@@ -59,6 +59,16 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
     throw new UnauthorizedError('Missing or malformed Authorization header');
   }
 
+  // Idempotent within a request: routers stacked on one prefix each mount this
+  // middleware, so one request used to re-verify the JWT and re-run the
+  // revocation/membership/terms reads once per mount. authMiddleware takes no
+  // options, so an earlier pass with the SAME token is an equivalent result; a
+  // different token (or none recorded) still runs the full contract.
+  if (c.get('authenticatedToken') === token) {
+    await next();
+    return;
+  }
+
   let payload;
   try {
     payload = await verifyJwt(token, c.env.JWT_SECRET);
@@ -155,6 +165,8 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   // `resolveSegment` serves this from a bounded, TTL'd in-isolate map, so it is
   // usually free.
   c.set('segmentId', await resolveSegment(db, payload.tid, { accountId: payload.acct, companyId: payload.co }, c.env));
+  // Set last, so a pass that threw or answered 428 never marks the request verified.
+  c.set('authenticatedToken', token);
 
   await next();
 };

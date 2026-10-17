@@ -820,6 +820,13 @@ export interface Vars {
   /** True when the request is running under an emulation token (read-only). */
   isEmulation?: boolean;
   /**
+   * The bearer token `authMiddleware` has already fully verified on THIS request.
+   * Several routers mount on one prefix (`/api/projects`, `/api/insights`) and each
+   * runs `authMiddleware`; this marker lets the later mounts skip re-verifying the
+   * same token. Only `authMiddleware` sets it, and only after every check passed.
+   */
+  authenticatedToken?: string;
+  /**
    * The request's database handle, built once by the auth middleware.
    *
    * Downstream middleware (e.g. `requirePermission`) reads this instead of

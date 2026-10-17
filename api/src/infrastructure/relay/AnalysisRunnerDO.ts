@@ -22,6 +22,7 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  */
 import { and, eq } from 'drizzle-orm';
 import { usageDatabaseOf } from '../../application/llm/usageLedger';
+import { estimateTokensFromText } from '../../application/llm/tokenUsage';
 import { buildDatabase, type Db } from '../database/connection';
 import {
   integrationCredentials,
@@ -329,7 +330,7 @@ export class AnalysisRunnerDO implements DurableObject {
         treeSummary: JSON.stringify({ topDirs, fileCount: fileEntries.length, totalBytes, truncated: tree.truncated }),
         sampledFiles: JSON.stringify(sampledFiles),
         commitSummary: JSON.stringify({ recent: recentCommits.map((c) => ({ message: c.message, date: c.date })) }),
-        tokenEstimate: sampledFiles.reduce((n, f) => n + Math.ceil(f.content.length / 4), 0),
+        tokenEstimate: sampledFiles.reduce((n, f) => n + estimateTokensFromText(f.content), 0),
         status: sampledFiles.length > 0 ? 'complete' : 'partial',
       });
     } catch (err) {

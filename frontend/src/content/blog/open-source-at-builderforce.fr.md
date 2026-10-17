@@ -7,7 +7,7 @@ C'est pourquoi les runtimes sur lesquels Builderforce est construit sont open so
   "kind": "stack",
   "title": "Quatre projets, une plateforme au-dessus",
   "bands": [
-    { "label": "BuilderForce WebContainers", "note": "Un runtime de développement dans le navigateur : aperçu, build, vérification de types, Node, npm et un shell, sans COOP/COEP ni plafond de sessions.", "hue": "make", "tag": "TypeScript · npm" },
+    { "label": "BuilderForce WebContainers", "note": "Un runtime de développement dans le navigateur : aperçu, build, vérification de types, Node, npm et un shell, sans exiger COOP/COEP, ni plafond de sessions.", "hue": "make", "tag": "TypeScript · npm" },
     { "label": "BuilderForce Memory", "note": "Une mémoire SSM persistante et entraînable dans le navigateur pour n'importe quel agent, un cache sémantique qui réduit la dépense en tokens, et un serveur MCP.", "hue": "idea", "tag": "TypeScript · npm" },
     { "label": "BuilderForce Inference", "note": "Synapse, l'app de bureau, et bfi, un moteur natif qui exécute des modèles sur votre propre machine.", "hue": "run", "tag": "Rust" },
     { "label": "BuilderForce Spawn", "note": "Créer des jeux Roblox en parlant : une app de bureau et un pont vers Roblox Studio.", "hue": "reach", "tag": "Rust" }
@@ -20,7 +20,7 @@ C'est pourquoi les runtimes sur lesquels Builderforce est construit sont open so
 
 **Ce que c'est.** Un runtime de développement dans le navigateur, ouvert et forkable. Donnez-lui un projet sous forme de fichiers et il sert un aperçu en direct : Vite avec React, Vue ou Svelte, Create React App et les sites statiques. Il construit pour le déploiement (`runtime.build()`) et vérifie les types (`createChecker()`) dans la page, et exécute des programmes Node, `npm install` depuis le vrai registre et un shell interactif, avec un Web Worker par processus.
 
-**Ce qu'il vaut.** Il lui faut un contexte sécurisé et un service worker, rien d'autre. Sans en-têtes COOP/COEP, les fenêtres de connexion, les cadres de paiement et les intégrations de votre app continuent de fonctionner. Sans plafond de sessions, ouvrir un aperçu ne coûte rien. Avec des ports interchangeables, vous pouvez remplacer le compilateur ou le CDN de paquets sans forker le cœur. Il a remplacé StackBlitz WebContainers sous chaque aperçu de canvas, chaque Publier et chaque Vérifier de Builderforce.
+**Ce qu'il vaut.** Il lui faut un contexte sécurisé et un service worker, rien d'autre. Comme il n'exige pas COOP/COEP, il n'ajoute aucun en-tête d'isolation : les fenêtres de connexion, les cadres de paiement et les intégrations de votre app continuent de fonctionner. Sans plafond de sessions, ouvrir un aperçu ne coûte rien. Avec des ports interchangeables, vous pouvez remplacer le compilateur ou le CDN de paquets sans forker le cœur. Il a remplacé StackBlitz WebContainers sous chaque aperçu de canvas, chaque Publier et chaque Vérifier de Builderforce.
 
 **Clair sur ses limites.** Les modules natifs, les scripts d'installation et les serveurs de développement de Next.js, Nuxt, SvelteKit, Remix et Astro ne tournent pas ; le runtime détecte ces projets et explique pourquoi. Les WebSockets et les réponses en streaming sont sur la feuille de route.
 

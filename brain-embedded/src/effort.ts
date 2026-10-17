@@ -71,6 +71,10 @@ export interface EffortProfile {
   directive: string;
 }
 
+/** A request's `max_tokens` when nothing set one — Balanced's budget, so an
+ *  unconfigured call and a Balanced call are the same request. */
+export const DEFAULT_MAX_TOKENS = 4096;
+
 const EFFORT_PROFILES: Record<Effort, EffortProfile> = {
   quick: {
     effort: 'quick',
@@ -82,7 +86,7 @@ const EFFORT_PROFILES: Record<Effort, EffortProfile> = {
   },
   balanced: {
     effort: 'balanced',
-    maxTokens: 4096,
+    maxTokens: DEFAULT_MAX_TOKENS,
     reasoningLevel: 'medium',
     thinkingBudgetTokens: 8192,
     directive: '',

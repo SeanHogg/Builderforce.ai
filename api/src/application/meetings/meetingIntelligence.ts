@@ -22,7 +22,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * persona-resolve failure surfaces as an error the route maps to a 4xx/5xx, never a
  * fabricated line.
  */
-import { asc, desc, eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
@@ -75,12 +75,11 @@ export async function postMeetingChatLine(
   authoredBy: { kind: string; ref: string; name: string },
 ): Promise<void> {
   try {
-    const [last] = await db.select({ seq: brainChatMessages.seq }).from(brainChatMessages)
-      .where(eq(brainChatMessages.chatId, chatId)).orderBy(desc(brainChatMessages.seq)).limit(1);
+    // seq comes from the generated PK inside the INSERT (migration 1233's trigger) —
+    // a MAX(seq)+1 read races concurrent appends and can collide with id-stamped rows.
     await db.insert(brainChatMessages).values({
       chatId, role: 'assistant', content,
       metadata: JSON.stringify({ authoredBy }),
-      seq: (last?.seq ?? 0) + 1,
     });
     await db.update(brainChats).set({ updatedAt: new Date() }).where(eq(brainChats.id, chatId));
   } catch (error) { /* the meeting chat is a nice-to-have; never fail the turn on it */ 

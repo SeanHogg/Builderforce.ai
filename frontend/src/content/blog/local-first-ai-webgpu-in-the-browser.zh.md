@@ -26,50 +26,52 @@ SitePoint 最近发布了一份出色的蓝图，讲解如何完全在浏览器�
 
 ## 3. 第 1 层：Chrome 内置的 Gemini Nano
 
-这是指南的头号特性，如今它已是 Builderforce 中的一等后端。我们的 `PromptApiModelProvider` 封装了 Chrome 的 `LanguageModel` API——对应用而言**零下载**（模型随浏览器一同提供），无需管理显存预算，而且开箱即支持**真正的 token 流式输出**：
+这是该指南的核心功能，也是 Builderforce 中的一等引擎。Prompt API 引擎封装了 Chrome 的 `LanguageModel` API：应用**零下载**（模型随浏览器提供），无需管理显存预算，开箱即有**真正的逐 token 流式输出**。它与另外两个在 WebGPU 上运行已下载模型的引擎并列——我们自研的 1 比特 **Bonsai** 引擎和 **WebLLM**——共用同一个 `PageEngine` 契约：
 
 ```ts
-import { createInferenceProvider } from '@/lib/model-provider';
+import { createPageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 
-const ai = createInferenceProvider({
-  projectId,
-  systemPrompt: 'You are a concise coding assistant.',
-});
-await ai.init();
-
-// Streams tokens the instant the built-in model produces them.
-await ai.stream('Refactor this function', context, (token) => {
-  append(token);
-});
+// Bonsai, WebLLM and the Prompt API — one set per page, one fetch shim, one model store.
+const engines = createPageEngineSet({ loadBfi });
 ```
 
-该 provider 会对 API 做特性检测，处理浏览器报告的 `downloadable`/`downloading`/`available` 状态，并暴露会话剩余的 **token 预算**（`inputUsage` / `inputQuota`），让调用方能在固定上下文窗口耗尽*之前*裁剪历史记录。
+该引擎会检测 API 是否可用，处理浏览器报告的 `downloadable`/`downloading`/`available` 状态，而且每个引擎都会报告真实的上下文窗口，因此对话会在到达较小的本地模型*之前*被裁剪到合适大小。
 
 ## 4. 渐进增强级联
 
-指南中最重要的理念是架构层面的：**一个接口，多个后端，优雅回退**。这正是 `createInferenceProvider` 返回的东西——一个单一的 `ModelProvider`，内部按以下顺序排列：
+该指南最重要的思想是架构层面的：**一个接口、多个后端、优雅降级**。在 Builderforce 中，这是唯一的路由步骤 `createHostModelStream`——Web 应用、VS Code 扩展和 Chrome 侧边栏运行的是同一个函数：
 
-1. **Chrome Prompt API**（本地、零配置）——当浏览器提供它时
-2. **你的端侧模型**（一个训练好的 Mamba SSM，可选择托管在 worker 中）——当你有一个时
-3. **云端 LLM**——始终可用，作为最终回退
+```ts
+import { createHostModelStream } from '@seanhogg/builderforce-brain-embedded';
 
-`init()` 会选出第一个就绪的最高优先级后端；`generate` 和 `stream` 会路由到它，一旦出错便**透明地降级**到下一个已就绪的层级。“用哪个后端？”这个决定只存在于一个地方。你的 UI 只需与一个 `ModelProvider` 交互，永远不必自己根据可用性做分支判断。
+const stream = createHostModelStream({
+  probes: () => engines.probe(),  // what this page can run right now
+  fetch: engines.fetch(),         // the engines' one transport
+  cloud: () => gatewayStream,     // the terminal tier
+});
+```
+
+每次调用的顺序为：
+
+1. **你固定的模型**（来自“在此设备上”选择器）——就在这里运行
+2. **本地优先**——只要有就绪的引擎能处理请求，就在设备上作答
+3. **云端 LLM**——始终可用，也是本地尝试失败时的**无感回退**
+
+“用哪个后端？”的决定只存在于一个地方。你的界面只管流式输出，从不自己按可用性分支。
 
 ## 5. Web Worker 隔离
 
-指南说得对：生成过程绝不能阻塞主线程——*每个 token* 都要在一个 15 万项的 logit 向量上采样，足以让 UI 卡顿。因此整个引擎都可以运行在 **Web Worker** 中。由于 `GPUDevice` 无法跨 worker 边界传递，worker 会完整托管引擎，主线程则通过一个小巧的 RPC 协议与之通信：
+指南说得对：繁重的工作绝不能阻塞主线程——*每个 token* 都在 15 万项的 logit 向量上采样会让界面卡顿。当宿主提供 Worker 时，WebLLM 在 Web Worker 中运行；而我们的本地 **Mamba** 引擎——也就是你训练的那个——完全运行在 Worker 内。由于 `GPUDevice` 无法跨越 Worker 边界传递，Worker 承载整个引擎，主线程通过一个小型 RPC 协议与之通信：
 
 ```ts
-import { createLocalFirstProvider } from '@/lib/mamba-worker-client';
+import { initMambaProvider } from '@/lib/mamba-worker-client';
 
-const ai = createLocalFirstProvider({
-  projectId,
-  includeLocalMamba: true, // Tier 2 runs entirely in a Web Worker
-});
-await ai.init();
+// Off the main thread when the runtime allows it; in-page otherwise.
+const mamba = await initMambaProvider({ dModel: 512, numLayers: 8 });
+await mamba.train(code, { epochs: 3, onEpochEnd: (epoch, loss) => plot(epoch, loss) });
 ```
 
-token 和每轮训练的进度事件以消息的形式流回；训练好的检查点会被**转移**（而非复制）回主线程。如果运行时无法创建 worker，provider 会报告未就绪，级联随即降到下一层——什么都不会出错。
+token 与每个 epoch 的进度事件以消息形式传回；训练好的检查点以**转移**（而非复制）的方式送回。如果运行环境无法创建 Worker，就回退到页面内引擎——一切照常工作。
 
 ## 6. `GPUDevice.lost` 恢复
 
@@ -85,24 +87,24 @@ token 和每轮训练的进度事件以消息的形式流回；训练好的检�
 | --- | --- |
 | WebGPU 计算着色器 | ✅ 手写的 WGSL Mamba SSM 内核 |
 | WASM 分词/采样 | ✅ BPE 分词器，基于你自己的语料训练 |
-| Chrome Prompt API（第 1 层） | ✅ `PromptApiModelProvider`，真正的流式输出 |
-| Web-LLM / WebGPU（第 2 层） | ✅ 端侧 Mamba，可选托管在 worker 中 |
+| Chrome Prompt API（第 1 层） | ✅ Prompt API 引擎，真正的流式输出 |
+| Web-LLM / WebGPU（第 2 层） | ✅ WebLLM 与我们的 1 比特 Bonsai 引擎，运行于 WebGPU |
 | 云端回退（第 3 层） | ✅ 级联中的最终层 |
-| 统一接口 + 回退 | ✅ `createInferenceProvider` |
-| Web Worker 隔离 | ✅ 整个引擎托管在 worker 中 |
+| 统一接口 + 回退 | ✅ `createHostModelStream`，每个界面同一步骤 |
+| Web Worker 隔离 | ✅ WebLLM 与 Mamba 引擎运行在 Worker 中 |
 | `GPUDevice.lost` 恢复 | ✅ 单一来源的设备丢失处理 |
 | 本地权重缓存 | ✅ IndexedDB、流式、多源 |
 | 对一切做特性检测 | ✅ WebNN → WebGPU → CPU 探测 |
 | **端侧*训练*** | ✅ **超越指南**——真正的反向传播 + AdamW |
 | **通过 WebNN 调用 NPU** | ✅ **超越指南** |
-| **语义响应缓存** | ✅ **超越指南**——端侧 SSM 嵌入 |
+| **设备端答案记忆** | ✅ **超越指南**——设备端 SSM 嵌入 |
 
 ## 如何使用
 
 以上每一部分今天都已可用：
 
-- **聊天/助手界面**调用 `createInferenceProvider({ projectId })`，即可免费获得本地优先的级联——浏览器支持时用 Gemini Nano，否则用云端，一行代码搞定。
-- **对隐私敏感的工作**打开 `includeLocalMamba`，让推理完全在 Web Worker 中于端侧进行。
+- **聊天与助手界面**免费获得本地优先的级联——浏览器能运行时使用 Gemini Nano 或你在“在此设备上”选择器中下载的模型，否则使用云端；Web、VS Code 和 Chrome 侧边栏的路由完全相同。
+- **注重隐私的工作**固定一个设备端模型，请求永远不会离开本机。
 - **微调**在 [AI 训练面板](/training)中完成：把它指向你的代码，真正的 WebGPU 梯度下降就会产出一个从不触碰服务器的检查点。
 
 SitePoint 的指南是一张正确的地图。而 Builderforce 是一个早已走遍这片疆域的平台——并且还在继续前行，走进了端侧训练这片直到最近还被认为浏览器根本无法涉足的领域。

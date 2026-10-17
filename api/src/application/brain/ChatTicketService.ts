@@ -899,19 +899,15 @@ export class ChatTicketService {
       .where(inArray(brainChatMessages.chatId, sources))
       .orderBy(brainChatMessages.createdAt, brainChatMessages.seq);
 
-    // One multi-row insert for every message, then one seq stamp for the batch —
-    // seq BECOMES the generated id, the same rule as BrainService.appendRaw. The
-    // VALUES keep chronological order, so the ids (and seq) still ascend with it.
+    // One multi-row insert for every message. seq BECOMES the generated id inside the
+    // INSERT (migration 1233's trigger). The VALUES keep chronological order, so the
+    // ids (and seq) still ascend with it.
     let messagesMoved = 0;
     if (srcMsgs.length > 0) {
       const inserted = await this.db.insert(brainChatMessages).values(srcMsgs.map((m) => ({
         chatId: input.targetChatId, role: m.role, content: m.content,
         metadata: m.metadata, eventKey: m.eventKey,
       }))).onConflictDoNothing().returning({ id: brainChatMessages.id });
-      if (inserted.length > 0) {
-        await this.db.update(brainChatMessages).set({ seq: sql`${brainChatMessages.id}` })
-          .where(inArray(brainChatMessages.id, inserted.map((r) => r.id)));
-      }
       messagesMoved = inserted.length;
     }
 
@@ -1035,14 +1031,13 @@ export class ChatTicketService {
     metadata?: Record<string, unknown>,
     eventKey?: string,
   ): Promise<void> {
-    // The generated PK is the database's atomic append order. Copying it to `seq`
-    // avoids the racy MAX(seq)+1 read used by concurrent agent publishers.
+    // seq is stamped from the generated PK inside the INSERT (migration 1233's trigger),
+    // avoiding both the racy MAX(seq)+1 read and a follow-up UPDATE round trip.
     const [inserted] = await this.db.insert(brainChatMessages).values({
       chatId, role: 'assistant', content, metadata: metadata ? JSON.stringify(metadata) : null,
       eventKey: eventKey ?? null,
     }).onConflictDoNothing().returning({ id: brainChatMessages.id });
     if (!inserted) return;
-    await this.db.update(brainChatMessages).set({ seq: inserted.id }).where(eq(brainChatMessages.id, inserted.id));
     await broadcastBrainChatChanged(this.env.SESSION_ROOM, tenantId, chatId);
   }
 

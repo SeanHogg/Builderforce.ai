@@ -17,7 +17,7 @@ So the runtimes Builderforce is built on are open source under MIT. There are fo
   "kind": "stack",
   "title": "Four projects, one platform on top",
   "bands": [
-    { "label": "BuilderForce WebContainers", "note": "An in-browser dev runtime: preview, build, type-check, Node, npm and a shell, with no COOP/COEP and no session caps.", "hue": "make", "tag": "TypeScript · npm" },
+    { "label": "BuilderForce WebContainers", "note": "An in-browser dev runtime: preview, build, type-check, Node, npm and a shell, without requiring COOP/COEP, and with no session caps.", "hue": "make", "tag": "TypeScript · npm" },
     { "label": "BuilderForce Memory", "note": "Persistent, browser-trainable SSM memory for any agent, a semantic cache that cuts token spend, and an MCP server.", "hue": "idea", "tag": "TypeScript · npm" },
     { "label": "BuilderForce Inference", "note": "Synapse, the desktop app, and bfi, a native engine that runs models on your own machine.", "hue": "run", "tag": "Rust" },
     { "label": "BuilderForce Spawn", "note": "Build Roblox games by talking: a desktop app and a Roblox Studio bridge.", "hue": "reach", "tag": "Rust" }
@@ -30,7 +30,7 @@ So the runtimes Builderforce is built on are open source under MIT. There are fo
 
 **What it is.** An open, forkable in-browser dev runtime. Hand it a project as files and it serves a live preview: Vite with React, Vue or Svelte, Create React App and static sites. It builds for deployment (`runtime.build()`) and type-checks (`createChecker()`) in the page, and runs Node programs, `npm install` from the real registry and an interactive shell, one Web Worker per process.
 
-**What it is worth.** It needs a secure context and a service worker, and nothing else. No COOP/COEP headers means the sign-in popups, payment frames and embeds in your app keep working. No session caps means a preview costs nothing to open. Pluggable ports mean you can swap the compiler or the package CDN without forking the core. It replaced StackBlitz WebContainers under every Builderforce canvas preview, Publish and Check.
+**What it is worth.** It needs a secure context and a service worker, and nothing else. Because it does not require COOP/COEP, it adds no isolation headers of its own, so the sign-in popups, payment frames and embeds in your app keep working. No session caps means a preview costs nothing to open. Pluggable ports mean you can swap the compiler or the package CDN without forking the core. It replaced StackBlitz WebContainers under every Builderforce canvas preview, Publish and Check.
 
 **Be clear about the limits.** Native addons, install scripts, and the Next.js, Nuxt, SvelteKit, Remix and Astro dev servers do not run; the runtime detects those projects and says why. WebSockets and streaming responses are on the roadmap.
 

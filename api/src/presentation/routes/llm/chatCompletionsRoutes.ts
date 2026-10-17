@@ -20,8 +20,7 @@ import {
 } from '../../../application/llm/LlmProxyService';
 import { parseClientReasoningIntent } from '../../../application/llm/reasoningCapability';
 import { normalizeByoProvider } from '../../../application/llm/usageLedger';
-import { logTrace, backfillTraceUsage, backfillTraceResponseBody } from '../../../application/llm/traceLogger';
-import { wrapStreamForTrace } from '../../../application/llm/streamTrace';
+import { logTrace, logStreamedTrace } from '../../../application/llm/traceLogger';
 import { toTenantPlan } from '../../../application/tenant/featureEntitlements';
 import { requestDb } from '../../../application/shared/dbHandle';
 import { roleRoutingStats } from '../../../application/llm/routingTable';
@@ -285,31 +284,18 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
       // Log any failovers that happened before this successful model
       logCascadeFailovers();
 
-      // Full diagnostic trace (builder-side only). For streams the completion
-      // body isn't captured here; identity, timing, attempts, and the chain are.
-      logTrace(c.env, c.executionCtx, { ...traceBase, streamed: true, responseBody: null, errorMessage: null });
-
-      // Tee the stream so the trace row gets BOTH halves it can only learn in
-      // passing: the token counts from the final usage frame, and the completion
-      // body reassembled from the deltas (`response_body` was null on every
-      // streamed trace until this tee existed).
-      const instrumentedStream = wrapStreamForTrace(result.response.body, {
-        onUsage: (usage) => {
+      // Full diagnostic trace (builder-side only), written ONCE when the stream ends
+      // with the usage frame and the reassembled completion body. The same tee
+      // meters the usage frame into the ledger.
+      const instrumentedStream = logStreamedTrace(
+        c.env, c.executionCtx,
+        { ...traceBase, streamed: true, responseBody: null, errorMessage: null },
+        result.response.body,
+        (usage) => {
           logUsage(c.env, c.executionCtx, { ...usageRow, streamed: true, usage, surface: resolveUsageSurface(c, access) });
-          // Back-fill the streamed trace row (logged above with 0 tokens) [1298].
-          backfillTraceUsage(c.env, c.executionCtx, traceId, usage);
           recordBrainChatModelActivity();
         },
-        onComplete: (completion) => {
-          backfillTraceResponseBody(c.env, c.executionCtx, traceId, {
-            streamed: true,
-            content: completion.content,
-            finishReason: completion.finishReason,
-            model: completion.model,
-            ...(completion.toolCalls.length > 0 ? { toolCalls: completion.toolCalls } : {}),
-          });
-        },
-      });
+      );
 
       return new Response(instrumentedStream, {
         status: result.response.status,

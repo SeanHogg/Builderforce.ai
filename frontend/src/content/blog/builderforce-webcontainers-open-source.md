@@ -1,7 +1,7 @@
 ---
 title: BuilderForce WebContainers is open source — the in-browser dev runtime you can fork
 date: 2026-10-16
-description: The runtime behind every Builderforce canvas preview, Publish and Check is now MIT on GitHub and npm. It previews, builds and type-checks Vite, React, Vue and Svelte apps and runs Node, npm and a shell in the tab, with no COOP/COEP headers and no session caps.
+description: The runtime behind every Builderforce canvas preview, Publish and Check is now MIT on GitHub and npm. It previews, builds and type-checks Vite, React, Vue and Svelte apps and runs Node, npm and a shell in the tab, without requiring COOP/COEP headers, and with no session caps.
 tags: [open-source, webcontainers, developer-tools, ide, browser, preview]
 author: Sean Hogg
 ---

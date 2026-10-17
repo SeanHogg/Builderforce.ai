@@ -25,7 +25,7 @@ import { detectRepetitionLoop } from '@builderforce/agent-loop';
 import { brainRequestError } from './chatError';
 import { describeNetworkError, isConnectFailure, retryOnConnectFailure } from './networkErrorDetail';
 import { readWithIdleWatchdog, StreamIdleError, STREAM_IDLE_MS } from './streamIdleWatchdog';
-import type { ReasoningIntent } from './effort';
+import { DEFAULT_MAX_TOKENS, type ReasoningIntent } from './effort';
 import type { LocalFirstAttemptSummary } from './localFirstTraces';
 
 /** Injected auth + endpoint config. Built once by BrainProvider from BrainConfig.transport. */
@@ -445,7 +445,7 @@ export async function streamChatCompletion(
   const body: Record<string, unknown> = {
     messages: opts.messages,
     temperature: opts.temperature ?? 0.3,
-    max_tokens: opts.maxTokens ?? 4096,
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
     stream: true,
     // Ask the gateway to emit a trailing `usage` chunk (OpenAI stream_options).
     // Providers that ignore it simply omit usage — the parse below is tolerant.

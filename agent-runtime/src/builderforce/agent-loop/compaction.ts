@@ -6,6 +6,7 @@
  * checkpoint summary. Prompts are reproduced verbatim from pi 0.54 for output parity.
  */
 
+import { estimateTokensFromChars } from "@builderforce/workload";
 import type { AgentMessage } from "../model/agent-types.js";
 import { nativeComplete } from "../model/native-llm.js";
 import type { AssistantMessage, Message, Model } from "../model/types.js";
@@ -30,7 +31,7 @@ export function estimateTokens(message: AgentMessage): number {
       else
         for (const block of content)
           if (block.type === "text" && block.text) chars += block.text.length;
-      return Math.ceil(chars / 4);
+      return estimateTokensFromChars(chars);
     }
     case "assistant": {
       for (const block of (message as AssistantMessage).content) {
@@ -39,7 +40,7 @@ export function estimateTokens(message: AgentMessage): number {
         else if (block.type === "toolCall")
           chars += block.name.length + JSON.stringify(block.arguments).length;
       }
-      return Math.ceil(chars / 4);
+      return estimateTokensFromChars(chars);
     }
     case "custom":
     case "toolResult": {
@@ -50,13 +51,13 @@ export function estimateTokens(message: AgentMessage): number {
           if (block.type === "text" && block.text) chars += block.text.length;
           if (block.type === "image") chars += 4800;
         }
-      return Math.ceil(chars / 4);
+      return estimateTokensFromChars(chars);
     }
     case "bashExecution":
-      return Math.ceil((message.command.length + message.output.length) / 4);
+      return estimateTokensFromChars(message.command.length + message.output.length);
     case "branchSummary":
     case "compactionSummary":
-      return Math.ceil(message.summary.length / 4);
+      return estimateTokensFromChars(message.summary.length);
   }
   return 0;
 }

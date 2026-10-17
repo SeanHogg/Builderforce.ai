@@ -24,7 +24,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * it every few minutes is safe.
  */
 
-import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { executionPauseState, executions, pullRequests, tasks, toolAuditEvents } from '../../infrastructure/database/schema';
@@ -34,7 +34,9 @@ import { ChatTicketService, ticketKindForTaskType } from '../brain/ChatTicketSer
 import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
 import { markReaperRequeued, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
-import { runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
+import { resolveParkAgeTimeoutMs, runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
+import { anyStale, probeStaleWork, REAP_BATCH_LIMIT, stalePredicates } from './staleExecutionProbe';
+import { signalPendingWork } from './cronWorkSignal';
 import { revokeRunPrincipalsForExecutions } from '../agentIdentity/agentRunIdentity';
 import { executionsWithPendingSteers } from './lateSteerStore';
 import { settleLateSteersSafely } from './lateSteerFollowUp';
@@ -86,24 +88,26 @@ const REAPED_RETURNING = {
 } as const;
 
 export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db = buildDatabase(env)): Promise<ReapResult> {
-  const runningCutoff = new Date(nowMs - RUNNING_DEADLINE_MS).toISOString();
-  const cloudRunningCutoff = new Date(nowMs - CLOUD_RUNNING_DEADLINE_MS).toISOString();
-  const queuedCutoff = new Date(nowMs - QUEUED_DEADLINE_MS).toISOString();
-  const pausedCutoff = new Date(nowMs - PAUSED_DEADLINE_MS).toISOString();
+  const stale = stalePredicates({
+    running: new Date(nowMs - RUNNING_DEADLINE_MS).toISOString(),
+    cloudRunning: new Date(nowMs - CLOUD_RUNNING_DEADLINE_MS).toISOString(),
+    queued: new Date(nowMs - QUEUED_DEADLINE_MS).toISOString(),
+    paused: new Date(nowMs - PAUSED_DEADLINE_MS).toISOString(),
+    parkAge: new Date(nowMs - resolveParkAgeTimeoutMs(env)).toISOString(),
+  });
+
+  // Idle gate: one EXISTS probe decides which sweeps below have any work, so a quiet
+  // platform costs a single statement instead of every UPDATE/SELECT each tick.
+  const probe = await probeStaleWork(db, stale);
+  const empty: ReapResult = { failedRunning: 0, failedQueued: 0, failedPaused: 0, requeuedCloud: 0, parkAge: { stale: 0, unparked: 0 } };
+  if (!anyStale(probe)) return empty;
 
   // Hung HOST runs: a real long-lived process that went silent (crash / dropped
   // connection). Cloud runs (agent_host_id IS NULL) are handled below on a much
   // tighter deadline, so scope this to host runs only.
-  const running: ReapedRow[] = await db
-    .update(executions)
-    .set({
-      status: 'failed',
-      errorMessage: 'Execution timed out — the agent did not report completion (host crash or dropped connection).',
-      completedAt: sql`now()`,
-      updatedAt: sql`now()`,
-    })
-    .where(and(eq(executions.status, 'running'), isNotNull(executions.agentHostId), sql`coalesce(${executions.startedAt}, ${executions.createdAt}) < ${runningCutoff}`))
-    .returning(REAPED_RETURNING);
+  const running: ReapedRow[] = probe.hostRunning
+    ? await failStaleBatch(db, stale.hostRunning, 'Execution timed out — the agent did not report completion (host crash or dropped connection).')
+    : [];
 
   // Hung CLOUD runs: the serverless background task was stopped at the ~30s wall
   // (or a container that booted then died) before writing a terminal status.
@@ -113,7 +117,9 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // decide per-row whether to re-dispatch or fail — see requeueCloudRun.
   // Keep these as typed Date values. `tsToMs` performs the explicit epoch conversion
   // used by the per-surface silence calculation, preserving millisecond precision.
-  const cloudCandidates: CloudCandidateRow[] = await db
+  // Oldest-silent first + bounded: the runs past their ceiling are the oldest, so a
+  // crowd of live durable runs inside the 90s floor can never crowd them out of the batch.
+  const cloudCandidates: CloudCandidateRow[] = !probe.cloudRunning ? [] : await db
     .select({
       id: executions.id,
       tenant_id: executions.tenantId,
@@ -136,11 +142,9 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
     })
     .from(executions)
     .innerJoin(tasks, eq(tasks.id, executions.taskId))
-    .where(and(
-      eq(executions.status, 'running'),
-      isNull(executions.agentHostId),
-      sql`coalesce(${executions.updatedAt}, ${executions.createdAt}) < ${cloudRunningCutoff}`,
-    ));
+    .where(stale.cloudRunning)
+    .orderBy(asc(sql`coalesce(${executions.updatedAt}, ${executions.createdAt})`))
+    .limit(REAP_BATCH_LIMIT);
 
   const cloudRunning: ReapedRow[] = [];
   let requeuedCloud = 0;
@@ -190,16 +194,9 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   }
 
   // Dropped queue: submitted/pending but no agent ever took it.
-  const queued: ReapedRow[] = await db
-    .update(executions)
-    .set({
-      status: 'failed',
-      errorMessage: 'Execution was never picked up by an agent within the dispatch window.',
-      completedAt: sql`now()`,
-      updatedAt: sql`now()`,
-    })
-    .where(and(inArray(executions.status, ['pending', 'submitted']), sql`${executions.createdAt} < ${queuedCutoff}`))
-    .returning(REAPED_RETURNING);
+  const queued: ReapedRow[] = probe.queued
+    ? await failStaleBatch(db, stale.queued, 'Execution was never picked up by an agent within the dispatch window.')
+    : [];
 
   // Abandoned agent QUESTION: a run parked on `ask_human` that nobody answered
   // within the (generous) paused deadline. Unlike the sweeps above this is not a
@@ -207,16 +204,13 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // `laneRequirementGate` both count a paused run as LIVE, so until this row goes
   // terminal the ticket can never auto-run again. Measured from `updated_at` so a
   // still-active back-and-forth on the question keeps the run alive.
-  const paused: ReapedRow[] = await db
-    .update(executions)
-    .set({
-      status: 'failed',
-      errorMessage: PAUSED_ORPHAN_REASON,
-      completedAt: sql`now()`,
-      updatedAt: sql`now()`,
-    })
-    .where(and(eq(executions.status, 'paused'), sql`coalesce(${executions.updatedAt}, ${executions.startedAt}, ${executions.createdAt}) < ${pausedCutoff}`))
-    .returning(REAPED_RETURNING);
+  const paused: ReapedRow[] = probe.paused ? await failStaleBatch(db, stale.paused, PAUSED_ORPHAN_REASON) : [];
+
+  // A full batch means a backlog remains: keep the next tick's gate open so it drains
+  // promptly instead of waiting for the floor sweep.
+  if ([running, queued, paused, cloudCandidates].some((rows) => rows.length >= REAP_BATCH_LIMIT)) {
+    await signalPendingWork(env);
+  }
 
   // A reaped question is never going to be answered, so its resume record is now
   // dead weight: nothing will redispatch a terminal run, and leaving one row behind
@@ -304,7 +298,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
   // execution reaper above (and vice versa).
   let parkAge: ParkAgeTimeoutResult = { stale: 0, unparked: 0 };
   try {
-    parkAge = await runParkAgeTimeoutSweep(env, nowMs);
+    if (probe.parkAge) parkAge = await runParkAgeTimeoutSweep(env, nowMs);
   } catch (err) {
     reportCaughtError(err, { source: "application/runtime/staleExecutionReaper.ts", operation: "reapStaleExecutions", context: { logMessage: '[cron:park-age] sweep failed', details: err } });
   }
@@ -316,6 +310,24 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
     requeuedCloud,
     parkAge,
   };
+}
+
+/**
+ * Fail at most {@link REAP_BATCH_LIMIT} rows matching `stalePredicate`. The predicate is
+ * repeated on the outer WHERE so Postgres re-checks it against the row it locks — a run
+ * that completed between the subquery's read and the update is left alone, exactly as
+ * the old unbounded UPDATE behaved.
+ */
+async function failStaleBatch(db: Db, stalePredicate: SQL, errorMessage: string): Promise<ReapedRow[]> {
+  return db
+    .update(executions)
+    .set({ status: 'failed', errorMessage, completedAt: sql`now()`, updatedAt: sql`now()` })
+    .where(acrossTenants(executions, 'scheduled_sweep', stalePredicate, inArray(executions.id, db
+      .select({ id: executions.id })
+      .from(executions)
+      .where(acrossTenants(executions, 'scheduled_sweep', stalePredicate))
+      .limit(REAP_BATCH_LIMIT))))
+    .returning(REAPED_RETURNING);
 }
 
 interface ReapedRow {

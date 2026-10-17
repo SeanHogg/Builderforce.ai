@@ -26,12 +26,10 @@ import {
   probePageEngines,
   type ChatCompletionChunk,
   type ChatCompletionsRequest,
+  type LocalFetch,
   type PageEngine,
 } from "@seanhogg/builderforce-brain-embedded";
 import { isPageEngineReply, type PageEngineRequest } from "./pageEngineBridgeProtocol";
-
-/** The local fetch a route lends the shared streamer. */
-type LocalFetch = (input: string, init: RequestInit) => Promise<Response>;
 
 /** One attached webview. */
 export interface PageEnginePort {

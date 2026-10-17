@@ -26,50 +26,52 @@ Eine Prüfung, eine Entscheidung, geteilt von allen Konsumenten – keine Kompon
 
 ## 3. Stufe 1: Chromes eingebautes Gemini Nano
 
-Das ist das Kernfeature des Leitfadens – und jetzt ein vollwertiges Backend in Builderforce. Unser `PromptApiModelProvider` kapselt Chromes `LanguageModel`-API: **null Download** für die App (das Modell kommt mit dem Browser), kein VRAM-Budget zu verwalten und **echtes Token-Streaming** ab Werk:
+Das ist das Kernfeature des Leitfadens – und eine vollwertige Engine in Builderforce. Die Prompt-API-Engine kapselt Chromes `LanguageModel`-API: **null Download** für die App (das Modell kommt mit dem Browser), kein VRAM-Budget zu verwalten und **echtes Token-Streaming** ab Werk. Sie steht neben zwei Engines, die heruntergeladene Modelle auf WebGPU ausführen – unserer eigenen 1-Bit-**Bonsai**-Engine und **WebLLM** – hinter einem einzigen `PageEngine`-Vertrag:
 
 ```ts
-import { createInferenceProvider } from '@/lib/model-provider';
+import { createPageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 
-const ai = createInferenceProvider({
-  projectId,
-  systemPrompt: 'You are a concise coding assistant.',
-});
-await ai.init();
-
-// Streams tokens the instant the built-in model produces them.
-await ai.stream('Refactor this function', context, (token) => {
-  append(token);
-});
+// Bonsai, WebLLM and the Prompt API — one set per page, one fetch shim, one model store.
+const engines = createPageEngineSet({ loadBfi });
 ```
 
-Der Provider erkennt die API per Feature-Detection, verarbeitet die vom Browser gemeldeten Zustände `downloadable`/`downloading`/`available` und macht das verbleibende **Token-Budget** der Session sichtbar (`inputUsage` / `inputQuota`), damit Aufrufer den Verlauf kürzen können, *bevor* das feste Kontextfenster voll ist.
+Die Engine erkennt die API per Feature-Detection, verarbeitet die vom Browser gemeldeten Zustände `downloadable`/`downloading`/`available`, und jede Engine meldet ihr echtes Kontextfenster – so wird eine Unterhaltung passend gepackt, *bevor* sie ein kleineres On-Device-Modell erreicht.
 
 ## 4. Die Progressive-Enhancement-Kaskade
 
-Die wichtigste Idee des Leitfadens ist eine architektonische: **eine Schnittstelle, viele Backends, eleganter Fallback**. Genau das liefert `createInferenceProvider` – einen einzigen `ModelProvider`, der intern so priorisiert:
+Die wichtigste Idee des Leitfadens ist eine architektonische: **eine Schnittstelle, viele Backends, eleganter Fallback**. In Builderforce ist das ein einziger Routing-Schritt, `createHostModelStream` – dieselbe Funktion, die die Web-App, die VS-Code-Erweiterung und das Chrome-Seitenpanel ausführen:
 
-1. **Chrome Prompt API** (lokal, ohne Einrichtung) – wenn der Browser sie anbietet
-2. **Ihr On-Device-Modell** (ein trainiertes Mamba-SSM, optional in einem Worker) – wenn Sie eines haben
-3. **Cloud-LLM** – immer verfügbar, der letzte Fallback
+```ts
+import { createHostModelStream } from '@seanhogg/builderforce-brain-embedded';
 
-`init()` wählt das Backend mit der höchsten Priorität, das bereit wird; `generate` und `stream` leiten dorthin und **fallen transparent** auf die nächste bereite Stufe zurück, wenn es einen Fehler wirft. Die Entscheidung „welches Backend?“ lebt an genau einer Stelle. Ihre UI spricht einfach mit einem `ModelProvider` und verzweigt nie selbst nach Verfügbarkeit.
+const stream = createHostModelStream({
+  probes: () => engines.probe(),  // what this page can run right now
+  fetch: engines.fetch(),         // the engines' one transport
+  cloud: () => gatewayStream,     // the terminal tier
+});
+```
+
+Pro Aufruf gilt diese Reihenfolge:
+
+1. **Ein Modell, das Sie angeheftet haben** (aus der Auswahl „Auf diesem Gerät“) – es läuft hier, Punkt
+2. **Lokal zuerst** – kann eine bereite Engine die Anfrage bedienen, antwortet sie auf dem Gerät
+3. **Cloud-LLM** – immer verfügbar und der **unsichtbare Fallback**, falls ein lokaler Versuch scheitert
+
+Die Entscheidung „welches Backend?“ lebt an genau einer Stelle. Ihre UI streamt einfach und verzweigt nie selbst nach Verfügbarkeit.
 
 ## 5. Isolation im Web Worker
 
-Der Leitfaden hat recht: Die Generierung darf niemals den Main Thread blockieren – Sampling über einen Logit-Vektor mit 150.000 Einträgen *pro Token* bringt die UI ins Stocken. Deshalb kann die gesamte Engine in einem **Web Worker** laufen. Weil sich ein `GPUDevice` nicht über die Worker-Grenze übertragen lässt, hostet der Worker die Engine vollständig, und der Main Thread spricht über ein kleines RPC-Protokoll mit ihr:
+Der Leitfaden hat recht: Schwere Arbeit darf niemals den Main Thread blockieren – Sampling über einen Logit-Vektor mit 150.000 Einträgen *pro Token* bringt die UI ins Stocken. WebLLM läuft in einem Web Worker, wenn der Host einen bereitstellt, und unsere On-Device-**Mamba**-Engine – die, die Sie trainieren – läuft vollständig in einem Worker. Weil sich ein `GPUDevice` nicht über die Worker-Grenze übertragen lässt, hostet der Worker die gesamte Engine, und der Main Thread spricht über ein kleines RPC-Protokoll mit ihr:
 
 ```ts
-import { createLocalFirstProvider } from '@/lib/mamba-worker-client';
+import { initMambaProvider } from '@/lib/mamba-worker-client';
 
-const ai = createLocalFirstProvider({
-  projectId,
-  includeLocalMamba: true, // Tier 2 runs entirely in a Web Worker
-});
-await ai.init();
+// Off the main thread when the runtime allows it; in-page otherwise.
+const mamba = await initMambaProvider({ dModel: 512, numLayers: 8 });
+await mamba.train(code, { epochs: 3, onEpochEnd: (epoch, loss) => plot(epoch, loss) });
 ```
 
-Token- und Fortschrittsereignisse pro Epoche kommen als Nachrichten zurück; der trainierte Checkpoint wird nach Hause **übertragen** (nicht kopiert). Und kann die Runtime keinen Worker starten, meldet der Provider „nicht bereit“, und die Kaskade fällt einfach auf die nächste Stufe – nichts geht kaputt.
+Token- und Fortschrittsereignisse pro Epoche kommen als Nachrichten zurück; der trainierte Checkpoint wird nach Hause **übertragen** (nicht kopiert). Und kann die Runtime keinen Worker starten, greift sie auf die Engine im Tab zurück – nichts geht kaputt.
 
 ## 6. Wiederherstellung nach `GPUDevice.lost`
 
@@ -85,24 +87,24 @@ Modellgewichte werden nach dem ersten Download in **IndexedDB** zwischengespeich
 | --- | --- |
 | WebGPU-Compute-Shader | ✅ Handgeschriebene WGSL-Kernel für Mamba-SSM |
 | Tokenisierung/Sampling in WASM | ✅ BPE-Tokenizer, trainiert auf Ihrem eigenen Korpus |
-| Chrome Prompt API (Stufe 1) | ✅ `PromptApiModelProvider`, echtes Streaming |
-| Web-LLM / WebGPU (Stufe 2) | ✅ On-Device-Mamba, optional in einem Worker |
+| Chrome Prompt API (Stufe 1) | ✅ Prompt-API-Engine, echtes Streaming |
+| Web-LLM / WebGPU (Stufe 2) | ✅ WebLLM und unsere 1-Bit-Bonsai-Engine, auf WebGPU |
 | Cloud-Fallback (Stufe 3) | ✅ Letzte Stufe der Kaskade |
-| Einheitliche Schnittstelle + Fallback | ✅ `createInferenceProvider` |
-| Isolation im Web Worker | ✅ Komplette Engine in einem Worker |
+| Einheitliche Schnittstelle + Fallback | ✅ `createHostModelStream`, ein Schritt auf jeder Oberfläche |
+| Isolation im Web Worker | ✅ WebLLM und die Mamba-Engine in Workern |
 | Wiederherstellung nach `GPUDevice.lost` | ✅ Behandlung von Geräteverlust an einer einzigen Stelle |
 | Lokales Caching der Gewichte | ✅ IndexedDB, Streaming, mehrere Quellen |
 | Alles per Feature-Detection prüfen | ✅ Prüfkette WebNN → WebGPU → CPU |
 | **On-Device-*Training*** | ✅ **Über den Leitfaden hinaus** – echter Backward Pass + AdamW |
 | **NPU über WebNN** | ✅ **Über den Leitfaden hinaus** |
-| **Semantischer Antwort-Cache** | ✅ **Über den Leitfaden hinaus** – On-Device-SSM-Embeddings |
+| **On-Device-Antwortgedächtnis** | ✅ **Über den Leitfaden hinaus** – On-Device-SSM-Embeddings |
 
 ## So nutzen Sie es
 
 Alles oben Beschriebene ist heute verfügbar:
 
-- **Chat- und Assistenzoberflächen** rufen `createInferenceProvider({ projectId })` auf und erhalten die Local-First-Kaskade gratis dazu – Gemini Nano, wenn der Browser es hat, sonst die Cloud, eine Zeile Code.
-- **Datenschutzsensible Arbeit** aktiviert `includeLocalMamba`, damit die Inferenz vollständig auf dem Gerät in einem Web Worker bleibt.
+- **Chat- und Assistenzoberflächen** erhalten die Local-First-Kaskade gratis – Gemini Nano oder ein Modell, das Sie über die Auswahl „Auf diesem Gerät“ geladen haben, wenn der Browser es ausführen kann, sonst die Cloud – mit demselben Routing im Web, in VS Code und im Chrome-Seitenpanel.
+- **Datenschutzsensible Arbeit** heftet ein On-Device-Modell an, sodass die Anfrage die Maschine nie verlässt.
 - **Fine-Tuning** findet im [AI-Training-Panel](/training) statt: Richten Sie es auf Ihren Code, und echter WebGPU-Gradientenabstieg erzeugt einen Checkpoint, der nie einen Server berührt.
 
 Der SitePoint-Leitfaden ist die richtige Landkarte. Builderforce ist eine Plattform, die das gesamte Gelände bereits durchschritten hat – und weitergegangen ist, bis ins On-Device-Training, das der Browser bis vor Kurzem eigentlich nie beherrschen sollte.

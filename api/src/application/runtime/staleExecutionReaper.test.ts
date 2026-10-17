@@ -23,6 +23,10 @@ interface Captured {
 
 let candidateRows: Array<Record<string, unknown>> = [];
 let captured: Captured;
+/** What the one-statement idle probe reports; `null` = derive cloud_running from candidates. */
+let probeRow: Record<string, unknown> | null = null;
+/** Every statement kind the reaper issued, so the idle case can assert "probe only". */
+let calls: string[] = [];
 
 const dialect = new PgDialect();
 /** Bound parameters of a Drizzle WHERE clause, in order. */
@@ -43,9 +47,21 @@ function fakeDb() {
   return {
     // Only the stale-cloud-candidate SELECT projects `open_pr_count`; every other
     // read (tasks kinds, the park-age sibling sweep) yields nothing here.
+    execute: () => {
+      calls.push('execute');
+      return Promise.resolve({ rows: [probeRow ?? {
+        host_running: false, cloud_running: candidateRows.length > 0, queued: false, paused: false, park_age: false,
+      }] });
+    },
     select: (fields: Record<string, unknown>) => {
+      calls.push('select');
       const rows = 'open_pr_count' in fields ? candidateRows : [];
-      const where = () => Promise.resolve(rows);
+      // Awaitable directly and through the `.orderBy().limit()` the bounded candidate pull adds.
+      const where = () => {
+        const p = Promise.resolve(rows);
+        const limited = Object.assign(p, { limit: () => p });
+        return Object.assign(p, { limit: () => p, orderBy: () => limited });
+      };
       return { from: () => ({ where, innerJoin: () => ({ where }) }) };
     },
     update: () => ({
@@ -104,6 +120,8 @@ const STALE_TS = '2000-01-01T00:00:00.000Z'; // far past every deadline
 
 beforeEach(() => {
   candidateRows = [];
+  probeRow = null;
+  calls = [];
   captured = { failed: [], failedReasons: new Map(), requeuedPayloads: new Map(), requeueEvents: [] };
   startMock.mockReset();
 });
@@ -247,5 +265,37 @@ describe('reapStaleExecutions — per-surface silence ceiling (execution #136)',
 
     expect(res.failedRunning).toBe(1);
     expect(captured.failed).toContain(201);
+  });
+});
+
+describe('reapStaleExecutions — idle probe', () => {
+  it('issues ONLY the probe when nothing is stale (no UPDATE, no candidate SELECT, no park-age sweep)', async () => {
+    const res = await reapStaleExecutions(envWithRunner(true));
+
+    expect(calls).toEqual(['execute']);
+    expect(res).toEqual({ failedRunning: 0, failedQueued: 0, failedPaused: 0, requeuedCloud: 0, parkAge: { stale: 0, unparked: 0 } });
+  });
+
+  it('runs only the sweeps the probe flagged', async () => {
+    probeRow = { host_running: false, cloud_running: false, queued: true, paused: false, park_age: false };
+
+    await reapStaleExecutions(envWithRunner(true));
+
+    // The queued UPDATE runs; the cloud candidate SELECT does not.
+    expect(calls).toContain('execute');
+    expect(calls).not.toContain('select');
+  });
+
+  it('accepts text-typed booleans from the probe', async () => {
+    probeRow = { host_running: 'f', cloud_running: 't', queued: 'f', paused: 'f', park_age: 'f' };
+    candidateRows = [{
+      id: 7, tenant_id: 1, agent_host_id: null, payload: '{"reaperRequeued":true}', error_message: null,
+      task_id: 1, task_title: 'x', task_description: null,
+      project_id: 3, cloud_agent_ref: null, open_pr_count: 0, updated_at: STALE_TS,
+    }];
+
+    await reapStaleExecutions(envWithRunner(true));
+
+    expect(captured.failed).toContain(7);
   });
 });

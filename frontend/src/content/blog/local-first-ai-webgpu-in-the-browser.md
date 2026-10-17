@@ -36,50 +36,52 @@ One probe, one decision, shared by every consumer — no component recomputes "c
 
 ## 3. Tier 1: Chrome's built-in Gemini Nano
 
-This is the guide's headline feature, and now it's a first-class backend in Builderforce. Our `PromptApiModelProvider` wraps Chrome's `LanguageModel` API — **zero download** for the app (the model ships with the browser), no VRAM budget to manage, and **real token streaming** out of the box:
+This is the guide's headline feature, and it's a first-class engine in Builderforce. The Prompt API engine wraps Chrome's `LanguageModel` API — **zero download** for the app (the model ships with the browser), no VRAM budget to manage, and **real token streaming** out of the box. It sits beside two engines that run downloaded models on WebGPU — our own 1-bit **Bonsai** engine and **WebLLM** — behind one `PageEngine` contract:
 
 ```ts
-import { createInferenceProvider } from '@/lib/model-provider';
+import { createPageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 
-const ai = createInferenceProvider({
-  projectId,
-  systemPrompt: 'You are a concise coding assistant.',
-});
-await ai.init();
-
-// Streams tokens the instant the built-in model produces them.
-await ai.stream('Refactor this function', context, (token) => {
-  append(token);
-});
+// Bonsai, WebLLM and the Prompt API — one set per page, one fetch shim, one model store.
+const engines = createPageEngineSet({ loadBfi });
 ```
 
-The provider feature-detects the API, handles the `downloadable`/`downloading`/`available` states the browser reports, and surfaces the session's remaining **token budget** (`inputUsage` / `inputQuota`) so callers can trim history *before* the fixed context window runs out.
+The engine feature-detects the API, handles the `downloadable`/`downloading`/`available` states the browser reports, and every engine reports its real context window, so a conversation is packed to fit *before* it reaches a smaller on-device model.
 
 ## 4. The progressive-enhancement cascade
 
-The guide's most important idea is architectural: **one interface, many backends, graceful fallback**. That's exactly what `createInferenceProvider` returns — a single `ModelProvider` that internally orders:
+The guide's most important idea is architectural: **one interface, many backends, graceful fallback**. In Builderforce that's one routing step, `createHostModelStream` — the same function the web app, the VS Code extension and the Chrome side panel all run:
 
-1. **Chrome Prompt API** (local, zero-setup) — when the browser exposes it
-2. **Your on-device model** (a trained Mamba SSM, optionally worker-hosted) — when you've got one
-3. **Cloud LLM** — always available, the terminal fallback
+```ts
+import { createHostModelStream } from '@seanhogg/builderforce-brain-embedded';
 
-`init()` picks the highest-priority backend that becomes ready; `generate` and `stream` route to it and **transparently fall through** to the next ready tier if it throws. The "which backend?" decision lives in exactly one place. Your UI just talks to a `ModelProvider` and never branches on availability itself.
+const stream = createHostModelStream({
+  probes: () => engines.probe(),  // what this page can run right now
+  fetch: engines.fetch(),         // the engines' one transport
+  cloud: () => gatewayStream,     // the terminal tier
+});
+```
+
+Per call it orders:
+
+1. **A model you pinned** from the "On this device" picker — it runs here, full stop
+2. **Local first** — when a ready engine can serve the request, it answers on-device
+3. **Cloud LLM** — always available, and the **invisible failover** if a local attempt fails
+
+The "which backend?" decision lives in exactly one place. Your UI just streams and never branches on availability itself.
 
 ## 5. Web Worker isolation
 
-The guide is right that generation must never block the main thread — sampling over a 150k-entry logit vector *per token* will jank the UI. So the whole engine can run in a **Web Worker**. Because a `GPUDevice` can't be transferred across the worker boundary, the worker fully hosts the engine and the main thread talks to it over a small RPC protocol:
+The guide is right that heavy work must never block the main thread — sampling over a 150k-entry logit vector *per token* will jank the UI. WebLLM runs in a Web Worker when the host supplies one, and our on-device **Mamba** engine — the one you train — runs fully inside a worker. Because a `GPUDevice` can't be transferred across the worker boundary, the worker hosts the whole engine and the main thread talks to it over a small RPC protocol:
 
 ```ts
-import { createLocalFirstProvider } from '@/lib/mamba-worker-client';
+import { initMambaProvider } from '@/lib/mamba-worker-client';
 
-const ai = createLocalFirstProvider({
-  projectId,
-  includeLocalMamba: true, // Tier 2 runs entirely in a Web Worker
-});
-await ai.init();
+// Off the main thread when the runtime allows it; in-page otherwise.
+const mamba = await initMambaProvider({ dModel: 512, numLayers: 8 });
+await mamba.train(code, { epochs: 3, onEpochEnd: (epoch, loss) => plot(epoch, loss) });
 ```
 
-Token and per-epoch progress events stream back as messages; the trained checkpoint is **transferred** (not copied) home. And if the runtime can't spawn a worker, the provider reports not-ready and the cascade simply falls to the next tier — nothing breaks.
+Token and per-epoch progress events stream back as messages; the trained checkpoint is **transferred** (not copied) home. And if the runtime can't spawn a worker, it falls back to the in-page engine — nothing breaks.
 
 ## 6. `GPUDevice.lost` recovery
 
@@ -95,24 +97,24 @@ Model weights are cached in **IndexedDB** after first download, from a multi-sou
 | --- | --- |
 | WebGPU compute shaders | ✅ Hand-written WGSL Mamba SSM kernels |
 | WASM tokenization/sampling | ✅ BPE tokenizer, trained on your own corpus |
-| Chrome Prompt API (Tier 1) | ✅ `PromptApiModelProvider`, real streaming |
-| Web-LLM / WebGPU (Tier 2) | ✅ On-device Mamba, optionally worker-hosted |
+| Chrome Prompt API (Tier 1) | ✅ Prompt API page engine, real streaming |
+| Web-LLM / WebGPU (Tier 2) | ✅ WebLLM and our 1-bit Bonsai engine, on WebGPU |
 | Cloud fallback (Tier 3) | ✅ Terminal tier in the cascade |
-| Uniform interface + fallback | ✅ `createInferenceProvider` |
-| Web Worker isolation | ✅ Full engine hosted in a worker |
+| Uniform interface + fallback | ✅ `createHostModelStream`, one step on every surface |
+| Web Worker isolation | ✅ WebLLM and the Mamba engine hosted in workers |
 | `GPUDevice.lost` recovery | ✅ Single-source device-loss handling |
 | Local weight caching | ✅ IndexedDB, streaming, multi-source |
 | Feature-detect everything | ✅ WebNN → WebGPU → CPU probe |
 | **On-device *training*** | ✅ **Beyond the guide** — real backward pass + AdamW |
 | **NPU via WebNN** | ✅ **Beyond the guide** |
-| **Semantic response cache** | ✅ **Beyond the guide** — on-device SSM embeddings |
+| **On-device answer memory** | ✅ **Beyond the guide** — on-device SSM embeddings |
 
 ## How to use it
 
 Every piece above is available today:
 
-- **Chat / assistant surfaces** call `createInferenceProvider({ projectId })` and get the local-first cascade for free — Gemini Nano when the browser has it, cloud otherwise, one line of code.
-- **Privacy-sensitive work** flips on `includeLocalMamba` to keep inference entirely on-device in a Web Worker.
+- **Chat / assistant surfaces** get the local-first cascade for free — Gemini Nano or a model you downloaded from the "On this device" picker when the browser can run it, the cloud otherwise, with the same routing on the web, in VS Code and in the Chrome side panel.
+- **Privacy-sensitive work** pins an on-device model, so the request never leaves the machine.
 - **Fine-tuning** happens in the [AI Training panel](/training): point it at your code, and real WebGPU gradient descent produces a checkpoint that never touches a server.
 
 The SitePoint guide is the right map. Builderforce is a platform that has already walked the whole territory — and kept going, into on-device training that the browser was, until recently, never supposed to be able to do.

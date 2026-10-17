@@ -4,7 +4,7 @@
  * team-chat posts and execution updates.
  */
 
-import { eq, and, inArray, isNotNull, sql } from 'drizzle-orm';
+import { eq, and, inArray, isNotNull } from 'drizzle-orm';
 import { brainChats, brainChatMessages } from '../../infrastructure/database/schema';
 import { reconcileKeyedBatch, unwrittenKeys } from '../../domain/shared/keyedBatch';
 import { messageColumns, type BrainChatMessageRow } from './brainChatShapes';
@@ -51,16 +51,9 @@ export async function appendRaw(
     })
     .returning({ ...messageColumns, eventKey: brainChatMessages.eventKey });
 
-  // The generated PK is an atomic database append order. A read-then-write
-  // MAX(seq)+1 races when agents and humans append concurrently — so seq simply
-  // BECOMES the id, in one statement for the batch.
-  const ids = rows.map((r) => r.id);
-  if (ids.length > 0) {
-    await db
-      .update(brainChatMessages)
-      .set({ seq: sql`${brainChatMessages.id}` })
-      .where(inArray(brainChatMessages.id, ids));
-  }
+  // seq is the generated PK (atomic append order; MAX(seq)+1 races under concurrent
+  // appends). Migration 1233's BEFORE INSERT trigger stamps it inside the INSERT, so
+  // RETURNING already carries it — no follow-up UPDATE round trip.
 
   // Touch updatedAt on the chat
   await db
@@ -68,7 +61,7 @@ export async function appendRaw(
     .set({ updatedAt: new Date() })
     .where(eq(brainChats.id, chatId));
 
-  const written = rows.map((row) => ({ ...row, seq: row.id }));
+  const written = rows;
   // Nothing was skipped: every message is new, so the batch IS the answer.
   if (written.length === valid.length) return written.map(({ eventKey: _k, ...row }) => row);
   return keyedRows(db, chatId, valid, written);

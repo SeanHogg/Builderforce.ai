@@ -12,18 +12,21 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *      for superadmin diagnostics and must never be serialized back.
  *   2. Tracing must never fail or slow a request — every insert is
  *      fire-and-forget via `ctx.waitUntil` and swallows its own errors.
+ *   3. One call, one write: a streamed call is inserted once at stream end
+ *      ({@link logStreamedTrace}), never inserted then patched.
  *
  * The trace id itself is minted by `newTraceId()` in LlmProxyService (so the
  * proxy can stamp it onto `ProxyResult` even for internal callers that don't
  * pre-generate one); routes pass that same id here.
  */
-import { eq } from 'drizzle-orm';
 import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { llmTraces } from '../../infrastructure/database/schema';
 import { redactSecrets } from '../../infrastructure/security/redactSecrets';
 import type { ImageProxyResult } from './ImageProxyService';
 import type { HonoEnv } from '../../env';
 import { requestCarriesImages } from './vendors/capabilityGate';
+import { wrapStreamForTrace, type StreamedCompletion } from './streamTrace';
+import type { LlmUsage } from './LlmProxyService';
 
 type Env = HonoEnv['Bindings'];
 
@@ -172,6 +175,9 @@ export interface TraceInput {
   /** Parsed final response or error envelope. */
   responseBody?: unknown;
   errorMessage?: string | null;
+  /** When the call began. Set by {@link logStreamedTrace}, whose single insert lands
+   *  at stream end; omitted, `created_at` takes the insert time. */
+  startedAt?: Date;
 }
 
 /**
@@ -223,6 +229,7 @@ export function logTrace(env: Env, ctx: TraceCtx | undefined | null, input: Trac
     requestBody:       redactedJsonOrNull(input.requestBody?.messages ?? input.requestBody ?? null),
     responseBody:      redactedJsonOrNull(input.responseBody ?? null),
     callerMetadata:    jsonOrNull(input.callerMetadata ?? null),
+    ...(input.startedAt ? { createdAt: input.startedAt } : {}),
   };
   enqueueTrace(
     ctx,
@@ -236,73 +243,55 @@ export function logTrace(env: Env, ctx: TraceCtx | undefined | null, input: Trac
 }
 
 /**
- * Back-fill token usage onto an already-written streaming trace [1298].
+ * Trace a STREAMED call with ONE write, made when the stream ends.
  *
- * For `stream: true` calls the trace row is inserted up-front (identity, timing,
- * chain) with zero tokens, because usage is only known from the final SSE chunk.
- * The stream's usage callback calls this to UPDATE the matching row by trace id,
- * so streamed traces show real token counts instead of 0. Fire-and-forget; never
- * fails the request. The completion body is back-filled separately by
- * {@link backfillTraceResponseBody}, which the same stream tee drives.
+ * A streamed trace used to be three statements: an up-front insert with 0 tokens
+ * and a null body, then an UPDATE for usage and another for the completion body,
+ * because both are only learnt in passing ({@link wrapStreamForTrace}). Each is a
+ * Neon HTTPS round trip that keeps the compute awake. Nothing reads a trace while
+ * its stream is still open (lookups are by a trace id quoted after the call, or a
+ * run's finished turns), so the row is built once the tee has everything and
+ * inserted once, stamped with the call's start time so `created_at` still orders
+ * traces by when the call began. The tee finishes on a client cancel too, so a
+ * cancelled stream is still traced with what arrived.
+ *
+ * With no stream body (the caller is about to answer with an error, or the call
+ * was not streamed) the trace is written immediately, as {@link logTrace} would.
+ * `onUsage` lets the caller meter the same usage frame (gateway usage ledger).
  */
-export function backfillTraceUsage(
+export function logStreamedTrace(
   env: Env,
   ctx: TraceCtx | undefined | null,
-  traceId: string,
-  usage: { promptTokens?: number; completionTokens?: number; totalTokens?: number },
-): void {
-  enqueueTrace(
-    ctx,
-    buildTransactionalDatabase(env)
-      .update(llmTraces)
-      .set({
-        promptTokens:     usage.promptTokens ?? 0,
-        completionTokens: usage.completionTokens ?? 0,
-        totalTokens:      usage.totalTokens ?? 0,
-      })
-      .where(eq(llmTraces.traceId, traceId))
-      .catch((error) => { /* tracing must never fail the request */ 
-        reportCaughtError(error, { source: "application/llm/traceLogger.ts", operation: "backfillTraceUsage" });
-      }),
-  );
+  input: TraceInput,
+  source: ReadableStream<Uint8Array> | null | undefined,
+  onUsage?: (usage: LlmUsage) => void,
+): ReadableStream<Uint8Array> | null {
+  if (!source) {
+    logTrace(env, ctx, input);
+    return null;
+  }
+  const startedAt = input.startedAt ?? new Date();
+  return wrapStreamForTrace(source, {
+    ...(onUsage ? { onUsage } : {}),
+    onComplete: (completion) => logTrace(env, ctx, {
+      ...input,
+      startedAt,
+      streamed: true,
+      usage: completion.usage ?? input.usage ?? null,
+      responseBody: streamedResponseBody(completion),
+    }),
+  });
 }
 
-/**
- * Back-fill the COMPLETION BODY onto an already-written streaming trace.
- *
- * A streamed trace used to capture everything except the one field a reader opens
- * it for: what the model actually said. `response_body` stayed null because the
- * body is only assembled as the SSE frames arrive, long after the row is written.
- * The stream tee ({@link wrapStreamForTrace}) reassembles the completion as it
- * passes through to the client and hands it here, so a streamed trace reads the
- * same as a non-streamed one.
- *
- * Redacted and capped by the same helper the insert path uses — a streamed body is
- * no less likely to echo a pasted key. Fire-and-forget; a failure here can never
- * touch the stream, which has already been delivered.
- */
-export function backfillTraceResponseBody(
-  env: Env,
-  ctx: TraceCtx | undefined | null,
-  traceId: string,
-  responseBody: unknown,
-  errorMessage?: string | null,
-): void {
-  const body = redactedJsonOrNull(responseBody ?? null);
-  if (body == null && !errorMessage) return;
-  enqueueTrace(
-    ctx,
-    buildTransactionalDatabase(env)
-      .update(llmTraces)
-      .set({
-        ...(body != null ? { responseBody: body } : {}),
-        ...(errorMessage ? { errorMessage } : {}),
-      })
-      .where(eq(llmTraces.traceId, traceId))
-      .catch((error) => { /* tracing must never fail the request */
-        reportCaughtError(error, { source: "application/llm/traceLogger.ts", operation: "backfillTraceResponseBody" });
-      }),
-  );
+/** The `response_body` a streamed trace stores: the reassembled completion. */
+export function streamedResponseBody(completion: StreamedCompletion): Record<string, unknown> {
+  return {
+    streamed: true,
+    content: completion.content,
+    finishReason: completion.finishReason,
+    model: completion.model,
+    ...(completion.toolCalls.length > 0 ? { toolCalls: completion.toolCalls } : {}),
+  };
 }
 
 /**

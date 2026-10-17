@@ -7,7 +7,7 @@ Por eso los runtimes sobre los que está construido Builderforce son código abi
   "kind": "stack",
   "title": "Cuatro proyectos, una plataforma encima",
   "bands": [
-    { "label": "BuilderForce WebContainers", "note": "Un runtime de desarrollo en el navegador: vista previa, build, comprobación de tipos, Node, npm y una shell, sin COOP/COEP y sin límite de sesiones.", "hue": "make", "tag": "TypeScript · npm" },
+    { "label": "BuilderForce WebContainers", "note": "Un runtime de desarrollo en el navegador: vista previa, build, comprobación de tipos, Node, npm y una shell, sin exigir COOP/COEP y sin límite de sesiones.", "hue": "make", "tag": "TypeScript · npm" },
     { "label": "BuilderForce Memory", "note": "Memoria SSM persistente y entrenable en el navegador para cualquier agente, una caché semántica que recorta el gasto en tokens y un servidor MCP.", "hue": "idea", "tag": "TypeScript · npm" },
     { "label": "BuilderForce Inference", "note": "Synapse, la app de escritorio, y bfi, un motor nativo que ejecuta modelos en tu propia máquina.", "hue": "run", "tag": "Rust" },
     { "label": "BuilderForce Spawn", "note": "Crea juegos de Roblox hablando: una app de escritorio y un puente con Roblox Studio.", "hue": "reach", "tag": "Rust" }
@@ -20,7 +20,7 @@ Por eso los runtimes sobre los que está construido Builderforce son código abi
 
 **Qué es.** Un runtime de desarrollo en el navegador, abierto y con el que puedes hacer un fork. Entrégale un proyecto como archivos y sirve una vista previa en vivo: Vite con React, Vue o Svelte, Create React App y sitios estáticos. Compila para despliegue (`runtime.build()`) y comprueba tipos (`createChecker()`) en la página, y ejecuta programas Node, `npm install` desde el registro real y una shell interactiva, con un Web Worker por proceso.
 
-**Qué vale.** Necesita un contexto seguro y un service worker, nada más. Sin cabeceras COOP/COEP, las ventanas de inicio de sesión, los marcos de pago y los embeds de tu app siguen funcionando. Sin límite de sesiones, abrir una vista previa no cuesta nada. Con puertos intercambiables, puedes cambiar el compilador o el CDN de paquetes sin hacer un fork del núcleo. Sustituyó a StackBlitz WebContainers en cada vista previa del lienzo, cada Publicar y cada Comprobar de Builderforce.
+**Qué vale.** Necesita un contexto seguro y un service worker, nada más. Como no exige COOP/COEP, no añade cabeceras de aislamiento propias: las ventanas de inicio de sesión, los marcos de pago y los embeds de tu app siguen funcionando. Sin límite de sesiones, abrir una vista previa no cuesta nada. Con puertos intercambiables, puedes cambiar el compilador o el CDN de paquetes sin hacer un fork del núcleo. Sustituyó a StackBlitz WebContainers en cada vista previa del lienzo, cada Publicar y cada Comprobar de Builderforce.
 
 **Con claridad sobre sus límites.** Los complementos nativos, los scripts de instalación y los servidores de desarrollo de Next.js, Nuxt, SvelteKit, Remix y Astro no se ejecutan; el runtime detecta esos proyectos y explica por qué. Los WebSockets y las respuestas en streaming están en la hoja de ruta.
 
