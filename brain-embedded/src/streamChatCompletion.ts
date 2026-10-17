@@ -210,10 +210,11 @@ export interface StreamChatOptions {
    */
   metadata?: CompletionMetadata;
   /**
-   * Silence (zero bytes read) that ends this stream, defaulting to
-   * {@link STREAM_IDLE_MS}. A stalled upstream never settles its `read()`, so without
-   * this a dead turn hangs until the user presses Stop. Overridden only by tests,
-   * which cannot wait four minutes to prove it.
+   * Silence that ends this request — no response headers, or zero bytes read, for this
+   * long — defaulting to {@link STREAM_IDLE_MS}. A stalled upstream never settles, so
+   * without this a dead turn hangs until the user presses Stop. A host sets its own
+   * budget here (the canvas, an interactive surface on free models, waits less than an
+   * IDE run whose reasoning model may think for minutes); the RULE is this one.
    */
   idleTimeoutMs?: number;
   signal?: AbortSignal;
@@ -482,6 +483,17 @@ export async function streamChatCompletion(
   }
 
   const doFetch = transport.fetch ?? ((input: string, init: RequestInit) => fetch(input, init));
+  // THE silence rule covers the wait for response HEADERS too, not only the reads after
+  // them: a gateway that accepts the socket and never answers left the turn waiting
+  // forever, which is why the canvas once carried a second, private watchdog. One rule,
+  // one budget (`idleTimeoutMs`) — the user's Stop is forwarded, and our own trip is
+  // reported as an interruption the run loop routes around. The listener is `once` and
+  // stays for the body: the same signal must still cancel the stream after the headers.
+  const idleMs = opts.idleTimeoutMs ?? STREAM_IDLE_MS;
+  const request = new AbortController();
+  if (opts.signal?.aborted) request.abort();
+  else opts.signal?.addEventListener('abort', () => request.abort(), { once: true });
+  const headerDeadline = Number.isFinite(idleMs) && idleMs > 0 ? setTimeout(() => request.abort(), idleMs) : undefined;
   let res: Response;
   try {
     // A connection that never opened reached nobody, so it is sent again with backoff —
@@ -491,12 +503,15 @@ export async function streamChatCompletion(
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-        signal: opts.signal,
+        signal: request.signal,
       }),
-      { signal: opts.signal, ...(handlers.onConnectRetry ? { onRetry: handlers.onConnectRetry } : {}) },
+      { signal: request.signal, ...(handlers.onConnectRetry ? { onRetry: handlers.onConnectRetry } : {}) },
     );
   } catch (e) {
     if (opts.signal?.aborted) throw e;
+    if (request.signal.aborted) {
+      throw new StreamInterruptedError(`the gateway sent nothing for ${Math.round(idleMs / 1000)}s`, model);
+    }
     // A transport-level failure (network error, DNS, refused, timeout before response).
     // This is NOT an HTTP error — we never got a Response. Throw a TransportError so
     // the caller can retry under auto-routing, the same way it handles StreamInterruptedError.
@@ -507,6 +522,8 @@ export async function streamChatCompletion(
     }
     // Rethrow anything else as-is — unexpected.
     throw e;
+  } finally {
+    clearTimeout(headerDeadline);
   }
   if (res.status === 401) transport.onUnauthorized?.(res, !!token);
   if (!res.ok) throw await (transport.mapError ?? defaultMapError)(res);
@@ -610,7 +627,7 @@ export async function streamChatCompletion(
       // open and never settles this read, so the turn used to hang until the user
       // pressed Stop. An idle trip is an interruption like any other — the run loop
       // retries the turn once on another model.
-      chunkRead = await readWithIdleWatchdog(reader, { idleMs: opts.idleTimeoutMs ?? STREAM_IDLE_MS });
+      chunkRead = await readWithIdleWatchdog(reader, { idleMs });
     } catch (e) {
       // A user Stop aborts the fetch — that is a cancellation, not an upstream failure.
       if (opts.signal?.aborted) throw e;

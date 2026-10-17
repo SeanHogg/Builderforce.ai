@@ -2,7 +2,7 @@ import {
   hasWebGPUSupport,
   probeDevice,
   watchDeviceLoss
-} from "./chunk-Q5Y27QLY.mjs";
+} from "./chunk-J5TFPZVT.mjs";
 export {
   hasWebGPUSupport,
   probeDevice,

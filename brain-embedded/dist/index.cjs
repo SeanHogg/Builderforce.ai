@@ -306,6 +306,7 @@ __export(src_exports, {
   promptApiInputQuota: () => promptApiInputQuota,
   promptApiMeasure: () => promptApiMeasure,
   promptStreamDeltas: () => promptStreamDeltas,
+  providerFailureEvent: () => providerFailureEvent,
   queueRunSteering: () => queueRunSteering,
   ratedTurnContext: () => ratedTurnContext,
   ratedTurnTool: () => ratedTurnTool,
@@ -360,6 +361,7 @@ __export(src_exports, {
   toolSpecsFor: () => toolSpecsFor,
   traceWithPersistedSteps: () => traceWithPersistedSteps,
   transcriptSeedFrom: () => transcriptSeedFrom,
+  transportRetryTrace: () => transportRetryTrace,
   trimToolResult: () => trimToolResult,
   turnInterruption: () => turnInterruption,
   turnOptimizationDirective: () => turnOptimizationDirective,
@@ -1634,6 +1636,11 @@ async function streamChatCompletion(opts, handlers = {}) {
     if (Object.keys(meta).length > 0) body.metadata = meta;
   }
   const doFetch = transport.fetch ?? ((input, init) => fetch(input, init));
+  const idleMs = opts.idleTimeoutMs ?? STREAM_IDLE_MS;
+  const request = new AbortController();
+  if (opts.signal?.aborted) request.abort();
+  else opts.signal?.addEventListener("abort", () => request.abort(), { once: true });
+  const headerDeadline = Number.isFinite(idleMs) && idleMs > 0 ? setTimeout(() => request.abort(), idleMs) : void 0;
   let res;
   try {
     res = await retryOnConnectFailure(
@@ -1641,16 +1648,21 @@ async function streamChatCompletion(opts, handlers = {}) {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal: opts.signal
+        signal: request.signal
       }),
-      { signal: opts.signal, ...handlers.onConnectRetry ? { onRetry: handlers.onConnectRetry } : {} }
+      { signal: request.signal, ...handlers.onConnectRetry ? { onRetry: handlers.onConnectRetry } : {} }
     );
   } catch (e) {
     if (opts.signal?.aborted) throw e;
+    if (request.signal.aborted) {
+      throw new StreamInterruptedError(`the gateway sent nothing for ${Math.round(idleMs / 1e3)}s`, model);
+    }
     if (e instanceof TypeError) {
       throw new TransportError(describeNetworkError(e), void 0, { cause: e, unreachable: isConnectFailure(e) });
     }
     throw e;
+  } finally {
+    clearTimeout(headerDeadline);
   }
   if (res.status === 401) transport.onUnauthorized?.(res, !!token);
   if (!res.ok) throw await (transport.mapError ?? defaultMapError)(res);
@@ -1737,7 +1749,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   while (true) {
     let chunkRead;
     try {
-      chunkRead = await readWithIdleWatchdog(reader, { idleMs: opts.idleTimeoutMs ?? STREAM_IDLE_MS });
+      chunkRead = await readWithIdleWatchdog(reader, { idleMs });
     } catch (e) {
       if (opts.signal?.aborted) throw e;
       if (e instanceof StreamIdleError) {
@@ -1844,6 +1856,447 @@ function useBrainConfig() {
   const ctx = (0, import_react.useContext)(BrainConfigContext);
   if (!ctx) throw new Error("useBrainConfig must be used within a BrainProvider");
   return ctx;
+}
+
+// src/providerFailure.ts
+function providerFailureEvent(error) {
+  if (error instanceof StreamInterruptedError) {
+    return { type: "transport_failed", kind: "interrupted", ...error.model ? { model: error.model } : {} };
+  }
+  if (error instanceof TransportError) {
+    return { type: "transport_failed", kind: error.unreachable ? "unreachable" : "transport" };
+  }
+  return null;
+}
+
+// ../packages/agent-stall/src/requestIntent.ts
+var CHANGE_VERB = /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge)\b/i;
+var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will|explain|describe|summar|tell me|show me|list|compare|review|analyse|analyze)\b|\?\s*$/i;
+function asksForChange(text) {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  const head = t.slice(0, 600);
+  if (QUESTION_SHAPE.test(head)) return false;
+  return CHANGE_VERB.test(head);
+}
+var NOTHING_DONE = /\b(nothing (has been|was|is) (changed|modified|applied|edited|written|saved)|no (changes?|edits?) (have been|were|was) (made|applied|written|saved)|(not|never) (yet )?(been )?(applied|written|saved|committed)|has not been (changed|applied|modified)|before (applying|making) the edit)\b/i;
+var DEFERRED_PROMISE = /\b(re-?run me|run me again|ask me again|in a follow-?up|next run|on the next turn|say the word|let me know and I'?ll|I'?ll (then )?(apply|make|write|implement|create|edit|fix|update|do|proceed|carry)|I will (then )?(apply|make|write|implement|create|edit|fix|update|proceed))\b/i;
+var BUDGET_EXHAUSTED = /\b(tool-?call budget|step budget|iteration (cap|limit|budget)|ran out of (tool calls|steps|budget)|hit (the|my) (tool|step|budget))\b/i;
+function promisesUnfinishedWork(text) {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  return NOTHING_DONE.test(t) || DEFERRED_PROMISE.test(t) || BUDGET_EXHAUSTED.test(t);
+}
+var CONTINUATION = /^\s*(?:ok(?:ay)?[,\s]*)?(?:please\s+)?(?:now\s+)?(?:just\s+)?(?:go\s+ahead|carry\s+on|keep\s+going|make\s+it\s+so|do\s+it|do\s+that|do\s+so|fix\s+it|fix\s+that|apply\s+it|apply\s+that|apply|fix|go|proceed|continue|yes|yep|yeah|y|sure|confirm(?:ed)?|approved?|ship\s+it|send\s+it|run\s+it|do\s+the\s+fix|make\s+the\s+change)\s*[.!]*\s*$/i;
+var MAX_CONTINUATION_CHARS = 40;
+function isContinuationDirective(text) {
+  const t = (text ?? "").trim();
+  if (!t || t.length > MAX_CONTINUATION_CHARS) return false;
+  return CONTINUATION.test(t);
+}
+var CURRENT_STATE = /^\s*(?:(?:so|ok(?:ay)?|and|hey)[,\s]+)?(?:(?:what(?:'s| is) )?(?:the )?(?:current |latest )?(?:status|progress|update|updates|news|eta|state of (?:play|things))\b|any (?:updates?|news|progress)\b|where (?:are|do) (?:we|things|you) (?:stand|at)\b|where are we\b|how(?:'s| is) it going\b|how far along\b|is it (?:done|finished|ready|working|fixed)\b|are (?:we|you) done\b|what(?:'s| is) (?:left|next|remaining|the latest|happening)\b|still working\b)/i;
+function asksAboutCurrentState(text) {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  return CURRENT_STATE.test(t.slice(0, 200));
+}
+function memoryReplayable(question, context = {}) {
+  const q = (question ?? "").trim();
+  if (!q || context.followUp === true) return false;
+  return !asksForChange(q) && !asksAboutCurrentState(q) && !isContinuationDirective(q);
+}
+function continuationDirective() {
+  return `The user's last message is a bare directive ("fix", "do it", "go ahead") with no subject of its own. It refers to the proposal in YOUR immediately preceding message, which described work you had not yet carried out. Carry out that exact proposal now, using the tools, starting from the files and the change it already named \u2014 do NOT ask the user what to fix, and do NOT re-derive the analysis you have already done and can read above. If the earlier proposal named a specific file and edit, apply that edit. Report what you changed when it is done.`;
+}
+
+// ../packages/agent-stall/src/handoff.ts
+var EXECUTION_TOOLS = /* @__PURE__ */ new Set([
+  "run_command",
+  "run_shell_command",
+  "execute_command",
+  "bash",
+  "shell",
+  "terminal",
+  "git_commit",
+  "git_push",
+  "git_sync_latest",
+  "open_pull_request",
+  // The SERVER addressed-agent reply has no shell of its own — its shell lives in the
+  // agent's runtime, and this tool is the door to it. Its own system prompt already
+  // says "NEVER reply that you lack a git or file tool"; without this entry the gate
+  // that enforces that sentence could never fire on the one surface it was written for.
+  "builtin_chats_execute_as_agent"
+]);
+function canExecuteCommands(toolNames) {
+  return (toolNames ?? []).some((n) => EXECUTION_TOOLS.has(n.toLowerCase()));
+}
+var RUNNER = "(?:npm|pnpm|yarn|npx|bun|deno|node|git|make|cargo|go|dotnet|mvn|gradle|python3?|pip3?|poetry|uv|ruby|rake|bundle|composer|php|docker(?:\\s+compose)?|kubectl|helm|terraform|wrangler|vercel|netlify|vite|webpack|tsc|tsgo|eslint|prettier|pytest|jest|vitest|playwright|cypress|bash|sh|zsh|pwsh|powershell|curl|wget|sed|awk|rsync|vsce)\\b";
+var SCRIPT_NOUN = "(?:build|tests?|test suite|type-?check(?:ing)?|typecheck|lint(?:er|ing)?|guards?|checks?|install|dev server|migrations?|deploy(?:ment)?|codegen|bundle|vsix|package|commit|push|pull request|pr\\b|branch|lockfile|extension host)";
+var CMD_MARK = "\u2983cmd\u2984";
+var ID_MARK = "\u2983id\u2984";
+var OUT_OF_REACH = /\b(credential|password|api ?key|secret|auth token|\.env\b|environment variable|2fa|mfa|sign ?in|log ?in|browser|incognito|restart vs ?code|reload the window|reinstall the extension|github ui|web ui|dashboard|billing|payment|admin console|approve|permission|by hand|manually)\b/i;
+var TAIL_CHARS = 900;
+var WINDOW_BEFORE = 80;
+var WINDOW_AFTER = 220;
+function normalise(text) {
+  const mark = (body) => new RegExp(RUNNER, "i").test(body) ? ` ${CMD_MARK} ` : ` ${ID_MARK} `;
+  return text.replace(/```[\s\S]*?(?:```|$)/g, (m) => mark(m)).replace(/`[^`\n]+`/g, (m) => mark(m));
+}
+var HANDOFF_VERB = "(?:re-?run|run|execute|apply|install|re-?install|rebuild|build|compile|commit|push|deploy|publish|restart|relaunch|launch|start|test|verify|lint|type-?check|typecheck|migrate|regenerate|package|bump|trigger|kick off)";
+var HANDS_OFF = new RegExp(
+  [
+    // "you can run", "you'll need to run", "you should now commit", "you must rebuild"
+    `\\byou(?:'ll|'d|'ve| will| would| should| must| may| might| can| could| still| then| now)?(?:\\s+(?:then|now|also|just|still|next|first|finally|want to|need to|have to|be able to))*\\s+${HANDOFF_VERB}\\b`,
+    // "please run the guards"
+    `\\bplease\\s+(?:now\\s+|then\\s+)?${HANDOFF_VERB}\\b`,
+    // "once you've run the build", "after you push"
+    `\\b(?:once|after|when|before)\\s+you(?:'ve| have| had)?\\s+${HANDOFF_VERB}\\b`,
+    // "run the following", "apply these changes", "execute this command"
+    `\\b${HANDOFF_VERB}\\s+(?:the\\s+following|these|this)\\b`,
+    // "to verify, run …" / "to apply the fix you need to run …"
+    `\\bto\\s+(?:apply|verify|confirm|finish|complete|deploy|ship|land|pick up|see)\\b[^.\\n]{0,60}?,?\\s*(?:you\\s+(?:can|should|must|will|need to|have to)\\s+)?${HANDOFF_VERB}\\b`,
+    // A steps list: "1. Run the type-check", "- Commit the change", "Then push to main"
+    `(?:^|\\n)[ \\t]*(?:\\d+[.)]|[-*+]|#{1,6}|>)?[ \\t]*(?:then|now|next|finally|first)?[,:]?[ \\t]*${HANDOFF_VERB}\\b`,
+    // The same imperative mid-paragraph: "I applied the fix. Now run the type-check."
+    // The adverb is REQUIRED here, unlike the line-leading form above — without it a
+    // plain sentence that happens to open with one of these words ("Build output is
+    // clean now.") would read as an instruction.
+    `[.!?]\\s+(?:then|now|next|finally|first)[,:]?\\s+${HANDOFF_VERB}\\b`
+  ].join("|"),
+  "gi"
+);
+var COMMAND_NEARBY = new RegExp(`${CMD_MARK}|${RUNNER}|\\b${SCRIPT_NOUN}`, "i");
+function handsWorkToUser(text) {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  const scanned = normalise(t.slice(-TAIL_CHARS));
+  HANDS_OFF.lastIndex = 0;
+  for (let m = HANDS_OFF.exec(scanned); m; m = HANDS_OFF.exec(scanned)) {
+    const window2 = scanned.slice(
+      Math.max(0, m.index - WINDOW_BEFORE),
+      m.index + m[0].length + WINDOW_AFTER
+    );
+    if (!COMMAND_NEARBY.test(window2)) continue;
+    if (OUT_OF_REACH.test(window2)) continue;
+    HANDS_OFF.lastIndex = 0;
+    return true;
+  }
+  return false;
+}
+function delegatesExecutableWork(text, ctx) {
+  if (!canExecuteCommands(ctx.availableToolNames)) return false;
+  if (!asksForChange(ctx.requestText)) return false;
+  return handsWorkToUser(text);
+}
+function handoffRecoveryNudge(lastChance) {
+  return "Your last turn ended by telling the USER to run commands. You are the one holding the tools \u2014 `run_command` for shell steps, the git tools to commit and push \u2014 so those steps are yours, not theirs. Carry them out NOW in this turn: run the commands you just listed, read their output, and fix anything that fails before you answer. Verification you hand to the user is verification nobody does. Only leave a step to the user when you genuinely cannot do it here \u2014 it needs a credential, a browser, or a decision that is theirs \u2014 and then say which step and why." + (lastChance ? " This is your last chance to act: your answer after this turn is shown to the user as-is, so either run the commands now or state plainly, at the top of your reply, that the change is UNVERIFIED and exactly which steps were never run." : "");
+}
+
+// ../packages/agent-stall/src/permissionMenu.ts
+var TAIL_CHARS2 = 900;
+var ACTION_VERB = "(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so|first|next|now|any|all)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)";
+var OFFER = new RegExp(
+  [
+    // "Would you like me to open the PRs?" · "Do you want me to merge these?"
+    // · "Would you like me to proceed?"
+    `\\b(?:would|do)\\s+you\\s+(?:like|want|prefer)\\s+(?:me|us)\\s+to\\b`,
+    // "Shall I open PRs?" · "Should I cancel the stalled tickets?" · "Can I proceed?"
+    // · "May I go ahead?"
+    `\\b(?:shall|should|can|may)\\s+i\\b[^.?\\n]{0,80}\\?`,
+    // "Want me to push these?" — the subjectless form.
+    `\\bwant\\s+(?:me|us)\\s+to\\b`,
+    // "Let me know if you'd like me to…" · "Let me know which of these to do"
+    // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
+    // "how" earns its place: "let me know how you'd like to proceed" is the single most
+    // common way this pause is phrased, and it names no option at all.
+    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
+    `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
+    `\\bsay the word\\b`,
+    // "I can open the PRs if you'd like." · "I could cancel them if you want."
+    // · "I'm happy to merge these if that's what you want."
+    `\\bi\\s+(?:can|could|am happy to|'?m happy to|would be happy to)\\b[^.\\n]{0,120}?\\bif\\s+(?:you|that|you'?d|you would)\\b`,
+    // "Confirm and I'll proceed." · "Approve and I'll merge them."
+    `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
+    // "Which would you like me to do first?" · "Which of these should I start with?"
+    `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
+    // "Your call." · "Up to you." · "How would you like to proceed?" — and the
+    // declarative order the same sentence takes inside a clause, "…how you would like
+    // to proceed", which the interrogative-only form used to miss.
+    `\\b(?:your call|up to you|it'?s your call)\\b`,
+    `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`
+  ].join("|"),
+  "gi"
+);
+var WINDOW_AFTER2 = 400;
+var WINDOW_BEFORE2 = 120;
+var ACTION_NEARBY = new RegExp(`\\b${ACTION_VERB}\\b`, "i");
+var USERS_OWN_CHOICE = /\b(?:did you mean|do you mean|what did you (?:mean|intend)|which did you mean|prefer(?:ence|red)?\b|intended behaviou?r|by design|is that (?:right|correct|intended|what you)|am i (?:right|correct) (?:that|in)|credential|password|api ?key|secret|which account|whose|budget|deadline|priorit(?:y|ise|ize))\b/i;
+function offersMenuInsteadOfActing(text) {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  const scanned = t.slice(-TAIL_CHARS2);
+  OFFER.lastIndex = 0;
+  for (let m = OFFER.exec(scanned); m; m = OFFER.exec(scanned)) {
+    const window2 = scanned.slice(
+      Math.max(0, m.index - WINDOW_BEFORE2),
+      m.index + m[0].length + WINDOW_AFTER2
+    );
+    if (!ACTION_NEARBY.test(window2)) continue;
+    OFFER.lastIndex = 0;
+    return true;
+  }
+  return false;
+}
+function pausesOnUsersOwnChoice(text) {
+  return USERS_OWN_CHOICE.test((text ?? "").slice(-TAIL_CHARS2));
+}
+var ASK_USER_TOOL_NAME = "ask_user";
+function askUserAdvertised(toolNames) {
+  return (toolNames ?? []).some((n) => n.toLowerCase() === ASK_USER_TOOL_NAME);
+}
+function asksPermissionForRequestedWork(text, ctx) {
+  if (!asksForChange(ctx.requestText)) return false;
+  if (!offersMenuInsteadOfActing(text)) return false;
+  if (pausesOnUsersOwnChoice(text) && !askUserAdvertised(ctx.availableToolNames)) return false;
+  return true;
+}
+function permissionRecoveryNudge(lastChance, askUserAvailable = false) {
+  const askBranch = askUserAvailable ? ` If some part of it genuinely IS the user's decision \u2014 two defensible options with no sensible default, something only they know \u2014 call \`${ASK_USER_TOOL_NAME}\` with the options as labelled choices instead of listing them in prose. That puts them on screen as buttons; a question in prose ends the run and costs a full round trip to answer. Do the parts that are NOT in question first, then ask about the rest.` : ` If some part of it genuinely IS the user's decision, say which single question you need answered, state which option you recommend and why, and carry out everything that does NOT depend on the answer before you stop.`;
+  return "Your last turn ended by asking the user whether to do work they had ALREADY asked for. You hold the tools to do it, so the answer is yes and it is yours to carry out: pick the sensible default for anything you offered as an option, and DO IT NOW in this turn. Report what you did afterwards \u2014 do not re-state the offer." + askBranch + (lastChance ? " This is your last chance to act: your answer after this turn is shown to the user as-is, so either start the work now or state plainly, at the top of your reply, exactly what you did NOT do and the one decision you are blocked on." : "");
+}
+
+// ../packages/agent-stall/src/index.ts
+var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to|'d need to| would need to| will need to| need to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
+var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
+var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|act|see|walk|trace|map)";
+var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
+var TOOL_IDENT = "(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)";
+function toolNamesMentionedIn(text) {
+  return [...new Set(text.match(new RegExp(TOOL_IDENT, "gi")) ?? [])];
+}
+var PSEUDO_CALL = [
+  // "call builtin_x", "run tool builtin_x", "invoke the function mcp__srv__x"
+  `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_IDENT}`,
+  // "builtin_x({…})" / "builtin_x(" — the call written as code
+  `${TOOL_IDENT}\\s*[({]`,
+  // "builtin_x with chatId is 85" — the call written as an argument clause
+  `${TOOL_IDENT}\\s+(?:with|args|arguments)\\b`
+];
+var ANNOUNCED_ACTION = new RegExp(
+  [
+    "calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)",
+    `${ANNOUNCE_SUBJECT}${ANNOUNCE_FILLER}\\s+${ANNOUNCE_VERB}\\b`,
+    "(one|just a) (moment|second|sec)\\b",
+    `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
+    // A sentence that OPENS on a gerund and signs off with "now": "Pulling linked tickets
+    // and the roster code now." The object-led form above wants the/this/now straight
+    // after the verb, so a bare noun phrase slipped through. Measured on VS Code chat #105
+    // (`xai-oauth/grok-4.6`): turns 1-2 were caught and re-prompted, turn 3 said exactly
+    // this, scored as a complete answer, and the run ended with a recovery still unspent.
+    `(?:^|[.!?\\n]\\s*)${ANNOUNCE_GERUND}\\b[^.!?\\n]{0,80}\\bnow\\b`,
+    "stand ?by\\b",
+    ...PSEUDO_CALL
+  ].join("|"),
+  "i"
+);
+var TAIL_CHARS3 = 240;
+function announcesUntakenAction(text) {
+  const t = text.trim();
+  if (!t) return false;
+  return ANNOUNCED_ACTION.test(t.slice(-TAIL_CHARS3));
+}
+var FILE_EXTENSION = "(?:ts|tsx|js|jsx|mjs|cjs|json|md|ya?ml|sql|toml|lock|txt|env|html|css|py|go|rs|sh|png|svg|csv|xml)\\b";
+var DOTTED_TOOL_IDENT = `\\b[a-z][a-z0-9_]{2,}\\.(?!${FILE_EXTENSION})[a-z][a-z0-9_]{2,}\\b`;
+function catalogToolNamesMentionedIn(text) {
+  return [...new Set(text.match(new RegExp(DOTTED_TOOL_IDENT, "gi")) ?? [])];
+}
+var UNCALLED_TOOL_CLAIM = new RegExp(
+  [
+    // "The tools required are X, Y and Z." / "The required tools are …"
+    "\\b(?:required tools?\\b|tools? required\\b|tools? (?:i |we )?(?:need|require)\\b)",
+    // "…tools have not returned results" / "…the tool has not returned anything yet"
+    "\\btools?\\b[^.!?]{0,80}?\\b(?:have|has|had|were|was)(?:n'?t| not)\\s+(?:yet\\s+)?(?:return|returned|provided|available|run|called)",
+    // "no tool results", "no results from the tools", "no tool outputs for project 11"
+    "\\bno\\s+(?:new\\s+)?tools?\\s+(?:results?|outputs?|data|returns?)\\b",
+    // "No other tools provide the needed data." — the same claim aimed at the CATALOG
+    // rather than at the results: an inventory of what it would need, from a turn that
+    // called none of it. Observed as the closing sentence of the measured replies.
+    "\\bno\\s+other\\s+tools?\\b[^.!?]{0,40}?\\b(?:provide|provides|give|gives|return|returns|have|has|offer|offers)\\b",
+    "\\bno\\s+results?\\s+(?:from|for)\\s+(?:the\\s+)?tools?\\b",
+    // "tool outputs never provided" / "the tool results were never returned"
+    "\\btools?\\s+(?:results?|outputs?)\\b[^.!?]{0,40}?\\b(?:never|not)\\s+(?:been\\s+)?(?:provided|returned|available)",
+    // "requires the tool outputs" / "awaiting the tool results"
+    "\\b(?:requires?|awaiting|waiting on|pending)\\s+(?:those\\s+|the\\s+)?tools?\\s+(?:results?|outputs?)",
+    // The same claim with the TOOL NAMED instead of the word "tool" — "no results from
+    // manager.digest", "missing builtin_manager_policy results". The name IS the
+    // discriminator here: prose does not carry tool identifiers by accident.
+    `\\bno\\s+(?:new\\s+)?(?:results?|data|outputs?|returns?)\\s+(?:from|for|on)\\s+(?:the\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`,
+    `\\b(?:missing|awaiting|pending|without)\\s+(?:the\\s+|those\\s+)?(?:results?\\s+(?:from|of|for)\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`
+  ].join("|"),
+  "i"
+);
+function claimsMissingToolData(text) {
+  const t = text.trim();
+  if (!t) return false;
+  return UNCALLED_TOOL_CLAIM.test(t);
+}
+var MAX_ANNOUNCEMENT_RECOVERIES = 3;
+function stallRecoveryNudge(lastChance, shape, ctx) {
+  if (shape === "handed-off") return handoffRecoveryNudge(lastChance);
+  if (shape === "asked-permission") {
+    return permissionRecoveryNudge(lastChance, askUserAdvertised(ctx?.availableToolNames));
+  }
+  return (
+    // Covers BOTH stall shapes: the promise ("I'll check…") and the missing-data claim
+    // ("the required tools have not returned results"). The second wording matters —
+    // a model told only "you said you would call a tool" when it never said any such
+    // thing tends to repeat the same excuse rather than act.
+    "Your last turn made zero tool calls. You either said you would call a tool and did not, reported that tool results were missing \u2014 no results exist because you never made the call \u2014 or returned nothing at all. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call, and do not reply with an empty message." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "")
+  );
+}
+function isEmptyTurn(input) {
+  return input.toolCallCount === 0 && input.availableToolCount > 0 && input.text.trim() === "";
+}
+function stallShape(input) {
+  if (input.toolCallCount !== 0 || input.availableToolCount <= 0) return null;
+  if (isEmptyTurn(input)) return "empty";
+  if (asksPermissionForRequestedWork(input.text, input)) return "asked-permission";
+  if (delegatesExecutableWork(input.text, input)) return "handed-off";
+  if (announcesUntakenAction(input.text)) return "announced";
+  if (claimsMissingToolData(input.text)) return "missing-data";
+  return null;
+}
+function isStalledTurn(input) {
+  return stallShape(input) !== null;
+}
+function shouldRecoverStalledTurn(input) {
+  return isStalledTurn(input) && input.recoveriesUsed < MAX_ANNOUNCEMENT_RECOVERIES;
+}
+function isExhaustedStall(input) {
+  return isStalledTurn(input) && input.recoveriesUsed >= MAX_ANNOUNCEMENT_RECOVERIES;
+}
+function resolveShape(arg) {
+  if (arg === true) return "empty";
+  if (typeof arg === "string") return arg;
+  return "announced";
+}
+function whatItDid(shape) {
+  const rounds = `${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`;
+  switch (shape) {
+    case "empty":
+      return `returned an empty turn \u2014 no tool call and no words \u2014 ${rounds}`;
+    case "handed-off":
+      return `handed the remaining work back to you as commands to run yourself, ${rounds}, rather than running them with the tools it holds`;
+    case "asked-permission":
+      return `asked your permission to carry out work you had already asked for, ${rounds}, rather than carrying it out`;
+    case "missing-data":
+      return `reported that tool results were missing without ever calling a tool, ${rounds}`;
+    default:
+      return `described tool calls instead of making them, ${rounds}`;
+  }
+}
+function whatYouGot(shape) {
+  switch (shape) {
+    case "empty":
+      return "there is no answer above to show you.";
+    case "handed-off":
+      return "the steps above are still yours to run \u2014 treat the change as UNVERIFIED.";
+    case "asked-permission":
+      return "the work you asked for has NOT been started \u2014 the answer above is an offer to start it.";
+    default:
+      return "the answer above is only a description of intended actions.";
+  }
+}
+function modelFailoverNotice(from, to, shape = false) {
+  const who = from && from !== "default" ? `\`${from}\`` : "The previous model";
+  return `${who} ${whatItDid(resolveShape(shape))}, so it cannot complete this request. Retrying on \`${to}\`.`;
+}
+function stallExhaustedNotice(model, tried, shape = false) {
+  const who = model && model !== "default" ? `The model \`${model}\`` : "The model";
+  const kind = resolveShape(shape);
+  const others = (tried ?? []).filter((m) => m && m !== model);
+  return `${who} ${whatItDid(kind)}, so nothing was actually run and ` + whatYouGot(kind) + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : kind === "handed-off" ? " Nothing upstream failed here \u2014 the model reached the right answer and declined to carry it out, which is an agency limitation. Run the steps it listed, or retry on a model from the coding pool, which is selected for exactly this." : " Before switching models, check your runtime or gateway log for this turn: a request REJECTED upstream \u2014 a prompt over the context limit, an exhausted quota \u2014 produces exactly these symptoms, and no other model will fix it. If the log is clean, this is a model limitation and a different model is the answer.");
+}
+function stallRecoveryToolChoice(input) {
+  return input.availableToolCount > 0 ? "required" : void 0;
+}
+function ids(list) {
+  return (list ?? []).map((m) => m.id).filter((id) => !!id);
+}
+function nextFallbackModel(surface, tried) {
+  if (!surface) return void 0;
+  const used = new Set(tried.filter(Boolean));
+  const byo = ids(surface.byo?.models);
+  const byoSet = new Set(byo);
+  const coding = (surface.codingModels ?? []).filter(Boolean);
+  const pool = ids(surface.data);
+  const tiers = [
+    coding.filter((m) => byoSet.has(m)),
+    byo,
+    coding,
+    pool
+  ];
+  for (const tier of tiers) {
+    const hit = tier.find((m) => !used.has(m));
+    if (hit) return hit;
+  }
+  return void 0;
+}
+var MAX_MODEL_FAILOVERS = 2;
+function chooseStallFailover(input) {
+  for (const m of [input.activeModel, input.resolvedModel]) {
+    if (m && m !== "default" && !input.tried.includes(m)) input.tried.push(m);
+  }
+  if (input.failoversUsed >= (input.maxFailovers ?? MAX_MODEL_FAILOVERS)) return void 0;
+  const next = input.pick ? input.pick(input.tried) : nextFallbackModel(input.surface, input.tried);
+  return next && !input.tried.includes(next) ? next : void 0;
+}
+
+// src/runPolicyTraces.ts
+function coderReaskTrace(ts, step, plannerModel) {
+  return {
+    ts,
+    category: "message",
+    label: "llm.role_handoff",
+    args: { from: plannerModel ?? "default", step },
+    result: `Analysis on ${plannerModel ?? "the planning model"} reached its first code change \u2014 handing the edit to the strongest connected coding model.`
+  };
+}
+function handOffTrace(ts, step, tasks, via) {
+  return {
+    ts,
+    category: "message",
+    label: "llm.role_handoff",
+    args: { step, tasks, via },
+    result: `Planning handed off ${tasks} task${tasks === 1 ? "" : "s"} to the coding model.`
+  };
+}
+function modelFailoverTrace(ts, step, from, outcome, shape) {
+  return {
+    ts,
+    category: "message",
+    label: "loop.model_failover",
+    args: { step, from, to: outcome.to, attempt: outcome.attempt, of: outcome.of },
+    result: modelFailoverNotice(from, outcome.to, shape)
+  };
+}
+function transportRetryTrace(ts, step, outcome, message) {
+  if (outcome.broken) {
+    return {
+      ts,
+      category: "message",
+      label: "llm.stream_interrupted",
+      args: { model: outcome.broken, step },
+      result: `${message} \u2014 retrying this turn on another connected model. ${outcome.broken} is left out for the rest of this run.`
+    };
+  }
+  return {
+    ts,
+    category: "message",
+    label: "llm.transport_error",
+    args: { step },
+    result: `${message} \u2014 retrying this turn on another connected model.`
+  };
 }
 
 // ../packages/local-inference/src/runtimes.ts
@@ -4663,9 +5116,9 @@ function isReadOnlyShellCall(tool, args) {
 // src/finishReason.ts
 var TRUNCATED_REASONS = /* @__PURE__ */ new Set(["length", "max_tokens", "maxtokens", "model_length", "output_limit"]);
 var MALFORMED_TOOL_CALL_REASONS = /* @__PURE__ */ new Set(["malformed_function_call", "malformed_tool_call", "invalid_tool_call"]);
-var normalise = (finishReason) => (finishReason ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+var normalise2 = (finishReason) => (finishReason ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
 function turnInterruption(finishReason) {
-  const reason = normalise(finishReason);
+  const reason = normalise2(finishReason);
   if (!reason) return null;
   if (TRUNCATED_REASONS.has(reason)) return "truncated";
   if (MALFORMED_TOOL_CALL_REASONS.has(reason)) return "malformed-tool-call";
@@ -5989,389 +6442,6 @@ function filterTicketCandidates(tickets, query) {
     const idx = titleIdx >= 0 ? titleIdx : keyIdx;
     return { t, idx };
   }).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.t.title.localeCompare(b.t.title)).map((s) => s.t);
-}
-
-// ../packages/agent-stall/src/requestIntent.ts
-var CHANGE_VERB = /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge)\b/i;
-var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will|explain|describe|summar|tell me|show me|list|compare|review|analyse|analyze)\b|\?\s*$/i;
-function asksForChange(text) {
-  const t = (text ?? "").trim();
-  if (!t) return false;
-  const head = t.slice(0, 600);
-  if (QUESTION_SHAPE.test(head)) return false;
-  return CHANGE_VERB.test(head);
-}
-var NOTHING_DONE = /\b(nothing (has been|was|is) (changed|modified|applied|edited|written|saved)|no (changes?|edits?) (have been|were|was) (made|applied|written|saved)|(not|never) (yet )?(been )?(applied|written|saved|committed)|has not been (changed|applied|modified)|before (applying|making) the edit)\b/i;
-var DEFERRED_PROMISE = /\b(re-?run me|run me again|ask me again|in a follow-?up|next run|on the next turn|say the word|let me know and I'?ll|I'?ll (then )?(apply|make|write|implement|create|edit|fix|update|do|proceed|carry)|I will (then )?(apply|make|write|implement|create|edit|fix|update|proceed))\b/i;
-var BUDGET_EXHAUSTED = /\b(tool-?call budget|step budget|iteration (cap|limit|budget)|ran out of (tool calls|steps|budget)|hit (the|my) (tool|step|budget))\b/i;
-function promisesUnfinishedWork(text) {
-  const t = (text ?? "").trim();
-  if (!t) return false;
-  return NOTHING_DONE.test(t) || DEFERRED_PROMISE.test(t) || BUDGET_EXHAUSTED.test(t);
-}
-var CONTINUATION = /^\s*(?:ok(?:ay)?[,\s]*)?(?:please\s+)?(?:now\s+)?(?:just\s+)?(?:go\s+ahead|carry\s+on|keep\s+going|make\s+it\s+so|do\s+it|do\s+that|do\s+so|fix\s+it|fix\s+that|apply\s+it|apply\s+that|apply|fix|go|proceed|continue|yes|yep|yeah|y|sure|confirm(?:ed)?|approved?|ship\s+it|send\s+it|run\s+it|do\s+the\s+fix|make\s+the\s+change)\s*[.!]*\s*$/i;
-var MAX_CONTINUATION_CHARS = 40;
-function isContinuationDirective(text) {
-  const t = (text ?? "").trim();
-  if (!t || t.length > MAX_CONTINUATION_CHARS) return false;
-  return CONTINUATION.test(t);
-}
-var CURRENT_STATE = /^\s*(?:(?:so|ok(?:ay)?|and|hey)[,\s]+)?(?:(?:what(?:'s| is) )?(?:the )?(?:current |latest )?(?:status|progress|update|updates|news|eta|state of (?:play|things))\b|any (?:updates?|news|progress)\b|where (?:are|do) (?:we|things|you) (?:stand|at)\b|where are we\b|how(?:'s| is) it going\b|how far along\b|is it (?:done|finished|ready|working|fixed)\b|are (?:we|you) done\b|what(?:'s| is) (?:left|next|remaining|the latest|happening)\b|still working\b)/i;
-function asksAboutCurrentState(text) {
-  const t = (text ?? "").trim();
-  if (!t) return false;
-  return CURRENT_STATE.test(t.slice(0, 200));
-}
-function memoryReplayable(question, context = {}) {
-  const q = (question ?? "").trim();
-  if (!q || context.followUp === true) return false;
-  return !asksForChange(q) && !asksAboutCurrentState(q) && !isContinuationDirective(q);
-}
-function continuationDirective() {
-  return `The user's last message is a bare directive ("fix", "do it", "go ahead") with no subject of its own. It refers to the proposal in YOUR immediately preceding message, which described work you had not yet carried out. Carry out that exact proposal now, using the tools, starting from the files and the change it already named \u2014 do NOT ask the user what to fix, and do NOT re-derive the analysis you have already done and can read above. If the earlier proposal named a specific file and edit, apply that edit. Report what you changed when it is done.`;
-}
-
-// ../packages/agent-stall/src/handoff.ts
-var EXECUTION_TOOLS = /* @__PURE__ */ new Set([
-  "run_command",
-  "run_shell_command",
-  "execute_command",
-  "bash",
-  "shell",
-  "terminal",
-  "git_commit",
-  "git_push",
-  "git_sync_latest",
-  "open_pull_request",
-  // The SERVER addressed-agent reply has no shell of its own — its shell lives in the
-  // agent's runtime, and this tool is the door to it. Its own system prompt already
-  // says "NEVER reply that you lack a git or file tool"; without this entry the gate
-  // that enforces that sentence could never fire on the one surface it was written for.
-  "builtin_chats_execute_as_agent"
-]);
-function canExecuteCommands(toolNames) {
-  return (toolNames ?? []).some((n) => EXECUTION_TOOLS.has(n.toLowerCase()));
-}
-var RUNNER = "(?:npm|pnpm|yarn|npx|bun|deno|node|git|make|cargo|go|dotnet|mvn|gradle|python3?|pip3?|poetry|uv|ruby|rake|bundle|composer|php|docker(?:\\s+compose)?|kubectl|helm|terraform|wrangler|vercel|netlify|vite|webpack|tsc|tsgo|eslint|prettier|pytest|jest|vitest|playwright|cypress|bash|sh|zsh|pwsh|powershell|curl|wget|sed|awk|rsync|vsce)\\b";
-var SCRIPT_NOUN = "(?:build|tests?|test suite|type-?check(?:ing)?|typecheck|lint(?:er|ing)?|guards?|checks?|install|dev server|migrations?|deploy(?:ment)?|codegen|bundle|vsix|package|commit|push|pull request|pr\\b|branch|lockfile|extension host)";
-var CMD_MARK = "\u2983cmd\u2984";
-var ID_MARK = "\u2983id\u2984";
-var OUT_OF_REACH = /\b(credential|password|api ?key|secret|auth token|\.env\b|environment variable|2fa|mfa|sign ?in|log ?in|browser|incognito|restart vs ?code|reload the window|reinstall the extension|github ui|web ui|dashboard|billing|payment|admin console|approve|permission|by hand|manually)\b/i;
-var TAIL_CHARS = 900;
-var WINDOW_BEFORE = 80;
-var WINDOW_AFTER = 220;
-function normalise2(text) {
-  const mark = (body) => new RegExp(RUNNER, "i").test(body) ? ` ${CMD_MARK} ` : ` ${ID_MARK} `;
-  return text.replace(/```[\s\S]*?(?:```|$)/g, (m) => mark(m)).replace(/`[^`\n]+`/g, (m) => mark(m));
-}
-var HANDOFF_VERB = "(?:re-?run|run|execute|apply|install|re-?install|rebuild|build|compile|commit|push|deploy|publish|restart|relaunch|launch|start|test|verify|lint|type-?check|typecheck|migrate|regenerate|package|bump|trigger|kick off)";
-var HANDS_OFF = new RegExp(
-  [
-    // "you can run", "you'll need to run", "you should now commit", "you must rebuild"
-    `\\byou(?:'ll|'d|'ve| will| would| should| must| may| might| can| could| still| then| now)?(?:\\s+(?:then|now|also|just|still|next|first|finally|want to|need to|have to|be able to))*\\s+${HANDOFF_VERB}\\b`,
-    // "please run the guards"
-    `\\bplease\\s+(?:now\\s+|then\\s+)?${HANDOFF_VERB}\\b`,
-    // "once you've run the build", "after you push"
-    `\\b(?:once|after|when|before)\\s+you(?:'ve| have| had)?\\s+${HANDOFF_VERB}\\b`,
-    // "run the following", "apply these changes", "execute this command"
-    `\\b${HANDOFF_VERB}\\s+(?:the\\s+following|these|this)\\b`,
-    // "to verify, run …" / "to apply the fix you need to run …"
-    `\\bto\\s+(?:apply|verify|confirm|finish|complete|deploy|ship|land|pick up|see)\\b[^.\\n]{0,60}?,?\\s*(?:you\\s+(?:can|should|must|will|need to|have to)\\s+)?${HANDOFF_VERB}\\b`,
-    // A steps list: "1. Run the type-check", "- Commit the change", "Then push to main"
-    `(?:^|\\n)[ \\t]*(?:\\d+[.)]|[-*+]|#{1,6}|>)?[ \\t]*(?:then|now|next|finally|first)?[,:]?[ \\t]*${HANDOFF_VERB}\\b`,
-    // The same imperative mid-paragraph: "I applied the fix. Now run the type-check."
-    // The adverb is REQUIRED here, unlike the line-leading form above — without it a
-    // plain sentence that happens to open with one of these words ("Build output is
-    // clean now.") would read as an instruction.
-    `[.!?]\\s+(?:then|now|next|finally|first)[,:]?\\s+${HANDOFF_VERB}\\b`
-  ].join("|"),
-  "gi"
-);
-var COMMAND_NEARBY = new RegExp(`${CMD_MARK}|${RUNNER}|\\b${SCRIPT_NOUN}`, "i");
-function handsWorkToUser(text) {
-  const t = (text ?? "").trim();
-  if (!t) return false;
-  const scanned = normalise2(t.slice(-TAIL_CHARS));
-  HANDS_OFF.lastIndex = 0;
-  for (let m = HANDS_OFF.exec(scanned); m; m = HANDS_OFF.exec(scanned)) {
-    const window2 = scanned.slice(
-      Math.max(0, m.index - WINDOW_BEFORE),
-      m.index + m[0].length + WINDOW_AFTER
-    );
-    if (!COMMAND_NEARBY.test(window2)) continue;
-    if (OUT_OF_REACH.test(window2)) continue;
-    HANDS_OFF.lastIndex = 0;
-    return true;
-  }
-  return false;
-}
-function delegatesExecutableWork(text, ctx) {
-  if (!canExecuteCommands(ctx.availableToolNames)) return false;
-  if (!asksForChange(ctx.requestText)) return false;
-  return handsWorkToUser(text);
-}
-function handoffRecoveryNudge(lastChance) {
-  return "Your last turn ended by telling the USER to run commands. You are the one holding the tools \u2014 `run_command` for shell steps, the git tools to commit and push \u2014 so those steps are yours, not theirs. Carry them out NOW in this turn: run the commands you just listed, read their output, and fix anything that fails before you answer. Verification you hand to the user is verification nobody does. Only leave a step to the user when you genuinely cannot do it here \u2014 it needs a credential, a browser, or a decision that is theirs \u2014 and then say which step and why." + (lastChance ? " This is your last chance to act: your answer after this turn is shown to the user as-is, so either run the commands now or state plainly, at the top of your reply, that the change is UNVERIFIED and exactly which steps were never run." : "");
-}
-
-// ../packages/agent-stall/src/permissionMenu.ts
-var TAIL_CHARS2 = 900;
-var ACTION_VERB = "(?:run|execute|apply|implement|install|rebuild|build|compile|commit|push|merge|rebase|deploy|publish|release|ship|open|create|file|draft|write|add|update|patch|edit|change|modify|fix|resolve|refactor|rename|move|delete|remove|drop|close|cancel|archive|assign|dispatch|schedule|start|kick off|trigger|link|list|enumerate|show|generate|produce|proceed|continue|go ahead|do (?:it|that|this|them|so|first|next|now|any|all)|handle|take care of|work through|go through|tackle|clean up|tidy|sort out|migrate|convert|split|extract|bump|revert|restore|retry|re-?try|re-?run|verify|test|check|review|investigate|dig into|look into)";
-var OFFER = new RegExp(
-  [
-    // "Would you like me to open the PRs?" · "Do you want me to merge these?"
-    // · "Would you like me to proceed?"
-    `\\b(?:would|do)\\s+you\\s+(?:like|want|prefer)\\s+(?:me|us)\\s+to\\b`,
-    // "Shall I open PRs?" · "Should I cancel the stalled tickets?" · "Can I proceed?"
-    // · "May I go ahead?"
-    `\\b(?:shall|should|can|may)\\s+i\\b[^.?\\n]{0,80}\\?`,
-    // "Want me to push these?" — the subjectless form.
-    `\\bwant\\s+(?:me|us)\\s+to\\b`,
-    // "Let me know if you'd like me to…" · "Let me know which of these to do"
-    // · "Tell me which you'd prefer" · "Just say the word and I'll merge them"
-    // "how" earns its place: "let me know how you'd like to proceed" is the single most
-    // common way this pause is phrased, and it names no option at all.
-    `\\blet me know\\b[^.\\n]{0,80}\\b(?:if|whether|which|what|how)\\b`,
-    `\\b(?:tell|let)\\s+me\\s+know\\s+(?:which|what|whether|if)\\b`,
-    `\\bsay the word\\b`,
-    // "I can open the PRs if you'd like." · "I could cancel them if you want."
-    // · "I'm happy to merge these if that's what you want."
-    `\\bi\\s+(?:can|could|am happy to|'?m happy to|would be happy to)\\b[^.\\n]{0,120}?\\bif\\s+(?:you|that|you'?d|you would)\\b`,
-    // "Confirm and I'll proceed." · "Approve and I'll merge them."
-    `\\b(?:confirm|approve|give me the go-?ahead|give the go-?ahead)\\b[^.\\n]{0,40}\\band\\s+i(?:'ll| will)\\b`,
-    // "Which would you like me to do first?" · "Which of these should I start with?"
-    `\\bwhich\\s+(?:one|of these|of those)?\\s*(?:would|do|should|shall)\\s+(?:you|i)\\b`,
-    // "Your call." · "Up to you." · "How would you like to proceed?" — and the
-    // declarative order the same sentence takes inside a clause, "…how you would like
-    // to proceed", which the interrogative-only form used to miss.
-    `\\b(?:your call|up to you|it'?s your call)\\b`,
-    `\\bhow\\s+(?:you\\s+(?:would|do)|(?:would|do)\\s+you)\\s+(?:want|like|prefer)\\b`
-  ].join("|"),
-  "gi"
-);
-var WINDOW_AFTER2 = 400;
-var WINDOW_BEFORE2 = 120;
-var ACTION_NEARBY = new RegExp(`\\b${ACTION_VERB}\\b`, "i");
-var USERS_OWN_CHOICE = /\b(?:did you mean|do you mean|what did you (?:mean|intend)|which did you mean|prefer(?:ence|red)?\b|intended behaviou?r|by design|is that (?:right|correct|intended|what you)|am i (?:right|correct) (?:that|in)|credential|password|api ?key|secret|which account|whose|budget|deadline|priorit(?:y|ise|ize))\b/i;
-function offersMenuInsteadOfActing(text) {
-  const t = (text ?? "").trim();
-  if (!t) return false;
-  const scanned = t.slice(-TAIL_CHARS2);
-  OFFER.lastIndex = 0;
-  for (let m = OFFER.exec(scanned); m; m = OFFER.exec(scanned)) {
-    const window2 = scanned.slice(
-      Math.max(0, m.index - WINDOW_BEFORE2),
-      m.index + m[0].length + WINDOW_AFTER2
-    );
-    if (!ACTION_NEARBY.test(window2)) continue;
-    OFFER.lastIndex = 0;
-    return true;
-  }
-  return false;
-}
-function pausesOnUsersOwnChoice(text) {
-  return USERS_OWN_CHOICE.test((text ?? "").slice(-TAIL_CHARS2));
-}
-var ASK_USER_TOOL_NAME = "ask_user";
-function askUserAdvertised(toolNames) {
-  return (toolNames ?? []).some((n) => n.toLowerCase() === ASK_USER_TOOL_NAME);
-}
-function asksPermissionForRequestedWork(text, ctx) {
-  if (!asksForChange(ctx.requestText)) return false;
-  if (!offersMenuInsteadOfActing(text)) return false;
-  if (pausesOnUsersOwnChoice(text) && !askUserAdvertised(ctx.availableToolNames)) return false;
-  return true;
-}
-function permissionRecoveryNudge(lastChance, askUserAvailable = false) {
-  const askBranch = askUserAvailable ? ` If some part of it genuinely IS the user's decision \u2014 two defensible options with no sensible default, something only they know \u2014 call \`${ASK_USER_TOOL_NAME}\` with the options as labelled choices instead of listing them in prose. That puts them on screen as buttons; a question in prose ends the run and costs a full round trip to answer. Do the parts that are NOT in question first, then ask about the rest.` : ` If some part of it genuinely IS the user's decision, say which single question you need answered, state which option you recommend and why, and carry out everything that does NOT depend on the answer before you stop.`;
-  return "Your last turn ended by asking the user whether to do work they had ALREADY asked for. You hold the tools to do it, so the answer is yes and it is yours to carry out: pick the sensible default for anything you offered as an option, and DO IT NOW in this turn. Report what you did afterwards \u2014 do not re-state the offer." + askBranch + (lastChance ? " This is your last chance to act: your answer after this turn is shown to the user as-is, so either start the work now or state plainly, at the top of your reply, exactly what you did NOT do and the one decision you are blocked on." : "");
-}
-
-// ../packages/agent-stall/src/index.ts
-var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about to| plan to|'d need to| would need to| will need to| need to)|let(?:'?s| me| us)|going to|about to|next,? i'?l?l?|now)";
-var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
-var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|act|see|walk|trace|map)";
-var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
-var TOOL_IDENT = "(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)";
-function toolNamesMentionedIn(text) {
-  return [...new Set(text.match(new RegExp(TOOL_IDENT, "gi")) ?? [])];
-}
-var PSEUDO_CALL = [
-  // "call builtin_x", "run tool builtin_x", "invoke the function mcp__srv__x"
-  `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_IDENT}`,
-  // "builtin_x({…})" / "builtin_x(" — the call written as code
-  `${TOOL_IDENT}\\s*[({]`,
-  // "builtin_x with chatId is 85" — the call written as an argument clause
-  `${TOOL_IDENT}\\s+(?:with|args|arguments)\\b`
-];
-var ANNOUNCED_ACTION = new RegExp(
-  [
-    "calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)",
-    `${ANNOUNCE_SUBJECT}${ANNOUNCE_FILLER}\\s+${ANNOUNCE_VERB}\\b`,
-    "(one|just a) (moment|second|sec)\\b",
-    `${ANNOUNCE_GERUND} (it|that|this|these|those|the [\\w-]+|now|for)\\b`,
-    // A sentence that OPENS on a gerund and signs off with "now": "Pulling linked tickets
-    // and the roster code now." The object-led form above wants the/this/now straight
-    // after the verb, so a bare noun phrase slipped through. Measured on VS Code chat #105
-    // (`xai-oauth/grok-4.6`): turns 1-2 were caught and re-prompted, turn 3 said exactly
-    // this, scored as a complete answer, and the run ended with a recovery still unspent.
-    `(?:^|[.!?\\n]\\s*)${ANNOUNCE_GERUND}\\b[^.!?\\n]{0,80}\\bnow\\b`,
-    "stand ?by\\b",
-    ...PSEUDO_CALL
-  ].join("|"),
-  "i"
-);
-var TAIL_CHARS3 = 240;
-function announcesUntakenAction(text) {
-  const t = text.trim();
-  if (!t) return false;
-  return ANNOUNCED_ACTION.test(t.slice(-TAIL_CHARS3));
-}
-var FILE_EXTENSION = "(?:ts|tsx|js|jsx|mjs|cjs|json|md|ya?ml|sql|toml|lock|txt|env|html|css|py|go|rs|sh|png|svg|csv|xml)\\b";
-var DOTTED_TOOL_IDENT = `\\b[a-z][a-z0-9_]{2,}\\.(?!${FILE_EXTENSION})[a-z][a-z0-9_]{2,}\\b`;
-function catalogToolNamesMentionedIn(text) {
-  return [...new Set(text.match(new RegExp(DOTTED_TOOL_IDENT, "gi")) ?? [])];
-}
-var UNCALLED_TOOL_CLAIM = new RegExp(
-  [
-    // "The tools required are X, Y and Z." / "The required tools are …"
-    "\\b(?:required tools?\\b|tools? required\\b|tools? (?:i |we )?(?:need|require)\\b)",
-    // "…tools have not returned results" / "…the tool has not returned anything yet"
-    "\\btools?\\b[^.!?]{0,80}?\\b(?:have|has|had|were|was)(?:n'?t| not)\\s+(?:yet\\s+)?(?:return|returned|provided|available|run|called)",
-    // "no tool results", "no results from the tools", "no tool outputs for project 11"
-    "\\bno\\s+(?:new\\s+)?tools?\\s+(?:results?|outputs?|data|returns?)\\b",
-    // "No other tools provide the needed data." — the same claim aimed at the CATALOG
-    // rather than at the results: an inventory of what it would need, from a turn that
-    // called none of it. Observed as the closing sentence of the measured replies.
-    "\\bno\\s+other\\s+tools?\\b[^.!?]{0,40}?\\b(?:provide|provides|give|gives|return|returns|have|has|offer|offers)\\b",
-    "\\bno\\s+results?\\s+(?:from|for)\\s+(?:the\\s+)?tools?\\b",
-    // "tool outputs never provided" / "the tool results were never returned"
-    "\\btools?\\s+(?:results?|outputs?)\\b[^.!?]{0,40}?\\b(?:never|not)\\s+(?:been\\s+)?(?:provided|returned|available)",
-    // "requires the tool outputs" / "awaiting the tool results"
-    "\\b(?:requires?|awaiting|waiting on|pending)\\s+(?:those\\s+|the\\s+)?tools?\\s+(?:results?|outputs?)",
-    // The same claim with the TOOL NAMED instead of the word "tool" — "no results from
-    // manager.digest", "missing builtin_manager_policy results". The name IS the
-    // discriminator here: prose does not carry tool identifiers by accident.
-    `\\bno\\s+(?:new\\s+)?(?:results?|data|outputs?|returns?)\\s+(?:from|for|on)\\s+(?:the\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`,
-    `\\b(?:missing|awaiting|pending|without)\\s+(?:the\\s+|those\\s+)?(?:results?\\s+(?:from|of|for)\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`
-  ].join("|"),
-  "i"
-);
-function claimsMissingToolData(text) {
-  const t = text.trim();
-  if (!t) return false;
-  return UNCALLED_TOOL_CLAIM.test(t);
-}
-var MAX_ANNOUNCEMENT_RECOVERIES = 3;
-function stallRecoveryNudge(lastChance, shape, ctx) {
-  if (shape === "handed-off") return handoffRecoveryNudge(lastChance);
-  if (shape === "asked-permission") {
-    return permissionRecoveryNudge(lastChance, askUserAdvertised(ctx?.availableToolNames));
-  }
-  return (
-    // Covers BOTH stall shapes: the promise ("I'll check…") and the missing-data claim
-    // ("the required tools have not returned results"). The second wording matters —
-    // a model told only "you said you would call a tool" when it never said any such
-    // thing tends to repeat the same excuse rather than act.
-    "Your last turn made zero tool calls. You either said you would call a tool and did not, reported that tool results were missing \u2014 no results exist because you never made the call \u2014 or returned nothing at all. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call, and do not reply with an empty message." + (lastChance ? " This is your last chance to act: you have now stated an intention without acting several times in a row. Either emit a tool call in this turn, or give your complete final answer from what you already know \u2014 an answer that only describes what you are about to do will be shown to the user as-is." : "")
-  );
-}
-function isEmptyTurn(input) {
-  return input.toolCallCount === 0 && input.availableToolCount > 0 && input.text.trim() === "";
-}
-function stallShape(input) {
-  if (input.toolCallCount !== 0 || input.availableToolCount <= 0) return null;
-  if (isEmptyTurn(input)) return "empty";
-  if (asksPermissionForRequestedWork(input.text, input)) return "asked-permission";
-  if (delegatesExecutableWork(input.text, input)) return "handed-off";
-  if (announcesUntakenAction(input.text)) return "announced";
-  if (claimsMissingToolData(input.text)) return "missing-data";
-  return null;
-}
-function isStalledTurn(input) {
-  return stallShape(input) !== null;
-}
-function shouldRecoverStalledTurn(input) {
-  return isStalledTurn(input) && input.recoveriesUsed < MAX_ANNOUNCEMENT_RECOVERIES;
-}
-function isExhaustedStall(input) {
-  return isStalledTurn(input) && input.recoveriesUsed >= MAX_ANNOUNCEMENT_RECOVERIES;
-}
-function resolveShape(arg) {
-  if (arg === true) return "empty";
-  if (typeof arg === "string") return arg;
-  return "announced";
-}
-function whatItDid(shape) {
-  const rounds = `${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`;
-  switch (shape) {
-    case "empty":
-      return `returned an empty turn \u2014 no tool call and no words \u2014 ${rounds}`;
-    case "handed-off":
-      return `handed the remaining work back to you as commands to run yourself, ${rounds}, rather than running them with the tools it holds`;
-    case "asked-permission":
-      return `asked your permission to carry out work you had already asked for, ${rounds}, rather than carrying it out`;
-    case "missing-data":
-      return `reported that tool results were missing without ever calling a tool, ${rounds}`;
-    default:
-      return `described tool calls instead of making them, ${rounds}`;
-  }
-}
-function whatYouGot(shape) {
-  switch (shape) {
-    case "empty":
-      return "there is no answer above to show you.";
-    case "handed-off":
-      return "the steps above are still yours to run \u2014 treat the change as UNVERIFIED.";
-    case "asked-permission":
-      return "the work you asked for has NOT been started \u2014 the answer above is an offer to start it.";
-    default:
-      return "the answer above is only a description of intended actions.";
-  }
-}
-function modelFailoverNotice(from, to, shape = false) {
-  const who = from && from !== "default" ? `\`${from}\`` : "The previous model";
-  return `${who} ${whatItDid(resolveShape(shape))}, so it cannot complete this request. Retrying on \`${to}\`.`;
-}
-function stallExhaustedNotice(model, tried, shape = false) {
-  const who = model && model !== "default" ? `The model \`${model}\`` : "The model";
-  const kind = resolveShape(shape);
-  const others = (tried ?? []).filter((m) => m && m !== model);
-  return `${who} ${whatItDid(kind)}, so nothing was actually run and ` + whatYouGot(kind) + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : kind === "handed-off" ? " Nothing upstream failed here \u2014 the model reached the right answer and declined to carry it out, which is an agency limitation. Run the steps it listed, or retry on a model from the coding pool, which is selected for exactly this." : " Before switching models, check your runtime or gateway log for this turn: a request REJECTED upstream \u2014 a prompt over the context limit, an exhausted quota \u2014 produces exactly these symptoms, and no other model will fix it. If the log is clean, this is a model limitation and a different model is the answer.");
-}
-function stallRecoveryToolChoice(input) {
-  return input.availableToolCount > 0 ? "required" : void 0;
-}
-function ids(list) {
-  return (list ?? []).map((m) => m.id).filter((id) => !!id);
-}
-function nextFallbackModel(surface, tried) {
-  if (!surface) return void 0;
-  const used = new Set(tried.filter(Boolean));
-  const byo = ids(surface.byo?.models);
-  const byoSet = new Set(byo);
-  const coding = (surface.codingModels ?? []).filter(Boolean);
-  const pool = ids(surface.data);
-  const tiers = [
-    coding.filter((m) => byoSet.has(m)),
-    byo,
-    coding,
-    pool
-  ];
-  for (const tier of tiers) {
-    const hit = tier.find((m) => !used.has(m));
-    if (hit) return hit;
-  }
-  return void 0;
-}
-var MAX_MODEL_FAILOVERS = 2;
-function chooseStallFailover(input) {
-  for (const m of [input.activeModel, input.resolvedModel]) {
-    if (m && m !== "default" && !input.tried.includes(m)) input.tried.push(m);
-  }
-  if (input.failoversUsed >= (input.maxFailovers ?? MAX_MODEL_FAILOVERS)) return void 0;
-  const next = input.pick ? input.pick(input.tried) : nextFallbackModel(input.surface, input.tried);
-  return next && !input.tried.includes(next) ? next : void 0;
 }
 
 // src/localWorkspaceTools.ts
@@ -8908,53 +8978,6 @@ function coderHandoffBrief(plannerText, calls) {
   return brief.length > MAX_BRIEF_CHARS ? `${brief.slice(0, MAX_BRIEF_CHARS)}\u2026` : brief;
 }
 
-// src/runPolicyTraces.ts
-function coderReaskTrace(ts, step, plannerModel) {
-  return {
-    ts,
-    category: "message",
-    label: "llm.role_handoff",
-    args: { from: plannerModel ?? "default", step },
-    result: `Analysis on ${plannerModel ?? "the planning model"} reached its first code change \u2014 handing the edit to the strongest connected coding model.`
-  };
-}
-function handOffTrace(ts, step, tasks, via) {
-  return {
-    ts,
-    category: "message",
-    label: "llm.role_handoff",
-    args: { step, tasks, via },
-    result: `Planning handed off ${tasks} task${tasks === 1 ? "" : "s"} to the coding model.`
-  };
-}
-function modelFailoverTrace(ts, step, from, outcome, shape) {
-  return {
-    ts,
-    category: "message",
-    label: "loop.model_failover",
-    args: { step, from, to: outcome.to, attempt: outcome.attempt, of: outcome.of },
-    result: modelFailoverNotice(from, outcome.to, shape)
-  };
-}
-function transportRetryTrace(ts, step, outcome, message) {
-  if (outcome.broken) {
-    return {
-      ts,
-      category: "message",
-      label: "llm.stream_interrupted",
-      args: { model: outcome.broken, step },
-      result: `${message} \u2014 retrying this turn on another connected model. ${outcome.broken} is left out for the rest of this run.`
-    };
-  }
-  return {
-    ts,
-    category: "message",
-    label: "llm.transport_error",
-    args: { step },
-    result: `${message} \u2014 retrying this turn on another connected model.`
-  };
-}
-
 // src/planHandoff.ts
 var HAND_OFF_TOOL = "hand_off";
 var FAN_OUT_TOOL = "spawn_agents";
@@ -11174,8 +11197,8 @@ ${revisit}` : covered.note;
         result = await request();
       } catch (e) {
         if (c.abort?.signal.aborted) throw e;
-        const failure = e instanceof StreamInterruptedError ? { kind: "interrupted", ...e.model ? { model: e.model } : {} } : e instanceof TransportError ? { kind: e.unreachable ? "unreachable" : "transport" } : null;
-        const outcome = failure ? reportToPolicy({ type: "transport_failed", ...failure }).outcome : null;
+        const failure = providerFailureEvent(e);
+        const outcome = failure ? reportToPolicy(failure).outcome : null;
         if (!outcome || outcome.kind !== "retry_turn") throw turnError(e);
         pushTrace(c, transportRetryTrace(nowIso(), iter, outcome, e.message));
         restartTurn();
@@ -13443,6 +13466,7 @@ function PromptInput({
   promptApiInputQuota,
   promptApiMeasure,
   promptStreamDeltas,
+  providerFailureEvent,
   queueRunSteering,
   ratedTurnContext,
   ratedTurnTool,
@@ -13497,6 +13521,7 @@ function PromptInput({
   toolSpecsFor,
   traceWithPersistedSteps,
   transcriptSeedFrom,
+  transportRetryTrace,
   trimToolResult,
   turnInterruption,
   turnOptimizationDirective,

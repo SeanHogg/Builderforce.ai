@@ -1,5 +1,3 @@
-import { CanvasStreamStalledError } from '@/lib/canvasStreamWatchdog';
-
 /**
  * The two ways a Canvas turn can end WITHOUT being a failure, as types rather
  * than as strings.
@@ -47,6 +45,5 @@ export class CanvasRunAbortedError extends Error {
  */
 export function isCanvasRunAborted(error: unknown): boolean {
   if (error instanceof CanvasRunAbortedError) return true;
-  if (error instanceof CanvasStreamStalledError) return false;
   return error instanceof Error && error.name === 'AbortError';
 }

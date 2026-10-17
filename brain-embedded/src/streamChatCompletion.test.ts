@@ -332,6 +332,31 @@ describe('a model that breaks after the stream opened', () => {
     expect((err as StreamInterruptedError).model).toBe('xai-oauth/grok-4.6');
   });
 
+  it('bounds the wait for response HEADERS by the same silence rule', async () => {
+    // A gateway that accepts the socket and never answers: the fetch settles only when
+    // its signal aborts. The canvas once carried a private watchdog for exactly this.
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })));
+    })));
+    const err = await streamChatCompletion({ messages: [], model: 'free/model', transport: baseTransport, idleTimeoutMs: 20 })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StreamInterruptedError);
+    expect((err as Error).message).toContain('sent nothing');
+    expect((err as StreamInterruptedError).model).toBe('free/model');
+  });
+
+  it('treats a user Stop before the headers as a cancellation, not a silent gateway', async () => {
+    const stop = new AbortController();
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })));
+    })));
+    const pending = streamChatCompletion({ messages: [], transport: baseTransport, idleTimeoutMs: 60_000, signal: stop.signal }).catch((e: unknown) => e);
+    stop.abort();
+    const err = await pending;
+    expect(err).not.toBeInstanceOf(StreamInterruptedError);
+    expect((err as Error).name).toBe('AbortError');
+  });
+
   it('treats a user Stop as a cancellation, never as a silent stream', async () => {
     const controllerAbort = new AbortController();
     const body = new ReadableStream<Uint8Array>({

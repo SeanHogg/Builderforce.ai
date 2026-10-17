@@ -106,10 +106,16 @@ export const MAX_MUTATION_RECOVERIES = 2;
  * which cannot author inside the ceiling fails over instead of looping. */
 export const MAX_INTERRUPTED_TURN_RECOVERIES = 2;
 
-/** Silent round-trips tolerated on one model before the turn routes around it. Two:
- *  a stall is usually a single bad connection, and a model that swallows two requests
- *  in a row will swallow the third too. */
-export const MAX_STALLED_STREAMS = 2;
+/**
+ * The canvas's budget for THE stream client's silence rule (`idleTimeoutMs`): no
+ * response headers, or no bytes, for this long ends the round-trip as an interruption
+ * the run policy routes around. Shorter than the client's default because the canvas is
+ * an interactive surface on free models — a stream that has produced NOTHING for over a
+ * minute is not slow, it is gone (measured 2026-08-15: 134 s to return an empty
+ * completion behind a four-minute spinner). Every byte re-arms it, tool-call arguments
+ * included, so a long authoring response is never cut.
+ */
+export const CANVAS_STREAM_IDLE_MS = 75_000;
 
 /** A turn that provisioned a workspace (`canvas_create_build`) and then tried to end
  * without writing a file. The model reads the seeded template as the deliverable, so the

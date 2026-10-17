@@ -4,8 +4,9 @@ import {
   resolveBrainStream,
   streamChatCompletion,
   RepetitionLoopError,
-  StreamInterruptedError,
-  TransportError,
+  providerFailureEvent,
+  transportRetryTrace,
+  type ProviderFailureEvent,
   formatEvermindMemoryBlock,
   type BrainAction,
   type BrainTraceEvent,
@@ -33,7 +34,6 @@ import {
   unverifiedCreationClaim,
 } from '@/lib/canvasTurnOutcome';
 import { CANVAS_BUILD_FILE_WRITE_TOOLS, CANVAS_BUILD_TOOLS, CANVAS_BUILD_WORKSPACE_WRITE_TOOLS, workspacePathArg } from '@/lib/canvasBuildTools';
-import { CANVAS_STREAM_STALL_MS, CanvasStreamStalledError, streamBoundedByActivity } from '@/lib/canvasStreamWatchdog';
 import type { CanvasNotices } from '@/lib/canvasNotices';
 import { canvasSystemMessages, promptNamedTools } from '@/lib/canvasAiSystemPrompt';
 import { CanvasRunAbortedError, GuestAiUnavailableError } from '@/lib/canvasAiErrors';
@@ -41,6 +41,7 @@ import {
   BUILD_NOT_AUTHORED_DIRECTIVE,
   CANVAS_BUILD_RESPONSE_TOKENS,
   CANVAS_RESPONSE_TOKENS,
+  CANVAS_STREAM_IDLE_MS,
   CANVAS_TOOL_LIMIT,
   CANVAS_TRUNCATED_RETRY_HINT,
   MALFORMED_TOOL_CALL_DIRECTIVE,
@@ -49,7 +50,6 @@ import {
   MAX_INTERRUPTED_TURN_RECOVERIES,
   MAX_MUTATION_RECOVERIES,
   MAX_NARROW_SEARCHES,
-  MAX_STALLED_STREAMS,
   RESERVED_AUTHORING_TURNS,
   TRUNCATED_ROUND_DIRECTIVE,
   TRUNCATED_TURN_DIRECTIVE,
@@ -271,12 +271,8 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     excludeModels: options.disabledModels ?? [],
   });
   const reportToPolicy = (event: RunPolicyEvent): RunPolicyState => (policy = reduceRunPolicy(policy, event));
-  /** Silent round-trips IN A ROW on the current model. A completion resets it: two stalls
-   *  minutes apart with a file written in between are two bad connections, not a dead
-   *  model. A stall is retried on the same model until {@link MAX_STALLED_STREAMS}. */
-  let consecutiveStalls = 0;
-  /** Provider failures this turn had to route around — stalls and mid-answer errors, in
-   *  total — for the tail's "the provider failed" verdict. */
+  /** Provider failures this turn had to route around — silent, broken or looping
+   *  streams, resets — in total, for the tail's "the provider failed" verdict. */
   let providerFailures = 0;
   /** Labels this session's transcript uses, so a copied `Brain: ` prefix can be
    *  recognised and removed without touching an answer that legitimately opens with
@@ -308,33 +304,31 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     return true;
   };
   /**
-   * The PROVIDER broke under this round-trip (it stalled, failed mid-answer, or the
-   * request reset) — route around it rather than end the turn on the vendor's error.
-   * A model that already acted in this turn takes over first; with none, the run
-   * policy excludes the failed model (auto routing or the turn's own lock — a model the
-   * caller picked is their choice) and asks the gateway's pool again, once per
-   * round-trip. Only when both are spent does the turn stop, and the tail then delivers
-   * whatever the turn already has with a localized notice.
+   * The PROVIDER broke under this round-trip — route around it rather than end the turn
+   * on the vendor's error. The canvas's one addition to the shared policy path: a model
+   * that already ACTED in this turn takes over first (`preferProvenFailover`). With none,
+   * the failure is reported to the run policy exactly as the Brain run store reports it,
+   * and its outcome decides — a retry on the gateway's pool with the broken model left
+   * out, or the end of the turn, after which the tail delivers whatever the turn already
+   * has with a localized notice.
    */
   const rerouteAfterProviderFailure = (
+    failure: ProviderFailureEvent,
     failedModel: string | null | undefined,
-    kind: 'interrupted' | 'transport',
-    what: string,
+    message: string,
+    step: number,
   ): { skip: true } | { failed: string } => {
     providerFailures += 1;
-    consecutiveStalls = 0;
-    if (switchToProvenModel(failedModel, `The prior model ${what} and has been disabled for this session.`)) return { skip: true };
-    const reroute = reportToPolicy({ type: 'transport_failed', kind, ...(failedModel ? { model: failedModel } : {}) }).outcome;
-    // Re-asking without an exclusion lands on the same model — useless after it broke,
-    // worth one try after a reset or timeout that never named a model.
-    if (reroute.kind === 'retry_turn' && (reroute.broken || kind === 'transport')) {
-      options.onTrace?.({ ts: new Date().toISOString(), category: 'llm', label: 'rerouted after provider failure', result: { excluded: reroute.broken ?? null } });
-      messages.push({ role: 'system', content: `The prior model ${what}, so this turn now continues on a different model. Continue the user's request from where it left off, building on the work already done.` });
+    if (switchToProvenModel(failedModel, 'The prior model failed mid-request and has been disabled for this session.')) return { skip: true };
+    const outcome = reportToPolicy(failure).outcome;
+    if (outcome.kind === 'retry_turn') {
+      options.onTrace?.(transportRetryTrace(new Date().toISOString(), step, outcome, message));
+      messages.push({ role: 'system', content: 'The prior model failed mid-request, so this turn now continues on a different model. Continue the user\'s request from where it left off, building on the work already done.' });
       return { skip: true };
     }
     // Out of providers: stop, and let the tail deliver whatever the turn already has.
     abandonedMidTurn = true;
-    return { failed: `provider ${what}` };
+    return { failed: `provider failed: ${message}` };
   };
   const notices = options.notices;
   const mutationRequested = !options.participant && requestsCanvasMutation(options.prompt);
@@ -434,8 +428,11 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         const ask = nextTurn(policy, { hasTools: selection.tools.length > 0 });
         let result: CanvasTurn;
         try {
-          result = await streamBoundedByActivity(stream, {
-            transport,
+          result = await stream({
+            // THE stream client's silence rule (no headers, or no bytes, for this long)
+            // at the canvas's own budget — there is no second watchdog.
+            idleTimeoutMs: CANVAS_STREAM_IDLE_MS,
+            signal: options.signal,
             messages,
             tools: selection.tools,
             tool_choice: 'auto',
@@ -448,64 +445,30 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             routingMode: options.routingMode,
             ...(ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}),
             metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
-          }, (delta) => { finalText += delta; options.onText?.(finalText); }, options.signal);
+          }, { onTextDelta: (delta) => { finalText += delta; options.onText?.(finalText); } });
         } catch (error) {
-          // A model LOOPING on one sentence (cut by the stream client's repetition guard) is
-          // a fault of that model, not of the connection, so asking it again buys nothing:
-          // the turn goes straight to a model that already worked in this session. With none
-          // to switch to, the turn stops and keeps what was said before the loop.
-          if (error instanceof RepetitionLoopError) {
-            throwIfStopped();
-            options.onTrace?.({
-              ts: new Date().toISOString(), category: 'error', label: 'model stuck repeating itself', isError: true,
-              result: { model: error.model ?? ask.model ?? null, copies: error.copies },
-            });
-            const switched = switchToProvenModel(error.model ?? ask.model, 'The prior model got stuck repeating the same sentence and has been disabled for this session.');
-            finalText = switched ? '' : error.kept;
-            options.onText?.(finalText);
-            if (switched) return { skip: true };
-            abandonedMidTurn = true;
-            return { failed: 'model stuck repeating itself' };
-          }
-          // A provider that BROKE after the gateway committed to it — an in-band error frame
-          // ("Upstream error from Nvidia: Service temporarily overloaded"), a dropped or
-          // silent connection — or a gateway request that reset or timed out. The gateway
-          // can only fail over before it sends headers, so from here the turn is the only
-          // one that can route around the model. The vendor's error text is a trace, never
-          // the user's answer (measured 2026-10-17, ui 2026.10.52: a turn that had already
-          // put its architecture diagram on the board ended on that raw sentence).
-          // Asking the same overloaded model again buys nothing, so this goes straight to
-          // the reroute ladder; a gateway that was never reached was already retried with
-          // backoff by the transport, and another model cannot help with that.
-          if (error instanceof StreamInterruptedError || (error instanceof TransportError && !error.unreachable)) {
-            throwIfStopped();
-            const failedModel = error.model ?? ask.model;
-            options.onTrace?.({
-              ts: new Date().toISOString(), category: 'error', label: 'provider failed mid-answer', isError: true,
-              result: { model: failedModel ?? null, error: error.message },
-            });
-            finalText = '';
-            return rerouteAfterProviderFailure(failedModel, error instanceof TransportError ? 'transport' : 'interrupted', 'failed mid-request');
-          }
-          // A STALLED provider is a routing problem, not a content problem, so the ladder is
-          // shorter than the interruption one: try again once (a stall is often a single bad
-          // connection), then hand the turn to a model that has already worked in it, then
-          // stop. Stopping is the point — the alternative is the four-minute spinner this
-          // exists to end, and by here the turn still delivers whatever it already has.
-          if (!(error instanceof CanvasStreamStalledError)) throw error;
+          // The provider broke under this round-trip — an in-band error frame ("Upstream
+          // error from Nvidia: Service temporarily overloaded"), a dropped, silent or
+          // looping stream, a gateway that never answered, a reset. Classified by THE
+          // shared `providerFailureEvent`, exactly as the Brain run store does; anything it
+          // does not recognise (a refusal, a user Stop) surfaces as it is. The vendor's
+          // text is a trace, never the user's answer (measured 2026-10-17, ui 2026.10.52:
+          // a turn that had already put its diagram on the board ended on that sentence).
+          const failure = providerFailureEvent(error);
+          if (!failure) throw error;
           throwIfStopped();
-          consecutiveStalls += 1;
-          const stalledModel = ask.model;
+          const message = (error as Error).message;
+          const failedModel = failure.model ?? ask.model;
           options.onTrace?.({
-            ts: new Date().toISOString(), category: 'error', label: 'provider stopped responding', isError: true,
-            result: { model: stalledModel ?? null, seconds: Math.round(CANVAS_STREAM_STALL_MS / 1_000), attempt: consecutiveStalls },
+            ts: new Date().toISOString(), category: 'error', label: 'llm.complete', isError: true,
+            args: { model: failedModel ?? 'default', step: turn }, result: `${(error as Error).name}: ${message}`,
           });
           finalText = '';
-          if (consecutiveStalls < MAX_STALLED_STREAMS) {
-            providerFailures += 1;
-            return { skip: true };
-          }
-          return rerouteAfterProviderFailure(stalledModel, 'interrupted', 'stopped responding mid-request');
+          const next = rerouteAfterProviderFailure(failure, failedModel, message, turn);
+          // Out of models: a model that LOOPED still said something real before the loop.
+          if ('failed' in next && error instanceof RepetitionLoopError) finalText = error.kept;
+          options.onText?.(finalText);
+          return next;
         }
         throwIfStopped();
         options.onCompletion?.({
@@ -520,7 +483,6 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           finishReason: result.finishReason,
         });
         lastTurnInterruption = turnInterruption(result.finishReason);
-        consecutiveStalls = 0;
         reportToPolicy({
           type: 'turn_succeeded',
           ...(result.resolvedModel ? { model: result.resolvedModel } : {}),

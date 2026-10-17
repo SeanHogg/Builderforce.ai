@@ -22,12 +22,12 @@ vi.mock('@/lib/brain/guestRuntime', () => ({ guestBrainConfig: { transport: {} }
 vi.mock('@/lib/guestRoomApi', () => ({ ensureGuestToken: mocks.ensureGuestToken }));
 
 const { runCreationCanvasAi } = await import('./creationCanvasAi');
-const { StreamInterruptedError } = await import('@seanhogg/builderforce-brain-embedded');
+const { StreamInterruptedError, RepetitionLoopError } = await import('@seanhogg/builderforce-brain-embedded');
 // The budgets and the typed outcomes are their own modules — a turn's spending
 // limits and the two ways it can end without failing change for reasons the loop
 // does not. Imported statically because neither reaches a transport.
 const {
-  MAX_CANVAS_TOOL_TURNS, MAX_CANVAS_BUILD_TURNS, CANVAS_BUILD_RESPONSE_TOKENS, BUILD_NOT_AUTHORED_DIRECTIVE, CANVAS_TOOL_LIMIT,
+  MAX_CANVAS_TOOL_TURNS, MAX_CANVAS_BUILD_TURNS, CANVAS_BUILD_RESPONSE_TOKENS, BUILD_NOT_AUTHORED_DIRECTIVE, CANVAS_TOOL_LIMIT, CANVAS_STREAM_IDLE_MS,
 } = await import('./canvasAiTurnBudget');
 const { CanvasRunAbortedError, isCanvasRunAborted } = await import('./canvasAiErrors');
 
@@ -1164,127 +1164,80 @@ describe('runCreationCanvasAi', () => {
    *
    * Measured 2026-08-15: a completion took 134 seconds to return nothing, the loop asked
    * again, and the canvas sat on "Reading" for four minutes with no ceiling of any kind.
-   * The turn must now abandon a silent request, route around the model, and END — saying
-   * the provider stopped responding rather than blaming the user's request.
+   * Silence is now bounded by THE stream client's idle rule at the canvas's budget, and a
+   * silent stream arrives as the same interruption every other provider failure does —
+   * routed around, then ended with a notice that does not blame the user's request.
    */
   describe('when the model provider stops responding', () => {
-    /** A provider that accepts the request and then says nothing — settling only when
-     *  the caller's signal aborts, exactly as the fetch transport does. */
-    const silentUntilAborted = (request: { signal?: AbortSignal }) => new Promise<never>((_resolve, reject) => {
-      request.signal?.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })));
+    /** What the stream client throws when its idle rule trips. */
+    const silent = (model?: string) => new StreamInterruptedError('the stream went silent for 75s', model);
+
+    it('bounds every round-trip with the canvas budget on the shared silence rule', async () => {
+      mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Hello.', toolCalls: [] });
+
+      await runTurn({ prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [] });
+
+      expect(mocks.streamChatCompletion.mock.calls[0][0]).toMatchObject({ idleTimeoutMs: CANVAS_STREAM_IDLE_MS });
     });
 
-    it('abandons a silent request instead of waiting forever, and says why', async () => {
-      vi.useFakeTimers();
-      try {
-        mocks.streamChatCompletion.mockImplementation(silentUntilAborted);
-        const turn = runTurn({ prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [] });
-        // Each stalled round-trip burns its own watchdog; the ladder is bounded, so the
-        // turn ends rather than re-arming forever.
-        for (let attempt = 0; attempt < 6; attempt += 1) await vi.advanceTimersByTimeAsync(90_000);
+    it('abandons a silent provider, says why, and keeps the notice out of the transcript', async () => {
+      mocks.streamChatCompletion.mockRejectedValue(silent());
+      const onUnanswered = vi.fn();
 
-        await expect(turn).resolves.toBe(NOTICES.providerFailed);
-      } finally {
-        vi.useRealTimers();
-      }
-    });
+      const answer = await runTurn({ prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [], onUnanswered });
 
-    it('reports a stall as unanswered rather than storing it as an assistant reply', async () => {
-      vi.useFakeTimers();
-      try {
-        mocks.streamChatCompletion.mockImplementation(silentUntilAborted);
-        const onUnanswered = vi.fn();
-        const turn = runTurn({ prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [], onUnanswered });
-        for (let attempt = 0; attempt < 6; attempt += 1) await vi.advanceTimersByTimeAsync(90_000);
-        await turn;
-
-        expect(onUnanswered).toHaveBeenCalledWith({ reason: 'no-answer', detail: 'provider-failed' });
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('does not report a stalled provider as the user having pressed Stop', async () => {
-      vi.useFakeTimers();
-      try {
-        mocks.streamChatCompletion.mockImplementation(silentUntilAborted);
-        const turn = runTurn({ prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [] });
-        for (let attempt = 0; attempt < 6; attempt += 1) await vi.advanceTimersByTimeAsync(90_000);
-
-        await expect(turn).resolves.not.toBe(NOTICES.noAnswer);
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(answer).toBe(NOTICES.providerFailed);
+      expect(answer).not.toBe(NOTICES.noAnswer);
+      expect(onUnanswered).toHaveBeenCalledWith({ reason: 'no-answer', detail: 'provider-failed' });
     });
 
     /**
      * Measured 2026-10-10 (session `local-6d36899d`, ui 2026.10.31, "build a marketing site
      * for phones"): a free model wrote `index.html`, stalled, and the turn reported "I added
-     * the requested content to the canvas" above a "Hello World!" preview. Three faults: the
-     * stall count never reset between non-adjacent stalls, an auto-routed turn never asked
-     * the gateway for another model, and an abandoned turn was reported as delivered.
+     * the requested content to the canvas" above a "Hello World!" preview. An auto-routed
+     * turn must ask the gateway for another model, and an abandoned turn must never be
+     * reported as delivered.
      */
     describe('part-way through a build', () => {
       const writeFile = { name: 'canvas_write_build_file', description: 'Write', parameters: { type: 'object' }, mutates: true, run: vi.fn(() => ({ ok: true, applied: true, path: 'index.html' })) };
       const wroteIndex = { text: '', resolvedModel: 'free/model', finishReason: 'tool_calls', toolCalls: [{ id: 'w1', name: 'canvas_write_build_file', args: '{"objectId":"b1","path":"index.html","content":"<!doctype html>"}' }] };
-      const settle = async (turn: Promise<string>) => {
-        for (let attempt = 0; attempt < 8; attempt += 1) await vi.advanceTimersByTimeAsync(90_000);
-        return turn;
-      };
 
-      it('re-routes an auto turn away from a model that stalled with nothing proven to switch to', async () => {
-        vi.useFakeTimers();
-        try {
-          mocks.streamChatCompletion
-            .mockResolvedValueOnce(wroteIndex)
-            .mockImplementationOnce(silentUntilAborted)
-            .mockImplementationOnce(silentUntilAborted)
-            .mockResolvedValueOnce({ text: 'I built the marketing site.', resolvedModel: 'other/model', finishReason: 'stop', toolCalls: [] });
+      it('re-routes an auto turn away from a model that went silent with nothing proven to switch to', async () => {
+        mocks.streamChatCompletion
+          .mockResolvedValueOnce(wroteIndex)
+          .mockRejectedValueOnce(silent('free/model'))
+          .mockResolvedValueOnce({ text: 'I built the marketing site.', resolvedModel: 'other/model', finishReason: 'stop', toolCalls: [] });
 
-          const answer = await settle(runTurn({ prompt: 'build a marketing site for phones', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeFile] }));
+        const answer = await runTurn({ prompt: 'build a marketing site for phones', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeFile] });
 
-          expect(answer).toBe('I built the marketing site.');
-          expect(mocks.streamChatCompletion.mock.calls[3][0]).toMatchObject({ model: undefined, excludeModels: ['free/model'] });
-        } finally {
-          vi.useRealTimers();
-        }
+        expect(answer).toBe('I built the marketing site.');
+        expect(mocks.streamChatCompletion.mock.calls[2][0]).toMatchObject({ model: undefined, excludeModels: ['free/model'] });
       });
 
       it('says the work stopped part-way — never "added to the canvas" — when no model is left', async () => {
-        vi.useFakeTimers();
-        try {
-          mocks.streamChatCompletion.mockResolvedValueOnce(wroteIndex).mockImplementation(silentUntilAborted);
-          const onUnanswered = vi.fn();
+        mocks.streamChatCompletion.mockResolvedValueOnce(wroteIndex).mockRejectedValue(silent('free/model'));
+        const onUnanswered = vi.fn();
 
-          const answer = await settle(runTurn({ prompt: 'build a marketing site for phones', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeFile], onUnanswered }));
+        const answer = await runTurn({ prompt: 'build a marketing site for phones', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeFile], onUnanswered });
 
-          expect(answer).toBe(NOTICES.stoppedPartway);
-          expect(answer).not.toBe(NOTICES.addedToCanvas);
-          expect(onUnanswered).toHaveBeenCalledWith({ reason: 'no-answer', detail: 'provider-failed' });
-          // One write, two stalls, one re-route, two stalls — then stop.
-          expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(5);
-        } finally {
-          vi.useRealTimers();
-        }
+        expect(answer).toBe(NOTICES.stoppedPartway);
+        expect(answer).not.toBe(NOTICES.addedToCanvas);
+        expect(onUnanswered).toHaveBeenCalledWith({ reason: 'no-answer', detail: 'provider-failed' });
+        // One write, one silence, one re-route, one silence — then stop.
+        expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(3);
       });
 
-      it('counts stalls IN A ROW — a completion between two stalls resets the ladder', async () => {
-        vi.useFakeTimers();
-        try {
-          mocks.streamChatCompletion
-            .mockImplementationOnce(silentUntilAborted)
-            .mockResolvedValueOnce(wroteIndex)
-            .mockImplementationOnce(silentUntilAborted)
-            .mockResolvedValueOnce({ text: 'I built the marketing site.', resolvedModel: 'free/model', finishReason: 'stop', toolCalls: [] });
+      it('restores the retry allowance after a completion — two failures minutes apart are two bad connections', async () => {
+        mocks.streamChatCompletion
+          .mockRejectedValueOnce(silent())
+          .mockResolvedValueOnce(wroteIndex)
+          .mockRejectedValueOnce(silent('free/model'))
+          .mockResolvedValueOnce({ text: 'I built the marketing site.', resolvedModel: 'other/model', finishReason: 'stop', toolCalls: [] });
 
-          const answer = await settle(runTurn({ prompt: 'build a marketing site for phones', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeFile] }));
+        const answer = await runTurn({ prompt: 'build a marketing site for phones', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeFile] });
 
-          expect(answer).toBe('I built the marketing site.');
-          // Never re-routed: the second stall was the first in its run.
-          expect(mocks.streamChatCompletion.mock.calls[3][0]).toMatchObject({ model: 'free/model' });
-        } finally {
-          vi.useRealTimers();
-        }
+        expect(answer).toBe('I built the marketing site.');
+        expect(mocks.streamChatCompletion.mock.calls[3][0]).toMatchObject({ model: undefined, excludeModels: ['free/model'] });
       });
 
       it('asks the gateway for analysis until the turn starts building, then for a coding model', async () => {
@@ -1310,24 +1263,12 @@ describe('runCreationCanvasAi', () => {
       });
     });
 
-    it('leaves a streaming answer alone — length is never the thing that trips it', async () => {
-      vi.useFakeTimers();
-      try {
-        mocks.streamChatCompletion.mockImplementationOnce(async (_request: unknown, handlers: { onTextDelta: (delta: string) => void }) => {
-          for (let token = 0; token < 8; token += 1) {
-            handlers.onTextDelta('word ');
-            await vi.advanceTimersByTimeAsync(60_000);
-          }
-          return { text: 'word word word word word word word word', toolCalls: [] };
-        });
+    it('keeps what a LOOPING model said when no other model can take over', async () => {
+      mocks.streamChatCompletion.mockRejectedValue(new RepetitionLoopError({ block: 'again and again', copies: 3, kept: 'Here is the first half.' }, 'free/model'));
 
-        const turn = runTurn({ prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [] });
-        await vi.advanceTimersByTimeAsync(0);
+      const answer = await runTurn({ prompt: 'explain it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [] });
 
-        await expect(turn).resolves.toContain('word');
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(answer).toContain('Here is the first half.');
     });
   });
 });

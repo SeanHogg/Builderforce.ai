@@ -29,9 +29,9 @@
 import type { BrainMessage } from './types';
 import { batchStepPersistence, stepDurabilityFor } from './stepOutbox';
 import { getRunDriver } from './runDriver';
+import { providerFailureEvent } from './providerFailure';
 import {
   StreamInterruptedError,
-  TransportError,
   type BrainToolSpec,
   type ChatCompletionMessage,
   type CompletionMetadata,
@@ -2723,12 +2723,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey:
         // every later turn. One where the gateway was NEVER reached has already been
         // retried with backoff inside the stream (`retryOnConnectFailure`); anything else
         // is not a transport failure at all, and is reported as it is.
-        const failure = e instanceof StreamInterruptedError
-          ? { kind: 'interrupted' as const, ...(e.model ? { model: e.model } : {}) }
-          : e instanceof TransportError
-            ? { kind: e.unreachable ? 'unreachable' as const : 'transport' as const }
-            : null;
-        const outcome = failure ? reportToPolicy({ type: 'transport_failed', ...failure }).outcome : null;
+        const failure = providerFailureEvent(e);
+        const outcome = failure ? reportToPolicy(failure).outcome : null;
         if (!outcome || outcome.kind !== 'retry_turn') throw turnError(e);
         pushTrace(c, transportRetryTrace(nowIso(), iter, outcome, (e as Error).message));
         restartTurn();

@@ -1520,10 +1520,11 @@ interface StreamChatOptions {
      */
     metadata?: CompletionMetadata;
     /**
-     * Silence (zero bytes read) that ends this stream, defaulting to
-     * {@link STREAM_IDLE_MS}. A stalled upstream never settles its `read()`, so without
-     * this a dead turn hangs until the user presses Stop. Overridden only by tests,
-     * which cannot wait four minutes to prove it.
+     * Silence that ends this request — no response headers, or zero bytes read, for this
+     * long — defaulting to {@link STREAM_IDLE_MS}. A stalled upstream never settles, so
+     * without this a dead turn hangs until the user presses Stop. A host sets its own
+     * budget here (the canvas, an interactive surface on free models, waits less than an
+     * IDE run whose reasoning model may think for minutes); the RULE is this one.
      */
     idleTimeoutMs?: number;
     signal?: AbortSignal;
@@ -2519,6 +2520,333 @@ declare function BrainProvider({ config, children, }: {
 }): react.JSX.Element;
 /** Consume the resolved brain runtime. Throws if no BrainProvider is mounted. */
 declare function useBrainConfig(): BrainRuntime;
+
+/**
+ * Deterministic JSON — object keys sorted at every depth — for anything KEYED on a
+ * value whose key order is incidental: a tool call's arguments, a cache key's request
+ * fields, a trace fingerprint. Two values a caller means identically (`{path, offset}`
+ * vs `{offset, path}`) must produce one string; `JSON.stringify` keeps insertion order,
+ * so it cannot.
+ *
+ * JSON-faithful for JSON values: an object entry whose value is `undefined` is dropped
+ * (as `JSON.stringify` drops it), a top-level `undefined` reads as `null`. Values JSON
+ * cannot express still get a stable, distinct form instead of collapsing: a non-finite
+ * number and a bigint as their string, an `Error` as its name/message/stack, bytes as
+ * their numbers.
+ *
+ * NOT for fingerprints that are stored and later re-compared (boardsync content
+ * hashes, sandbox verification stamps) — those keep `domain/shared/stableStringify`'s
+ * format until their stored hashes are migrated.
+ *
+ * Pure and dependency-free (this package's root is imported by the Worker).
+ */
+declare function stableStringify(value: unknown): string;
+
+/**
+ * Untaken tool call — detection + recovery, shared by every agent loop.
+ *
+ * Recovery has two halves and BOTH live in this file: the re-prompt budget with its
+ * user-facing notices, and the MODEL FAILOVER section at the bottom. They were split
+ * across two packages once — the selector lived in a React package — and the server
+ * reply loop, unable to import it, hand-rolled its own and shipped a failover branch
+ * that could not run. See {@link chooseStallFailover}.
+ *
+ * The failure it fixes: a turn ends with `stopReason: stop` and ZERO tool calls while
+ * tools were available, and a loop that treats "no tool calls" as "done" hands the user
+ * words instead of a result. It wears five faces, all of them observed in production and
+ * all of them a model-behaviour class rather than a vendor bug:
+ *
+ *   1. the PROMISE — `"I'll search the codebase for the handler."`
+ *   2. the PSEUDO-CALL — `"run tool builtin_chats_list_tickets with chatId is 85"`
+ *   3. the MISSING-DATA CLAIM — `"The required tools have not returned results yet."`
+ *   4. the BLANK TURN — nothing at all: no call, no words.
+ *   5. the HANDOFF — `"Now run `pnpm type-check`, then commit and push."` (`handoff.ts`)
+ *   6. the PERMISSION MENU — `"Would you like me to: open PRs? cancel the tickets?"`
+ *      (`permissionMenu.ts`)
+ *
+ * The third is the one that reads like an answer, and it is why the manager's
+ * accountability chat shipped "I have no data" to a person asking it to account for a
+ * dead board (project 11 / chat 86, 2026-07-28: 7 turns, 102 tools, 0 calls). The
+ * fourth is the one that reads like a blip, and it is why the same chat answered a
+ * 400 saying "this usually clears on a retry" four days running (2026-07-31). The
+ * fifth is the one that reads like a FINISHED answer — it is well written, correct,
+ * and complete except for the part where somebody has to do it — and it is the shape
+ * a coding agent in the user's own workspace fails with most: it edits the files, then
+ * writes out the verification and the commit for the user to run. Every other detector
+ * here is first-person by construction and scores it a clean finish.
+ *
+ * The sixth is the one that reads like GOOD MANNERS. It does the reading, writes a
+ * correct report, and closes by offering to do the work — so the user, who asked for
+ * that work one message earlier, spends a turn granting permission that was implicit in
+ * the request. It defeats every detector above at once: too long to be empty, too
+ * deferential to be a promise, too well-sourced to be a missing-data claim, and it names
+ * platform actions rather than shell commands so the handoff gate's "is a command within
+ * reach" test never fires.
+ *
+ * Deliberately zero-dependency, framework-free and free of Node builtins: the Brain
+ * run loop imports this into a BROWSER bundle (VS Code webview / Next.js client)
+ * while the on-prem + cloud agent loop imports it into Node and the Worker.
+ */
+
+/**
+ * Every advertised tool identifier appearing in `text`, de-duplicated, in order.
+ *
+ * Two callers, one pattern — which is the point of putting it here. The stall
+ * detector below uses it to recognise a call written as prose; the per-turn tool
+ * SELECTOR uses it to find the tools a system prompt instructs the model to call, so
+ * a relevance filter can never drop a tool the prompt just promised. Those two must
+ * agree on what a tool name looks like, or the loop recovers from a stall the
+ * selector caused.
+ */
+declare function toolNamesMentionedIn(text: string): string[];
+/**
+ * Does this reply PROMISE a tool call rather than make one?
+ *
+ * A false positive costs one extra model turn; a false negative strands the user
+ * holding a promise — so the bias runs toward catching the stall.
+ */
+declare function announcesUntakenAction(text: string): boolean;
+/**
+ * Every CATALOG-style tool id in `text` (`manager.digest`), de-duplicated, in order —
+ * the counterpart to {@link toolNamesMentionedIn}, which finds the ADVERTISED form.
+ *
+ * The pair is a DIAGNOSIS, not a curiosity, and it is the distinction a shipped report
+ * got wrong. A stalled reply naming `manager.digest` was told to call a string the model
+ * never had (the prompt / persisted-persona name mismatch, fixed by migration 0379). A
+ * stalled reply naming `builtin_manager_digest` was told correctly and could not comply —
+ * the tool list is fine and the MODEL is the problem. Identical transcripts, opposite
+ * fixes; a report that asserts the first while the evidence says the second sends the
+ * reader to re-audit prompts and migrations that were already right.
+ */
+declare function catalogToolNamesMentionedIn(text: string): string[];
+/**
+ * Does this reply blame MISSING TOOL DATA on a turn that called nothing?
+ *
+ * Exported alongside {@link announcesUntakenAction} because the two are different
+ * failure shapes with the same remedy, and a caller reporting WHY it re-prompted
+ * should be able to tell them apart.
+ */
+declare function claimsMissingToolData(text: string): boolean;
+/**
+ * The gateway model surface, as `/llm/v1/models` returns it and both browser hosts
+ * cache it. Structurally a superset of what `classifyModelFunding` takes, so one
+ * cached object feeds both. A SERVER caller composes the same shape from the pool
+ * constants it already has (see `BrainService.agentReply`).
+ */
+interface ModelFallbackSurface {
+    /** The plan pool — every model this tenant may select. */
+    data?: Array<{
+        id?: string;
+    }>;
+    /** The curated tool-calling / coding subset of the pool. */
+    codingModels?: string[];
+    /** Models reachable through the tenant's OWN connected accounts (BYO). */
+    byo?: {
+        models?: Array<{
+            id?: string;
+            vendor?: string;
+        }>;
+    };
+}
+/**
+ * The next model to try, or undefined when nothing untried is left.
+ *
+ * Preference order, and why:
+ *  1. **BYO ∩ coding pool** — the tenant's own connected account (so the retry costs
+ *     nothing against the plan allowance) AND curated for tool calling, which is the
+ *     capability that just failed. Best on both axes.
+ *  2. **Remaining BYO** — another connected account, before the shared free pool. A
+ *     stall on BYO Grok that falls straight onto a shared coder surfaces as
+ *     `shared_byo_unused` even though Claude/Codex/etc. were connected and free to
+ *     try; preferring BYO here keeps the retry on the tenant's own keys.
+ *  3. **Coding pool** — curated for tool calling, plan-funded (shared).
+ *  4. **Rest of the plan pool.**
+ *
+ * A caller driving an AGENTIC turn should leave `data` unset: tier 4 is the general
+ * plan pool, and falling a tool-loop onto a non-coder produces a run that flails and
+ * ships nothing (the same reasoning as the gateway's coding-only backstop chain).
+ *
+ * `tried` holds every model already attempted this run, including the original pin.
+ * A caller that pinned nothing (gateway auto-select) should pass its resolved model,
+ * so the failover cannot hand back the model that just failed.
+ */
+declare function nextFallbackModel(surface: ModelFallbackSurface | null | undefined, tried: readonly string[]): string | undefined;
+
+/**
+ * The model hand-off policy for ONE agent run, as a pure reducer.
+ *
+ * Every agent loop answers the same four questions before and after each turn: what
+ * kind of call is this (plan, code, verify — or chat when no tools are on offer), which
+ * model does it ask for and how strictly, which models must it route around, and when a
+ * model is spent, who takes over. Those answers lived inline in the browser Brain's run
+ * store, and each other host (the cloud durable and container loops, the server
+ * addressed reply, the canvas, on-prem) carried its own partial copy — which is how one
+ * loop retried a broken model on eighteen separate turns and another enforced a
+ * failover budget over a failover that never happened.
+ *
+ * Here they are one state machine. A host asks {@link nextTurn} what to request, makes
+ * the call, and reports what happened with {@link reduceRunPolicy}; the reduced state's
+ * `outcome` says what the host must DO about it (re-ask, retry, fail, continue on a new
+ * model). Traces, nudges, persistence and dispatch stay with the host. No I/O, no
+ * clocks; the only foreign code that runs is a host-supplied fallback `pick`. The state
+ * is plain JSON, so a host that runs one step per invocation (the cloud durable loop,
+ * the container `llm` op) persists it between steps as it is.
+ */
+
+/** What the host must do about the event it just reported. */
+type RunPolicyOutcome = {
+    kind: 'none';
+}
+/** The plan turn reached for a code change: discard it and re-ask THIS turn as `code`
+ *  (with `coderHandoffBrief`). */
+ | {
+    kind: 'reask_as_coder';
+}
+/** `hand_off` accepted — every later turn is `code`. */
+ | {
+    kind: 'handed_off';
+}
+/** `hand_off` after the plan was already handed off — answer the call with an error. */
+ | {
+    kind: 'hand_off_rejected';
+}
+/** A transport failure the policy routes around: re-ask this turn now. `broken` is the
+ *  model left out for the rest of the run; `released` names a dropped pin/lock. */
+ | {
+    kind: 'retry_turn';
+    broken?: string;
+    released?: string;
+    status?: number;
+}
+/** A transport failure the policy does not route around: the turn fails. */
+ | {
+    kind: 'fail_turn';
+}
+/** The spent model was swapped; the host re-prompts on `to`. */
+ | {
+    kind: 'failed_over';
+    from: string | undefined;
+    to: string;
+    attempt: number;
+    of: number;
+}
+/** Nothing untried within budget — the run stops and says so. */
+ | {
+    kind: 'failover_exhausted';
+    tried: readonly string[];
+};
+/** How a request failed in transport — the host classifies, the policy decides. */
+type TransportFailureKind = 
+/** The model broke AFTER the gateway committed to it (in-band error, dropped stream). */
+'interrupted'
+/** The gateway was reached and the request failed (reset, timeout, HTTP status). */
+ | 'transport'
+/** The gateway was never reached — already retried with backoff by the transport. */
+ | 'unreachable';
+type RunPolicyEvent = 
+/** The turn answered. `model` is what the gateway RESOLVED, when it said; `acted` —
+ *  the turn called tools — makes that model a proven failover candidate. */
+{
+    type: 'turn_succeeded';
+    model?: string;
+    acted?: boolean;
+}
+/** The turn's tool calls include a code change (the implicit plan→code re-ask). */
+ | {
+    type: 'code_change_attempted';
+}
+/** The model called `hand_off` (planning ends explicitly). */
+ | {
+    type: 'hand_off';
+}
+/** The run moved on to verifying its change. */
+ | {
+    type: 'verify_started';
+}
+/**
+ * The model burned its whole stall budget. `resolvedModel` names what answered (the
+ * only id on an auto-select turn); `pick` is the host's own fallback picker, `surface`
+ * the gateway model surface — `pick` wins when both are present, neither ⇒ no failover
+ * (unless the run prefers a proven model and has one).
+ */
+ | {
+    type: 'stalled';
+    resolvedModel?: string;
+    surface?: ModelFallbackSurface | null;
+    pick?: (tried: readonly string[]) => string | undefined;
+} | {
+    type: 'transport_failed';
+    kind: TransportFailureKind;
+    model?: string;
+    status?: number;
+};
+
+/**
+ * The analysis→code hand-off, as it appears on the wire and as the coder is told it.
+ *
+ * When an auto-routed run's planning turn reaches for its first code change, the loop
+ * discards that turn and re-asks the SAME turn, from the same transcript, with role
+ * `code` (the `code_change_attempted` event in `./policy.ts` decides when). Every host
+ * that plans before it codes makes that re-ask, so both halves of it live here rather
+ * than in whichever loop happened to write them first (the browser Brain's run store).
+ * Pure.
+ */
+/**
+ * A request with role `code` straight after one with role `plan` is the re-ask — a
+ * run's role only ever moves from plan to code there.
+ *
+ * Exported so a scripted gateway can recognise the re-ask and replay the current step
+ * instead of advancing its script: a real coding model, handed the same transcript,
+ * makes the same move.
+ */
+declare function isCoderReask(role: string | undefined, previousRole: string | undefined): boolean;
+
+/**
+ * THE classification of a failed completion for the run policy.
+ *
+ * Every browser agent loop (the Brain run store, the Creation Canvas) catches the same
+ * errors from `streamChatCompletion` and must tell `@builderforce/run-policy` the same
+ * thing about them. That translation used to be written once per host, and the hosts
+ * drifted: the run store routed an in-band "Upstream error … overloaded" frame around
+ * the broken model while the canvas rethrew it and showed the vendor's sentence as its
+ * answer (2026-10-17, ui 2026.10.52). One function, so a new failure shape reaches
+ * every loop at once.
+ *
+ * Pure: the host reports the event and acts on the outcome (its own traces, re-asks and
+ * transcript handling stay with it).
+ */
+
+/** The policy event a provider failure is reported as. */
+type ProviderFailureEvent = Extract<RunPolicyEvent, {
+    type: 'transport_failed';
+}>;
+/**
+ * The run-policy event for `error`, or null when it is not a provider/transport failure
+ * (a refusal, a bug, a user Stop) and must surface as it is.
+ *
+ *  - The model broke AFTER the gateway committed to it — an in-band error frame, a
+ *    dropped or silent stream, a repetition loop, a gateway that never answered —
+ *    `interrupted`, naming the model to route around when the stream knew it.
+ *  - The gateway was reached and the request reset or timed out — `transport`.
+ *  - The gateway was never reached through every backoff retry — `unreachable`.
+ */
+declare function providerFailureEvent(error: unknown): ProviderFailureEvent | null;
+
+/**
+ * The timeline steps the Brain run loop records when `@builderforce/run-policy` moves
+ * the run — a role hand-off, a model failover, a turn retried around a broken model.
+ *
+ * The policy decides; this module only SAYS what it decided, in the labels and wording
+ * the triage and diagnostics readers already key on (`llm.role_handoff`,
+ * `loop.model_failover`, `llm.stream_interrupted`, `llm.transport_error`). Kept out of
+ * `brainRunStore.ts` so the loop reads as "report the event, act on the outcome" rather
+ * than carrying the prose of every outcome inline. Pure: the caller stamps `ts`.
+ */
+
+/** A turn re-asked after a transport failure the policy routes around. */
+declare function transportRetryTrace(ts: string, step: number, outcome: Extract<RunPolicyOutcome, {
+    kind: 'retry_turn';
+}>, message: string): BrainTraceEvent;
 
 /**
  * The REASON behind a network failure, read off its `cause` chain — and what to do
@@ -3968,177 +4296,6 @@ type BrainRestPersistence = ReturnType<typeof createBrainRestPersistence>;
 declare function queueRunSteering(runKey: number, text: string): void;
 /** Take every message queued for a run, oldest first. Empty when none are waiting. */
 declare function drainRunSteering(runKey: number): string[];
-
-/**
- * Deterministic JSON — object keys sorted at every depth — for anything KEYED on a
- * value whose key order is incidental: a tool call's arguments, a cache key's request
- * fields, a trace fingerprint. Two values a caller means identically (`{path, offset}`
- * vs `{offset, path}`) must produce one string; `JSON.stringify` keeps insertion order,
- * so it cannot.
- *
- * JSON-faithful for JSON values: an object entry whose value is `undefined` is dropped
- * (as `JSON.stringify` drops it), a top-level `undefined` reads as `null`. Values JSON
- * cannot express still get a stable, distinct form instead of collapsing: a non-finite
- * number and a bigint as their string, an `Error` as its name/message/stack, bytes as
- * their numbers.
- *
- * NOT for fingerprints that are stored and later re-compared (boardsync content
- * hashes, sandbox verification stamps) — those keep `domain/shared/stableStringify`'s
- * format until their stored hashes are migrated.
- *
- * Pure and dependency-free (this package's root is imported by the Worker).
- */
-declare function stableStringify(value: unknown): string;
-
-/**
- * Untaken tool call — detection + recovery, shared by every agent loop.
- *
- * Recovery has two halves and BOTH live in this file: the re-prompt budget with its
- * user-facing notices, and the MODEL FAILOVER section at the bottom. They were split
- * across two packages once — the selector lived in a React package — and the server
- * reply loop, unable to import it, hand-rolled its own and shipped a failover branch
- * that could not run. See {@link chooseStallFailover}.
- *
- * The failure it fixes: a turn ends with `stopReason: stop` and ZERO tool calls while
- * tools were available, and a loop that treats "no tool calls" as "done" hands the user
- * words instead of a result. It wears five faces, all of them observed in production and
- * all of them a model-behaviour class rather than a vendor bug:
- *
- *   1. the PROMISE — `"I'll search the codebase for the handler."`
- *   2. the PSEUDO-CALL — `"run tool builtin_chats_list_tickets with chatId is 85"`
- *   3. the MISSING-DATA CLAIM — `"The required tools have not returned results yet."`
- *   4. the BLANK TURN — nothing at all: no call, no words.
- *   5. the HANDOFF — `"Now run `pnpm type-check`, then commit and push."` (`handoff.ts`)
- *   6. the PERMISSION MENU — `"Would you like me to: open PRs? cancel the tickets?"`
- *      (`permissionMenu.ts`)
- *
- * The third is the one that reads like an answer, and it is why the manager's
- * accountability chat shipped "I have no data" to a person asking it to account for a
- * dead board (project 11 / chat 86, 2026-07-28: 7 turns, 102 tools, 0 calls). The
- * fourth is the one that reads like a blip, and it is why the same chat answered a
- * 400 saying "this usually clears on a retry" four days running (2026-07-31). The
- * fifth is the one that reads like a FINISHED answer — it is well written, correct,
- * and complete except for the part where somebody has to do it — and it is the shape
- * a coding agent in the user's own workspace fails with most: it edits the files, then
- * writes out the verification and the commit for the user to run. Every other detector
- * here is first-person by construction and scores it a clean finish.
- *
- * The sixth is the one that reads like GOOD MANNERS. It does the reading, writes a
- * correct report, and closes by offering to do the work — so the user, who asked for
- * that work one message earlier, spends a turn granting permission that was implicit in
- * the request. It defeats every detector above at once: too long to be empty, too
- * deferential to be a promise, too well-sourced to be a missing-data claim, and it names
- * platform actions rather than shell commands so the handoff gate's "is a command within
- * reach" test never fires.
- *
- * Deliberately zero-dependency, framework-free and free of Node builtins: the Brain
- * run loop imports this into a BROWSER bundle (VS Code webview / Next.js client)
- * while the on-prem + cloud agent loop imports it into Node and the Worker.
- */
-
-/**
- * Every advertised tool identifier appearing in `text`, de-duplicated, in order.
- *
- * Two callers, one pattern — which is the point of putting it here. The stall
- * detector below uses it to recognise a call written as prose; the per-turn tool
- * SELECTOR uses it to find the tools a system prompt instructs the model to call, so
- * a relevance filter can never drop a tool the prompt just promised. Those two must
- * agree on what a tool name looks like, or the loop recovers from a stall the
- * selector caused.
- */
-declare function toolNamesMentionedIn(text: string): string[];
-/**
- * Does this reply PROMISE a tool call rather than make one?
- *
- * A false positive costs one extra model turn; a false negative strands the user
- * holding a promise — so the bias runs toward catching the stall.
- */
-declare function announcesUntakenAction(text: string): boolean;
-/**
- * Every CATALOG-style tool id in `text` (`manager.digest`), de-duplicated, in order —
- * the counterpart to {@link toolNamesMentionedIn}, which finds the ADVERTISED form.
- *
- * The pair is a DIAGNOSIS, not a curiosity, and it is the distinction a shipped report
- * got wrong. A stalled reply naming `manager.digest` was told to call a string the model
- * never had (the prompt / persisted-persona name mismatch, fixed by migration 0379). A
- * stalled reply naming `builtin_manager_digest` was told correctly and could not comply —
- * the tool list is fine and the MODEL is the problem. Identical transcripts, opposite
- * fixes; a report that asserts the first while the evidence says the second sends the
- * reader to re-audit prompts and migrations that were already right.
- */
-declare function catalogToolNamesMentionedIn(text: string): string[];
-/**
- * Does this reply blame MISSING TOOL DATA on a turn that called nothing?
- *
- * Exported alongside {@link announcesUntakenAction} because the two are different
- * failure shapes with the same remedy, and a caller reporting WHY it re-prompted
- * should be able to tell them apart.
- */
-declare function claimsMissingToolData(text: string): boolean;
-/**
- * The gateway model surface, as `/llm/v1/models` returns it and both browser hosts
- * cache it. Structurally a superset of what `classifyModelFunding` takes, so one
- * cached object feeds both. A SERVER caller composes the same shape from the pool
- * constants it already has (see `BrainService.agentReply`).
- */
-interface ModelFallbackSurface {
-    /** The plan pool — every model this tenant may select. */
-    data?: Array<{
-        id?: string;
-    }>;
-    /** The curated tool-calling / coding subset of the pool. */
-    codingModels?: string[];
-    /** Models reachable through the tenant's OWN connected accounts (BYO). */
-    byo?: {
-        models?: Array<{
-            id?: string;
-            vendor?: string;
-        }>;
-    };
-}
-/**
- * The next model to try, or undefined when nothing untried is left.
- *
- * Preference order, and why:
- *  1. **BYO ∩ coding pool** — the tenant's own connected account (so the retry costs
- *     nothing against the plan allowance) AND curated for tool calling, which is the
- *     capability that just failed. Best on both axes.
- *  2. **Remaining BYO** — another connected account, before the shared free pool. A
- *     stall on BYO Grok that falls straight onto a shared coder surfaces as
- *     `shared_byo_unused` even though Claude/Codex/etc. were connected and free to
- *     try; preferring BYO here keeps the retry on the tenant's own keys.
- *  3. **Coding pool** — curated for tool calling, plan-funded (shared).
- *  4. **Rest of the plan pool.**
- *
- * A caller driving an AGENTIC turn should leave `data` unset: tier 4 is the general
- * plan pool, and falling a tool-loop onto a non-coder produces a run that flails and
- * ships nothing (the same reasoning as the gateway's coding-only backstop chain).
- *
- * `tried` holds every model already attempted this run, including the original pin.
- * A caller that pinned nothing (gateway auto-select) should pass its resolved model,
- * so the failover cannot hand back the model that just failed.
- */
-declare function nextFallbackModel(surface: ModelFallbackSurface | null | undefined, tried: readonly string[]): string | undefined;
-
-/**
- * The analysis→code hand-off, as it appears on the wire and as the coder is told it.
- *
- * When an auto-routed run's planning turn reaches for its first code change, the loop
- * discards that turn and re-asks the SAME turn, from the same transcript, with role
- * `code` (the `code_change_attempted` event in `./policy.ts` decides when). Every host
- * that plans before it codes makes that re-ask, so both halves of it live here rather
- * than in whichever loop happened to write them first (the browser Brain's run store).
- * Pure.
- */
-/**
- * A request with role `code` straight after one with role `plan` is the re-ask — a
- * run's role only ever moves from plan to code there.
- *
- * Exported so a scripted gateway can recognise the re-ask and replay the current step
- * instead of advancing its script: a real coding model, handed the same transcript,
- * makes the same move.
- */
-declare function isCoderReask(role: string | undefined, previousRole: string | undefined): boolean;
 
 /**
  * Planning ends in TASKS, and the tasks are the hand-off to the coding model.
@@ -7334,4 +7491,4 @@ interface PromptInputProps {
 }
 declare function PromptInput({ value, onChange, onSubmit, placeholder, submitLabel, ariaLabel, disabled, busy, onStop, stopLabel, leading, secondaryContent, rows, className, submitOnEnter, }: PromptInputProps): react.JSX.Element;
 
-export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS, BROWSER_ENGINE_MODEL, BROWSER_ENGINE_PROBE_TTL_MS, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BrowserEngineProber, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatTicket, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, HISTORY_TOKEN_BUDGET, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageUrlContentPart, type IndexedDbStepDurabilityOptions, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalChatMessage, type LocalFetch, type LocalFirstAttemptSummary, type LocalFirstStreamInput, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelScore, type ModelTurn, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, type RunStopHook, type RunStopInput, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, brainPersonaAgents, browserEngineFetch, browserEngineProbe, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, createBrainRestPersistence, createBrowserEngineProber, createComposingActivity, createLocalFirstStream, createLocalStream, createPayloadBudget, declinesReview, declinesShipping, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, hasPromptApi, installIndexedDbStepDurability, installRunDriver, installStepDurability, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, localFallbackTrace, localFirstApplies, localFirstWorkload, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, productForPlan, productModelName, progressDuration, projectMemoryHooks, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, queueRunSteering, ratedTurnContext, ratedTurnTool, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resolveBrainStream, resolveRecipient, resolveRunConfirm, retryOnConnectFailure, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, stripAskUser, studioToolsIn, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeLocalFirstAttempt, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, transcriptSeedFrom, trimToolResult, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, utf8ByteLength, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workFiledNotStaffedVerdict, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS, BROWSER_ENGINE_MODEL, BROWSER_ENGINE_PROBE_TTL_MS, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BrowserEngineProber, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatTicket, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, HISTORY_TOKEN_BUDGET, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageUrlContentPart, type IndexedDbStepDurabilityOptions, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalChatMessage, type LocalFetch, type LocalFirstAttemptSummary, type LocalFirstStreamInput, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MentionToken, type MessageProvenance, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelScore, type ModelTurn, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, type ProviderFailureEvent, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, type RunStopHook, type RunStopInput, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, brainPersonaAgents, browserEngineFetch, browserEngineProbe, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, createBrainRestPersistence, createBrowserEngineProber, createComposingActivity, createLocalFirstStream, createLocalStream, createPayloadBudget, declinesReview, declinesShipping, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, hasPromptApi, installIndexedDbStepDurability, installRunDriver, installStepDurability, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUserConfiguredModelRef, lastConsolidationIndex, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, localFallbackTrace, localFirstApplies, localFirstWorkload, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, productForPlan, productModelName, progressDuration, projectMemoryHooks, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, providerFailureEvent, queueRunSteering, ratedTurnContext, ratedTurnTool, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resolveBrainStream, resolveRecipient, resolveRunConfirm, retryOnConnectFailure, revealsModelId, revisitAdvisory, routerToolSpecs, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, stripAskUser, studioToolsIn, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeLocalFirstAttempt, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSpecsFor, traceWithPersistedSteps, transcriptSeedFrom, transportRetryTrace, trimToolResult, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, useToolConfirmationGate, utf8ByteLength, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, workFiledNotStaffedVerdict, workItemLinkFromCreate };

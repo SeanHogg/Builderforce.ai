@@ -18,6 +18,11 @@ export type { BrainConfig, BrainRuntime, BrainPersistenceAdapter } from './confi
 // Streaming client + tool/message types
 // RepetitionLoopError: a model stuck repeating one block of prose, cut mid-stream.
 export { streamChatCompletion, StreamInterruptedError, RepetitionLoopError, TransportError } from './streamChatCompletion';
+// THE classification of a failed completion for the run policy, and the timeline step a
+// policy retry records — one of each for every browser agent loop.
+export { providerFailureEvent } from './providerFailure';
+export type { ProviderFailureEvent } from './providerFailure';
+export { transportRetryTrace } from './runPolicyTraces';
 // The reason behind Node's opaque `fetch failed` / `terminated`, read off the `cause` chain.
 export { describeNetworkError, isConnectFailure, retryOnConnectFailure, CONNECT_RETRY_DELAYS_MS } from './networkErrorDetail';
 export type { ConnectRetryOptions } from './networkErrorDetail';
