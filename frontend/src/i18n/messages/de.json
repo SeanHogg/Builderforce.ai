@@ -25059,7 +25059,7 @@
     "notice": {
       "addedToCanvas": "Ich habe den gewünschten Inhalt auf der Arbeitsfläche ergänzt.",
       "noAnswer": "Aus dieser Anfrage konnte ich keine Änderung an der Arbeitsfläche vorbereiten.",
-      "providerStalled": "Der Modellanbieter hat diese Anfrage angenommen und dann nicht mehr geantwortet, deshalb warte ich nicht länger. An deiner Anfrage ist nichts falsch – schicke sie erneut oder wähle im Menü / ein anderes Modell.",
+      "providerFailed": "Der Modellanbieter ist während dieser Anfrage ausgefallen – er hat nicht mehr geantwortet oder war überlastet – und kein anderes Modell konnte übernehmen. An deiner Anfrage ist nichts falsch – schicke sie erneut oder wähle im Menü / ein anderes Modell.",
       "stoppedPartway": "Das Modell hat mitten in dieser Anfrage aufgehört zu antworten, sie ist also nicht fertig. Was es abgeschlossen hat, liegt auf der Arbeitsfläche – sag „weiter“, um dort fortzufahren, oder wähle im Menü / ein anderes Modell.",
       "toolError": "Die gewünschten Änderungen an der Arbeitsfläche konnte ich nicht vorbereiten: {detail}",
       "stepsExhausted": "Ich habe alle Schritte aufgebraucht, die dieser Durchgang erlaubt, und höre hier auf; alles bisher Gebaute liegt auf der Arbeitsfläche. Sag „weiter“, dann mache ich genau dort weiter.",

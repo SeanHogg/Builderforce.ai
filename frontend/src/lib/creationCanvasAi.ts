@@ -4,6 +4,8 @@ import {
   resolveBrainStream,
   streamChatCompletion,
   RepetitionLoopError,
+  StreamInterruptedError,
+  TransportError,
   formatEvermindMemoryBlock,
   type BrainAction,
   type BrainTraceEvent,
@@ -273,9 +275,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
    *  minutes apart with a file written in between are two bad connections, not a dead
    *  model. A stall is retried on the same model until {@link MAX_STALLED_STREAMS}. */
   let consecutiveStalls = 0;
-  /** Round-trips this turn abandoned because the provider went silent — in total, for the
-   *  tail's "the provider stalled" verdict. */
-  let stalledStreams = 0;
+  /** Provider failures this turn had to route around — stalls and mid-answer errors, in
+   *  total — for the tail's "the provider failed" verdict. */
+  let providerFailures = 0;
   /** Labels this session's transcript uses, so a copied `Brain: ` prefix can be
    *  recognised and removed without touching an answer that legitimately opens with
    *  a colon. */
@@ -304,6 +306,35 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     options.onModelFallback?.(fallback);
     messages.push({ role: 'system', content: `${directive} Continue on ${fallback}, which already emitted valid tool calls in this turn.` });
     return true;
+  };
+  /**
+   * The PROVIDER broke under this round-trip (it stalled, failed mid-answer, or the
+   * request reset) — route around it rather than end the turn on the vendor's error.
+   * A model that already acted in this turn takes over first; with none, the run
+   * policy excludes the failed model (auto routing or the turn's own lock — a model the
+   * caller picked is their choice) and asks the gateway's pool again, once per
+   * round-trip. Only when both are spent does the turn stop, and the tail then delivers
+   * whatever the turn already has with a localized notice.
+   */
+  const rerouteAfterProviderFailure = (
+    failedModel: string | null | undefined,
+    kind: 'interrupted' | 'transport',
+    what: string,
+  ): { skip: true } | { failed: string } => {
+    providerFailures += 1;
+    consecutiveStalls = 0;
+    if (switchToProvenModel(failedModel, `The prior model ${what} and has been disabled for this session.`)) return { skip: true };
+    const reroute = reportToPolicy({ type: 'transport_failed', kind, ...(failedModel ? { model: failedModel } : {}) }).outcome;
+    // Re-asking without an exclusion lands on the same model — useless after it broke,
+    // worth one try after a reset or timeout that never named a model.
+    if (reroute.kind === 'retry_turn' && (reroute.broken || kind === 'transport')) {
+      options.onTrace?.({ ts: new Date().toISOString(), category: 'llm', label: 'rerouted after provider failure', result: { excluded: reroute.broken ?? null } });
+      messages.push({ role: 'system', content: `The prior model ${what}, so this turn now continues on a different model. Continue the user's request from where it left off, building on the work already done.` });
+      return { skip: true };
+    }
+    // Out of providers: stop, and let the tail deliver whatever the turn already has.
+    abandonedMidTurn = true;
+    return { failed: `provider ${what}` };
   };
   const notices = options.notices;
   const mutationRequested = !options.participant && requestsCanvasMutation(options.prompt);
@@ -436,6 +467,26 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             abandonedMidTurn = true;
             return { failed: 'model stuck repeating itself' };
           }
+          // A provider that BROKE after the gateway committed to it — an in-band error frame
+          // ("Upstream error from Nvidia: Service temporarily overloaded"), a dropped or
+          // silent connection — or a gateway request that reset or timed out. The gateway
+          // can only fail over before it sends headers, so from here the turn is the only
+          // one that can route around the model. The vendor's error text is a trace, never
+          // the user's answer (measured 2026-10-17, ui 2026.10.52: a turn that had already
+          // put its architecture diagram on the board ended on that raw sentence).
+          // Asking the same overloaded model again buys nothing, so this goes straight to
+          // the reroute ladder; a gateway that was never reached was already retried with
+          // backoff by the transport, and another model cannot help with that.
+          if (error instanceof StreamInterruptedError || (error instanceof TransportError && !error.unreachable)) {
+            throwIfStopped();
+            const failedModel = error.model ?? ask.model;
+            options.onTrace?.({
+              ts: new Date().toISOString(), category: 'error', label: 'provider failed mid-answer', isError: true,
+              result: { model: failedModel ?? null, error: error.message },
+            });
+            finalText = '';
+            return rerouteAfterProviderFailure(failedModel, error instanceof TransportError ? 'transport' : 'interrupted', 'failed mid-request');
+          }
           // A STALLED provider is a routing problem, not a content problem, so the ladder is
           // shorter than the interruption one: try again once (a stall is often a single bad
           // connection), then hand the turn to a model that has already worked in it, then
@@ -443,7 +494,6 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
           // exists to end, and by here the turn still delivers whatever it already has.
           if (!(error instanceof CanvasStreamStalledError)) throw error;
           throwIfStopped();
-          stalledStreams += 1;
           consecutiveStalls += 1;
           const stalledModel = ask.model;
           options.onTrace?.({
@@ -451,24 +501,11 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
             result: { model: stalledModel ?? null, seconds: Math.round(CANVAS_STREAM_STALL_MS / 1_000), attempt: consecutiveStalls },
           });
           finalText = '';
-          if (consecutiveStalls < MAX_STALLED_STREAMS) return { skip: true };
-          if (switchToProvenModel(stalledModel, 'The prior model stopped responding mid-request and has been disabled for this session.')) {
-            consecutiveStalls = 0;
+          if (consecutiveStalls < MAX_STALLED_STREAMS) {
+            providerFailures += 1;
             return { skip: true };
           }
-          // No PROVEN model to hand over to — the policy routes around the stalled model
-          // (auto routing or the turn's own lock; a model the caller picked is their
-          // choice) and asks the gateway's pool again, once per round-trip.
-          const reroute = reportToPolicy({ type: 'transport_failed', kind: 'interrupted', ...(stalledModel ? { model: stalledModel } : {}) }).outcome;
-          if (reroute.kind === 'retry_turn' && reroute.broken) {
-            consecutiveStalls = 0;
-            options.onTrace?.({ ts: new Date().toISOString(), category: 'llm', label: 'rerouted after stall', result: { excluded: stalledModel } });
-            messages.push({ role: 'system', content: 'The prior model stopped responding mid-request, so this turn now continues on a different model. Continue the user\'s request from where it left off, building on the work already done.' });
-            return { skip: true };
-          }
-          // Out of providers: stop, and let the tail deliver whatever the turn already has.
-          abandonedMidTurn = true;
-          return { failed: 'provider stopped responding' };
+          return rerouteAfterProviderFailure(stalledModel, 'interrupted', 'stopped responding mid-request');
         }
         throwIfStopped();
         options.onCompletion?.({
@@ -738,7 +775,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     lastToolError,
     canvasChanged,
     abandonedMidTurn,
-    stalledStreams,
+    providerFailures,
     stepsExhausted: loop.exhausted,
     workspaceTurn,
     buildTurn,

@@ -44,10 +44,11 @@ export interface CanvasNotices {
    *  app, after every recovery was spent. Distinct from `addedToCanvas`: the board holds a
    *  template, not what was asked for, and the preview proves it. */
   buildNotAuthored: string;
-  /** The model provider accepted the request and then went silent, so the turn was
-   *  abandoned rather than left spinning. Distinct from `noAnswer`: nothing is wrong
-   *  with what was asked, and retrying is the right next move. */
-  providerStalled: string;
+  /** The model provider failed under the request — went silent, or broke mid-answer
+   *  (overloaded, errored) — and no other model could take over, so the turn was
+   *  abandoned. Distinct from `noAnswer`: nothing is wrong with what was asked, and
+   *  retrying is the right next move. */
+  providerFailed: string;
   /** The turn CHANGED the board and was then abandoned mid-work — the provider went
    *  silent, or the model looped — with no model left to finish it. Distinct from
    *  `addedToCanvas`, which this used to fall through to: a build that wrote only
@@ -83,7 +84,7 @@ export function canvasNoticesFrom(t: CanvasNoticeTranslator): CanvasNotices {
       : t('stepsExhausted')),
     stepsExhaustedUnchanged: t('stepsExhaustedUnchanged'),
     buildNotAuthored: t('buildNotAuthored'),
-    providerStalled: t('providerStalled'),
+    providerFailed: t('providerFailed'),
     stoppedPartway: t('stoppedPartway'),
     toolError: (detail) => t('toolError', { detail }),
     answeredWithoutCanvasChange: (answer) => `${answer}\n\n${t('answeredWithoutChange')}`,

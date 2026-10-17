@@ -22,6 +22,7 @@ vi.mock('@/lib/brain/guestRuntime', () => ({ guestBrainConfig: { transport: {} }
 vi.mock('@/lib/guestRoomApi', () => ({ ensureGuestToken: mocks.ensureGuestToken }));
 
 const { runCreationCanvasAi } = await import('./creationCanvasAi');
+const { StreamInterruptedError } = await import('@seanhogg/builderforce-brain-embedded');
 // The budgets and the typed outcomes are their own modules — a turn's spending
 // limits and the two ways it can end without failing change for reasons the loop
 // does not. Imported statically because neither reaches a transport.
@@ -1118,6 +1119,47 @@ describe('runCreationCanvasAi', () => {
   });
 
   /**
+   * A PROVIDER THAT BREAKS MID-ANSWER.
+   *
+   * Measured 2026-10-17 (ui 2026.10.52): an auto-routed turn put its architecture diagram
+   * on the board, then the next round-trip died on an in-band "Upstream error from
+   * Nvidia: Service temporarily overloaded" — and that raw sentence was the whole reply.
+   * The turn must route around the broken model and carry on.
+   */
+  describe('when the model provider fails mid-answer', () => {
+    const overloaded = () => new StreamInterruptedError('the model failed mid-answer: Upstream error from Nvidia: Service temporarily overloaded', 'nvidia/nemotron');
+
+    it('continues the turn on another model, excluding the one that broke', async () => {
+      const run = vi.fn(() => ({ ok: true, proposed: true }));
+      mocks.streamChatCompletion
+        .mockResolvedValueOnce({ text: '', resolvedModel: 'nvidia/nemotron', finishReason: 'tool_calls', toolCalls: [{ id: 'c1', name: 'canvas_add_object', args: '{"kind":"diagram","title":"Architecture"}' }] })
+        .mockRejectedValueOnce(overloaded())
+        .mockResolvedValueOnce({ text: 'Here is the roadmap.', resolvedModel: 'other/model', finishReason: 'stop', toolCalls: [] });
+
+      const answer = await runTurn({
+        prompt: 'share a roadmap and architecture', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+        canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
+      });
+
+      expect(answer).toBe('Here is the roadmap.');
+      expect(answer).not.toContain('Upstream error');
+      expect(mocks.streamChatCompletion.mock.calls[2][0]).toMatchObject({ model: undefined, excludeModels: ['nvidia/nemotron'] });
+    });
+
+    it('ends on the localized provider notice — never the vendor error — when no model is left', async () => {
+      mocks.streamChatCompletion.mockRejectedValue(overloaded());
+      const onUnanswered = vi.fn();
+
+      const answer = await runTurn({ prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [], onUnanswered });
+
+      expect(answer).toBe(NOTICES.providerFailed);
+      expect(onUnanswered).toHaveBeenCalledWith({ reason: 'no-answer', detail: 'provider-failed' });
+      // One failure, one re-route, one failure — then stop.
+      expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  /**
    * A PROVIDER THAT GOES SILENT.
    *
    * Measured 2026-08-15: a completion took 134 seconds to return nothing, the loop asked
@@ -1141,7 +1183,7 @@ describe('runCreationCanvasAi', () => {
         // turn ends rather than re-arming forever.
         for (let attempt = 0; attempt < 6; attempt += 1) await vi.advanceTimersByTimeAsync(90_000);
 
-        await expect(turn).resolves.toBe(NOTICES.providerStalled);
+        await expect(turn).resolves.toBe(NOTICES.providerFailed);
       } finally {
         vi.useRealTimers();
       }
@@ -1156,7 +1198,7 @@ describe('runCreationCanvasAi', () => {
         for (let attempt = 0; attempt < 6; attempt += 1) await vi.advanceTimersByTimeAsync(90_000);
         await turn;
 
-        expect(onUnanswered).toHaveBeenCalledWith({ reason: 'no-answer', detail: 'provider-stalled' });
+        expect(onUnanswered).toHaveBeenCalledWith({ reason: 'no-answer', detail: 'provider-failed' });
       } finally {
         vi.useRealTimers();
       }
@@ -1218,7 +1260,7 @@ describe('runCreationCanvasAi', () => {
 
           expect(answer).toBe(NOTICES.stoppedPartway);
           expect(answer).not.toBe(NOTICES.addedToCanvas);
-          expect(onUnanswered).toHaveBeenCalledWith({ reason: 'no-answer', detail: 'provider-stalled' });
+          expect(onUnanswered).toHaveBeenCalledWith({ reason: 'no-answer', detail: 'provider-failed' });
           // One write, two stalls, one re-route, two stalls — then stop.
           expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(5);
         } finally {

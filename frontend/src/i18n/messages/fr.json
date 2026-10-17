@@ -25059,7 +25059,7 @@
     "notice": {
       "addedToCanvas": "J’ai ajouté le contenu demandé au canevas.",
       "noAnswer": "Je n’ai pas pu préparer de modification du canevas à partir de cette demande.",
-      "providerStalled": "Le fournisseur du modèle a accepté cette demande puis a cessé de répondre ; j’ai donc arrêté d’attendre. Votre demande n’a rien d’incorrect : renvoyez-la, ou choisissez un autre modèle dans le menu /.",
+      "providerFailed": "Le fournisseur du modèle a échoué en cours de traitement de cette demande — il a cessé de répondre ou était surchargé — et aucun autre modèle n’était disponible pour prendre le relais. Votre demande n’a rien d’incorrect : renvoyez-la, ou choisissez un autre modèle dans le menu /.",
       "stoppedPartway": "Le modèle a cessé de répondre en cours de route, donc cette demande n’est pas terminée. Ce qu’il a achevé se trouve sur le canevas : dites « continuer » pour reprendre là où il s’est arrêté, ou choisissez un autre modèle dans le menu /.",
       "toolError": "Je n’ai pas pu préparer les modifications demandées du canevas : {detail}",
       "stepsExhausted": "J’ai utilisé toutes les étapes que ce tour autorise et je m’arrête ici ; tout ce que j’ai construit jusqu’à présent est sur le canevas. Dites « continuer » et je reprendrai là où je me suis arrêté.",

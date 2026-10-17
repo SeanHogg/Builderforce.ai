@@ -25059,7 +25059,7 @@
     "notice": {
       "addedToCanvas": "I added the requested content to the canvas.",
       "noAnswer": "I couldn't prepare any canvas changes from that request.",
-      "providerStalled": "The model provider accepted this request and then stopped responding, so I stopped waiting. Nothing is wrong with what you asked — send it again, or pick a different model from the / menu.",
+      "providerFailed": "The model provider failed partway through this request — it stopped responding or was overloaded — and no other model was available to take over. Nothing is wrong with what you asked — send it again, or pick a different model from the / menu.",
       "stoppedPartway": "The model stopped responding partway through this request, so it is not finished. What it completed is on the board — say \"continue\" to pick up where it left off, or pick a different model from the / menu.",
       "toolError": "I couldn't prepare the requested canvas changes: {detail}",
       "stepsExhausted": "I used every step this turn allows and stopped here; everything I built so far is on the board. Say \"continue\" and I will pick up where I left off.",

@@ -25059,7 +25059,7 @@
     "notice": {
       "addedToCanvas": "He añadido al lienzo el contenido solicitado.",
       "noAnswer": "No he podido preparar ningún cambio en el lienzo a partir de esa petición.",
-      "providerStalled": "El proveedor del modelo aceptó esta petición y luego dejó de responder, así que he dejado de esperar. Tu petición no tiene ningún problema: vuelve a enviarla o elige otro modelo en el menú /.",
+      "providerFailed": "El proveedor del modelo falló a mitad de esta petición —dejó de responder o estaba saturado— y no había otro modelo disponible para continuar. Tu petición no tiene ningún problema: vuelve a enviarla o elige otro modelo en el menú /.",
       "stoppedPartway": "El modelo dejó de responder a mitad de esta petición, así que no está terminada. Lo que completó está en el lienzo: di \"continuar\" para retomarla donde se quedó, o elige otro modelo en el menú /.",
       "toolError": "No he podido preparar los cambios solicitados en el lienzo: {detail}",
       "stepsExhausted": "He agotado todos los pasos que permite este turno y me he detenido aquí; todo lo que he construido hasta ahora está en el lienzo. Di «continuar» y seguiré desde donde lo dejé.",

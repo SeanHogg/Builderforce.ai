@@ -41,8 +41,8 @@ export interface CanvasTurnTailFacts {
   canvasChanged: boolean;
   /** The loop stopped on a `failed` rung — the turn was abandoned, not finished. */
   abandonedMidTurn: boolean;
-  /** Round-trips abandoned because the provider went silent. */
-  stalledStreams: number;
+  /** Round-trips abandoned because the provider failed — went silent or broke mid-answer. */
+  providerFailures: number;
   /** The step cap stopped the model. */
   stepsExhausted: boolean;
   /** The turn called a build tool — it was working inside an app, written to or not. */
@@ -96,12 +96,12 @@ export function composeTurnTail(facts: CanvasTurnTailFacts): CanvasTurnTail {
     // model left to take over, part-way through work that had already touched the board.
     // Measured (session `local-6d36899d`, ui 2026.10.31): a build wrote `index.html`, then
     // stalled, and "I added the requested content" sat above a "Hello World!" preview.
-    // A runtime notice, so it stays out of the transcript like `providerStalled`.
+    // A runtime notice, so it stays out of the transcript like `providerFailed`.
     if (facts.abandonedMidTurn) {
       return {
         answer: notices.stoppedPartway,
         learn: false,
-        unanswered: { reason: 'no-answer', detail: facts.stalledStreams ? 'provider-stalled' : 'model-looped' },
+        unanswered: { reason: 'no-answer', detail: facts.providerFailures ? 'provider-failed' : 'model-looped' },
       };
     }
     if (facts.stepsExhausted && facts.buildTurn) return { answer: notices.stepsExhausted(facts.changedFiles), learn: true };
@@ -136,8 +136,8 @@ export function composeTurnTail(facts: CanvasTurnTailFacts): CanvasTurnTail {
   }
   // A turn that ran out of PROVIDERS is not a turn that had nothing to say. Reporting it
   // as "no answer" blames the request, so the user rewrites a prompt that was fine.
-  if (facts.stalledStreams) {
-    return { answer: notices.providerStalled, learn: false, unanswered: { reason: 'no-answer', detail: 'provider-stalled' } };
+  if (facts.providerFailures) {
+    return { answer: notices.providerFailed, learn: false, unanswered: { reason: 'no-answer', detail: 'provider-failed' } };
   }
   return {
     answer: notices.noAnswer,

@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-10-17 — Canvas Brain recovers from a provider that fails mid-answer (frontend 2026.10.53)
+
+- **Gap:** a canvas turn whose provider broke AFTER the gateway committed to it (in-band error frame — measured: "Upstream error from Nvidia: Service temporarily overloaded" on `nvidia/nemotron-3-ultra-550b-a55b:free`, ui 2026.10.52) rethrew `StreamInterruptedError`, so the raw vendor sentence became the whole reply — even though the turn had already put its architecture diagram on the board. Only stalls and repetition loops were routed around.
+- **Fix:** `frontend/src/lib/creationCanvasAi.ts` — `StreamInterruptedError` and a reached-gateway `TransportError` now go through ONE `rerouteAfterProviderFailure` ladder shared with the stall path: hand the turn to a model that already acted in it, else the run policy excludes the broken model and asks the gateway pool again, else stop with the localized notice. The vendor text is a trace (`provider failed mid-answer`), never the answer.
+- Notice `creationCanvas.notice.providerStalled` → `providerFailed` (all five catalogs, reworded to cover overload as well as silence); tail fact `stalledStreams` → `providerFailures`, unanswered detail `provider-stalled` → `provider-failed`.
+- Tests: `creationCanvasAi.test.ts` › "when the model provider fails mid-answer" (continues on another model with the broken one excluded; ends on the localized notice when none is left).
+
 ## ✅ RESOLVED 2026-10-16 — In-browser engine for the web app, memory versions aligned, Rovr keeps the app's logos (frontend 2026.10.52 · api 2026.10.41 · brain-embedded 2026.10.24 · VSIX 2026.10.34 · Rovr 2026.10.3 · agent-runtime 2026.10.4 · local-inference 2026.10.17)
 
 Operator decisions (2026-10-16): align versions; Rovr reuses the app's logos; the web app's local-first answer is an IN-BROWSER engine built on our webcontainers ("the full experience").
