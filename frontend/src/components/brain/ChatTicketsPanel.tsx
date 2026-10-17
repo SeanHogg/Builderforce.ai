@@ -18,6 +18,7 @@ import { useTranslations } from 'next-intl';
 import {
   ChatTicketsPanel as SharedChatTicketsPanel,
   createChatTicketsRestAdapter,
+  DEFAULT_CHAT_TICKETS_LABELS,
   useChatActivitySignal,
   type ChatTicketsAdapter, type ChatTicketsLabels, type ChatSubagentVM, type TicketLinkVM,
 } from '@seanhogg/builderforce-brain-ui';
@@ -87,6 +88,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
   }, [chatId, refreshSignal]);
 
   const labels = useMemo<ChatTicketsLabels>(() => ({
+    ...DEFAULT_CHAT_TICKETS_LABELS,
     none: t('none'), spawned: t('spawned'), run: t('run'), open: t('open'), lineage: t('lineage'), unlink: t('unlink'),
     pickAgent: t('pickAgent'), lineageTitle: t('lineageTitle'), lineageEmpty: t('lineageEmpty'), merged: t('merged'),
     runNoAgent: t('runNoAgent'), runFailed: t('runFailed'), link: t('link'), agents: t('agents'), merge: t('merge'),
@@ -101,6 +103,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
     visibilityShared: t('visibilityShared'), visibilityLocked: t('visibilityLocked'), lockHint: t('lockHint'),
     mergeHint: t('mergeHint'), mergeNoOthers: t('mergeNoOthers'),
     showTickets: t('showTickets'), hideTickets: t('hideTickets'),
+
     kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap'), spec: t('kind.spec'), retro: t('kind.retro'), poker: t('kind.poker') },
     ringAria: (label, pct) => t('ringAria', { label, pct }),
     inParent: (parent) => t('inParent', { parent }),

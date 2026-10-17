@@ -332,6 +332,16 @@ export interface ChatTicketsLabels {
   showTickets: string;
   /** Title on the expanded ticket header — click to collapse the ring grid. */
   hideTickets: string;
+  /** Accessible name of the ticket-grid sort control. */
+  sortLabel: string;
+  /** Incomplete (progress < 100%) first — the default. */
+  sortOpen: string;
+  /** Complete (100%) first. */
+  sortDone: string;
+  /** Alphabetical by title. */
+  sortTitle: string;
+  /** Original API / link order. */
+  sortLinked: string;
   kind: Record<TicketKind, string>;
   ringAria: (label: string, pct: number) => string;
   /** The chip's parent line: which work item this ticket belongs to ("in Advisor
@@ -398,6 +408,11 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   mergeNoOthers: 'No other chats to merge.',
   showTickets: 'Show linked tickets',
   hideTickets: 'Hide linked tickets',
+  sortLabel: 'Sort tickets',
+  sortOpen: 'Incomplete first',
+  sortDone: 'Complete first',
+  sortTitle: 'Title',
+  sortLinked: 'Linked order',
   kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec', retro: 'Retrospective', poker: 'Planning poker' },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
   inParent: (parent) => `in ${parent}`,

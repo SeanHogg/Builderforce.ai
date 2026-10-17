@@ -2,7 +2,8 @@
  * ChatTicketsPanel — the shared chat↔ticket surface (web app + VS Code webview).
  *
  * Under a chat's header it shows a health ring (% done) for every linked ticket
- * of any tier (portfolio · objective/OKR · initiative · epic · task); link/unlink
+ * of any tier (portfolio · objective/OKR · initiative · epic · task), sorted
+ * incomplete-first by default with a user-controlled order; link/unlink
  * controls with a per-tier picker; the chat↔ticket lineage; a "merge into this
  * chat" consolidator; and an agent roster where a teammate agent is invited as a
  * participant OR tagged to EXECUTE a linked task/epic.
@@ -26,6 +27,7 @@ import { MergeSection } from './MergeSection';
 import { PeopleSection } from './PeopleSection';
 import { QuestionsSection } from './QuestionsSection';
 import { S } from './panelStyles';
+import { parseChatTicketSort, sortChatTickets, type ChatTicketSort } from './sortChatTickets';
 import {
   RUNNABLE_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
@@ -103,6 +105,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   // list on first load; a bool = the user chose, and we respect it from then on.
   const [collapsed, setCollapsed] = useState<boolean | null>(null);
   const userCollapsed = useRef(false);
+  // Presentational only — default incomplete-first so DONE chips don't bury open work.
+  const [sort, setSort] = useState<ChatTicketSort>('open');
 
   // The picker and Sessions tree show a chat-list snapshot; when the tickets read here
   // disagree with it, the host refetches so all three show one figure.
@@ -171,6 +175,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   // SAME rollup the server puts on the chat list (see rollupChatTicketHealth for why it
   // weights `progressPct` rather than counting Σdone/Σtotal).
   const agg = useMemo(() => rollupChatTicketHealth(tickets), [tickets]);
+  const displayedTickets = useMemo(() => sortChatTickets(tickets, sort), [tickets, sort]);
 
   const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
   const toggleCollapsed = () => { userCollapsed.current = true; setCollapsed(!isCollapsed); };
@@ -180,18 +185,33 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       {/* Collapsible header — one row summarising the linked tickets so a chat with
           hundreds of them stays compact. Click to expand/collapse the ring grid. */}
       {tickets.length > 0 && (
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          aria-expanded={!isCollapsed}
-          title={isCollapsed ? labels.showTickets : labels.hideTickets}
-          style={S.ticketsHeader}
-        >
-          <span aria-hidden style={{ ...S.caret, transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>▸</span>
-          <HealthRing percent={agg.pct} size={22} muted={false} ariaLabel={labels.overallAria(agg.pct)} />
-          <span style={S.ticketsCount}>{labels.ticketCount(tickets.length)}</span>
-          <span style={S.ticketsAgg}>{agg.pct}%{agg.total > 0 ? ` · ${agg.done}/${agg.total}` : ''}</span>
-        </button>
+        <div style={S.headerRow}>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-expanded={!isCollapsed}
+            title={isCollapsed ? labels.showTickets : labels.hideTickets}
+            style={S.ticketsHeader}
+          >
+            <span aria-hidden style={{ ...S.caret, transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>▸</span>
+            <HealthRing percent={agg.pct} size={22} muted={false} ariaLabel={labels.overallAria(agg.pct)} />
+            <span style={S.ticketsCount}>{labels.ticketCount(tickets.length)}</span>
+            <span style={S.ticketsAgg}>{agg.pct}%{agg.total > 0 ? ` · ${agg.done}/${agg.total}` : ''}</span>
+          </button>
+          {tickets.length > 1 && (
+            <select
+              aria-label={labels.sortLabel}
+              value={sort}
+              onChange={(e) => setSort(parseChatTicketSort(e.target.value))}
+              style={S.sortSelect}
+            >
+              <option value="open" style={S.option}>{labels.sortOpen}</option>
+              <option value="done" style={S.option}>{labels.sortDone}</option>
+              <option value="title" style={S.option}>{labels.sortTitle}</option>
+              <option value="linked" style={S.option}>{labels.sortLinked}</option>
+            </select>
+          )}
+        </div>
       )}
 
       {/* Health rings for linked tickets */}
@@ -199,7 +219,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       <div style={S.ticketGrid}>
         {tickets.length === 0 ? (
           <span style={S.muted}>{labels.none}</span>
-        ) : tickets.map((tk) => {
+        ) : displayedTickets.map((tk) => {
           const key = `${tk.kind}:${tk.ref}`;
           const parentTk = parentLink(tk);
           return (

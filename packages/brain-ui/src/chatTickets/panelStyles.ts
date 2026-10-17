@@ -11,7 +11,10 @@ export const S = {
   muted: { fontSize: 12, color: V.muted } as React.CSSProperties,
   // Collapsible ticket-summary header — full-width, button-reset, subtle hover-less
   // affordance that carries a caret, an overall health ring and the linked count.
-  ticketsHeader: { display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', color: V.text } as React.CSSProperties,
+  // The header row: ticket health on the left, the sort control on the right. Wraps
+  // on a narrow panel rather than pushing the select off the edge.
+  headerRow: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, minWidth: 0 } as React.CSSProperties,
+  ticketsHeader: { display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px', flex: '1 1 auto', minWidth: 0, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', color: V.text } as React.CSSProperties,
   caret: { display: 'inline-block', fontSize: 11, color: V.muted, transition: 'transform 120ms ease' } as React.CSSProperties,
   ticketsCount: { fontSize: 12, fontWeight: 600, color: V.text } as React.CSSProperties,
   ticketsAgg: { fontSize: 11, color: V.muted } as React.CSSProperties,
@@ -31,6 +34,9 @@ export const S = {
   // `colorScheme` makes the browser draw the native <select> (and its OS/UA popup)
   // in the editor's active scheme even where the token background doesn't reach.
   select: { minWidth: 120, padding: '4px 8px', fontSize: 12, borderRadius: 8, border: `1px solid ${V.border}`, background: V.field, color: V.fieldText, colorScheme: 'inherit' } as React.CSSProperties,
+  // Compact sort control in the rail header — sits outside the collapse button so
+  // changing the order never toggles the grid.
+  sortSelect: { minWidth: 132, maxWidth: 180, padding: '3px 6px', fontSize: 11, borderRadius: 8, border: `1px solid ${V.border}`, background: V.field, color: V.fieldText, colorScheme: 'inherit', flex: '0 0 auto' } as React.CSSProperties,
   // The option popup is drawn by the OS and does NOT inherit `select`'s background,
   // so each option needs its own opaque pair — see nativeOptionStyle.
   option: nativeOptionStyle,
