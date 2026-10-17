@@ -27,6 +27,7 @@ export function beginRun(c: RunCell, outcomeKey?: RunKey): void {
   c.codeModel = null;
   c.liveTurn = null;
   c.stoppedTurn = null;
+  c.turn = null;
   if (typeof outcomeKey === 'number') c.runId = runOutcomeId(outcomeKey, Date.now());
   // Fresh abort handle for this run, so Stop can cancel the LLM stream and unwind
   // the loop (a stale, already-aborted controller never bleeds into a new run).

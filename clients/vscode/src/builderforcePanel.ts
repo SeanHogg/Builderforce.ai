@@ -8,6 +8,7 @@ import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import type { BrainRunHost, WebviewRunStart } from "./brainRunHost";
 import { authorizeLocalEndpoint, getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
 import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
+import { confirmChatDelete } from "./chatDeletion";
 import { getGroundingWithHistory } from "./grounding";
 import { getEditorContext, getEditorContextLive, watchEditorContext } from "./editorContext";
 import { detectPendingChanges, watchPendingChanges } from "./gitChanges";
@@ -493,6 +494,11 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
     void this.sendInit();
   }
 
+  /** A chat deleted from the Sessions tree: a panel leaves it only if it is the one open. */
+  static chatDeleted(chatId: number): void {
+    for (const panel of BuilderForcePanel.allPanels()) panel.post({ type: "chat.deleted", chatId });
+  }
+
   /** Re-push init (token/grounding/model/labels) to every open panel — e.g. after sign-in. */
   static refresh(): void {
     for (const panel of BuilderForcePanel.allPanels()) void panel.sendInit();
@@ -653,21 +659,13 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
         await vscode.env.clipboard.writeText(typeof msg.text === "string" ? msg.text : "");
         void vscode.window.showInformationMessage(vscode.l10n.t("Chat diagnostics copied to clipboard."));
         break;
+      // The history list's Delete asks the Sessions tree's modal; the webview deletes.
+      case "chat.confirmDelete":
+        this.respond(msg.id, true, typeof msg.chatId === "number" && await confirmChatDelete(msg.chatId, typeof msg.title === "string" ? msg.title : ""));
+        break;
       // Open a linked work item (clicked in the ChatTicketsPanel) in its own view:
       // a task/epic/gap deep-links to its detail drawer (assignee/status/PRD) in the
       // web portal; strategy tiers + specs open the web page they live on.
-      // The history list's Delete: the ONE delete path (the Sessions tree's command), so
-      // the modal confirm and the "stop the run first" refusal apply here too. The
-      // webview re-reads its list afterwards.
-      case "chat.delete":
-        if (typeof msg.chatId === "number") {
-          await vscode.commands.executeCommand("builderforce.deleteSession", {
-            id: msg.chatId,
-            title: typeof msg.title === "string" ? msg.title : "",
-          });
-          this.post({ type: "refresh" });
-        }
-        break;
       case "open.artifact":
         this.openArtifact(
           typeof msg.kind === "string" ? msg.kind : "",

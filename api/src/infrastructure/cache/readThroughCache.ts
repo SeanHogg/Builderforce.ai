@@ -123,7 +123,7 @@ export async function getCacheVersion(env: Env, versionKey: string): Promise<str
 
 /** Bump a version token: the next getCacheVersion mints a fresh one, orphaning
  *  every data key that embedded the previous token (they age out via TTL). */
-export async function bumpCacheVersion(env: Env, versionKey: string): Promise<void> {
+export async function bumpCacheVersion(env: CacheEnv, versionKey: string): Promise<void> {
   await invalidateCached(env, `ver:${versionKey}`);
 }
 

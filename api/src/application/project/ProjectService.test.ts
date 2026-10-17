@@ -164,3 +164,36 @@ describe('ProjectService create — projects_key_key collisions', () => {
       .rejects.toBeInstanceOf(ConflictError);
   });
 });
+
+describe('ProjectService onCountChanged — the plan-limit count cache', () => {
+  it('fires after a create and after a delete, with the tenant', async () => {
+    let stored: Project | null = null;
+    const repo = {
+      findByKey: vi.fn(async () => null),
+      save: vi.fn(async (p: Project) => { stored = p; return p; }),
+      findById: vi.fn(async () => stored),
+      delete: vi.fn(async () => undefined),
+    } as unknown as IProjectRepository;
+    const onCountChanged = vi.fn(async () => undefined);
+    const svc = new ProjectService(repo, undefined, null, onCountChanged);
+
+    await svc.createProjectWithGeneratedKey({ tenantId: 4, name: 'Acme' });
+    expect(onCountChanged).toHaveBeenLastCalledWith(4);
+
+    await svc.deleteProject(1, 4);
+    expect(repo.delete).toHaveBeenCalled();
+    expect(onCountChanged).toHaveBeenCalledTimes(2);
+    expect(onCountChanged).toHaveBeenLastCalledWith(4);
+  });
+
+  it('does not fire when the insert fails', async () => {
+    const repo = {
+      findByKey: vi.fn(async () => null),
+      save: vi.fn(async () => { throw new Error('boom'); }),
+    } as unknown as IProjectRepository;
+    const onCountChanged = vi.fn(async () => undefined);
+    await expect(new ProjectService(repo, undefined, null, onCountChanged)
+      .createProject({ tenantId: 4, key: 'K', name: 'X' })).rejects.toThrow('boom');
+    expect(onCountChanged).not.toHaveBeenCalled();
+  });
+});

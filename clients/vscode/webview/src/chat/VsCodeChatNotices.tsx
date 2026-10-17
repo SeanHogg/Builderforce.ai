@@ -5,7 +5,9 @@
  * - a connected BYO account the gateway couldn't use this run (revoked, or connected in
  *   a DIFFERENT workspace) — the reason picks the sentence;
  * - a BYO provider key that hit its usage cap, so the run fell back to the shared pool;
- * - the failed turn itself, with the server-decided remedy (`chatErrorAction`).
+ * - the failed turn itself, with the server-decided remedy (`chatErrorAction`);
+ * - a failed history action (summarize, rename, delete) — the shared `useBrainChats`
+ *   reports those through its own `error`, which nothing else on this surface shows.
  *
  * The first two are passive (`role="status"`) and dismissible until a NEW occurrence —
  * the shared `useDismissibleNotice` rule the web's provider-cap banner uses too. They
@@ -19,8 +21,10 @@ import { openUpgrade } from '../accountPlan';
 import { invalidatePlanSnapshot } from '../planSnapshot';
 import { post, refreshToken } from '../vscodeBridge';
 
-export function VsCodeChatNotices({ conv, t }: {
+export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, t }: {
   conv: UseBrainConversation;
+  chatsError: string;
+  onDismissChatsError: () => void;
   t: (key: string, fallback: string) => string;
 }) {
   const byo = useDismissibleNotice(conv.byoUnresolved);
@@ -65,6 +69,8 @@ export function VsCodeChatNotices({ conv, t }: {
           ).replace('{providers}', conv.providerCap.join(', '))}
         />
       )}
+      {/* A chat the first send could not create fails the turn too — show that once. */}
+      <ChatErrorBanner className="bf-error" error={chatsError === conv.error ? '' : chatsError} action={null} onDismiss={onDismissChatsError} labels={{ dismiss }} />
       <ChatErrorBanner
         className="bf-error"
         error={conv.error}

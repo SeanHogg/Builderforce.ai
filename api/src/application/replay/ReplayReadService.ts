@@ -19,6 +19,7 @@ import type {
   ReplayLiveDto,
   ReplayPage,
   ReplayRecordingDto,
+  ReplayRecordingStatusDto,
   ReplayRecordingSummaryDto,
   ReplayReleaseDto,
   ReplayDeviceClass,
@@ -124,6 +125,28 @@ export class ReplayReadService {
       const [marks, chunkSeqs] = await Promise.all([getMarks(this.env, loc), listChunkSeqs(this.env, loc)]);
       return toRecordingDto(row, marks, chunkSeqs);
     }, LIST_TTL);
+  }
+
+  /**
+   * What a followed (live) recording gained since the reader's last look: the seqs
+   * past `afterSeq`, the facts that grow, and the marks only when their count moved.
+   * A projection of the cached {@link getRecording} read, so a follow tick costs no
+   * extra query on a cache hit and ships a few hundred bytes instead of the row.
+   */
+  async recordingStatus(scope: ReplayScope, recordingId: string, cursor: { afterSeq: number; knownMarks: number }): Promise<ReplayRecordingStatusDto> {
+    const recording = await this.getRecording(scope, recordingId);
+    return {
+      durationMs: recording.durationMs,
+      activeMs: recording.activeMs,
+      pageCount: recording.pageCount,
+      exitPath: recording.exitPath,
+      counts: recording.counts,
+      chunkCount: recording.chunkCount,
+      chunkSeqs: recording.chunkSeqs.filter((seq) => seq > cursor.afterSeq),
+      markCount: recording.marks.length,
+      ended: recording.ended === true,
+      ...(recording.marks.length !== cursor.knownMarks ? { marks: recording.marks } : {}),
+    };
   }
 
   /** The stored gzip bytes of one chunk (not cached: immutable, served with a long Cache-Control). */

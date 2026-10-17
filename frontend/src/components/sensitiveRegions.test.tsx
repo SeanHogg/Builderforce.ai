@@ -23,6 +23,8 @@ const SENSITIVE_REGIONS: ReadonlyArray<{ file: string; component: string; privac
   { file: 'ProjectBackendPanel.tsx', component: 'ProjectBackendPanel', privacy: 'block' },
   // Every web AI surface's footer (Brain panel, guest drawer, canvas) — what a person types to the Brain.
   { file: 'ai-surface/WebAiSurface.tsx', component: 'WebSurfaceFooter', privacy: 'mask' },
+  // The canvas prompt also floats on the board, outside any surface footer.
+  { file: 'creation-canvas/CanvasComposer.tsx', component: 'CanvasComposer', privacy: 'mask' },
 ];
 // A shared part (`SurfaceFooter`) takes the attribute through its `dataAttrs` prop.
 

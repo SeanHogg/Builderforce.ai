@@ -1,5 +1,6 @@
 import type { CanvasVideoSource, CanvasVideoTimeline } from '@builderforce/creation-canvas-contract';
 import { apiRequest } from './apiClient';
+import { backoffDelay, whenDocumentVisible } from './polling/pollPolicy';
 
 /**
  * THE client for AI video — `/llm/v1/videos/*`.
@@ -78,18 +79,45 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/** Consecutive failed status reads (network, 5xx, 429) before the wait gives up with the last error. */
+const MAX_READ_FAILURES = 5;
+
+/** A 4xx other than 408/429 will not heal by asking again (the job is gone, or not ours). */
+function isPermanentReadFailure(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 /**
  * Poll a job until it finishes. Resolves with the succeeded job; throws the
  * job's own error message when it failed (that sentence names the real reason).
  * Aborting stops WAITING — the server job carries on and can be read later.
+ *
+ * Follows the shared polling rules: a hidden tab does not ask (the job runs
+ * server-side regardless, and is read the moment the tab is back), and a failed
+ * read doubles the wait instead of hammering a struggling API.
  */
 export async function waitForVideoJob(id: string, opts: { signal?: AbortSignal; onUpdate?: (job: VideoJob) => void } = {}): Promise<VideoJob> {
+  let delay = POLL_INTERVAL_MS;
+  let failures = 0;
   for (;;) {
-    const job = await getVideoJob(id);
+    await whenDocumentVisible(opts.signal);
+    let job: VideoJob;
+    try {
+      job = await getVideoJob(id);
+    } catch (error) {
+      failures += 1;
+      if (isPermanentReadFailure(error) || failures >= MAX_READ_FAILURES) throw error;
+      delay = backoffDelay(delay, POLL_INTERVAL_MS);
+      await sleep(delay, opts.signal);
+      continue;
+    }
+    failures = 0;
+    delay = POLL_INTERVAL_MS;
     opts.onUpdate?.(job);
     if (job.status === 'succeeded') return job;
     if (job.status === 'failed') throw new Error(job.error || 'The video could not be generated');
-    await sleep(POLL_INTERVAL_MS, opts.signal);
+    await sleep(delay, opts.signal);
   }
 }
 

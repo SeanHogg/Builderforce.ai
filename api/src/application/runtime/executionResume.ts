@@ -36,6 +36,7 @@ import { loadContainerRunContext } from './cloudAgentEngine';
 import { dispatchGithubActionsRun } from './githubActionsDispatch';
 import { probeContainerHealth } from './cloudDispatch';
 import { recordCloudToolEvent } from './cloudToolEvents';
+import { cloudRunnerStub } from './cloudRunnerStub';
 import { markCloudExecutionRunning } from './cloudAgentEngine';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { executions } from '../../infrastructure/database/schema';
@@ -113,7 +114,7 @@ async function resumeDurableRun(
   args: { executionId: number; tenantId: number; approvalId?: string },
 ): Promise<void> {
   if (!env.CLOUD_RUNNER) return;
-  const stub = env.CLOUD_RUNNER.get(env.CLOUD_RUNNER.idFromName(`exec:${args.executionId}`));
+  const stub = cloudRunnerStub(env.CLOUD_RUNNER, args.executionId);
   await stub.fetch('https://cloud-runner/resume', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

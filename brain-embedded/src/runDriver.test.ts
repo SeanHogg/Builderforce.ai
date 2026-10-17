@@ -35,6 +35,7 @@ const remote = (over: Partial<BrainRunSnapshot> = {}): BrainRunSnapshot => ({
   activity: null,
   byoUnresolved: [],
   providerCap: [],
+  turn: null,
   ...over,
 });
 

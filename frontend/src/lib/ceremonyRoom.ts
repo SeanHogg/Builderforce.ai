@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getStoredTenantToken } from './auth';
 import { apiSocketUrl } from './apiSocket';
+import { createReconnector, openSocket } from './polling/reconnectPolicy';
 
 /**
  * useCeremonyRoom — the live multiplayer client for a standup/planning round-table.
@@ -75,21 +76,17 @@ export function useCeremonyRoom(
 
     const url = apiSocketUrl(`/api/agile/ceremonies/rooms/${projectId}/ws`, { token });
 
-    let closed = false;
     let ws: WebSocket | null = null;
-    let retry: ReturnType<typeof setTimeout> | null = null;
 
+    // Drops follow the shared reconnect policy (backoff, auth close codes, hidden tab)
+    // rather than a fixed 2 s loop that retried a dead relay forever.
     const connect = () => {
-      if (closed) return;
-      try {
-        ws = new WebSocket(url);
-      } catch {
-        retry = setTimeout(connect, 2000);
-        return;
-      }
+      ws = openSocket(url);
+      if (!ws) { reconnector.closed(); return; }
       wsRef.current = ws;
 
       ws.onopen = () => {
+        reconnector.opened();
         setConnected(true);
         try { ws?.send(JSON.stringify({ type: 'join', ...meRef.current })); } catch { /* ignore */ }
       };
@@ -122,17 +119,17 @@ export function useCeremonyRoom(
             onFrame?.(msg);
         }
       };
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         setConnected(false);
-        if (!closed) retry = setTimeout(connect, 2000);
+        reconnector.closed(ev?.code);
       };
       ws.onerror = () => { try { ws?.close(); } catch { /* ignore */ } };
     };
-    connect();
+    const reconnector = createReconnector({ connect });
+    reconnector.start();
 
     return () => {
-      closed = true;
-      if (retry) clearTimeout(retry);
+      reconnector.stop();
       setConnected(false);
       setPeers([]);
       setMyId(null);

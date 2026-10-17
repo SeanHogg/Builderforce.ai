@@ -116,6 +116,12 @@ export async function createPanelServices(): Promise<PanelServices> {
     cache.clear(tabId); // its refs belonged to the page that is gone
     if (working.current()?.id === tabId) working.set({ id: tabId, url: change.url });
   });
+  // A closed working tab is not a page Rovr can act on. (Closing usually activates a
+  // sibling, which `onActivated` reports; the last tab of a window does not.)
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    cache.clear(tabId);
+    if (working.current()?.id === tabId) working.set(null);
+  });
 
   const safety = (): SafetyContext => {
     const tab = working.current();

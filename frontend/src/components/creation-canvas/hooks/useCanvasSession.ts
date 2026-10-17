@@ -17,6 +17,8 @@ import { projectEvermindNodePatch } from '../canvasProjectSync';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { Edge, ReactFlowInstance } from '@xyflow/react';
 import type { CanvasTimelineMessage } from '../canvasBoardTypes';
+import { timelineFromLocal, timelineToLocal } from '../localTimeline';
+import { drainSessionBoardWrites } from '../sessionBoardWriters';
 import type { useTranslations } from 'next-intl';
 import type { CreationNodeData } from '../types';
 
@@ -68,6 +70,13 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
    * same commit as the loaded nodes, so the first render that sees `true` sees them too.
    */
   const [boardLoaded, setBoardLoaded] = useState(false);
+  /**
+   * A turn that outlived an earlier instance of this board wrote while no board was on
+   * screen (`sessionBoardWriters`). Replayed only once the load has COMMITTED, so it lands
+   * on top of the loaded board instead of being overwritten by it, and the next autosave
+   * keeps it.
+   */
+  useEffect(() => { if (boardLoaded) drainSessionBoardWrites(sessionId); }, [boardLoaded, sessionId]);
   useEffect(() => {
     try {
       if (persistence === 'local') {
@@ -76,7 +85,7 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
           setTitle(saved.title);
           setNodes(saved.nodes);
           setEdges(saved.edges);
-          setTimeline((saved.timeline ?? []).map((message) => ({ clientMessageId: message.clientMessageId, messageRole: message.role, body: message.body, metadata: message.metadata ?? {}, createdAt: message.createdAt })));
+          setTimeline(timelineFromLocal(saved.timeline));
           // The mode a guest armed in the homepage composer, carried across the
           // hand-off — a local canvas has no server row, so the snapshot IS the store.
           setSessionMode_(normalizeChatMode(saved.mode));
@@ -199,13 +208,7 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
     setTitle(snapshot.title);
     setNodes(snapshot.nodes);
     setEdges(snapshot.edges);
-    setTimeline((snapshot.timeline ?? []).map((message) => ({
-      clientMessageId: message.clientMessageId,
-      messageRole: message.role,
-      body: message.body,
-      metadata: message.metadata ?? {},
-      createdAt: message.createdAt,
-    })));
+    setTimeline(timelineFromLocal(snapshot.timeline));
     // The viewport is personal — following someone else's pan mid-edit is
     // disorienting, and each participant keeps their own place on the board.
     writeLocalCreationSession(sessionId, snapshot);
@@ -230,7 +233,7 @@ export function useCanvasSession({ commitRevision, currentGraphRef, edges, flowR
    */
   const currentSnapshot = useCallback((viewport = viewportRef.current) => localCreationSnapshot(sessionId, {
     title: readLocalCreationSession(sessionId)?.title ?? title,
-    timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })),
+    timeline: timelineToLocal(timeline),
     nodes,
     edges,
     viewport,

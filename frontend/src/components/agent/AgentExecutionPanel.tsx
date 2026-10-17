@@ -14,7 +14,6 @@ import {
   type AgentHost,
   type Approval,
   type Execution,
-  type ExecutionTrace,
   type ExecutionTraceToolEvent,
   type ExecutionLlmTurn,
   type TaskFileChange,
@@ -33,6 +32,7 @@ import { statusColor } from '@/lib/statusTone';
 import { ExecutionChip } from './ExecutionChip';
 import { EvermindRunChip } from './EvermindRunChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
+import { useExecutionTrace } from './useExecutionTrace';
 import { ObservabilityContent } from '../ObservabilityContent';
 import { TaskChangesPanel } from './TaskChangesPanel';
 import { PullRequestPanel } from './PullRequestPanel';
@@ -223,7 +223,6 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const { user } = useAuth();
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [trace, setTrace] = useState<ExecutionTrace | null>(null);
   const [loading, setLoading] = useState(true);
   const [gate, setGate] = useState<{ approvalId: string; reason: string } | null>(null);
   // The full approval row behind the gate, fetched so a manager can resolve it
@@ -305,12 +304,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // the prior run. (The Changes panel resets its own open-file view via resetKey.)
   useEffect(() => { setSentMessages([]); }, [selectedId]);
 
-  useEffect(() => {
-    if (selectedId == null) { setTrace(null); return; }
-    let cancelled = false;
-    runtimeApi.trace(selectedId).then((t) => { if (!cancelled) setTrace(t); }).catch(() => { if (!cancelled) setTrace(null); });
-    return () => { cancelled = true; };
-  }, [selectedId]);
+  const { trace, readTail } = useExecutionTrace(selectedId);
 
   const stream = useExecutionStream(selectedId);
 
@@ -556,13 +550,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     // Run settled (or none selected) — pick up changes persisted as it ended.
     if (selectedId != null && !isRunning) loadTaskChanges();
   }, [selectedId, isRunning, loadTaskChanges]);
-  usePolledResource(
-    (signal) => selectedId == null ? undefined : Promise.all([
-      runtimeApi.trace(selectedId).then((tr) => { if (!signal.aborted) setTrace(tr); }),
-      loadTaskChanges(),
-    ]),
-    { intervalMs: 4000, enabled: selectedId != null && isRunning, immediate: false },
-  );
+  usePolledResource((signal) => Promise.all([readTail(signal), loadTaskChanges()]), { intervalMs: 4000, enabled: selectedId != null && isRunning, immediate: false });
 
   const send = async () => {
     const text = draft.trim();

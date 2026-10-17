@@ -51,6 +51,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { activityLog } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { boundedDelete, type PurgeStatement } from '../maintenance/boundedPurge';
 import type { VisitorEvent } from '../../domain/marketing/VisitorJourney';
 import { type ActivityInput, type ActorIdentity, recordActivityBatch } from '../activity/activityLog';
 
@@ -153,11 +154,10 @@ export async function forgetVisitorActivity(db: Db, visitorId: string): Promise<
  * entry, so it runs on every endpoint the relation exists on and the daily plain
  * vacuum follows it.
  */
-export async function purgeVisitorActivity(db: Db, cutoff: Date): Promise<unknown> {
-  return db
-    .delete(activityLog)
-    .where(acrossTenants(activityLog, 'scheduled_sweep',
-      eq(activityLog.actorType, VISITOR_ACTOR_TYPE),
-      lt(activityLog.occurredAt, cutoff),
-    ));
+export function purgeVisitorActivity(db: Db, cutoff: Date): PurgeStatement {
+  // Bounded + unexecuted so the retention pass batches it with the other purges.
+  return boundedDelete(db, activityLog, acrossTenants(activityLog, 'scheduled_sweep',
+    eq(activityLog.actorType, VISITOR_ACTOR_TYPE),
+    lt(activityLog.occurredAt, cutoff),
+  ));
 }

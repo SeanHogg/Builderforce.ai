@@ -1141,6 +1141,10 @@
  * API. Reflows to one column on a narrow panel.
  * ========================================================================== */
 
+/* The glyph-only header button (refresh ⟳) Project 360 and the project list pages share.
+   Doubled class: it must beat a host's own `.bf-btn` padding, whichever loads last. */
+.bf-btn.bf-btn--icon { padding: 4px 7px; line-height: 1; }
+
 .bf-360 {
   display: flex;
   flex-direction: column;

@@ -14,7 +14,7 @@
     "components/ObservabilityContent.tsx": 1033,
     "components/ProviderKeysSettings.tsx": 1438,
     "components/TaskMgmtContent.tsx": 2762,
-    "components/agent/AgentExecutionPanel.tsx": 1091,
+    "components/agent/AgentExecutionPanel.tsx": 1078,
     "components/creation-canvas/CreationCanvas.tsx": 1159,
     "components/manager/ManagerContent.tsx": 1150,
     "components/reliability/MonitoringSections.tsx": 954,

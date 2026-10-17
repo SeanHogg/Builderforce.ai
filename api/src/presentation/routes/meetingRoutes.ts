@@ -24,7 +24,7 @@ import { meetings, meetingAttendees, userAvailability } from '../../infrastructu
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { relayToRoom } from './realtimeRelay';
 import {
-  runAgentTurn, summarizeMeeting, appendTranscriptLine, loadTranscript,
+  runAgentTurn, summarizeMeeting, appendTranscriptLine, loadTranscript, loadTranscriptSince,
 } from '../../application/meetings/meetingIntelligence';
 import { pushMeetingEvent, deleteMeetingEvent } from '../../application/calendar/calendarService';
 import type { CalendarProviderName } from '../../application/calendar/calendarProviders';
@@ -361,10 +361,15 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   }
 
   // GET /:id/transcript — the meeting's transcript in spoken order (+ any minutes).
+  // `?sinceAtMs=` returns only the lines from that point on (with a small overlap the
+  // reader de-duplicates), so a live panel's re-read is not the whole meeting again.
   r.get('/:id/transcript', async (c) => {
     const res = await loadForAccess(c, c.req.param('id'));
     if ('error' in res) return c.json({ error: res.error }, res.code);
-    const segments = await loadTranscript(db, res.meeting.id);
+    const sinceAtMs = boundedIntParam(c.req.query('sinceAtMs'), { def: -1, min: -1 });
+    const segments = sinceAtMs >= 0
+      ? await loadTranscriptSince(db, res.meeting.tenantId, res.meeting.id, sinceAtMs)
+      : await loadTranscript(db, res.meeting.id);
     return c.json({
       segments: segments.map((s) => ({
         id: s.id, speakerRef: s.speakerRef, speakerName: s.speakerName,

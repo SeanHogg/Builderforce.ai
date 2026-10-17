@@ -137,7 +137,8 @@ export function stopRun(chatId: RunKey): void {
   const driver = driverFor(chatId);
   if (driver) return driver.stop(chatId as number);
   const c = cells.get(chatId);
-  if (!c || !c.running) return;
+  // Already stopped and unwinding: a second press must not record a second Stop.
+  if (!c || !c.running || c.abort?.signal.aborted) return;
   const stopped = stoppedTurnOf(c);
   c.stoppedTurn = stopped;
   c.abort?.abort();
@@ -152,6 +153,7 @@ export function stopRun(chatId: RunKey): void {
   // so the indicator disappears the instant Stop is pressed, rather than when the
   // aborted loop finally unwinds.
   c.activity = null;
+  c.turn = null;
   // pushTrace emits, so subscribers see both the trace step and the cleared
   // streaming buffer in one go.
   pushTrace(c, stopped.event);
@@ -250,5 +252,6 @@ export function applyRemoteRun(chatId: number, snapshot: BrainRunSnapshot): void
   c.activity = snapshot.activity;
   c.byoUnresolved = snapshot.byoUnresolved;
   c.providerCap = snapshot.providerCap;
+  c.turn = snapshot.turn ?? null;
   emit(c);
 }

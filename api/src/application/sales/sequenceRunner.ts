@@ -28,9 +28,9 @@
  */
 
 import { asJsonRecord } from '../../domain/shared/json';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { eq, isNull, lte, or, sql } from 'drizzle-orm';
 import {
-  readSequenceEnrolments, readSequenceSteps, sequenceDueSteps,
+  readSequenceEnrolments, readSequenceSteps, sequenceDueSteps, sequenceNextDueAt,
   type SequenceChannel, type SequenceDueStep, type SequenceEnrolment,
 } from '@builderforce/creation-canvas-contract';
 import type { Env } from '../../env';
@@ -48,8 +48,18 @@ const SOURCE = 'application/sales/sequenceRunner.ts';
 
 /** How many cadences one tick will drive. A bound, not a guess: the sweep runs every
  *  fifteen minutes and a cadence step is a day apart, so nothing is starved by a cap that
- *  keeps one tick inside a Worker's budget. */
+ *  keeps one tick inside a Worker's budget. Only DUE (or never-evaluated) cadences count
+ *  toward it — see `next_due_at` (1234). */
 const MAX_SEQUENCES_PER_TICK = 40;
+/** `next_due_at` for a cadence nobody will ever be due on (not running, everyone done). A
+ *  real timestamp rather than NULL, because NULL means "unknown, evaluate me". An edit that
+ *  restarts it clears the stamp through the 1234 trigger. */
+const NEVER_DUE = new Date('9999-12-31T00:00:00.000Z');
+
+/** The stamp to store after a cadence's content is `content`. */
+function nextDueStamp(content: Record<string, unknown>): Date {
+  return sequenceNextDueAt({ state: content.sequenceState, steps: content.steps, enrolments: content.enrolments }) ?? NEVER_DUE;
+}
 /** And how many people inside one cadence. A 2,000-person cadence sends in batches over
  *  successive ticks rather than trying to send 2,000 emails in one invocation — which is
  *  also the only behaviour a provider's rate limit will tolerate. */
@@ -178,9 +188,9 @@ async function dispatch(
 /**
  * Drive every running cadence one tick.
  *
- * One indexed read (`idx_creation_objects_sequences`, migration 0923) rather than a scan
- * of every object on every board — the same argument `idx_question_sets_reminders` makes
- * for the form sweep.
+ * One indexed read (`idx_creation_objects_sequence_due`, migration 1234) of only the
+ * cadences with a step due now or never evaluated since their last edit — so an idle tick
+ * is one statement that returns nothing, instead of 40 JSON blobs evaluated in JS.
  */
 export async function runSequenceSweep(env: Env, now = new Date(), db: Db = buildDatabase(env)): Promise<SequenceSweepResult> {
   const rows = await db.select({
@@ -200,11 +210,15 @@ export async function runSequenceSweep(env: Env, now = new Date(), db: Db = buil
       'scheduled_sweep',
       eq(creationSessionObjects.kind, 'sequence'),
       eq(creationSessions.status, 'active'),
+      or(isNull(creationSessionObjects.nextDueAt), lte(creationSessionObjects.nextDueAt, now)),
     ))
-    .orderBy(desc(creationSessionObjects.updatedAt))
+    // Unknown (just edited) first, then the longest-overdue.
+    .orderBy(sql`${creationSessionObjects.nextDueAt} asc nulls first`)
     .limit(MAX_SEQUENCES_PER_TICK);
 
   const result: SequenceSweepResult = { sequences: 0, sent: 0, stopped: 0, failed: 0 };
+  /** Cadences evaluated with nothing to send: only their due stamp is written. */
+  const stamps: Array<{ id: string; at: Date }> = [];
 
   for (const row of rows) {
     const content = asJsonRecord(row.content);
@@ -212,7 +226,10 @@ export async function runSequenceSweep(env: Env, now = new Date(), db: Db = buil
       { state: content.sequenceState, steps: content.steps, enrolments: content.enrolments },
       now,
     ).slice(0, MAX_SENDS_PER_SEQUENCE);
-    if (due.length === 0) continue;
+    if (due.length === 0) {
+      stamps.push({ id: row.id, at: nextDueStamp(content) });
+      continue;
+    }
 
     result.sequences += 1;
 
@@ -294,21 +311,28 @@ export async function runSequenceSweep(env: Env, now = new Date(), db: Db = buil
     const allDone = nextEnrolments.length > 0 && nextEnrolments.every((row_) =>
       row_.repliedAtISO || row_.stoppedAtISO || (steps.length > 0 && row_.stepsSent >= steps.length));
 
+    const nextContent = {
+      ...content,
+      enrolments: nextEnrolments,
+      lastRunAt: nowISO,
+      ...(allDone ? { sequenceState: 'completed', status: 'Completed' } : {}),
+    };
     await db.update(creationSessionObjects)
-      .set({
-        content: {
-          ...content,
-          enrolments: nextEnrolments,
-          lastRunAt: nowISO,
-          ...(allDone ? { sequenceState: 'completed', status: 'Completed' } : {}),
-        },
-        updatedAt: now,
-      })
+      // Content and its due stamp together, so the 1234 trigger keeps the stamp. A step
+      // left unsent (retryable failure, per-tick send cap) keeps it due — retried next tick.
+      .set({ content: nextContent, nextDueAt: nextDueStamp(nextContent), updatedAt: now })
       .where(eq(creationSessionObjects.id, row.id));
     await db.update(creationSessions)
       .set({ canvasRevision: sql`${creationSessions.canvasRevision} + 1`, lastActivityAt: now })
       .where(scopedToTenant(creationSessions, row.tenantId, eq(creationSessions.id, row.sessionId)));
   }
+
+  // Every nothing-due cadence's stamp in ONE round trip. Content is untouched, so the
+  // trigger keeps these, and `updated_at` is left alone — this is bookkeeping, not an edit.
+  const [first, ...rest] = stamps.map((s) => db.update(creationSessionObjects)
+    .set({ nextDueAt: s.at })
+    .where(eq(creationSessionObjects.id, s.id)));
+  if (first) await db.batch([first, ...rest]);
 
   return result;
 }

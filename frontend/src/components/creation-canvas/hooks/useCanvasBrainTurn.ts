@@ -36,7 +36,6 @@ export interface UseCanvasBrainTurnDeps {
   canvasNotices: CanvasNotices;
   /** The in-flight turn's correlation id and start — what Stop records. The run itself
    *  (abort, trace, approvals) lives in the run store under `canvasRunKey(sessionId)`. */
-  canvasRunRef: RefObject<{ requestMessageId: string; startedAt: number; } | null>;
   currentUserId: string | null;
   describeTurnError: (error: unknown, fallbackKey: 'noticeBrainFailed' | 'noticeAgentTestFailed' | 'noticeAgentGroupFailed') => string;
   disableBrainModel: (model: string) => void;
@@ -65,7 +64,6 @@ export interface UseCanvasBrainTurnDeps {
   setAcceptedProposalIds: Dispatch<SetStateAction<Set<string>>>;
   setActiveAgentIds: Dispatch<SetStateAction<Set<string>>>;
   setAutoApplyPending: Dispatch<SetStateAction<boolean>>;
-  setBrainRunStartedAt: Dispatch<SetStateAction<number | null>>;
   setEdges: Dispatch<SetStateAction<Edge[]>>;
   setGuestLimit: Dispatch<SetStateAction<GuestLimitRefusal | null>>;
   setModelSelection: Dispatch<SetStateAction<ChatModelSelection>>;
@@ -83,7 +81,7 @@ export interface UseCanvasBrainTurnDeps {
   turnUnansweredRef: RefObject<{ reason: string; detail?: string; } | null>;
 }
 
-export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, canvasRunRef, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, stage, t, timeline, title, turnToolCallsRef, turnUnansweredRef }: UseCanvasBrainTurnDeps) {
+export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, stage, t, timeline, title, turnToolCallsRef, turnUnansweredRef }: UseCanvasBrainTurnDeps) {
   const evaluateCanvas = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
     // The run store is the truth about whether a turn is in flight (`thinking` trails it
@@ -123,15 +121,15 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeR
     // asking for approvals through the gate the surface's ToolConfirmBar answers. The
     // body below runs synchronously up to its first await, inside the store's claim.
     void startEngineRun(canvasRunKey(sessionId), async (run) => {
-      setBrainRunStartedAt(Date.now());
       setNotice(t('noticeBrainEvaluating'));
       const initialMessage = initialPromptSubmittedRef.current ? adoptableInitialMessage(timeline, requestText) : undefined;
       const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
       const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'human', ref: currentUserId || 'local', name: promptAuthor?.displayName || 'You' } }, initialMessage?.clientMessageId);
       const promptStartedAt = performance.now();
-      // What Stop records against. The abort handle is the run cell's, created when the
-      // store claimed it, so a Stop pressed while the request is assembled still lands.
-      canvasRunRef.current = { requestMessageId, startedAt: promptStartedAt };
+      // What Stop records against — named on the run cell, so it outlives this component.
+      // The abort handle is the cell's too, so a Stop pressed while the request is
+      // assembled still lands.
+      run.correlate(requestMessageId);
       if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'started', metadata: { scope: resolvedScopeMode, ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } }).catch(() => undefined);
       // A composer submission is a chat interaction, so reveal its Brain object
       // immediately. Waiting for the vendor request to succeed left a blank canvas
@@ -178,7 +176,7 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeR
         'turn', 'brain.turn',
         `scope=${resolvedScopeMode} (${scopedNodes.length}/${nodes.length} objects) · ${request.slice(0, 80)}`,
       );
-      const settle: CanvasTurnSettleContext = { appendTimeline, autoApplyRef, brainId, canvasRunRef, describeTurnError, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, signal: run.signal, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, stage, t, turnDone, turnUnansweredRef };
+      const settle: CanvasTurnSettleContext = { appendTimeline, autoApplyRef, brainId, describeTurnError, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, signal: run.signal, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, stage, t, turnDone, turnUnansweredRef };
       try {
         const answer = await runCanvasGroupTurn({ appendTimeline, autoApplyRef, brainId, brainRuntimeRef, canvasActions, canvasNotices, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journalRef, memoryEnabled, modelSelection, runShaping, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setModelSelection, setNodes, run, stage, t, timeline, title, turnSnapshot, turnToolCallsRef, turnUnansweredRef });
         settleCanvasTurnSuccess(settle, answer);
@@ -188,6 +186,6 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeR
         settleCanvasTurnFailure(settle, error);
       }
     });
-  }, [prompt, persistence, inFlightUseCaseIdRef, sessionId, resolvedScopeMode, scopedNodes, setBrainRunStartedAt, setNotice, t, initialPromptSubmittedRef, timeline, members, appendTimeline, scopedNodeIds, currentUserId, canvasRunRef, nodes, setSelectedId, setSelectedIds, stage, turnUnansweredRef, turnToolCallsRef, setNodes, setProposedChanges, edges, effectiveSelectedIds, setActiveAgentIds, journalRef, autoApplyRef, describeTurnError, lastTurnProvenance, setAcceptedProposalIds, setAutoApplyPending, setEdges, setGuestLimit, brainRuntimeRef, canvasActions, canvasNotices, disableBrainModel, evermindProjectId, memoryEnabled, modelSelection, runShaping, recordBrainCompletion, sessionMode, setModelSelection, title, requireAccount, setPrompt]);
+  }, [prompt, persistence, inFlightUseCaseIdRef, sessionId, resolvedScopeMode, scopedNodes, setNotice, t, initialPromptSubmittedRef, timeline, members, appendTimeline, scopedNodeIds, currentUserId, nodes, setSelectedId, setSelectedIds, stage, turnUnansweredRef, turnToolCallsRef, setNodes, setProposedChanges, edges, effectiveSelectedIds, setActiveAgentIds, journalRef, autoApplyRef, describeTurnError, lastTurnProvenance, setAcceptedProposalIds, setAutoApplyPending, setEdges, setGuestLimit, brainRuntimeRef, canvasActions, canvasNotices, disableBrainModel, evermindProjectId, memoryEnabled, modelSelection, runShaping, recordBrainCompletion, sessionMode, setModelSelection, title, requireAccount, setPrompt]);
   return { evaluateCanvas };
 }

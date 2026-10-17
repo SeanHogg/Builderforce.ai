@@ -60,11 +60,13 @@ export interface ChatHistoryListProps {
 export function ChatHistoryList({ loading, total, children, labels: overrides, id, className }: ChatHistoryListProps) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const hasRows = Array.isArray(children) ? children.length > 0 : children != null && children !== false;
+  // The status line is a live SIBLING of the rows, not a child of role="list" (a list
+  // may only own listitems).
+  const status = loading ? labels.loading : !hasRows ? (total === 0 ? labels.empty : labels.noMatch) : null;
   return (
-    <div id={id} className={['bf-history', className].filter(Boolean).join(' ')} role="list">
-      {loading && <div className="bf-history__status">{labels.loading}</div>}
-      {!loading && !hasRows && <div className="bf-history__status">{total === 0 ? labels.empty : labels.noMatch}</div>}
-      {children}
+    <div id={id} className={['bf-history', className].filter(Boolean).join(' ')}>
+      {status != null && <div className="bf-history__status" role="status">{status}</div>}
+      {hasRows && <div role="list" className="bf-history__rows">{children}</div>}
     </div>
   );
 }
@@ -111,20 +113,22 @@ export const ChatHistoryRow = memo(function ChatHistoryRow({
       role="listitem"
     >
       <div className="bf-chatrow__head">
-        <button
-          type="button"
-          className="bf-chatrow__open"
-          aria-current={active ? 'true' : undefined}
-          onClick={() => onOpen(chat.id)}
-          disabled={renaming}
-        >
-          {marker != null && <span className="bf-chatrow__marker">{marker}</span>}
-          {renaming ? null : (
+        {/* While renaming the input IS the row's title — no nameless disabled button beside it. */}
+        {renaming ? (
+          marker != null && <span className="bf-chatrow__marker">{marker}</span>
+        ) : (
+          <button
+            type="button"
+            className="bf-chatrow__open"
+            aria-current={active ? 'true' : undefined}
+            onClick={() => onOpen(chat.id)}
+          >
+            {marker != null && <span className="bf-chatrow__marker">{marker}</span>}
             <span className="bf-chatrow__title">
               {chatSwitcherLabel({ title: chat.title, id: chat.id, ticketCount: chat.ticketCount, ticketProgressPct: chat.ticketProgressPct })}
             </span>
-          )}
-        </button>
+          </button>
+        )}
         {renaming && (
           <input
             autoFocus
@@ -160,13 +164,13 @@ export const ChatHistoryRow = memo(function ChatHistoryRow({
         <div className="bf-chatrow__actions">
           {onStartRename && <button type="button" className="bf-chatrow__action" onClick={() => onStartRename(chat)}>{labels.rename}</button>}
           {onSummarize && (
-            <button type="button" className="bf-chatrow__action" onClick={() => onSummarize(chat.id)} disabled={summarizing}>
-              {summarizing ? '…' : labels.summarize}
+            <button type="button" className="bf-chatrow__action" onClick={() => onSummarize(chat.id)} disabled={summarizing} aria-busy={summarizing || undefined}>
+              {labels.summarize}{summarizing && <span aria-hidden>…</span>}
             </button>
           )}
           {onDelete && (
-            <button type="button" className="bf-chatrow__action bf-chatrow__action--danger" onClick={() => onDelete(chat)} disabled={deleting}>
-              {deleting ? '…' : labels.delete}
+            <button type="button" className="bf-chatrow__action bf-chatrow__action--danger" onClick={() => onDelete(chat)} disabled={deleting} aria-busy={deleting || undefined}>
+              {labels.delete}{deleting && <span aria-hidden>…</span>}
             </button>
           )}
           {extraActions}

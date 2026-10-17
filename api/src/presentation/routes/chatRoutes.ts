@@ -1,12 +1,12 @@
 /**
  * Chat persistence routes
  *
- * POST /api/agent-hosts/:agentHostId/messages?key=  — agentHost-key auth; upserts session + bulk inserts messages
+ * POST /api/agent-hosts/:agentHostId/messages  — agentHost-key auth (Bearer or ?key=); upserts session + bulk inserts messages (also at /api/agentHosts/…)
  * GET  /api/chats                         — JWT tenant auth; lists chat sessions across all agentHosts
  * GET  /api/chats/:sessionId/messages     — JWT tenant auth; messages for a session
  * GET  /api/agent-hosts/:agentHostId/sessions/:sessionKey/messages  — JWT tenant auth; messages by session key
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { eq, and, desc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import {
@@ -41,9 +41,11 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
   // Relay DO calls this to persist messages. Creates/upserts the session row
   // and bulk-inserts messages. Authentication via the agentHost's own API key.
   // ---------------------------------------------------------------------------
-  router.post('/agentHosts/:agentHostId/messages', async (c) => {
+  const persistMessages = async (c: Context<HonoEnv>) => {
     const agentHostId = Number(c.req.param('agentHostId'));
-    const key = c.req.query('key');
+    // The relay DO sends the host key as a Bearer (like every other host ingest); the
+    // legacy `?key=` stays accepted.
+    const key = c.req.header('Authorization')?.replace(/^Bearer\s+/i, '') ?? c.req.query('key');
 
     if (Number.isNaN(agentHostId) || agentHostId <= 0) {
       return c.json({ error: 'invalid agentHostId' }, 400);
@@ -119,7 +121,11 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
       .where(eq(chatSessions.id, session.id));
 
     return c.json({ ok: true, inserted, sessionId: session.id });
-  });
+  };
+  router.post('/agentHosts/:agentHostId/messages', persistMessages);
+  // The canonical agent-host base path — where the relay DO's `callApi` posts. Without
+  // it every relayed chat message 404'd and was never persisted.
+  router.post('/agent-hosts/:agentHostId/messages', persistMessages);
 
   // ---------------------------------------------------------------------------
   // GET /api/chats?limit=&offset=   — tenant JWT; all sessions across all agentHosts

@@ -106,6 +106,30 @@ export interface ReplayRecordingDto extends ReplayRecordingSummaryDto {
   chunkSeqs: number[];
   /** Timeline marks from `marks.json`, ordered by `atMs`. */
   marks: ReplayMark[];
+  /** The recorder sent the visit's final chunk — a followed recording has nothing more coming. */
+  ended?: boolean;
+}
+
+/**
+ * What a LIVE recording gains while it is followed — the light read the player
+ * polls instead of the whole row (`GET …/recordings/:id/status`). Chunk seqs come
+ * back only past the reader's `afterSeq`; marks come back only when the count the
+ * reader holds (`marks`) is stale.
+ */
+export interface ReplayRecordingStatusDto {
+  durationMs: number;
+  activeMs: number;
+  pageCount: number;
+  exitPath: string;
+  counts: ReplayCounts;
+  chunkCount: number;
+  /** Stored seqs above the request's `afterSeq`, ascending. */
+  chunkSeqs: number[];
+  markCount: number;
+  /** The visit's final chunk has landed: the follower can stop asking. */
+  ended: boolean;
+  /** The whole timeline, present only when `markCount` differs from the reader's. */
+  marks?: ReplayMark[];
 }
 
 export interface ReplayPage<T> {

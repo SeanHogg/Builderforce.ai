@@ -15,6 +15,7 @@ import { CanvasComposerIntent } from './CanvasComposerIntent';
 import { PanelDragHandle } from './PanelDragHandle';
 import { usePanelDragOffset } from './usePanelDragOffset';
 import styles from './CreationCanvas.module.css';
+import { REPLAY_MASK } from '@/lib/replaySensitive';
 
 /**
  * THE ONE COMPOSER. One box per screen, whatever surface is under it.
@@ -237,8 +238,10 @@ export function CanvasComposer({
     else onAsk(text);
   };
 
+  // What a person types to the Brain is masked in session replay wherever the prompt
+  // sits — floating on the board as well as docked in a masked surface footer.
   return (
-    <div
+    <div {...REPLAY_MASK}
       // Measured ONLY while it floats over the board. In the Brain panel it is that
       // panel's last row rather than the board's chrome, so the band the board reserves
       // for it is zero — `useChromeSpace` publishes `0px` the moment this ref stops

@@ -187,7 +187,7 @@ describe("the relay", () => {
     const ev = (label: string) => ({ ts: "t", category: "tool" as const, label, result: "ok" });
     applyRemoteRun(chatId, {
       running: false, streamingText: "", error: "", errorAction: null, pendingConfirm: null, messagesEpoch: 0,
-      appended: [], hasTrace: true, trace: [ev("a"), ev("b")], activity: null, byoUnresolved: [], providerCap: [],
+      appended: [], hasTrace: true, trace: [ev("a"), ev("b")], activity: null, byoUnresolved: [], providerCap: [], turn: null,
     });
     const entry: SinkEntry = { sink: { post: () => undefined }, sent: new Map() };
     expect(syncMessageFor(entry, chatId).traceFrom).toBe(0);

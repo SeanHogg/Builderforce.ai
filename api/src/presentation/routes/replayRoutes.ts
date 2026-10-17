@@ -34,6 +34,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { replayReadKeyOrMember } from '../middleware/replayReadAuth';
 import { requireTenantId } from '../middleware/tenantContext';
 import { parseBody, z } from './requestBody';
+import { boundedIntParam } from './queryParams';
 import { insightsGate, optionalNumber, replayScopeOf as scopeOf } from './replayRouteScope';
 
 const RenameReleaseBody = z.object({ label: z.string().max(200).nullable() });
@@ -71,6 +72,16 @@ export function createReplayRoutes(): Hono<HonoEnv> {
       metadata: { recordingId },
     }));
     return c.json(recording);
+  });
+
+  // The live-follow poll: no `sessionViewed` trace (the full read above already
+  // recorded the view — a trace per 5 s tick would be a write per tick), and only
+  // what changed since the reader's cursor. `afterSeq=-1` means "no chunks held".
+  router.get('/recordings/:recordingId/status', authMiddleware, insightsGate, async (c) => {
+    const scope = await scopeOf(c);
+    const afterSeq = boundedIntParam(c.req.query('afterSeq'), { def: -1, min: -1 });
+    const knownMarks = boundedIntParam(c.req.query('marks'), { def: -1, min: -1 });
+    return c.json(await reads(c).recordingStatus(scope, c.req.param('recordingId'), { afterSeq, knownMarks }));
   });
 
   router.get('/recordings/:recordingId/chunks/:seq', authMiddleware, insightsGate, async (c) => {

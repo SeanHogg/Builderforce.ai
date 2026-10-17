@@ -1460,6 +1460,10 @@ export const creationSessionObjects = pgTable('creation_session_objects', {
   lockExpiresAt:    timestamp('lock_expires_at'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+  /** `sequence` objects only: when the cadence sweep next has a step to send (1234).
+   *  NULL = unknown; a DB trigger clears it whenever `content` changes outside the
+   *  runner, so an edit is always re-evaluated. Written only by sequenceRunner. */
+  nextDueAt:        timestamp('next_due_at'),
 }, (t) => ({
   bySession: index('idx_creation_objects_session').on(t.sessionId, t.createdAt),
   byResource: uniqueIndex('uq_creation_objects_resource').on(t.sessionId, t.resourceType, t.resourceId)

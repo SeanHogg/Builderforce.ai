@@ -3197,7 +3197,9 @@
 .brainSurface { flex:1 1 0; min-height:0; }
 .brainSurface > :global(.bf-surface__rail) { padding:0; }
 .brainSurface .brainSurfaceFooter { gap:0; padding:0; border-top:0; }
-.brainSurfaceFooter > :global(.bf-qpend) { margin:8px 10px 0; }
+/* Out-specifies brain-ui's `.bf-surface__footer > .bf-confirm { margin:0 }` whatever the load order. */
+.brainSurface .brainSurfaceFooter > :global(.bf-qpend),
+.brainSurface .brainSurfaceFooter > :global(.bf-confirm) { margin:8px 10px 0; }
 .brainDockActions { display:flex; flex:none; align-items:center; gap:2px; }
 @media (pointer:coarse) { .brainDockActions button { width:40px; height:40px; } }
 .brainDockActions button { width:30px; height:30px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font:600 13px var(--font-sans); line-height:1; cursor:pointer; }

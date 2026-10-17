@@ -15,6 +15,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiSocketUrl } from './apiSocket';
+import { createReconnector, openSocket } from './polling/reconnectPolicy';
+import { createCoalescedRefresh } from './polling/coalescedRefresh';
 import { apiRequestStream } from './apiClient';
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getVisitorId } from './visitor';
@@ -123,45 +125,44 @@ export function usePlatformBroadcasts(): PlatformBroadcastsState {
 
   useEffect(() => { setDismissed(readDismissed()); }, []);
 
-  const reload = useCallback(() => {
-    void fetchPlatformBroadcasts().then(setBroadcasts);
-  }, []);
+  // Returns the promise so the coalesced relay refresh can hold one fetch in flight.
+  const reload = useCallback(() => fetchPlatformBroadcasts().then(setBroadcasts), []);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { void reload(); }, [reload]);
 
   // Live refresh. Connect with the WebSocket API directly so the request carries
   // the required Upgrade header; an ordinary HTTP probe of this URL receives the
   // endpoint's intentional 426 response and appears as a failed request in DevTools.
   useEffect(() => {
     if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
-    let closed = false;
     let socket: WebSocket | null = null;
-    let retry: ReturnType<typeof setTimeout> | null = null;
-
-    const connect = () => {
-      if (closed) return;
-      try {
-        socket = new WebSocket(broadcastSocketUrl());
-      } catch {
-        retry = setTimeout(connect, 5000);
-        return;
-      }
-      socket.onmessage = (event) => {
-        try {
-          const frame = JSON.parse(typeof event.data === 'string' ? event.data : '');
-          if (frame?.type === 'changed') reload();
-        } catch { /* non-JSON frames are not ours */ }
-      };
-      socket.onclose = () => {
-        if (!closed) retry = setTimeout(connect, 5000);
-      };
-      socket.onerror = () => { try { socket?.close(); } catch { /* already gone */ } };
-    };
-    connect();
+    // A public room every visitor holds: a dead relay must not earn a fixed-interval
+    // retry from every open tab, so drops follow the shared reconnect policy.
+    const refresh = createCoalescedRefresh(reload);
+    const reconnector = createReconnector({
+      connect: () => {
+        const opened = openSocket(broadcastSocketUrl());
+        if (!opened) { reconnector.closed(); return; }
+        socket = opened;
+        opened.onopen = () => reconnector.opened();
+        opened.onmessage = (event) => {
+          try {
+            const frame = JSON.parse(typeof event.data === 'string' ? event.data : '');
+            if (frame?.type === 'changed') refresh.trigger();
+          } catch { /* non-JSON frames are not ours */ }
+        };
+        opened.onclose = (event) => {
+          if (socket === opened) socket = null;
+          reconnector.closed(event?.code);
+        };
+        opened.onerror = () => { try { opened.close(); } catch { /* already gone */ } };
+      },
+    });
+    reconnector.start();
 
     return () => {
-      closed = true;
-      if (retry) clearTimeout(retry);
+      reconnector.stop();
+      refresh.cancel();
       try { socket?.close(); } catch { /* already gone */ }
     };
   }, [reload]);

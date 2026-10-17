@@ -60,6 +60,16 @@ describe('replayApi', () => {
     expect(transport.apiRequest).toHaveBeenCalledTimes(2);
   });
 
+  it('asks the light status read with the follower cursor', async () => {
+    transport.apiRequest.mockResolvedValue({ chunkSeqs: [5], markCount: 3, ended: false });
+    await replayApi.getRecordingStatus('site-1', 'rec-1', { afterSeq: 4, marks: 3 });
+    const [path] = transport.apiRequest.mock.calls.at(-1)!;
+    expect(String(path)).toContain('/api/replay/recordings/rec-1/status?');
+    expect(String(path)).toContain('site=site-1');
+    expect(String(path)).toContain('afterSeq=4');
+    expect(String(path)).toContain('marks=3');
+  });
+
   it('renames a release with PATCH', async () => {
     transport.apiRequest.mockResolvedValue({});
     await replayApi.renameRelease('site-1', 'rel-a', 'Spring launch');

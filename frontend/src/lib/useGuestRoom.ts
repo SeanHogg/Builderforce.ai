@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CANVAS_PRESENCE_FRAME, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import { getStoredGuestToken } from './guestChatApi';
+import { createReconnector, openSocket } from './polling/reconnectPolicy';
 import {
   fetchGuestRoomState, guestRoomSocketUrl, type GuestRoomParticipant, type GuestRoomState,
 } from './guestRoomApi';
@@ -176,17 +177,19 @@ export function useGuestRoom(
     if (!code) return;
     let cancelled = false;
     let ws: WebSocket | null = null;
-    let retry: ReturnType<typeof setTimeout> | null = null;
 
+    // WHEN to retry is the shared reconnect policy (backoff, auth close codes, a cap on
+    // attempts that never open, no retry while hidden) — not a fixed 2 s loop.
     const connect = () => {
-      if (cancelled) return;
       const token = getStoredGuestToken();
       // No token yet (still minting, or it just lapsed) — try again shortly rather
       // than failing the room; the socket is an enhancement, not the transport.
-      if (!token) { retry = setTimeout(connect, 1500); return; }
-      try { ws = new WebSocket(guestRoomSocketUrl(code, 'chat', token)); } catch { retry = setTimeout(connect, 2000); return; }
+      if (!token) { reconnector.closed(); return; }
+      ws = openSocket(guestRoomSocketUrl(code, 'chat', token));
+      if (!ws) { reconnector.closed(); return; }
       wsRef.current = ws;
       ws.onopen = () => {
+        reconnector.opened();
         setConnected(true);
         send({ type: 'join', name: nameRef.current });
       };
@@ -241,14 +244,15 @@ export function useGuestRoom(
           setState((prev) => (prev ? { ...prev, title: msg.title as string } : prev));
         }
       };
-      ws.onclose = () => { setConnected(false); if (!cancelled) retry = setTimeout(connect, 2000); };
+      ws.onclose = (ev) => { setConnected(false); if (!cancelled) reconnector.closed(ev?.code); };
       ws.onerror = () => { try { ws?.close(); } catch { /* already closing */ } };
     };
-    connect();
+    const reconnector = createReconnector({ connect });
+    reconnector.start();
 
     return () => {
       cancelled = true;
-      if (retry) clearTimeout(retry);
+      reconnector.stop();
       if (busyTimer.current) clearTimeout(busyTimer.current);
       if (streamTimer.current) { clearTimeout(streamTimer.current); streamTimer.current = null; }
       pendingStream.current = null;

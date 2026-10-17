@@ -74,6 +74,9 @@ export { StarterGroup, StarterTile } from './surface/StarterTiles';
 export type { StarterTileProps } from './surface/StarterTiles';
 export { ChatHistoryList, ChatHistoryRow, DEFAULT_CHAT_HISTORY_LABELS } from './surface/ChatHistory';
 export type { ChatHistoryListProps, ChatHistoryRowProps, ChatHistoryLabels, ChatHistoryChat } from './surface/ChatHistory';
+// THE row state + actions every host's history rows bind through (held above the list).
+export { useChatRowActions } from './surface/useChatRowActions';
+export type { UseChatRowActionsOptions, ChatRowActions, ChatRowActionProps, ChatRowRef } from './surface/useChatRowActions';
 // A run notice the person can dismiss until a NEW occurrence (keyed on the value set).
 export { useDismissibleNotice } from './surface/useDismissibleNotice';
 // Composer chips, extracted from the hosts: fixed next-step suggestions (web), the held

@@ -10,13 +10,9 @@
  *   if (check) return c.json(check, 402);
  */
 
-import { count, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import {
-  agentHosts,
-  projects,
-} from '../../infrastructure/database/schema';
+import { countTenantAgentHosts, countTenantProjects } from '../../application/tenant/tenantResourceCounts';
 import { canAddAgentHost, canAddProject, canAddSeat, getLimits } from '../../domain/tenant/PlanLimits';
 import { tenantHasSuperadminMember } from '../../application/llm/tenantTokenAvailability';
 import { resolveTenantEffectivePlan } from '../../application/tenant/tenantPlanSnapshot';
@@ -37,12 +33,12 @@ export function buildPlanLimitsGuard(db: Db, env: Env) {
     /** Returns an error payload if the tenant has reached their agentHost limit, otherwise null. */
     async checkAgentHostLimit(tenantId: number): Promise<LimitError | null> {
       if (await bypass(tenantId)) return null;
-      const plan = await resolveTenantEffectivePlan(env, tenantId, db);
-      const [row] = await db
-        .select({ total: count() })
-        .from(agentHosts)
-        .where(eq(agentHosts.tenantId, tenantId));
-      const current = Number(row?.total ?? 0);
+      // The plan (cached snapshot) and the host count (cached, version-bumped by
+      // every host insert/delete) are independent reads.
+      const [plan, current] = await Promise.all([
+        resolveTenantEffectivePlan(env, tenantId, db),
+        countTenantAgentHosts(env, db, tenantId),
+      ]);
       if (canAddAgentHost(plan, current)) return null;
       const { maxAgentHosts } = getLimits(plan);
       return {
@@ -56,15 +52,12 @@ export function buildPlanLimitsGuard(db: Db, env: Env) {
     /** Returns an error payload if the tenant has reached their project limit, otherwise null. */
     async checkProjectLimit(tenantId: number): Promise<LimitError | null> {
       if (await bypass(tenantId)) return null;
-      // The plan (cached snapshot) and the project count are independent reads.
-      const [plan, [row]] = await Promise.all([
+      // The plan (cached snapshot) and the project count (cached, version-bumped by
+      // every project insert/delete) are independent reads.
+      const [plan, current] = await Promise.all([
         resolveTenantEffectivePlan(env, tenantId, db),
-        db
-          .select({ total: count() })
-          .from(projects)
-          .where(eq(projects.tenantId, tenantId)),
+        countTenantProjects(env, db, tenantId),
       ]);
-      const current = Number(row?.total ?? 0);
       if (canAddProject(plan, current)) return null;
       const { maxProjects } = getLimits(plan);
       return {

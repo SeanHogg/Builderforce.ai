@@ -35,6 +35,7 @@
 import { and, eq, isNotNull, lt, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { boundedDelete, type PurgeStatement } from './boundedPurge';
 import { rollUpToolAudit, TOOL_AUDIT_ROLLUP_AFTER_DAYS } from './toolAuditRollup';
 import { rollUpLlmUsage, LLM_USAGE_ROLLUP_AFTER_DAYS } from './llmUsageRollup';
 import { VISITOR_RETENTION_DAYS, purgeVisitorActivity } from '../marketing/visitorActivity';
@@ -134,8 +135,10 @@ export interface SweptTable {
   reclaimable?: boolean;
   /** Why this window and not another — the reasoning that used to live inline. */
   rationale: string;
-  /** Delete rows older than `cutoff`. Takes the db for its own connection. */
-  purge: (db: Db, cutoff: Date) => Promise<unknown>;
+  /** The DELETE of rows older than `cutoff`, returned UNEXECUTED and bounded
+   *  ({@link boundedDelete}) so the retention pass can batch one endpoint's purges into
+   *  a single round trip. Takes the db for its own connection. */
+  purge: (db: Db, cutoff: Date) => PurgeStatement;
   /**
    * Optional COLUMN-level retention, on a shorter window than the row's.
    *
@@ -214,7 +217,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     // The one relation here that is UPDATEd after insert (a stream finalises its row),
     // which is why migration 1104 gives it a fillfactor and the others none.
     rationale: 'Per-call LLM trace stream; the cost panels never look further back than 30d.',
-    purge: (db, cutoff) => db.delete(llmTraces).where(acrossTenants(llmTraces, 'scheduled_sweep', lt(llmTraces.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, llmTraces, acrossTenants(llmTraces, 'scheduled_sweep', lt(llmTraces.createdAt, cutoff))),
     redact: {
       afterDays: 7,
       // One day of bodies under pressure: enough to debug the incident that is happening
@@ -261,7 +264,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       + 'on purpose (a shade over three years) and is a BACKSTOP rather than the policy: '
       + 'what actually bounds this relation is `rollup`, which costs no reader a figure, '
       + 'and by the time a folded tally is this old every consumer of it is long gone.',
-    purge: (db, cutoff) => db.delete(llmUsageLog).where(acrossTenants(llmUsageLog, 'scheduled_sweep', lt(llmUsageLog.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, llmUsageLog, acrossTenants(llmUsageLog, 'scheduled_sweep', lt(llmUsageLog.createdAt, cutoff))),
     rollup: {
       afterDays: LLM_USAGE_ROLLUP_AFTER_DAYS,
       rationale:
@@ -288,7 +291,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       + 'keeps a full annual comparison of ingestion volume; the floor stays well clear of '
       + "the meter's month-to-date window, so a compressed sweep can never disturb an "
       + 'allowance that is still being counted.',
-    purge: (db, cutoff) => db.delete(ingestionUsageLog).where(acrossTenants(ingestionUsageLog, 'scheduled_sweep', lt(ingestionUsageLog.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, ingestionUsageLog, acrossTenants(ingestionUsageLog, 'scheduled_sweep', lt(ingestionUsageLog.createdAt, cutoff))),
   },
   {
     relation: 'llm_failover_log',
@@ -296,7 +299,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     retentionDays: 30,
     pressureFloorDays: 7,
     rationale: 'Routing failover events, read only while diagnosing a live routing incident.',
-    purge: (db, cutoff) => db.delete(llmFailoverLog).where(acrossTenants(llmFailoverLog, 'scheduled_sweep', lt(llmFailoverLog.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, llmFailoverLog, acrossTenants(llmFailoverLog, 'scheduled_sweep', lt(llmFailoverLog.createdAt, cutoff))),
   },
   {
     relation: 'llm_health_probes',
@@ -304,7 +307,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     retentionDays: 180,
     pressureFloorDays: 30,
     rationale: 'Vendor health history — the long window is the point; it is what makes a vendor trend readable.',
-    purge: (db, cutoff) => db.delete(llmHealthProbes).where(lt(llmHealthProbes.createdAt, cutoff)),
+    purge: (db, cutoff) => boundedDelete(db, llmHealthProbes, lt(llmHealthProbes.createdAt, cutoff)),
   },
   {
     relation: 'api_error_log',
@@ -315,7 +318,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       "The platform's OWN caught/unhandled exception stream (persistCaughtError). Its write rate rose "
       + 'sharply once every handled catch reported here, so it is one of the fastest-growing tables; 30d '
       + 'matches the superadmin Logs page, which never looks further back.',
-    purge: (db, cutoff) => db.delete(apiErrorLog).where(lt(apiErrorLog.createdAt, cutoff)),
+    purge: (db, cutoff) => boundedDelete(db, apiErrorLog, lt(apiErrorLog.createdAt, cutoff)),
   },
   {
     relation: 'qa_journey_events',
@@ -323,7 +326,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     retentionDays: 90,
     pressureFloorDays: 14,
     rationale: 'QA journey telemetry, swept on the same window as the other event streams.',
-    purge: (db, cutoff) => db.delete(qaJourneyEvents).where(acrossTenants(qaJourneyEvents, 'scheduled_sweep', lt(qaJourneyEvents.ts, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, qaJourneyEvents, acrossTenants(qaJourneyEvents, 'scheduled_sweep', lt(qaJourneyEvents.ts, cutoff))),
   },
   {
     relation: 'error_events',
@@ -334,7 +337,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       'Raw Quality error events — group aggregates (error_groups) are kept forever, only the raw stream is '
       + "swept. 90d is safely > the consumption meter's month-to-date window, so error-event billing is "
       + 'never affected by the purge.',
-    purge: (db, cutoff) => db.delete(errorEvents).where(acrossTenants(errorEvents, 'scheduled_sweep', lt(errorEvents.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, errorEvents, acrossTenants(errorEvents, 'scheduled_sweep', lt(errorEvents.createdAt, cutoff))),
   },
   {
     relation: 'manager_actions',
@@ -345,7 +348,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       'The manager-decision FEED (cron + "Run manager now" telemetry) — the platform\'s highest-write '
       + 'table and the one that proved this registry necessary: it had retention but no vacuum, so 46k '
       + 'live rows sat inside 593 MB of page bloat autovacuum never returned to the OS.',
-    purge: (db, cutoff) => db.delete(managerActions).where(acrossTenants(managerActions, 'scheduled_sweep', lt(managerActions.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, managerActions, acrossTenants(managerActions, 'scheduled_sweep', lt(managerActions.createdAt, cutoff))),
   },
   {
     relation: 'tool_audit_events',
@@ -357,7 +360,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       + '→ `buildEvidencePack`, `parseDays(…, 90)`). Shrink the ROW instead (`redact`), then the '
       + 'GRAIN (`rollup`) — both below. In practice `rollup` at 45d is what bounds this relation and '
       + 'this window is the backstop that still holds if a fold ever fails.',
-    purge: (db, cutoff) => db.delete(toolAuditEvents).where(acrossTenants(toolAuditEvents, 'scheduled_sweep', lt(toolAuditEvents.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, toolAuditEvents, acrossTenants(toolAuditEvents, 'scheduled_sweep', lt(toolAuditEvents.createdAt, cutoff))),
     redact: {
       afterDays: 14,
       // The compliance summary and evidence pack never read `args`/`result`, so the SOC 2
@@ -407,7 +410,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       + 'which is affordable precisely because it is ~4k rows per quarter rather than 665k. It is in '
       + 'this registry for the vacuum half as much as the purge: unlike every other member it is '
       + 'UPDATEd in place (a re-fold adds to a tally), so it accrues dead tuples without the tuning.',
-    purge: (db, cutoff) => db.delete(toolAuditDaily).where(acrossTenants(toolAuditDaily, 'scheduled_sweep', lt(toolAuditDaily.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, toolAuditDaily, acrossTenants(toolAuditDaily, 'scheduled_sweep', lt(toolAuditDaily.createdAt, cutoff))),
   },
   {
     relation: 'pr_reconciliation_items',
@@ -422,7 +425,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       + 'than the window: items are only ever fetched for ONE run id, and the run list itself '
       + 'returns the 25 most recent (100 max) — a few hours of history. 14d is therefore ~50x '
       + 'what any consumer can reach, and still bounds the table at roughly 180k rows.',
-    purge: (db, cutoff) => db.delete(prReconciliationItems).where(acrossTenants(prReconciliationItems, 'scheduled_sweep', lt(prReconciliationItems.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, prReconciliationItems, acrossTenants(prReconciliationItems, 'scheduled_sweep', lt(prReconciliationItems.createdAt, cutoff))),
   },
   {
     relation: 'pr_reconciliation_errors',
@@ -430,7 +433,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     retentionDays: 14,
     pressureFloorDays: 3,
     rationale: 'Per-run reconciliation failures, read from the same run-scoped diagnostics view as the items above — same window.',
-    purge: (db, cutoff) => db.delete(prReconciliationErrors).where(acrossTenants(prReconciliationErrors, 'scheduled_sweep', lt(prReconciliationErrors.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, prReconciliationErrors, acrossTenants(prReconciliationErrors, 'scheduled_sweep', lt(prReconciliationErrors.createdAt, cutoff))),
   },
   {
     relation: 'pr_reconciliation_runs',
@@ -441,7 +444,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     // the parent first would make the two sweeps above no-ops and hide a growing child
     // table behind a run count that looks healthy.
     rationale: 'The run header for the two relations above. Same window, so a run and its findings expire together.',
-    purge: (db, cutoff) => db.delete(prReconciliationRuns).where(acrossTenants(prReconciliationRuns, 'scheduled_sweep', lt(prReconciliationRuns.startedAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, prReconciliationRuns, acrossTenants(prReconciliationRuns, 'scheduled_sweep', lt(prReconciliationRuns.startedAt, cutoff))),
   },
   {
     relation: 'execution_lifecycle_outbox',
@@ -455,7 +458,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     rationale:
       'Spent execution-lifecycle events. 72k of its 80k rows are `done` and hold 49 MB that '
       + 'nothing reads once delivered; the undelivered remainder is deliberately never swept.',
-    purge: (db, cutoff) => db.delete(executionLifecycleOutbox).where(acrossTenants(
+    purge: (db, cutoff) => boundedDelete(db, executionLifecycleOutbox, acrossTenants(
       executionLifecycleOutbox, 'scheduled_sweep',
       and(eq(executionLifecycleOutbox.status, 'done'), lt(executionLifecycleOutbox.createdAt, cutoff)),
     )),
@@ -471,7 +474,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       + 'recent — every one of its 18,199 rows was already older than 30d, the residue of the '
       + 'runaway dispatch loop. Safe to sweep: the `executions` row it points at is untouched, '
       + 'and that FK is ON DELETE SET NULL in the other direction only.',
-    purge: (db, cutoff) => db.delete(executionRollbacks).where(acrossTenants(executionRollbacks, 'scheduled_sweep', lt(executionRollbacks.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, executionRollbacks, acrossTenants(executionRollbacks, 'scheduled_sweep', lt(executionRollbacks.createdAt, cutoff))),
   },
   {
     relation: 'activity_signals',
@@ -483,7 +486,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
       + '"who is active now" read. The contributor rollups are materialised elsewhere and do not '
       + 'read this stream retrospectively, so the 90d window it started on bought nothing; 30d '
       + 'matches how far back presence is ever asked about.',
-    purge: (db, cutoff) => db.delete(activitySignals).where(acrossTenants(activitySignals, 'scheduled_sweep', lt(activitySignals.createdAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, activitySignals, acrossTenants(activitySignals, 'scheduled_sweep', lt(activitySignals.createdAt, cutoff))),
   },
   {
     relation: 'activity_log',
@@ -511,7 +514,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     retentionDays: 90,
     pressureFloorDays: 14,
     rationale: 'Per-sync connector run log, read only while diagnosing a failing integration. Aged by `started_at` — the row is written when the sync begins.',
-    purge: (db, cutoff) => db.delete(integrationSyncLogs).where(acrossTenants(integrationSyncLogs, 'scheduled_sweep', lt(integrationSyncLogs.startedAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, integrationSyncLogs, acrossTenants(integrationSyncLogs, 'scheduled_sweep', lt(integrationSyncLogs.startedAt, cutoff))),
   },
   // ── Insights (PRD 33 D3) — the operational telemetry, mirrored on core (1217) ──
   // The daily rollups keep 13 months; every one is an additive counter table with no
@@ -522,7 +525,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 90,
     rationale: ROLLUP_RATIONALE,
-    purge: (db, cutoff) => db.delete(replayRouteDaily).where(acrossTenants(replayRouteDaily, 'scheduled_sweep', lt(replayRouteDaily.day, utcDay(cutoff)))),
+    purge: (db, cutoff) => boundedDelete(db, replayRouteDaily, acrossTenants(replayRouteDaily, 'scheduled_sweep', lt(replayRouteDaily.day, utcDay(cutoff)))),
   },
   {
     relation: 'replay_breakdown_daily',
@@ -530,7 +533,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 90,
     rationale: ROLLUP_RATIONALE,
-    purge: (db, cutoff) => db.delete(replayBreakdownDaily).where(acrossTenants(replayBreakdownDaily, 'scheduled_sweep', lt(replayBreakdownDaily.day, utcDay(cutoff)))),
+    purge: (db, cutoff) => boundedDelete(db, replayBreakdownDaily, acrossTenants(replayBreakdownDaily, 'scheduled_sweep', lt(replayBreakdownDaily.day, utcDay(cutoff)))),
   },
   {
     relation: 'replay_heat_daily',
@@ -538,7 +541,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 90,
     rationale: ROLLUP_RATIONALE,
-    purge: (db, cutoff) => db.delete(replayHeatDaily).where(acrossTenants(replayHeatDaily, 'scheduled_sweep', lt(replayHeatDaily.day, utcDay(cutoff)))),
+    purge: (db, cutoff) => boundedDelete(db, replayHeatDaily, acrossTenants(replayHeatDaily, 'scheduled_sweep', lt(replayHeatDaily.day, utcDay(cutoff)))),
   },
   {
     relation: 'replay_vitals_daily',
@@ -546,7 +549,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 90,
     rationale: ROLLUP_RATIONALE,
-    purge: (db, cutoff) => db.delete(replayVitalsDaily).where(acrossTenants(replayVitalsDaily, 'scheduled_sweep', lt(replayVitalsDaily.day, utcDay(cutoff)))),
+    purge: (db, cutoff) => boundedDelete(db, replayVitalsDaily, acrossTenants(replayVitalsDaily, 'scheduled_sweep', lt(replayVitalsDaily.day, utcDay(cutoff)))),
   },
   {
     relation: 'replay_issue_daily',
@@ -554,14 +557,14 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     retentionDays: ROLLUP_DAYS,
     pressureFloorDays: 90,
     rationale: 'Insights issue sessions per day (13 months, D3). Child of replay_issues; aged by its own day.',
-    purge: (db, cutoff) => db.delete(replayIssueDaily).where(lt(replayIssueDaily.day, utcDay(cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, replayIssueDaily, lt(replayIssueDaily.day, utcDay(cutoff))),
   },
   {
     relation: 'replay_issues',
     connections: ['transactional', 'primary'],
     retentionDays: ROLLUP_DAYS,
     rationale: 'Insights issue groups not seen for 13 months — their daily rows are gone, so nothing could rank them.',
-    purge: (db, cutoff) => db.delete(replayIssues).where(acrossTenants(replayIssues, 'scheduled_sweep', lt(replayIssues.lastSeenAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, replayIssues, acrossTenants(replayIssues, 'scheduled_sweep', lt(replayIssues.lastSeenAt, cutoff))),
   },
   {
     relation: 'replay_recordings',
@@ -572,7 +575,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     // and gives the relation its vacuum.
     retentionDays: 90,
     rationale: 'Kept Insights recordings: per-site retention (D3) is the replay retention pass; this is the 90-day ceiling and the vacuum.',
-    purge: (db, cutoff) => db.delete(replayRecordings).where(acrossTenants(replayRecordings, 'scheduled_sweep', lt(replayRecordings.startedAt, cutoff))),
+    purge: (db, cutoff) => boundedDelete(db, replayRecordings, acrossTenants(replayRecordings, 'scheduled_sweep', lt(replayRecordings.startedAt, cutoff))),
   },
   {
     relation: 'replay_live',
@@ -582,7 +585,7 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     // purges each site's stale rows once a minute).
     retentionDays: 1,
     rationale: 'Insights live presence: a row older than five minutes is not live and nothing reads it.',
-    purge: (db, cutoff) => db.delete(replayLive).where(acrossTenants(replayLive, 'scheduled_sweep',
+    purge: (db, cutoff) => boundedDelete(db, replayLive, acrossTenants(replayLive, 'scheduled_sweep',
       lt(replayLive.lastSeenAt, new Date(cutoff.getTime() + DAY_MS - 5 * MINUTE_MS)))),
   },
 ];

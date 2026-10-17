@@ -34,7 +34,6 @@ import {
   specs,
   taskSpecs,
   platformPersonas,
-  taskFileChanges,
 } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../../application/shared/runTelemetryDatabase';
 import { cascadeAgentHostDelete } from '../../application/shared/siblingCascade';
@@ -75,6 +74,7 @@ import type { AgentHostService } from '../../application/agentHost/AgentHostServ
 import { classifyContextFiles, normalizeMachineProfile } from './agentHostAssignmentContext';
 import { TenantRole } from '../../domain/shared/types';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
+import { bumpTenantAgentHostCount } from '../../application/tenant/tenantResourceCounts';
 import { resolveScheduledAgentBinding } from '../../application/agentHost/scheduledAgentBinding';
 import {
   heartbeatPayloadFingerprint,
@@ -100,7 +100,6 @@ import {
   DeclaredCapabilitiesBody,
   DirectorySyncBody,
   ExecutionStateBody,
-  FileChangeBody,
   HeartbeatBody,
   HostDispatchResultBody,
   PersonasBody,
@@ -108,16 +107,15 @@ import {
   PullRequestBody,
   RegisterAgentHostBody,
   RelayResultPayload,
-  ToolAuditBody,
   UpdateChannelBody,
   UpdateCronJobBody,
-  UsageSnapshotBody,
   WorkspaceChangeBody,
   isRootBodyIssue,
   nullWhenNoJsonObject,
 } from './agentHostRoutes.schemas';
 import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
 import { registerLateSteerRoute } from './agentHostLateSteerRoute';
+import { registerHostTelemetryRoutes } from './agentHostTelemetryRoutes';
 
 // Extend HonoEnv bindings type to include the Durable Object
 type AgentHostHonoEnv = HonoEnv & {
@@ -436,6 +434,8 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!inserted) {
       throw new InternalError('Failed to register agentHost');
     }
+    // The plan-limit check above reads a cached count; a new row must re-count.
+    await bumpTenantAgentHostCount(c.env, tenantId);
 
     await db
       .update(tenants)
@@ -469,6 +469,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     // (Raw delete — not routed through the repo/service, so it invalidates here.)
     if (deleted) {
       await invalidateAgentHostKeyCache(c.env, deleted.apiKeyHash);
+      await bumpTenantAgentHostCount(c.env, tenantId);
       // Its telemetry lives on the run-telemetry database, beyond the FK cascade.
       await cascadeAgentHostDelete(db, tenantId, id);
     }
@@ -1750,51 +1751,6 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   });
 
   // -------------------------------------------------------------------------
-  // POST /api/agent-hosts/:id/file-change   (host key auth)
-  // Persist one per-agent file change from the ticket workspace for traceability.
-  // -------------------------------------------------------------------------
-  router.post('/:id/file-change', async (c) => {
-    const agentHostId = Number(c.req.param('id'));
-    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
-    if (!agentHost) return c.text('Unauthorized', 401);
-
-    const body = await parseOptionalBody(c, FileChangeBody);
-    const taskId = Number(body.taskId);
-    const executionId = Number(body.executionId);
-    const path = typeof body.path === 'string' ? body.path.trim() : '';
-    if (!Number.isFinite(taskId) || !Number.isFinite(executionId) || !path) {
-      return c.json({ error: 'taskId, executionId, and path are required' }, 400);
-    }
-    const change = ['created', 'modified', 'deleted'].includes(body.change ?? '') ? body.change! : 'modified';
-    const agent = typeof body.agent === 'string' && body.agent.trim() ? body.agent.trim() : 'agent';
-
-    // `taskId` arrives in the request BODY. The row is stamped with the host's
-    // tenant, and the FK to tasks.id only proves the task exists — so without this
-    // check a host key for tenant A could attach file-change rows to tenant B's
-    // task. Tasks inherit tenancy through their project, hence the shared helper.
-    if (!(await taskInTenant(db, taskId, agentHost.tenantId))) {
-      return c.json({ error: 'task not found' }, 404);
-    }
-    const [execution] = await db.select({ id: executions.id }).from(executions).where(and(
-      eq(executions.id, executionId),
-      eq(executions.taskId, taskId),
-      eq(executions.tenantId, agentHost.tenantId),
-      eq(executions.agentHostId, agentHostId),
-    )).limit(1);
-    if (!execution) return c.json({ error: 'execution not found' }, 404);
-
-    await db.insert(taskFileChanges).values({
-      tenantId: agentHost.tenantId,
-      taskId,
-      executionId,
-      path,
-      change,
-      agent,
-    });
-    return c.json({ ok: true });
-  });
-
-  // -------------------------------------------------------------------------
   // POST /api/agent-hosts/:id/channel-status   (host key auth)
   //
   // The host's own verdict on a channel it brought up. Reported rather than asked
@@ -1844,34 +1800,6 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const result = await openTaskPullRequest(db, secret, agentHost.tenantId, taskId, body, c.env);
     if (!result.ok) return statusResponse(c, { error: result.error }, result.status, { source: 'presentation/routes/agentHostRoutes.ts', operation: 'openTaskPullRequest' });
     return c.json({ ok: true, url: result.url, number: result.number, merged: result.merged, mergeError: result.mergeError });
-  });
-
-  // -------------------------------------------------------------------------
-  // POST /api/agent-hosts/:id/usage-snapshot?key=<agentHostApiKey>
-  // P2-2: AgentHost posts context window / token usage snapshot for persistence.
-  // -------------------------------------------------------------------------
-  router.post('/:id/usage-snapshot', async (c) => {
-    const agentHostId = Number(c.req.param('id'));
-    const key    = extractAgentHostKey(c);
-
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
-    if (!agentHost) return c.text('Unauthorized', 401);
-
-    const body = await parseBody(c, UsageSnapshotBody);
-
-    await runTelemetryDatabase(db).insert(usageSnapshots).values({
-      tenantId:         agentHost.tenantId,
-      agentHostId,
-      sessionKey:       body.sessionKey ?? 'default',
-      inputTokens:      body.inputTokens ?? 0,
-      outputTokens:     body.outputTokens ?? 0,
-      contextTokens:    body.contextTokens ?? 0,
-      contextWindowMax: body.contextWindowMax ?? 0,
-      compactionCount:  body.compactionCount ?? 0,
-      ts:               body.ts ? new Date(body.ts) : new Date(),
-    });
-
-    return c.json({ ok: true });
   });
 
   // -------------------------------------------------------------------------
@@ -1961,41 +1889,6 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     }
 
     return c.json({ events: rows });
-  });
-
-  // -------------------------------------------------------------------------
-  // POST /api/agent-hosts/:id/tool-audit?key=<agentHostApiKey>
-  // P2-4: AgentHost posts a tool call audit event for persistence.
-  // -------------------------------------------------------------------------
-  router.post('/:id/tool-audit', async (c) => {
-    const agentHostId = Number(c.req.param('id'));
-    const key    = extractAgentHostKey(c);
-
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
-    if (!agentHost) return c.text('Unauthorized', 401);
-
-    const body = await parseBody(c, ToolAuditBody);
-
-    if (!body.toolName) return c.json({ error: 'toolName is required' }, 400);
-
-    await runTelemetryDatabase(db).insert(toolAuditEvents).values({
-      tenantId:    agentHost.tenantId,
-      agentHostId,
-      // Stamp the execution so the event is queryable per-run (the cloud Logs/
-      // Timeline scope by execution_id), giving V2/host runs parity with V1.
-      executionId: Number.isFinite(Number(body.executionId)) ? Number(body.executionId) : null,
-      runId:       body.runId ?? null,
-      sessionKey:  body.sessionKey ?? null,
-      toolCallId:  body.toolCallId ?? null,
-      toolName:    body.toolName,
-      category:    body.category ?? null,
-      args:        body.args != null ? JSON.stringify(body.args) : null,
-      result:      body.result ?? null,
-      durationMs:  body.durationMs ?? null,
-      ts:          body.ts ? new Date(body.ts) : new Date(),
-    });
-
-    return c.json({ ok: true });
   });
 
   // -------------------------------------------------------------------------
@@ -2107,6 +2000,10 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // POST /api/agent-hosts/:id/late-steers — steers a host could not deliver because
   // the run had already taken its last turn (see agentHostLateSteerRoute.ts).
   registerLateSteerRoute(router, { db, verifyAgentHostApiKey, extractAgentHostKey });
+
+  // POST /:id/tool-audit · /:id/usage-snapshot · /:id/file-change — host telemetry,
+  // one event or a batch (see agentHostTelemetryRoutes.ts).
+  registerHostTelemetryRoutes(router, { db, verifyAgentHostApiKey, extractAgentHostKey });
 
   // -------------------------------------------------------------------------
   // GET /api/agent-hosts/:id/spec

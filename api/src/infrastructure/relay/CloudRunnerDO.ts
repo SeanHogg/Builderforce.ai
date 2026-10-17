@@ -69,6 +69,18 @@ interface Cursor extends StartBody {
 }
 
 const CURSOR_KEY = 'cursor';
+/** Set once the run is known terminal (told via `/concluded`, or read from the row).
+ *  Sticky until cleanup, so no later tick or cancel poll needs the DB to know it. */
+const CONCLUDED_KEY = 'concluded';
+/**
+ * How long a "not concluded" answer from the row is trusted before re-reading it. The
+ * alarm re-arms per LLM step and the engine's cancel watcher polls every 2s, so an
+ * uncached check was several Neon round trips per tick for an answer that almost never
+ * changes. A cancel through RuntimeService tells this DO directly (`/concluded`), so
+ * this window only delays what nobody signals — a reaper fail, a cancel from an older
+ * isolate — by at most 10s.
+ */
+const CONCLUDED_RECHECK_MS = 10_000;
 
 export class CloudRunnerDO implements DurableObject {
   declare readonly '__DURABLE_OBJECT_BRAND': never;
@@ -77,6 +89,8 @@ export class CloudRunnerDO implements DurableObject {
   private readonly runtimeService: RuntimeService;
   /** Bound once here so no call site can forget the runtime override. */
   private readonly reportError: DurableErrorReporter;
+  /** When the row last said "not concluded" (in memory: an evicted DO just re-reads). */
+  private notConcludedCheckedAt = 0;
 
   constructor(private readonly state: DurableObjectState, private readonly env: Env) {
     this.reportError = createDurableErrorReporter('infrastructure/relay/CloudRunnerDO.ts', env, state);
@@ -113,6 +127,13 @@ export class CloudRunnerDO implements DurableObject {
       });
       return new Response(JSON.stringify({ ok: true }), { status: 202, headers: { 'Content-Type': 'application/json' } });
     }
+    // The run was concluded elsewhere (RuntimeService.cancel). Remember it so the next
+    // tick — and the in-flight step's cancel poll — stop without reading the row. A DO
+    // with no run (container/host executions, or already cleaned up) records nothing.
+    if (request.method === 'POST' && url.pathname.endsWith('/concluded')) {
+      if (await this.state.storage.get<Cursor>(CURSOR_KEY)) await this.state.storage.put(CONCLUDED_KEY, true);
+      return new Response(null, { status: 204 });
+    }
     return new Response('not found', { status: 404 });
   }
 
@@ -125,7 +146,11 @@ export class CloudRunnerDO implements DurableObject {
     const model = parseModel(body.payload);
 
     // Already concluded before we start (cancelled, or reaped) → don't transition or spend.
-    if (await this.isAlreadyConcluded(body.executionId)) return;
+    // A self-heal requeue reuses this DO (`exec:<id>`), so a flag left by an earlier
+    // life must not stop it: the start always reads the row itself.
+    await this.state.storage.delete(CONCLUDED_KEY);
+    this.notConcludedCheckedAt = 0;
+    if (await this.isAlreadyConcluded(body.executionId, { fresh: true })) return;
 
     const cursor: Cursor = { ...body, stage: 'prep', model };
     await this.state.storage.put(CURSOR_KEY, cursor);
@@ -147,7 +172,8 @@ export class CloudRunnerDO implements DurableObject {
     // Heartbeat: prove the run is alive so the orphan reaper doesn't reap an
     // actively-ticking run (the cloud ceiling measures from updated_at). The ONE
     // throttled writer the container ops use too — the alarm re-arms per LLM step, so
-    // an unthrottled beat here was a write every few seconds per run.
+    // an unthrottled beat here was a write every few seconds per run. This DO is one
+    // isolate, so the beat's in-isolate gate makes most ticks skip the round trip too.
     await heartbeatExecution(this.db, cursor.executionId);
 
     try {
@@ -264,7 +290,7 @@ export class CloudRunnerDO implements DurableObject {
       // In Review, records metrics/audit, and fires the next-lane agent) and stop.
       // Skip when the run already concluded (retried alarm, reaper, cancellation)
       // — that transition can only be rejected, and would clobber a cancellation.
-      if (!(await this.isAlreadyConcluded(cursor.executionId))) {
+      if (!(await this.isAlreadyConcluded(cursor.executionId, { fresh: true }))) {
         await this.runtimeService.update(
           cursor.executionId,
           result.ok
@@ -304,7 +330,7 @@ export class CloudRunnerDO implements DurableObject {
       }
 
       // Don't clobber a run that already concluded; otherwise fail it so it isn't stuck.
-      if (!(await this.isAlreadyConcluded(cursor.executionId))) {
+      if (!(await this.isAlreadyConcluded(cursor.executionId, { fresh: true }))) {
         await this.runtimeService.update(cursor.executionId, {
           status: ExecutionStatus.FAILED,
           errorMessage: message,
@@ -331,15 +357,25 @@ export class CloudRunnerDO implements DurableObject {
    *
    * Fails OPEN (returns false) so a transient read error still lets the run
    * conclude — the domain guard remains the backstop.
+   *
+   * Cached: a terminal answer is sticky in storage ({@link CONCLUDED_KEY}); a
+   * "not concluded" one is trusted for {@link CONCLUDED_RECHECK_MS}. `fresh` always
+   * reads the row — the start and the terminal transitions, where a stale "no" could
+   * clobber a cancellation, use it.
    */
-  private async isAlreadyConcluded(executionId: number): Promise<boolean> {
+  private async isAlreadyConcluded(executionId: number, opts?: { fresh?: boolean }): Promise<boolean> {
+    if (await this.state.storage.get<boolean>(CONCLUDED_KEY)) return true;
+    if (!opts?.fresh && Date.now() - this.notConcludedCheckedAt < CONCLUDED_RECHECK_MS) return false;
     try {
       const [row] = await this.db
         .select({ status: executions.status })
         .from(executions)
         .where(eq(executions.id, executionId))
         .limit(1);
-      return TERMINAL_EXECUTION_STATUSES.includes(row?.status as ExecutionStatus);
+      const concluded = TERMINAL_EXECUTION_STATUSES.includes(row?.status as ExecutionStatus);
+      if (concluded) await this.state.storage.put(CONCLUDED_KEY, true);
+      else this.notConcludedCheckedAt = Date.now();
+      return concluded;
     } catch (error) {
       this.reportError(error, {
         operation: 'isAlreadyConcluded',
@@ -374,6 +410,8 @@ export class CloudRunnerDO implements DurableObject {
       } } }));
     }
     await this.state.storage.delete(CURSOR_KEY);
+    await this.state.storage.delete(CONCLUDED_KEY);
+    this.notConcludedCheckedAt = 0;
     await this.state.storage.deleteAlarm();
   }
 }

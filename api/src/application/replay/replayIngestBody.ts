@@ -10,6 +10,8 @@
 
 import { parseReplayChunk, REPLAY_LIMITS, type ReplayChunk } from '@builderforce/interaction-contract';
 import type { Env } from '../../env';
+// Gzip detection/inflation is shared with the container-op edge (infrastructure/http).
+import { gunzip, isGzip } from '../../infrastructure/http/gzipBody';
 
 /** Chunks one IP may send per UTC day before ingest stops listening (fail-open on KV errors). */
 export const REPLAY_IP_DAILY_CHUNKS = 3_000;
@@ -39,51 +41,6 @@ export async function withinReplayIpBudget(env: Env | undefined, ip: string | nu
   return true;
 }
 
-/**
- * Gzip is decided by the MAGIC BYTES. `Content-Encoding` is only a hint: a beacon
- * cannot send it, and an edge that already inflated the body leaves it set on JSON —
- * trusting the header would drop a valid chunk.
- */
-function isGzip(bytes: Uint8Array): boolean {
-  return bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-}
-
-async function readBounded(stream: ReadableStream<Uint8Array>, limit: number): Promise<Uint8Array | null> {
-  const reader = stream.getReader();
-  const parts: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > limit) {
-      await reader.cancel();
-      return null;
-    }
-    parts.push(value);
-  }
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const part of parts) {
-    out.set(part, offset);
-    offset += part.byteLength;
-  }
-  return out;
-}
-
-async function gunzip(bytes: Uint8Array): Promise<Uint8Array | null> {
-  const body = new Response(bytes).body;
-  if (!body) return null;
-  return readBounded(body.pipeThrough(new DecompressionStream('gzip')), MAX_INFLATED_BYTES);
-}
-
-/** Gzip `bytes` (a kept chunk that arrived uncompressed is stored compressed). */
-export async function gzip(bytes: Uint8Array): Promise<Uint8Array> {
-  const body = new Response(bytes).body;
-  if (!body) return new Uint8Array(0);
-  return new Uint8Array(await new Response(body.pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
-}
-
 export interface DecodedChunk {
   chunk: ReplayChunk;
   /** The body as it should be stored: the received gzip, or null when it arrived plain. */
@@ -104,7 +61,7 @@ export async function decodeChunkBody(body: ArrayBuffer, _contentEncoding: strin
   try {
     if (isGzip(bytes)) {
       gzipped = bytes;
-      plain = await gunzip(bytes);
+      plain = await gunzip(bytes, MAX_INFLATED_BYTES);
     } else {
       plain = bytes;
     }

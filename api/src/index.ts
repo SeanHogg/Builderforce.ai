@@ -24,6 +24,7 @@ import { AuditRepository }      from './infrastructure/repositories/AuditReposit
 
 // Application services
 import { ProjectService }  from './application/project/ProjectService';
+import { bumpTenantProjectCount } from './application/tenant/tenantResourceCounts';
 import { r2ProjectStoragePurge } from './application/ide/projectStorage';
 import { TaskService }     from './application/task/TaskService';
 import { TaskType }        from './domain/shared/types';
@@ -413,7 +414,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const paymentProvider = buildPaymentProvider(env);
 
   // --- Application ---
-  const projectService  = new ProjectService(projectRepo, taskRepo, r2ProjectStoragePurge(env));
+  const projectService  = new ProjectService(projectRepo, taskRepo, r2ProjectStoragePurge(env),
+    (tenantId) => bumpTenantProjectCount(env, tenantId));
   const taskService     = new TaskService(taskRepo, projectRepo, llmEpicDecomposer(env),
     (projectId, roleKey) => recommendTopAssignee(env, db, projectId, roleKey ? { roleKey } : {}),
     // Epic fan-out records its planned SEQUENCE as real precedence edges, through the

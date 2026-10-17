@@ -51,6 +51,26 @@ export function heartbeatPayloadFingerprint(
   return JSON.stringify({ c: capabilitiesJson ?? null, m: machineProfile ?? null });
 }
 
+/**
+ * THE throttled-liveness rule, shared by every heartbeat writer (this agent-host beat
+ * and the cloud execution beat in runtime/cloudAgent/runContext): write when nothing
+ * is known to have been written, when the last write is at least `throttleMs` old, or
+ * when the beat carries a change a reader can see. Each caller binds `throttleMs` to
+ * ITS reader's staleness window; the rule itself is the same.
+ */
+export function throttledWriteDue(args: {
+  /** When the row was last written (ms epoch); null = unknown. */
+  lastWrittenAtMs: number | null;
+  throttleMs: number;
+  /** The beat carries something besides liveness that differs from the last write. */
+  changed?: boolean;
+  now?: number;
+}): boolean {
+  const now = args.now ?? Date.now();
+  if (args.lastWrittenAtMs == null || now - args.lastWrittenAtMs >= args.throttleMs) return true;
+  return args.changed === true;
+}
+
 /** Pure decision: must this beat write the row? */
 export function heartbeatWriteDue(args: {
   lastSeenAt: Date | null;
@@ -60,12 +80,14 @@ export function heartbeatWriteDue(args: {
   lastFingerprint: string | null;
   now?: number;
 }): boolean {
-  const now = args.now ?? Date.now();
-  if (!args.lastSeenAt || now - args.lastSeenAt.getTime() >= HEARTBEAT_WRITE_THROTTLE_MS) return true;
-  // A liveness-only beat has nothing else to write.
-  if (args.fingerprint === null) return false;
-  // Unknown last payload: cannot claim "unchanged", so write.
-  return args.fingerprint !== args.lastFingerprint;
+  return throttledWriteDue({
+    lastWrittenAtMs: args.lastSeenAt ? args.lastSeenAt.getTime() : null,
+    throttleMs: HEARTBEAT_WRITE_THROTTLE_MS,
+    // A liveness-only beat has nothing else to write; an unknown last payload cannot
+    // be claimed "unchanged", so it writes.
+    changed: args.fingerprint !== null && args.fingerprint !== args.lastFingerprint,
+    ...(args.now != null ? { now: args.now } : {}),
+  });
 }
 
 /** Read the fingerprint last written for a host (L1, then KV). */

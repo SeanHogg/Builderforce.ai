@@ -24,14 +24,18 @@ export function useRun(chatId: number | null): BrainRunSnapshot {
 }
 
 /** Load something async and reload it when any of `deps` (or a subscription) changes. */
-export function useLoaded<T>(load: () => Promise<T>, initial: T, deps: unknown[], subscribe?: (reload: () => void) => () => void): [T, () => void] {
+export function useLoaded<T>(load: () => Promise<T>, initial: T, deps: unknown[], subscribe?: (reload: () => void) => () => void): [T, () => void, boolean] {
   const [value, setValue] = useState<T>(initial);
   const [nonce, setNonce] = useState(0);
+  /** The first read has landed — until then `value` is only `initial` (a list shows "Loading…", not "empty"). */
+  const [loaded, setLoaded] = useState(false);
   const reload = useCallback(() => setNonce((n) => n + 1), []);
   useEffect(() => {
     let live = true;
     void load().then((v) => {
-      if (live) setValue(v);
+      if (!live) return;
+      setValue(v);
+      setLoaded(true);
     });
     return () => {
       live = false;
@@ -39,7 +43,7 @@ export function useLoaded<T>(load: () => Promise<T>, initial: T, deps: unknown[]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, nonce]);
   useEffect(() => (subscribe ? subscribe(reload) : undefined), [subscribe, reload]);
-  return [value, reload];
+  return [value, reload, loaded];
 }
 
 /** Whether the session is signed in, kept current across contexts. */

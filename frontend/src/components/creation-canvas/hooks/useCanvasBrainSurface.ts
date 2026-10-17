@@ -3,7 +3,7 @@ import { canvasRunKey } from '../brainTurn/canvasRunKey';
 import { type BrainDockMode, type BrainDockPreferences, brainDockReservedWidth } from '../brainDockPreferences';
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo, useState } from 'react';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
-import { stepRow, withRating, type MessageRatings } from '@seanhogg/builderforce-brain-embedded';
+import { stepRow, useRunSnapshot, withRating, type MessageRatings } from '@seanhogg/builderforce-brain-embedded';
 import { useTranscriptReplies } from '@/lib/brain/useTranscriptReplies';
 import { boardAgentOccupants, boardAgents } from '@/lib/canvas/boardAgents';
 import { roomSpeech } from '@/lib/canvas/roomSpeech';
@@ -159,7 +159,14 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
     [livePresence, rosterMembers, rosterSelfId, sendPresence],
   );
 
-  const brainSurfaceOpen = !presentMode && brainDock.open;
+  /**
+   * A tool approval the run is WAITING on is answered on the Brain surface (its footer's
+   * ToolConfirmBar) — reveal it, as a guest wall is revealed, or a board with Brain closed
+   * (or presenting) sits on a turn nobody can see is asking. Present mode yields to it.
+   */
+  const awaitingApproval = useRunSnapshot(canvasRunKey(sessionId)).pendingConfirm != null;
+  useEffect(() => { if (awaitingApproval) openBrainDock(); }, [awaitingApproval, openBrainDock]);
+  const brainSurfaceOpen = (!presentMode || awaitingApproval) && brainDock.open;
   /**
    * Brain turns a COLLABORATOR started. Every Brain surface narrates one — the
    * thinking animation and its elapsed clock — so the whole board sees Brain

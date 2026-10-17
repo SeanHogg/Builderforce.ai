@@ -17,6 +17,7 @@
  */
 import type { CreateChannelInput, UpdateChannelInput } from '../../application/agentHost/agentHostChannels';
 import type { OpenTaskPrInput } from '../../application/repos/openTaskPullRequest';
+import { HOST_TELEMETRY_BATCH_MAX } from '../../application/agentHost/hostTelemetryIngest';
 import { RequestValidationError } from '../../domain/shared/errors';
 import { z, zJsonObject, zNumberLike } from './requestBody';
 
@@ -203,19 +204,38 @@ export const WorkspaceChangeBody = z.object({
   deletes: z.array(z.string()).nullish(),
 });
 
+/**
+ * A host telemetry body: one event (every host in the field) or `{ events }` (the
+ * relay DO and newer runtimes batch). Batch first, so a body carrying `events` is
+ * never read as one empty event. A malformed event inside a batch is dropped, not
+ * the batch: one bad frame used to cost only itself, and batching must not change that.
+ */
+const hostTelemetryBody = <T extends z.ZodType>(event: T) =>
+  z.union([
+    z.object({
+      events: z.array(z.unknown()).min(1).max(HOST_TELEMETRY_BATCH_MAX).transform((items) =>
+        items.flatMap((item) => {
+          const parsed = event.safeParse(item);
+          return parsed.success ? [parsed.data as z.output<T>] : [];
+        })),
+    }),
+    event,
+  ]);
+
 /** `POST /:id/file-change` — ids are `Number()`d and path/agent type-guarded by the handler. */
-export const FileChangeBody = z.object({
+const FileChangeBody = z.object({
   taskId: zNumberLike.nullish(),
   executionId: zNumberLike.nullish(),
   path: z.unknown().optional(),
   change: z.string().nullish(),
   agent: z.unknown().optional(),
 });
+export const FileChangeIngestBody = hostTelemetryBody(FileChangeBody);
 
 // ── Telemetry ───────────────────────────────────────────────────────────────
 
 /** `POST /:id/usage-snapshot` — every counter defaults to 0 when absent. */
-export const UsageSnapshotBody = z.object({
+const UsageSnapshotBody = z.object({
   sessionKey: z.string().nullish(),
   inputTokens: z.number().nullish(),
   outputTokens: z.number().nullish(),
@@ -225,8 +245,10 @@ export const UsageSnapshotBody = z.object({
   ts: zTimestamp,
 });
 
+export const UsageSnapshotIngestBody = hostTelemetryBody(UsageSnapshotBody);
+
 /** `POST /:id/tool-audit` — the handler refuses a missing toolName itself. */
-export const ToolAuditBody = z.object({
+const ToolAuditBody = z.object({
   runId: z.string().nullish(),
   /** `Number()`d by the handler. */
   executionId: zNumberLike.nullish(),
@@ -240,6 +262,7 @@ export const ToolAuditBody = z.object({
   durationMs: z.number().nullish(),
   ts: zTimestamp,
 });
+export const ToolAuditIngestBody = hostTelemetryBody(ToolAuditBody);
 
 /** `POST /:id/approval-request` — the handler refuses a missing actionType/description itself. */
 export const ApprovalRequestBody = z.object({

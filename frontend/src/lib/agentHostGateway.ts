@@ -3,10 +3,13 @@
  * Connects to /api/agent-hosts/:id/ws (tenant JWT via ?token=).
  * Used by AgentHostDebugContent for snapshots and manual RPC.
  */
+import { createReconnector, openSocket, type Reconnector } from './polling/reconnectPolicy';
 
 export type GatewayEvent =
   | { type: 'connected' }
   | { type: 'disconnected'; code: number; reason: string }
+  /** A reconnect attempt is starting (only with `reconnect: true`). */
+  | { type: 'reconnecting' }
   | { type: 'agent_host_offline' }
   | { type: 'agent_host_online' }
   | { type: 'message'; data: unknown };
@@ -16,22 +19,36 @@ export type GatewayEventHandler = (ev: GatewayEvent) => void;
 export interface AgentHostGatewayOptions {
   url: string;
   onEvent: GatewayEventHandler;
+  /**
+   * Reconnect after a drop, under the shared reconnect policy (backoff, auth close
+   * codes, no retry while the tab is hidden). Off by default: a debug view that
+   * shows "disconnected" is telling the truth.
+   */
+  reconnect?: boolean;
 }
 
 export class AgentHostGateway {
   private ws: WebSocket | null = null;
   private destroyed = false;
   private pingInterval: ReturnType<typeof setInterval> | null = null;
+  private readonly reconnector: Reconnector | null;
+  private attempted = false;
 
   constructor(private opts: AgentHostGatewayOptions) {
-    this.connect();
+    this.reconnector = opts.reconnect ? createReconnector({ connect: () => this.connect() }) : null;
+    if (this.reconnector) this.reconnector.start();
+    else this.connect();
   }
 
   private connect(): void {
     if (this.destroyed) return;
-    this.ws = new WebSocket(this.opts.url);
+    if (this.attempted) this.opts.onEvent({ type: 'reconnecting' });
+    this.attempted = true;
+    this.ws = openSocket(this.opts.url);
+    if (!this.ws) { this.reconnector?.closed(); return; }
 
     this.ws.addEventListener('open', () => {
+      this.reconnector?.opened();
       this.schedulePings();
       this.opts.onEvent({ type: 'connected' });
     });
@@ -60,6 +77,7 @@ export class AgentHostGateway {
       this.clearPings();
       if (this.destroyed) return;
       this.opts.onEvent({ type: 'disconnected', code: ev.code, reason: ev.reason });
+      this.reconnector?.closed(ev.code);
     });
 
     this.ws.addEventListener('error', () => {
@@ -77,6 +95,7 @@ export class AgentHostGateway {
 
   destroy(): void {
     this.destroyed = true;
+    this.reconnector?.stop();
     this.clearPings();
     this.ws?.close(1000, 'destroyed');
     this.ws = null;

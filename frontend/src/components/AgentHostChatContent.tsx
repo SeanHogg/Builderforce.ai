@@ -52,20 +52,18 @@ export function AgentHostChatContent({ agentHostId, agentHostName }: AgentHostCh
     const url = agentHosts.wsUrl(agentHostId);
     setConnStatus('connecting');
 
+    // The gateway owns reconnecting (shared backoff + hidden-tab policy), so a dead
+    // relay is not retried on a fixed timer from every open chat.
     const gateway = new AgentHostGateway({
       url,
+      reconnect: true,
       onEvent: (ev) => {
         if (ev.type === 'connected') {
           setConnStatus('connected');
         } else if (ev.type === 'disconnected') {
           setConnStatus('offline');
-          // Reconnect after 3s
-          setTimeout(() => {
-            if (gatewayRef.current === gateway) {
-              setConnStatus('connecting');
-              gateway['connect']?.();
-            }
-          }, 3000);
+        } else if (ev.type === 'reconnecting') {
+          setConnStatus('connecting');
         } else if (ev.type === 'agent_host_offline') {
           setConnStatus('offline');
         } else if (ev.type === 'agent_host_online') {

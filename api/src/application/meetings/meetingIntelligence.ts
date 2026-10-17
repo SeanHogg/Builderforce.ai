@@ -22,7 +22,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * persona-resolve failure surfaces as an error the route maps to a 4xx/5xx, never a
  * fabricated line.
  */
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
@@ -61,6 +61,23 @@ export async function loadTranscript(db: Db, meetingId: string, limit = SUMMARY_
     .where(eq(meetingTranscriptSegments.meetingId, meetingId))
     .orderBy(asc(meetingTranscriptSegments.atMs), asc(meetingTranscriptSegments.createdAt))
     .limit(limit);
+}
+
+/**
+ * Lines a live meeting's transcript gained since the reader's newest `atMs` cursor.
+ * `atMs` is stamped server-side as each line lands, but two appends can race (an
+ * agent turn stamps when its LLM call returns), so the read reaches back a few
+ * seconds and the reader de-duplicates by id. Served by (meeting_id, at_ms).
+ */
+const TRANSCRIPT_TAIL_OVERLAP_MS = 5_000;
+export async function loadTranscriptSince(db: Db, tenantId: number, meetingId: string, sinceAtMs: number): Promise<TranscriptSegment[]> {
+  return db.select().from(meetingTranscriptSegments)
+    .where(scopedToTenant(meetingTranscriptSegments, tenantId, and(
+      eq(meetingTranscriptSegments.meetingId, meetingId),
+      gte(meetingTranscriptSegments.atMs, Math.max(0, sinceAtMs - TRANSCRIPT_TAIL_OVERLAP_MS)),
+    )))
+    .orderBy(asc(meetingTranscriptSegments.atMs), asc(meetingTranscriptSegments.createdAt))
+    .limit(SUMMARY_MAX_LINES);
 }
 
 /**

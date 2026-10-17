@@ -21,6 +21,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { dispatchGithubActionsRun, githubActionsAvailable } from './githubActionsDispatch';
 import { RuntimeService } from './RuntimeService';
+import { cloudRunnerStub } from './cloudRunnerStub';
 import { tenantHasFeature } from '../tenant/featureEntitlements';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
@@ -763,7 +764,7 @@ export async function startDispatchedExecution(
         return;
       }
       try {
-        const stub = cloudRunner.get(cloudRunner.idFromName(`exec:${execution.id}`));
+        const stub = cloudRunnerStub(cloudRunner, execution.id);
         const res = await stub.fetch('https://cloud-runner/start', {
           method: 'POST',
           body: JSON.stringify({

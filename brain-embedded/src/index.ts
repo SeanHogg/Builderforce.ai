@@ -236,7 +236,7 @@ export {
   // same cell — single-flight, Stop, the confirm gate, the live snapshot.
   startEngineRun,
 } from './brainRunStore';
-export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn, BrainRunEngine, RunEngineControl, RunKey } from './brainRunStore';
+export type { BrainRunRequest, BrainRunSnapshot, BrainRunPersistence, BrainStreamFn, BrainRunEngine, RunEngineControl, RunKey, RunTurn } from './brainRunStore';
 export { useRunSnapshot } from './useRunSnapshot';
 // A sub-agent is an ordinary run with an OWNER pointer (`runLineage.ts`), redirected
 // mid-run through the same inbox any run has (`runSteering.ts`).

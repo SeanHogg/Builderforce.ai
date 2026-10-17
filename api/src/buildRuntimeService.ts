@@ -22,6 +22,7 @@ import { AuditRepository } from './infrastructure/repositories/AuditRepository';
 import { RuntimeService } from './application/runtime/RuntimeService';
 import { recordRunFailureEvent } from './application/runtime/recordRunFailureEvent';
 import { loadCloudRunForSelfHeal, selfHealCloudRun } from './application/runtime/cloudSelfHeal';
+import { signalCloudRunnerConcluded } from './application/runtime/cloudRunnerStub';
 import { wireExecutionEventSinks } from './application/runtime/wireExecutionEventSinks';
 import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { maybeAutoRunOnLaneEntry } from './application/swimlane/laneEntryTrigger';
@@ -59,6 +60,9 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
       if (!input) return 'failed';
       return (await selfHealCloudRun(env, db, input)) === 'requeued' ? 'requeued' : 'failed';
     },
+    // A cancelled cloud run's durable runner caches "still running" between row reads;
+    // tell it now so it stops mid-step. Host runs are cancelled over the host relay.
+    onCancelled: (e) => (e.agentHostId == null ? signalCloudRunnerConcluded(env, Number(e.id)) : Promise.resolve()),
     // Autonomous chaining: when an agent advances its ticket into the next lane,
     // start that lane's configured agent via the SAME trigger a human board-drag
     // uses — so a multi-stage board (BA → Dev → QA …) flows without a human nudging

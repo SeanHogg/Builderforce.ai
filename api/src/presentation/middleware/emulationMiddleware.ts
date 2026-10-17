@@ -1,12 +1,15 @@
 import { MiddlewareHandler } from 'hono';
-import { eq, sql } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import { verifyEmulationJwt } from '../../infrastructure/auth/JwtService';
 import type { EmulationJwtPayload } from '../../infrastructure/auth/JwtService';
 import { ForbiddenError, UnauthorizedError } from '../../domain/shared/errors';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { adminImpersonationSessions } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import {
+  loadEmulationSession,
+  recordEmulationPageVisit,
+  recordEmulationWriteBlock,
+} from '../../application/admin/emulationSessions';
+import { background } from './background';
 import { updateRequestScope } from '../../application/shared/requestScope';
 
 // ---------------------------------------------------------------------------
@@ -19,7 +22,9 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
  *
  * When `X-Emulation-Token` is present:
  *   1. Validates the emulation JWT (signature + expiry).
- *   2. Confirms the session record is still active in the DB.
+ *   2. Confirms the session record is still active (read-through cached — an
+ *      ended session stops working within ~60s everywhere, at once in the isolate
+ *      that ended it; see `application/admin/emulationSessions`).
  *   3. Rejects mutating verbs (POST/PUT/PATCH/DELETE) — emu_readonly enforcement.
  *      Increments `write_block_count` on the session record for audit purposes.
  *   4. Injects `userId`, `tenantId`, `role` from the emulation token (overrides
@@ -45,19 +50,10 @@ export const emulationMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) =
 
   const db = buildDatabase(c.env);
 
-  // Confirm session is still active in DB
-  const [session] = await db
-    .select({
-      id: adminImpersonationSessions.id,
-      endedAt: adminImpersonationSessions.endedAt,
-      tokenJti: adminImpersonationSessions.tokenJti,
-      writeBlockCount: adminImpersonationSessions.writeBlockCount,
-    })
-    .from(adminImpersonationSessions)
-    .where(eq(adminImpersonationSessions.id, payload.emu_sid))
-    .limit(1);
+  // Confirm session is still active — cached, since this runs on every emulated request.
+  const session = await loadEmulationSession(c.env, db, payload.tid, payload.emu_sid);
 
-  if (!session || session.endedAt !== null) {
+  if (!session || session.ended) {
     throw new UnauthorizedError('Emulation session has ended or does not exist');
   }
 
@@ -69,10 +65,7 @@ export const emulationMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) =
   // Write-block enforcement
   if (MUTATING_METHODS.has(c.req.method)) {
     // Increment write_block_count for audit trail
-    await db
-      .update(adminImpersonationSessions)
-      .set({ writeBlockCount: sql`${adminImpersonationSessions.writeBlockCount} + 1` })
-      .where(eq(adminImpersonationSessions.id, session.id));
+    await recordEmulationWriteBlock(db, payload.tid, payload.emu_sid);
 
     throw new ForbiddenError(
       'Write operations are not permitted during an emulation session (read-only mode)',
@@ -88,16 +81,10 @@ export const emulationMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) =
 
   await next();
 
-  // Track page visits (GET requests only, fire-and-forget to not block response)
+  // Track page visits (GET only), once per distinct path, after the response —
+  // best-effort, so an audit write can never fail the request.
   if (c.req.method === 'GET') {
     const path = new URL(c.req.url).pathname;
-    // Append to pages_visited JSONB array; use fire-and-forget (no await)
-    db
-      .update(adminImpersonationSessions)
-      .set({
-        pagesVisited: sql`jsonb_insert(coalesce(pages_visited, '[]'::jsonb), '{-1}', to_jsonb(${JSON.stringify({ path, ts: new Date().toISOString() })}::text))`,
-      })
-      .where(eq(adminImpersonationSessions.id, session.id))
-      .catch(() => undefined);  // best-effort; ignore errors
+    background(c, recordEmulationPageVisit(c.env, db, payload.tid, payload.emu_sid, path));
   }
 };

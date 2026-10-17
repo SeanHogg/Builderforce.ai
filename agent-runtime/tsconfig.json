@@ -38,6 +38,7 @@
       "@builderforce/model-router": ["../packages/model-router/src/index.ts"],
       "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
       "@builderforce/run-context": ["../packages/run-context/src/index.ts"],
+      "@builderforce/write-outbox": ["../packages/write-outbox/src/index.ts"],
       "@builderforce/tui": ["../packages/tui/src/index.ts"],
       "@builderforce/tui/*": ["../packages/tui/src/*"]
     }

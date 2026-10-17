@@ -416,12 +416,38 @@ export function sequenceDueSteps(
   sequence: { state?: unknown; steps?: unknown; enrolments?: unknown },
   now: Date,
 ): SequenceDueStep[] {
+  const due: SequenceDueStep[] = [];
+  for (const next of pendingSequenceSteps(sequence)) {
+    if (next.dueAtMs > now.getTime()) continue;
+    due.push({ enrolment: next.enrolment, stepIndex: next.stepIndex, step: next.step });
+  }
+  return due;
+}
+
+/**
+ * The earliest moment any enrolled person becomes due a step, or null when nobody ever
+ * will (not running, everyone finished/replied/stopped). Derived from the SAME per-person
+ * rule as {@link sequenceDueSteps}, so the runner can store it as an indexed due time and
+ * skip a cadence until then without ever disagreeing with what it would send.
+ */
+export function sequenceNextDueAt(sequence: { state?: unknown; steps?: unknown; enrolments?: unknown }): Date | null {
+  let earliest: number | null = null;
+  for (const next of pendingSequenceSteps(sequence)) {
+    if (earliest == null || next.dueAtMs < earliest) earliest = next.dueAtMs;
+  }
+  return earliest == null ? null : new Date(earliest);
+}
+
+/** Each live person's next step and when it fires — the one rule both readers above share. */
+function pendingSequenceSteps(
+  sequence: { state?: unknown; steps?: unknown; enrolments?: unknown },
+): Array<SequenceDueStep & { dueAtMs: number }> {
   const state = String(sequence.state ?? '').trim().toLowerCase();
   if (state !== 'running') return [];
   const steps = readSequenceSteps(sequence.steps);
   if (steps.length === 0) return [];
 
-  const due: SequenceDueStep[] = [];
+  const pending: Array<SequenceDueStep & { dueAtMs: number }> = [];
   for (const enrolment of readSequenceEnrolments(sequence.enrolments)) {
     if (enrolment.repliedAtISO || enrolment.stoppedAtISO) continue;
     const stepIndex = enrolment.stepsSent;
@@ -429,10 +455,9 @@ export function sequenceDueSteps(
     if (!step) continue;
     const enrolledAt = isoDay(enrolment.enrolledAtISO);
     if (enrolledAt == null) continue;
-    if (enrolledAt + step.dayOffset * 86_400_000 > now.getTime()) continue;
-    due.push({ enrolment, stepIndex, step });
+    pending.push({ enrolment, stepIndex, step, dueAtMs: enrolledAt + step.dayOffset * 86_400_000 });
   }
-  return due;
+  return pending;
 }
 
 /** How the cadence is doing. Rendered on the card and read by the CRO coach. */

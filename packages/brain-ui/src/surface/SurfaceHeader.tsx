@@ -32,7 +32,8 @@ export interface SurfaceHeaderHistory {
   onToggle: () => void;
   /** Unread messages in OTHER chats — badged on the History lever. */
   unread?: number;
-  /** id of the element the lever shows/hides. */
+  /** id of the element the lever shows/hides. Referenced only while open — the list is
+   *  not in the DOM while closed, and aria-controls must not point at a missing id. */
   controls?: string;
 }
 
@@ -79,7 +80,7 @@ export function SurfaceHeader({
             title={historyLabel}
             aria-label={historyLabel}
             aria-pressed={history.open}
-            aria-controls={history.controls}
+            aria-controls={history.open ? history.controls : undefined}
           >
             <HeaderIcon d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 8v4l3 2" />
           </button>

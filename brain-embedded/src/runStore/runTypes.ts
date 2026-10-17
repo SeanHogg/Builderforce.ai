@@ -199,10 +199,9 @@ export interface BrainRunSnapshot {
   /**
    * The live execution trace (LLM turns + tool calls + errors), in order. The
    * same array `getRunTrace` returns — exposed on the snapshot so a mounted view
-   * (e.g. the timeline transcript) can render each step AS IT HAPPENS. The
-   * snapshot object identity changes on every `emit` (including every
-   * `pushTrace`), so consumers re-render even though the array reference is
-   * stable; they read it fresh each render. Bounded by {@link MAX_TRACE_EVENTS}.
+   * (e.g. the timeline transcript) can render each step AS IT HAPPENS. Each
+   * `pushTrace` publishes a NEW array (copy-on-write), so a consumer may key a
+   * memo or effect on it. Bounded by {@link MAX_TRACE_EVENTS}.
    */
   trace: BrainTraceEvent[];
   /**
@@ -230,6 +229,24 @@ export interface BrainRunSnapshot {
    * Accumulated across turns; reset fresh each run. Empty when no cap was hit.
    */
   providerCap: string[];
+  /**
+   * The engine-hosted turn being narrated ({@link RunTurn}) — null for chat runs, while
+   * idle, and from the instant Stop is pressed: a surface stops saying "working" at once
+   * while `running` stays true until the aborted loop has actually unwound.
+   */
+  turn: RunTurn | null;
+}
+
+/**
+ * An engine-hosted turn as its surfaces narrate it. Held on the CELL rather than by the
+ * component that started it, so a remounted surface still has the elapsed clock and
+ * Stop still records against the turn.
+ */
+export interface RunTurn {
+  /** The id the host correlates the turn by (`RunEngineControl.correlate`), once known. */
+  id: string | null;
+  /** Wall-clock start (ms). */
+  startedAt: number;
 }
 
 /**

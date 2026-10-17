@@ -31,6 +31,8 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { join, dirname, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
+import { gzip } from 'node:zlib';
+import { promisify } from 'node:util';
 // The Worker-relayed half of the tool table — memory, PRD, coordination, search,
 // delegation, the platform catalog and the human pause. ONE implementation, shared
 // verbatim with the GitHub Actions runner (which inlines this same file), so a new
@@ -79,20 +81,32 @@ function proxyPreviewHttp(req, res) {
 }
 const MAX_LIST_ENTRIES = 500;
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
-// Liveness heartbeat cadence. The Worker reaps a cloud run whose last activity is
-// older than 90s (RuntimeService.CLOUD_ORPHAN_MS / staleExecutionReaper). A single
-// run_command can run for minutes with no LLM round-trip, so we bump the run's
-// `updated_at` on this timer — well under the 90s ceiling — so the reaper never kills
-// a healthy, busy container mid-build. ~3 beats fit the window, so a dropped beat is
-// covered by the next.
+// Liveness heartbeat cadence. A single run_command can run for minutes with no LLM
+// round-trip, so this timer keeps the run's `updated_at` fresh for the Worker's reaper
+// (5-min long-lived ceiling, orphanReasons.CLOUD_LONG_LIVED_SILENCE_MS). The Worker
+// throttles the WRITE to one per 2 min (runContext.HEARTBEAT_MIN_INTERVAL_MS); the beat
+// stays at 30s because its reply is also the cancel signal for an in-flight command.
+// Mirrored as runContext.CONTAINER_HEARTBEAT_CADENCE_MS.
 const HEARTBEAT_MS = 30 * 1000;
+
+const gzipAsync = promisify(gzip);
+/** Bodies at least this big are gzipped. The `llm` op re-posts the whole transcript
+ *  every turn (the Worker is stateless and needs the full context), so its payload
+ *  grows with the run; JSON transcripts compress several-fold. Small ops stay plain. */
+const GZIP_MIN_BYTES = 16 * 1024;
 
 /** POST a container-op back to the Worker; returns the parsed JSON body. */
 async function op(spec, body) {
+  const json = JSON.stringify({ executionId: spec.executionId, token: spec.token, op: body.op, args: body.args || {} });
+  // The Worker detects gzip by its magic bytes and still reads plain JSON, so small
+  // ops stay plain and older images keep working.
+  const compress = Buffer.byteLength(json) >= GZIP_MIN_BYTES;
   const res = await fetch(`${spec.internalBaseUrl.replace(/\/$/, '')}/api/runtime/internal/container-op`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ executionId: spec.executionId, token: spec.token, op: body.op, args: body.args || {} }),
+    headers: compress
+      ? { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' }
+      : { 'Content-Type': 'application/json' },
+    body: compress ? await gzipAsync(json) : json,
   });
   if (!res.ok) throw new Error(`container-op ${body.op} → ${res.status}`);
   return res.json();
@@ -501,7 +515,7 @@ async function runLoop(spec) {
   // Holds the live child process so the heartbeat can kill it on cancel.
   const proc = { current: null };
   // Liveness heartbeat: bump the run's `updated_at` on a timer so a long shell step
-  // (build/test) doesn't look orphaned to the Worker's reaper (90s ceiling). A beat
+  // (build/test) doesn't look orphaned to the Worker's reaper (5-min ceiling). A beat
   // that reports the run cancelled also SIGKILLs an in-flight command so a cancel
   // during a multi-minute build takes effect immediately instead of after timeout.
   const heartbeat = setInterval(() => {

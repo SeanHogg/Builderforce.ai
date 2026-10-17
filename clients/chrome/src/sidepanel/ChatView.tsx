@@ -6,7 +6,7 @@
  * the safety gate pauses on and the shared composer. Which chat is open is chosen from
  * the header's History lever (`RovrChatHistory`).
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AiSurface,
   BrainTimeline,
@@ -58,14 +58,29 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   // The loop persisted a turn (or the run settled) — re-read the device record.
   useEffect(reload, [run.messagesEpoch, run.running, reload]);
 
+  // The first message's chat creation while it is in flight: a second send before the
+  // device record's write lands JOINS it instead of minting a second chat (and splitting
+  // the conversation across two). Cleared once the panel is on a real chat.
+  const creating = useRef<Promise<number> | null>(null);
+  useEffect(() => {
+    if (chatId !== null) creating.current = null;
+  }, [chatId]);
+
   // One turn, start to finish. A turn typed while a run streams is HELD by the queue
   // and delivered on the run's falling edge — the composer's Send says "Queue message".
   const deliver = async (text: string) => {
     let id = chatId;
     if (id === null) {
       // The first message creates the chat — with the `/` choices made before it existed.
-      id = await onNewChat();
-      await services.records.updateChat(id, chatOptions.draft);
+      creating.current ??= (async () => {
+        const created = await onNewChat();
+        await services.records.updateChat(created, chatOptions.draft);
+        return created;
+      })().catch((error: unknown) => {
+        creating.current = null;
+        throw error;
+      });
+      id = await creating.current;
     }
     const current = await services.records.getChat(id);
     if (current && current.title === t('newChatTitle')) {

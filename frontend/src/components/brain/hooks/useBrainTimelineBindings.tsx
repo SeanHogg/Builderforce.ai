@@ -4,7 +4,7 @@ import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import { parseSuggestedActions, type useBrainActions, type useBrainChats, type useBrainConversation } from '@/lib/brain';
 import type { BrainMessage } from '@/lib/builderforceApi';
-import { usePendingQuestion, useTranscriptReplies } from '@/lib/brain/useTranscriptReplies';
+import { useTranscriptReplies } from '@/lib/brain/useTranscriptReplies';
 
 /**
  * Everything the shared <BrainTimeline> and the pending-question banner are
@@ -70,9 +70,6 @@ export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, ru
     if (submitQueued(text)) return;
     void conv.send(text, { addressedTo: recipient });
   });
-  // The question this chat is BLOCKED on — the same shared predicate + banner the VSIX
-  // pins at its composer, so the surfaces can never disagree about whether a chat is blocked.
-  const { pendingQuestion, askLabels, revealPendingQuestion } = usePendingQuestion(conv.messages, timelineLabels);
 
   const renderTimelineMessage = useCallback(
     (msg: BrainMessage, ctx: { role: 'user' | 'assistant'; text: string }) => (
@@ -101,9 +98,6 @@ export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, ru
     timelineCreateFile,
     onAnswerTimelineQuestion,
     onReplayTimelineMessage,
-    pendingQuestion,
-    askLabels,
-    revealPendingQuestion,
     renderTimelineMessage,
     renderTimelineStreaming,
     onTicketsChanged,

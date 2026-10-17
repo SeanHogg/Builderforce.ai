@@ -179,13 +179,18 @@ export class BuilderforceRelayService implements IRelayService {
       accumulated: string;
     }
   >();
-  /** Coalesced live chunks waiting to flush over HTTP (keyed by session). */
-  private remoteChunkFlush = new Map<
-    string,
-    { buf: string; timer: ReturnType<typeof setTimeout> | null }
-  >();
   /** Remote dispatch options, set after construction so result callbacks work. */
   private remoteDispatchOpts: RemoteDispatchOptions | null = null;
+  /** Live output for remote sessions, coalesced per session before it goes over HTTP. */
+  private readonly remoteChunks = createRemoteChunkQueue(
+    (chunk) =>
+      this.remoteDispatchOpts
+        ? dispatchChunkToRemoteAgentNode(this.remoteDispatchOpts, chunk.callbackAgentNodeId, chunk.correlationId, chunk.piece)
+        : Promise.resolve(),
+    (err) => logDebug(`[builderforce-relay] remote chunk dispatch failed: ${String(err)}`),
+  );
+  /** The durable tool-audit trail, batched (see builderforce-relay-outboxes.ts). */
+  private readonly toolAudit: ToolAuditPersister;
 
   private readonly upstreamWsUrl: string;
   private readonly heartbeatHttpUrl: string;
@@ -683,45 +688,12 @@ export class BuilderforceRelayService implements IRelayService {
   /**
    * Persist one tool-call audit event so the run is observable on the timeline
    * AFTER it ends — not just live. The relay frame ({@link sendToRelay}
-   * `tool.audit`) only fans out to live subscribers; this HTTP POST writes it to
-   * the durable `tool_audit_events` store via the same agent-host ingest the
-   * self-hosted path uses. Fire-and-forget; never surfaces errors.
+   * `tool.audit`) only fans out to live subscribers; this writes it to the durable
+   * `tool_audit_events` store via the agent-host ingest, batched with its
+   * neighbours. Fire-and-forget; never surfaces errors.
    */
-  private async persistToolAudit(event: {
-    executionId?: number;
-    toolName: string;
-    toolCallId?: string;
-    category?: string;
-    args?: unknown;
-    result?: string;
-  }): Promise<void> {
-    const base = normalizeBaseUrl(this.opts.baseUrl);
-    const url = `${base}/api/agent-hosts/${this.opts.agentNodeId}/tool-audit`;
-    try {
-      await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.opts.apiKey}`,
-        },
-        body: JSON.stringify({
-          // Tie the event to its execution so it's queryable per-run as well as
-          // per-host. sessionKey 'main' matches the live relay frame.
-          executionId: event.executionId,
-          runId: event.executionId != null ? `exec-${event.executionId}` : undefined,
-          sessionKey: "main",
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          category: event.category,
-          args: event.args,
-          result: event.result,
-          ts: new Date().toISOString(),
-        }),
-        signal: AbortSignal.timeout(10_000),
-      });
-    } catch (err) {
-      logDebug(`[builderforce-relay] tool-audit persist failed: ${String(err)}`);
-    }
+  private async persistToolAudit(event: ToolAuditEvent): Promise<void> {
+    this.toolAudit.persist(event);
   }
 
   /**
@@ -802,6 +774,11 @@ export class BuilderforceRelayService implements IRelayService {
     this.heartbeatHttpUrl = `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/${opts.agentNodeId}/heartbeat`;
     this.assignmentContextUrl = `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/${opts.agentNodeId}/assignment-context`;
     this.gatewayWsUrl = opts.gatewayUrl ?? "ws://127.0.0.1:18789";
+    this.toolAudit = createToolAuditPersister({
+      url: `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/${opts.agentNodeId}/tool-audit`,
+      apiKey: opts.apiKey,
+      onError: (err) => logDebug(`[builderforce-relay] tool-audit persist failed: ${String(err)}`),
+    });
 
     this.heartbeat = new RelayHeartbeat({
       heartbeatUrl: this.heartbeatHttpUrl,

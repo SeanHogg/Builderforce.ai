@@ -54,7 +54,7 @@ function fakeDb() {
       }] });
     },
     select: (fields: Record<string, unknown>) => {
-      calls.push('select');
+      calls.push('open_pr_count' in fields ? 'candidates' : 'select');
       const rows = 'open_pr_count' in fields ? candidateRows : [];
       // Awaitable directly and through the `.orderBy().limit()` the bounded candidate pull adds.
       const where = () => {
@@ -64,7 +64,7 @@ function fakeDb() {
       };
       return { from: () => ({ where, innerJoin: () => ({ where }) }) };
     },
-    update: () => ({
+    update: () => (calls.push('update'), {
       set: (set: Record<string, unknown>) => ({
         where: (cond: unknown) => {
           const id = Number(paramsOf(cond)[0]);
@@ -283,7 +283,8 @@ describe('reapStaleExecutions — idle probe', () => {
 
     // The queued UPDATE runs; the cloud candidate SELECT does not.
     expect(calls).toContain('execute');
-    expect(calls).not.toContain('select');
+    expect(calls).toContain('update');
+    expect(calls).not.toContain('candidates');
   });
 
   it('accepts text-typed booleans from the probe', async () => {

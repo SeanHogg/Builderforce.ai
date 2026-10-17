@@ -1,14 +1,14 @@
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePolledResource } from '@/hooks/usePolledResource';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { meetingsApi, type MeetingDetail, type MeetingTranscript } from '@/lib/builderforceApi';
+import { meetingsApi, type MeetingDetail } from '@/lib/builderforceApi';
 import { useLiveSession } from '@/lib/live/LiveSessionContext';
 import { useSpeechCaptions, isSpeechCaptionsSupported } from '@/lib/useSpeechCaptions';
 import { VideoGrid, type AgentTile } from '@/components/video/VideoGrid';
 import { MediaControls } from '@/components/video/MediaControls';
 import { MeetingTranscriptList } from './MeetingTranscriptList';
+import { useMeetingTranscript } from './useMeetingTranscript';
 import { BrainPanel } from '@/components/brain/BrainPanel';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { Select } from '@/components/Select';
@@ -44,7 +44,6 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
   const [notice, setNotice] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
-  const [transcript, setTranscript] = useState<MeetingTranscript | null>(null);
   const [tileSize, setTileSize] = useState<'small' | 'large'>('small');
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [interim, setInterim] = useState('');
@@ -148,17 +147,10 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
     void askAgent(askAgentRef, q);
   }, [ask, askAgentRef, askAgent]);
 
-  // Transcript panel: fetch on open, then poll while the meeting is live.
-  const loadTranscript = useCallback(() => {
-    meetingsApi.transcript(meetingId).then(setTranscript).catch(() => { /* ignore */ });
-  }, [meetingId]);
-  useEffect(() => {
-    if (transcriptOpen) loadTranscript();
-  }, [transcriptOpen, loadTranscript]);
-  usePolledResource(loadTranscript, {
-    intervalMs: 5000,
-    enabled: transcriptOpen && m?.status !== 'ended' && m?.status !== 'cancelled',
-    immediate: false,
+  // Transcript panel: a whole read on open, then only the new lines while the meeting is live.
+  const { transcript, reload: loadTranscript } = useMeetingTranscript(meetingId, {
+    open: transcriptOpen,
+    live: m?.status !== 'ended' && m?.status !== 'cancelled',
   });
 
   useEffect(() => {

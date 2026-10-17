@@ -3,7 +3,7 @@
  * assert the exact IngestEvent shape the producer feeds into activity_events.
  */
 import { describe, it, expect } from 'vitest';
-import { commitEvents, mergedPullRequestRef, pullRequestEvents, reviewEvents, issueEvents } from './githubWebhookRoutes';
+import { commitEvents, mergedPullRequestRef, pullRequestActionSignalsSweep, pullRequestEvents, reviewEvents, issueEvents } from './githubWebhookRoutes';
 
 describe('commitEvents', () => {
   it('maps each commit on a branch push, preferring login then email', () => {
@@ -125,5 +125,20 @@ describe('mergedPullRequestRef', () => {
     // The PR-row `task_id` join still works without a branch; only the fallback is lost.
     expect(mergedPullRequestRef({ ...merged, pull_request: { merged: true } }))
       .toMatchObject({ number: 42, branchName: null });
+  });
+});
+
+describe('pullRequestActionSignalsSweep', () => {
+  it('opens the cron gate for a PR entering or leaving the merge queue', () => {
+    for (const action of ['opened', 'reopened', 'ready_for_review', 'closed']) {
+      expect(pullRequestActionSignalsSweep({ action }), action).toBe(true);
+    }
+  });
+
+  it('does NOT wake every frequent sweep for PR noise', () => {
+    for (const action of ['synchronize', 'edited', 'labeled', 'unlabeled', 'assigned', 'review_requested', 'converted_to_draft']) {
+      expect(pullRequestActionSignalsSweep({ action }), action).toBe(false);
+    }
+    expect(pullRequestActionSignalsSweep({})).toBe(false);
   });
 });

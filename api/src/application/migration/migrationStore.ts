@@ -29,6 +29,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import { cascadeProjectDelete } from '../shared/siblingCascade';
 import type { Env } from '../../env';
+import { bumpTenantProjectCount } from '../tenant/tenantResourceCounts';
 import { hasPendingInvite, invite } from '../kernel/InvitationService';
 import type {
   MigrationStore,
@@ -219,6 +220,8 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
         importRunId: input.importRunId,
       }).returning({ id: projects.id });
       if (!row) throw new Error('insertProject returned no row');
+      // The plan-limit guard caches the tenant's project count; a new row must re-count.
+      await bumpTenantProjectCount(env, input.tenantId);
       return row.id;
     },
 
@@ -332,6 +335,7 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
       // After the commit: the apps database cannot take part in this transaction, and a
       // rollback that failed must not have taken the projects' sites with it.
       await cascadeProjectDelete(db, projectIds);
+      if (projectIds.length) await bumpTenantProjectCount(env, tenantId);
       return removed;
     },
   };

@@ -6,6 +6,10 @@ import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSess
 import { rejectedObjectKinds } from '../canvasBoardLoad';
 import { type LocalCreationSnapshot, readLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { usePolledResource } from '@/hooks/usePolledResource';
+import { createReconnector, openSocket } from '@/lib/polling/reconnectPolicy';
+import { createCoalescedRefresh } from '@/lib/polling/coalescedRefresh';
+import { useLatestRef } from './useLatestRef';
+import { fetchTimelineTail, mergeTimelineTail, timelineCursor } from './canvasTimelineTail';
 import { useBoardOnScreen } from '@/lib/canvas/BoardOnScreenContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { adoptRemoteBoard, type AdoptRemoteBoardDecision, type LocalBoardState } from '@/domains/canvas/application/AdoptRemoteBoard';
@@ -14,6 +18,7 @@ import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { Edge, ReactFlowInstance } from '@xyflow/react';
 import type { useTranslations } from 'next-intl';
 import type { CanvasTimelineMessage } from '../canvasBoardTypes';
+import { timelineToLocal } from '../localTimeline';
 import type { PresenceRelay } from '@/domains/canvas/application/PresenceRelay';
 import type { CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
@@ -176,7 +181,7 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
       // `...prior` carries prior.title forward untouched — a rename now happens in
       // the session rail, not here, so this write must not overwrite it with the
       // stale copy this component hydrated `title` from.
-      const snapshot: LocalCreationSnapshot = { ...prior, nodes, edges, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
+      const snapshot: LocalCreationSnapshot = { ...prior, nodes, edges, timeline: timelineToLocal(timeline), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
       writeLocalSnapshot(snapshot);
     }, 150);
     return () => window.clearTimeout(handle);
@@ -231,14 +236,16 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
     return () => window.clearTimeout(timer);
   }, [joinedCollaborator, setJoinedCollaborator]);
 
+  // The live socket reads the held timeline for its `after` cursor without
+  // re-opening the socket every time a message lands.
+  const timelineLatest = useLatestRef(timeline);
   useEffect(() => {
     if (persistence !== 'server') return;
     const liveUrl = creationSessionsApi.liveUrl(sessionId);
     if (!liveUrl) { setRealtimeState('offline'); return; }
     let stopped = false;
     let socket: WebSocket | null = null;
-    let retryTimer: number | null = null;
-    let retryMs = 1_000;
+    let attempted = false;
     const syncRevision = async (hint?: number) => {
       if (stopped) return;
       try {
@@ -252,57 +259,77 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
         applyRemoteBoard(decision, t('noticeUpdatedLive'));
       } catch { /* The presence reconciliation remains a durable fallback. */ }
     };
-    const connect = () => {
-      if (stopped) return;
-      setRealtimeState(retryMs > 1_000 ? 'reconnecting' : 'connecting');
-      try { socket = new WebSocket(liveUrl); } catch { socket = null; }
-      if (!socket) {
-        setRealtimeState('reconnecting');
-        retryTimer = window.setTimeout(connect, retryMs);
-        retryMs = Math.min(15_000, retryMs * 2);
-        return;
-      }
-      socket.onopen = () => {
-        setRealtimeState('online');
-        retryMs = 1_000;
-        // Publishing the socket is what arms `sendPresence`; until this runs, the
-        // pointer keeps riding the presence poll.
-        liveSocketRef.current = socket;
-        void syncRevision();
-      };
-      socket.onmessage = (event) => {
-        try {
-          const frame = JSON.parse(String(event.data)) as { type?: string; revision?: number; lastId?: number; action?: string; peer?: { id?: string } };
-          if (frame.type === 'canvas.changed') void syncRevision(frame.revision);
-          if (frame.type === 'timeline.changed') void creationSessionsApi.timeline.list(sessionId).then((result) => setTimeline(result.messages)).catch(() => undefined);
-          // A peer's pointer at pointer speed, and the `leave` that retires it. Relayed
-          // frames are attributed by the SERVER (`userId`), never by the sender — see
-          // `SessionRoomDO`; the folding is `useLivePresence`'s, shared with the guest room.
-          receivePresence(frame);
-        } catch { /* Ignore malformed relay frames. */ }
-      };
-      socket.onclose = () => {
-        if (liveSocketRef.current === socket) liveSocketRef.current = null;
-        socket = null;
-        // Nobody's pointer is live while this client is deaf; the poll takes over.
-        clearPresence();
-        if (!stopped) {
-          setRealtimeState(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'reconnecting');
-          retryTimer = window.setTimeout(connect, retryMs);
-          retryMs = Math.min(15_000, retryMs * 2);
-        }
-      };
-    };
-    connect();
+    // Frames arrive in bursts (a Brain turn writes many rows, a drag saves many
+    // revisions); each burst is ONE read, never two in flight. The hints carry the
+    // highest revision / timeline id announced, so this client's own writes echoed
+    // back cost nothing.
+    let revisionHint = 0;
+    const boardRefresh = createCoalescedRefresh(async () => {
+      const hint = revisionHint;
+      revisionHint = 0;
+      if (hint && hint <= revisionRef.current) return;
+      await syncRevision(hint);
+    });
+    let timelineHint = 0;
+    const timelineRefresh = createCoalescedRefresh(async () => {
+      const after = timelineCursor(timelineLatest.current);
+      const hint = timelineHint;
+      timelineHint = 0;
+      if (hint && hint <= after) return;
+      const rows = await fetchTimelineTail(sessionId, after);
+      if (!stopped && rows.length) setTimeline((current) => mergeTimelineTail(current, rows));
+    });
+    const reconnector = createReconnector({
+      baseMs: 1_000,
+      maxMs: 15_000,
+      onRetryScheduled: () => setRealtimeState(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'reconnecting'),
+      onGiveUp: () => setRealtimeState('offline'),
+      connect: () => {
+        setRealtimeState(attempted ? 'reconnecting' : 'connecting');
+        attempted = true;
+        const opened = openSocket(liveUrl);
+        if (!opened) { reconnector.closed(); return; }
+        socket = opened;
+        opened.onopen = () => {
+          reconnector.opened();
+          setRealtimeState('online');
+          // Publishing the socket is what arms `sendPresence`; until this runs, the
+          // pointer keeps riding the presence poll.
+          liveSocketRef.current = opened;
+          void syncRevision();
+        };
+        opened.onmessage = (event) => {
+          try {
+            const frame = JSON.parse(String(event.data)) as { type?: string; revision?: number; lastId?: number; action?: string; peer?: { id?: string } };
+            if (frame.type === 'canvas.changed') { revisionHint = Math.max(revisionHint, Number(frame.revision || 0)); boardRefresh.trigger(); }
+            if (frame.type === 'timeline.changed') { timelineHint = Math.max(timelineHint, Number(frame.lastId || 0)); timelineRefresh.trigger(); }
+            // A peer's pointer at pointer speed, and the `leave` that retires it. Relayed
+            // frames are attributed by the SERVER (`userId`), never by the sender — see
+            // `SessionRoomDO`; the folding is `useLivePresence`'s, shared with the guest room.
+            receivePresence(frame);
+          } catch { /* Ignore malformed relay frames. */ }
+        };
+        opened.onclose = (event) => {
+          if (liveSocketRef.current === opened) liveSocketRef.current = null;
+          if (socket === opened) socket = null;
+          // Nobody's pointer is live while this client is deaf; the poll takes over.
+          clearPresence();
+          if (!stopped) reconnector.closed(event?.code);
+        };
+      },
+    });
+    reconnector.start();
     return () => {
       stopped = true;
-      if (retryTimer != null) window.clearTimeout(retryTimer);
+      reconnector.stop();
+      boardRefresh.cancel();
+      timelineRefresh.cancel();
       liveSocketRef.current = null;
       // Drop the pending flush with the socket it was going to be written to.
       presenceRelay.dispose();
       socket?.close();
     };
-  }, [applyRemoteBoard, clearPresence, liveSocketRef, localBoardState, persistence, presenceRelay, receivePresence, revisionRef, sessionId, setEdges, setNodes, setRealtimeState, setTimeline, t]);
+  }, [applyRemoteBoard, clearPresence, liveSocketRef, localBoardState, persistence, presenceRelay, receivePresence, revisionRef, sessionId, setEdges, setNodes, setRealtimeState, setTimeline, t, timelineLatest]);
 
   /**
    * Composing a prompt is presence too — the cursor label says so. It changes at

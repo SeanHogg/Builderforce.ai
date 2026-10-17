@@ -15,7 +15,9 @@ vi.mock('../ceremony/ceremonyMinutesToCanvas', () => ({ syncMinutesForMeeting: m
 vi.mock('../agent/agentPrompt', () => ({ resolveWorkforceModel: vi.fn(), WORKFORCE_MODEL_REF_PREFIX: 'workforce:' }));
 vi.mock('../../infrastructure/relay/broadcastRoom', () => ({ broadcastRoom: vi.fn() }));
 
-import { summarizeMeeting } from './meetingIntelligence';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
+import { loadTranscriptSince, summarizeMeeting } from './meetingIntelligence';
 
 function fakeDb(segments: Array<{ speakerName: string; text: string }>) {
   const updates: unknown[] = [];
@@ -51,5 +53,17 @@ describe('summarizeMeeting', () => {
     const { db } = fakeDb([]);
     expect(await summarizeMeeting(db, {} as never, meeting)).toEqual({ error: 'No transcript to summarize yet.' });
     expect(mocks.condenseTranscript).not.toHaveBeenCalled();
+  });
+});
+
+describe('loadTranscriptSince', () => {
+  it('reads the tenant's meeting from a few seconds before the cursor (racing appends), oldest first', async () => {
+    const wheres: SQL[] = [];
+    const chain = { from: () => chain, where: (cond: SQL) => { wheres.push(cond); return chain; }, orderBy: () => chain, limit: async () => [] };
+    await loadTranscriptSince({ select: () => chain } as never, 7, 'm1', 60_000);
+    const { sql, params } = new PgDialect().sqlToQuery(wheres[0]!);
+    expect(sql).toContain('"tenant_id"');
+    expect(sql).toContain('"at_ms" >=');
+    expect(params).toEqual(expect.arrayContaining([7, 'm1', 55_000]));
   });
 });

@@ -7,6 +7,7 @@ import {
   heartbeatWriteDue,
   readHeartbeatFingerprint,
   rememberHeartbeatFingerprint,
+  throttledWriteDue,
 } from './heartbeatThrottle';
 
 const NOW = 1_700_000_000_000;
@@ -35,6 +36,13 @@ describe('heartbeat write throttle', () => {
     expect(heartbeatWriteDue({ lastSeenAt: ago(60_000), fingerprint: fp, lastFingerprint: fp, now: NOW })).toBe(false);
     expect(heartbeatWriteDue({ lastSeenAt: ago(60_000), fingerprint: changed, lastFingerprint: fp, now: NOW })).toBe(true);
     expect(heartbeatWriteDue({ lastSeenAt: ago(60_000), fingerprint: fp, lastFingerprint: null, now: NOW })).toBe(true);
+  });
+
+  it('the shared rule: unknown or past-throttle writes, a recent write skips unless changed', () => {
+    expect(throttledWriteDue({ lastWrittenAtMs: null, throttleMs: 1000, now: NOW })).toBe(true);
+    expect(throttledWriteDue({ lastWrittenAtMs: NOW - 1000, throttleMs: 1000, now: NOW })).toBe(true);
+    expect(throttledWriteDue({ lastWrittenAtMs: NOW - 999, throttleMs: 1000, now: NOW })).toBe(false);
+    expect(throttledWriteDue({ lastWrittenAtMs: NOW - 999, throttleMs: 1000, changed: true, now: NOW })).toBe(true);
   });
 
   it('fingerprints an empty beat as liveness-only', () => {

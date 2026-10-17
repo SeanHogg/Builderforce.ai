@@ -39,7 +39,7 @@ vi.mock('./replayTrace', () => ({
 
 import { ReplayIngestService, releaseSource, type ReplayIngestRequest } from './ReplayIngestService';
 import { ReplayRollupBuffer } from './replayRollupBuffer';
-import { gzip } from './replayIngestBody';
+import { gzip } from '../../infrastructure/http/gzipBody';
 
 const NOW = new Date('2026-10-12T10:00:00.000Z');
 const env = {} as never;

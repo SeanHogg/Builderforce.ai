@@ -6,7 +6,7 @@
  * keyboard-first (the view switcher is a real tablist with arrow-key movement).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SurfaceHeader, SurfaceTabs, type SurfaceHeaderHistory } from '@seanhogg/builderforce-brain-ui';
+import { SurfaceHeader, SurfaceTabs, useChatRowActions, type SurfaceHeaderHistory } from '@seanhogg/builderforce-brain-ui';
 import { createPanelServices, type PanelServices } from '../host/panelServices';
 import { t, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
@@ -50,7 +50,7 @@ function Shell() {
   const [view, setView] = useState<View>('chat');
   const [chatId, setChatId] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [chats, reloadChats] = useLoaded<LocalChat[]>(() => services.records.listChats(), [], []);
+  const [chats, reloadChats, chatsLoaded] = useLoaded<LocalChat[]>(() => services.records.listChats(), [], []);
 
   // Open on the most recent chat — once, when the panel first has its list. After that
   // `null` is a deliberate state: the new, not-yet-created chat the header's New chat
@@ -84,6 +84,12 @@ function Shell() {
     setChatId(id);
     setHistoryOpen(false);
   }, []);
+  // THE shared row state, held here: the history list unmounts whenever it closes.
+  const rows = useChatRowActions({
+    onOpen: openChat,
+    // The device record has no delete or summarize, so the rows offer only Rename.
+    rename: (id, title) => services.records.updateChat(id, { title }).then(reloadChats, (e: unknown) => services.reportError(e, 'chat.rename')),
+  });
 
   // History belongs to the Chat view: from another view the lever opens it there.
   const showingHistory = historyOpen && view === 'chat';
@@ -110,7 +116,7 @@ function Shell() {
             ? (
               <>
                 {showingHistory && (
-                  <RovrChatHistory id={HISTORY_ID} chats={chats} chatId={chatId} onOpen={openChat} onChanged={reloadChats} />
+                  <RovrChatHistory id={HISTORY_ID} chats={chats} loading={!chatsLoaded} chatId={chatId} rows={rows} />
                 )}
                 {/* Kept mounted under the history, so the draft and held turns survive a look. */}
                 <div className="rovr-chat-host" hidden={showingHistory}>

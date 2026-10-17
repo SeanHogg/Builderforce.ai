@@ -122,6 +122,25 @@ describe('getRecording', () => {
   });
 });
 
+describe('recordingStatus (live follow)', () => {
+  it('returns only the seqs past the cursor and omits marks the reader already holds', async () => {
+    const { db } = fakeDb([recording(1)]);
+    const status = await service(db).recordingStatus(SCOPE, recording(1).id, { afterSeq: 3, knownMarks: 1 });
+    expect(status.chunkSeqs).toEqual([4]);
+    expect(status.markCount).toBe(1);
+    expect(status.marks).toBeUndefined();
+    expect(status).toMatchObject({ durationMs: 1_000, activeMs: 500, chunkCount: 2, counts: { clicks: 3, rage: 1 }, ended: false });
+  });
+
+  it('sends the whole timeline when the mark count moved, and says when the visit ended', async () => {
+    const { db: endedDb } = fakeDb([{ ...recording(2), endedAt: NOW }]);
+    const status = await service(endedDb).recordingStatus(SCOPE, recording(2).id, { afterSeq: -1, knownMarks: 0 });
+    expect(status.chunkSeqs).toEqual([3, 4]);
+    expect(status.ended).toBe(true);
+    expect(status.marks).toEqual([{ kind: 'page', key: '/', atMs: 0 }]);
+  });
+});
+
 describe('live', () => {
   it('counts visitors seen in the last minute, by route, inside the scope', async () => {
     const seen = new Date(NOW.getTime() - 10_000);

@@ -135,6 +135,12 @@ describe('the autonomous executor\'s candidate window', () => {
     );
   });
 
+  it('reads the block-memo fingerprint inputs in the same statement (no extra round trip)', () => {
+    const sql = candidateSql();
+    expect(sql).toContain('max(lx.id)');
+    expect(sql).toContain('"assigned_agent_ref"');
+  });
+
   it('still bounds the scan and still drains by priority', () => {
     // The fix must not turn the queue back into arrival order — priority-first dispatch
     // is the reason the ordering exists.

@@ -17,6 +17,7 @@ import {
   type ManagedAgentHostRequestStatus,
 } from './managedAgentHostSubscription';
 import type { ManagedAgentHostRuntime } from './managedAgentHostRuntime';
+import { bumpTenantAgentHostCount } from './tenantResourceCounts';
 
 export interface ManagedAgentHostRuntimeDeps {
   runtime: ManagedAgentHostRuntime;
@@ -36,6 +37,8 @@ async function retireManagedAgentHost(
     .where(and(eq(agentHosts.id, agentHostId), eq(agentHosts.tenantId, tenantId)))
     .returning({ apiKeyHash: agentHosts.apiKeyHash });
   if (host && env) await invalidateAgentHostKeyCache(env, host.apiKeyHash);
+  // The plan-limit guard caches the tenant's host count; a removed row must re-count.
+  if (host) await bumpTenantAgentHostCount(env, tenantId);
   await db
     .update(tenants)
     .set({ defaultAgentHostId: null, updatedAt: new Date() })
@@ -75,6 +78,7 @@ export async function provisionManagedAgentHost(
       }),
     })
     .returning({ id: agentHosts.id, tenantId: agentHosts.tenantId });
+  if (host) await bumpTenantAgentHostCount(deps.env, row.tenantId);
 
   if (!host) {
     await provisionManagedAgentHostRequest(db, { requestId: input.requestId, status: 'failed' });

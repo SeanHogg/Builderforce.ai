@@ -23,7 +23,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { SWEPT_TABLES } from './sweptTables';
+import { SWEPT_TABLES, type SweptConnection } from './sweptTables';
+import { runPurgeBatch } from './boundedPurge';
 import { purgeExpiredMemories } from '../memory/memoryService';
 import { EXECUTION_PAYLOAD_RETENTION_DAYS, redactStaleExecutionPayloads } from '../runtime/executionPayloadRetention';
 import { DAY_MS } from '../../domain/shared/time';
@@ -81,6 +82,23 @@ export async function runRetentionPurge(
   const dbFor = (connection: 'primary' | 'transactional'): Db => (connection === 'primary' ? db : transactionalDb);
   const windowFor = (table: { retentionDays: number; pressureFloorDays?: number }) => compressedWindow(table, options.pressure);
 
+  const report = (name: string, err: unknown) =>
+    reportCaughtError(err, { source: "application/maintenance/retentionPurge.ts", operation: "runRetentionPurge", context: { logMessage: `[cron:retention] purge ${name} failed`, details: err } });
+
+  // ONE target per endpoint for the row purges: every bounded DELETE on that endpoint goes
+  // out in a single batched round trip (runPurgeBatch), instead of one trip per relation.
+  // Per-table isolation survives — a failed batch is retried table by table.
+  const purgeBatch = (connection: SweptConnection) => ({
+    name: `purge@${connection}`,
+    run: () => runPurgeBatch(
+      dbFor(connection),
+      SWEPT_TABLES
+        .filter((table) => table.connections.includes(connection))
+        .map((table) => ({ name: `${table.relation}@${connection}`, statement: table.purge(dbFor(connection), cutoff(now, windowFor(table))) })),
+      report,
+    ),
+  });
+
   const targets: Array<{ name: string; run: () => Promise<unknown> }> = [
     // Grain-level retention, FIRST — and the order is load-bearing, not tidiness. A
     // rollup folds a row into a summary and then deletes it; a purge deletes it
@@ -95,12 +113,10 @@ export async function runRetentionPurge(
         run: () => table.rollup!.run(dbFor(connection), cutoff(now, table.rollup!.afterDays)),
       }))
       : [])),
-    // One target per (table, endpoint): a relation that exists on both databases is
-    // purged on both, or the copy on the endpoint that lost its writer is never swept.
-    ...SWEPT_TABLES.flatMap((table) => table.connections.map((connection) => ({
-      name: `${table.relation}@${connection}`,
-      run: () => table.purge(dbFor(connection), cutoff(now, windowFor(table))),
-    }))),
+    // Every (table, endpoint) pair: a relation that exists on both databases is purged
+    // on both, or the copy on the endpoint that lost its writer is never swept.
+    purgeBatch('primary'),
+    purgeBatch('transactional'),
     // Column-level retention, on its own shorter window. Runs AFTER every purge so it
     // never rewrites a row that was about to be deleted anyway.
     ...SWEPT_TABLES.flatMap((table) => (table.redact
@@ -144,7 +160,7 @@ export async function runRetentionPurge(
     try {
       await t.run();
     } catch (err) {
-      reportCaughtError(err, { source: "application/maintenance/retentionPurge.ts", operation: "runRetentionPurge", context: { logMessage: `[cron:retention] purge ${t.name} failed`, details: err } });
+      report(t.name, err);
     }
   }
 }

@@ -27,17 +27,18 @@ import {
 import { checkPreviewCapacity } from '../../application/runtime/previewSessions';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
-import { enqueueExecutionMessage, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
+import { enqueueExecutionMessage, releasePendingSteers } from '../../application/runtime/executionSteering';
 import { markSteerRelayed } from '../../application/runtime/lateSteerStore';
 import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
 import { startFollowUpRun } from '../../application/runtime/followUpRun';
-import { listExecutionLlmTurns } from '../../application/llm/executionTraces';
-import { executionUsageCost, taskUsageCost } from '../../application/llm/usageCostSummary';
+import { readExecutionTrace } from '../../application/runtime/executionTraceRead';
+import { taskUsageCost } from '../../application/llm/usageCostSummary';
 import { auditedModelsByExecution, modelUsageByExecution } from '../../application/llm/executionModelUsage';
 import { invalidateAgentExecutionGate } from '../../application/runtime/agentExecutionGate';
 import { resolveUsageDatabase } from '../../application/llm/usageLedger';
 import { notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
 import { broadcastExecutionEvent, executionRoomName } from '../../infrastructure/relay/broadcastRoom';
+import { readJsonBody } from '../../infrastructure/http/gzipBody';
 import { relayToRoom } from './realtimeRelay';
 import {
   markCloudExecutionRunning, recordCloudToolEvent, recordPrdDirective,
@@ -82,7 +83,7 @@ import { getTicketCoordination } from '../../application/coordination/coordinati
 import { executeGitProxy } from '../../application/repos/gitProxy';
 import { authorizeExecutionPrincipal } from '../../application/agentIdentity/agentRunIdentity';
 import type { ExecutionReadMemo } from '../../application/runtime/executionReadMemo';
-import { limitParam } from './queryParams';
+import { limitParam, positiveIntParam } from './queryParams';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -188,6 +189,9 @@ function parseOptionalNumber(value: string | undefined | null): number | null {
 // ── Request bodies ───────────────────────────────────────────────────────────
 
 /** The container executor's delegated op; `args` is forwarded wholesale to the op handler. */
+/** Ceiling on an inflated container-op body: far above a real transcript, low enough
+ *  that a gzip bomb cannot exhaust the isolate's memory. */
+const CONTAINER_OP_MAX_INFLATED_BYTES = 32 * 1024 * 1024;
 const ContainerOpBody = z.object({
   executionId: zPositiveInt,
   token: zNonEmptyString,
@@ -396,7 +400,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // (HMAC of the execution id). The container delegates each LLM step / commit /
   // finalize here so metering, commit, and PR logic stay server-side (one impl).
   router.post('/internal/container-op', async (c) => {
-    const body = await parseBody(c, ContainerOpBody);
+    // Newer images gzip large bodies (the `llm` op re-posts the whole transcript each
+    // turn); older images post plain JSON. Detected by magic bytes, so both are read.
+    const body = await parseBody({ req: { json: () => readJsonBody(c.req.raw, CONTAINER_OP_MAX_INFLATED_BYTES) } }, ContainerOpBody);
     const ok = await verifyContainerRunToken(c.env.JWT_SECRET, body.executionId, body.token);
     if (!ok) return c.json({ error: 'invalid run token' }, 403);
     const ctx = await loadContainerRunContext(c.env as Env, db, body.executionId);
@@ -837,83 +843,19 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       return c.json({ error: 'Execution not found' }, 404);
     }
 
-    // Self-hosted runs are keyed by (agent_host_id, session_key); cloud runs have
-    // neither, so their telemetry (0092) is keyed by execution_id. Pick the filter
-    // that matches the run shape rather than bailing out for cloud executions.
-    const hostId = plain.agentHostId;
-    const sessionId = plain.sessionId;
-    const isCloudRun = hostId == null || !sessionId;
-    const usageFilter = isCloudRun
-      ? and(eq(usageSnapshots.tenantId, plain.tenantId), eq(usageSnapshots.executionId, id))
-      : and(
-          eq(usageSnapshots.tenantId, plain.tenantId),
-          eq(usageSnapshots.agentHostId, hostId!),
-          eq(usageSnapshots.sessionKey, sessionId!),
-        );
-    const toolFilter = isCloudRun
-      ? and(eq(toolAuditEvents.tenantId, plain.tenantId), eq(toolAuditEvents.executionId, id))
-      : and(
-          eq(toolAuditEvents.tenantId, plain.tenantId),
-          eq(toolAuditEvents.agentHostId, hostId!),
-          eq(toolAuditEvents.sessionKey, sessionId!),
-        );
-
-    const usage = await runTelemetryDatabase(db)
-      .select({
-        id: usageSnapshots.id,
-        ts: usageSnapshots.ts,
-        inputTokens: usageSnapshots.inputTokens,
-        outputTokens: usageSnapshots.outputTokens,
-        contextTokens: usageSnapshots.contextTokens,
-        contextWindowMax: usageSnapshots.contextWindowMax,
-        compactionCount: usageSnapshots.compactionCount,
-      })
-      .from(usageSnapshots)
-      .where(usageFilter)
-      .orderBy(desc(usageSnapshots.ts))
-      .limit(500);
-
-    const toolEvents = await runTelemetryDatabase(db)
-      .select({
-        id: toolAuditEvents.id,
-        ts: toolAuditEvents.ts,
-        toolName: toolAuditEvents.toolName,
-        category: toolAuditEvents.category,
-        durationMs: toolAuditEvents.durationMs,
-        args: toolAuditEvents.args,
-        result: toolAuditEvents.result,
-        runId: toolAuditEvents.runId,
-        toolCallId: toolAuditEvents.toolCallId,
-      })
-      .from(toolAuditEvents)
-      .where(toolFilter)
-      .orderBy(desc(toolAuditEvents.ts))
-      .limit(500);
-
-    // The durable steering/chat thread (0109) — so a steer survives a reload and
-    // the Output tab can render the real conversation, not just optimistic echoes.
-    const messages = await listExecutionMessages(db, plain.tenantId, id);
-
-    // The run's LLM turns as STRUCTURED rows (0949): resolved model, vendor, token
-    // counts, duration, and the trace id each turn can be looked up by. Previously
-    // the only per-turn model evidence was a JSON `args` blob on the tool-audit
-    // event, and the trace id it carried resolved to nothing.
-    const llmTurns = await listExecutionLlmTurns(c.env as Env, plain.tenantId, id);
-    // The run's OWN spend (every usage row stamped with this execution_id) — the
-    // per-run figure beside the per-ticket and per-turn ones the drawer already shows.
-    const cost = await executionUsageCost(c.env as Env, db, plain.tenantId, id);
-
-    return c.json({
-      execution: plain,
-      trace: {
-        source: isCloudRun ? 'cloud-telemetry' : 'runtime-fallback',
-        usageSnapshots: usage,
-        toolEvents,
-        messages,
-        llmTurns,
-        cost,
-      },
+    // `afterEventId` / `afterUsageId`: a live drawer's re-read asks only for the
+    // telemetry written since its last tick instead of the whole trace again.
+    const trace = await readExecutionTrace(c.env as Env, db, {
+      executionId: id,
+      tenantId: plain.tenantId,
+      agentHostId: plain.agentHostId,
+      sessionId: plain.sessionId,
+    }, {
+      afterEventId: positiveIntParam(c.req.query('afterEventId')),
+      afterUsageId: positiveIntParam(c.req.query('afterUsageId')),
     });
+
+    return c.json({ execution: plain, trace });
   });
 
   // GET /api/runtime/cloud-agents

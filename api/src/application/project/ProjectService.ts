@@ -87,11 +87,17 @@ export class ProjectService {
    * `tasks` is optional: it's only needed on the key-change path (re-keying every
    * task to a renamed Project Key). Call sites that never change a project key
    * (MCP project.update, delta ingestion) may omit it.
+   *
+   * `onCountChanged` runs after every insert and delete — the plan-limit guard
+   * caches the tenant's project count under a version token this bumps
+   * (`application/tenant/tenantResourceCounts`). A port, like `purgeStorage`, so
+   * the service keeps depending on nothing but interfaces.
    */
   constructor(
     private readonly projects: IProjectRepository,
     private readonly tasks?: ITaskRepository,
     private readonly purgeStorage?: ProjectStoragePurge | null,
+    private readonly onCountChanged?: ((tenantId: number) => Promise<void>) | null,
   ) {}
 
   async listProjects(tenantId: number): Promise<Project[]> {
@@ -194,7 +200,9 @@ export class ProjectService {
       companyId: dto.companyId ?? null,
     });
 
-    return this.projects.save(project);
+    const saved = await this.projects.save(project);
+    await this.onCountChanged?.(dto.tenantId);
+    return saved;
   }
 
   async updateProject(id: number, dto: UpdateProjectDto, callerTenantId: number): Promise<Project> {
@@ -268,7 +276,7 @@ export class ProjectService {
    * common case and what the reported error lets an operator clean up in the rare one.
    */
   async deleteProject(id: number, callerTenantId: number): Promise<void> {
-    await this.getProject(id, callerTenantId); // throws NotFoundError or ForbiddenError
+    const project = await this.getProject(id, callerTenantId); // throws NotFoundError or ForbiddenError
 
     // Resolved first — the published site's prefix is stored on a row that the
     // delete cascades away, so asking afterwards is asking nothing.
@@ -282,6 +290,7 @@ export class ProjectService {
     }
 
     await this.projects.delete(asProjectId(id));
+    await this.onCountChanged?.(Number(project.tenantId));
 
     if (this.purgeStorage && prefixes.length) {
       try {

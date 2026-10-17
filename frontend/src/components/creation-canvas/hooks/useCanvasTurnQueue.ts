@@ -1,9 +1,9 @@
 /** Starting, queueing and stopping Brain turns. */
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useInsertionEffect, useRef } from 'react';
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useInsertionEffect, useRef } from 'react';
 import type { CanvasExportAction } from '@/lib/canvasExports';
 import { useLatestRef } from './useLatestRef';
 import { useQueuedTurns } from '@seanhogg/builderforce-brain-ui';
-import { stopRun } from '@seanhogg/builderforce-brain-embedded';
+import { clearRunError, stopRun, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
 import { canvasRunKey } from '../brainTurn/canvasRunKey';
 import { creationSessionsApi, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import type { useTranslations } from 'next-intl';
@@ -12,7 +12,8 @@ import type { AssessmentGate } from '@/lib/academic/assessment';
 export interface UseCanvasTurnQueueDeps {
   appendTimeline: (role: 'user' | 'assistant' | 'system', body: string, metadata?: CreationTimelineMessage['metadata'], clientMessageId?: string) => string;
   assistantGate: AssessmentGate;
-  canvasRunRef: RefObject<{ requestMessageId: string; startedAt: number; } | null>;
+  /** This session's run (`useRunSnapshot(canvasRunKey(sessionId))`). */
+  canvasRun: BrainRunSnapshot;
   evaluateCanvas: (promptOverride?: string) => void;
   exportArtifact: (nodeId: string, action: CanvasExportAction) => Promise<string>;
   persistence: 'local' | 'server';
@@ -21,14 +22,12 @@ export interface UseCanvasTurnQueueDeps {
   scopedNodeIds: Set<string>;
   sessionId: string;
   setActiveAgentIds: Dispatch<SetStateAction<Set<string>>>;
-  setBrainRunStartedAt: Dispatch<SetStateAction<number | null>>;
   setNotice: (text: string) => void;
   setPrompt: Dispatch<SetStateAction<string>>;
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
-  thinking: boolean;
 }
 
-export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef, evaluateCanvas, exportArtifact, persistence, prompt, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setBrainRunStartedAt, setNotice, setPrompt, t, thinking }: UseCanvasTurnQueueDeps) {
+export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRun, evaluateCanvas, exportArtifact, persistence, prompt, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setNotice, setPrompt, t }: UseCanvasTurnQueueDeps) {
   /**
    * Export from a card, at the identity React Flow needs.
    *
@@ -55,7 +54,9 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef
    *  callbacks both need the newest closure without re-registering. */
   const startCanvasTurnRef = useRef<(text?: string) => void>(() => {});
   const queuedTurns = useQueuedTurns({
-    running: thinking,
+    // The CELL's running, not the narrated turn: a turn typed while a stopped loop is
+    // still unwinding waits for it rather than being refused by the single-flight claim.
+    running: canvasRun.running,
     // Flushed turns take the same door every other turn takes — see
     // `startCanvasTurn`. Re-queueing is impossible here: the queue only flushes
     // once the run it was held behind has finished.
@@ -71,25 +72,34 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef
    * already in flight can take seconds to settle and a Stop that leaves the board
    * saying "Executing…" is not a stop.
    */
+  const turn = canvasRun.turn;
   const stopCanvasRun = useCallback(() => {
-    const run = canvasRunRef.current;
-    // `thinking` is the authority on whether there is anything to stop: a settled
-    // run can leave its handle behind, and a Stop that narrates an interruption
-    // nobody was waiting on is worse than an inert button.
-    if (!run || !thinking) return;
-    canvasRunRef.current = null;
+    // The narrated turn is the authority on whether there is anything to stop. It lives
+    // on the run cell, so a board remounted mid-turn still stops it, and the store clears
+    // it at the first press — a second press while the loop unwinds is inert.
+    if (!turn) return;
     // The run store aborts the stream, declines a pending approval and settles the cell.
     stopRun(canvasRunKey(sessionId));
     queuedTurns.clear();
     setActiveAgentIds(new Set());
-    setBrainRunStartedAt(null);
     setNotice(t('noticeBrainStopped'));
-    appendTimeline('system', t('noticeBrainStopped'), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, `${run.requestMessageId}:stopped`);
-    if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, {
-      correlationId: run.requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'user',
-      durationMs: performance.now() - run.startedAt, metadata: { stopped: true },
+    appendTimeline('system', t('noticeBrainStopped'), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, turn.id ? `${turn.id}:stopped` : undefined);
+    if (persistence === 'server' && turn.id) void creationSessionsApi.recordOutcome(sessionId, {
+      correlationId: turn.id, action: 'prompt.evaluate', phase: 'failed', actorType: 'user',
+      durationMs: Date.now() - turn.startedAt, metadata: { stopped: true },
     }).catch(() => undefined);
-  }, [appendTimeline, canvasRunRef, persistence, queuedTurns, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setBrainRunStartedAt, setNotice, t, thinking]);
+  }, [appendTimeline, persistence, queuedTurns, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setNotice, t, turn]);
+  /**
+   * The canvas narrates its own turn failures (`settleCanvasTurnFailure`). An error that
+   * escaped the engine body before it could — the run cell's error — is said here once,
+   * so no failure is silent.
+   */
+  const runError = canvasRun.error;
+  useEffect(() => {
+    if (!runError) return;
+    setNotice(runError);
+    clearRunError(canvasRunKey(sessionId));
+  }, [runError, sessionId, setNotice]);
   /**
    * THE ONE DOOR every user-initiated turn goes through — the composer, "Send
    * again" on a transcript message, an object handing Brain a request.

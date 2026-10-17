@@ -68,7 +68,7 @@ import { SUBAGENT_TOOLS, type Capability, type CapabilityProvider } from '@build
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { RuntimeService } from '../RuntimeService';
-import { heartbeatExecution, isExecutionCancelled, type ContainerRunContext } from './runContext';
+import { heartbeatAndCheckCancelled, heartbeatExecution, isExecutionCancelled, type ContainerRunContext } from './runContext';
 import { skillOp } from './skillOp';
 import { cloudStallStep, recordStallStep, type CloudRunModelState } from './cloudRunModelPolicy';
 import { loadContainerRunModelState, saveContainerRunModelState } from './containerRunModelStore';
@@ -155,10 +155,11 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
   // LLM steps so a multi-minute `run_command` (build/test) keeps the run out of the
   // orphan reaper. Returns `cancelled` so the container can abort an in-flight command
   // when the run was cancelled mid-build instead of waiting out the command timeout.
+  // The image beats every 30s whatever its version; the write it causes is throttled
+  // server-side (runContext.HEARTBEAT_MIN_INTERVAL_MS), so old images need no change.
   heartbeat: async (deps) => {
-    const { db, executionId } = deps;
-    await heartbeatExecution(db, executionId);
-    return { status: 200, body: { ok: true, cancelled: await isExecutionCancelled(db, executionId) } };
+    const { db, executionId, tenantId } = deps;
+    return { status: 200, body: { ok: true, cancelled: await heartbeatAndCheckCancelled(db, tenantId, executionId) } };
   },
 
   /**

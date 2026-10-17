@@ -17,11 +17,9 @@
  * nothing here writes to a chat.
  */
 
-import type { BrainMessage } from '../types';
 import type { BrainTraceEvent } from '../brainTriage';
-import type { BrainRunActivity } from '../runActivity';
 import { chatErrorAction } from '../chatError';
-import { emit, emitStreaming, getCell, pushTrace, recordAppended, recordRunFailure, setActivity } from './runCells';
+import { emit, getCell, pushTrace, recordRunFailure } from './runCells';
 import { beginRun } from './beginRun';
 import { requestRunConfirm } from './runControl';
 import type { RunKey } from './runTypes';
@@ -32,14 +30,10 @@ export interface RunEngineControl {
   readonly signal: AbortSignal;
   /** Record a completed step on the live trace. */
   trace(event: BrainTraceEvent): void;
-  /** Replace the text streaming right now ('' clears it). Repaints are coalesced. */
-  stream(text: string): void;
-  /** Publish the in-flight step (null when between steps). */
-  activity(activity: BrainRunActivity | null): void;
   /** Ask the human about one tool call; resolves false on decline or Stop. */
   confirm(req: { name: string; args: unknown }): Promise<boolean>;
-  /** A message the engine persisted, for live splice-in by mounted views. */
-  append(message: BrainMessage): void;
+  /** Name the turn by the id the host records it under (`snapshot.turn.id`). */
+  correlate(id: string): void;
 }
 
 /** A run's body. Resolve when the turn is settled; throw to surface an error. */
@@ -58,15 +52,14 @@ export async function startEngineRun(key: RunKey, engine: BrainRunEngine): Promi
   // session's earlier turns the way a chat cell does for triage.
   c.trace = [];
   beginRun(c);
+  c.turn = { id: null, startedAt: Date.now() };
   emit(c);
   const signal = c.abort!.signal;
   const control: RunEngineControl = {
     signal,
     trace: (event) => pushTrace(c, event),
-    stream: (text) => { c.streamingText = text; emitStreaming(c); },
-    activity: (activity) => setActivity(c, activity),
     confirm: (req) => requestRunConfirm(key, req),
-    append: (message) => { recordAppended(c, message); emit(c); },
+    correlate: (id) => { if (c.turn && !signal.aborted) { c.turn = { ...c.turn, id }; emit(c); } },
   };
   try {
     await engine(control);
@@ -81,6 +74,7 @@ export async function startEngineRun(key: RunKey, engine: BrainRunEngine): Promi
     c.streamingText = '';
     c.abort = null;
     c.activity = null;
+    c.turn = null;
     c.pendingConfirm = null;
     c.confirmResolver = null;
     emit(c);

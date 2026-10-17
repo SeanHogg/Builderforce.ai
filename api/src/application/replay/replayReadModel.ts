@@ -75,6 +75,7 @@ export function toRecordingDto(row: RecordingRow, marks: ReplayMark[], chunkSeqs
     chunkCount: row.chunkCount,
     chunkSeqs,
     marks,
+    ended: row.endedAt != null,
   };
 }
 

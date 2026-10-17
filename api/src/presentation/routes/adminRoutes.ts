@@ -1,6 +1,7 @@
 import { InternalError } from '../../domain/shared/errors';
 import { ROLE_ORDER, isTenantRole } from '../../domain/shared/types';
 import { resolveImpersonationRole } from '../../application/admin/impersonationRole';
+import { invalidateEmulationSession } from '../../application/admin/emulationSessions';
 import { failResponse, statusResponse } from '../middleware/errorResponse';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { parseBody, parseOptionalBody } from './requestBody';
@@ -3138,6 +3139,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .update(adminImpersonationSessions)
       .set({ endedAt: now, endReason: 'MANUAL' })
       .where(eq(adminImpersonationSessions.id, sessionId));
+    // The emulation middleware caches the session verdict; drop it so the token dies now.
+    await invalidateEmulationSession(c.env, sessionId);
 
     // Revoke the token JTI
     if (session.tokenJti) await revokeSessionTokens(db, c.env, { jti: session.tokenJti });
@@ -3186,15 +3189,6 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       toRole: role,
     });
 
-    // Update the session's current role
-    await db
-      .update(adminImpersonationSessions)
-      .set({ roleOverride: role })
-      .where(eq(adminImpersonationSessions.id, sessionId));
-
-    // Invalidate old token JTI if present
-    if (session.tokenJti) await revokeSessionTokens(db, c.env, { jti: session.tokenJti });
-
     // Issue new emulation token with the new role
     const newToken = await signEmulationJwt(
       {
@@ -3206,6 +3200,20 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       },
       c.env.JWT_SECRET,
     );
+
+    // Update the session's current role AND its live JTI — the emulation middleware
+    // rejects any token whose jti differs from the stored one, so without this the
+    // freshly issued token was refused as "superseded" and the old one kept working.
+    const newJti = decodeJwtPayload<{ jti?: string }>(newToken).jti;
+    await db
+      .update(adminImpersonationSessions)
+      .set({ roleOverride: role, ...(newJti ? { tokenJti: newJti } : {}) })
+      .where(eq(adminImpersonationSessions.id, sessionId));
+    // The middleware caches the session's JTI; drop it so the switch bites now.
+    await invalidateEmulationSession(c.env, sessionId);
+
+    // Invalidate old token JTI if present
+    if (session.tokenJti) await revokeSessionTokens(db, c.env, { jti: session.tokenJti });
 
     await writeAudit(db, 'IMPERSONATION_PERSONA_SWITCHED', adminId, {
       targetUserId: session.targetUserId,

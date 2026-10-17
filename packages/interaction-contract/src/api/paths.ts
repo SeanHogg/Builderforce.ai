@@ -13,6 +13,7 @@ export const REPLAY_PATHS = {
   recordings: '/api/replay/recordings',
   recording: '/api/replay/recordings/:recordingId',
   recordingChunk: '/api/replay/recordings/:recordingId/chunks/:seq',
+  recordingStatus: '/api/replay/recordings/:recordingId/status',
   releases: '/api/replay/releases',
   release: '/api/replay/releases/:releaseKey',
   kpis: '/api/replay/kpis',

@@ -23,7 +23,8 @@ const h = vi.hoisted(() => ({
 vi.mock('../database/connection', () => ({
   buildDatabase: () => ({
     select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ status: 'running' }] }) }) }),
-    update: () => ({ set: (v: Record<string, unknown>) => ({ where: () => { h.updateCalls.push(v); return Promise.resolve([]); } }) }),
+    // `returning` for the throttled heartbeat, a bare promise for the pause write.
+    update: () => ({ set: (v: Record<string, unknown>) => ({ where: () => { h.updateCalls.push(v); return Object.assign(Promise.resolve([]), { returning: async () => [] }); } }) }),
   }),
 }));
 vi.mock('../../buildRuntimeService', () => ({

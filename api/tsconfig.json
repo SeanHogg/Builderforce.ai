@@ -34,7 +34,8 @@
       "@builderforce/session-introspection": ["../packages/session-introspection/src/index.ts"],
       "@builderforce/workspace-path": ["../packages/workspace-path/src/index.ts"],
       "@builderforce/hono-wildcard-path": ["../packages/hono-wildcard-path/src/index.ts"],
-      "@builderforce/interaction-contract": ["../packages/interaction-contract/src/index.ts"]
+      "@builderforce/interaction-contract": ["../packages/interaction-contract/src/index.ts"],
+      "@builderforce/write-outbox": ["../packages/write-outbox/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],

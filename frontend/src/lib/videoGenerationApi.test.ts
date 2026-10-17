@@ -53,6 +53,25 @@ describe('waitForVideoJob', () => {
     await expect(waitForVideoJob('j')).rejects.toThrow('Every video model failed');
   });
 
+  it('backs off after a failed read instead of giving up, then carries on', async () => {
+    vi.useFakeTimers();
+    apiRequest
+      .mockRejectedValueOnce(Object.assign(new Error('Bad gateway'), { status: 502 }))
+      .mockResolvedValueOnce({ id: 'j', kind: 'clip', status: 'succeeded', result: RESULT });
+    const done = waitForVideoJob('j');
+    // The doubled wait (10 s), not the base 5 s: nothing is asked at 5 s.
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(apiRequest).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(done).resolves.toMatchObject({ status: 'succeeded' });
+  });
+
+  it('throws a read failure that asking again cannot fix', async () => {
+    apiRequest.mockRejectedValue(Object.assign(new Error('Not found'), { status: 404 }));
+    await expect(waitForVideoJob('j')).rejects.toThrow('Not found');
+    expect(apiRequest).toHaveBeenCalledTimes(1);
+  });
+
   it('stops waiting when aborted', async () => {
     vi.useFakeTimers();
     apiRequest.mockResolvedValue({ id: 'j', kind: 'clip', status: 'running' });

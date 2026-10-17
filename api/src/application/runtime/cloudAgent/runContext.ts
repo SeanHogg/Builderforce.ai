@@ -24,8 +24,10 @@ import { resolveArtifacts } from '../../artifact/resolveArtifacts';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { findCanonicalBoard } from '../../swimlane/canonicalBoard';
 import { parseCloudAgentRef, parseModel, parseOriginatingChatId } from '../cloudDispatch';
-import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, getCacheVersion, getOrSetCached, peekCached, setCached } from '../../../infrastructure/cache/readThroughCache';
 import { executions, tasks } from '../../../infrastructure/database/schema';
+import { scopedToTenant } from '../../../infrastructure/database/tenantScope';
+import { throttledWriteDue } from '../../agentHost/heartbeatThrottle';
 import { loadAgentPsychometric, resolveCloudAgent } from './agent';
 import { resolveCloudRouting } from './routing';
 import type { EffectivePlan } from '../../llm/LlmProxyService';
@@ -176,13 +178,26 @@ export async function isExecutionCancelled(db: Db, executionId: number): Promise
   }
 }
 
+/** The container image's beat cadence (`HEARTBEAT_MS` in api/container/server.mjs).
+ *  The beat doubles as its cancel poll, so the image keeps it short; only the WRITE
+ *  it causes is throttled. */
+export const CONTAINER_HEARTBEAT_CADENCE_MS = 30_000;
+
 /**
- * Minimum spacing between liveness writes. A third of the reaper's shortest silence
- * deadline (`CLOUD_RUNNING_DEADLINE_MS`, 90s in `staleExecutionReaper.ts`), so two
- * beats can be lost before a live run looks dead. Not imported from there: the reaper's
- * import graph reaches the runtime modules this one serves.
+ * Minimum spacing between liveness writes, bound to the reaper's REAL ceiling for the
+ * executors that beat here: `orphanReasons.CLOUD_LONG_LIVED_SILENCE_MS` (5 min, durable +
+ * container; `staleExecutionReaper`'s 90s `CLOUD_RUNNING_DEADLINE_MS` is only its
+ * candidate prefilter). Worst-case `updated_at` age for a live run is this plus one
+ * caller cadence: container 30s (+30s for one dropped beat) = 3 min; durable DO one
+ * alarm tick ≈ one LLM step (slowest observed 93s, execution #136) ≈ 3.5 min. Both
+ * stay inside the ceiling — pinned in runContext.heartbeat.test.ts. Was 30s, which made
+ * every live run an UPDATE every 30s and kept Neon from ever suspending.
  */
-export const HEARTBEAT_MIN_INTERVAL_MS = 30_000;
+export const HEARTBEAT_MIN_INTERVAL_MS = 2 * 60_000;
+
+/** In-isolate memory of this isolate's last successful beat (L1 only — a KV write per
+ *  beat would cost more than the round trip it saves). */
+const beatCacheKey = (executionId: number): string => `exec:beat:${executionId}`;
 
 /**
  * Bump `executions.updated_at` — the cloud-run liveness heartbeat the orphan reaper
@@ -195,12 +210,50 @@ export const HEARTBEAT_MIN_INTERVAL_MS = 30_000;
  * Throttled to one write per {@link HEARTBEAT_MIN_INTERVAL_MS}: callers beat on every
  * LLM step and container op (the Durable Object alarm re-arms immediately), which was
  * a write per few seconds per run — and each one used to fire the lifecycle trigger.
+ * Two layers: an in-isolate gate skips the round trip entirely while this isolate's
+ * own last write is fresh (the DO alarm is one isolate, so most ticks cost nothing),
+ * and the conditional WHERE keeps writes throttled across isolates.
  */
 export async function heartbeatExecution(db: Db, executionId: number): Promise<void> {
-  await db.update(executions).set({ updatedAt: new Date() })
-    .where(and(
-      eq(executions.id, executionId),
-      or(isNull(executions.updatedAt), lt(executions.updatedAt, new Date(Date.now() - HEARTBEAT_MIN_INTERVAL_MS))),
-    ))
-    .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgent/runContext.ts", operation: "heartbeatExecution", context: { logMessage: '[cloud-container] execution heartbeat failed', details: { executionId, error } } }));
+  const lastBeat = await peekCached<number>(undefined, beatCacheKey(executionId));
+  if (!throttledWriteDue({ lastWrittenAtMs: lastBeat, throttleMs: HEARTBEAT_MIN_INTERVAL_MS })) return;
+  const now = Date.now();
+  try {
+    const written = await db.update(executions).set({ updatedAt: new Date(now) })
+      .where(and(
+        eq(executions.id, executionId),
+        or(isNull(executions.updatedAt), lt(executions.updatedAt, new Date(now - HEARTBEAT_MIN_INTERVAL_MS))),
+      ))
+      .returning({ id: executions.id });
+    // Gate only on a write THIS call made: a no-match means another isolate wrote at an
+    // unknown point inside the window, and gating on "now" could age the row past the
+    // throttle before anyone wrote again.
+    if (written.length > 0) {
+      await setCached(undefined, beatCacheKey(executionId), now, { l1TtlMs: HEARTBEAT_MIN_INTERVAL_MS });
+    }
+  } catch (error) {
+    reportCaughtError(error, { source: "application/runtime/cloudAgent/runContext.ts", operation: "heartbeatExecution", context: { logMessage: '[cloud-container] execution heartbeat failed', details: { executionId, error } } });
+  }
+}
+
+/**
+ * The container's timer beat: ONE read answers both questions it asks — was the run
+ * cancelled, and is a liveness write due — so the 30s cadence costs one round trip,
+ * plus the write only every {@link HEARTBEAT_MIN_INTERVAL_MS}. Fails open (not
+ * cancelled) like {@link isExecutionCancelled}.
+ */
+export async function heartbeatAndCheckCancelled(db: Db, tenantId: number, executionId: number): Promise<boolean> {
+  try {
+    const [row] = await db.select({ status: executions.status, updatedAt: executions.updatedAt })
+      .from(executions)
+      .where(scopedToTenant(executions, tenantId, eq(executions.id, executionId)))
+      .limit(1);
+    if (row && throttledWriteDue({ lastWrittenAtMs: row.updatedAt ? row.updatedAt.getTime() : null, throttleMs: HEARTBEAT_MIN_INTERVAL_MS })) {
+      await heartbeatExecution(db, executionId);
+    }
+    return row?.status === 'cancelled';
+  } catch (error) {
+    reportCaughtError(error, { source: "application/runtime/cloudAgent/runContext.ts", operation: "heartbeatAndCheckCancelled", context: { logMessage: '[cloud-container] heartbeat status check failed', details: { executionId, error } } });
+    return false;
+  }
 }

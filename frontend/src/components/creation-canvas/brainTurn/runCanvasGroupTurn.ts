@@ -66,7 +66,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
       const groupTurn = await runCanonicalCanvasGroupTurn({
         chatId: existingChatId ? Number(existingChatId) : null,
         title, projectId,
-        sessionId, prompt: request, agents: canonicalAgents,
+        sessionId, prompt: request, agents: canonicalAgents, signal: run.signal,
       });
       throwIfStopped();
       setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, resourceId: `chat:${groupTurn.chatId}`, status: 'Canonical group chat' } } : node));
@@ -85,8 +85,9 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
         });
       }
     } catch (error) {
-      // A stopped run is the user's decision, not a group-turn failure.
-      if (isCanvasRunAborted(error)) throw error;
+      // A stopped run is the user's decision, not a group-turn failure. The signal is the
+      // authority: an aborted fetch surfaces as a transport error, not an AbortError.
+      if (isCanvasRunAborted(error) || run.signal.aborted) throw error;
       const detail = describeTurnError(error, 'noticeAgentGroupFailed');
       appendTimeline('system', t('noticeAgentGroupTurnFailed', { reason: detail }), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:agent-group-error`);
     }

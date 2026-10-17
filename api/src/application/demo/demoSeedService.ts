@@ -53,6 +53,7 @@ import {
   type DemoPersonaKey,
 } from './demoPersonas';
 import { DAY_MS } from '../../domain/shared/time';
+import { bumpTenantProjectCount } from '../tenant/tenantResourceCounts';
 
 /** Daily token allowance for a demo tenant — enough to try the Brain, never enough to hurt. */
 const DEMO_TOKEN_DAILY_LIMIT = 200_000;
@@ -293,6 +294,9 @@ async function seedPersona(env: Env, db: Db, bp: DemoBlueprint): Promise<DemoPer
       projectIds.set(p.key, row!.id);
     }
   }
+  // The wipe dropped visitor projects and the loop may have inserted blueprint ones;
+  // the plan-limit guard caches the tenant's project count, so re-count either way.
+  await bumpTenantProjectCount(env, tenantId);
 
   // Tasks — blueprint order guarantees parents (epics) precede children.
   const taskIds = new Map<string, number>();

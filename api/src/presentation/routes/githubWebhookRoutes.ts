@@ -126,6 +126,26 @@ export function mergedPullRequestRef(p: Record<string, unknown>): MergedPullRequ
   };
 }
 
+/**
+ * `pull_request` actions that create work a frequent sweep must act on SOON, and so may
+ * open the cron work-gate (which wakes every frequent sweep and the Neon compute).
+ *
+ * The consumer that cares is `pr-merge`: a PR entering the queue (opened / reopened /
+ * ready_for_review) and a PR leaving it (closed, merged or not — the next PR becomes
+ * the head, and a merge moves the base it must be updated from). The other PR readers
+ * gain nothing from a signal: `pr-ticket-reconciler` and `repo-delivery` run per repo on
+ * their own interval and skip a repo that is not due, and `gh-actions-reconcile` follows
+ * dispatched workflow runs, not PRs. Everything else — synchronize, edited, labeled,
+ * assigned, review_requested, converted_to_draft — either creates no sweep work or is
+ * followed by the CI event that does (a push's checks report through CI_EVENTS).
+ */
+const SWEEP_SIGNAL_PR_ACTIONS = new Set(['opened', 'reopened', 'ready_for_review', 'closed']);
+
+export function pullRequestActionSignalsSweep(p: Record<string, unknown>): boolean {
+  const action = gs(p, 'action');
+  return action != null && SWEEP_SIGNAL_PR_ACTIONS.has(action);
+}
+
 /** pull_request → pr_opened / pr_merged / pr_closed (with merge cycle time). */
 export function pullRequestEvents(p: Record<string, unknown>): IngestEvent[] {
   const action = gs(p, 'action');
@@ -365,9 +385,11 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
         }
       }
 
-      // A PR lifecycle change is work for the frequent reconciler. Signal the
-      // shared cron gate so a newly opened PR cannot wait for the 30-minute floor.
-      if (event === 'pull_request') c.executionCtx.waitUntil(signalPendingWork(c.env as Env));
+      // A PR entering or leaving the merge queue is work for `pr-merge`: signal the
+      // shared cron gate so it cannot wait for the 30-minute floor. Only those actions —
+      // labels, edits and pushes would otherwise wake every frequent sweep for nothing
+      // (see pullRequestActionSignalsSweep).
+      if (event === 'pull_request' && pullRequestActionSignalsSweep(p)) c.executionCtx.waitUntil(signalPendingWork(c.env as Env));
       // A MERGE is also the moment a delta ticket's change actually shipped. The run
       // that recorded the delta left the change on a branch and never saw this merge,
       // so without it the ticket stays in review forever — the second half of

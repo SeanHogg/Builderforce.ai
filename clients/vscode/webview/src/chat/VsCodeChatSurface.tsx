@@ -69,6 +69,7 @@ import { useHostIntents } from './useHostIntents';
 import { useRunShaping } from './useRunShaping';
 import { useChatVisibility, useSessionActions } from './useSessionActions';
 import { useTicketRail } from './useTicketRail';
+import { useChatHistoryView } from './useChatHistoryView';
 import { useVsCodeChats } from './useVsCodeChats';
 import { VsCodeChatHeader } from './VsCodeChatHeader';
 import { VsCodeChatHistory } from './VsCodeChatHistory';
@@ -78,16 +79,16 @@ import { VsCodeComposer } from './VsCodeComposer';
 const HISTORY_ID = 'bf-chat-history';
 
 export function VsCodeChatSurface({ init }: { init: InitData }) {
-  const t = makeT(init.labels);
+  const t = useMemo(() => makeT(init.labels), [init.labels]);
   const { persistence } = useBrainConfig();
   // The conversation list — the shared `useBrainChats` plus the editor's own bindings.
+  const vsChats = useVsCodeChats(init, t('app.newChat', 'New chat'));
   const {
     chatId, setChatId, chats, chatOptions, activeChat, reloadChats, autoTitleChat, ensureChatId,
-    runStatus, titleOf, chatMode, selectMode, setMemoryEnabled: persistMemory, armMemory, rename, summarize, remove,
-  } = useVsCodeChats(init, t('app.newChat', 'New chat'));
+    runStatus, titleOf, chatMode, selectMode, setMemoryEnabled: persistMemory, armMemory,
+  } = vsChats;
   // The header's History lever swaps the body to the chat list; opening a chat closes it.
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const openChat = useCallback((id: number | null) => { setChatId(id); setHistoryOpen(false); }, [setChatId]);
+  const { historyOpen, toggleHistory, openChat, rows } = useChatHistoryView(vsChats);
 
   // Auto-approve skips the per-action confirm prompt. The gate is the SHARED hook (the
   // flag is read through a REF, because a run's tool loop captures `needsConfirm` at run
@@ -174,7 +175,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
 
   const rail = useTicketRail({ init, apiReq, chatId, chats, reloadChats, reloadMessages: conv.reloadMessages });
   const { ticketAdapter, ticketRefresh, linkOpenedTicket } = rail;
-  useHostIntents({ persistence, projectId: init.project?.id ?? null, setChatId, setInput, reloadChats, linkOpenedTicket, t });
+  // A host intent switches chat the way a row does: History closes onto it.
+  useHostIntents({ persistence, projectId: init.project?.id ?? null, setChatId: openChat, setInput, reloadChats, linkOpenedTicket, t });
 
   // Multi-party chat: who a message goes to (the BRAIN executes; an invited agent/human is
   // talked to), and the live sub-agents a message can steer.
@@ -224,13 +226,14 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   return (
     <AiSurface
       className="bf-app"
+      label={t('app.conversation', 'Conversation')}
       header={(
         <VsCodeChatHeader
           projectName={associatedProject?.name ?? null}
           chatTitle={activeChat ? titleOf(activeChat) : t('app.newChat', 'New chat')}
           running={conv.sending}
           copy={{ state: copyState, enabled: canCopy, onCopy: () => void copyTranscript() }}
-          history={{ open: historyOpen, onToggle: () => setHistoryOpen((o) => !o), controls: HISTORY_ID }}
+          history={{ open: historyOpen, onToggle: toggleHistory, controls: HISTORY_ID }}
           onNewChat={() => openChat(null)}
           t={t}
         />
@@ -260,13 +263,11 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
         <VsCodeChatHistory
           id={HISTORY_ID}
           chats={chatOptions}
+          loading={vsChats.loading}
           activeId={chatId}
           titleOf={titleOf}
           runStatus={runStatus}
-          onOpen={openChat}
-          rename={rename}
-          summarize={summarize}
-          remove={remove}
+          rows={rows}
           t={t}
         />
       ) : chatId == null ? <EditorEmptyState t={t} onPick={pickStarter} /> : undefined}
@@ -287,7 +288,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           ratings={conv.ratings}
         />
       )}
-      notices={<VsCodeChatNotices conv={conv} t={t} />}
+      notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} t={t} />}
       footer={(
         <SurfaceFooter
           // The chat's live sub-agents: who works for whom, and the owner's levers.

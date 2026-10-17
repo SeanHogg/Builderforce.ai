@@ -26,6 +26,7 @@ import {
   type ReplayLiveDto,
   type ReplayPage,
   type ReplayRecordingDto,
+  type ReplayRecordingStatusDto,
   type ReplayRecordingSummaryDto,
   type ReplayReleaseDto,
   type ReplayRouteStatDto,
@@ -130,6 +131,14 @@ export const replayApi = {
   getRecording(siteId: string, recordingId: string): Promise<ReplayRecordingDto> {
     const url = withQuery(fill(REPLAY_PATHS.recording, { recordingId }), siteId);
     return shared(url, () => apiRequest<ReplayRecordingDto>(url));
+  },
+
+  /**
+   * The live-follow read: what a recording gained past the seqs and mark count the
+   * player holds — a few hundred bytes, and no view trace, instead of the whole row.
+   */
+  getRecordingStatus(siteId: string, recordingId: string, cursor: { afterSeq: number; marks: number }): Promise<ReplayRecordingStatusDto> {
+    return apiRequest<ReplayRecordingStatusDto>(withQuery(fill(REPLAY_PATHS.recordingStatus, { recordingId }), siteId, cursor));
   },
 
   /** One chunk's rrweb events, in order. */

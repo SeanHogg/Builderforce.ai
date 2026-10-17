@@ -1,23 +1,16 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { useTranslations } from 'next-intl';
+import { useChatRowActions, type ChatRowRef } from '@seanhogg/builderforce-brain-ui';
 import { useConfirm } from '@/components/ConfirmProvider';
 import type { useBrainChats } from '@/lib/brain';
-import type { BrainChat } from '@/lib/builderforceApi';
-
-/** What a row action needs of a chat — the shared history row hands back this much. */
-type ChatRef = Pick<BrainChat, 'id' | 'title'>;
 
 /**
- * The chat-history row state and its per-row actions (open, reveal actions,
- * rename, summarize, delete, assign to a project).
+ * The web Brain panel's binding of THE shared chat-history row state
+ * (`useChatRowActions`): the panel's chat hook as the actions, the web's confirm
+ * dialog worded through next-intl, and the open behaviour of each layout.
  *
  * Held at panel level rather than inside the list: docked, the list is a tab that
- * unmounts while the conversation is shown, and a row's open actions / in-flight
- * rename must still be there when the user comes back.
- *
- * Every handler depends on the chat hook's individual (stable) methods rather than
- * on its per-render result object, so the handlers handed to the shared
- * `ChatHistoryRow`s keep their identity across renders.
+ * unmounts while the conversation is shown.
  */
 export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
   chats: ReturnType<typeof useBrainChats>;
@@ -27,81 +20,30 @@ export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
 }) {
   const tBrain = useTranslations('brain');
   const confirm = useConfirm();
-  /** Which chat row has its rename/summarize/delete/assign actions revealed. */
-  const [actionsChatId, setActionsChatId] = useState<number | null>(null);
-  const [renamingId, setRenamingId] = useState<number | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  const [summarizingId, setSummarizingId] = useState<number | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [busyId, setBusyId] = useState<number | null>(null);
-
   const { select, rename, summarize, remove, assignToProject } = chats;
 
   /**
-   * Open an existing chat from the history list. Docked, history is a tab beside
-   * the conversation, so opening a chat has to switch back to it; the page keeps
-   * the list permanently beside the thread and instead reveals that row's
-   * actions (its long-standing behaviour).
+   * Docked, history is a tab beside the conversation, so opening a chat switches back
+   * to it; the page keeps the list permanently beside the thread and instead reveals
+   * that row's actions (`revealActionsOnOpen`).
    */
-  const openChat = useCallback((id: number) => {
+  const onOpen = useCallback((id: number) => {
     void select(id);
-    if (isPage) setActionsChatId(id);
-    else showChatTab();
+    if (!isPage) showChatTab();
   }, [select, isPage, showChatTab]);
 
-  const toggleActions = useCallback((id: number) => {
-    setActionsChatId((cur) => (cur === id ? null : id));
-  }, []);
+  const confirmDelete = useCallback(
+    (chat: ChatRowRef) => confirm(tBrain('deleteChatConfirm', { title: chat.title?.trim() || tBrain('thisChat') })),
+    [confirm, tBrain],
+  );
 
-  const startRename = useCallback((chat: ChatRef) => {
-    setRenamingId(chat.id);
-    setRenameValue(chat.title);
-  }, []);
-
-  const cancelRename = useCallback(() => {
-    setRenamingId(null);
-    setRenameValue('');
-  }, []);
-
-  /** The row submits its own id and draft — the row being renamed IS `renamingId`. */
-  const submitRename = useCallback(async (id: number, value: string) => {
-    if (value.trim()) await rename(id, value);
-    setRenamingId(null);
-    setRenameValue('');
-  }, [rename]);
-
-  const onSummarize = useCallback(async (id: number) => {
-    setSummarizingId(id);
-    try { await summarize(id); } finally { setSummarizingId(null); }
-  }, [summarize]);
-
-  const onDelete = useCallback(async (chat: ChatRef) => {
-    const title = chat.title?.trim() || tBrain('thisChat');
-    if (!(await confirm(tBrain('deleteChatConfirm', { title })))) return;
-    setDeletingId(chat.id);
-    try { await remove(chat.id); } finally { setDeletingId(null); }
-  }, [remove, confirm, tBrain]);
-
-  const onAssign = useCallback(async (chatId: number, projectId: number | null) => {
-    setBusyId(chatId);
-    try { await assignToProject(chatId, projectId); } finally { setBusyId(null); }
-  }, [assignToProject]);
-
-  return {
-    actionsChatId,
-    renamingId,
-    renameValue,
-    setRenameValue,
-    summarizingId,
-    deletingId,
-    busyId,
-    openChat,
-    toggleActions,
-    startRename,
-    cancelRename,
-    submitRename,
-    onSummarize,
-    onDelete,
-    onAssign,
-  };
+  return useChatRowActions({
+    onOpen,
+    revealActionsOnOpen: isPage,
+    rename,
+    summarize,
+    remove: (chat) => remove(chat.id),
+    confirmDelete,
+    assign: assignToProject,
+  });
 }

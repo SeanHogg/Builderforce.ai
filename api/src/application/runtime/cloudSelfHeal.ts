@@ -42,6 +42,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import { markReaperRequeued, wasReaperRequeued, parseCloudAgentRef } from './cloudDispatch';
 import { recordCloudToolEvent } from './cloudToolEvents';
+import { cloudRunnerStub } from './cloudRunnerStub';
 import { notifyExecutionSubscribers } from './executionEvents';
 
 /** Live (non-terminal) statuses an orphaned/crashed run can be recovered from. */
@@ -104,7 +105,7 @@ export async function dispatchDurableStart(env: Env, executionId: number, body: 
   const cloudRunner = env.CLOUD_RUNNER;
   if (!cloudRunner) return false;
   try {
-    const stub = cloudRunner.get(cloudRunner.idFromName(`exec:${executionId}`));
+    const stub = cloudRunnerStub(cloudRunner, executionId);
     const res = await stub.fetch('https://cloud-runner/start', { method: 'POST', body: JSON.stringify(body) });
     return res.ok;
   } catch {

@@ -30,6 +30,7 @@ import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { BrainService } from '../brain/BrainService';
 import { enqueueExecutionMessage, hasPendingPersonSteer } from './executionSteering';
 import { composeDispatcherLabel } from './dispatcherLabel';
+import { cloudRunnerStub } from './cloudRunnerStub';
 import { parseOriginatingChatId } from './cloudDispatch';
 import { resolveDelegatePersona, type PersonaBriefPort } from './cloudSubagent';
 import {
@@ -98,7 +99,7 @@ export function buildLiveOrchestration(deps: LiveOrchestrationDeps): Orchestrati
   const startOnRunner = async (executionId: number, payload: string): Promise<string | null> => {
     const runner = deps.env.CLOUD_RUNNER;
     if (!runner) return 'the CLOUD_RUNNER binding is not configured';
-    const res = await runner.get(runner.idFromName(`exec:${executionId}`)).fetch('https://cloud-runner/start', {
+    const res = await cloudRunnerStub(runner, executionId).fetch('https://cloud-runner/start', {
       method: 'POST',
       body: JSON.stringify({
         executionId, tenantId: parent.tenantId, projectId: parent.projectId,

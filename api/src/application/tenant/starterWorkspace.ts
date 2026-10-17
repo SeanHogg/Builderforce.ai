@@ -1,5 +1,6 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { ProjectService } from '../project/ProjectService';
+import { bumpTenantProjectCount } from './tenantResourceCounts';
 import { afterBrainProjectCreate } from '../project/ensureProjectCodingTarget';
 import { TenantService } from './TenantService';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
@@ -143,7 +144,8 @@ async function provisionOwnedWorkspace(
     let projectCreated = false;
     if (opts.seedProject) {
       try {
-        const projectService = new ProjectService(new ProjectRepository(db));
+        const projectService = new ProjectService(new ProjectRepository(db), undefined, null,
+          (tid) => bumpTenantProjectCount(env, tid));
         const project = await projectService.createProjectWithGeneratedKey({
           tenantId,
           name: STARTER_PROJECT_NAME,

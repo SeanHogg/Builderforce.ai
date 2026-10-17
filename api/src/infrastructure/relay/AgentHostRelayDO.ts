@@ -32,13 +32,9 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
 
 import { buildExecutionMessageFrame, buildExecutionCancelFrame } from './executionMessage';
 import { PeerRelay } from './peerRelay';
+import { createHostPersistQueue, type HostPersistQueue, type PersistedChatMessage } from './hostPersistQueue';
 
-interface BufferedMessage {
-  role: string;
-  content: string;
-  metadata?: string;
-  seq: number;
-}
+type BufferedMessage = PersistedChatMessage;
 
 interface BufferedLog {
   ts: string;
@@ -104,9 +100,15 @@ export class AgentHostRelayDO implements DurableObject {
 
   /** Bound once here so no call site can forget the runtime override. */
   private readonly reportError: DurableErrorReporter;
+  /** Frames bound for Postgres, batched per kind (see hostPersistQueue.ts). */
+  private readonly persistQueue: HostPersistQueue;
 
   constructor(private state: DurableObjectState, private env: unknown) {
     this.reportError = createDurableErrorReporter('infrastructure/relay/AgentHostRelayDO.ts', env, state);
+    this.persistQueue = createHostPersistQueue({
+      post: (suffix, body) => this.callApi(suffix, body, 'persistBatch'),
+      onError: (error) => this.reportError(error, { operation: 'persistBatch' }),
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -243,6 +245,9 @@ export class AgentHostRelayDO implements DurableObject {
         // Nothing will ever answer these now — release them instead of making every
         // caller wait out the full egress ceiling.
         this.failPendingEgress();
+        // The host is gone, so nothing more joins the pending batches: send them now
+        // rather than on their wait timers.
+        void this.persistQueue.flush();
         // Notify all clients that the agentHost went offline
         this.clients.broadcast(JSON.stringify({ type: "agent_host_offline" }));
       }
@@ -403,28 +408,15 @@ export class AgentHostRelayDO implements DurableObject {
 
       // --- P2-2: usage.snapshot — persist token telemetry ---
       if (msg.type === "usage.snapshot") {
-        void this.persistUsageSnapshot(msg as {
-          sessionKey?: string;
-          inputTokens?: number;
-          outputTokens?: number;
-          contextTokens?: number;
-          contextWindowMax?: number;
-          compactionCount?: number;
-          ts?: string;
-        });
+        this.persistQueue.event("/usage-snapshot", msg);
         return;
       }
 
       // --- file.change — persist per-agent file-change traceability ---
       if (msg.type === "file.change") {
-        void this.persistFileChange(msg as {
-          taskId?: number;
-          executionId?: number;
-          path?: string;
-          change?: string;
-          agent?: string;
-          ts?: string;
-        });
+        const change = msg as unknown as { taskId?: unknown; path?: unknown };
+        // A frame naming no task or path can address no row; don't queue it.
+        if (change.taskId != null && change.path) this.persistQueue.event("/file-change", msg);
         return;
       }
 
@@ -441,17 +433,7 @@ export class AgentHostRelayDO implements DurableObject {
 
       // --- P2-4: tool.audit — persist tool call record ---
       if (msg.type === "tool.audit") {
-        void this.persistToolAuditEvent(msg as {
-          runId?: string;
-          sessionKey?: string;
-          toolCallId?: string;
-          toolName?: string;
-          category?: string;
-          args?: unknown;
-          result?: string;
-          durationMs?: number;
-          ts?: string;
-        });
+        this.persistQueue.event("/tool-audit", msg);
         return;
       }
 
@@ -492,7 +474,7 @@ export class AgentHostRelayDO implements DurableObject {
       this.msgBuffer.shift();
     }
 
-    void this.persistMessage(buffered);
+    this.persistQueue.message(this.currentSessionKey, buffered);
   }
 
   private emitLog(level: string, message: string, executionId?: number) {
@@ -537,15 +519,6 @@ export class AgentHostRelayDO implements DurableObject {
     }
   }
 
-  /** POST a single message to the main API for Postgres persistence. */
-  private async persistMessage(msg: BufferedMessage) {
-    await this.callApi(
-      "/messages",
-      { sessionKey: this.currentSessionKey, messages: [msg] },
-      "persistMessage",
-    );
-  }
-
   // ---------------------------------------------------------------------------
   // P0-1: remote.result persistence — forward result back to source agentHost relay
   // ---------------------------------------------------------------------------
@@ -588,55 +561,8 @@ export class AgentHostRelayDO implements DurableObject {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // P2-2: usage.snapshot persistence
-  // ---------------------------------------------------------------------------
-
-  private async persistUsageSnapshot(msg: {
-    sessionKey?: string;
-    inputTokens?: number;
-    outputTokens?: number;
-    contextTokens?: number;
-    contextWindowMax?: number;
-    compactionCount?: number;
-    ts?: string;
-  }) {
-    await this.callApi("/usage-snapshot", msg, "persistUsageSnapshot");
-  }
-
-  // ---------------------------------------------------------------------------
-  // P2-4: tool.audit event persistence
-  // ---------------------------------------------------------------------------
-
-  private async persistToolAuditEvent(msg: {
-    runId?: string;
-    sessionKey?: string;
-    toolCallId?: string;
-    toolName?: string;
-    category?: string;
-    args?: unknown;
-    result?: string;
-    durationMs?: number;
-    ts?: string;
-  }) {
-    await this.callApi("/tool-audit", msg, "persistToolAuditEvent");
-  }
-
-  // ---------------------------------------------------------------------------
-  // file.change persistence — per-agent traceability for the ticket workspace
-  // ---------------------------------------------------------------------------
-
-  private async persistFileChange(msg: {
-    taskId?: number;
-    executionId?: number;
-    path?: string;
-    change?: string;
-    agent?: string;
-    ts?: string;
-  }) {
-    if (msg.taskId == null || !msg.path) return;
-    await this.callApi("/file-change", msg, "persistFileChange");
-  }
+  // usage.snapshot (P2-2), tool.audit (P2-4) and file.change frames are persisted
+  // through `persistQueue`, batched per kind — see handleUpstreamMessage.
 
   /**
    * The host says a channel connected, failed to authenticate, or dropped.

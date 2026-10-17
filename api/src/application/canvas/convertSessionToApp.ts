@@ -60,6 +60,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { buildProjectKey } from '../project/projectKey';
 import { placeCanvasObject } from './placeCanvasObject';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { bumpTenantProjectCount } from '../tenant/tenantResourceCounts';
 import {
   HOSTING_APEX,
   SITES_PREFIX,
@@ -432,6 +433,8 @@ export async function convertSessionToApp(
     })
     .returning({ id: projects.id, key: projects.key, name: projects.name });
   if (!project) return { ok: false, status: 400, error: 'Could not create the project.' };
+  // The plan-limit guard caches the tenant's project count; a new row must re-count.
+  await bumpTenantProjectCount(env, input.tenantId);
 
   // THE JOIN. `onConflictDoUpdate` on the composite key so a board that already
   // REFERENCED this project is promoted to owning it rather than failing on the

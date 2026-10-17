@@ -105,6 +105,7 @@ export function emit(c: RunCell): void {
     activity: c.activity,
     byoUnresolved: c.byoUnresolved,
     providerCap: c.providerCap,
+    turn: c.turn,
   };
   for (const l of c.listeners) l();
   // Cross-chat subscribers (the dropdown / session-list indicators) see every
@@ -125,14 +126,13 @@ export function setActivity(c: RunCell, activity: BrainRunActivity | null): void
 }
 
 export function pushTrace(c: RunCell, ev: BrainTraceEvent): void {
-  c.trace.push(ev);
-  c.persistStep?.(ev);
+  // Copy-on-write: each step publishes a NEW array, so a consumer that memoizes on
+  // `snapshot.trace` (the canvas surfaces, the Brain Object mirror) sees the change.
   // Bound a single run's trace so a long tool-chain can't grow without limit.
-  if (c.trace.length > MAX_TRACE_EVENTS) {
-    const dropped = c.trace.length - MAX_TRACE_EVENTS;
-    c.trace.splice(0, dropped);
-    c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
-  }
+  const dropped = Math.max(0, c.trace.length + 1 - MAX_TRACE_EVENTS);
+  c.trace = [...(dropped ? c.trace.slice(dropped) : c.trace), ev];
+  if (dropped) c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
+  c.persistStep?.(ev);
   emit(c);
 }
 

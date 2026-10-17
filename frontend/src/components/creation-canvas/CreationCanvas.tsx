@@ -179,6 +179,7 @@ import { CanvasOutcomeMetricsPanel } from './stage/CanvasOutcomeMetricsPanel';
 import { CanvasConversationPanel, CanvasDiagnosticsPanel } from './stage/CanvasSessionPanels';
 import { CanvasChangeSetPanel, CanvasMergePanel } from './stage/CanvasReviewPanels';
 import { CanvasBrainDockHost } from './stage/CanvasBrainDockHost';
+import { useSessionBoardState, useSessionBoardWriter } from './sessionBoardWriters';
 import { CanvasBrainLauncher } from './stage/CanvasBrainLauncher';
 import { useCanvasSessionApp, useOpenCanvasApp } from './hooks/useCanvasSessionApp';
 import { sessionHasApp } from '@/lib/canvasSessionApp';
@@ -254,9 +255,12 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const confirm = useConfirm();
   const toast = useToast();
   const storageKey = creationStorageKey(sessionId);
-  const [nodes, setNodes, onNodesChange] = useNodesState<CreationFlowNode>(persistence === 'local' ? initialNodes(canvasText) : []);
+  // Board setters route to the board ON SCREEN once this instance is gone (`sessionBoardWriters`); loaders keep `…OnScreen`.
+  const [nodes, setNodesOnScreen, onNodesChange] = useNodesState<CreationFlowNode>(persistence === 'local' ? initialNodes(canvasText) : []);
+  const setNodes = useSessionBoardWriter(sessionId, persistence, 'nodes', setNodesOnScreen);
   const [evermindLiveByNodeId, setEvermindLiveByNodeId] = useState<Record<string, Partial<CreationNodeData>>>({});
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(persistence === 'local' ? initialEdges(canvasText) : []);
+  const [edges, setEdgesOnScreen, onEdgesChange] = useEdgesState<Edge>(persistence === 'local' ? initialEdges(canvasText) : []);
+  const setEdges = useSessionBoardWriter(sessionId, persistence, 'edges', setEdgesOnScreen);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   /**
@@ -393,17 +397,12 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
    * whether a turn is in flight and its live trace are READ from it, never mirrored here.
    */
   const canvasRun = useRunSnapshot(canvasRunKey(sessionId));
-  const thinking = canvasRun.running;
+  // The turn being narrated lives on the run cell (correlation id + start), so a remounted
+  // board keeps its clock and its Stop. It clears the instant Stop is pressed, while the
+  // cell's `running` holds queued turns until the aborted loop has unwound.
+  const thinking = canvasRun.turn != null;
+  const brainRunStartedAt = canvasRun.turn?.startedAt ?? null;
   const brainTrace = canvasRun.trace;
-  /**
-   * The in-flight turn's correlation id — what Stop records against, so the transcript
-   * says the user ended it. Held in a ref because Stop must reach the CURRENT run from a
-   * callback the composer holds for the whole session.
-   */
-  const canvasRunRef = useRef<{ requestMessageId: string; startedAt: number } | null>(null);
-  // When the in-flight turn began. Shared with every Brain surface (dock strip,
-  // transcript, board anchor) so they narrate the same phase at the same instant.
-  const [brainRunStartedAt, setBrainRunStartedAt] = useState<number | null>(null);
   const [activeAgentIds, setActiveAgentIds] = useState<Set<string>>(() => new Set());
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
   const { options: canvasModelOptions, identity: modelIdentity } = useChatModelOptions();
@@ -510,7 +509,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const [localCheckpoints, setLocalCheckpoints] = useState<LocalCheckpointSummary[]>([]);
   /** The checkpoint name being typed, inline. See `createCheckpoint` for why it is not a prompt. */
   const [checkpointName, setCheckpointName] = useState('');
-  const [timeline, setTimeline] = useState<CanvasTimelineMessage[]>([]);
+  const [timeline, setTimeline, setTimelineOnScreen] = useSessionBoardState<CanvasTimelineMessage[]>(sessionId, persistence, 'timeline', []);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   /** The left dock holds ONE panel at a time. Six booleans used to stack panels invisibly at
@@ -536,10 +535,10 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const [outcomeMetrics, setOutcomeMetrics] = useState<CreationOutcomeMetrics | null>(null);
   const [outcomeMetricsLoading, setOutcomeMetricsLoading] = useState(false);
   const [outcomeMetricsError, setOutcomeMetricsError] = useState<string | null>(null);
-  const [proposedChanges, setProposedChanges] = useState<ProposedCanvasChange[]>([]);
-  const [acceptedProposalIds, setAcceptedProposalIds] = useState<Set<string>>(new Set());
+  const [proposedChanges, setProposedChanges] = useSessionBoardState<ProposedCanvasChange[]>(sessionId, persistence, 'proposedChanges', []);
+  const [acceptedProposalIds, setAcceptedProposalIds] = useSessionBoardState<Set<string>>(sessionId, persistence, 'acceptedProposalIds', () => new Set());
   const [autoApply, setAutoApply] = useState(true);
-  const [autoApplyPending, setAutoApplyPending] = useState(false);
+  const [autoApplyPending, setAutoApplyPending] = useSessionBoardState(sessionId, persistence, 'autoApplyPending', false);
   /** Conversation vs execution for this session (0409). Hydrated from the loaded
    *  session below; `setSessionMode` is the writer that also persists it. */
   const [sessionMode, setSessionMode_] = useState<ChatMode>(NEW_CHAT_MODE);
@@ -693,12 +692,12 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const { setAutoApplyMode, setSessionMode } = useCanvasSessionModes({ autoApplyRef, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen });
   const { memoryEnabled, setMemoryMode } = useCanvasMemorySwitch({ nodes, sessionId, persistence });
   const runShapingControls = useCanvasRunShaping();
-  const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard, boardLoaded } = useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded: settleLoadedPhase, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline, setTitle, t, timeline, title, viewportRef });
+  const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard, boardLoaded } = useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded: settleLoadedPhase, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges: setEdgesOnScreen, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes: setNodesOnScreen, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline: setTimelineOnScreen, setTitle, t, timeline, title, viewportRef });
   // HOW THIS BOARD IS PRESENTED (`lib/canvasLens.ts`) — every lens decision reads this def, never the id.
   const lensState = useCanvasLens({ lens, sessionId, surface, showSurface: setSurfaceState, chooseSurface: setSurface, phase, setPhase, boardLoaded, updateBrainDock, phoneViewport }), lensDef = lensState.def;
   const showApp = useCallback(() => setSurface('app'), [setSurface]);
   const openApp = useOpenCanvasApp({ setNodes, showApp });
-  useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef });
+  useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges: setEdgesOnScreen, setJoinedCollaborator, setMembers, setNodes: setNodesOnScreen, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline: setTimelineOnScreen, storageKey, t, thinking, timeline, title, viewportRef });
   const { liveMembers, presenceSelfId } = useCanvasPresence({ currentUserId, flowRef, followingUserId, inRoom, livePresence, members, sharedRoom });
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
@@ -818,7 +817,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
 
   const { canvasActions } = useCanvasBrainVocabulary({ buildsRef: sessionApp.buildsRef, createApp: sessionApp.createApp, appWritten: sessionApp.appWritten, buildSocialFeedNode, canEdit, canvasText, convertObjectToDiagram, effectiveSelectedIds, fmt, inFlightUseCaseIdRef, layoutViewportRef, localizedTourDefaults, nodes, nodesRef, openAccountGate, persistence, promptRef, recentJournalEvidence, requireAccount, resolvedScopeMode, scopedNodeIds, sessionId, setDockPanel, socialAccountGate, stage, t, tSocial, turnToolCallsRef });
   const { addAgentKnowledge, runAgentTest } = useCanvasAgentTesting({ brainRuntimeRef, canEdit, canvasNotices, describeTurnError, disableBrainModel, edges, modelSelection, nodes, persistence, placeAppendedRef, recordBrainCompletion, setEdges, setNodes, setNotice, t });
-  const { evaluateCanvas } = useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, canvasRunRef, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, runShaping: runShapingControls.runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setBrainRunStartedAt, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, stage, t, timeline, title, turnToolCallsRef, turnUnansweredRef });
+  const { evaluateCanvas } = useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, runShaping: runShapingControls.runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, stage, t, timeline, title, turnToolCallsRef, turnUnansweredRef });
   const { rejectProposedChanges, applyAndEnableAutoApply, applyProposedChanges } = useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, entryAppPending: entryApp.pending, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline });
   const { resolveWorkflowNode, buildFlowFromFrame, buildFlow, openEvermindBuild, loadEvermindTemplate, evermindBuild, setEvermindBuild } = useCanvasFlowBuild({ connectionKind, edgesRef, errorText, framedBoardRef, nodes, nodesRef, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes, setNotice, t, updateNodeData });
   const { compileWorkflow, runWorkflow, unpackWorkflow, saveAgent } = useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKind, errorText, framedBoardRef, persistence, requireAccount, resolveWorkflowNode, selectedNode, sessionId, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t });
@@ -899,7 +898,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
 
   const cleanLayout = useCanvasCleanLayout({ boardRef: flowWrapRef, instanceRef: flowRef, setNodes, edges, padding: .16, maxZoom: .9 });
   const { zoomInAction, zoomOutAction, fitViewAction, framedBoard, roomSceneInput, threeDNodes, describeThreeD, selectThreeDObject, moveThreeDObjects, roomCreations, openRoomCreation } = useCanvasRenderedBoard({ activeAgentIds, canEdit, comparisonModelIds, dockPanel, edges, evermindLiveByNodeId, flowRef, frameFocus, framedBoardRef, minimapColor: canvasMinimapColor, nodes, outlineHighlightIds, setInspectorFocus, setNodes, setSelectedId, setSelectedIds, setSurface, showHidden, t, threeDControls, timeline });
-  const { startCanvasTurnRef, exportFromNode, startCanvasTurn, stopCanvasRun, queuedTurns } = useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRunRef, evaluateCanvas, exportArtifact, persistence, prompt, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setBrainRunStartedAt, setNotice, setPrompt, t, thinking });
+  const { startCanvasTurnRef, exportFromNode, startCanvasTurn, stopCanvasRun, queuedTurns } = useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRun, evaluateCanvas, exportArtifact, persistence, prompt, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setNotice, setPrompt, t });
   const { tailorResumeFromNode, detachResumeFromNode, createResumeShare, listResumeShares, revokeResumeShare } = useCanvasResumeShares({ persistence, sessionId, setNodes, setNotice, setScopeMode, setSelectedId, setSelectedIds, startCanvasTurnRef, t });
   /**
    * The same treatment for `runWorkflow`, which needed it just as badly and was

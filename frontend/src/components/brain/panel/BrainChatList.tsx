@@ -39,26 +39,13 @@ export function BrainChatList() {
     <ChatHistoryList loading={chats.loading} total={chats.chats.length} labels={labels}>
       {filteredChats.map((chat) => {
         const active = chats.activeChatId === chat.id;
-        const renaming = rows.renamingId === chat.id;
         return (
           <ChatHistoryRow
             key={chat.id}
             chat={chat}
             active={active}
             labels={labels}
-            onOpen={rows.openChat}
-            actionsOpen={rows.actionsChatId === chat.id}
-            onToggleActions={rows.toggleActions}
-            renaming={renaming}
-            renameValue={renaming ? rows.renameValue : ''}
-            onStartRename={rows.startRename}
-            onRenameChange={rows.setRenameValue}
-            onSubmitRename={rows.submitRename}
-            onCancelRename={rows.cancelRename}
-            onSummarize={rows.onSummarize}
-            summarizing={rows.summarizingId === chat.id}
-            onDelete={rows.onDelete}
-            deleting={rows.deletingId === chat.id}
+            {...rows.rowProps(chat.id)}
             meta={(
               <>
                 {chat.projectId != null && pinnedProjectId == null && (

@@ -20,6 +20,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { readWorkforceMetricsVersion } from './workforceMetrics';
+import { claimDailyMemberSnapshot, memberSnapshotPeriod } from './memberMetricsSnapshot';
 import {
   activityEvents,
   activityLog,
@@ -177,13 +178,16 @@ export async function getTenantEngagement(env: Env, db: Db, tenantId: number, da
  * snapshot). Keyed per (member, period) like the scorecard; we write ONLY
  * engagement_score (+ name/computed_at) via upsert so a co-windowed board
  * snapshot's other columns aren't clobbered. memberRef = the user id.
+ *
+ * At most once per tenant, window and UTC day ({@link claimDailyMemberSnapshot}):
+ * this runs from a read path, which must not write on every view.
  */
 export async function persistTenantEngagement(
-  db: Db, tenantId: number, days: number, members: MemberEngagement[],
+  db: Db, env: Env, tenantId: number, days: number, members: MemberEngagement[],
 ): Promise<void> {
   if (members.length === 0) return;
-  const periodEnd = new Date();
-  const periodStart = new Date(periodEnd.getTime() - days * 24 * HOUR_MS);
+  if (!(await claimDailyMemberSnapshot(env, 'engagement', tenantId, days))) return;
+  const { periodStart, periodEnd } = memberSnapshotPeriod(days);
   const computedAt = new Date();
   // ONE multi-row upsert per chunk instead of one statement per member — this runs
   // on the member-page request path (waitUntil), so it must not scale with roster

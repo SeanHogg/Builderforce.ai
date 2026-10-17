@@ -42,6 +42,7 @@ import type { ChallengePlan } from './planChallenge';
 import type { ChallengeSpec } from './parseBrief';
 import type { SetupStep } from '../backend/hostingStrategy';
 import { loadProjectInTenant } from '../project/projectOwnership';
+import { bumpTenantProjectCount } from '../tenant/tenantResourceCounts';
 
 export interface MaterializeChallengeResult {
   projectId: number;
@@ -70,6 +71,7 @@ function projectNameFor(spec: ChallengeSpec): string {
  */
 async function resolveProject(
   db: Db,
+  env: Env,
   tenantId: number,
   spec: ChallengeSpec,
   existingProjectId: number | null,
@@ -103,7 +105,11 @@ async function resolveProject(
           origin: 'ide',
         })
         .returning({ id: projects.id, key: projects.key, name: projects.name });
-      if (row) return row;
+      if (row) {
+        // The plan-limit guard caches the tenant's project count; a new row must re-count.
+        await bumpTenantProjectCount(env, tenantId);
+        return row;
+      }
     } catch (error) {
       reportCaughtError(error, {
         source: 'application/challenge/materializeChallenge.ts',
@@ -271,7 +277,7 @@ export async function materializeChallenge(args: {
   const { db, env, bucket, tenantId, spec, plan } = args;
   const warnings: string[] = [...plan.handlerWarnings];
 
-  const project = await resolveProject(db, tenantId, spec, args.projectId ?? null);
+  const project = await resolveProject(db, env, tenantId, spec, args.projectId ?? null);
   const backend = await ensureProjectBackend(env, db, tenantId, project.id, plan.strategy);
   const ingressUrl = ingressUrlFor(env, backend.ingressToken);
 

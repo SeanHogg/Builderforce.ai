@@ -4,23 +4,24 @@
  * only mark a live run or a waiting question with emoji (a native option holds no
  * icon); a row carries a labelled inline-SVG marker instead, and Rename lives on the
  * row (inline — VS Code webviews block `window.prompt`) through the shared `rename`.
+ *
+ * The row state (`rows`, THE shared `useChatRowActions`) is held by the surface, not
+ * here: this list unmounts whenever History closes.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import type { BrainChat } from '@seanhogg/builderforce-brain-embedded';
-import { ChatHistoryList, ChatHistoryRow, type ChatHistoryChat, type ChatHistoryLabels } from '@seanhogg/builderforce-brain-ui';
+import { ChatHistoryList, ChatHistoryRow, type ChatHistoryLabels, type ChatRowActions } from '@seanhogg/builderforce-brain-ui';
 import type { ChatRunStatus } from './useVsCodeChats';
 
 export interface VsCodeChatHistoryProps {
   id: string;
   chats: BrainChat[];
+  loading: boolean;
   activeId: number | null;
   titleOf: (chat: BrainChat) => string;
   runStatus: (id: number) => ChatRunStatus;
-  onOpen: (id: number) => void;
-  rename: (id: number, title: string) => Promise<void>;
-  summarize: (id: number) => Promise<void>;
-  remove: (chat: { id: number; title: string }) => void;
+  rows: ChatRowActions;
   t: (key: string, fallback: string) => string;
 }
 
@@ -41,14 +42,7 @@ function RunMarker({ status, label }: { status: Exclude<ChatRunStatus, null>; la
   );
 }
 
-export function VsCodeChatHistory({ id, chats, activeId, titleOf, runStatus, onOpen, rename, summarize, remove, t }: VsCodeChatHistoryProps) {
-  const [summarizingId, setSummarizingId] = useState<number | null>(null);
-  const [actionsFor, setActionsFor] = useState<number | null>(null);
-  const [renamingId, setRenamingId] = useState<number | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  // Enter commits and unmounts the input, whose blur may then commit again — one write.
-  const committing = useRef<number | null>(null);
-
+export function VsCodeChatHistory({ id, chats, loading, activeId, titleOf, runStatus, rows, t }: VsCodeChatHistoryProps) {
   const labels = useMemo<Partial<ChatHistoryLabels>>(() => ({
     loading: t('app.historyLoading', 'Loading…'),
     empty: t('app.historyEmpty', 'No chats yet'),
@@ -61,34 +55,8 @@ export function VsCodeChatHistory({ id, chats, activeId, titleOf, runStatus, onO
   const runningLabel = t('app.chatRunning', 'Running');
   const awaitingLabel = t('app.chatAwaiting', 'Needs an answer');
 
-  const startRename = useCallback((chat: ChatHistoryChat) => {
-    committing.current = null;
-    setRenameValue(chat.title);
-    setRenamingId(chat.id);
-    setActionsFor(null);
-  }, []);
-  // A blank/unchanged title just cancels (no needless write).
-  const submitRename = useCallback((chatId: number, value: string) => {
-    if (committing.current === chatId) return;
-    committing.current = chatId;
-    setRenamingId(null);
-    const title = value.trim();
-    const current = chats.find((c) => c.id === chatId)?.title;
-    if (!title || title === current) return;
-    void rename(chatId, title);
-  }, [chats, rename]);
-  const onSummarize = useCallback((chatId: number) => {
-    setSummarizingId(chatId);
-    void summarize(chatId).finally(() => setSummarizingId((cur) => (cur === chatId ? null : cur)));
-  }, [summarize]);
-  const onDelete = useCallback((chat: ChatHistoryChat) => {
-    setActionsFor(null);
-    remove({ id: chat.id, title: chat.title });
-  }, [remove]);
-  const toggleActions = useCallback((chatId: number) => setActionsFor((cur) => (cur === chatId ? null : chatId)), []);
-
   return (
-    <ChatHistoryList id={id} total={chats.length} labels={labels}>
+    <ChatHistoryList id={id} loading={loading} total={chats.length} labels={labels}>
       {chats.map((chat) => {
         const status = runStatus(chat.id);
         return (
@@ -96,19 +64,8 @@ export function VsCodeChatHistory({ id, chats, activeId, titleOf, runStatus, onO
             key={chat.id}
             chat={{ id: chat.id, title: titleOf(chat), ticketCount: chat.ticketCount, ticketProgressPct: chat.ticketProgressPct }}
             active={chat.id === activeId}
-            onOpen={onOpen}
             marker={status ? <RunMarker status={status} label={status === 'running' ? runningLabel : awaitingLabel} /> : undefined}
-            actionsOpen={actionsFor === chat.id}
-            onToggleActions={toggleActions}
-            renaming={renamingId === chat.id}
-            renameValue={renameValue}
-            onStartRename={startRename}
-            onRenameChange={setRenameValue}
-            onSubmitRename={submitRename}
-            onCancelRename={() => { committing.current = chat.id; setRenamingId(null); }}
-            onSummarize={onSummarize}
-            summarizing={summarizingId === chat.id}
-            onDelete={onDelete}
+            {...rows.rowProps(chat.id)}
             labels={labels}
           />
         );

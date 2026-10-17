@@ -57,8 +57,9 @@ export const BRAIN_HOST_MESSAGES = [
   'copy',
   'diagnose',
   'chats.changed',
-  /** Delete a chat from the history list — confirmed by the host's modal (`builderforce.deleteSession`). */
-  'chat.delete',
+  /** Ask the host's modal to confirm deleting a chat from the history list (request → boolean;
+   *  refused while its run is live). The webview then deletes through its own store. */
+  'chat.confirmDelete',
   'open.web',
   'open.artifact',
   'changes.open',

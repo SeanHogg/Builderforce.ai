@@ -3,12 +3,13 @@
  * (`chunkSeqs`, ascending) in order through `replayApi`, hand the events to rrweb's `Replayer` (loaded on
  * demand), and expose play / pause / seek / speed / skip-inactivity.
  *
- * Follow mode (live, PRD 33 S5) re-reads the recording every 5 s while the tab
- * is visible and appends any new chunks to the running replayer.
+ * Follow mode (live, PRD 33 S5) asks the recording's light status read every 5 s
+ * while the tab is visible, appends any new chunks to the running replayer, and
+ * stops once the visit has ended.
  */
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import type { ReplayRecordingDto } from '@builderforce/interaction-contract';
+import type { ReplayRecordingDto, ReplayRecordingStatusDto } from '@builderforce/interaction-contract';
 import { replayApi } from '@/lib/replayApi';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import { createReplayer, type ReplayerLike } from './rrwebLoader';
@@ -27,6 +28,25 @@ const FOLLOW_POLL_MS = 5_000;
 export function recordingSeqs(row: Pick<ReplayRecordingDto, 'chunkCount'> & { chunkSeqs?: number[] }): number[] {
   if (Array.isArray(row.chunkSeqs)) return row.chunkSeqs;
   return Array.from({ length: Math.max(0, row.chunkCount) }, (_, index) => index);
+}
+
+/** Fold a live-follow status read into the held row: new seqs appended, growing facts replaced, marks when sent. */
+export function applyRecordingStatus(row: ReplayRecordingDto, update: ReplayRecordingStatusDto): ReplayRecordingDto {
+  const held = recordingSeqs(row);
+  const last = held.at(-1) ?? -1;
+  const added = update.chunkSeqs.filter((seq) => seq > last);
+  return {
+    ...row,
+    durationMs: update.durationMs,
+    activeMs: update.activeMs,
+    pageCount: update.pageCount,
+    exitPath: update.exitPath,
+    counts: update.counts,
+    chunkCount: update.chunkCount,
+    chunkSeqs: added.length ? [...held, ...added] : held,
+    marks: update.marks ?? row.marks,
+    ended: update.ended,
+  };
 }
 
 export interface ReplayPlaybackOptions {
@@ -65,6 +85,9 @@ export function useReplayPlayback({ siteId, recordingId, follow = false, startAt
   const busyRef = useRef(false);
   const settingsRef = useRef({ speed: 1, skipInactive: true, startAtMs });
   const [recording, setRecording] = useState<ReplayRecordingDto | null>(null);
+  // The follow poll reads the held row for its cursor without re-creating itself per tick.
+  const recordingRef = useRef<ReplayRecordingDto | null>(null);
+  const commitRecording = useCallback((next: ReplayRecordingDto) => { recordingRef.current = next; setRecording(next); }, []);
   const [status, setStatus] = useState<PlaybackStatus>('loading');
   const [error, setError] = useState<unknown>(null);
   const [playing, setPlaying] = useState(false);
@@ -116,7 +139,7 @@ export function useReplayPlayback({ siteId, recordingId, follow = false, startAt
     replayApi.getRecording(siteId, recordingId)
       .then(async (row) => {
         if (cancelled) return;
-        setRecording(row);
+        commitRecording(row);
         await loadChunks(recordingSeqs(row), isCancelled);
         if (!cancelled && !replayerRef.current) setStatus('empty');
       })
@@ -130,7 +153,7 @@ export function useReplayPlayback({ siteId, recordingId, follow = false, startAt
       replayerRef.current?.destroy();
       replayerRef.current = null;
     };
-  }, [siteId, recordingId, loadChunks]);
+  }, [siteId, recordingId, loadChunks, commitRecording]);
 
   // The position readout follows the replayer while it plays.
   useEffect(() => {
@@ -142,13 +165,20 @@ export function useReplayPlayback({ siteId, recordingId, follow = false, startAt
     return () => clearInterval(timer);
   }, [playing]);
 
+  // Live follow asks the light status read (seqs past the newest held, the facts
+  // that grow, marks only when their count moved) — never the whole row — and stops
+  // once the recorder has sent the visit's final chunk.
   usePolledResource(async (signal) => {
-    const row = await replayApi.getRecording(siteId, recordingId);
+    const held = recordingRef.current;
+    if (!held) return;
+    const seqs = recordingSeqs(held);
+    const update = await replayApi.getRecordingStatus(siteId, recordingId, { afterSeq: seqs.at(-1) ?? -1, marks: held.marks.length });
     if (signal.aborted) return;
-    setRecording(row);
-    const seqs = recordingSeqs(row);
-    if (seqs.length > loadedRef.current) await loadChunks(seqs, () => signal.aborted);
-  }, { intervalMs: FOLLOW_POLL_MS, enabled: follow && status === 'ready', immediate: false });
+    const next = applyRecordingStatus(held, update);
+    commitRecording(next);
+    const nextSeqs = recordingSeqs(next);
+    if (nextSeqs.length > loadedRef.current) await loadChunks(nextSeqs, () => signal.aborted);
+  }, { intervalMs: FOLLOW_POLL_MS, enabled: follow && status === 'ready' && !recording?.ended, immediate: false });
 
   const play = useCallback(() => {
     const replayer = replayerRef.current;

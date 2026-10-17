@@ -15,11 +15,13 @@ const SITE_BASE = './';
 
 /** `npm run build`, in the browser: a deployable static site (`index.html`, hashed `assets/`, `public/`). */
 export async function buildSite(files: FlatFiles): Promise<BuiltFile[]> {
-  const { buildProject, createEsbuildWasmBundler, createCdnComponentCompilers } = await import('@seanhogg/builderforce-webcontainers');
+  const { buildProject, createEsbuildWasmBundler, createCdnComponentCompilers, createCdnStyleCompilers } = await import('@seanhogg/builderforce-webcontainers');
   const result = await buildProject({
     files,
     bundler: await createEsbuildWasmBundler(),
     components: createCdnComponentCompilers(),
+    // Sass/SCSS/Less compile for the published site exactly as they do in the preview.
+    styles: createCdnStyleCompilers(),
     base: SITE_BASE,
   });
   return result.files;

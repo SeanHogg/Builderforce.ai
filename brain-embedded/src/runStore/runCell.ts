@@ -64,6 +64,8 @@ export interface RunCell {
   byoUnresolved: string[];
   /** BYO providers that hit a capacity/usage cap accumulated across this run's turns. */
   providerCap: string[];
+  /** The engine turn being narrated (see BrainRunSnapshot.turn). */
+  turn: RunTurn | null;
   /**
    * Backstop bookkeeping for the current run (reset each {@link startRun}): whether a
    * workspace code-change tool succeeded, whether the model itself recorded a ticket
@@ -158,6 +160,7 @@ export const EMPTY_SNAPSHOT: BrainRunSnapshot = {
   activity: null,
   byoUnresolved: [],
   providerCap: [],
+  turn: null,
 };
 
 export function makeCell(): RunCell {
@@ -179,6 +182,7 @@ export function makeCell(): RunCell {
     activity: null,
     byoUnresolved: [],
     providerCap: [],
+    turn: null,
     codeChanged: false,
     codeModel: null,
     codePhaseReached: false,

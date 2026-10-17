@@ -41,6 +41,7 @@ import {
 } from '../../application/metrics/workforceMetrics';
 import { recommendAssignee } from '../../application/metrics/assigneeRecommender';
 import { getTenantEngagement, persistTenantEngagement } from '../../application/metrics/engagement';
+import { claimDailyMemberSnapshot, memberSnapshotPeriod } from '../../application/metrics/memberMetricsSnapshot';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -261,7 +262,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     // of that table (retros, SPACE efficiency, the engagement proxy) would then be
     // reading whichever project happened to be selected last.
     if (projectId == null) {
-      c.executionCtx.waitUntil(snapshotMetrics(db, tenantId, days, scorecards).catch((error) => {
+      c.executionCtx.waitUntil(snapshotMetrics(db, env, tenantId, days, scorecards).catch((error) => {
         reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
       }));
     }
@@ -309,7 +310,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     const members = await getTenantEngagement(c.env as Env, db, tenantId, days);
     // Snapshot into member_metrics_period (best-effort) so the composite score has
     // trend history, mirroring the scorecard snapshot on the members read.
-    c.executionCtx.waitUntil(persistTenantEngagement(db, tenantId, days, members).catch((error) => {
+    c.executionCtx.waitUntil(persistTenantEngagement(db, c.env as Env, tenantId, days, members).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
     }));
     return c.json({ windowDays: days, members });
@@ -382,12 +383,13 @@ async function resolveGoogleCalendarCredential(env: Env, db: Db, tenantId: numbe
   return { accessToken: creds.accessToken as string | undefined, refreshToken: creds.refreshToken as string | undefined };
 }
 
-/** Upsert one period snapshot per member into member_metrics_period. The period
- *  is [now − days, now]; re-running the same window overwrites its row. */
-async function snapshotMetrics(db: Db, tenantId: number, days: number, cards: MemberScorecard[]): Promise<void> {
+/** Upsert one period snapshot per member into member_metrics_period, filed under
+ *  the `days` window ending at the current UTC day. At most once per tenant, window
+ *  and day: this runs from GET /metrics, which must not write on every view. */
+async function snapshotMetrics(db: Db, env: Env, tenantId: number, days: number, cards: MemberScorecard[]): Promise<void> {
   if (!cards.length) return;
-  const periodEnd = new Date();
-  const periodStart = new Date(periodEnd.getTime() - days * 24 * 3_600_000);
+  if (!(await claimDailyMemberSnapshot(env, 'scorecard', tenantId, days))) return;
+  const { periodStart, periodEnd } = memberSnapshotPeriod(days);
   const computedAt = new Date();
   const metricColumns = [
     'memberName', 'assignedCount', 'completedCount', 'redoCount', 'reopenCount', 'avgCycleTimeHours',

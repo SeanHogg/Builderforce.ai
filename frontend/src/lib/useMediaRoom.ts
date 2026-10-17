@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getStoredTenantToken } from './auth';
 import { apiSocketUrl } from './apiSocket';
+import { createReconnector, openSocket, type Reconnector } from './polling/reconnectPolicy';
 import { meetingsApi } from './builderforceApi';
 import { acquireUserMedia, stopStream } from './mediaCapture';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
@@ -367,7 +368,7 @@ export function useMediaRoom(
     setConnection('connecting');
     let cancelled = false;
     let ws: WebSocket | null = null;
-    let retry: ReturnType<typeof setTimeout> | null = null;
+    let reconnector: Reconnector | null = null;
 
     const start = async () => {
       // 1) Local media — acquisition + error classification belong to
@@ -395,45 +396,55 @@ export function useMediaRoom(
       // once meant a room opened a beat before its token existed — a guest room being
       // minted, a session being refreshed — could never connect at all: the effect
       // returned, nothing in its dependency list ever changed again, and the surface sat
-      // on "Connecting…" until the page was reloaded. Now the same 2s loop that survives
-      // a dropped socket also survives a late token, and says which of the two it is
-      // waiting on.
-      const connect = () => {
-        if (cancelled) return;
-        const token = transport.getToken();
-        if (!token) {
-          setConnection('unauthenticated');
-          retry = setTimeout(connect, 2000);
-          return;
-        }
-        try { ws = new WebSocket(transport.signalingUrl(roomKey, token)); } catch {
-          setConnection('retrying');
-          retry = setTimeout(connect, 2000);
-          return;
-        }
-        wsRef.current = ws;
-        ws.onopen = () => {
-          setConnection('connected');
-          send({ type: 'join', name: meRef.current.name, kind: 'human', ref: meRef.current.ref });
-        };
-        ws.onmessage = (ev) => {
-          let msg: Record<string, unknown>;
-          try { msg = JSON.parse(typeof ev.data === 'string' ? ev.data : ''); } catch { return; }
-          if (msg && typeof msg.type === 'string') handleFrame(msg);
-        };
-        // A refused upgrade and a dropped call both land here — the relay closes the
-        // socket either way — so both are `retrying`, which is the honest word for what
-        // the loop below is about to do.
-        ws.onclose = () => { if (!cancelled) { setConnection('retrying'); retry = setTimeout(connect, 2000); } };
-        ws.onerror = () => { try { ws?.close(); } catch { /* ignore */ } };
-      };
-      connect();
+      // on "Connecting…" until the page was reloaded. Now the same retry loop that
+      // survives a dropped socket also survives a late token, and says which of the two
+      // it is waiting on. WHEN to retry is the shared reconnect policy (backoff, a cap on
+      // attempts that never open, no retry while the tab is hidden), not a fixed 2 s loop.
+      if (cancelled) return;
+      reconnector = createReconnector({
+        connect: () => {
+          const token = transport.getToken();
+          if (!token) {
+            setConnection('unauthenticated');
+            reconnector?.closed();
+            return;
+          }
+          const socket = openSocket(transport.signalingUrl(roomKey, token));
+          if (!socket) {
+            setConnection('retrying');
+            reconnector?.closed();
+            return;
+          }
+          ws = socket;
+          wsRef.current = socket;
+          socket.onopen = () => {
+            reconnector?.opened();
+            setConnection('connected');
+            send({ type: 'join', name: meRef.current.name, kind: 'human', ref: meRef.current.ref });
+          };
+          socket.onmessage = (ev) => {
+            let msg: Record<string, unknown>;
+            try { msg = JSON.parse(typeof ev.data === 'string' ? ev.data : ''); } catch { return; }
+            if (msg && typeof msg.type === 'string') handleFrame(msg);
+          };
+          // A refused upgrade and a dropped call both land here — the relay closes the
+          // socket either way — so both are `retrying`, which is the honest word for what
+          // the reconnector is about to do.
+          socket.onclose = (ev) => {
+            if (cancelled) return;
+            setConnection('retrying');
+            reconnector?.closed(ev?.code);
+          };
+          socket.onerror = () => { try { socket.close(); } catch { /* ignore */ } };
+        },
+      });
+      reconnector.start();
     };
     start();
 
     return () => {
       cancelled = true;
-      if (retry) clearTimeout(retry);
+      reconnector?.stop();
       try { ws?.close(); } catch { /* ignore */ }
       wsRef.current = null;
       for (const [id] of peersRef.current) { try { peersRef.current.get(id)?.pc.close(); } catch { /* ignore */ } }

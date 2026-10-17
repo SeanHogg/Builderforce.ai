@@ -509,8 +509,8 @@ export const brain = {
    * Wired into BrainPersistenceAdapter so `useBrainConversation` calls it after a
    * user directs a message to an @agent.
    */
-  requestAgentReply: (chatId: number, input: { agentRef: string; agentName?: string }) =>
-    request<{ message: BrainMessage }>(`/api/brain/chats/${chatId}/agent-reply`, { method: 'POST', body: JSON.stringify(input) }).then((r) => r.message),
+  requestAgentReply: (chatId: number, input: { agentRef: string; agentName?: string }, opts?: { signal?: AbortSignal }) =>
+    request<{ message: BrainMessage }>(`/api/brain/chats/${chatId}/agent-reply`, { method: 'POST', body: JSON.stringify(input), signal: opts?.signal }).then((r) => r.message),
 
   /**
    * Persist one captured ChatDiagnosticsReport for this chat. Best-effort — the
@@ -2974,6 +2974,7 @@ export interface ExecutionTrace {
     llmTurns?: ExecutionLlmTurn[];
     /** This run's own spend off the usage ledger (every row stamped with its execution id). */
     cost?: { estimatedCostUsd: number; totalTokens: number; requests: number };
+    incremental?: boolean; // only the telemetry rows past the request's cursor
   };
 }
 
@@ -3087,9 +3088,9 @@ export const runtimeApi = {
   get: (id: number): Promise<Execution> =>
     request<Execution>(`/api/runtime/executions/${id}`),
 
-  /** Execution + usage snapshots + tool-call audit events. */
-  trace: (id: number): Promise<ExecutionTrace> =>
-    request<ExecutionTrace>(`/api/runtime/executions/${id}/trace`),
+  /** Execution + usage snapshots + tool-call audit events; with a cursor, only the telemetry rows past it (a live run's re-read). */
+  trace: (id: number, cursor: { afterEventId?: number; afterUsageId?: number } = {}): Promise<ExecutionTrace> =>
+    request<ExecutionTrace>(`/api/runtime/executions/${id}/trace${cursor.afterEventId || cursor.afterUsageId ? `?afterEventId=${cursor.afterEventId ?? 0}&afterUsageId=${cursor.afterUsageId ?? 0}` : ''}`),
 
   /** Per-agent file-change traceability for a task's shared ticket workspace. */
   taskFileChanges: (taskId: number): Promise<{ changes: TaskFileChange[] }> =>
@@ -6041,7 +6042,7 @@ export const meetingsApi = {
     request(`${MEETINGS_BASE}/ice?mode=${mode}`),
 
   // Recording / transcription + agent voice (0330).
-  transcript: (id: string): Promise<MeetingTranscript> => request(`${MEETINGS_BASE}/${id}/transcript`),
+  transcript: (id: string, sinceAtMs?: number): Promise<MeetingTranscript> => request(`${MEETINGS_BASE}/${id}/transcript${sinceAtMs != null ? `?sinceAtMs=${Math.max(0, Math.floor(sinceAtMs))}` : ''}`),
   /** Append one final caption line (from the caller's own browser speech-to-text). */
   appendTranscript: (id: string, text: string): Promise<{ ok: boolean; id: string | null }> =>
     request(`${MEETINGS_BASE}/${id}/transcript`, { method: 'POST', body: JSON.stringify({ text }) }),

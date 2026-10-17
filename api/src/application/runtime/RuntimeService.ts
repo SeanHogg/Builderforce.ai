@@ -472,6 +472,8 @@ export class RuntimeService {
     const execution = await this.getExecution(id);
     const cancelled = execution.cancel();
     const saved     = await this.executions.update(cancelled);
+    // Right after the row flips, so a durable runner mid-step stops on its next cancel poll.
+    await this.ports.onCancelled?.(saved).catch((error) => reportCaughtError(error, { source: "application/runtime/RuntimeService.ts", operation: "cancel", context: { logMessage: '[runtime] cancel signal to the cloud runner failed', details: { executionId: saved.id } } }));
 
     await this.audit.save(AuditEvent.create({
       tenantId:     execution.tenantId,

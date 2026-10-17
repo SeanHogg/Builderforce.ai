@@ -45,6 +45,7 @@ import {
   type ErrorLogFilters,
 } from '../observability/errorLogQuery';
 import { ProjectService } from '../project/ProjectService';
+import { bumpTenantProjectCount } from '../tenant/tenantResourceCounts';
 import { afterBrainProjectCreate, ensureProjectCodingTarget } from '../project/ensureProjectCodingTarget';
 import { listCompanies, companyDetail, unassignedProjects } from '../investor/companyWorkspace';
 import { r2ProjectStoragePurge } from '../ide/projectStorage';
@@ -87,7 +88,7 @@ import { MigrationService, type ImportMode } from '../migration/MigrationService
 import { createMigrationStore } from '../migration/migrationStore';
 import { buildMigrationProviderFactory } from '../migration/buildProviderFactory';
 import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCatalog';
-import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
+import { maybeAutoRunOnLaneEntry, mutationCanTriggerLaneEntry, type LaneEntryInputs } from '../swimlane/laneEntryTrigger';
 import { evaluateTaskAutoRun, AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../swimlane/evaluateAutoRun';
 import { invalidateProjectsList } from '../project/projectsListCache';
 import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
@@ -1163,8 +1164,7 @@ const CATALOG: BuiltinTool[] = [
       // lane AND owner so the autonomous triggers fire only on a genuine lane change /
       // a genuine reassignment.
       const before = await getTenantTask(ctx, num(a.id));
-      const beforePlain = before.toPlain() as { status: string; assignedAgentRef?: string | null };
-      const previousStatus = beforePlain.status;
+      const beforePlain = before.toPlain();
       const previousAgentRef = beforePlain.assignedAgentRef ?? null;
       const updated = await ctx.tasks.updateTask(num(a.id), {
         title: a.title != null ? str(a.title) : undefined,
@@ -1181,21 +1181,18 @@ const CATALOG: BuiltinTool[] = [
         assignedAgentRef: a.assignedAgentRef !== undefined ? (a.assignedAgentRef === null ? null : str(a.assignedAgentRef)) : undefined,
         assignedAgentHostId: a.assignedAgentHostId !== undefined ? (a.assignedAgentHostId === null ? null : num(a.assignedAgentHostId)) : undefined,
       });
-      // The ticket may have just entered a new lane — run that lane's configured
-      // agent (AS the lane agent; the ticket's own assignee is left untouched).
-      const laneOutcome = await fireLaneAutoRun(ctx, updated, previousStatus);
-      // Assignment → work handoff: reassigning the ticket to a NEW cloud agent is itself
-      // a "go" — start that owner's run AND bring it into the ticket's linked chats (the
-      // MCP path used to do neither, so a dev agent assigned by the Brain never picked up
-      // the ticket or joined the conversation).
-      const assignOutcome = await fireAgentAssignmentHandoff(ctx, updated, previousAgentRef);
-      // REPORT the autonomy verdict. Both triggers are best-effort and backgrounded, so
-      // the result used to say nothing about whether work actually started — a caller
-      // that moved seven tickets to a coder was told each write succeeded while every
-      // dispatch was declined. Prefer whichever trigger dispatched; else the first
-      // decision made (the lane move is evaluated before the reassignment).
-      const autoRun = [laneOutcome, assignOutcome].find((o) => o?.dispatched)
-        ?? laneOutcome ?? assignOutcome;
+      // The ticket may have just entered a new lane, or gained a NEW cloud-agent owner
+      // (itself a "go"): ONE trigger decision for the write (AS the lane agent, or the
+      // owner via the fallback; the ticket's own assignee is left untouched).
+      const autoRun = await fireLaneAutoRun(ctx, updated, beforePlain);
+      // Assignment → chat handoff: bring a NEW cloud-agent owner into the ticket's
+      // linked chats (the MCP path used to skip this, so a dev agent assigned by the
+      // Brain never joined the conversation).
+      await fireAgentAssignmentHandoff(ctx, updated, previousAgentRef);
+      // REPORT the autonomy verdict: the trigger is best-effort and backgrounded, so the
+      // result used to say nothing about whether work actually started — a caller that
+      // moved seven tickets to a coder was told each write succeeded while every
+      // dispatch was declined.
       return { ...(updated.toPlain() as object), ...(autoRun ? { autoRun } : {}) };
     },
   },
@@ -4332,15 +4329,17 @@ async function evaluateAndDispatch(
   };
 }
 
-async function fireLaneAutoRun(ctx: BuiltinCtx, task: Task, previousStatus?: string): Promise<McpAutoRunOutcome | null> {
+async function fireLaneAutoRun(ctx: BuiltinCtx, task: Task, before?: LaneEntryInputs): Promise<McpAutoRunOutcome | null> {
   const env = ctx.env;
   if (!env) return null; // dispatch needs the worker env (credentials + runtime bindings)
   const plain = task.toPlain();
-  // Only a genuine lane CHANGE triggers a run — a no-status-change update (title,
-  // priority, reassignment) must not re-fire the lane's agent. A create has no
-  // previousStatus, so it always evaluates the lane it was created into.
-  if (previousStatus !== undefined && plain.status === previousStatus) return null;
-  return evaluateAndDispatch(ctx, env, plain, ctx.userId ?? 'system:lane-auto');
+  // ONE decision for the whole write, by the shared rule: a lane change or a NEW
+  // owner agent can start work; a title/priority edit must not re-fire the lane's
+  // agent. An update that changed both used to evaluate twice (once per trigger). A
+  // create has no `before`, so it always evaluates the lane it was created into.
+  if (!mutationCanTriggerLaneEntry(before, plain)) return null;
+  const systemLabel = before && before.status === plain.status ? 'system:agent-assign' : 'system:lane-auto';
+  return evaluateAndDispatch(ctx, env, plain, ctx.userId ?? systemLabel);
 }
 
 /** Kind used on chat↔ticket links for a task-tier row (epic | gap | task). */
@@ -4361,21 +4360,21 @@ function taskLinkKind(task: Task): string {
  * create) treats any owner as newly assigned. Best-effort + backgrounded on the request's
  * executionCtx so it survives the tool returning; a no-env context simply skips it.
  */
-async function fireAgentAssignmentHandoff(ctx: BuiltinCtx, task: Task, previousAgentRef?: string | null): Promise<McpAutoRunOutcome | null> {
+async function fireAgentAssignmentHandoff(ctx: BuiltinCtx, task: Task, previousAgentRef?: string | null): Promise<void> {
   const env = ctx.env;
-  if (!env) return null;
+  if (!env) return;
   const plain = task.toPlain() as { id: number; projectId: number; status: string; assignedAgentRef?: string | null };
   const newRef = plain.assignedAgentRef ?? null;
-  if (!newRef || newRef === (previousAgentRef ?? null)) return null;
+  if (!newRef || newRef === (previousAgentRef ?? null)) return;
+  // The run half is {@link fireLaneAutoRun}'s single decision for the write; this
+  // half only brings the new owner into the ticket's chats.
   const joinChats = new ChatTicketService(ctx.db, env)
     .onTicketAgentAssigned(ctx.tenantId, taskLinkKind(task), String(plain.id), newRef)
     .catch((error) => {
       reportCaughtError(error, { source: "application/llm/builtinMcpService.ts", operation: "joinChats" });
     });
   if (ctx.executionCtx) ctx.executionCtx.waitUntil(joinChats);
-  const outcome = await evaluateAndDispatch(ctx, env, plain, ctx.userId ?? 'system:agent-assign');
-  if (!ctx.executionCtx) await joinChats;
-  return outcome;
+  else await joinChats;
 }
 
 /** Flat, gateway-safe advertised name: `builtin_projects_list` (no dots). */
@@ -4398,7 +4397,12 @@ function buildCtx(
   return {
     db,
     tenantId,
-    projects: new ProjectService(projectRepo, undefined, opts?.env ? r2ProjectStoragePurge(opts.env) : null),
+    projects: new ProjectService(
+      projectRepo,
+      undefined,
+      opts?.env ? r2ProjectStoragePurge(opts.env) : null,
+      (tid) => bumpTenantProjectCount(opts?.env, tid),
+    ),
     // Creation attribution for tickets minted through MCP (`tasks.create`,
     // `tickets.from_delta`). This is also what canonicalizes `target_type` to `'task'`:
     // the MCP writer used to record `'tasks'`, so the lifecycle ledger read one shape and

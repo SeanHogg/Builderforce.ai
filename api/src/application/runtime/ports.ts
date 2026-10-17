@@ -113,6 +113,12 @@ export interface RuntimePorts {
    */
   onCloudOrphan?: (e: Execution) => Promise<'requeued' | 'failed'>;
   /**
+   * The execution was just cancelled. Wired to tell its durable runner
+   * (`CloudRunnerDO` `/concluded`), which caches "still running" between DB reads
+   * and would otherwise notice the cancel only on its next re-read. Best-effort.
+   */
+  onCancelled?: (e: Execution) => Promise<void>;
+  /**
    * Autonomous-trigger sink invoked when an execution ADVANCES its ticket into a
    * new non-terminal lane. Wired to the SAME lane auto-run trigger a human
    * board-drag uses (`maybeAutoRunOnLaneEntry`), so the next lane's configured

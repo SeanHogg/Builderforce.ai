@@ -44,6 +44,7 @@ import type { Env } from '../../env';
 import { enforceCloudRunCap } from './cloudRunLedger';
 import { recordTenantAutoRunSkip, clearTenantAutoRunSkip } from './autoRunSkipLedger';
 import type { AutoRunReason } from '../swimlane/evaluateAutoRun';
+import { candidateFingerprint, loadBlockMemo, type BlockVerdict, type CandidateInputs } from './autoExecBlockMemo';
 
 /** The non-terminal statuses whose lane an agent could work — the candidate scan
  *  is bounded to these (Done/Blocked are excluded up front; the lane evaluator
@@ -89,9 +90,11 @@ export interface AutonomousSweepResult {
   /** Tickets sitting pending under those tenants — the "workspace over allowance"
    *  count a board can show once, globally, instead of per card. */
   pendingUnderCapBlockedTenants: number;
+  /** Candidates skipped because their last block verdict still holds (autoExecBlockMemo). */
+  memoSkipped: number;
 }
 
-interface CandidateTask {
+interface CandidateTask extends CandidateInputs {
   taskId: number;
   projectId: number;
   tenantId: number;
@@ -189,6 +192,11 @@ export function autonomousCandidatesQuery(db: Db, limit: number) {
       projectId: tasks.projectId,
       tenantId: projects.tenantId,
       status: tasks.status,
+      // The verdict inputs that live on the ticket and its runs — the block memo's
+      // fingerprint. Read here so a memoised skip costs no extra round trip.
+      updatedAt: tasks.updatedAt,
+      assignedAgentRef: tasks.assignedAgentRef,
+      lastExecutionId: sql<number | null>`(select max(lx.id) from executions lx where lx.tenant_id = ${projects.tenantId} and lx.task_id = ${tasks.id})`,
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -224,8 +232,8 @@ export async function loadAutonomousCandidates(db: Db, limit: number): Promise<C
 }
 
 /** Group candidates by tenant, preserving the oldest-first order within each. */
-export function groupByTenant(candidates: CandidateTask[]): Map<number, CandidateTask[]> {
-  const byTenant = new Map<number, CandidateTask[]>();
+export function groupByTenant<T extends { tenantId: number }>(candidates: T[]): Map<number, T[]> {
+  const byTenant = new Map<number, T[]>();
   for (const c of candidates) {
     const list = byTenant.get(c.tenantId);
     if (list) list.push(c);
@@ -249,6 +257,8 @@ export async function runAutonomousExecutionSweep(
 
   const candidates = await loadAutonomousCandidates(db, MAX_CANDIDATES_PER_TICK);
   const byTenant = groupByTenant(candidates);
+  const memo = await loadBlockMemo(env);
+  const nowMs = Date.now();
 
   const result: AutonomousSweepResult = {
     candidates: candidates.length,
@@ -258,6 +268,7 @@ export async function runAutonomousExecutionSweep(
     upgradeEmailsSent: 0,
     capBlockedTenants: 0,
     pendingUnderCapBlockedTenants: 0,
+    memoSkipped: 0,
   };
 
   for (const [tenantId, tenantCandidates] of byTenant) {
@@ -356,6 +367,14 @@ export async function runAutonomousExecutionSweep(
       const runs = tenantDispatchReserver(budget, tenantId);
       let dispatchedForTenant = 0;
       for (const c of tenantCandidates) {
+        // Blocked last time on unchanged inputs and still inside that reason's ceiling:
+        // re-evaluating would cost ~10 round trips to reach the same refusal.
+        const fingerprint = candidateFingerprint(c);
+        if (memo.isFresh(c.taskId, fingerprint, nowMs)) {
+          result.memoSkipped += 1;
+          continue;
+        }
+        const seen: { verdict?: BlockVerdict } = {};
         try {
           const spend = await runs.spend(() => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
             tenantId: c.tenantId,
@@ -375,6 +394,7 @@ export async function runAutonomousExecutionSweep(
             // full fan-out every 5 minutes instead of the 30-minute floor — and an
             // unstarted ticket stays in this window for the next tick regardless.
             signalCronGate: false,
+            onBlocked: (verdict) => { seen.verdict = verdict; },
             // The verdict this loop already gated on — reused so the evaluator's own
             // token gate costs no second lookup per ticket, and so the sweep and the
             // evaluator cannot disagree about the tenant's budget within one tick.
@@ -393,6 +413,8 @@ export async function runAutonomousExecutionSweep(
           // Out of tenant budget for the whole tick — no later candidate fares better.
           if (spend.refused) break;
           if (spend.result) dispatchedForTenant += 1;
+          if (seen.verdict) memo.record(c.taskId, fingerprint, seen.verdict, nowMs);
+          else memo.forget(c.taskId);
         } catch (err) {
           reportCaughtError(err, { source: "application/runtime/autonomousExecutionSweep.ts", operation: "runAutonomousExecutionSweep", context: { logMessage: `[cron:auto-exec] dispatch failed tenant=${tenantId} task=${c.taskId}`, details: err } });
         }
@@ -407,5 +429,6 @@ export async function runAutonomousExecutionSweep(
     }
   }
 
+  await memo.save(new Set(candidates.map((c) => c.taskId)), nowMs);
   return result;
 }

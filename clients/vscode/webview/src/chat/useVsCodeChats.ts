@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CHAT_TITLE, useArmedNewChat, useBrainChats, type BrainChat, type ChatMode } from '@seanhogg/builderforce-brain-embedded';
-import { onRefresh, post, type InitData } from '../vscodeBridge';
+import { onHostMessage, onRefresh, post, request, type InitData } from '../vscodeBridge';
 import { useGlobalRunState } from './useGlobalRunState';
 
 export interface VsCodeChats {
@@ -40,10 +40,19 @@ export interface VsCodeChats {
   /** Arm the Memory switch before the chat exists. */
   armMemory: (on: boolean) => void;
   rename: (id: number, title: string) => Promise<void>;
-  /** Summarize a chat into its memory (the shared `useBrainChats.summarize`). */
+  /** Rename a chat to a model-written summary of it (the shared `useBrainChats.summarize`);
+   *  a failure — or a signed-out chat, which has no server to summarize it — lands in `error`. */
   summarize: (id: number) => Promise<void>;
-  /** Delete a chat — the host confirms in a modal (`builderforce.deleteSession`). */
-  remove: (chat: { id: number; title: string }) => void;
+  /** Ask the host's modal whether to delete (it refuses while the chat's run is live). */
+  confirmDelete: (chat: { id: number; title: string }) => Promise<boolean>;
+  /** Delete a chat through the panel's own store — the gateway signed in, this webview
+   *  signed out — so the open chat is left only when it IS the deleted one. */
+  remove: (chat: { id: number; title: string }) => Promise<void>;
+  /** The list is still on its first read. */
+  loading: boolean;
+  /** The last failed list action (summarize, rename, delete…), until dismissed. */
+  error: string;
+  clearError: () => void;
 }
 
 export type ChatRunStatus = 'awaiting' | 'running' | null;
@@ -56,7 +65,7 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
     onActiveChatChange: setActiveId,
     placeholderTitles: [newChatLabel],
   });
-  const { chats, select, setMemoryEnabled, rename, autoTitle, reload, summarize } = brainChats;
+  const { chats, select, setMemoryEnabled, rename, autoTitle, reload, summarize, setError } = brainChats;
   // The armed Chat|Work mode and Memory switch, and the one creation path carrying them.
   const { chatMode, selectMode: selectArmedMode, armMemory, createArmed } = useArmedNewChat(brainChats);
 
@@ -71,11 +80,23 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
     post('chats.changed');
   }, [chats]);
 
-  // The host re-reads after work done outside this view (a chat deleted from the list).
+  // The host re-reads after work done outside this view.
   useEffect(() => onRefresh(() => { void reload(); }), [reload]);
-  const remove = useCallback((chat: { id: number; title: string }) => {
-    post('chat.delete', { chatId: chat.id, title: chat.title });
-  }, []);
+  // A chat deleted from the Sessions tree: leave it only if it is the one open here.
+  const chatIdRef = useRef(chatId);
+  chatIdRef.current = chatId;
+  useEffect(() => onHostMessage<{ chatId?: number }>('chat.deleted', (m) => {
+    if (m.chatId != null && m.chatId === chatIdRef.current) void select(null);
+    void reload();
+  }), [select, reload]);
+  const confirmDelete = useCallback(
+    (chat: { id: number; title: string }) =>
+      request<boolean>('chat.confirmDelete', { chatId: chat.id, title: chat.title }).then((ok) => ok === true, () => false),
+    [],
+  );
+  const { remove: removeChat } = brainChats;
+  const remove = useCallback((chat: { id: number; title: string }) => removeChat(chat.id), [removeChat]);
+  const clearError = useCallback(() => setError(''), [setError]);
 
   const setChatId = useCallback((id: number | null) => { void select(id); }, [select]);
   const reloadChats = useCallback(() => { void reload(); }, [reload]);
@@ -118,6 +139,7 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
 
   return {
     chatId, setChatId, chats, chatOptions, activeChat, reloadChats, autoTitleChat, ensureChatId,
-    runStatus, titleOf, chatMode, selectMode, setMemoryEnabled, armMemory, rename, summarize, remove,
+    runStatus, titleOf, chatMode, selectMode, setMemoryEnabled, armMemory, rename, summarize, confirmDelete, remove,
+    loading: brainChats.loading, error: brainChats.error, clearError,
   };
 }

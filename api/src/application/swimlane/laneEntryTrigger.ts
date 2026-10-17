@@ -51,6 +51,9 @@ import { roleDisplayName } from '../kanban/roleCatalog';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
 import { createExecutionReadMemo } from '../runtime/executionReadMemo';
 import { currentRequestScope } from '../shared/requestScope';
+import { mutationCanTriggerLaneEntry, type LaneEntryInputs } from './laneEntryChange';
+
+export { mutationCanTriggerLaneEntry, type LaneEntryInputs } from './laneEntryChange';
 
 /**
  * Whether a ticket that CAN run now should raise the KV work-gate signal.
@@ -135,6 +138,11 @@ export async function maybeAutoRunOnLaneEntry(
      * signalling — except inside the scheduled invocation; see shouldSignalCronGate.
      */
     signalCronGate?: boolean;
+    /**
+     * Told WHY the ticket was refused, so the auto-exec sweep can skip re-asking until
+     * that reason's inputs change (autoExecBlockMemo). Not called on a run or an error.
+     */
+    onBlocked?: (verdict: { reason: string; cooldownRemainingMs?: number }) => void;
   },
 ): Promise<boolean> {
   try {
@@ -217,6 +225,7 @@ export async function maybeAutoRunOnLaneEntry(
           + `awaiting role sign-off${gate.dispatchedReviewers.length ? ` — dispatched reviewer(s): ${gate.dispatchedReviewers.join(', ')}` : ''}`
           + `${gate.dispatchedProducers.length ? ` — dispatched producer(s): ${gate.dispatchedProducers.join(', ')}` : ''}.`,
       });
+      args.onBlocked?.({ reason: 'lane_requirement_gate' });
       return false;
     }
 
@@ -287,7 +296,10 @@ export async function maybeAutoRunOnLaneEntry(
           + `${evaln.liveExecution ? ` — run #${evaln.liveExecution.id} is ${evaln.liveExecution.status}` : ''}.`,
       });
     }
-    if (!evaln.canRunNow) return false;
+    if (!evaln.canRunNow) {
+      args.onBlocked?.({ reason: evaln.reason, cooldownRemainingMs: evaln.cooldownRemainingMs });
+      return false;
+    }
 
     // The ticket is about to RUN, so drop its skip-suppression marker: a stall that
     // recurs after a real run is new information, and must not be swallowed as a
@@ -511,6 +523,15 @@ export interface LaneEntrySignal {
   originLaneKey?: string;
   /** Reuse the caller's RuntimeService instead of building one. */
   runtimeService?: RuntimeService;
+  /** The mutation that landed it, when it was an UPDATE (see {@link routeLaneEntry}). */
+  change?: LaneEntryChange;
+}
+
+/** A ticket write as the lane trigger sees it: the trigger inputs before and after.
+ *  `before` null is a create. */
+export interface LaneEntryChange {
+  before: LaneEntryInputs | null;
+  after: LaneEntryInputs;
 }
 
 /**
@@ -540,8 +561,16 @@ export async function routeLaneEntry(
     /** What a lifecycle-managed board does. Omitted → the inline trigger, which is what
      *  the internal `onTaskLandedInLane` writers have always done. */
     onManagedBoard?: () => Promise<void>;
+    /**
+     * The ticket write behind this call. When it cannot change the outcome
+     * ({@link mutationCanTriggerLaneEntry}) nothing is evaluated: every engine below
+     * starts with board / lane / execution reads. Omitted by callers that are not a
+     * ticket write (staffing backfill) or that always land a ticket (creates).
+     */
+    change?: LaneEntryChange;
   },
 ): Promise<boolean> {
+  if (args.change && !mutationCanTriggerLaneEntry(args.change.before, args.change.after)) return false;
   if (args.onManagedBoard) {
     const board = await findCanonicalBoard(db, args.projectId, args.tenantId).catch(() => null);
     if (board?.lifecycleManaged) {
@@ -581,6 +610,8 @@ export async function routeLaneEntry(
  */
 export async function onTaskLandedInLane(env: Env, db: Db, signal: LaneEntrySignal): Promise<boolean> {
   try {
+    // Before the row lookup below: a write that cannot change the outcome costs nothing.
+    if (signal.change && !mutationCanTriggerLaneEntry(signal.change.before, signal.change.after)) return false;
     let projectId = signal.projectId ?? null;
     let status = signal.status ?? null;
     if (projectId == null || status == null) {

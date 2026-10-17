@@ -39,7 +39,7 @@ import { dispatchCloudRunForTask, ENTITLEMENT_REFUSALS, type CloudDispatchOutcom
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { resolveLaneAgentHostId } from '../../application/swimlane/laneAgentHost';
-import { routeLaneEntry } from '../../application/swimlane/laneEntryTrigger';
+import { routeLaneEntry, type LaneEntryChange } from '../../application/swimlane/laneEntryTrigger';
 import { coordinateTicket } from '../../application/manager/coordinateTicket';
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { requestRoleRun } from '../../application/kanban/requestRoleRun';
@@ -95,7 +95,13 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // the response via the request's `executionCtx`. Both the create and PATCH paths
   // funnel through here so neither can drift; the agent-advance path (a fourth
   // status-writer) reuses the same `maybeAutoRunOnLaneEntry` from the runtime layer.
-  const fireLaneAutoRun = (c: Context<HonoEnv>, info: { projectId: number; taskId: number; status: string }): void => {
+  // `change` is the write behind an UPDATE; routeLaneEntry skips the whole evaluation
+  // when it cannot change the outcome (mutationCanTriggerLaneEntry). Creates omit it.
+  const fireLaneAutoRun = (
+    c: Context<HonoEnv>,
+    info: { projectId: number; taskId: number; status: string },
+    change?: LaneEntryChange,
+  ): void => {
     c.executionCtx.waitUntil((async () => {
       const tenantId = c.get('tenantId');
       const submittedBy = (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:lane-auto';
@@ -110,6 +116,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       await routeLaneEntry(c.env as Env, db, runtimeService, {
         tenantId, projectId: info.projectId, taskId: info.taskId, status: info.status, submittedBy,
         onManagedBoard: async () => { await coordinateTicket(c.env as Env, db, runtimeService, { tenantId, taskId: info.taskId }); },
+        ...(change ? { change } : {}),
       });
     })());
   };
@@ -823,8 +830,13 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // lane transition (the metrics keystone, migration 0117) AND an owner-agent
     // change can fire the autonomous trigger. Cheap PK read; only when the PATCH
     // carries a status and/or a reassignment.
-    const prevStatus = (body.status !== undefined || body.assignedAgentRef !== undefined)
-      ? (await db.select({ status: tasks.status, projectId: tasks.projectId, assignedAgentRef: tasks.assignedAgentRef }).from(tasks).where(eq(tasks.id, id)).limit(1))[0]
+    // taskType rides along because it is a lane-trigger input too
+    // (mutationCanTriggerLaneEntry); a PATCH touching none of them skips the read.
+    const prevStatus = (body.status !== undefined || body.assignedAgentRef !== undefined || body.taskType !== undefined)
+      ? (await db.select({
+        status: tasks.status, projectId: tasks.projectId, assignedAgentRef: tasks.assignedAgentRef,
+        taskType: tasks.taskType,
+      }).from(tasks).where(eq(tasks.id, id)).limit(1))[0]
       : undefined;
 
     // Done gate (AC-2): on a lifecycle-managed board, block a move to a terminal lane
@@ -882,28 +894,27 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
           reportCaughtError(error, { source: "presentation/routes/taskRoutes.ts", operation: "createTaskRoutes" });
         }),
       );
-
-      // Autonomous trigger: the ticket just ENTERED a new lane. If that lane has a
-      // configured cloud agent (auto gate), start the run AS that agent. This is
-      // the server-side source of truth — it fires no matter which client moved
-      // the ticket (board drag, status dropdown, the brain, a raw API PATCH), so a
-      // brain-created ticket moved to a To Do lane with an agent actually runs.
-      fireLaneAutoRun(c, { projectId: prevStatus.projectId, taskId: id, status: body.status });
     }
 
-    // Autonomous trigger on REASSIGNMENT: assigning a cloud agent as the ticket's
-    // owner is itself a "go" — the owner agent should pick the ticket up in its
-    // current (auto-gated) lane, even with no explicit swimlane staffing (see
-    // withOwnerAgentFallback). Fire only when the owner ref actually CHANGED to a
-    // non-null value AND the status did not also change in this PATCH (that path
-    // already fired for the lane the ticket entered), so a single PATCH never
-    // double-fires. The live-run idempotency guard makes a redundant fire a no-op.
+    // Autonomous trigger: ONE call per PATCH, decided by the shared rule in
+    // laneEntryTrigger. The ticket ENTERING a new lane (board drag, status dropdown,
+    // the brain, a raw API PATCH) or gaining a NEW cloud-agent owner (the owner is a
+    // candidate even with no explicit staffing — withOwnerAgentFallback) can start a
+    // run; a PATCH that changed neither (title, priority, dates) evaluates nothing.
     const statusChanged = !!prevStatus && body.status !== undefined && body.status !== prevStatus.status;
     const newAgentRef = typeof body.assignedAgentRef === 'string' ? body.assignedAgentRef.trim() : null;
     const agentReassigned = !!newAgentRef && !!prevStatus && newAgentRef !== (prevStatus.assignedAgentRef ?? null);
-    if (!statusChanged && agentReassigned) {
+    if (prevStatus) {
       const plain = task.toPlain();
-      fireLaneAutoRun(c, { projectId: plain.projectId, taskId: id, status: plain.status });
+      fireLaneAutoRun(c, { projectId: plain.projectId, taskId: id, status: plain.status }, {
+        before: prevStatus,
+        after: {
+          projectId: plain.projectId, status: plain.status,
+          assignedAgentRef: plain.assignedAgentRef ?? null,
+          // actionType is not PATCHable, so it is left out (not compared).
+          taskType: plain.taskType ?? null,
+        },
+      });
     }
     // Reassigning to a NEW cloud agent also brings it INTO the ticket's linked chats
     // (with a "starting work" notice) — independent of whether the lane/status changed —
@@ -981,7 +992,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // Landing on ANOTHER board's lane is a lane entry like any other. This route was the
     // one status-writer that never fired the trigger, so a ticket moved onto a staffed
     // board sat inert until the 30-minute autonomous sweep happened to notice it.
-    fireLaneAutoRun(c, { projectId: body.projectId, taskId: id, status: task.toPlain().status });
+    // A "move" onto the board it is already on changes nothing the trigger reads.
+    fireLaneAutoRun(c, { projectId: body.projectId, taskId: id, status: task.toPlain().status }, before ? {
+      before: { projectId: before.projectId },
+      after: { projectId: body.projectId },
+    } : undefined);
 
     return c.json(task.toPlain());
   });

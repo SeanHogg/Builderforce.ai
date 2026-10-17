@@ -35,8 +35,8 @@ import { getProjectNames, invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from "./sessionsTree";
 import { InboxQuickActionsProvider, InboxTreeProvider } from "./inboxTree";
-import { AttentionPoller, onLocalRunsChange, managerAttention, attentionFor } from "./attention";
-import { confirmDeleteInEditor } from "./confirmDeletionUi";
+import { AttentionPoller, onLocalRunsChange, managerAttention } from "./attention";
+import { confirmChatDelete } from "./chatDeletion";
 import { registerTaskActions } from "./taskActions";
 import { ClosedTasksTreeProvider } from "./closedTasksTree";
 import { createVsCodeRunHost } from "./brainRunHostPorts";
@@ -487,15 +487,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.deleteSession", async (item: bfApi.BfBrainChat | string | SessionTreeNode) => {
       const id = chatIdOf(item);
       if (id == null) return;
-      const title = chatTitleOf(item) || vscode.l10n.t("New chat");
-      // Any live attention on this chat (running, awaiting input, local run) means
-      // an execution is in flight — deleting it would orphan that run.
-      const ok = await confirmDeleteInEditor(title, attentionFor("chat", id) != null);
-      if (!ok) return;
+      if (!(await confirmChatDelete(id, chatTitleOf(item)))) return;
       try {
         await bfApi.deleteBrainChat(context.secrets, id);
         tree.refresh();
-        BuilderForcePanel.open(context, { kind: "new" });
+        // Only a panel showing THIS chat leaves it; every other one just re-reads its list.
+        BuilderForcePanel.chatDeleted(id);
       } catch (e) {
         surfaceError(e, "command:deleteSession", `BuilderForce: could not delete chat (${(e as Error).message}).`);
       }

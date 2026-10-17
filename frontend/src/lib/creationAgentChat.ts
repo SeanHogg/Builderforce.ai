@@ -35,6 +35,8 @@ export async function runCanonicalCanvasGroupTurn(input: {
   sessionId: string;
   prompt: string;
   agents: readonly CanvasAgentParticipant[];
+  /** Stop: the agents' replies are the long wait, so they are what it cancels. */
+  signal?: AbortSignal;
 }): Promise<CanonicalCanvasGroupTurn> {
   const chatId = input.chatId ?? (await brain.createChat({ title: `${input.title} — Create`, projectId: input.projectId ?? null, capability: 'create' })).id;
   const invited = await brain.listChatAgents(chatId);
@@ -53,7 +55,7 @@ export async function runCanonicalCanvasGroupTurn(input: {
     ),
   }]);
   const replies = await Promise.all(addressed.map(async (agent) => {
-    const message = await brain.requestAgentReply(chatId, { agentRef: agent.ref, agentName: agent.name });
+    const message = await brain.requestAgentReply(chatId, { agentRef: agent.ref, agentName: agent.name }, { signal: input.signal });
     return { agent: messageAuthor(message, agent), message };
   }));
   return { chatId, contributions: replies };

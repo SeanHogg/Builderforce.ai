@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   read: {
     listRecordings: vi.fn(),
     getRecording: vi.fn(),
+    recordingStatus: vi.fn(),
     chunk: vi.fn(),
     releases: vi.fn(),
     renameRelease: vi.fn(),
@@ -152,6 +153,29 @@ describe('GET /recordings/:id', () => {
   it('does not trace a refused read', async () => {
     await call(`/recordings/${REC}?site=${OTHER_SITE}`);
     expect(mocks.recordReplayTrace).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /recordings/:id/status (live follow)', () => {
+  it('passes the reader cursor through and writes no view trace', async () => {
+    mocks.read.recordingStatus.mockResolvedValue({ chunkSeqs: [4, 5], markCount: 2 });
+    const res = await call(`/recordings/${REC}/status?site=${OWN_SITE}&afterSeq=3&marks=2`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ chunkSeqs: [4, 5], markCount: 2 });
+    expect(mocks.read.recordingStatus).toHaveBeenCalledWith({ tenantId: 7, siteId: OWN_SITE }, REC, { afterSeq: 3, knownMarks: 2 });
+    expect(mocks.recordReplayTrace).not.toHaveBeenCalled();
+  });
+
+  it('reads from the start when the reader holds nothing', async () => {
+    mocks.read.recordingStatus.mockResolvedValue({ chunkSeqs: [], markCount: 0 });
+    await call(`/recordings/${REC}/status?site=${OWN_SITE}`);
+    expect(mocks.read.recordingStatus).toHaveBeenCalledWith({ tenantId: 7, siteId: OWN_SITE }, REC, { afterSeq: -1, knownMarks: -1 });
+  });
+
+  it('refuses another workspace’s site', async () => {
+    const res = await call(`/recordings/${REC}/status?site=${OTHER_SITE}`);
+    expect(res.status).toBe(403);
+    expect(mocks.read.recordingStatus).not.toHaveBeenCalled();
   });
 });
 
