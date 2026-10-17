@@ -6,7 +6,13 @@ import { DEFAULT_BASE_URL, LOOPBACK_ORIGINS, PLATFORM_ORIGINS } from './config';
 
 const manifest = JSON.parse(
   fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'manifest.json'), 'utf8'),
-) as { host_permissions: string[]; optional_host_permissions: string[]; permissions: string[]; content_scripts?: unknown };
+) as {
+  host_permissions: string[];
+  optional_host_permissions: string[];
+  permissions: string[];
+  content_scripts?: unknown;
+  content_security_policy?: { extension_pages?: string };
+};
 
 describe('Rovr config ↔ manifest', () => {
   it('may reach the platform and this machine without asking — and nothing else', () => {
@@ -21,4 +27,11 @@ describe('Rovr config ↔ manifest', () => {
     expect(manifest.permissions).toEqual(expect.arrayContaining(['sidePanel', 'storage', 'tabs', 'activeTab', 'scripting']));
   });
 
+  it('lets the panel compile WebAssembly for its on-device engines, and nothing looser', () => {
+    // WebLLM and the WebGPU `bfi` instantiate wasm in the side panel. Their model
+    // downloads (huggingface.co and its *.hf.co CDN, WebLLM's libs on
+    // raw.githubusercontent.com) are plain CORS fetches — every one of those origins
+    // answers `Access-Control-Allow-Origin` — so they need no host permission.
+    expect(manifest.content_security_policy?.extension_pages).toBe("script-src 'self' 'wasm-unsafe-eval'; object-src 'self'");
+  });
 });

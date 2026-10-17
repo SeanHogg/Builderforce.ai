@@ -37,6 +37,7 @@ import {
   type LocalRuntimeId,
   type LocalRuntimeProbe,
 } from "@builderforce/local-inference";
+import { hostPageEngines } from "./pageEngineBridge";
 
 // Re-exported for the editor modules that already reach the local path through this
 // file (the panel's proxy fence, the Synapse catalog, the model-state pin check, the
@@ -102,10 +103,21 @@ export async function listLocalModels(config: LocalModelsConfig, fetchImpl: Fetc
  */
 const localFirstProber = createLocalRuntimeProber(globalFetch, { capabilities: true });
 
-/** The runtimes a local-first route may try, or none while the feature or the mode is off. */
-export async function probeLocalFirstRuntimes(config: LocalModelsConfig): Promise<LocalRuntimeProbe[]> {
+/**
+ * The runtimes a local-first route may try, or none while the feature or the mode is off:
+ * the HTTP runtimes on this machine, then the page engines the chat webview runs on
+ * WebGPU (asked over the bridge — none while no panel is open, never a failure).
+ */
+export async function probeLocalFirstRuntimes(
+  config: LocalModelsConfig,
+  pageProbe: () => Promise<LocalRuntimeProbe[]> = () => hostPageEngines.probe(),
+): Promise<LocalRuntimeProbe[]> {
   if (!config.enabled || !config.localFirst) return [];
-  return localFirstProber.probe(config.endpoints);
+  const [http, page] = await Promise.all([
+    localFirstProber.probe(config.endpoints),
+    pageProbe().catch((): LocalRuntimeProbe[] => []),
+  ]);
+  return [...http, ...page];
 }
 
 /**

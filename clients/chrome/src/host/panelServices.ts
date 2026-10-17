@@ -7,14 +7,11 @@
  */
 import { createLocalRuntimeProber, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import { createOnlineSignal } from '@builderforce/write-outbox';
-import {
-  browserEngineFetch,
-  browserEngineProbe,
-  installIndexedDbStepDurability,
-} from '@seanhogg/builderforce-brain-embedded';
+import { createPageEngineSet, installIndexedDbStepDurability, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
+import { bfiWebLoader } from '@seanhogg/builderforce-brain-embedded/bfi';
 import { createApiClient, type ApiClient } from '../api/apiClient';
 import { createSession, type Session } from '../auth/session';
-import { DEFAULT_BASE_URL, LOCAL_DB, STEP_OUTBOX_DB } from '../config';
+import { BFI_WASM_FILE, DEFAULT_BASE_URL, LOCAL_DB, STEP_OUTBOX_DB } from '../config';
 import { loopbackEndpoints, resolveLoopbackProbes } from '../inference/localRuntimes';
 import { createRovrStream } from '../inference/route';
 import { createLocalFirstPersistence } from '../persistence/localFirstPersistence';
@@ -30,9 +27,11 @@ import { errorEvent } from '../telemetry/errorEvents';
 import { createBrowserTools, createRovrToolRegistry } from '../tools/browserTools';
 import { createChromeTabPort } from '../tools/chromeTabPort';
 import { createActionLedger, type ActionLedger } from '../tools/ledger';
+import { createPlatformCatalog, withPlatformTools } from '../tools/platformTools';
 import { browserNeedsConfirm, type SafetyContext } from '../tools/safety';
 import { createElementCache, createWorkingTab, type TabPort, type WorkingTab } from '../tools/tabPort';
 import { createRovrRunHost, type RovrRunHost } from './rovrRunHost';
+import { createRunOptions } from './runOptions';
 
 export interface PanelServices {
   host: RovrRunHost;
@@ -54,6 +53,8 @@ export interface PanelServices {
   addTask(chatId: number, title: string, description: string): Promise<LocalTask>;
   /** Probe the on-device runtimes now (Settings → Refresh). */
   probeLocal(): Promise<LocalRuntimeProbe[]>;
+  /** The side panel's in-page engines and their model store (the picker's downloads). */
+  pageEngines: PageEngineSet;
   sendRuntime(message: RovrRuntimeMessage): Promise<unknown>;
   reportError(error: unknown, operation: string): void;
 }
@@ -130,6 +131,9 @@ export async function createPanelServices(): Promise<PanelServices> {
 
   // ── Local first, failover to the gateway ───────────────────────────────────────
   const prober = createLocalRuntimeProber(fetchImpl, { capabilities: true });
+  // The engines inside the panel (it has the Prompt API and WebGPU): Gemini Nano, WebLLM
+  // and the WebGPU `bfi`, whose binary `build.mjs` copies into the extension root.
+  const pageEngines = createPageEngineSet({ loadBfi: bfiWebLoader(() => chrome.runtime.getURL(BFI_WASM_FILE)) });
   const endpoints = async () => loopbackEndpoints(await settings.synapseUrl());
   const stream = createRovrStream({
     baseUrl,
@@ -137,13 +141,22 @@ export async function createPanelServices(): Promise<PanelServices> {
     prober,
     endpoints,
     key: () => session.key(),
-    // The browser's own model, asked through the page (the panel has the Prompt API).
-    page: { probe: () => browserEngineProbe(), fetch: browserEngineFetch(fetchImpl) },
+    page: { probe: () => pageEngines.probe(), fetch: pageEngines.fetch(fetchImpl) },
+    // The side panel's model picker persists its pin here (Settings → Model).
+    pinned: () => settings.pinnedModel(),
     onAttempt: (record: LocalFirstAttemptRecord) => {
       if (record.outcome !== 'served' && record.attempt.kind === 'local') {
         console.warn(`Rovr local-first: ${record.attempt.ref} ${record.outcome}${record.detail ? ` (${record.detail})` : ''}`);
       }
     },
+  });
+
+  // Signed in, the tenant's gateway MCP catalog joins the browser tools — read once a
+  // minute at most for the life of the panel, writes behind the same approval card.
+  const platform = createPlatformCatalog({
+    baseUrl,
+    key: () => session.key(),
+    onError: (error) => reportError(error, 'platform.catalog'),
   });
 
   const host = createRovrRunHost({
@@ -160,8 +173,15 @@ export async function createPanelServices(): Promise<PanelServices> {
         addTask: (title, description) => addTask(chatId, title, description),
       });
       const { specs, run } = createRovrToolRegistry(tools);
-      return { specs, run, needsConfirm: browserNeedsConfirm(safety) };
+      return withPlatformTools({ specs, run, needsConfirm: browserNeedsConfirm(safety) }, await platform.actions());
     },
+    // The chat's `/` Work panel choices, read from its device record per run.
+    runOptions: createRunOptions({
+      getChat: (chatId) => records.getChat(chatId),
+      api,
+      signedIn: () => session.isSignedIn(),
+      projectId: () => settings.taskProjectId(),
+    }),
     async systemPrompt() {
       const tab = working.current();
       const title = tab ? ((await tabs.getTab(tab.id))?.title ?? '') : '';
@@ -203,10 +223,11 @@ export async function createPanelServices(): Promise<PanelServices> {
     probeLocal: async () => {
       const [probes, page] = await Promise.all([
         prober.probe(await endpoints(), { fresh: true }),
-        browserEngineProbe({ fresh: true }),
+        pageEngines.probe({ fresh: true }),
       ]);
-      return [...resolveLoopbackProbes(probes), ...(page ? [page] : [])];
+      return [...resolveLoopbackProbes(probes), ...page];
     },
+    pageEngines,
     sendRuntime,
     reportError,
   };

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  BFI_ENGINE_BASE_URL,
   BROWSER_ENGINE_BASE_URL,
   GATEWAY_COMPLETIONS_PATH,
   HTTP_LOCAL_RUNTIMES,
@@ -17,6 +18,7 @@ import {
   parseLocalModelRef,
   probeLocalRuntimes,
   rewriteToLocalUrl,
+  WEBLLM_ENGINE_BASE_URL,
   type FetchLike,
 } from './index.js';
 
@@ -31,20 +33,32 @@ const json = (body: unknown, status = 200): Response => new Response(JSON.string
 
 describe('registry', () => {
   it('lists every runtime once, on-device engines first', () => {
-    expect(LOCAL_RUNTIME_IDS).toEqual(['synapse', 'ollama', 'freetoken', 'browser', 'kimi-code']);
+    expect(LOCAL_RUNTIME_IDS).toEqual(['synapse', 'ollama', 'freetoken', 'bfi', 'webllm', 'browser', 'kimi-code']);
     expect(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id)).toEqual([
       'synapse',
       'ollama',
       'freetoken',
+      'bfi',
+      'webllm',
       'browser',
     ]);
   });
 
-  it('marks the in-page engine as reached by the page, never over HTTP', () => {
-    expect(LOCAL_RUNTIMES.filter((r) => r.reach === 'page').map((r) => r.id)).toEqual(['browser']);
+  it('marks the in-page engines as reached by the page, never over HTTP', () => {
+    expect(LOCAL_RUNTIMES.filter((r) => r.reach === 'page').map((r) => r.id)).toEqual(['bfi', 'webllm', 'browser']);
     expect(HTTP_LOCAL_RUNTIMES.map((r) => r.id)).toEqual(['synapse', 'ollama', 'freetoken', 'kimi-code']);
     expect(LOCAL_RUNTIMES.find((r) => r.id === 'browser')).toMatchObject({
       defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
+      tools: 'unknown',
+    });
+    expect(LOCAL_RUNTIMES.find((r) => r.id === 'bfi')).toMatchObject({
+      defaultBaseUrl: BFI_ENGINE_BASE_URL,
+      catalog: 'declared',
+      tools: 'all',
+    });
+    expect(LOCAL_RUNTIMES.find((r) => r.id === 'webllm')).toMatchObject({
+      defaultBaseUrl: WEBLLM_ENGINE_BASE_URL,
+      catalog: 'declared',
       tools: 'unknown',
     });
   });
@@ -54,6 +68,8 @@ describe('registry', () => {
       synapse: 'Synapse',
       ollama: 'Ollama',
       freetoken: 'FreeToken',
+      bfi: 'Builderforce engine',
+      webllm: 'WebLLM',
       browser: 'Gemini Nano',
       'kimi-code': 'Kimi Code',
     });

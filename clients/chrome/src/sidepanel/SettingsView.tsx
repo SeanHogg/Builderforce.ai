@@ -11,6 +11,7 @@ import { SYNAPSE_DEFAULT_URL } from '../inference/localRuntimes';
 import { originOf } from '../tools/safety';
 import { t, type MessageKey } from '../i18n/t';
 import { useLoaded, useServices, useSignedIn } from './hooks';
+import { ModelPickerSection } from './ModelPickerSection';
 
 const FAILURE_KEY: Record<DeviceAuthFailure, MessageKey> = {
   unavailable: 'signInUnavailable',
@@ -25,6 +26,7 @@ export function SettingsView() {
     <section className="rovr-stack">
       <AccountSection />
       <SitesSection />
+      <ModelPickerSection />
       <LocalModelsSection />
       <TaskProjectSection />
       <ReportingSection />

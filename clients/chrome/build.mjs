@@ -2,8 +2,12 @@
  * Builds Rovr — the Chrome (MV3) extension — into `dist/extension/`, the folder Chrome
  * loads unpacked and `package.mjs` zips for the Web Store.
  *
- * Three bundles, one esbuild run each, no code splitting (an MV3 content script cannot
- * import a chunk, and the service worker must be one module):
+ * Three bundles, one esbuild run each. The service worker and the content script are
+ * single files (an MV3 content script cannot import a chunk, and the worker stays one
+ * module); the SIDE PANEL is code-split — an extension page loads ES modules
+ * (`static/sidepanel.html` uses `<script type="module">`), so the page engines' heavy
+ * dependencies (`@mlc-ai/web-llm`, ~6 MB) stay lazy chunks under `chunks/`, parsed only
+ * when a WebLLM model is downloaded or run, never on every panel open:
  *
  *   background.js   the service worker — side-panel behaviour, the sync outbox that
  *                   owns every network write, alarms that wake it to replay a backlog
@@ -101,6 +105,9 @@ await Promise.all([
     ...shared,
     entryPoints: { sidepanel: 'src/sidepanel/main.tsx' },
     format: 'esm',
+    // Code-split (see the header): dynamic imports become lazy chunks beside the entry.
+    splitting: true,
+    chunkNames: 'chunks/[name]-[hash]',
     outdir: outDir,
     jsx: 'automatic',
     loader: { '.css': 'css' },
@@ -111,6 +118,15 @@ await Promise.all([
 const copyDir = (from, to) => fs.cpSync(from, to, { recursive: true });
 copyDir(path.join(here, '_locales'), path.join(outDir, '_locales'));
 fs.copyFileSync(path.join(here, 'static', 'sidepanel.html'), path.join(outDir, 'sidepanel.html'));
+
+// The WebGPU `bfi` engine's binary (the vendored `@seanhogg/bfi-web`, PRD 34). esbuild has
+// no asset pipeline for `new URL(…, import.meta.url)`, so the file is copied beside the
+// bundles (`BFI_WASM_FILE` in src/config.ts names it) and the panel passes its
+// `chrome.runtime.getURL` to the loader. The glue itself is bundled — reached through
+// brain-embedded's `/bfi` entry — as a lazy chunk.
+const bfiWasm = path.join(repoRoot, 'packages', 'bfi-web', 'bfi_web_bg.wasm');
+if (!fs.existsSync(bfiWasm)) throw new Error(`[rovr] ${path.relative(repoRoot, bfiWasm)} is missing — run \`node scripts/vendor-bfi-web.mjs\``);
+fs.copyFileSync(bfiWasm, path.join(outDir, 'bfi_web_bg.wasm'));
 
 // The brand mark the web app already ships (no second icon pipeline): Chrome downscales
 // it for the toolbar, the side panel header and the extensions page.

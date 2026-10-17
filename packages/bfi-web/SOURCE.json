@@ -1,0 +1,12 @@
+{
+  "repository": "SeanHogg/builderforce-inference",
+  "crate": "crates/bfi-web",
+  "commit": "585061d2e575380db842aa9affecc4e2905e4cb6",
+  "version": "2026.10.6",
+  "build": "wasm-pack build crates/bfi-web --target web --release --out-dir pkg",
+  "files": {
+    "bfi_web.js": "ee9e2c38c78a26277e02baba7a3a2876851f1786ebfe5826b82621b44aa1cbb5",
+    "bfi_web.d.ts": "d23739d0b7d301dd7d2f1e3b62ff7ce55e6dab4176213ff6091f971e0decf0d2",
+    "bfi_web_bg.wasm": "ca51249b90ff41c06e49692204fb7c14e4d42147f0077754ad08881395b4fefa"
+  }
+}

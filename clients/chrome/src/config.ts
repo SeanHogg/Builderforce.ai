@@ -14,8 +14,16 @@ export const DEFAULT_BASE_URL = 'https://builderforce.ai/gateway';
 
 /** The origins Rovr talks to without asking — mirrored by the manifest's `host_permissions`. */
 export const PLATFORM_ORIGINS = ['https://builderforce.ai', 'https://api.builderforce.ai'] as const;
+/** Where an upgrade click lands — the web app's `/pricing` IS its billing console, for a
+ *  free workspace choosing a tier and a paid one managing its plan alike. */
+export const PRICING_URL = `${PLATFORM_ORIGINS[0]}/pricing`;
 /** On-device inference runs on loopback — also in `host_permissions`. */
 export const LOOPBACK_ORIGINS = ['http://127.0.0.1', 'http://localhost'] as const;
+
+/** The WebGPU `bfi` engine's binary, copied to the extension root by `build.mjs` under the
+ *  vendored file's own name (`packages/bfi-web`); the panel loads it from
+ *  `chrome.runtime.getURL(BFI_WASM_FILE)`. */
+export const BFI_WASM_FILE = 'bfi_web_bg.wasm';
 
 /** The client name sent with a device sign-in (`POST /api/auth/device/code`). */
 export const DEVICE_CLIENT = 'chrome';

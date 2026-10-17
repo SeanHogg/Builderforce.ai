@@ -25,6 +25,10 @@
     // target resolves relative to THIS file — which is what these already are.
     "paths": {
       "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"],
+      // The page-engine bridge protocol (`../src/pageEngineBridgeProtocol.ts`) names
+      // the local-runtime ids, and the webview reaches it by a relative import.
+      "@builderforce/local-inference": ["../../../packages/local-inference/src/index.ts"],
+      "@builderforce/model-catalog": ["../../../packages/model-catalog/src/index.ts"],
       // How a BuilderForce JWT names its workspace is one fact, and the canvas reads
       // it too, so the one copy lives in `frontend/src/lib`. Mapped MODULE BY MODULE
       // rather than as `@/*`: the wildcard would hand this project the frontend's

@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/local-inference",
-  "version": "2026.10.17",
+  "version": "2026.10.18",
   "private": true,
   "type": "module",
   "description": "LOCAL-FIRST inference for every client that runs the shared agent loop on the user's machine (the VS Code extension, the Chrome extension): the on-device runtime registry (Synapse/bfi, Ollama, FreeToken, the browser's built-in model) and the `local/<runtime>/<model>` ref grammar, a never-throwing probe of what each runtime serves and can do, the CatalogView binding that prices local models at zero, and the plan + failover rule that tries a capable local model first and falls back to the cloud gateway. Pure; the host injects `fetch`, so it runs in Node, a page and an MV3 service worker alike.",

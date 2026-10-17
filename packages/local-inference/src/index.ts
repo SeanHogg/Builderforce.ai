@@ -6,8 +6,11 @@
  * serve, which model may take this turn, and when do we fall back to the cloud" is
  * answered once:
  *
- *  - the runtime REGISTRY (Synapse/bfi, Ollama, FreeToken, the browser's built-in
- *    model, Kimi Code) and the `local/<runtime>/<model>` ref grammar;
+ *  - the runtime REGISTRY (Synapse/bfi, Ollama, FreeToken, the page engines — WebGPU
+ *    `bfi`, WebLLM, the browser's built-in model — and Kimi Code) and the
+ *    `local/<runtime>/<model>` ref grammar;
+ *  - the page engines' model CATALOG and the device FIT check a picker runs before a
+ *    download;
  *  - a never-throwing PROBE of what each runtime serves and can do;
  *  - the `CatalogView` binding that makes `@builderforce/model-router` price local at 0;
  *  - the PLAN (capable local model first, then the cloud) and the FAILOVER rule that
@@ -20,7 +23,9 @@
  */
 
 export {
+  BFI_ENGINE_BASE_URL,
   BROWSER_ENGINE_BASE_URL,
+  WEBLLM_ENGINE_BASE_URL,
   HTTP_LOCAL_RUNTIMES,
   LOCAL_RUNTIMES,
   LOCAL_RUNTIME_IDS,
@@ -57,6 +62,14 @@ export {
   type LocalRuntimeProber,
 } from './probe.js';
 export { localCatalogView } from './catalogView.js';
+export {
+  LOCAL_MODEL_CATALOG,
+  localCatalogFor,
+  localCatalogModel,
+  type LocalCatalogModel,
+  type LocalModelSource,
+} from './catalog.js';
+export { localModelFit, type LocalDeviceSupport, type LocalModelFit, type LocalModelUnfit } from './fit.js';
 export {
   localFirstPlan,
   localModelUnfitReason,

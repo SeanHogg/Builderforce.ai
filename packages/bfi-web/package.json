@@ -1,0 +1,37 @@
+{
+  "name": "@seanhogg/bfi-web",
+  "version": "2026.10.6",
+  "private": true,
+  "type": "module",
+  "description": "VENDORED build of bfi-web (builderforce-inference crates/bfi-web, wasm-pack --target web): Synapse's 1-bit Bonsai (GGUF Q1_0) engine on WebGPU, exposed as the BfiEngine JS class of PRD 34 §3.1. Not published (PRD 34 §4) — hosts consume it by `link:`. Rebuild with `node scripts/vendor-bfi-web.mjs`; SOURCE.json records the commit and file hashes this copy came from.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SeanHogg/builderforce-inference",
+    "directory": "crates/bfi-web"
+  },
+  "main": "./bfi_web.js",
+  "module": "./bfi_web.js",
+  "types": "./bfi_web.d.ts",
+  "exports": {
+    ".": {
+      "types": "./bfi_web.d.ts",
+      "default": "./bfi_web.js"
+    },
+    "./wasm-url": {
+      "types": "./wasm-url.d.ts",
+      "default": "./wasm-url.js"
+    },
+    "./bfi_web_bg.wasm": "./bfi_web_bg.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bfi_web.js",
+    "bfi_web.d.ts",
+    "bfi_web_bg.wasm",
+    "wasm-url.js",
+    "wasm-url.d.ts",
+    "SOURCE.json"
+  ],
+  "sideEffects": false
+}

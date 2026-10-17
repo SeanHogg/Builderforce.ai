@@ -103,13 +103,22 @@ function canvasMessages(): Plugin {
  * in `voiceEngine.ts`), which is set before the runtime initialises, so the
  * emitted copy is never requested. Dropping it at `generateBundle` is what makes
  * that saving real.
+ *
+ * The ONE binary that does ship is `bfi_web_bg.wasm` (~3.5 MB) — the vendored WebGPU
+ * engine (`@seanhogg/bfi-web`, PRD 34), which runs IN this webview and has no origin to
+ * be fetched from instead. `pageEngines.ts` imports it with `?url`; it is kept by name.
  */
+const SHIPPED_WASM = ['bfi_web_bg.wasm'];
+
 function dropWasmAssets(): Plugin {
   return {
     name: 'bf-drop-wasm',
     generateBundle(_options, bundle) {
       for (const [fileName, chunk] of Object.entries(bundle)) {
-        if (chunk.type === 'asset' && fileName.endsWith('.wasm')) delete bundle[fileName];
+        if (chunk.type !== 'asset' || !fileName.endsWith('.wasm')) continue;
+        const names = [...(chunk.names ?? []), ...(chunk.originalFileNames ?? [])].map((name) => path.basename(name));
+        if (names.some((name) => SHIPPED_WASM.includes(name))) continue;
+        delete bundle[fileName];
       }
     },
   };

@@ -3,11 +3,12 @@ import { BROWSER_ENGINE_BASE_URL, type LocalRuntimeProbe } from '@builderforce/l
 import type { BrainStreamFn } from './brainRunStore';
 import {
   BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS,
-  browserEngineFetch,
   createBrowserEngineProber,
+  promptApiEngine,
   toPromptApiTurn,
 } from './browserEngine';
 import { createLocalFirstStream, localTransport } from './localFirstTransport';
+import { pageEnginesFetch } from './pageEngines/fetchShim';
 import { streamChatCompletion } from './streamChatCompletion';
 
 /**
@@ -21,6 +22,9 @@ import { streamChatCompletion } from './streamChatCompletion';
  */
 
 const CHAT_URL = `${BROWSER_ENGINE_BASE_URL}/v1/chat/completions`;
+/** The Prompt API engine behind the ONE page shim — what every host lends the streamer. */
+const browserEngineFetch = (base?: (input: string, init: RequestInit) => Promise<Response>) =>
+  pageEnginesFetch([promptApiEngine], base);
 
 type FakeSession = {
   inputQuota?: number;
@@ -85,7 +89,7 @@ const post = (body: unknown, signal?: AbortSignal): RequestInit => ({
   ...(signal ? { signal } : {}),
 });
 
-describe('browserEngineProbe', () => {
+describe('the Prompt API engine probe', () => {
   it('offers the one model only when it is ready, with the session quota as its window', async () => {
     const { factory, sessions } = installLanguageModel({ quota: 9_216 });
     const probe = await createBrowserEngineProber().probe();
@@ -178,7 +182,7 @@ describe('toPromptApiTurn', () => {
   });
 });
 
-describe('browserEngineFetch', () => {
+describe('the Prompt API engine behind pageEnginesFetch', () => {
   it('passes every other request to the base fetch', async () => {
     installLanguageModel();
     const res = await browserEngineFetch(passthrough)('http://127.0.0.1:11434/v1/chat/completions', post({}));

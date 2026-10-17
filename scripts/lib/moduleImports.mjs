@@ -26,7 +26,7 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { builtinModules, createRequire } from 'node:module';
-import { join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { SKIP_DIRS } from './skipDirs.mjs';
 
@@ -192,9 +192,12 @@ function isTestFile(file) {
  *   this substring. A cheap pre-filter for the callers that only care about one
  *   family of specifiers over a very large tree; preprocessing every file in
  *   `frontend/` to find nine `@builderforce/` imports is the whole cost of the run.
+ * @param {(file: string, text: string) => void} [options.onFile] Sees every file read,
+ *   before `mustContain` filters it — so a caller can take a second cheap fact from the
+ *   same read instead of reading the tree twice.
  * @returns {ImportSite[]}
  */
-export async function scanBareImports({ ts, repoRoot, dirs, mustContain }) {
+export async function scanBareImports({ ts, repoRoot, dirs, mustContain, onFile }) {
   const files = [];
   const seen = new Set();
   for (const dir of dirs) {
@@ -219,6 +222,7 @@ export async function scanBareImports({ ts, repoRoot, dirs, mustContain }) {
       next += 1;
       const file = files[index];
       const text = await readFile(file, 'utf8');
+      onFile?.(file, text);
       if (mustContain && !text.includes(mustContain)) {
         perFile[index] = [];
         continue;
@@ -246,6 +250,29 @@ export async function scanBareImports({ ts, repoRoot, dirs, mustContain }) {
 }
 
 /**
+ * The candidate extensions a relative specifier resolves through, in tsc's bundler order.
+ * NodeNext sources spell `./x.js` for a file that is `./x.ts` on disk, so a `.js`
+ * specifier tries the TypeScript spellings too.
+ */
+const RELATIVE_SUFFIXES = ['', '.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '/index.ts', '/index.tsx', '/index.js'];
+
+/** The source file a relative import resolves to, or null when nothing on disk matches. */
+function resolveRelativeFile(fromFile, specifier) {
+  const base = resolve(fromFile, '..', specifier);
+  const stems = /\.[cm]?jsx?$/.test(base) ? [base.replace(/\.([cm]?)js(x?)$/, '.$1ts$2'), base] : [base];
+  for (const stem of stems) {
+    for (const suffix of RELATIVE_SUFFIXES) {
+      const candidate = stem + suffix;
+      if (SOURCE_FILE.test(candidate) && existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+    }
+  }
+  return null;
+}
+
+/** A quick, over-inclusive read of the `../` specifiers in a file — confirmed by the parser before use. */
+const PARENT_SPECIFIER = /['"`](\.\.\/[^'"`\n]+)['"`]/g;
+
+/**
  * A scanner that reads each directory once.
  *
  * The projects in this repo overlap heavily — `frontend/tsconfig.json` compiles
@@ -254,26 +281,107 @@ export async function scanBareImports({ ts, repoRoot, dirs, mustContain }) {
  * thousands of files several times over. The cache is per scanner instance, and
  * a guard process is short-lived, so it never goes stale.
  *
- * @param {{ ts: import('typescript'), repoRoot: string }} options
- * @returns {{ scan: (dirs: string[], mustContain?: string) => Promise<ImportSite[]> }}
+ * `reachOutside` answers the second question a project's sources raise: which files
+ * OUTSIDE its source dirs it compiles because something inside reaches them by
+ * RELATIVE import, followed transitively. `clients/vscode/webview` includes only
+ * `src`, and imports `../../src/pageEngineBridgeProtocol.ts`, which imports
+ * `@builderforce/local-inference` — tsc compiles that file into the webview program
+ * and needs the package's `paths` entry, but a guard that scanned only the included
+ * dirs never saw the import, and the missing entry shipped. A project owns the
+ * imports of every file it compiles, however the file got into the program.
+ *
+ * It rides the scan's own reads: every file read records the `../` specifiers a quick
+ * read finds (a `./` one cannot leave the dir its file is in), and only a file with
+ * one that lands outside the project is parsed. Bounded by `limit` reached files.
+ *
+ * @param {{ ts: import('typescript'), repoRoot: string, limit?: number }} options
+ * @returns {{
+ *   scan: (dirs: string[], mustContain?: string) => Promise<ImportSite[]>,
+ *   reachOutside: (dirs: string[], mustContain?: string) => Promise<string[]>,
+ * }}
  */
-export function createImportScanner({ ts, repoRoot }) {
+export function createImportScanner({ ts, repoRoot, limit = 2000 }) {
   /** @type {Map<string, Promise<ImportSite[]>>} */
   const cache = new Map();
-  return {
+  /** @type {Map<string, string[]>} file → the bases its `../` specifiers point at (quick read). */
+  const parentBases = new Map();
+  /** @type {Map<string, string[]>} scanned dir → its source files. */
+  const filesByDir = new Map();
+  /** @type {Map<string, Promise<string[]>>} file → files its relative imports resolve to (parsed). */
+  const parsedTargets = new Map();
+
+  const recordFile = (dir) => (file, text) => {
+    if (!filesByDir.has(dir)) filesByDir.set(dir, []);
+    filesByDir.get(dir).push(file);
+    if (parentBases.has(file)) return;
+    parentBases.set(
+      file,
+      text.includes('../') ? [...text.matchAll(PARENT_SPECIFIER)].map((match) => resolve(file, '..', match[1])) : [],
+    );
+  };
+
+  const relativeTargets = (file) => {
+    let targets = parsedTargets.get(file);
+    if (!targets) {
+      targets = readFile(file, 'utf8').then((text) =>
+        parseModuleSpecifiers(ts, file, text)
+          .map(({ specifier }) => specifier)
+          .filter((specifier) => specifier.startsWith('.'))
+          .map((specifier) => resolveRelativeFile(file, specifier))
+          .filter((target) => target !== null),
+      );
+      parsedTargets.set(file, targets);
+    }
+    return targets;
+  };
+
+  const followable = (file) => {
+    const rel = relative(repoRoot, file);
+    if (rel.startsWith('..') || isAbsolute(rel)) return false;
+    return !rel.split(sep).some((part) => SKIP_DIRS.has(part));
+  };
+
+  const scanner = {
     async scan(dirs, mustContain) {
       const pending = dirs.map((dir) => {
         const key = [dir, mustContain ?? ''].join('|');
         let sites = cache.get(key);
         if (!sites) {
-          sites = scanBareImports({ ts, repoRoot, dirs: [dir], mustContain });
+          // A dir's files are recorded on its FIRST scan only, whatever its filter.
+          const onFile = filesByDir.has(dir) ? undefined : recordFile(dir);
+          if (onFile) filesByDir.set(dir, []);
+          sites = scanBareImports({ ts, repoRoot, dirs: [dir], mustContain, onFile });
           cache.set(key, sites);
         }
         return sites;
       });
       return (await Promise.all(pending)).flat();
     },
+
+    async reachOutside(dirs, mustContain) {
+      await scanner.scan(dirs, mustContain);
+      const inside = (file) => dirs.some((dir) => file === dir || file.startsWith(dir + sep));
+      const pending = dirs
+        .flatMap((dir) => filesByDir.get(dir) ?? [])
+        .filter((file) => (parentBases.get(file) ?? []).some((base) => !inside(base)));
+
+      /** @type {Set<string>} */
+      const reached = new Set();
+      while (pending.length && reached.size < limit) {
+        const file = /** @type {string} */ (pending.pop());
+        for (const target of await relativeTargets(file)) {
+          if (inside(target) || reached.has(target) || !followable(target)) continue;
+          reached.add(target);
+          pending.push(target);
+        }
+      }
+      if (reached.size >= limit) {
+        console.warn(`relative-import reach stopped at ${limit} files outside ${dirs.map((dir) => toPosix(relative(repoRoot, dir))).join(', ')}`);
+      }
+      return [...reached].sort();
+    },
   };
+  return scanner;
 }
 
 /** Convenience for callers that only want the distinct specifier set. */

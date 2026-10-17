@@ -51,6 +51,9 @@ COPY packages/interaction-contract /repo/packages/interaction-contract
 COPY packages/canvas-widget-protocol /repo/packages/canvas-widget-protocol
 COPY packages/ide-templates /repo/packages/ide-templates
 COPY packages/ide-file-contract /repo/packages/ide-file-contract
+# The vendored WebGPU engine (`link:../packages/bfi-web`, PRD 34) — a committed build
+# artifact rather than a watched source, so it is copied whole instead of stubbed above.
+COPY packages/bfi-web /repo/packages/bfi-web
 WORKDIR /repo/frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./
 RUN corepack enable && corepack prepare pnpm@10.23.0 --activate

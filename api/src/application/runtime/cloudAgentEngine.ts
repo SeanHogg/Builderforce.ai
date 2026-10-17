@@ -1100,7 +1100,12 @@ async function runCloudToolLoop(
       // budget; summarizes the bulky middle into a builder-memory note (free pool),
       // falling back to elision. Mutated IN PLACE so the compacted form persists into
       // CloudLoopState — the DO surface won't re-summarize the same prefix next tick.
-      const compaction = await compactMessages(messages, CLOUD_COMPACT_DEFAULTS, buildGatewaySummarizer(env));
+      // Sized to the model the policy asks for next when it names one (its catalog window).
+      const compaction = await compactMessages(
+        messages,
+        { ...CLOUD_COMPACT_DEFAULTS, ...(modelState.policy.model ? { targetModel: modelState.policy.model } : {}) },
+        buildGatewaySummarizer(env),
+      );
       if (compaction.compacted) {
         messages.length = 0;
         messages.push(...compaction.messages);

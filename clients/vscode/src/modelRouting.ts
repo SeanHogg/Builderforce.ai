@@ -31,12 +31,15 @@ import type * as vscode from "vscode";
 import {
   completeLocal,
   completeLocalFirst,
+  createHandoffFit,
   createLocalFirstStream,
   createLocalStream,
   localFirstApplies,
+  pageRuntimePin,
   type BrainStreamFn,
 } from "@seanhogg/builderforce-brain-embedded";
 import {
+  formatLocalModelRef,
   parseLocalModelRef,
   type LocalEndpoint,
   type LocalFirstAttemptRecord,
@@ -54,6 +57,10 @@ import {
 import { probeLocalFirstRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeBrainRun";
+import { hostPageEngines } from "./pageEngineBridge";
+
+/** Packs a local call for its model's window — `@seanhogg/builderforce-memory/handoff`. */
+const handoffFit = createHandoffFit();
 
 /** Where one turn will run, and with which model. */
 export interface ModelRoute {
@@ -85,6 +92,12 @@ export async function resolveModelRoute(secrets: vscode.SecretStorage): Promise<
   const config = getLocalModelsConfig();
   const pin = parseLocalModelRef(choice.model);
   if (!pin) return withLocalFirst(choice, config);
+  // A model the chat webview runs on WebGPU (`local/bfi/…`, `local/webllm/…`) is served
+  // over the page-engine bridge: it needs the webview, not a configured endpoint. With
+  // the panel closed it cannot be served here, so the turn goes to the gateway rather
+  // than failing — exactly like a pin whose runtime was removed.
+  const page = pageRuntimePin(choice.model);
+  if (page) return hostPageEngines.connected() ? { ...choice, local: page } : choice;
   // A pin can outlive the thing it points at — a Kimi install signed out since the model
   // was chosen, an on-device runtime removed from settings. No endpoint means no local
   // route, so the turn falls back to the gateway rather than dispatching at `undefined`.
@@ -145,11 +158,25 @@ function logLocalFirstAttempt(record: LocalFirstAttemptRecord): void {
  * sending an unauthenticated turn that fails opaquely at the gateway.
  */
 export function routeStream(route: ModelRoute, apiKey: string | undefined): BrainStreamFn {
-  if (route.local) return createLocalStream(route.local.endpoint, route.local.model);
+  const cloud = apiKey ? createNativeStream(getBaseUrl(), apiKey) : null;
+  // A pin still reaches a DIFFERENT model a run-policy failover names (the gateway, or
+  // the pin's runtime under another id), and every local call is packed for its window.
+  if (route.local) {
+    // The bridge's fetch answers a page runtime's root (`http://bfi.local`, …) from the
+    // webview's engines and passes every other runtime's request to the global fetch.
+    return createLocalStream(route.local.endpoint, route.local.model, hostPageEngines.fetch(), {
+      ref: formatLocalModelRef(route.local.provider, route.local.model),
+      cloud,
+      fit: handoffFit,
+    });
+  }
   if (route.localFirst) {
     return createLocalFirstStream({
       probes: route.localFirst.probes,
-      cloud: apiKey ? createNativeStream(getBaseUrl(), apiKey) : null,
+      cloud,
+      fit: handoffFit,
+      // Page runtimes' chat routes over the bridge; everything else via the global fetch.
+      fetch: hostPageEngines.fetch(),
       onAttempt: logLocalFirstAttempt,
     });
   }
@@ -169,13 +196,14 @@ export async function routeComplete(
   messages: ChatMessage[],
   signal?: AbortSignal,
 ): Promise<string> {
-  if (route.local) return completeLocal(route.local.endpoint, route.local.model, messages, signal);
+  if (route.local) return completeLocal(route.local.endpoint, route.local.model, messages, signal, hostPageEngines.fetch());
   if (route.localFirst) {
     const signedIn = Boolean(await getApiKey(secrets));
     return completeLocalFirst({
       probes: route.localFirst.probes,
       messages,
       cloud: signedIn ? () => complete(secrets, messages, route.model, signal) : null,
+      fetch: hostPageEngines.fetch(),
       ...(signal ? { signal } : {}),
       onAttempt: logLocalFirstAttempt,
     });

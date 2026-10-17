@@ -7,38 +7,45 @@
  * unbounded this balloons the request (a 97K-token turn 413'd a 32K model), inflates
  * cost, and forces the biggest-window models.
  *
- * Compaction COMPRESSES the bulky MIDDLE of the conversation into a concise "memory"
- * — the same builder-memory pattern BrainService uses ("Compress the following
- * conversation into a concise memory") — via an injected summarizer (the gateway on
- * the free pool). When no summarizer is available (or it fails) it falls back to
- * lossy elision so correctness never depends on an LLM call.
+ * Compaction is THE hand-off packer — `packHandoff` from
+ * `@seanhogg/builderforce-memory/handoff`, the same one the Brain uses when a run moves
+ * to a smaller model — sized to the smaller of the cost budget (`maxTokens`) and the
+ * serving model's catalog window when the caller names it. The dropped middle becomes
+ * ONE note: the injected summarizer's memory (the gateway on the free pool), else the
+ * caller's memory recall for the latest directive, else an elision marker — so
+ * correctness never depends on an LLM call.
  *
- * Invariants (must hold or the upstream rejects the request):
- *   • The system prompt (instructions) and the FIRST user message (the task) are
- *     always kept verbatim — the run's anchor.
- *   • The most recent `recentMessages` turns are kept verbatim — the live context.
- *   • Tool-call ↔ tool-result PAIRING is never broken: the middle is replaced by a
- *     SINGLE synthetic note placed where a `tool` message can't be orphaned (the
- *     tail never starts on a `tool` message), or messages are only CONTENT-truncated
- *     (count + roles + tool_call ids unchanged).
+ * Invariants (the packer's, must hold or the upstream rejects the request):
+ *   • The system prompt and the LATEST user directive are always kept verbatim.
+ *   • The verbatim tail takes what the budget allows, in whole units.
+ *   • Tool-call ↔ tool-result PAIRING is never broken: an assistant `tool_calls`
+ *     message and its `tool` results are kept or dropped together.
  *
- * Dependency-light + summarizer-injected so it is unit-testable without an LLM.
+ * Worker-safe: only the `/handoff` subpath is imported (pure, no `node:*`).
  */
+import { packHandoff, type HandoffMessage } from '@seanhogg/builderforce-memory/handoff';
 import { estimateRequestTokens, ideProxy, readProxyChoice, type ProxyEnv } from './LlmProxyService';
+import { catalogEntry } from './vendors/registry';
 
 type Msg = Record<string, unknown>;
 
 /** Compress a chunk of conversation text into a concise memory. Returns null to
- *  signal "couldn't summarize" so the caller falls back to elision. */
+ *  signal "couldn't summarize" so the caller falls back to recall / elision. */
 export type CompactionSummarizer = (conversationText: string) => Promise<string | null>;
 
 export interface CompactOptions {
-  /** Compact only when the messages estimate exceeds this token budget. */
+  /** Compact only when the messages estimate exceeds this token budget — the cost cap. */
   maxTokens: number;
-  /** Trailing messages kept verbatim (the live working context). */
-  recentMessages: number;
-  /** Older message `content` truncated to this many chars in the elision fallback. */
-  elidedContentCap: number;
+  /** The model about to serve, when the caller knows it: its catalog window (less
+   *  `reserveOutputTokens`) caps the budget when smaller than `maxTokens`. */
+  targetModel?: string;
+  /** Tokens held back for the reply when sizing to `targetModel`'s window. */
+  reserveOutputTokens?: number;
+  /** Memory recall for the latest directive (an Evermind context source), at most
+   *  `budgetChars` long — the note when the summarizer is absent or fails. */
+  recall?: (query: string, budgetChars: number) => Promise<string>;
+  /** Ceiling (ms) on each of the summarize / recall calls. */
+  timeoutMs?: number;
 }
 
 /** Defaults for the cloud coding loop. ~40K keeps a run comfortably inside the
@@ -46,29 +53,19 @@ export interface CompactOptions {
  *  leaving enough recent context to keep working. */
 export const CLOUD_COMPACT_DEFAULTS: CompactOptions = {
   maxTokens: 40_000,
-  recentMessages: 6,
-  elidedContentCap: 1_000,
+  reserveOutputTokens: 4_096,
+  timeoutMs: 30_000,
 };
 
 export interface CompactResult {
   messages: Msg[];
   compacted: boolean;
-  /** True when the middle was compressed via the summarizer (vs lossy elision). */
+  /** True when the middle was compressed via the summarizer (vs recall / elision). */
   summarized: boolean;
   beforeTokens: number;
   afterTokens: number;
-  /** Messages removed (middle collapsed to one memory note). */
+  /** Messages removed (the middle collapsed to one memory note). */
   droppedMessages: number;
-}
-
-const elisionNote = (chars: number): string => ` …[${chars} chars elided to fit the context budget]`;
-
-/** Truncate a message's string `content` to `cap`, preserving role / tool ids /
- *  tool_calls. Non-string content (already-structured) is left untouched. */
-function elide(msg: Msg, cap: number): Msg {
-  const c = msg.content;
-  if (typeof c !== 'string' || c.length <= cap) return msg;
-  return { ...msg, content: c.slice(0, cap) + elisionNote(c.length - cap) };
 }
 
 /** Render a slice of the conversation as role-tagged text for the summarizer, with
@@ -90,32 +87,17 @@ function renderForSummary(middle: readonly Msg[]): string {
   return parts.join('\n');
 }
 
-/** Split into the pinned head (system + task), the compressible middle, and the
- *  verbatim recent tail — with the tail guaranteed NOT to start on a `tool` message
- *  (which would orphan it once the middle is replaced). */
-function partition(messages: readonly Msg[], recentMessages: number): { head: Msg[]; middle: Msg[]; tail: Msg[] } {
-  const hasSystem = messages[0]?.role === 'system';
-  let taskIdx = messages.findIndex((m) => m.role === 'user');
-  if (taskIdx < 0) taskIdx = hasSystem ? 0 : -1;
-  const pinnedCount = taskIdx + 1;
-  let tailStart = Math.max(pinnedCount, messages.length - recentMessages);
-  while (tailStart > pinnedCount && messages[tailStart]?.role === 'tool') tailStart--;
-  return {
-    head: messages.slice(0, pinnedCount),
-    middle: messages.slice(pinnedCount, tailStart),
-    tail: messages.slice(tailStart),
-  };
+/** The token budget: the cost cap, or the serving model's window when that is smaller. */
+export function compactionBudget(opts: CompactOptions): number {
+  const window = opts.targetModel ? catalogEntry(opts.targetModel)?.contextWindow : undefined;
+  if (!window || window <= 0) return opts.maxTokens;
+  return Math.max(1, Math.min(opts.maxTokens, window - (opts.reserveOutputTokens ?? 0)));
 }
 
 /**
- * Compact `messages` to fit `maxTokens`, preserving the system prompt, the task,
- * the recent tail, and tool-call pairing. Returns the input unchanged
- * (compacted: false) when already within budget.
- *
- * Compression strategy, best-first:
- *   1. summarizer present → compress the middle into ONE memory note (builder memory);
- *   2. else / on failure → elide the middle's bulky content (lossy but structure-safe);
- *   3. if elision still overflows → collapse the middle to a single placeholder note.
+ * Compact `messages` to fit the budget ({@link compactionBudget}), preserving the system
+ * prompt, the latest directive, the recent tail and tool-call pairing. Returns the input
+ * unchanged (compacted: false) when already within budget.
  */
 export async function compactMessages(
   messages: readonly Msg[],
@@ -123,37 +105,39 @@ export async function compactMessages(
   summarize?: CompactionSummarizer,
 ): Promise<CompactResult> {
   const beforeTokens = estimateRequestTokens(messages);
-  if (messages.length === 0 || beforeTokens <= opts.maxTokens) {
-    return { messages: [...messages], compacted: false, summarized: false, beforeTokens, afterTokens: beforeTokens, droppedMessages: 0 };
-  }
+  const budget = compactionBudget(opts);
+  const untouched = (): CompactResult =>
+    ({ messages: [...messages], compacted: false, summarized: false, beforeTokens, afterTokens: beforeTokens, droppedMessages: 0 });
+  if (messages.length === 0 || beforeTokens <= budget) return untouched();
 
-  const { head, middle, tail } = partition(messages, opts.recentMessages);
-
-  // 1) Builder-memory compression: summarize the middle into one concise note.
-  if (summarize && middle.length > 0) {
-    const summary = await summarize(renderForSummary(middle)).catch(() => null);
-    if (summary && summary.trim()) {
-      const note: Msg = { role: 'assistant', content: `[Compressed memory of ${middle.length} earlier step(s) — the task and recent steps are retained verbatim]\n${summary.trim()}` };
-      const out = [...head, note, ...tail];
-      return { messages: out, compacted: true, summarized: true, beforeTokens, afterTokens: estimateRequestTokens(out), droppedMessages: middle.length - 1 };
-    }
-  }
-
-  // 2) Elision fallback (no summarizer / it failed): truncate the bulky middle.
-  const elidedMiddle = middle.map((m) => elide(m, opts.elidedContentCap));
-  let out = [...head, ...elidedMiddle, ...tail];
-  let droppedMessages = 0;
-  let afterTokens = estimateRequestTokens(out);
-
-  // 3) Still over budget → collapse the elided middle to a single placeholder note.
-  if (afterTokens > opts.maxTokens && elidedMiddle.length > 0) {
-    const note: Msg = { role: 'assistant', content: `[${elidedMiddle.length} earlier message(s) omitted to fit the context budget. The recent steps and the task above are retained.]` };
-    out = [...head, note, ...tail];
-    droppedMessages = elidedMiddle.length - 1;
-    afterTokens = estimateRequestTokens(out);
-  }
-
-  return { messages: out, compacted: true, summarized: false, beforeTokens, afterTokens, droppedMessages };
+  const pack = await packHandoff({
+    messages: messages as unknown as readonly HandoffMessage[],
+    targetContextTokens: budget,
+    reserveOutputTokens: 0,
+    ...(summarize
+      ? {
+          summarize: async (dropped: readonly HandoffMessage[]) => {
+            const summary = await summarize(renderForSummary(dropped as unknown as Msg[])).catch(() => null);
+            return summary && summary.trim()
+              ? `[Compressed memory of ${dropped.length} earlier step(s) — the task and recent steps are retained verbatim]\n${summary.trim()}`
+              : '';
+          },
+        }
+      : {}),
+    ...(opts.recall ? { recall: opts.recall } : {}),
+    ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+  });
+  // The packer's own estimate found it already fits: nothing to compact.
+  if (pack.dropped === 0) return untouched();
+  const out = pack.messages as unknown as Msg[];
+  return {
+    messages: out,
+    compacted: true,
+    summarized: pack.summarized,
+    beforeTokens,
+    afterTokens: estimateRequestTokens(out),
+    droppedMessages: pack.dropped,
+  };
 }
 
 /**

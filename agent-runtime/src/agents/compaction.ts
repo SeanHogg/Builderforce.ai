@@ -2,7 +2,6 @@ import { estimateTokens, generateSummary } from "../builderforce/agent-loop/inde
 import type { AgentMessage } from "../builderforce/model/agent-types.js";
 import type { Model } from "../builderforce/model/types.js";
 import { retryAsync } from "../infra/retry.js";
-import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
 import { repairToolUseResultPairing, stripToolResultDetails } from "./session-transcript-repair.js";
 
 export const BASE_CHUNK_RATIO = 0.4;
@@ -384,6 +383,5 @@ export function pruneHistoryForContextShare(params: {
   };
 }
 
-export function resolveContextWindowTokens(model?: Model): number {
-  return Math.max(1, Math.floor(model?.contextWindow ?? DEFAULT_CONTEXT_TOKENS));
-}
+// The one window resolver lives in `context-window.ts` (the loop's hand-off reads it too).
+export { resolveContextWindowTokens } from "./context-window.js";

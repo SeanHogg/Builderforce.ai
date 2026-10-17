@@ -30,6 +30,7 @@ import type {
 } from "../model/agent-types.js";
 import type { AssistantMessage, Message, Model, ToolResultMessage } from "../model/types.js";
 import { EventStream } from "./event-stream.js";
+import { packContextForModel } from "./handoff-pack.js";
 import { initialOnPremRunPolicy, modelRef, resolveStallOutcome } from "./stall-recovery.js";
 import type { StreamFn } from "./stream.js";
 
@@ -354,6 +355,17 @@ async function runLoop(
           const previous = activeModel;
           activeModel = outcome.model;
           announcementRecoveries = 0;
+          // The incoming model inherits a context packed for ITS window (a smaller
+          // fallback must not be handed a transcript it cannot hold).
+          const packed = await packContextForModel({
+            messages: currentContext.messages,
+            systemPrompt: currentContext.systemPrompt,
+            tools: currentContext.tools,
+            from: previous,
+            to: outcome.model,
+            maxTokens: config.maxTokens,
+          });
+          if (packed.dropped > 0) currentContext.messages.splice(0, currentContext.messages.length, ...packed.messages);
           config.onModelFallback?.(previous, outcome.model, outcome.notice);
           // Visible, never silent: a run that quietly changes who is answering is its
           // own support ticket. `display: true` also folds it into the next prompt, so

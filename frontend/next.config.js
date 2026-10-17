@@ -86,6 +86,12 @@ const nextConfig = {
       // provides below).
       '@huggingface/transformers': './node_modules/@huggingface/transformers/dist/transformers.web.js',
       '@seanhogg/builderforce-brain-embedded': '../brain-embedded/dist/index.mjs',
+      '@seanhogg/builderforce-brain-embedded/bfi': '../brain-embedded/dist/bfi.mjs',
+      // The vendored WebGPU engine (PRD 34): its glue, and the module whose relative
+      // `new URL('./bfi_web_bg.wasm', import.meta.url)` emits the binary as an asset.
+      // Webpack needs neither — it follows the `link:` like any package.
+      '@seanhogg/bfi-web': '../packages/bfi-web/bfi_web.js',
+      '@seanhogg/bfi-web/wasm-url': '../packages/bfi-web/wasm-url.js',
       '@seanhogg/builderforce-sdk': '../sdk/dist/index.mjs',
       '@seanhogg/builderforce-studio': '../studio/dist/index.mjs',
       '@seanhogg/builderforce-studio-embedded': '../studio-embedded/dist/index.mjs',
@@ -245,6 +251,11 @@ const nextConfig = {
             //   • WebRTC/relay sockets (wss:) for meetings, execution steering, live rooms
             //   • cdn.builderforce.ai — the Insights loader/recorder on builderforce.ai
             //     itself and the replay player bundle + stylesheet (PRD 33 D5, D17)
+            //   • on-device models (PRD 34): weights from huggingface.co (redirected to
+            //     its *.hf.co CDN) and WebLLM's model libraries from
+            //     raw.githubusercontent.com are credential-free CORS fetches covered by
+            //     `connect-src https:` (and admitted by COEP credentialless); WebLLM and
+            //     the WebGPU `bfi` compile them under 'wasm-unsafe-eval'
             // 'unsafe-inline' is required because the app styles via inline
             // style={} and injects inline <script> (theme anti-FOUC, GTM loader);
             // a nonce CSP is impractical across the statically-prerendered shell.

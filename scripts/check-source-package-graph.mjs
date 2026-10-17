@@ -32,7 +32,9 @@
  *     it does not.
  *
  *  3. DIRECT IMPORTS RESOLVE. Every source-only specifier a project's own
- *     sources import must resolve through that project's `paths`.
+ *     sources import must resolve through that project's `paths`. "Own sources"
+ *     are its included and aliased dirs PLUS every file outside them it reaches by
+ *     relative import, transitively — tsc compiles those too.
  *
  *  4. NO STALE PATH. A `@builderforce/*` `paths` key that no longer matches the
  *     registry points at a file that has moved or gone.
@@ -121,7 +123,12 @@ for (const project of findTsconfigProjects(repoRoot)) {
   // One scanner across every project: `frontend/tsconfig.json` and the VS Code
   // canvas project compile overlapping trees, and reading them once each is the
   // difference between a guard that runs in seconds and one that runs in minutes.
-  const sites = await scanner.scan(project.sources, '@builderforce/');
+  // Plus every file OUTSIDE those dirs the project reaches by relative import: tsc
+  // compiles it into this program, so its package imports are this project's to
+  // resolve. (`clients/vscode/webview` → `../src/pageEngineBridgeProtocol.ts` →
+  // `@builderforce/local-inference` slipped through when only `include` was scanned.)
+  const reached = await scanner.reachOutside(project.sources, '@builderforce/');
+  const sites = await scanner.scan([...project.sources, ...reached], '@builderforce/');
   const imported = sites.map((site) => site.specifier).filter((specifier) => graph.bySpecifier.has(specifier));
   projects.push({ ...project, declaredHere, linked, imported: [...new Set(imported)].sort() });
 }
