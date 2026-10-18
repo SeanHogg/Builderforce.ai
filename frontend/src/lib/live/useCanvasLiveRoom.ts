@@ -4,7 +4,8 @@
 import { useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useAuth } from '@/lib/AuthContext';
+import { useOptionalAuth } from '@/lib/AuthContext';
+import { useViewerSession } from '@/lib/viewerSession';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
@@ -58,7 +59,16 @@ export interface CanvasLiveRoom {
 
 export function useCanvasLiveRoom(): CanvasLiveRoom | null {
   const t = useTranslations('liveBar');
-  const { tenant, hasTenant } = useAuth();
+  // NOT `useAuth()`. The canvas is the web canvas, compiled into the VS Code
+  // webview, and there is no `AuthProvider` over that tree — `useAuth()` threw
+  // "must be used within an AuthProvider" here and took the whole board down to
+  // the chat surface (see `lib/viewerSession.ts`, which exists for exactly this).
+  // The WORKSPACE comes from the viewer session, which resolves the embedded
+  // token too; its NAME is display copy, so the optional provider is asked for
+  // it and simply contributes nothing where there is no provider.
+  const viewer = useViewerSession();
+  const auth = useOptionalAuth();
+  const tenantName = auth?.tenant?.name ?? null;
   const live = useOptionalLiveSession();
   const canvas = useOptionalActiveCanvas();
   const scope = useOptionalProjectScope();
@@ -70,7 +80,7 @@ export function useCanvasLiveRoom(): CanvasLiveRoom | null {
   const anchor = live?.anchor ?? null;
   // A signed-in board is the default room; the canvas library is a LIST of boards
   // rather than one of them, so "a call about which of these?" has no answer there.
-  const canStartDefault = hasTenant && active != null && pathname !== '/create';
+  const canStartDefault = viewer.hasTenant && active != null && pathname !== '/create';
 
   const startRoom = useCallback(() => {
     if (!start) return;
@@ -79,11 +89,11 @@ export function useCanvasLiveRoom(): CanvasLiveRoom | null {
     start({
       roomKey: `canvas:${active.sessionId}`,
       label: t('onThisCanvas'),
-      scopeLabel: [tenant?.name, scope?.currentProject?.name].filter(Boolean).join(' › '),
-      tenantId: tenant?.id ?? null,
+      scopeLabel: [tenantName, scope?.currentProject?.name].filter(Boolean).join(' › '),
+      tenantId: viewer.tenantId,
       href: `/create/${active.sessionId}`,
     });
-  }, [active, anchor, canStartDefault, scope?.currentProject?.name, start, t, tenant?.id, tenant?.name]);
+  }, [active, anchor, canStartDefault, scope?.currentProject?.name, start, t, tenantName, viewer.tenantId]);
 
   const leaveRoom = useCallback(() => { leave?.(); }, [leave]);
 

@@ -47,7 +47,9 @@ export function projectBrainMemoryHooks(
   return composeEvermindHooks(
     // The on-device tier is capability-gated inside the loader: no WebGPU, no SSM
     // assets, no worker ⇒ null, and these hooks answer nothing.
-    onDeviceMemoryHooks(() => getOnDeviceAnswerMemory()),
+    // Scoped to THIS project: the store is partitioned by scope, so a near-identical
+    // question asked in another project cannot replay this one's answer.
+    onDeviceMemoryHooks(() => getOnDeviceAnswerMemory(projectId)),
     projectMemoryHooks(projectId, apiRequest, chatId),
   );
 }
