@@ -528,7 +528,7 @@ function fakeDb(): FakeDb {
 
   const db = {
     select: (projection?: unknown) => selectChain({ table: null, projection, predicates: [], order: [] }),
-    insert: (table: unknown) => insertChain(table, {}),
+    insert: (table: unknown) => insertChain(table),
     update: (table: unknown) => updateChain(table, {}),
   };
 
@@ -1032,7 +1032,10 @@ describe('learningPipelineReport', () => {
     const report = await learningPipelineReport(fake.db, TENANT, PROJECT);
 
     expect(report.pending).toHaveLength(1);
-    expect(report.pending[0]!.status).toBeUndefined();
+    // The projection does not select `status` — the query hard-filters on
+    // `status = 'pending'` — so the queue's meaning is "survived the filter".
+    const queued = report.pending[0] as { status?: string };
+    expect(queued.status).toBeUndefined();
     expect(report.pending[0]!.factKey).toBe('auth-flow');
   });
 
