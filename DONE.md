@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-10-18 — Chat ticket rail shows two rows, then scrolls (brain-ui 2026.10.18 · frontend 2026.10.75 · VSIX 2026.10.47 · Rovr 2026.10.12)
+
+- The linked-tickets grid grew to `min(320px, 45vh)` (about four rows), pushing the transcript off a short panel. Cards now have a fixed 64px height and the grid caps at exactly two rows, scrolling the rest (`chatTickets/panelStyles.ts`), on every host.
+
 ## ✅ RESOLVED 2026-10-18 — BuilderForce logo on every surface, a Spent tab, and the session spend that stayed at $0 (brain-embedded 2026.10.34 · brain-ui 2026.10.17 · api 2026.10.57 · frontend 2026.10.74 · VSIX 2026.10.46 · Rovr 2026.10.11)
 
 - **Logo.** The shared mark (`BrainMark`: surface header, launcher, empty state, canvas Brain Object) drew a generic Brain glyph and, in the editor header, read as a blank tinted square. It now draws the BuilderForce bolt "B" (`brain-ui/src/surface/brandLogo.ts`, trimmed from `clients/vscode/media/icon.png`), keeping the running pulse; the header's tinted tile is gone.

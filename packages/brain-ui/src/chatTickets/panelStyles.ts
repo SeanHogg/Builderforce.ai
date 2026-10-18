@@ -10,6 +10,11 @@ import { V } from './tokens';
 // in the editor's active scheme even where the token background doesn't reach.
 const select: React.CSSProperties = { minWidth: 120, padding: '4px 8px', fontSize: 12, borderRadius: 8, border: `1px solid ${V.border}`, background: V.field, color: V.fieldText, colorScheme: 'inherit' };
 
+/** Ticket card height and the rows the grid shows before it scrolls. */
+const TICKET_CHIP_HEIGHT = 64;
+const TICKET_GRID_GAP = 12;
+const TICKET_GRID_ROWS = 2;
+
 export const S = {
   root: { margin: '4px 0 0', padding: '8px 10px', border: `1px solid ${V.border}`, borderRadius: 10, background: V.surface, display: 'flex', flexDirection: 'column', gap: 8 } as React.CSSProperties,
   muted: { fontSize: 12, color: V.muted } as React.CSSProperties,
@@ -22,11 +27,11 @@ export const S = {
   caret: { display: 'inline-block', fontSize: 11, color: V.muted, transition: 'transform 120ms ease' } as React.CSSProperties,
   ticketsCount: { fontSize: 12, fontWeight: 600, color: V.text } as React.CSSProperties,
   ticketsAgg: { fontSize: 11, color: V.muted } as React.CSSProperties,
-  // Expanded ring grid — a chat can link hundreds of tickets, so the grid is a fixed-height
-  // scroll region (capped to the viewport on short panels) rather than growing past the
-  // host's clipped container where the rest could never be reached.
-  ticketGrid: { display: 'flex', alignItems: 'center', alignContent: 'flex-start', gap: 12, flexWrap: 'wrap', maxHeight: 'min(320px, 45vh)', overflowY: 'auto', overscrollBehavior: 'contain', paddingRight: 4 } as React.CSSProperties,
-  chip: { display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px', border: `1px solid ${V.border}`, borderRadius: 8 } as React.CSSProperties,
+  // Expanded ring grid — a chat can link hundreds of tickets, so the grid shows TWO rows of
+  // cards and scrolls the rest, keeping the transcript in view below it. The cards have a
+  // fixed height so "two rows" is exact whatever a card holds.
+  ticketGrid: { display: 'flex', alignItems: 'center', alignContent: 'flex-start', gap: TICKET_GRID_GAP, flexWrap: 'wrap', maxHeight: TICKET_GRID_ROWS * TICKET_CHIP_HEIGHT + (TICKET_GRID_ROWS - 1) * TICKET_GRID_GAP, overflowY: 'auto', overscrollBehavior: 'contain', paddingRight: 4 } as React.CSSProperties,
+  chip: { display: 'flex', alignItems: 'center', gap: 6, height: TICKET_CHIP_HEIGHT, boxSizing: 'border-box', overflow: 'hidden', padding: '2px 6px', border: `1px solid ${V.border}`, borderRadius: 8 } as React.CSSProperties,
   ticketLabel: { fontSize: 12, fontWeight: 600, color: V.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as React.CSSProperties,
   // Clickable variant of the label — opens the artifact. Underlined-on-hover link
   // affordance, theme-driven accent, left-aligned and truncating like the span.
