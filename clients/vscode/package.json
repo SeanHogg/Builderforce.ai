@@ -887,7 +887,7 @@
     "@webgpu/types": "^0.1.71",
     "@xyflow/react": "^12.3.5",
     "autoprefixer": "^10.4.20",
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.28.2",
     "mermaid": "^11.15.0",
     "mocha": "^11.1.0",
     "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
@@ -908,7 +908,8 @@
   "pnpm": {
     "overrides": {
       "sharp": "0.35.4",
-      "fast-uri": "3.1.8"
+      "fast-uri": "3.1.8",
+      "esbuild": "^0.28.2"
     }
   }
 }
