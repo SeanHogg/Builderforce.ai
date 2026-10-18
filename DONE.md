@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-18 — In-browser runtime 2026.10.10: `node:wasi` and single-threaded napi-rs bindings (api 2026.10.53 · frontend 2026.10.70)
+
+- **`node:wasi`** in builderforce-webcontainers: WASI preview1 over the process's file system and stdio. File descriptors are backed by real process-fs fds. Preopens are sandboxed (NOTCAPABLE outside them), unimplemented imports get ENOSYS stubs, bad guest pointers return FAULT instead of trapping, and decoding and random fills are safe on shared memory. emnapi/napi-rs WebAssembly packages now load.
+- **Installs prefer the single-threaded `-wasm32-wasip1` napi-rs binding**, falling back to `-wasm32-wasi` only when none is published at that version, so current oxc-parser loads without SharedArrayBuffer.
+- **Root causes logged in the runtime ROADMAP (item 15):**
+  - SvelteKit's start-up restarts come from chokidar treating `basename('/')` (`''`) as a child of the project root `/`. The fix is to run projects from a directory below `/`.
+  - Nuxt 3 pins an oxc-parser with only a threaded build.
+  - Nuxt 4 installs but stalls after "Starting Nuxt...".
+- Opus reviewed the work twice and Sonnet applied every finding; 68 targeted runtime tests pass.
+
 ## ✅ RESOLVED 2026-10-17 — Route consolidation: one implementation per entity and pattern (api 2026.10.52 · frontend 2026.10.68 · agent-runtime 2026.10.10 · VS Code 2026.10.43)
 
 Every row of the duplicates section in the Neon load audit (https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q) was worked through by ten agents: 29 consolidated, 5 distinct, 4 partial, 2 intentional, 2 not done (migration decisions, now in ROADMAP.md). The code is in `edbaebe23`; this commit fixes its typecheck and guards and bumps the versions.
