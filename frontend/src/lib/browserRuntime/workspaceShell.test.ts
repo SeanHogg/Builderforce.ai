@@ -241,13 +241,24 @@ describe('install snapshots in the shell', () => {
     expect(snapshots.store.save).not.toHaveBeenCalled();
   });
 
-  it('leaves snapshots alone for a command that is not an install', async () => {
-    const { store } = memoryStore({ 'package.json': '{"name":"app"}' });
-    const snapshots = snapshotStore();
-    const fake = fakeRuntime(() => 0);
-    await run(createWorkspaceShell(store, { boot: async () => fake.runtime, snapshots: snapshots.store }), 'npm test');
+  it('runs a non-install command over the packages this browser kept, and saves nothing for it', async () => {
+    const manifest = '{"name":"app"}';
+    const { store } = memoryStore({ 'package.json': manifest });
+    const key = installSnapshotKey(7, { 'package.json': manifest })!;
+    const snapshots = snapshotStore({ [key]: new Uint8Array([1]) });
+    const fake = fakeRuntime((fs) => (fs.has('/node_modules/restored/index.js') ? 0 : 127));
+    const result = await run(createWorkspaceShell(store, { boot: async () => fake.runtime, snapshots: snapshots.store }), 'npm run build');
+    expect(result.ok).toBe(true);
+    expect(snapshots.store.load).toHaveBeenCalledWith(key);
     await settle();
-    expect(snapshots.store.load).not.toHaveBeenCalled();
     expect(snapshots.store.save).not.toHaveBeenCalled();
+  });
+
+  it('tells the model to install first when a command is not found and nothing is installed', async () => {
+    const { store } = memoryStore({ 'package.json': '{"name":"app"}' });
+    const fake = fakeRuntime(() => 127);
+    const result = await run(createWorkspaceShell(store, { boot: async () => fake.runtime, snapshots: snapshotStore().store }), 'npm run build');
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Exited with code 127. No dependencies are installed — run npm install first, then retry.');
   });
 });

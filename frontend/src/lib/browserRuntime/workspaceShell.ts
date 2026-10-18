@@ -20,7 +20,7 @@
  *    never dependencies or build output — so a codemod, a formatter or
  *    `npm install <pkg>` updating `package.json` reaches the workspace like an edit.
  *
- * An install command shares the workspace run's install snapshots (`installSnapshots.ts`):
+ * Every command shares the workspace run's install snapshots (`installSnapshots.ts`):
  * after a reload it starts from the packages this browser kept rather than from nothing,
  * and a successful install is kept for the next visit.
  *
@@ -73,6 +73,9 @@ export interface WorkspaceShellDeps {
   /** Where install snapshots live. Default: the page's IndexedDB store; null turns them off. */
   snapshots?: SnapshotStore | null;
 }
+
+/** The shell's exit status for a command it could not find (`bfsh: command not found`). */
+const COMMAND_NOT_FOUND = 127;
 
 /** `npm install`, `pnpm add zod`, `yarn ci`… — a line that STARTS with a package install. */
 const INSTALL_COMMAND = /^\s*(?:npm|pnpm|yarn)\s+(?:install|i|ci|add)(?:\s|$)/;
@@ -256,8 +259,11 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
       return { ok: false, error: `The workspace files could not be loaded into the runtime: ${toolErrorMessage(error, 'the read failed')}` };
     }
 
+    // Any command starts from the packages this browser kept for this exact manifest: a
+    // build or test run on a fresh page otherwise fails with "command not found" (127)
+    // for a dependency the person installed on an earlier visit.
     const install = isInstallCommand(command);
-    if (install && !hasInstalledPackages(runtime)) {
+    if (!hasInstalledPackages(runtime)) {
       const key = installSnapshotKey(store.id, mounted);
       if (key) await restoreInstalledPackages(runtime, key, deps.snapshots);
     }
@@ -284,7 +290,7 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
     }
     const error = ran.timedOut
       ? `Timed out after ${Math.round(timeoutMs / 1000)}s and was stopped. A long-running process (a dev server, a watcher) never finishes here — the live preview already runs the app.`
-      : ok ? undefined : `Exited with code ${ran.exitCode}.`;
+      : ok ? undefined : `Exited with code ${ran.exitCode}.${ran.exitCode === COMMAND_NOT_FOUND && !install && !hasInstalledPackages(runtime) ? ' No dependencies are installed — run npm install first, then retry.' : ''}`;
     return {
       ok,
       stdout: ran.stdout,
