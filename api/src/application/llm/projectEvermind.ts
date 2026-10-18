@@ -1572,7 +1572,13 @@ export async function buildEvermindLessonsBlock(
   topK = 4,
 ): Promise<string> {
   try {
-    const res = await recallProjectEvermindMemory(env, db, tenantId, projectId, query);
+    // Resolve FIRST: a raw projectId can point at the CONTAINER's default head rather
+    // than this project's real build, so a cloud ticket would be grounded on a different
+    // Evermind than the chat that dispatched it. Every other reader here resolves
+    // (projectEvermindRoutes, projectMemory, brainEvermindLearning) — this was the one
+    // that did not. Unresolvable falls through to the raw id; the catch returns ''.
+    const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+    const res = await recallProjectEvermindMemory(env, db, tenantId, effectiveId, query);
     if (!res.seeded || res.items.length === 0) return '';
     const lines = res.items.slice(0, topK).map((i) => `- ${i.text.slice(0, 320)}`);
     if (lines.length === 0) return '';

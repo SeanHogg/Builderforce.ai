@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { __clearL1CacheForTests } from '../../infrastructure/cache/readThroughCache';
 import {
   projectEvermindBase,
   projectEvermindRef,
@@ -7,6 +8,7 @@ import {
   resolveProjectEvermindModelPin,
   resolveProjectInferenceModel,
   resolveEffectiveEvermindProjectId,
+  buildEvermindLessonsBlock,
   setProjectEvermindInference,
   recordEvermindServeOutcome,
   computeProjectAffect,
@@ -19,6 +21,10 @@ import {
   type EvermindServeReadiness,
 } from './projectEvermind';
 import type { Env } from '../../env';
+
+// The read-through L1 is module-global. setupFiles clears one module instance;
+// this file's graph can hold another, so clear the instance these tests use.
+beforeEach(() => __clearL1CacheForTests());
 
 /** db mock: `.select().from().where().limit()` resolves to the configured row. */
 function makeDb(row: Record<string, unknown> | null) {
@@ -166,6 +172,106 @@ describe('resolveEffectiveEvermindProjectId (the ONE "which Evermind is this pro
   it('expands a container’s pin to its Evermind BUILD’s head', async () => {
     const db = queueDb([[{ sid: 30, createdAt: '2026-09-01' }], [head(4)], [head(4)]]);
     expect(await resolveProjectInferenceModel(env, db, 7, 11)).toBe('evermind/evermind/project/7/30/v4');
+  });
+});
+
+/** Walk a drizzle `where` clause for bound numbers (tenant id, project id). */
+function boundNumbers(node: unknown): number[] {
+  const out: number[] = [];
+  const seen = new Set<unknown>();
+  const walk = (n: unknown, depth: number) => {
+    if (typeof n === 'number' && Number.isFinite(n)) { out.push(n); return; }
+    if (n == null || depth > 24 || typeof n !== 'object' || seen.has(n)) return;
+    seen.add(n);
+    if (Array.isArray(n)) { for (const x of n) walk(x, depth + 1); return; }
+    for (const v of Object.values(n as Record<string, unknown>)) walk(v, depth + 1);
+  };
+  walk(node, 0);
+  return out;
+}
+
+/**
+ * The container has no head of its own; its newest Evermind build (`buildId`) is
+ * seeded at v10217. Head reads branch on the project id in the WHERE clause, so a
+ * recall that forgets to resolve comes back unseeded.
+ */
+function containerWithSeededBuildDb(buildId: number) {
+  return {
+    select: (shape?: Record<string, unknown>) => ({
+      from: () => ({
+        where: (cond: unknown) => {
+          const run = async () => {
+            if (shape && 'sid' in shape) return [{ sid: buildId, createdAt: '2026-09-10' }];
+            if (shape && 'cid' in shape) return [];
+            if (shape && 'psychometric' in shape) return [];
+            const ids = boundNumbers(cond);
+            if (ids.includes(buildId)) return [{ name: 'Build', version: 10217, mode: 'connected', contributions: 1, inferenceEnabled: true }];
+            return [];
+          };
+          const thenable = run() as Promise<unknown[]> & { limit: () => Promise<unknown[]> };
+          thenable.limit = () => run();
+          return thenable;
+        },
+      }),
+    }),
+  } as never;
+}
+
+describe('buildEvermindLessonsBlock', () => {
+  // Ids no other test in this file uses. getOrSetCached keeps an in-process map for
+  // the process lifetime, so sharing tenant 7 / project 11 would poison those tests.
+  const TENANT = 907;
+  const CONTAINER = 9011;
+  const BUILD = 9031;
+  const LESSON = 'Cloud runs must recall the resolved Evermind build, not the container head.';
+
+  it('recalls against the resolved Evermind build, not the raw container project id', async () => {
+    const names: string[] = [];
+    const envWithDo = {
+      PROJECT_EVERMIND: {
+        idFromName: (name: string) => { names.push(name); return name; },
+        get: () => ({
+          fetch: async (input: string) => {
+            const url = String(input);
+            if (url.includes('/recall')) {
+              return { ok: true, json: async () => ({ method: 'embedding', matches: [{ id: 9, score: 0.99 }] }) };
+            }
+            if (url.includes('/recent')) {
+              return {
+                ok: true,
+                json: async () => ({
+                  recent: [{ id: 9, kind: 'text', version: 10217, at: 1, weight: 1, text: LESSON }],
+                }),
+              };
+            }
+            return { ok: false, json: async () => ({}) };
+          },
+        }),
+      },
+    } as unknown as Env;
+
+    const block = await buildEvermindLessonsBlock(
+      envWithDo,
+      containerWithSeededBuildDb(BUILD),
+      TENANT,
+      CONTAINER,
+      'resolved Evermind build',
+    );
+    expect(block).toContain(LESSON);
+    expect(block).toContain('Prior lessons for this work');
+    // The coordinator is named proj:<tenant>:<project>. Resolution must address the
+    // build, never the container the cloud run was dispatched against.
+    expect(names.length).toBeGreaterThan(0);
+    expect(names.every((n) => n === `proj:${TENANT}:${BUILD}`)).toBe(true);
+  });
+
+  it('returns "" rather than throwing when the project has no resolvable head', async () => {
+    await expect(buildEvermindLessonsBlock(env, queueDb([]), TENANT, 9042, 'anything learned')).resolves.toBe('');
+  });
+
+  it('returns "" rather than throwing when resolution fails', async () => {
+    const db = { select: () => { throw new Error('db down'); } } as never;
+    await expect(buildEvermindLessonsBlock(env, db, TENANT, 9043, 'anything learned')).resolves.toBe('');
   });
 });
 
