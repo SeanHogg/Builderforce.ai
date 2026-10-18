@@ -55,6 +55,12 @@ export interface CanvasHostAction {
 export interface CanvasHost {
   /** Which editor is hosting, for diagnostics reports and activity telemetry. */
   surface: 'vscode';
+  /**
+   * The extension's own version (`package.json` / `vscode.version`), so a canvas
+   * diagnostics paste names the VSIX that hosted it rather than only the web
+   * bundle the webview compiled. Absent when the host didn't pass one.
+   */
+  hostVersion?: string | null;
   actions: readonly CanvasHostAction[];
   /** Reveal a captured file in the editor, optionally at the captured range. */
   openFile(path: string, range?: CanvasHostRange): void;

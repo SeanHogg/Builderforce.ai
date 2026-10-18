@@ -13,3 +13,24 @@
 
 /** Build-time UI version, or '—' when the build didn't stamp one. */
 export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '—';
+
+/**
+ * Embedded Brain (`@seanhogg/builderforce-brain-embedded`) that composed a canvas
+ * or in-page turn. This is NOT the Agent Execution Engine's deploy stamp — that
+ * engine is {@link AGENT_ENGINE} and ships inside the API build (`apiVersion`).
+ */
+export const BRAIN_VERSION = process.env.NEXT_PUBLIC_BRAIN_VERSION || '—';
+
+/**
+ * In-browser sandbox (`@seanhogg/builderforce-webcontainers`) the canvas build
+ * commands run on. A `bfsh:` failure or a `preview.builderforce.ai/__bfwc/` URL
+ * is a failure of this build.
+ */
+export const RUNTIME_VERSION = process.env.NEXT_PUBLIC_RUNTIME_VERSION || '—';
+
+/**
+ * The only Agent Execution Engine. It has no version of its own: the cloud loop
+ * lives in the API worker, so its deploy stamp is `apiVersion`. A canvas Brain
+ * turn does not run that loop — it runs the embedded Brain ({@link BRAIN_VERSION}).
+ */
+export const AGENT_ENGINE = 'builderforce-v3';

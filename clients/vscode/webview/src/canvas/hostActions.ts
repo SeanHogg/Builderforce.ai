@@ -46,7 +46,11 @@ async function capture(id: string): Promise<CanvasHostCapture | null> {
  * Install the editor host so `<CanvasHostActions>` becomes visible and every
  * navigation/link routes through VS Code. Called once, before React mounts.
  */
-export function installCanvasHost(labels: LabelBundle, webOrigin: string): void {
+export function installCanvasHost(
+  labels: LabelBundle,
+  webOrigin: string,
+  hostVersion: string | null,
+): void {
   const actions: CanvasHostAction[] = CAPTURE_ACTIONS.map(({ id, labelKey, icon }) => ({
     id,
     label: labels[labelKey] ?? labelKey,
@@ -56,6 +60,7 @@ export function installCanvasHost(labels: LabelBundle, webOrigin: string): void 
 
   const host: CanvasHost = {
     surface: 'vscode',
+    hostVersion,
     actions,
     openFile: (path: string, range?: CanvasHostRange) => post('canvas.openFile', { path, range }),
     // The host decides what a route means here: another Canvas panel, the sign-in

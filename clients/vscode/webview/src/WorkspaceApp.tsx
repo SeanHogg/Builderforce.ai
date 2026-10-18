@@ -169,8 +169,12 @@ function WorkspaceScreen({ init }: { init: InitData }) {
   }), []);
 
   useEffect(() => {
-    installCanvasHost(init.labels, session?.webOrigin ?? 'https://builderforce.ai');
-  }, [init.labels, session?.webOrigin]);
+    installCanvasHost(
+      init.labels,
+      session?.webOrigin ?? 'https://builderforce.ai',
+      init.extensionVersion ?? null,
+    );
+  }, [init.labels, session?.webOrigin, init.extensionVersion]);
 
   // The canvas declares BOTH themes and treats dark as the default, opting into light
   // via `html[data-theme='light']` — so this is the whole theme bridge.

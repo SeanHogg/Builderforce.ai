@@ -22,12 +22,31 @@
  * around them is localized). {@link ./diagnosticsCapture} owns the impure capture.
  */
 
+/** Which install produced the report. `web` is the site, `vsix` the editor
+ *  extension, `rovr` the Chrome extension. */
+export type DiagnosticsHost = 'web' | 'vsix' | 'rovr';
+
 /** Build + capture provenance every report carries, ABOVE its payload. */
 export interface DiagnosticsContext {
   /** Frontend build that rendered this (APP_VERSION). */
   uiVersion?: string | null;
-  /** API build that served the data, when the page knows it. */
+  /** API build that served the data, when the page knows it.
+   *  This is also the deploy stamp of the Agent Execution Engine: that engine
+   *  (`engine`) has no version of its own and ships inside this API worker. */
   apiVersion?: string | null;
+  /** Which install produced the report. */
+  host?: DiagnosticsHost | null;
+  /** That install's version: the web frontend, the VSIX, or the Chrome extension. */
+  hostVersion?: string | null;
+  /** Agent Execution Engine. `builderforce-v3`, or `builderforce-v3@<apiVersion>`
+   *  when the API deploy stamp is known. That is its version: the engine has no
+   *  number of its own and ships inside the API worker. */
+  engine?: string | null;
+  /** Embedded Brain package that composed an in-page / canvas turn. Not the
+   *  cloud engine — canvas turns never leave the browser for that loop. */
+  brainVersion?: string | null;
+  /** In-browser sandbox (`builderforce-webcontainers`) canvas build commands ran on. */
+  runtimeVersion?: string | null;
   /** ISO timestamp of the capture. Passed in rather than read from the clock so every
    *  builder stays pure and testable — and so "now" is one instant for the whole report. */
   capturedAt: string;
@@ -93,6 +112,11 @@ export function environmentLines(
     line('capturedAt', ctx.capturedAt),
     line('uiVersion', ctx.uiVersion),
     line('apiVersion', ctx.apiVersion),
+    line('host', ctx.host),
+    line('hostVersion', ctx.hostVersion),
+    line('engine', ctx.engine),
+    line('brainVersion', ctx.brainVersion),
+    line('runtimeVersion', ctx.runtimeVersion),
     line('sourceUrl', ctx.sourceUrl),
     ...extra.map(([label, value]) => line(label, value)),
   ];

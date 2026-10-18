@@ -53,6 +53,29 @@ import { computeBuildId } from '../buildId.mjs';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
+
+/** First package.json in `files` that carries a version string, or ''. */
+function firstPackageVersion(files: string[]): string {
+  for (const file of files) {
+    if (!fs.existsSync(file)) continue;
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as { version?: unknown };
+    if (typeof parsed.version === 'string' && parsed.version.length > 0) return parsed.version;
+  }
+  return '';
+}
+
+// The webview compiles the web frontend, so its uiVersion is that package — not
+// a dash. Brain and the in-browser runtime are the same stamps the web build
+// inlines, so a canvas paste from the editor names the same kernels.
+const webviewUiVersion = firstPackageVersion([path.join(REPO_ROOT, 'frontend/package.json')]);
+const webviewBrainVersion = firstPackageVersion([
+  path.join(REPO_ROOT, 'frontend/node_modules/@seanhogg/builderforce-brain-embedded/package.json'),
+  path.join(REPO_ROOT, 'brain-embedded/package.json'),
+]);
+const webviewRuntimeVersion = firstPackageVersion([
+  path.join(REPO_ROOT, 'frontend/node_modules/@seanhogg/builderforce-webcontainers/package.json'),
+  path.resolve(REPO_ROOT, '../builderforce-webcontainers/packages/browser/package.json'),
+]);
 const FRONTEND_SRC = path.join(REPO_ROOT, 'frontend/src');
 
 /**
@@ -160,6 +183,9 @@ export default defineConfig({
     // is overridden at runtime by the host's `baseUrl` where it matters; this is the
     // fallback the module-level constants capture at import time.
     'process.env.NODE_ENV': JSON.stringify('production'),
+    'process.env.NEXT_PUBLIC_APP_VERSION': JSON.stringify(webviewUiVersion),
+    'process.env.NEXT_PUBLIC_BRAIN_VERSION': JSON.stringify(webviewBrainVersion),
+    'process.env.NEXT_PUBLIC_RUNTIME_VERSION': JSON.stringify(webviewRuntimeVersion),
     'process.env.NEXT_PUBLIC_AUTH_API_URL': JSON.stringify(process.env.BF_API_URL || 'https://api.builderforce.ai'),
     'process.env.NEXT_PUBLIC_WORKER_URL': JSON.stringify(''),
     'process.env.NEXT_PUBLIC_APP_URL': JSON.stringify('https://builderforce.ai'),

@@ -1,7 +1,38 @@
 /** @type {import('next').NextConfig} */
 const createNextIntlPlugin = require('next-intl/plugin');
+const fs = require('fs');
 const path = require('path');
 const { version } = require('./package.json');
+
+/**
+ * Version of a workspace package the frontend actually links, so a diagnostics
+ * paste can name the Brain and the in-browser runtime without a runtime import
+ * of their `package.json` (those packages don't export it).
+ *
+ * The installed copy wins: that is what the bundle resolves. The sibling
+ * checkout is the fallback for a build that hasn't linked `node_modules` yet.
+ */
+function linkedPackageVersion(name, fallbackFile) {
+  const candidates = [
+    path.join(__dirname, 'node_modules', '@seanhogg', name, 'package.json'),
+    fallbackFile,
+  ];
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (typeof parsed.version === 'string' && parsed.version.length > 0) return parsed.version;
+  }
+  return '';
+}
+
+const brainVersion = linkedPackageVersion(
+  'builderforce-brain-embedded',
+  path.join(__dirname, '../brain-embedded/package.json'),
+);
+const runtimeVersion = linkedPackageVersion(
+  'builderforce-webcontainers',
+  path.join(__dirname, '../../builderforce-webcontainers/packages/browser/package.json'),
+);
 
 /**
  * The Node-safe entry of `hast-util-from-html-isomorphic`, resolved once here.
@@ -60,6 +91,8 @@ const developmentConnectOrigins = process.env.NODE_ENV === 'development'
 const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
+    NEXT_PUBLIC_BRAIN_VERSION: brainVersion,
+    NEXT_PUBLIC_RUNTIME_VERSION: runtimeVersion,
   },
   // Cloudflare Pages (next-on-pages) does not run Next's default image
   // optimizer endpoint (/_next/image), so optimized <Image> requests 404 and

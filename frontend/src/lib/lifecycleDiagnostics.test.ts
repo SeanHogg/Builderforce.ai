@@ -127,6 +127,11 @@ describe('buildLifecycleDiagnosticsReport', () => {
 
   it('records the build versions so a pre/post-deploy capture is distinguishable', () => {
     expect(report).toContain('uiVersion: 2026.7.105');
+    // A fixture that didn't stamp the host still writes the lines, so a paste
+    // that predates the fields is distinguishable from one that omitted them.
+    expect(report).toContain('host: (none)');
+    expect(report).toContain('engine: (none)');
+    expect(report).toContain('runtimeVersion: (none)');
     expect(report).toContain('apiVersion: 2026.7.135');
     expect(report).toContain('capturedAt: 2026-07-25T10:00:00.000Z');
   });
