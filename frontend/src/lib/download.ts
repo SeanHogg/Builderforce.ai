@@ -39,8 +39,22 @@ export function filenameFromResponse(res: Response, fallback: string): string {
   return /filename="?([^";]+)"?/.exec(cd)?.[1] ?? fallback;
 }
 
-/** Turn a header row + body rows into RFC-4180 CSV (quotes escaped, CRLF rows). */
-export function toCsv(head: string[], rows: Array<Array<string | number | null | undefined>>): string {
-  const cell = (v: string | number | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  return [head.map(cell).join(','), ...rows.map((r) => r.map(cell).join(','))].join('\r\n');
+export interface CsvOptions {
+  /** 'always' quotes every cell (default); 'minimal' quotes only cells holding a comma, quote or line break. */
+  quote?: 'always' | 'minimal';
+  /** Row separator; RFC 4180's CRLF by default. */
+  eol?: string;
+}
+
+/** Turn a header row + body rows into RFC-4180 CSV (quotes escaped, CRLF rows by default). */
+export function toCsv(
+  head: string[],
+  rows: Array<Array<string | number | null | undefined>>,
+  { quote = 'always', eol = '\r\n' }: CsvOptions = {},
+): string {
+  const cell = (v: string | number | null | undefined) => {
+    const s = String(v ?? '');
+    return quote === 'minimal' && !/[",\r\n]/.test(s) ? s : `"${s.replace(/"/g, '""')}"`;
+  };
+  return [head.map(cell).join(','), ...rows.map((r) => r.map(cell).join(','))].join(eol);
 }

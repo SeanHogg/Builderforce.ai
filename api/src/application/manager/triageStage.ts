@@ -65,6 +65,7 @@ import {
   createTickDispatchBudget, tenantDispatchReserver, MAX_TENANT_DISPATCHES_PER_TICK,
   type DispatchReserver,
 } from '../runtime/tickDispatchBudget';
+import { DAY_MS } from '../../domain/shared/time';
 
 /**
  * How many stalled tickets one pass diagnoses in depth — the CEILING, not the schedule.
@@ -904,7 +905,7 @@ export async function runStallTriage(
             remedy: verdict.remedy,
             escalated: verdict.escalated,
             attempts: attempted ? priorAttempts + 1 : priorAttempts,
-            idleDays: Math.floor(idleMs / 86_400_000),
+            idleDays: Math.floor(idleMs / DAY_MS),
             autoRunReason: autoRun.reason,
             readiness,
             applied,

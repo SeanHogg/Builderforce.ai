@@ -45,7 +45,7 @@ import {
 } from '../../application/pmo/portfolioRollup';
 import { computeValueStream } from '../../application/pmo/valueStream';
 import { invalidateProjectsList, projectsListVersionKey } from '../../application/project/projectsListCache';
-import { convertWorkItemType, promoteOrphanOkrEpics, ConvertError } from '../../application/workitem/convertWorkItemType';
+import { convertWorkItemType, promoteOrphanOkrEpics } from '../../application/workitem/convertWorkItemType';
 import { TaskService } from '../../application/task/TaskService';
 import { notSystemTask } from '../../application/task/taskScope';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
@@ -335,16 +335,11 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     const body = await parseBody(c, ConvertObjectiveBody);
     const target = body.target;
     if (target !== 'task' && target !== 'epic') return c.json({ error: 'target must be task|epic' }, 400);
-    try {
-      const result = await convertWorkItemType(
-        { db, tasks: new TaskService(new TaskRepository(db), new ProjectRepository(db), undefined, undefined, undefined, undefined, undefined, taskCreatedHook(db, c.env as Env)), env: c.env as Env },
-        { tenantId, segmentId, sourceKind: 'objective', sourceId: c.req.param('id'), target, projectId: body.projectId ?? undefined },
-      );
-      return c.json(result);
-    } catch (e) {
-      if (e instanceof ConvertError) return c.json({ error: e.message }, 400);
-      throw e;
-    }
+    const result = await convertWorkItemType(
+      { db, tasks: new TaskService(new TaskRepository(db), new ProjectRepository(db), undefined, undefined, undefined, undefined, undefined, taskCreatedHook(db, c.env as Env)), env: c.env as Env },
+      { tenantId, segmentId, sourceKind: 'objective', sourceId: c.req.param('id'), target, projectId: body.projectId ?? undefined },
+    );
+    return c.json(result);
   });
 
   // POST /api/pmo/objectives/promote-orphans — bulk-promote every Epic titled "OKR …"

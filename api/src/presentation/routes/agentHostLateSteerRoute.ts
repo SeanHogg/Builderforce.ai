@@ -45,13 +45,13 @@ export function registerLateSteerRoute<E extends HonoEnv>(
   router: Hono<E>,
   deps: {
     db: LateSteerDeps['db'];
-    verifyAgentHostApiKey: (id: number, key?: string) => Promise<{ tenantId: number | string } | null | undefined>;
+    verifyAgentHostApiKey: (c: Context<E>, id: number, key?: string) => Promise<{ tenantId: number | string } | null | undefined>;
     extractAgentHostKey: (c: Context<E>) => string | undefined;
   },
 ): void {
   router.post('/:id/late-steers', async (c) => {
     const agentHostId = Number(c.req.param('id'));
-    const agentHost = await deps.verifyAgentHostApiKey(agentHostId, deps.extractAgentHostKey(c));
+    const agentHost = await deps.verifyAgentHostApiKey(c, agentHostId, deps.extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const parsed = parseLateSteerReport(await parseBody(c, zJsonObject));

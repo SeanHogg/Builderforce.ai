@@ -1,5 +1,4 @@
 import { apiRequest } from './apiClient';
-import { formatCents } from '@/lib/canvasMoney';
 import type { AdTargetingDimension } from './adSetsApi';
 
 /**
@@ -230,15 +229,3 @@ export const adsApi = {
   sync: (): Promise<{ synced: number; results: AdSyncResult[] }> =>
     apiRequest(`${ADS}/sync`, { method: 'POST' }),
 };
-
-/**
- * Cents → a display string in the account currency.
- *
- * The comment above this used to say "one implementation, because a second one is how the
- * same spend comes to read differently on two tiles" — and there were twenty. It now
- * delegates to `formatCents` in `canvasMoney`, which is where the cents shape actually
- * lives; this stays as a named re-export so the ads surfaces keep their import path.
- */
-export function formatMoney(cents: number | null | undefined, currency = 'USD', locale?: string): string {
-  return formatCents(cents, { currency, ...(locale ? { locale } : {}) });
-}

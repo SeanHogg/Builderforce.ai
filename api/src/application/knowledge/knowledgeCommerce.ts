@@ -38,7 +38,6 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
   knowledgeListingPurchases,
-  ledgerEntries,
   marketplaceKnowledge,
 } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -46,7 +45,7 @@ import { buildPaymentProvider } from '../../infrastructure/payment';
 import { ListingError } from '../marketplace/creationListings';
 import { platformTakeRateBps, lifetimeSellerCents, takeRateThresholdCents } from '../marketplace/listingCommerce';
 import { verifyPaidCheckout, assertCovers } from '../finance/verifiedCheckout';
-import { USD_CENTS } from '../kernel/denominations';
+import { recordSaleSplit } from '../finance/saleLedger';
 
 
 /** What this flow calls itself in checkout metadata. */
@@ -290,28 +289,16 @@ async function creditKnowledgeSeller(db: Db, input: {
   sellerCents: number;
   commissionCents: number;
 }): Promise<void> {
-  await db.insert(ledgerEntries).values([
-    {
-      tenantId: input.sellerTenantId,
-      accountKind: 'user',
-      accountRef: input.sellerRef,
-      denomination: USD_CENTS,
-      amount: String(input.sellerCents),
-      entryKind: 'commission',
-      reference: `kn-sale:${input.purchaseId}`,
-      memo: `Knowledge sale — ${input.listingTitle}`,
-      metadata: { source: 'knowledge_listing', purchaseId: input.purchaseId },
-    },
-    {
-      tenantId: input.sellerTenantId,
-      accountKind: 'partner',
-      accountRef: 'platform',
-      denomination: USD_CENTS,
-      amount: String(input.commissionCents),
-      entryKind: 'commission',
-      reference: `kn-fee:${input.purchaseId}`,
-      memo: `Platform fee — ${input.listingTitle}`,
-      metadata: { source: 'knowledge_listing', purchaseId: input.purchaseId },
-    },
-  ]).onConflictDoNothing();
+  await recordSaleSplit(db, {
+    sellerTenantId: input.sellerTenantId,
+    sellerRef: input.sellerRef,
+    referencePrefix: 'kn',
+    saleId: input.purchaseId,
+    saleIdKey: 'purchaseId',
+    source: 'knowledge_listing',
+    saleLabel: 'Knowledge sale',
+    subject: input.listingTitle,
+    sellerCents: input.sellerCents,
+    commissionCents: input.commissionCents,
+  });
 }

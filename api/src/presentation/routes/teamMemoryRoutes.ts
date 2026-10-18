@@ -50,7 +50,7 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
       const key = authHeader.slice(7);
       const id = Number(agentHostIdHeader);
       if (Number.isFinite(id) && id > 0) {
-        const agentHost = await verifyAgentHostApiKey(db, id, key);
+        const agentHost = await verifyAgentHostApiKey(db, id, key, c.env);
         if (agentHost) {
           tenantId = agentHost.tenantId;
           resolvedAgentHostIdStr = String(agentHost.id);

@@ -44,7 +44,6 @@ import {
   swimlanes,
   swimlaneRequirements,
   ticketRuns,
-  agentDispatches,
 } from '../../infrastructure/database/schema';
 import {
   SwimlaneCoordinator,
@@ -75,6 +74,7 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { forLane, laneAgentAssignments, laneAssignmentValues } from '../../application/swimlane/laneAgentAssignments';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { invalidateBoardLaneOrdinals, invalidateSwimlaneOrdinals } from '../../application/swimlane/laneOrdinals';
+import { bumpBoardLive, invalidateBoardLanesCache, readBoardDispatches, readBoardLanesCached, readBoardTickets } from '../../application/swimlane/boardReads';
 import { parseBody, z, zNonEmptyString, zPositiveInt } from './requestBody';
 
 const WORKFLOW_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const satisfies readonly WorkflowStatus[];
@@ -291,12 +291,12 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         .select()
         .from(boards)
         .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId))),
-      readBoardLanes(tenantId, boardId),
+      readBoardLanesCached(c.env as Env, db, tenantId, boardId),
       readCloudRunAllowance(db, c.env as Env, tenantId),
     ]);
     if (!board) return c.json({ error: 'Board not found' }, 404);
 
-    return c.json({ ...board, swimlanes: lanes, cloudRunAllowance });
+    return c.json({ ...board, swimlanes: lanes ?? [], cloudRunAllowance });
   });
 
   router.patch('/:boardId', async (c) => {
@@ -340,20 +340,11 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
     await db.delete(boards).where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
+    await Promise.all([invalidateBoardLanesCache(c.env as Env, tenantId, boardId), bumpBoardLive(tenantId, c.env as Env)]);
     return c.body(null, 204);
   });
 
   // ── Swimlanes (nested) ────────────────────────────────────────────────────
-
-  /** A board's lanes in display order — tenant-scoped, so safe to read before the
-   *  board itself is confirmed. */
-  function readBoardLanes(tenantId: number, boardId: string) {
-    return db
-      .select()
-      .from(swimlanes)
-      .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
-      .orderBy(asc(swimlanes.position)).limit(LIST_ROW_CAP);
-  }
 
   async function assertBoard(tenantId: number, boardId: string): Promise<boolean> {
     const [board] = await db
@@ -366,8 +357,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:boardId/swimlanes', async (c) => {
     const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
-    const [exists, lanes] = await Promise.all([assertBoard(tenantId, boardId), readBoardLanes(tenantId, boardId)]);
-    if (!exists) return c.json({ error: 'Board not found' }, 404);
+    const lanes = await readBoardLanesCached(c.env as Env, db, tenantId, boardId);
+    if (!lanes) return c.json({ error: 'Board not found' }, 404);
     return c.json({ swimlanes: lanes });
   });
 
@@ -386,7 +377,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));
     if (!board) return c.json({ error: 'Board not found' }, 404);
 
-    const existing = await readBoardLanes(tenantId, boardId);
+    const existing = (await readBoardLanesCached(c.env as Env, db, tenantId, boardId)) ?? [];
     if (existing.length > 0) return c.json({ swimlanes: existing, seeded: false });
 
     const now = new Date();
@@ -395,8 +386,9 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .values(buildDefaultLaneRows(tenantId, board.segmentId ?? null, boardId, now))
       .onConflictDoNothing();
     await invalidateBoardLaneOrdinals(c.env as Env, db, boardId);
+    await invalidateBoardLanesCache(c.env as Env, tenantId, boardId);
 
-    const lanes = await readBoardLanes(tenantId, boardId);
+    const lanes = (await readBoardLanesCached(c.env as Env, db, tenantId, boardId)) ?? [];
     return c.json({ swimlanes: lanes, seeded: true });
   });
 
@@ -877,42 +869,20 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:boardId/tickets', async (c) => {
     const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
-    if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
-    const rows = await db
-      .select()
-      .from(ticketRuns)
-      .where(and(eq(ticketRuns.boardId, boardId), eq(ticketRuns.tenantId, tenantId)))
-      .orderBy(asc(ticketRuns.createdAt)).limit(LIST_ROW_CAP);
+    const rows = await readBoardTickets(c.env as Env, db, tenantId, boardId);
+    if (!rows) return c.json({ error: 'Board not found' }, 404);
     return c.json({ tickets: rows });
   });
 
-  // Live per-agent dispatch status across the board's tickets, in ONE query
-  // (joined to the assignment for the display name) so the board can surface a
-  // status pill per task without an N+1. NOT cached: dispatch status is volatile
-  // live-execution state — caching it would show stale pending/running pills.
+  // Live per-agent dispatch status across the board's tickets, in ONE query (joined to the
+  // assignment for the display name) so the board can surface a status pill per task without
+  // an N+1. Cached behind the tenant's board-live token (`boardReads.ts`): every dispatch and
+  // ticket-run writer bumps it, so a pill is never staler than the write that moved it.
   router.get('/:boardId/dispatches', async (c) => {
     const tenantId = requireTenantId(c);
     const boardId = c.req.param('boardId');
-    if (!(await assertBoard(tenantId, boardId))) return c.json({ error: 'Board not found' }, 404);
-    const rows = await db
-      .select({
-        id: agentDispatches.id,
-        ticketRunId: agentDispatches.ticketRunId,
-        taskId: agentDispatches.taskId,
-        swimlaneId: agentDispatches.swimlaneId,
-        assignmentId: agentDispatches.assignmentId,
-        status: agentDispatches.status,
-        role: agentDispatches.role,
-        name: laneAgentAssignments.name,
-        stageSeq: agentDispatches.stageSeq,
-        position: agentDispatches.position,
-        updatedAt: agentDispatches.updatedAt,
-      })
-      .from(agentDispatches)
-      .innerJoin(ticketRuns, eq(agentDispatches.ticketRunId, ticketRuns.id))
-      .leftJoin(laneAgentAssignments, eq(agentDispatches.assignmentId, laneAgentAssignments.id))
-      .where(and(eq(ticketRuns.boardId, boardId), eq(agentDispatches.tenantId, tenantId)))
-      .orderBy(asc(agentDispatches.ticketRunId), asc(agentDispatches.stageSeq), asc(agentDispatches.position)).limit(LIST_ROW_CAP);
+    const rows = await readBoardDispatches(c.env as Env, db, tenantId, boardId);
+    if (!rows) return c.json({ error: 'Board not found' }, 404);
     return c.json({ dispatches: rows });
   });
 

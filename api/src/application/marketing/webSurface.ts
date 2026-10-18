@@ -62,6 +62,7 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import { bulkUpdateById } from '../../infrastructure/database/bulkUpdate';
+import { recordHit, scopedHitKey } from '../counters/hitCounters';
 import type { Env } from '../../env';
 import {
   landingPageBlocks,
@@ -854,23 +855,35 @@ export async function publicWebsitePageCached(db: Db, env: Env, tenantId: number
   );
 }
 
+/**
+ * The public landing read, through the shared cache under the owner's version token
+ * (the same token and layers as {@link publicWebsitePageCached}). Anonymous traffic to
+ * a campaign page no longer reaches Postgres per visit. The landing writers hold no
+ * `env` and do not bump the token, so freshness after an edit/unpublish/`ends_at`
+ * rests on the SHORT TTL (KV 120s, L1 30s) rather than invalidation.
+ */
+export async function publicLandingPageCached(db: Db, env: Env, tenantId: number, slug: string) {
+  const version = await getCacheVersion(env, websitePagesVersionKey(tenantId));
+  return getOrSetCached(
+    env,
+    `web:landing:v:${version}:${tenantId}:${slug.toLowerCase()}`,
+    () => publicLandingPage(db, tenantId, slug),
+    { kvTtlSeconds: 120, l1TtlMs: 30_000 },
+  );
+}
+
 /** A landing page view. Counter-only and deliberately not an `activity_log` row:
  *  anonymous page views are high-volume and belong in the counter the campaign
- *  report reads, not in the audit trail a person is expected to scroll. */
-export async function recordLandingPageView(db: Db, tenantId: number, id: number) {
-  await db
-    .update(landingPages)
-    .set({ viewCount: sql`${landingPages.viewCount} + 1` })
-    .where(scopedToTenant(landingPages, tenantId, eq(landingPages.id, id)));
+ *  report reads, not in the audit trail a person is expected to scroll. Buffered in
+ *  KV and applied by the `hit-counters` sweep — an anonymous view no longer writes. */
+export async function recordLandingPageView(env: Env, db: Db, tenantId: number, id: number) {
+  await recordHit(env, db, 'landing.view', scopedHitKey(tenantId, id));
 }
 
 /** A conversion against the page's `goal_metric`. Separate from the view counter
  *  because the ratio between them IS the campaign result. */
-export async function recordLandingPageConversion(db: Db, tenantId: number, id: number) {
-  await db
-    .update(landingPages)
-    .set({ conversionCount: sql`${landingPages.conversionCount} + 1` })
-    .where(scopedToTenant(landingPages, tenantId, eq(landingPages.id, id)));
+export async function recordLandingPageConversion(env: Env, db: Db, tenantId: number, id: number) {
+  await recordHit(env, db, 'landing.convert', scopedHitKey(tenantId, id));
 }
 
 /** An SEO page impression, by path, for pages that are still published. */

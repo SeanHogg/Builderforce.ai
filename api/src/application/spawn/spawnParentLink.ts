@@ -11,11 +11,12 @@
  */
 import { signState, verifyState } from '../../infrastructure/auth/oauthState';
 import { SpawnError } from './spawnErrors';
+import { DAY_MS } from '../../domain/shared/time';
 
 const PURPOSE = 'spawn_parent';
 
 /** Long enough to outlive the trial and a parent who acts a few weeks later. */
-const MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000;
+const MAX_AGE_MS = 60 * DAY_MS;
 
 export interface SpawnParentGrant {
   tenantId: number;

@@ -39,16 +39,10 @@ import {
 import { AnchoredPopover, ButtonLink } from '@/components/ui';
 import { isStageRoute } from '@/lib/workbenchPolicy';
 import styles from './TeamBar.module.css';
+import { initialsOf } from '@/lib/initials';
 
 /** Identity survives compression; a title does not — the same rule the seat rail
  *  applies to seats, applied to people. */
-function initials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return '?';
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
-}
-
 const payloadOf = (member: TeamRosterMember): TeammatePayload => ({
   kind: member.kind,
   ref: member.id,
@@ -101,7 +95,7 @@ function TeammateChip({ member, locallyAvailable = false, compact = false, onBoa
     >
       {member.avatarUrl
         ? <img className={styles.avatar} src={member.avatarUrl} alt="" width={20} height={20} />
-        : <span className={styles.initials} aria-hidden="true">{initials(member.seat ?? member.name)}</span>}
+        : <span className={styles.initials} aria-hidden="true">{initialsOf(member.seat ?? member.name)}</span>}
       {/* The name and the availability dot are what a BAND has room for. The compact
           strip keeps the accessible name — which already carries both — and drops only
           the drawn text, so nothing is lost to a screen reader. */}

@@ -10,6 +10,7 @@
  *  - Error / summary report generation
  */
 
+import { toCsv, type CsvOptions } from './download';
 import { IMPORT_BATCH_SIZE, type ImportResult } from './importApi';
 import { validateCell, type CellErrorCode, type FieldDirective } from './import-input-schema';
 
@@ -189,6 +190,9 @@ export async function parseFile(file: File): Promise<ParsedFileResult> {
 // ── Mapping ───────────────────────────────────────────────────
 
 /** `Member Name` / `member_name` / `memberName` all → `membername`. */
+/** Reports and templates quote only where a cell needs it and end rows with a bare LF. */
+const REPORT_CSV: CsvOptions = { quote: 'minimal', eol: '\n' };
+
 const normalizeHeader = (h: string): string => h.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /**
@@ -248,16 +252,7 @@ export function mapRows(
  * examples as the one example row.
  */
 export function generateCSVTemplate(fields: readonly FieldDirective[]): string {
-  const headerLine = fields.map((f) => escapeCSVField(f.key)).join(',');
-  const exampleLine = fields.map((f) => escapeCSVField(f.example ?? '')).join(',');
-  return `${headerLine}\n${exampleLine}\n`;
-}
-
-function escapeCSVField(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
+  return toCsv(fields.map((f) => f.key), [fields.map((f) => f.example ?? '')], REPORT_CSV) + '\n';
 }
 
 // ── Dry-run validation ────────────────────────────────────────
@@ -335,11 +330,11 @@ export function generateCSVErrorReport(
   errors: Array<{ rowNumber: number; column: string; reason: string }>,
   headings: { rowNumber: string; column: string; reason: string },
 ): string {
-  const header = [headings.rowNumber, headings.column, headings.reason].map(escapeCSVField).join(',');
-  const lines = errors.map((e) =>
-    `${e.rowNumber},${escapeCSVField(e.column)},${escapeCSVField(e.reason)}`,
+  return toCsv(
+    [headings.rowNumber, headings.column, headings.reason],
+    errors.map((e) => [e.rowNumber, e.column, e.reason]),
+    REPORT_CSV,
   );
-  return [header, ...lines].join('\n');
 }
 
 /**
@@ -355,11 +350,14 @@ export function generateImportSummaryReport(
   skipped: number,
   labels: { metric: string; value: string; totalRows: string; imported: string; skipped: string; timestamp: string },
 ): string {
-  return [
-    `${escapeCSVField(labels.metric)},${escapeCSVField(labels.value)}`,
-    `${escapeCSVField(labels.totalRows)},${totalRows}`,
-    `${escapeCSVField(labels.imported)},${imported}`,
-    `${escapeCSVField(labels.skipped)},${skipped}`,
-    `${escapeCSVField(labels.timestamp)},${new Date().toISOString()}`,
-  ].join('\n');
+  return toCsv(
+    [labels.metric, labels.value],
+    [
+      [labels.totalRows, totalRows],
+      [labels.imported, imported],
+      [labels.skipped, skipped],
+      [labels.timestamp, new Date().toISOString()],
+    ],
+    REPORT_CSV,
+  );
 }

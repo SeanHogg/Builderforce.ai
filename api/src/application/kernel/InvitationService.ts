@@ -34,6 +34,9 @@ import { invitations } from '../../infrastructure/database/schema/kernel';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { SEAT_KIND, type SeatKind, consumesSeat } from '../../domain/tenant/SeatKind';
 import type { Env } from '../../env';
+import { UserRepository } from '../../infrastructure/repositories/UserRepository';
+import { invalidateMyWorkspaces } from '../tenant/tenantReadCache';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** What an invitation invites you to. `objectId` is null for `tenant`, because a
  *  workspace is not an addressable object in the registry — every other kind
@@ -240,7 +243,24 @@ export async function invite(
 
   if (!row) throw new Error('invite: insert returned no row');
   await invalidateInvitations(env, input.tenantId);
+  await invalidateInviteeWorkspaces(db, env, email);
   return row;
+}
+
+/**
+ * `listMyWorkspaces` serves a cache hit WITHOUT landing pending invitations, so a
+ * person who already has an account would not see this invite until the entry
+ * expires. Drop their cached list now. No account yet ⇒ nothing cached to drop,
+ * and the first (empty, never-cached) read lands the invitation. Best-effort.
+ */
+async function invalidateInviteeWorkspaces(db: Db, env: Env | undefined, email: string): Promise<void> {
+  if (!env) return;
+  try {
+    const account = await new UserRepository(db).findByEmail(email);
+    if (account) await invalidateMyWorkspaces(env, [account.id]);
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/kernel/InvitationService.ts', operation: 'invalidateInviteeWorkspaces' });
+  }
 }
 
 /** Every pending invitation for a tenant, newest first. */

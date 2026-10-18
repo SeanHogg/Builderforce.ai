@@ -62,6 +62,7 @@ import { normalizeErrorMessage } from '../quality/errorSpec';
 import { activityLogVersionKey } from './activityLog';
 import { isParticipantSatisfied } from '../kanban/participantStates';
 import { isAutoAttestedContribution } from '../kanban/signoffContribution';
+import { DAY_MS } from '../../domain/shared/time';
 
 // ── Wire vocabulary ─────────────────────────────────────────────────────────
 
@@ -1138,7 +1139,7 @@ export async function summarizeAutonomy(
   args: { tenantId: number; projectId?: number | null; windowDays?: number },
 ): Promise<AutonomySummary> {
   const windowDays = Math.min(365, Math.max(1, args.windowDays ?? 30));
-  const since = new Date(Date.now() - windowDays * 86_400_000);
+  const since = new Date(Date.now() - windowDays * DAY_MS);
 
   // Tickets opened in the window, tenant-scoped through their project.
   const ticketRows = await db

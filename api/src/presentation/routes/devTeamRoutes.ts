@@ -20,6 +20,8 @@ import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { parseBody, z } from './requestBody';
+import { requireTenantId } from '../middleware/tenantContext';
+import { requireOwned, patchOwned, deleteOwned } from '../../application/contributors/ownedRecords';
 
 /** `name` stays optional so the handler's own "name is required" wins. */
 const CreateTeamBody = z.object({
@@ -51,7 +53,7 @@ export function createDevTeamRoutes(db: Db): Hono<HonoEnv> {
 
   // POST /api/dev-teams
   router.post('/', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const body = await parseBody(c, CreateTeamBody);
 
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
@@ -72,7 +74,7 @@ export function createDevTeamRoutes(db: Db): Hono<HonoEnv> {
 
   // GET /api/dev-teams
   router.get('/', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const teams = await db
       .select()
       .from(devTeams)
@@ -82,7 +84,7 @@ export function createDevTeamRoutes(db: Db): Hono<HonoEnv> {
 
   // GET /api/dev-teams/:id
   router.get('/:id', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id = Number(c.req.param('id'));
 
     const [team] = await db
@@ -112,53 +114,29 @@ export function createDevTeamRoutes(db: Db): Hono<HonoEnv> {
 
   // PATCH /api/dev-teams/:id
   router.patch('/:id', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id = Number(c.req.param('id'));
 
-    const [existing] = await db
-      .select({ id: devTeams.id })
-      .from(devTeams)
-      .where(and(eq(devTeams.id, id), eq(devTeams.tenantId, tenantId)));
-    if (!existing) return c.json({ error: 'Team not found' }, 404);
-
     const body = await parseBody(c, UpdateTeamBody);
-
-    const [updated] = await db
-      .update(devTeams)
-      .set({ ...body, updatedAt: new Date() })
-      .where(and(eq(devTeams.id, id), eq(devTeams.tenantId, tenantId)))
-      .returning();
-
-    return c.json(updated);
+    return c.json(await patchOwned(db, 'devTeam', tenantId, id, body));
   });
 
   // DELETE /api/dev-teams/:id
   router.delete('/:id', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id = Number(c.req.param('id'));
 
-    const [existing] = await db
-      .select({ id: devTeams.id })
-      .from(devTeams)
-      .where(and(eq(devTeams.id, id), eq(devTeams.tenantId, tenantId)));
-    if (!existing) return c.json({ error: 'Team not found' }, 404);
-
-    await db.delete(devTeams)
-      .where(and(eq(devTeams.id, id), eq(devTeams.tenantId, tenantId)));
+    await deleteOwned(db, 'devTeam', tenantId, id);
 
     return c.json({ deleted: true });
   });
 
   // POST /api/dev-teams/:id/members
   router.post('/:id/members', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id = Number(c.req.param('id'));
 
-    const [team] = await db
-      .select({ id: devTeams.id })
-      .from(devTeams)
-      .where(and(eq(devTeams.id, id), eq(devTeams.tenantId, tenantId)));
-    if (!team) return c.json({ error: 'Team not found' }, 404);
+    await requireOwned(db, 'devTeam', tenantId, id);
 
     const body = await parseBody(c, AddMemberBody);
 
@@ -187,18 +165,14 @@ export function createDevTeamRoutes(db: Db): Hono<HonoEnv> {
 
   // DELETE /api/dev-teams/:id/members/:contributorId
   router.delete('/:id/members/:contributorId', async (c) => {
-    const tenantId      = c.get('tenantId') as number;
+    const tenantId      = requireTenantId(c);
     const id            = Number(c.req.param('id'));
     const contributorId = Number(c.req.param('contributorId'));
 
     // Verify the team belongs to THIS tenant before mutating its membership —
     // dev_team_members carries no tenant_id, so without this a manager could remove
     // another tenant's members by guessing a teamId.
-    const [team] = await db
-      .select({ id: devTeams.id })
-      .from(devTeams)
-      .where(and(eq(devTeams.id, id), eq(devTeams.tenantId, tenantId)));
-    if (!team) return c.json({ error: 'Team not found' }, 404);
+    await requireOwned(db, 'devTeam', tenantId, id);
 
     await db.delete(devTeamMembers)
       .where(and(

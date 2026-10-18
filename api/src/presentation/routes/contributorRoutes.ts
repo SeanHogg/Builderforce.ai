@@ -21,7 +21,7 @@
 import { Hono } from 'hono';
 import { and, asc, between, desc, eq, gte, lte, sum, count, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
-import { optionalTenantId } from '../middleware/tenantContext';
+import { optionalTenantId, requireTenantId } from '../middleware/tenantContext';
 import {
   contributors,
   contributorIdentities,
@@ -41,6 +41,7 @@ import {
   suggestDuplicates,
 } from '../../application/contributors/mergeService';
 import { aggregateDailyMetrics, ingestActivityEvents } from '../../application/contributors/activityIngest';
+import { requireOwned, patchOwned, deleteOwned } from '../../application/contributors/ownedRecords';
 import { limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
@@ -145,14 +146,14 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
 
   // GET /api/contributors/duplicates — likely-duplicate groups to consolidate.
   router.get('/duplicates', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const groups = await suggestDuplicates(db, tenantId);
     return c.json({ groups });
   });
 
   // GET /api/contributors/merges — merge history (audit + undo).
   router.get('/merges', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const rows = await db
       .select({
         id: contributorMerges.id,
@@ -174,14 +175,14 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
 
   // POST /api/contributors/merge/preview — counts + conflicts for a proposed merge.
   router.post('/merge/preview', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const { sourceId, targetId } = await parseBody(c, MergePairBody);
     return c.json(await previewMerge(db, tenantId, sourceId, targetId));
   });
 
   // POST /api/contributors/merge — consolidate source INTO target (tenant-wide).
   router.post('/merge', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const userId = c.get('userId') as string | undefined;
     const { sourceId, targetId } = await parseBody(c, MergePairBody);
     const result = await mergeContributors(db, c.env as Env, { tenantId, sourceId, targetId, mergedByUserId: userId ?? null });
@@ -190,7 +191,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
 
   // POST /api/contributors/merges/:mergeId/revert — undo a prior merge.
   router.post('/merges/:mergeId/revert', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const mergeId = c.req.param('mergeId');
     // `MergeError` carries `status`; `app.onError` answers it through `statusOf`.
     return c.json(await unmergeContributors(db, c.env as Env, { tenantId, mergeId }));
@@ -198,7 +199,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
 
   // ── GET /api/contributors ─────────────────────────────────────────────────
   router.get('/', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     // Hide merged-away (tombstoned) profiles by default; ?includeMerged=true shows them.
     const includeMerged = c.req.query('includeMerged') === 'true';
     const conds = [eq(contributors.tenantId, tenantId)];
@@ -213,7 +214,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
 
   // ── POST /api/contributors ────────────────────────────────────────────────
   router.post('/', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const body = await parseBody(c, ContributorCreateBody);
 
     const [row] = await db
@@ -235,7 +236,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
 
   // ── GET /api/contributors/:id ─────────────────────────────────────────────
   router.get('/:id', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id = Number(c.req.param('id'));
 
     const [contributor] = await db
@@ -254,53 +255,29 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
 
   // ── PATCH /api/contributors/:id ───────────────────────────────────────────
   router.patch('/:id', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id = Number(c.req.param('id'));
 
-    const [existing] = await db
-      .select({ id: contributors.id })
-      .from(contributors)
-      .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)));
-    if (!existing) return c.json({ error: 'Contributor not found' }, 404);
-
     const body = await parseBody(c, ContributorPatchBody);
-
-    const [updated] = await db
-      .update(contributors)
-      .set({ ...body, updatedAt: new Date() })
-      .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)))
-      .returning();
-
-    return c.json(updated);
+    return c.json(await patchOwned(db, 'contributor', tenantId, id, body));
   });
 
   // ── DELETE /api/contributors/:id ──────────────────────────────────────────
   router.delete('/:id', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id = Number(c.req.param('id'));
 
-    const [existing] = await db
-      .select({ id: contributors.id })
-      .from(contributors)
-      .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)));
-    if (!existing) return c.json({ error: 'Contributor not found' }, 404);
-
-    await db.delete(contributors)
-      .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)));
+    await deleteOwned(db, 'contributor', tenantId, id);
 
     return c.json({ deleted: true });
   });
 
   // ── POST /api/contributors/:id/identities ─────────────────────────────────
   router.post('/:id/identities', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id = Number(c.req.param('id'));
 
-    const [existing] = await db
-      .select({ id: contributors.id })
-      .from(contributors)
-      .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)));
-    if (!existing) return c.json({ error: 'Contributor not found' }, 404);
+    await requireOwned(db, 'contributor', tenantId, id);
 
     const body = await parseBody(c, IdentityBody);
 
@@ -323,7 +300,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
 
   // ── DELETE /api/contributors/:id/identities/:identityId ──────────────────
   router.delete('/:id/identities/:identityId', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id       = Number(c.req.param('id'));
     const iid      = Number(c.req.param('identityId'));
 
@@ -342,15 +319,11 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
   // external activity (this profile) and platform/VS Code engagement (that user)
   // attach to one person. Validates the user is a member of the tenant.
   router.patch('/:id/link-user', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id = Number(c.req.param('id'));
     const { userId } = await parseBody(c, LinkUserBody);
 
-    const [existing] = await db
-      .select({ id: contributors.id })
-      .from(contributors)
-      .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)));
-    if (!existing) return c.json({ error: 'Contributor not found' }, 404);
+    await requireOwned(db, 'contributor', tenantId, id);
 
     if (userId) {
       const [member] = await db
@@ -371,7 +344,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
 
   // ── GET /api/contributors/:id/activity ────────────────────────────────────
   router.get('/:id/activity', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id       = Number(c.req.param('id'));
     const from     = c.req.query('from');
     const to       = c.req.query('to');
@@ -396,7 +369,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
 
   // ── GET /api/contributors/:id/metrics ─────────────────────────────────────
   router.get('/:id/metrics', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const id       = Number(c.req.param('id'));
     const from     = c.req.query('from') ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const to       = c.req.query('to')   ?? new Date().toISOString();
@@ -433,7 +406,7 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
   // ── POST /api/contributors/aggregate ─────────────────────────────────────
   // Recalculate daily metrics for all contributors in a date range.
   router.post('/aggregate', async (c) => {
-    const tenantId = c.get('tenantId') as number;
+    const tenantId = requireTenantId(c);
     const body = await parseBody(c, AggregateBody);
 
     const fromDate = body.from ? new Date(body.from) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);

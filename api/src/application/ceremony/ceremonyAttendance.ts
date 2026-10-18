@@ -22,6 +22,7 @@
  */
 
 import type { EffectiveManagerPolicy } from '../manager/managerPolicy';
+import { HOUR_MS } from '../../domain/shared/time';
 
 /** The resolved verdict stored on `ceremony_participants.attendance` (0365). */
 export type AttendanceVerdict = 'unknown' | 'present' | 'absent' | 'excused';
@@ -202,7 +203,7 @@ export interface ReassignmentPlan {
 export function idleHoursFor(task: ReassignableTask, now: Date): number {
   const anchor = task.lastWorkedAt ?? task.updatedAt;
   if (!anchor) return Number.POSITIVE_INFINITY; // never touched at all — maximally stale
-  return Math.max(0, (now.getTime() - anchor.getTime()) / 3_600_000);
+  return Math.max(0, (now.getTime() - anchor.getTime()) / HOUR_MS);
 }
 
 /**

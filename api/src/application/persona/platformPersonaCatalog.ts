@@ -20,6 +20,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { invalidateCapabilityCache } from '../artifact/capabilityContext';
 import type { Env } from '../../env';
+import { parseJsonOr } from '../../domain/shared/json';
 
 export type PlatformPersonaRow = typeof platformPersonas.$inferSelect;
 
@@ -45,11 +46,6 @@ export async function listPlatformPersonas(env: Env, db: Db, scope: PlatformPers
     .limit(LIST_ROW_CAP));
 }
 
-const parseJson = <T>(raw: string | null, fallback: T): T => {
-  if (!raw) return fallback;
-  try { return JSON.parse(raw) as T; } catch { return fallback; }
-};
-
 const iso = (d: Date | string | null | undefined): string | null =>
   d == null ? null : d instanceof Date ? d.toISOString() : String(d);
 
@@ -64,9 +60,9 @@ export function platformPersonaView(r: PlatformPersonaRow) {
     perspective:   r.perspective ?? null,
     decisionStyle: r.decisionStyle ?? null,
     outputPrefix:  r.outputPrefix ?? null,
-    capabilities:  parseJson<string[]>(r.capabilities, []),
-    tags:          parseJson<string[]>(r.tags, []),
-    psychometric:  parseJson<unknown>(r.psychometric, null),
+    capabilities:  parseJsonOr<string[]>(r.capabilities, []),
+    tags:          parseJsonOr<string[]>(r.tags, []),
+    psychometric:  parseJsonOr<unknown>(r.psychometric, null),
     source:        r.source ?? 'builtin',
     author:        r.author ?? null,
     active:        r.active,

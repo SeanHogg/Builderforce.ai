@@ -19443,7 +19443,11 @@
     "errorNoCode": "No se recibió ningún código de inicio de sesión. Inténtalo de nuevo.",
     "errorProfile": "No se pudo cargar el perfil de tu cuenta. Vuelve a iniciar sesión.",
     "popupDoneTitle": "Has iniciado sesión",
-    "popupDoneBody": "Puedes cerrar esta ventana y volver a Builderforce."
+    "popupDoneBody": "Puedes cerrar esta ventana y volver a Builderforce.",
+    "magicLinkNoToken": "No se encontró ningún token en el enlace. Solicita uno nuevo.",
+    "magicLinkInvalid": "Enlace mágico no válido o caducado.",
+    "magicLinkTitle": "Enlace caducado o no válido",
+    "magicLinkVerifying": "Verificando tu enlace mágico…"
   },
   "footer": {
     "builtBy": "Creado por",

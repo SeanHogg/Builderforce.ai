@@ -52,6 +52,7 @@ import {
   updateSocialCampaign,
 } from '../../application/social/socialCampaignService';
 import { parseBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';
+import { requireTenantId } from '../middleware/tenantContext';
 
 const PublishBody = z.object({
   connectionId: zOptionalString,
@@ -91,7 +92,7 @@ export function createSocialRoutes(db: Db): Hono<HonoEnv> {
 
   const ctx = (c: { env: unknown; get: (key: string) => unknown }) => ({
     env: c.env as Env,
-    tenantId: c.get('tenantId') as number,
+    tenantId: requireTenantId(c),
   });
 
   // GET /networks — the catalog, so an empty state can say what CAN be connected.

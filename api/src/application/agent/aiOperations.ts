@@ -34,6 +34,9 @@
  * table is which tools fail, which are slow, and which are never used.
  */
 
+import { recordHit, scopedHitKey } from '../counters/hitCounters';
+import type { CounterKv } from '../../infrastructure/cache/counterBuffer';
+import { currentRequestScope } from '../shared/requestScope';
 import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -241,10 +244,10 @@ export async function cacheLookup(db: Db, tenantId: number | null, provider: str
     .limit(1);
   if (!row) return null;
 
-  await db
-    .update(enrichmentCache)
-    .set({ hitCount: sql`${enrichmentCache.hitCount} + 1` })
-    .where(scopedToNullableTenant(enrichmentCache, tenantId, eq(enrichmentCache.id, row.id)));
+  // Buffered write (applied by the `hit-counters` sweep): a cache HIT used to cost a
+  // Postgres UPDATE on top of the SELECT that found it. The returned count still
+  // reflects this hit.
+  await recordHit((currentRequestScope()?.env ?? {}) as CounterKv, db, 'enrichment.hit', scopedHitKey(tenantId, row.id));
 
   return { ...row, hitCount: row.hitCount + 1 };
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { llmApi, dashboardApi, type LlmUsageStats, type LlmModelStatus, type LlmHealthResponse, type DashboardUsage, type UsageByKind } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 const cardStyle: React.CSSProperties = {
@@ -17,12 +18,6 @@ function fmtNum(n: number) {
   return String(n);
 }
 
-function fmtUsd(n: number) {
-  if (n === 0) return '$0';
-  if (n < 0.01) return `<$0.01`;
-  return `$${n.toFixed(2)}`;
-}
-
 const KIND_META: Record<UsageByKind['kind'], { label: string; color: string }> = {
   cloud: { label: 'Cloud', color: 'var(--indigo-bright, var(--indigo-bright))' },
   'on-prem': { label: 'On-prem', color: 'var(--cyan-bright, var(--cyan-bright))' },
@@ -33,6 +28,12 @@ export function LlmUsageContent() {
   const errorMessage = useErrorMessage();
   const fmt = useFormat();
   const t = useTranslations('llmUsage');
+  const { formatCents } = useMoneyFormat();
+  const fmtUsd = (n: number) => {
+    if (n === 0) return formatCents(0, { maximumFractionDigits: 0 });
+    if (n < 0.01) return `<${formatCents(1)}`;
+    return formatCents(Math.round(n * 100));
+  };
   const [usage, setUsage] = useState<LlmUsageStats | null>(null);
   const [health, setHealth] = useState<LlmHealthResponse | null>(null);
   const [models, setModels] = useState<LlmModelStatus[]>([]);

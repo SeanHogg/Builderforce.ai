@@ -35,7 +35,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { freezeIdeAgentDefinition, type FrozenAgentDefinition } from '../agentIdentity/agentRunIdentity';
 import { findTaskPrimarySpec } from '../prd/taskPrd';
-import { parseJsonOr } from '../../domain/shared/json';
+import { asJsonRecord, parseJsonOr } from '../../domain/shared/json';
 import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 
 export const REHEARSAL_KINDS = ['dry_run', 'replay', 'trial'] as const;
@@ -509,14 +509,10 @@ const safeJson = (raw: string | null): unknown => (raw ? parseJsonOr<unknown>(ra
 /** Pull the git ref a past run read from out of its payload, when it recorded one. */
 function extractFrozenRef(payload: string | null): string | null {
   if (!payload) return null;
-  try {
-    const parsed = JSON.parse(payload) as Record<string, unknown>;
-    const candidates = [parsed.sourceSha, parsed.baseSha, parsed.headSha, parsed.base, parsed.ref];
-    for (const c of candidates) if (typeof c === 'string' && c.trim()) return c.trim();
-    return null;
-  } catch {
-    return null;
-  }
+  const parsed = asJsonRecord(parseJsonOr<unknown>(payload, null));
+  const candidates = [parsed.sourceSha, parsed.baseSha, parsed.headSha, parsed.base, parsed.ref];
+  for (const c of candidates) if (typeof c === 'string' && c.trim()) return c.trim();
+  return null;
 }
 
 async function resolveAgentLabel(db: Db, tenantId: number, agentRef: string | null): Promise<string> {

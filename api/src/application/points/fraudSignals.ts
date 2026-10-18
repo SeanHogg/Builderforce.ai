@@ -38,6 +38,7 @@ import { POINTS } from '../kernel/denominations';
 import { POINT_ACTIONS } from './pointsCatalog';
 import { invalidatePointsCaches } from './pointsLedger';
 import { writePointsProfile, type PointsProfile } from './pointsProfile';
+import { HOUR_MS } from '../../domain/shared/time';
 
 /** The metric name every points-fraud firing is filed under, so the alerts
  *  surface can select them without knowing the individual heuristics. */
@@ -99,7 +100,7 @@ export function fraudFlagsFor(input: FraudInput): FraudFlag[] {
  * the same rows is two chances to disagree about the window.
  */
 export async function evaluateFraud(db: Db, tenantId: number, userId: string): Promise<FraudFlag[]> {
-  const since = new Date(Date.now() - 3_600_000);
+  const since = new Date(Date.now() - HOUR_MS);
   const minute = sql<string>`date_trunc('minute', ${ledgerEntries.occurredAt})`;
 
   const buckets = await db

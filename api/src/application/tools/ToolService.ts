@@ -13,7 +13,7 @@ import { applyMaturityFramework, maturityFramework, supportsMaturityFrameworks, 
 import { localizeTool, toolCatalog, toolCopy, DEFAULT_TOOL_LOCALE, TRANSLATED_TOOL_LOCALES, type ToolLocale } from './toolMessages';
 import { TOOL_LOCALES, resultCopy } from './resultCopy';
 import { storedFigures, storedResult, withFigures } from './storedToolResult';
-import { scoreQuestionnaire, scoreQuiz } from './toolTypes';
+import { clampLevel, scoreQuestionnaire, scoreQuiz } from './toolTypes';
 
 import { ARCHITECTURE_DIAGNOSTIC_ID, EXTERNAL_DIAGNOSTIC_NAMES, EXTERNAL_DIAGNOSTIC_ICONS } from './auditIds';
 
@@ -22,7 +22,6 @@ import { ARCHITECTURE_DIAGNOSTIC_ID, EXTERNAL_DIAGNOSTIC_NAMES, EXTERNAL_DIAGNOS
  *  system-audit ids and their display names. */
 export { ARCHITECTURE_DIAGNOSTIC_ID };
 
-const clampLevel = (n: number): number => Math.max(1, Math.min(5, Math.round(n)));
 /**
  * The five CMMI band names, from the SHARED chrome rather than a private list.
  *

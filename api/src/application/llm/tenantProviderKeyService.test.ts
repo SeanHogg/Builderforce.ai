@@ -103,7 +103,7 @@ describe('BYO provider routing map', () => {
 
 /** Stage an oauth row whose decrypted token blob has the given absolute `expires`. */
 function stageOAuth(expires: number, access = 'A1') {
-  rowsBox.current = [{ keyEnc: 'enc', authType: 'oauth' }];
+  rowsBox.current = [{ id: 'k1', provider: 'anthropic', keyEnc: 'enc', authType: 'oauth' }];
   decryptBox.current = () => JSON.stringify({ access, refresh: 'R1', expires });
 }
 
@@ -128,7 +128,7 @@ describe('resolveAnthropicResolution — reason reporting', () => {
   });
 
   it('an api key resolves with no reason', async () => {
-    rowsBox.current = [{ keyEnc: 'enc', authType: 'api_key' }];
+    rowsBox.current = [{ id: 'k1', provider: 'anthropic', keyEnc: 'enc', authType: 'api_key' }];
     decryptBox.current = () => 'sk-ant-123';
     const r = await resolveAnthropicResolution(env, 1);
     expect(r.reason).toBeUndefined();
@@ -136,7 +136,7 @@ describe('resolveAnthropicResolution — reason reporting', () => {
   });
 
   it('an undecryptable blob → reason "undecryptable"', async () => {
-    rowsBox.current = [{ keyEnc: 'enc', authType: 'oauth' }];
+    rowsBox.current = [{ id: 'k1', provider: 'anthropic', keyEnc: 'enc', authType: 'oauth' }];
     decryptBox.current = () => { throw new Error('bad key'); };
     expect(await resolveAnthropicResolution(env, 1)).toEqual({ auth: null, reason: 'undecryptable' });
   });

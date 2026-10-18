@@ -29,6 +29,7 @@ import {
 } from '../../application/finance/fundingRounds';
 import { sendInvestorUpdate } from '../../application/investor/investorUpdateDelivery';
 import { parseBody, z, zJsonObject, zNumberLike } from './requestBody';
+import { requireTenantId } from '../middleware/tenantContext';
 
 // Most bodies here are read field by field with `typeof` guards and handed to an
 // engine that owns the rules, so their schema is `zJsonObject`. The three small
@@ -42,7 +43,7 @@ const IntroductionBody = z.object({
 const IntroductionResponseBody = z.object({ decision: z.unknown().optional() });
 const MoveDealBody = z.object({ stage: z.string().nullish() });
 
-const tenant = (c: Context<HonoEnv>) => c.get('tenantId') as number;
+const tenant = requireTenantId;
 const actor = (c: Context<HonoEnv>) => String(c.get('userId') ?? '');
 
 // ---------------------------------------------------------------------------

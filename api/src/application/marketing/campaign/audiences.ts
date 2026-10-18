@@ -3,7 +3,7 @@
  * reach. Split out of `../campaignEngine.ts` (whose header states the four things
  * the engine refuses to do); that module re-exports everything here.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../../infrastructure/database/connection';
 import {
   marketingAudienceMembers,
@@ -13,6 +13,7 @@ import {
 import { excluded } from '../../../infrastructure/database/upsert';
 import { isSendableEmail, normalizeEmail } from '../../shared/dnsVerification';
 import { isE164 } from '../campaignTransports';
+import { suppressedEmails } from '../suppression';
 
 // ---------------------------------------------------------------------------
 // Audiences
@@ -187,12 +188,6 @@ export async function suppressEmails(
   return inserted.length;
 }
 
-/** The subset of `emails` this tenant may not contact. ONE query, never per-row. */
-export async function suppressedSubset(db: Db, tenantId: number, emails: string[]): Promise<Set<string>> {
-  if (emails.length === 0) return new Set();
-  const rows = await db
-    .select({ email: marketingSuppressions.email })
-    .from(marketingSuppressions)
-    .where(and(eq(marketingSuppressions.tenantId, tenantId), inArray(marketingSuppressions.email, emails)));
-  return new Set(rows.map((r) => r.email));
-}
+/** The subset of `emails` this tenant may not contact: BOTH suppression ledgers, ONE query
+ *  (see ../suppression.ts). Kept as the campaign engine's name for it. */
+export const suppressedSubset = suppressedEmails;

@@ -39,7 +39,6 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
-  ledgerEntries,
   marketplacePersonas,
   marketplacePurchases,
   marketplaceSkills,
@@ -49,7 +48,7 @@ import { buildPaymentProvider } from '../../infrastructure/payment';
 import { ListingError } from './creationListings';
 import { resolveTakeRateBps } from './listingCommerce';
 import { verifyPaidCheckout, assertCovers } from '../finance/verifiedCheckout';
-import { USD_CENTS } from '../kernel/denominations';
+import { recordSaleSplit } from '../finance/saleLedger';
 
 
 /** What this flow calls itself in checkout metadata. Skills and personas share it. */
@@ -385,30 +384,18 @@ async function creditSkillSeller(db: Db, input: {
   sellerCents: number;
   commissionCents: number;
 }): Promise<void> {
-  await db.insert(ledgerEntries).values([
-    {
-      tenantId: input.sellerTenantId,
-      accountKind: 'user',
-      accountRef: input.sellerRef,
-      denomination: USD_CENTS,
-      amount: String(input.sellerCents),
-      entryKind: 'commission',
-      reference: `mp-sale:${input.purchaseId}`,
-      memo: `Skill sale — ${input.artifactName}`,
-      metadata: { source: SKILL_PURCHASE_KIND, purchaseId: input.purchaseId },
-    },
-    {
-      tenantId: input.sellerTenantId,
-      accountKind: 'partner',
-      accountRef: 'platform',
-      denomination: USD_CENTS,
-      amount: String(input.commissionCents),
-      entryKind: 'commission',
-      reference: `mp-fee:${input.purchaseId}`,
-      memo: `Platform fee — ${input.artifactName}`,
-      metadata: { source: SKILL_PURCHASE_KIND, purchaseId: input.purchaseId },
-    },
-  ]).onConflictDoNothing();
+  await recordSaleSplit(db, {
+    sellerTenantId: input.sellerTenantId,
+    sellerRef: input.sellerRef,
+    referencePrefix: 'mp',
+    saleId: input.purchaseId,
+    saleIdKey: 'purchaseId',
+    source: SKILL_PURCHASE_KIND,
+    saleLabel: 'Skill sale',
+    subject: input.artifactName,
+    sellerCents: input.sellerCents,
+    commissionCents: input.commissionCents,
+  });
 }
 
 /** Re-exported so a route can answer without a second import. */

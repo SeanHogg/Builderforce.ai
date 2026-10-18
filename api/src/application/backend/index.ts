@@ -43,6 +43,7 @@ import {
 } from './hostingStrategy';
 import { HANDLERS_DIR, handlerNameFromPath, parseHandlerSpec, type HandlerSpec } from './handlerSpec';
 import { randomBase64Url } from '../../domain/shared/bytes';
+import { parseJsonOr } from '../../domain/shared/json';
 
 const STRATEGIES: Record<BackendStrategyKey, BackendHostingStrategy> = {
   declarative: declarativeStrategy,
@@ -475,11 +476,7 @@ export async function readHandlerDocument(
   if (!HANDLER_NAME_RE.test(clean)) return null;
   const raw = await readWorkspaceFile(bucket, projectId, handlerPathFor(clean));
   if (raw === null) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  return parseJsonOr<unknown>(raw, null);
 }
 
 // ---------------------------------------------------------------------------

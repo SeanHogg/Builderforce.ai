@@ -18,11 +18,12 @@
 import { and, desc, eq, gt, isNull } from 'drizzle-orm';
 import { pendingPrompts } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { DAY_MS } from '../../domain/shared/time';
 
 const MAX_PROMPT_LEN = 4000;
 export const MAX_ANON_LEN = 64;
 /** A prompt nobody came back for stops being a handoff and becomes analytics. */
-const TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const TTL_MS = 30 * DAY_MS; // 30 days
 
 export class PendingPromptService {
   constructor(private readonly db: Db) {}

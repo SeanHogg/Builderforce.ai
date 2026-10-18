@@ -18,6 +18,7 @@ import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { buildTenantDriftReport } from './driftReport';
 import { notifyAlert } from '../alerts/runAlertSweep';
 import type { Env } from '../../env';
+import { DAY_MS } from '../../domain/shared/time';
 
 export function buildEvalDriftAlertMessage(
   drifting: Array<{ group: string; result: { severity: string } }>,
@@ -34,7 +35,7 @@ export function buildEvalDriftAlertMessage(
 export async function runEvalDriftSweep(env: Env, db: Db = buildDatabase(env)): Promise<void> {
 
   // Tenants with eval scores in the last 60 days are the only ones worth checking.
-  const sinceMs = Date.now() - 60 * 24 * 60 * 60 * 1000;
+  const sinceMs = Date.now() - 60 * DAY_MS;
   const tenants = await runTelemetryDatabase(db)
     .select({ tenantId: runModelOutcomes.tenantId })
     .from(runModelOutcomes)

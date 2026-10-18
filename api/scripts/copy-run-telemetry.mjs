@@ -55,6 +55,14 @@ const ops = neon(opsUrl);
 /**
  * The relations, parents before children (claims before their evidence). `key` is the
  * keyset the copy pages on; `serial` names the sequence to advance afterwards.
+ *
+ * `remapId` is for a table whose operational copy has been WRITTEN TO since the split, so
+ * its ids overlap core's (the sibling sequence starts at 1, not 500M). `llm_usage_log` is
+ * that case: writes moved on 2026-10-05, leaving ~11 MB of pre-split residue on core. Nothing
+ * references its ids, so core rows are inserted under NEW operational ids and de-duplicated
+ * on `match` (every business column, NULL-safe) instead of on the primary key — an
+ * id-preserving ON CONFLICT DO NOTHING would silently drop each residue row whose id an
+ * operational row already holds.
  */
 const TABLES = [
   { name: 'tool_audit_events', key: ['id'], serial: true },
@@ -64,6 +72,10 @@ const TABLES = [
   { name: 'usage_snapshots', key: ['id'], serial: true },
   { name: 'run_context_state', key: ['id'], serial: true },
   { name: 'run_model_outcomes', key: ['id'], serial: true },
+  {
+    name: 'llm_usage_log', key: ['id'], serial: false, remapId: true,
+    match: ['tenant_id', 'user_id', 'model', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'idempotency_key', 'execution_id', 'created_at'],
+  },
 ];
 
 async function columnsOf(db, table) {
@@ -76,11 +88,14 @@ async function columnsOf(db, table) {
 
 const ident = (name) => `"${name.replace(/"/g, '""')}"`;
 
-async function copyTable({ name, key }) {
+async function copyTable({ name, key, remapId, match }) {
   const [coreCols, opsCols] = await Promise.all([columnsOf(core, name), columnsOf(ops, name)]);
   if (opsCols.length === 0) throw new Error(`${name} does not exist on the operational endpoint — run npm run db:migrate first.`);
   const cols = coreCols.filter((c) => opsCols.includes(c));
   const colList = cols.map(ident).join(', ');
+  // What the INSERT writes: everything, except the id when the operational endpoint assigns its own.
+  const insertCols = (remapId ? cols.filter((c) => c !== 'id') : cols).map(ident).join(', ');
+  const sameRow = (match ?? []).filter((c) => cols.includes(c)).map((c) => `o.${ident(c)} IS NOT DISTINCT FROM k.${ident(c)}`).join(' AND ');
   const keyList = key.map(ident).join(', ');
 
   let cursor = null;
@@ -97,11 +112,18 @@ async function copyTable({ name, key }) {
     read += batch.length;
     if (!DRY) {
       const [{ n }] = await ops(
-        `WITH ins AS (
-           INSERT INTO ${ident(name)} (${colList})
-           SELECT ${colList} FROM json_populate_recordset(NULL::${ident(name)}, $1::json)
-           ON CONFLICT DO NOTHING RETURNING 1)
-         SELECT count(*)::int AS n FROM ins`,
+        remapId
+          ? `WITH ins AS (
+               INSERT INTO ${ident(name)} (${insertCols})
+               SELECT ${insertCols.split(', ').map((c) => `k.${c}`).join(', ')} FROM json_populate_recordset(NULL::${ident(name)}, $1::json) k
+                WHERE NOT EXISTS (SELECT 1 FROM ${ident(name)} o WHERE ${sameRow})
+               ON CONFLICT DO NOTHING RETURNING 1)
+             SELECT count(*)::int AS n FROM ins`
+          : `WITH ins AS (
+               INSERT INTO ${ident(name)} (${insertCols})
+               SELECT ${colList} FROM json_populate_recordset(NULL::${ident(name)}, $1::json)
+               ON CONFLICT DO NOTHING RETURNING 1)
+             SELECT count(*)::int AS n FROM ins`,
         [JSON.stringify(batch)],
       );
       written += n;
@@ -128,20 +150,24 @@ async function advanceSequence(name) {
 }
 
 /** Every core row must already be on the operational endpoint before core is emptied. */
-async function missingOnOps({ name, key }) {
+async function missingOnOps({ name, key, remapId, match }) {
   let cursor = null;
   let missing = 0;
   const keyList = key.map(ident).join(', ');
+  // A remapped table has no shared key to compare, so a core row is "present" when an
+  // operational row matches it on every business column.
+  const compareCols = remapId ? match : key;
+  const selectList = (remapId ? [...new Set([...key, ...match])] : key).map(ident).join(', ');
   for (;;) {
     const after = cursor == null ? '' : `WHERE (${keyList}) > (${key.map((_, i) => `$${i + 1}`).join(', ')})`;
     const [{ batch }] = await core(
-      `SELECT coalesce(json_agg(t), '[]'::json) AS batch FROM (SELECT ${keyList} FROM ${ident(name)} ${after} ORDER BY ${keyList} LIMIT 5000) t`,
+      `SELECT coalesce(json_agg(t), '[]'::json) AS batch FROM (SELECT ${selectList} FROM ${ident(name)} ${after} ORDER BY ${keyList} LIMIT 5000) t`,
       cursor ?? [],
     );
     if (batch.length === 0) break;
     const [{ n }] = await ops(
       `SELECT count(*)::int AS n FROM json_populate_recordset(NULL::${ident(name)}, $1::json) k
-        WHERE NOT EXISTS (SELECT 1 FROM ${ident(name)} o WHERE ${key.map((c) => `o.${ident(c)} = k.${ident(c)}`).join(' AND ')})`,
+        WHERE NOT EXISTS (SELECT 1 FROM ${ident(name)} o WHERE ${compareCols.map((c) => `o.${ident(c)} IS NOT DISTINCT FROM k.${ident(c)}`).join(' AND ')})`,
       [JSON.stringify(batch)],
     );
     missing += n;
@@ -177,7 +203,7 @@ async function main() {
     console.log('[dry-run] every core row is present on the operational endpoint; core copies would be emptied.');
     return;
   }
-  // TRUNCATE, not DELETE: the claim tables are immutable by row trigger, and the eight are
+  // TRUNCATE, not DELETE: the claim tables are immutable by row trigger, and these are
   // a closed set (nothing else on core references them), so one statement empties them all.
   await core(`TRUNCATE ${TABLES.map((t) => ident(t.name)).join(', ')}`);
   console.log(`Core copies emptied: ${TABLES.map((t) => t.name).join(', ')}.`);

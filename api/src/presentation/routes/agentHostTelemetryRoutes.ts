@@ -31,13 +31,13 @@ export function registerHostTelemetryRoutes<E extends HonoEnv>(
   router: Hono<E>,
   deps: {
     db: Db;
-    verifyAgentHostApiKey: (id: number, key?: string) => Promise<{ tenantId: number | string } | null | undefined>;
+    verifyAgentHostApiKey: (c: Context<E>, id: number, key?: string) => Promise<{ tenantId: number | string } | null | undefined>;
     extractAgentHostKey: (c: Context<E>) => string | undefined;
   },
 ): void {
   const authenticate = async (c: Context<E>): Promise<HostIdentity | null> => {
     const agentHostId = Number(c.req.param('id'));
-    const agentHost = await deps.verifyAgentHostApiKey(agentHostId, deps.extractAgentHostKey(c));
+    const agentHost = await deps.verifyAgentHostApiKey(c, agentHostId, deps.extractAgentHostKey(c));
     return agentHost ? { tenantId: Number(agentHost.tenantId), agentHostId } : null;
   };
 

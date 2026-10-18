@@ -23,6 +23,7 @@ import { approvals } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { isApprovalVisibleTo } from '../../domain/approval/selfOwned';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface PendingApprovalCount {
   pending: number;
@@ -30,7 +31,7 @@ export interface PendingApprovalCount {
   recentCreatedAt: string[];
 }
 
-const RECENT_WINDOW_MS = 15 * 86_400_000;
+const RECENT_WINDOW_MS = 15 * DAY_MS;
 /** Bound on pending rows read — far past any real queue; the count saturates here. */
 const PENDING_SCAN_CAP = 5000;
 

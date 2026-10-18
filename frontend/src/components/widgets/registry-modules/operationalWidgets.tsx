@@ -14,13 +14,13 @@
 
 import { useTranslations } from 'next-intl';
 import {
-  tasksApi,
   workflowDefinitions,
   brain,
   type Task,
   type WorkflowDefinitionSummary,
   type BrainChat,
 } from '@/lib/builderforceApi';
+import { readTasks } from '@/lib/dashboardReads';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import { InsightStat } from '@/components/dashboard/InsightStat';
@@ -34,7 +34,7 @@ import { useInsightFormat } from '@/components/insights/format';
 // ── Shared, deduped data sources (one fetch per source regardless of pins) ──────
 
 function useTasks() {
-  return useSharedSource<Task[]>('op:tasks', () => tasksApi.list());
+  return useSharedSource<Task[]>('op:tasks', () => readTasks());
 }
 function useWorkflows() {
   return useSharedSource<WorkflowDefinitionSummary[]>('op:workflows', () => workflowDefinitions.list());

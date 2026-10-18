@@ -53,24 +53,23 @@ export async function loadAgentHostKeyByHash(db: Db, keyHash: string): Promise<R
 }
 
 /**
- * Resolve a raw host key (cache first). `null` = unknown / inactive key. Without an
- * `env` (a caller that has not been handed the bindings yet) it reads the database
- * directly rather than failing — correct, just not cached.
+ * Resolve a raw host key (cache first). `null` = unknown / inactive key. `env` is
+ * REQUIRED so a caller cannot silently skip the cache (an unbound KV still falls through
+ * to the database inside the cache helper).
  */
 export async function resolveAgentHostKey(
-  env: Env | undefined,
+  env: Env,
   db: Db,
   rawKey: string,
 ): Promise<ResolvedAgentHostKey | null> {
   const keyHash = await hashSecret(rawKey);
-  const load = () => loadAgentHostKeyByHash(db, keyHash);
-  const resolved = env ? await resolveKeyCached(env, 'clk', keyHash, load) : await load();
+  const resolved = await resolveKeyCached(env, 'clk', keyHash, () => loadAgentHostKeyByHash(db, keyHash));
   return resolved.ok ? (resolved.payload as unknown as ResolvedAgentHostKey) : null;
 }
 
 /** Verify `rawKey` belongs to active host `id`: hash → cached resolve → id must match. */
 export async function verifyAgentHostKey(
-  env: Env | undefined,
+  env: Env,
   db: Db,
   id: number,
   rawKey?: string | null,

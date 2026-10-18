@@ -25,7 +25,7 @@
 
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { GOOGLE_OAUTH_ENDPOINTS, MICROSOFT_OAUTH_ENDPOINTS, isProviderOAuthConfigured } from '../shared/providerOAuthConnect';
-import { base64UrlDecode, base64UrlEncode, base64UrlToBytes } from '../../domain/shared/bytes';
+import { base64UrlDecode, bytesToBase64, base64UrlEncode, base64UrlToBytes } from '../../domain/shared/bytes';
 
 // ---------------------------------------------------------------------------
 // The shared shape
@@ -364,7 +364,7 @@ function decodeBase64Url(input: string): string {
 function encodeHeaderValue(value: string): string {
   // eslint-disable-next-line no-control-regex
   if (/^[\x20-\x7E]*$/.test(value)) return value;
-  return `=?UTF-8?B?${btoa(String.fromCharCode(...new TextEncoder().encode(value)))}?=`;
+  return `=?UTF-8?B?${bytesToBase64(new TextEncoder().encode(value))}?=`;
 }
 
 /**

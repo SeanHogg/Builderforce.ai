@@ -13,6 +13,7 @@ vi.mock('../observability/caughtErrorReporter', () => ({ reportCaughtError: vi.f
 
 import { provisionBuiltinAgents as provisionBuiltinAgentsImpl } from '../agent/provisionBuiltinAgents';
 import { createWorkspace, listMyWorkspaces } from './myWorkspaces';
+import { __clearL1CacheForTests } from '../../infrastructure/cache/readThroughCache';
 
 const provisionBuiltinAgents = vi.mocked(provisionBuiltinAgentsImpl);
 
@@ -33,8 +34,27 @@ function lister() {
 
 describe('listMyWorkspaces — the one "my workspaces" list', () => {
   beforeEach(() => {
+    __clearL1CacheForTests();
     landPendingInvitations.mockReset().mockResolvedValue(undefined);
     getDefaultTenantId.mockReset();
+  });
+
+  it('serves a repeat read from cache without touching the database again', async () => {
+    getDefaultTenantId.mockResolvedValue(9);
+    const ts = lister();
+    await listMyWorkspaces(db, env, ts, 'u-cache');
+    await listMyWorkspaces(db, env, ts, 'u-cache');
+    expect(ts.listTenantsForUser).toHaveBeenCalledTimes(1);
+    expect(landPendingInvitations).toHaveBeenCalledTimes(1);
+  });
+
+  it('never caches an empty list, so a first-time invitee is not held on onboarding', async () => {
+    getDefaultTenantId.mockResolvedValue(null);
+    const ts = lister();
+    ts.listTenantsForUser.mockResolvedValue([]);
+    await listMyWorkspaces(db, env, ts, 'u-empty');
+    await listMyWorkspaces(db, env, ts, 'u-empty');
+    expect(ts.listTenantsForUser).toHaveBeenCalledTimes(2);
   });
 
   it('lands pending invitations BEFORE listing, so an invitee sees the workspace now', async () => {

@@ -11,6 +11,7 @@
  */
 import type { FetchLike } from '../repos/sources/repoSourceBase';
 import type { ActivitySource, IngestEvent } from './activityIngest';
+import { HOUR_MS } from '../../domain/shared/time';
 
 const BACKFILL_PAGES = 5;
 
@@ -80,7 +81,7 @@ export function mapBbPull(p: BbPull, repoFullName: string, repoName: string): In
   }];
   if (p.state === 'MERGED') {
     const cycle = p.created_on && p.updated_on
-      ? Math.max(0, Math.round((new Date(p.updated_on).getTime() - new Date(p.created_on).getTime()) / 3_600_000))
+      ? Math.max(0, Math.round((new Date(p.updated_on).getTime() - new Date(p.created_on).getTime()) / HOUR_MS))
       : null;
     out.push({ ...base, eventType: 'pr_merged', externalId: `pr-${p.id}`, cycleTimeHours: cycle, occurredAt: p.updated_on ?? p.created_on ?? new Date().toISOString() });
   } else if (p.state === 'DECLINED' || p.state === 'SUPERSEDED') {

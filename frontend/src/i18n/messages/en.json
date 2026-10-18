@@ -19443,7 +19443,11 @@
     "errorNoCode": "No sign-in code received. Please try again.",
     "errorProfile": "Failed to load your account profile. Please try signing in again.",
     "popupDoneTitle": "You're signed in",
-    "popupDoneBody": "You can close this window and go back to Builderforce."
+    "popupDoneBody": "You can close this window and go back to Builderforce.",
+    "magicLinkNoToken": "No token found in the link. Please request a new one.",
+    "magicLinkInvalid": "Invalid or expired magic link.",
+    "magicLinkTitle": "Link expired or invalid",
+    "magicLinkVerifying": "Verifying your magic link…"
   },
   "footer": {
     "builtBy": "Built by",

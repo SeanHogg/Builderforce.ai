@@ -22,7 +22,7 @@ import { nullableDateParam } from './queryParams';
 import { relayToRoom } from './realtimeRelay';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { AGENT_HOST_BASE_PATH, legacyAliasNotice } from '../middleware/legacyAlias';
-import { agentHostInTenant, listAgentHostDirectory } from '../../application/agentHost/agentHostDirectory';
+import { agentHostInTenant, invalidateAgentHostDirectory, listAgentHostDirectory } from '../../application/agentHost/agentHostDirectory';
 import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { projectSpend } from '../../application/llm/usageReports';
 import { namedWindowStart } from '../../application/llm/usageQuery';
@@ -909,6 +909,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
               target: [agentHostProjects.tenantId, agentHostProjects.agentHostId, agentHostProjects.projectId],
               set: { updatedAt: new Date() },
             });
+          await invalidateAgentHostDirectory(c.env as Env, tenantId);
         }
       }
     }
@@ -950,7 +951,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     async (c) => {
       const tenantId = c.get('tenantId');
       const proj = await projectService.getProject(c.req.param('id'), tenantId);
-      const hosts = await listAgentHostDirectory(db, { tenantId, projectId: proj.id });
+      const hosts = await listAgentHostDirectory(db, { tenantId, projectId: proj.id, env: c.env as Env });
       return c.json({
         agentHosts: hosts.map((h) => ({
           id:          String(h.id),

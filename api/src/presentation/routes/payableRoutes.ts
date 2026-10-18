@@ -66,6 +66,7 @@ import {
 } from '../../application/finance/payRuns';
 import { resolveAppBaseUrl } from '../../env';
 import { parseBody, parseOptionalBody, z, zNumberLike } from './requestBody';
+import { requireTenantId } from '../middleware/tenantContext';
 
 // ── Bodies ───────────────────────────────────────────────────────────────────
 // The handlers type-guard every field (`typeof x === 'string' ? x : null`) and
@@ -185,7 +186,7 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  const tenant = (c: Context<HonoEnv>) => c.get('tenantId') as number;
+  const tenant = requireTenantId;
   const actor = (c: Context<HonoEnv>) => String(c.get('userId') ?? '');
 
   router.post('/bills', async (c) => {

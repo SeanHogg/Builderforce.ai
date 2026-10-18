@@ -55,6 +55,7 @@ import {
   scheduleRestartSentinelWake,
   shouldWakeFromRestartSentinel,
 } from "./server-restart-sentinel.js";
+import { flushTelemetry } from "../infra/workflow-telemetry.js";
 import { startGatewayMemoryBackend } from "./server-startup-memory.js";
 
 const SESSION_LOCK_STALE_MS = 30 * 60 * 1000;
@@ -398,6 +399,8 @@ async function startBuilderforceServices(
         } catch {
           /* ignore */
         }
+        // Batched spans wait up to ~2 s to leave; don't drop that tail on exit.
+        flushTelemetry();
       };
       process.once("SIGTERM", stopRelay);
       process.once("SIGINT", stopRelay);

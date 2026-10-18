@@ -37,6 +37,7 @@ import { executions, ticketRoleSignoffs } from '../../infrastructure/database/sc
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { ExecutionStatus } from '../../domain/shared/types';
 import { isAutoAttestedContribution } from '../kanban/signoffContribution';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** One role-attributed run, reduced to what the match needs. PURE input. */
 export interface RoleRunRow {
@@ -198,7 +199,7 @@ export async function getVerdictCompliance(
 ): Promise<VerdictComplianceReport> {
   const windowDays = Math.min(365, Math.max(1, args.windowDays ?? 30));
   return getOrSetCached(env, `insights:verdict-compliance:${args.tenantId}:${windowDays}`, async () => {
-    const since = new Date(Date.now() - windowDays * 86_400_000);
+    const since = new Date(Date.now() - windowDays * DAY_MS);
 
     // ROLE-ATTRIBUTED RUNS. The role and lane live in the dispatch payload, which is
     // stored as text — cast to jsonb to read them rather than pulling every payload

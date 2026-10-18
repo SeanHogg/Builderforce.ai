@@ -54,7 +54,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'invalid agentHostId' }, 400);
     }
 
-    const agentHost = await authenticateChatHost(db, agentHostId, key);
+    const agentHost = await authenticateChatHost(db, agentHostId, key, c.env);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const { sessionKey, projectId, messages } = await parseBody(c, PersistMessagesBody);

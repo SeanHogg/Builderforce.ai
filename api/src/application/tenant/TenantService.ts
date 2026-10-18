@@ -16,6 +16,7 @@ import { SEAT_KIND, type SeatKind } from '../../domain/tenant/SeatKind';
 import { membershipChanged } from './membershipChanged';
 import type { Env } from '../../env';
 import { invalidateTenantPlan } from './tenantPlanCache';
+import { invalidateMyWorkspaces } from './tenantReadCache';
 import { tenantRoleForListing } from './tenantRoles';
 
 export interface CreateTenantDto {
@@ -48,6 +49,8 @@ export class TenantService {
   private async persist(tenant: Tenant): Promise<Tenant> {
     const saved = await this.tenants.update(tenant);
     await invalidateTenantPlan(this.env, saved.id);
+    // Every member's workspace list embeds this tenant row (name, plan, trial…).
+    await invalidateMyWorkspaces(this.env, saved.members.map((m) => m.userId));
     return saved;
   }
 

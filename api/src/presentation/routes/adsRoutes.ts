@@ -41,6 +41,7 @@ import {
 import { readAdInsightsLedger, syncTenantAdInsights } from '../../application/advertising/adInsightsSync';
 import { isAdObjective, isAdNetwork, AD_STATUSES, type AdStatus } from '../../application/advertising/adsProviders';
 import { parseOptionalBody, z, zNumberLike } from './requestBody';
+import { requireTenantId } from '../middleware/tenantContext';
 
 /** Which connected ad account a write targets — either coordinate may be absent. */
 const adAccountFields = {
@@ -100,7 +101,7 @@ export function createAdsRoutes(db: Db): Hono<HonoEnv> {
 
   const ctx = (c: { env: unknown; get: (key: string) => unknown }) => ({
     env: c.env as Env,
-    tenantId: c.get('tenantId') as number,
+    tenantId: requireTenantId(c),
   });
 
   // GET /networks — the catalog, so an empty state can say what CAN be connected.

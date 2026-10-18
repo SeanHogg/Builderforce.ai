@@ -45,7 +45,7 @@ export async function verifyHmacHex(
       expected = expected.slice(stripPrefix.length);
     }
     if (!expected) return false;
-    return timingSafeEqualHex(await hmacSha256Hex(secret, rawBody), expected);
+    return timingSafeEqualHex(await hmacSha256Hex(secret, rawBody), expected.toLowerCase());
   } catch {
     return false;
   }

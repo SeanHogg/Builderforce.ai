@@ -34,6 +34,7 @@ import {
   shareDataRoom,
 } from '../../application/investor/dataRoomSharing';
 import { parseBody, z } from './requestBody';
+import { requireTenantId } from '../middleware/tenantContext';
 
 /** `POST /:id/share` — `shareDataRoom` owns the required-recipient rules. */
 const ShareDataRoomBody = z.object({
@@ -59,7 +60,7 @@ export function createDataRoomRoutes(db: Db): Hono<HonoEnv> {
   /** Every room, with its documents, its live links and how much of it has been
    *  read — one call, because a card needs all of it at once. */
   router.get('/', async (c) =>
-    Response.json({ rooms: await listDataRooms(db, c.get('tenantId') as number) }));
+    Response.json({ rooms: await listDataRooms(db, requireTenantId(c)) }));
 
   /**
    * Share a room with one firm.
@@ -70,7 +71,7 @@ export function createDataRoomRoutes(db: Db): Hono<HonoEnv> {
    */
   router.post('/:id/share', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseBody(c, ShareDataRoomBody);
-    const result = await shareDataRoom(db, c.env as Env, c.get('tenantId') as number, {
+    const result = await shareDataRoom(db, c.env as Env, requireTenantId(c), {
       dataRoomId: roomId(c.req.param('id')),
       recipientName: String(body.recipientName ?? ''),
       recipientEmail: String(body.recipientEmail ?? ''),
@@ -86,13 +87,13 @@ export function createDataRoomRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.get('/:id/shares', async (c) =>
-    Response.json({ shares: await listDataRoomShares(db, c.get('tenantId') as number, roomId(c.req.param('id'))) }));
+    Response.json({ shares: await listDataRoomShares(db, requireTenantId(c), roomId(c.req.param('id'))) }));
 
   router.post('/shares/:shareId/revoke', requireRole(TenantRole.MANAGER), async (c) => {
     await revokeDataRoomShare(
       db,
       c.env as Env,
-      c.get('tenantId') as number,
+      requireTenantId(c),
       c.req.param('shareId'),
       await resolveActorFromContext(c.env as Env, db, c),
     );
@@ -102,7 +103,7 @@ export function createDataRoomRoutes(db: Db): Hono<HonoEnv> {
   /** What the firm actually read — the half of "sending a data room" that made
    *  the columns worth enforcing in the first place. */
   router.get('/:id/analytics', async (c) =>
-    Response.json({ analytics: await dataRoomAnalytics(db, c.get('tenantId') as number, roomId(c.req.param('id'))) }));
+    Response.json({ analytics: await dataRoomAnalytics(db, requireTenantId(c), roomId(c.req.param('id'))) }));
 
   return router;
 }

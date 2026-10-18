@@ -18,6 +18,8 @@ export interface RequestScope {
   userId?: string;
   /** The invocation's `ctx.waitUntil` — absent in tests and non-Worker callers. */
   waitUntil?: (task: Promise<unknown>) => void;
+  /** Version-token keys already bumped in this scope, with the time (see `bumpVersion`). */
+  bumpedAt?: Map<string, number>;
 }
 
 const storage = new AsyncLocalStorage<RequestScope>();
@@ -53,4 +55,18 @@ export function deferPastResponse(task: Promise<unknown>, scope: RequestScope | 
     // Not swallowed: `false` hands the task back, and the caller awaits it itself.
     return false;
   }
+}
+
+/**
+ * Enter a scope for a Durable Object entry point (fetch / alarm). A DO is not reached
+ * through `index.ts`, so without this its writes see no ambient env and every
+ * scope-driven cache bump (chat versions, unread) is silently skipped.
+ */
+export function runInDurableObjectScope<T>(
+  className: string,
+  env: unknown,
+  state: { waitUntil(task: Promise<unknown>): void },
+  work: () => T,
+): T {
+  return runInRequestScope({ env, method: 'DO', path: className, waitUntil: (task) => state.waitUntil(task) }, work);
 }

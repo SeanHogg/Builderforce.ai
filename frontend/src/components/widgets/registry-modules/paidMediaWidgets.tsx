@@ -13,7 +13,8 @@
  */
 
 import { useTranslations, useLocale } from 'next-intl';
-import { adsApi, formatMoney, type AdInsightsRead } from '@/lib/adsApi';
+import { adsApi, type AdInsightsRead } from '@/lib/adsApi';
+import { formatCents } from '@/lib/canvasMoney';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetMuted as Muted, WidgetStat } from '@/components/widgets/widgetBody';
 import type { ComponentSurfaceProps, ComponentDef, ComponentDrill } from '@/lib/components/types';
@@ -46,7 +47,7 @@ function PaidSpendCard({ days }: ComponentSurfaceProps) {
   const currency = data.rows[0]?.currency ?? 'USD';
   return (
     <WidgetStat
-      value={formatMoney(data.totals.spendCents, currency, locale)}
+      value={formatCents(data.totals.spendCents, { currency, locale })}
       sub={t('paidMedia.spendSub', {
         clicks: int(data.totals.clicks),
         conversions: int(data.totals.conversions),
@@ -72,7 +73,7 @@ function CostPerResultCard({ days }: ComponentSurfaceProps) {
   const currency = data.rows[0]?.currency ?? 'USD';
   return (
     <WidgetStat
-      value={formatMoney(data.totals.costPerConversionCents, currency, locale)}
+      value={formatCents(data.totals.costPerConversionCents, { currency, locale })}
       sub={t('paidMedia.costPerResultSub', { conversions: int(data.totals.conversions) })}
     />
   );
@@ -99,7 +100,7 @@ function SpendByNetworkCard({ days }: ComponentSurfaceProps) {
   return (
     <BarChart
       data={bars}
-      formatValue={(value) => formatMoney(value, currency, locale)}
+      formatValue={(value) => formatCents(value, { currency, locale })}
       ariaLabel={t('title.paidMediaSpendByNetwork')}
     />
   );
@@ -128,7 +129,7 @@ function SpendTrendCard({ days }: ComponentSurfaceProps) {
       labels={ordered.map(([date]) => date)}
       series={[{ key: 'spend', label: t('title.paidMediaSpendTrend'), values: ordered.map(([, cents]) => cents), color: colorAt(0) }]}
       area
-      formatValue={(value) => formatMoney(value, currency, locale)}
+      formatValue={(value) => formatCents(value, { currency, locale })}
       ariaLabel={t('title.paidMediaSpendTrend')}
     />
   );

@@ -8,6 +8,7 @@
  * URL + auth header and gate which smart-HTTP paths are allowed; the route does
  * the streaming fetch.
  */
+import { bytesToBase64 } from '../../domain/shared/bytes';
 
 export interface ProxyRepo {
   provider: string;       // github | bitbucket | gitlab
@@ -59,7 +60,7 @@ export function buildGitAuthHeader(provider: string, token: string): string {
     provider === 'gitlab' ? 'oauth2'
     : provider === 'bitbucket' ? 'x-token-auth'
     : 'x-access-token';
-  const basic = Buffer.from(`${user}:${token}`).toString('base64');
+  const basic = bytesToBase64(new TextEncoder().encode(`${user}:${token}`));
   return `Basic ${basic}`;
 }
 

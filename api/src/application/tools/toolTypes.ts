@@ -14,6 +14,7 @@
 
 import type { ToolCopy } from './analyzerCopy';
 import { DEFAULT_TOOL_LOCALE, resultCopy, type ResultCopy } from './resultCopy';
+import { clamp } from '../../domain/shared/numbers';
 
 export type ToolCategory = 'delivery' | 'finops' | 'finance' | 'governance' | 'quality' | 'career';
 export type ToolKind = 'calculator' | 'questionnaire' | 'quiz' | 'analyzer';
@@ -273,7 +274,7 @@ export function toDefinition(t: Tool): ToolDefinition {
 // ── Shared questionnaire scorer (CMMI-style averaging → bands + plan) ──────────
 
 export function clampLevel(n: number): number {
-  return Math.max(1, Math.min(5, Math.round(n)));
+  return clamp(Math.round(n), 1, 5);
 }
 
 /**

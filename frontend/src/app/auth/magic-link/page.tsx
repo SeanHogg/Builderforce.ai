@@ -1,122 +1,36 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
-import MascotIcon from '@/components/MascotIcon';
-import Link from 'next/link';
-import { AUTH_API_URL, persistSession } from '@/lib/auth';
-import { resolveAndSelectTenant } from '@/lib/auth/credentials';
-import type { AuthUser } from '@/lib/types';
+import { AUTH_API_URL } from '@/lib/auth';
+import { AuthStatusScreen, completeTokenSignIn, type SignInExchange } from '@/components/account/AuthStatusScreen';
 import { useErrorText } from '@/i18n/useErrorMessage';
+
 export default function MagicLinkVerifyPage() {
+  const t = useTranslations('authCallback');
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const errorText = useErrorText();
 
   // Derive initial state from URL so no synchronous setState inside the effect
-  const [status, setStatus] = useState<'loading' | 'error'>(!token ? 'error' : 'loading');
-  const [errorMsg, setErrorMsg] = useState<string>(
-    !token ? 'No token found in the link. Please request a new one.' : ''
-  );
+  const [errorMsg, setErrorMsg] = useState<string | null>(!token ? t('magicLinkNoToken') : null);
 
   useEffect(() => {
     if (!token) return;
 
     fetch(`${AUTH_API_URL}/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`)
-      .then((res) => res.json() as Promise<{ token?: string; user?: AuthUser; redirect?: string; error?: string }>)
-      .then(async (data) => {
-        if (!data.token || !data.user) {
-          throw new Error(data.error ?? 'Invalid or expired magic link.');
-        }
-        persistSession(data.token, data.user);
-        await resolveAndSelectTenant(data.token);
-        window.location.href = data.redirect || '/dashboard';
-      })
+      .then((res) => res.json() as Promise<SignInExchange & { error?: string }>)
+      .then((data) => completeTokenSignIn(data, data.error ?? t('magicLinkInvalid')))
       .catch((err: unknown) => {
-        setErrorMsg(
-          errorText(err),
-        );
-        setStatus('error');
+        setErrorMsg(errorText(err));
       });
-  }, [searchParams, token, errorText]);
-
-  if (status === 'error') {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--bg-deep)',
-          color: 'var(--text-primary)',
-          padding: 24,
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 420,
-            width: '100%',
-            background: 'var(--surface-card)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-xl)',
-            padding: '40px 32px',
-            textAlign: 'center',
-            backdropFilter: 'blur(12px)',
-          }}
-        >
-          <MascotIcon size={48} className="bf-mark-muted" />
-          <h2
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 'var(--font-size-section)',
-              fontWeight: 700,
-              marginBottom: 12,
-            }}
-          >
-            Link expired or invalid
-          </h2>
-          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginBottom: 24 }}>
-            {errorMsg}
-          </p>
-          <Link
-            href="/login"
-            style={{
-              display: 'inline-block',
-              background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: 'var(--text-on-accent)',
-              borderRadius: 'var(--radius-lg)',
-              padding: '10px 24px',
-              fontFamily: 'var(--font-display)',
-              fontWeight: 600,
-              fontSize: 'var(--font-size-body)',
-              textDecoration: 'none',
-            }}
-          >
-            Back to login
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  }, [searchParams, token, errorText, t]);
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--bg-deep)',
-        color: 'var(--text-primary)',
-      }}
-    >
-      <div style={{ textAlign: 'center' }}>
-        <MascotIcon size={56} className="bf-mark-pulse" />
-        <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)' }}>
-          Verifying your magic link…
-        </p>
-      </div>
-    </div>
+    <AuthStatusScreen
+      loadingLabel={t('magicLinkVerifying')}
+      failure={errorMsg !== null ? { title: t('magicLinkTitle'), message: errorMsg, backLabel: t('backToLogin') } : null}
+    />
   );
 }

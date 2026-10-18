@@ -147,7 +147,7 @@ export async function beginDeepLink(
     };
   }
 
-  const bridged = await bridgeLaunch(db, registration, context);
+  const bridged = await bridgeLaunch(db, registration, context, env);
   if (!bridged.ok) return bridged;
 
   const binding = await findContextBinding(db, context);

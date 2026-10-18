@@ -29,6 +29,7 @@ import {
   tallyPoll,
 } from '../../application/collection/pollFacilitation';
 import { parseBody, z, zJsonObject } from './requestBody';
+import { requireTenantId } from '../middleware/tenantContext';
 
 /** `answer` is the service's to judge against the poll's format, so it stays untyped. */
 const VoteBody = z.object({
@@ -40,7 +41,7 @@ export function createPollRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  const tenant = (c: Context<HonoEnv>) => c.get('tenantId') as number;
+  const tenant = requireTenantId;
 
   /** Publish a poll and OPEN it — one press, because the next thing that happens is a
    *  room being asked to answer. */

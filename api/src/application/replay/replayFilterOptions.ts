@@ -18,6 +18,7 @@ import type { ReplayScope } from '../../domain/replay/replayScope';
 import { replayReadKeys } from './replayCacheKeys';
 import { replayTelemetryDb } from './replayDatabase';
 import { clampDays } from './replayReadModel';
+import { DAY_MS } from '../../domain/shared/time';
 
 export const FILTER_OPTIONS_MAX = 50;
 
@@ -57,7 +58,7 @@ export async function filterOptions(
   const store = replayTelemetryDb(env, db);
   const keys = await replayReadKeys(env, scope);
   return getOrSetCached(env, keys.filterOptions(input.field || '*', days), async () => {
-    const since = new Date((input.now ?? new Date()).getTime() - days * 86_400_000);
+    const since = new Date((input.now ?? new Date()).getTime() - days * DAY_MS);
     return Promise.all(fields.map(async (field): Promise<ReplayFilterOptionsDto> => {
       if (field in COLUMN_FIELDS) {
         const column = COLUMN_FIELDS[field as keyof typeof COLUMN_FIELDS];

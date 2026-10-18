@@ -24,6 +24,7 @@ import {
 import {
   qualityVersionKey, peopleVersionKey, aiProgramVersionKey, rdFinancialsVersionKey, prodIncidentVersionKeys,
 } from './versionKeys';
+import { HOUR_MS } from '../../domain/shared/time';
 
 export type ImportColumnType = 'string' | 'number' | 'bool' | 'dateString' | 'timestamp';
 
@@ -216,7 +217,7 @@ export const IMPORT_REGISTRY_FINGERPRINT: string = fingerprint(JSON.stringify(li
 
 /** The registry cannot change without a deploy and the key carries its
  *  fingerprint, so a long TTL is honest. */
-const KINDS_TTL = { kvTtlSeconds: 86_400, l1TtlMs: 3_600_000 };
+const KINDS_TTL = { kvTtlSeconds: 86_400, l1TtlMs: HOUR_MS };
 
 /**
  * `GET /api/import/kinds`, cached.

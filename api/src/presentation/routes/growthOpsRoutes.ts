@@ -33,7 +33,6 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
 import {
-  ExperimentError,
   addSegment,
   channelAttribution,
   createJourney,
@@ -141,26 +140,15 @@ import {
   TouchpointBody,
   VariantsBody,
 } from './growthOpsRoutes.schemas';
-
-const rowId = (raw: string): number => {
-  const id = Number(raw);
-  if (!Number.isFinite(id) || id <= 0) throw new ExperimentError('That is not an id.', 400);
-  return Math.floor(id);
-};
-
-const when = (s: string | null | undefined): Date | undefined => {
-  if (!s) return undefined;
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) throw new ExperimentError('That is not a date.', 400);
-  return d;
-};
+import { rowId, whenOrUndefined } from '../../domain/shared/coerce';
+import { requireTenantId } from '../middleware/tenantContext';
 
 export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
   const manager = requireRole(TenantRole.MANAGER);
-  const tenant = (c: { get: (k: string) => unknown }) => c.get('tenantId') as number;
+  const tenant = (c: { get: (k: string) => unknown }) => requireTenantId(c);
   const who = async (c: Parameters<typeof resolveActorFromContext>[2] & { env: unknown }) =>
     resolveActorFromContext(c.env as Env, db, c);
 
@@ -264,7 +252,7 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/journeys/:id/touchpoints', async (c) => {
     const body = await parseBody(c, TouchpointBody);
-    const occurredAt = when(body.occurredAt);
+    const occurredAt = whenOrUndefined(body.occurredAt);
     return Response.json(await recordTouchpoint(db, tenant(c), {
       journeyId: rowId(c.req.param('id')),
       stage: String(body.stage ?? ''),
@@ -425,8 +413,8 @@ export function createGrowthOpsRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/heatmaps', manager, async (c) => {
     const body = await parseBody(c, HeatmapBody);
-    const periodStart = when(body.periodStart);
-    const periodEnd = when(body.periodEnd);
+    const periodStart = whenOrUndefined(body.periodStart);
+    const periodEnd = whenOrUndefined(body.periodEnd);
     if (!periodStart || !periodEnd) throw new PageInsightError('periodStart and periodEnd are required', 400);
     return Response.json(await storeHeatmap(db, tenant(c), {
       path: String(body.path ?? ''),

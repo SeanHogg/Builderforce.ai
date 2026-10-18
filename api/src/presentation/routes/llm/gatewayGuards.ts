@@ -13,10 +13,9 @@ import { IMAGE_PRODUCT_NAMES, IMAGE_TOKEN_COST } from '../../../application/llm/
 import { toTenantPlan } from '../../../application/tenant/featureEntitlements';
 import { requestDb } from '../../../application/shared/dbHandle';
 import {
-  utcDayStart,
   secondsUntilNextUtcMidnight,
   secondsUntilNextUtcMonth,
-  sumTenantTextTokens,
+  getTenantDayMonthTokens,
 } from '../../../application/llm/tokenUsage';
 import { getTenantTokenAvailability, tokenGateUpgradeHint } from '../../../application/llm/tenantTokenAvailability';
 import { getMemberSpendAvailability, maybeEmitSpendNotification, millicentsToUsd } from '../../../application/consumption/memberSpend';
@@ -137,7 +136,7 @@ export async function enforceTokenCaps(
   let usageToday = availability.usageToday;
   const usageMonth = availability.usageMonth;
   if (hasHostCap && planUnlimited) {
-    usageToday = await sumTenantTextTokens(db, access.tenantId, utcDayStart());
+    usageToday = (await getTenantDayMonthTokens(c.env, db, access.tenantId)).day;
   }
   if (hasHostCap && usageToday >= (access.agentHostTokenDailyLimit as number)) {
     return {

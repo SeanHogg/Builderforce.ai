@@ -10,8 +10,8 @@ import { buildExecutiveSummary } from './executiveSummary';
 import { generateProjectStatusReport } from './projectStatusReport';
 import { generateCodeReviewReport, generateStandupReport } from './devActivityReports';
 import { generatePortfolioReport } from './portfolioReport';
+import { DAY_MS } from '../../domain/shared/time';
 
-const REPORT_DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Dispatch a schedulable report_type → its generator, returning an email-ready
@@ -34,9 +34,9 @@ export async function buildScheduledReport(
     case 'standup':
       return { subject: '[Builderforce] Daily standup report', report: await generateStandupReport(db, tenantId, now) };
     case 'code_review':
-      return { subject: '[Builderforce] Code review report', report: await generateCodeReviewReport(db, tenantId, new Date(now.getTime() - 14 * REPORT_DAY_MS), now) };
+      return { subject: '[Builderforce] Code review report', report: await generateCodeReviewReport(db, tenantId, new Date(now.getTime() - 14 * DAY_MS), now) };
     case 'executive_summary':
-      return { subject: '[Builderforce] Executive summary', report: await buildExecutiveSummary(db, tenantId, new Date(now.getTime() - 30 * REPORT_DAY_MS), now) as unknown as Record<string, unknown> };
+      return { subject: '[Builderforce] Executive summary', report: await buildExecutiveSummary(db, tenantId, new Date(now.getTime() - 30 * DAY_MS), now) as unknown as Record<string, unknown> };
     case 'portfolio_rollup':
       return { subject: '[Builderforce] Portfolio (PMO) rollup', report: await generatePortfolioReport(db, tenantId, segmentId) };
     case 'project_status':

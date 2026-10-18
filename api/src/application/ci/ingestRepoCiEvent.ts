@@ -31,6 +31,7 @@ import { fetchBuildError } from './fetchBuildError';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { stampExecutionAuthority, systemInitiated } from '../runtime/executionAuthority';
+import { HOUR_MS } from '../../domain/shared/time';
 
 export interface RepoCiEvent {
   /** GitHub event name, e.g. 'check_suite' | 'deployment_status' | 'workflow_run' | 'status'. */
@@ -287,7 +288,7 @@ async function applyBuildOutcome(
   // arrives while the dispatch is still in flight sees the claim above.
   if (evt.sha) {
     await setCached(env, autofixClaimKey(tenantId, taskId, evt.sha), { statusKey: evt.statusKey ?? null }, {
-      kvTtlSeconds: 3600, l1TtlMs: 3600_000,
+      kvTtlSeconds: 3600, l1TtlMs: HOUR_MS,
     }).catch((error) => { /* claim is an optimization — the dispatch events are the record */ 
       reportCaughtError(error, { source: "application/ci/ingestRepoCiEvent.ts", operation: "applyBuildOutcome" });
     });

@@ -26,3 +26,12 @@ export function clampScore(n: number): number {
 export function clamp01(n: number): number {
   return Number.isFinite(n) ? clamp(n, 0, 1) : 0;
 }
+
+/**
+ * {@link clampScore} after rounding to a whole number — the "0..100 integer"
+ * every résumé / listing / talent scorer reported. Five modules each declared the
+ * same `const clamp = (n) => clampScore(Math.round(n))` locally.
+ */
+export function clampScoreRounded(n: number): number {
+  return clampScore(Math.round(n));
+}

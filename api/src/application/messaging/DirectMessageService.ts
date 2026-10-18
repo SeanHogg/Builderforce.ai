@@ -44,6 +44,7 @@ import {
   appendKernelMessage, getKernelThread, isThreadParticipant, listKernelMessages, listKernelThreads,
   markKernelThreadRead, memberThreadIds, openKernelThread, threadMemberRefs,
 } from './kernelThreads';
+import { bumpInboxes, cachedInbox } from './dmThreadsCache';
 
 /** The live room for one conversation. */
 export const dmThreadRoomName = (threadId: string): string => `dm:${threadId}`;
@@ -136,13 +137,15 @@ export class DirectMessageService {
    * they were added to.
    */
   private async reachableTenantIds(userId: string): Promise<number[]> {
-    const [me, memberRows] = await Promise.all([
-      this.person(userId),
-      this.db.select({ tenantId: tenantMembers.tenantId }).from(tenantMembers)
-        .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.isActive, true))),
-    ]);
-    const ids = new Set(memberRows.map((row) => row.tenantId));
-    if (me?.isSuperadmin) {
+    // One statement: the person's superadmin flag rides on their workspace rows (left join,
+    // so a person with no workspace still answers), instead of a separate `users` read.
+    const memberRows = await this.db
+      .select({ tenantId: tenantMembers.tenantId, isSuperadmin: users.isSuperadmin })
+      .from(users)
+      .leftJoin(tenantMembers, and(eq(tenantMembers.userId, users.id), eq(tenantMembers.isActive, true)))
+      .where(eq(users.id, userId));
+    const ids = new Set(memberRows.flatMap((row) => (row.tenantId != null ? [row.tenantId] : [])));
+    if (memberRows.some((row) => row.isSuperadmin)) {
       // Discovery, not a listing: this asks "which workspaces am I a participant
       // in", so it is keyed by the caller's own `memberRef` and cannot return
       // anyone else's rows. It is the query that PRODUCES the tenant filter every
@@ -222,6 +225,11 @@ export class DirectMessageService {
     }));
   }
 
+  /** {@link threads} behind the per-person inbox cache — what the polled route reads. */
+  threadsCached(userId: string): Promise<DirectMessageThreadView[]> {
+    return cachedInbox(this.env, userId, () => this.threads(userId));
+  }
+
   /** Total unread across every conversation — the top-bar badge, in one query. */
   async unreadCount(userId: string): Promise<number> {
     const list = await this.threads(userId);
@@ -278,6 +286,7 @@ export class DirectMessageService {
     });
     if (!opened) return null;
 
+    await bumpInboxes(this.env, [userId, otherUserId]);
     await broadcastRoom(this.env.SESSION_ROOM, dmUserRoomName(otherUserId));
     const [view] = (await this.threads(userId)).filter((row) => row.id === opened.threadId);
     return view ?? null;
@@ -303,6 +312,8 @@ export class DirectMessageService {
     await this.markRead(threadId, userId, new Date());
 
     const participants = await threadMemberRefs(this.db, thread.tenantId, threadId);
+    // The sender's own inbox was already bumped by markRead above.
+    await bumpInboxes(this.env, participants.filter((id) => id !== userId));
     const me = await this.person(userId);
     await Promise.all([
       broadcastRoom(this.env.SESSION_ROOM, dmThreadRoomName(threadId)),
@@ -329,6 +340,7 @@ export class DirectMessageService {
   async markRead(threadId: string, userId: string, at = new Date()): Promise<boolean> {
     const tenantIds = await this.reachableTenantIds(userId);
     if (!await markKernelThreadRead(this.db, tenantIds, threadId, userId, at)) return false;
+    await bumpInboxes(this.env, [userId]);
     await broadcastRoom(this.env.SESSION_ROOM, dmUserRoomName(userId));
     return true;
   }

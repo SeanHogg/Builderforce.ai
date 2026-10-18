@@ -52,12 +52,19 @@ function makeDb(
 ) {
   const inserts: any[] = [];
   const updates: any[] = [];
+  let insertStatements = 0;
   const db = {
     select: () => ({ from: () => ({ where: async () => subs }) }),
     insert: () => ({
       values: (v: any) => {
-        inserts.push(v);
-        const returning = async () => (insertConflicts ? [] : [{ id: `deliv-${inserts.length}` }]);
+        // One multi-row insert for every matched subscription.
+        insertStatements += 1;
+        const batch: any[] = Array.isArray(v) ? v : [v];
+        inserts.push(...batch);
+        const returning = async () => (insertConflicts ? [] : batch.map((r, i) => ({
+          id: `deliv-${inserts.length - batch.length + i + 1}`,
+          subscriptionId: r.subscriptionId,
+        })));
         return { returning, onConflictDoNothing: () => ({ returning }) };
       },
     }),
@@ -68,7 +75,7 @@ function makeDb(
       },
     }),
   };
-  return { db: db as any, inserts, updates };
+  return { db: db as any, inserts, updates, insertStatements: () => insertStatements };
 }
 
 describe('emitWebhookEvent', () => {
@@ -108,6 +115,23 @@ describe('emitWebhookEvent', () => {
 
     await expect(emitWebhookEvent(db, input, { fetchImpl, nowSec: () => 1 })).resolves.toBe(1);
     expect(updates.at(-1)).toMatchObject({ status: 'failed' });
+  });
+
+  it('enqueues every matched subscription in ONE insert and stamps successes in ONE update', async () => {
+    const ev = JSON.stringify(['sprint.completed']);
+    const { db, inserts, updates, insertStatements } = makeDb([
+      { id: 's1', url: 'https://host/a', secret: 'sec', events: ev },
+      { id: 's2', url: 'https://host/b', secret: 'sec', events: ev },
+    ]);
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }));
+
+    await expect(emitWebhookEvent(db, input, { fetchImpl, nowSec: () => 5 })).resolves.toBe(2);
+
+    expect(insertStatements()).toBe(1);
+    expect(inserts).toHaveLength(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ status: 'delivered', responseStatus: 200 });
   });
 
   it('returns 0 (no fetch) when nothing is subscribed', async () => {

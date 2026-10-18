@@ -7,6 +7,8 @@ import { hashSecret, generateApiKey } from '../../infrastructure/auth/HashServic
 import { IAuditRepository } from '../../domain/audit/IAuditRepository';
 import { AuditEvent } from '../../domain/audit/AuditEvent';
 import { ITenantRepository } from '../../domain/tenant/ITenantRepository';
+import type { Env } from '../../env';
+import { invalidateMyWorkspaces } from '../tenant/tenantReadCache';
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -51,6 +53,8 @@ export class AuthService {
     private readonly tenants:   ITenantRepository,
     private readonly audit:     IAuditRepository,
     private readonly jwtSecret: string,
+    /** Optional: unit tests construct this without a worker environment. */
+    private readonly env?: Env,
   ) {}
 
   // -- API key path ----------------------------------------------------------
@@ -120,6 +124,8 @@ export class AuthService {
       if (!tenant?.getMember(userId)) throw new ForbiddenError('User is not a member of this tenant');
     }
     await this.users.setDefaultTenantId(userId as UserId, tenantId);
+    // The cached workspace list carries `defaultTenantId`.
+    await invalidateMyWorkspaces(this.env, [userId]);
   }
 
   /**

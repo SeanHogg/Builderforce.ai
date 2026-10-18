@@ -36,6 +36,7 @@ import { addAudienceMembers } from '../marketing/campaignEngine';
 import { raiseTicketForSiteRecord } from './siteTicketBridge';
 import { appsDatabaseOf } from './appsDatabase';
 import { invalidateSiteAudience } from './siteAudienceSummary';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** The collection every published site gets for free. */
 export const DEFAULT_COLLECTION = 'signups';
@@ -200,7 +201,7 @@ export async function submitSiteRecord(input: SubmitInput): Promise<SubmitResult
   if (sanitized.honeypot) return { ok: true, recordId: null, accepted: true, audienceAdded: false };
 
   const cap = collection.dailyWriteCap > 0 ? collection.dailyWriteCap : DEFAULT_DAILY_WRITE_CAP;
-  const since = new Date(Date.now() - 86_400_000);
+  const since = new Date(Date.now() - DAY_MS);
   const [{ count } = { count: 0 }] = await apps
     .select({ count: sql<number>`count(*)::int` })
     .from(siteRecords)

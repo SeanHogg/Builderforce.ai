@@ -27,6 +27,7 @@ import { SWEPT_TABLES, type SweptConnection } from './sweptTables';
 import { runPurgeBatch } from './boundedPurge';
 import { purgeExpiredMemories } from '../memory/memoryService';
 import { EXECUTION_PAYLOAD_RETENTION_DAYS, redactStaleExecutionPayloads } from '../runtime/executionPayloadRetention';
+import { COLUMN_RETENTION, runColumnRetention } from './columnRetention';
 import { DAY_MS } from '../../domain/shared/time';
 import { runReplayRetention } from '../replay/replayRetention';
 
@@ -150,6 +151,12 @@ export async function runRetentionPurge(
     // R2 day-prefixes that hold their bytes, then stale live presence. The registry's
     // `replay_recordings` entry is only the 90-day backstop and the vacuum.
     { name: 'replay_recordings', run: () => runReplayRetention(env, db, new Date(now)) },
+    // Domain-table column/surplus retention (brain step payloads, canvas command bodies,
+    // surplus snapshots). Core only: none of these relations has a transactional copy.
+    ...COLUMN_RETENTION.map((entry) => ({
+      name: entry.name,
+      run: () => runColumnRetention(db, entry, cutoff(now, entry.afterDays)),
+    })),
     {
       name: 'execution_payloads',
       run: () => redactStaleExecutionPayloads(db, cutoff(now, EXECUTION_PAYLOAD_RETENTION_DAYS)),

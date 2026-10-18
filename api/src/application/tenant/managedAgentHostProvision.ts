@@ -19,6 +19,7 @@ import {
 import type { ManagedAgentHostRuntime } from './managedAgentHostRuntime';
 import { invalidateAgentHostDirectory } from '../agentHost/agentHostDirectory';
 import { bumpTenantAgentHostCount } from './tenantResourceCounts';
+import { invalidateTenantPlan } from './tenantPlanCache';
 
 export interface ManagedAgentHostRuntimeDeps {
   runtime: ManagedAgentHostRuntime;
@@ -47,6 +48,8 @@ async function retireManagedAgentHost(
     .update(tenants)
     .set({ defaultAgentHostId: null, updatedAt: new Date() })
     .where(and(eq(tenants.id, tenantId), eq(tenants.defaultAgentHostId, agentHostId)));
+  // The plan snapshot carries defaultAgentHostId.
+  await invalidateTenantPlan(env, tenantId);
 }
 
 export async function provisionManagedAgentHost(
@@ -107,6 +110,7 @@ export async function provisionManagedAgentHost(
     .update(tenants)
     .set({ defaultAgentHostId: host.id, updatedAt: new Date() })
     .where(and(eq(tenants.id, row.tenantId), isNull(tenants.defaultAgentHostId)));
+  await invalidateTenantPlan(deps.env, row.tenantId);
 
   return provisionManagedAgentHostRequest(db, {
     requestId: input.requestId,

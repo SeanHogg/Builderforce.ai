@@ -36,6 +36,7 @@ import { acrossTenants, scopedToTenant } from '../../infrastructure/database/ten
 import { jobInvites, jobPostings, jobProposals, tenants, users } from '../../infrastructure/database/schema';
 import { notify } from '../notifications/notify';
 import { excluded } from '../../infrastructure/database/upsert';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** The lifecycle. `expired` is never WRITTEN by a request — it is what the clock says. */
 export const INVITE_STATUSES = ['sent', 'viewed', 'accepted', 'declined', 'expired'] as const;
@@ -113,7 +114,7 @@ export function inviteDeadline(days?: unknown): Date {
   const ttl = Number.isFinite(requested) && requested > 0
     ? Math.min(Math.round(requested), MAX_INVITE_TTL_DAYS)
     : DEFAULT_INVITE_TTL_DAYS;
-  return new Date(Date.now() + ttl * 24 * 60 * 60 * 1000);
+  return new Date(Date.now() + ttl * DAY_MS);
 }
 
 export type InviteFailure = 'job_not_found' | 'job_not_open' | 'person_not_found' | 'self_invite';

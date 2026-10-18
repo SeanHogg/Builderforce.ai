@@ -210,7 +210,7 @@ export function createLtiRoutes(db: Db) {
     // to be a REDIRECT and not a JSON body — except for a caller that asked for
     // JSON, which is how the contract stays testable and how a non-browser
     // integration can still read the service URLs.
-    const bridged = await bridgeLaunch(db, registration, context);
+    const bridged = await bridgeLaunch(db, registration, context, c.env);
 
     if (!wantsJson) {
       const frontend = resolveAppBaseUrl(c.env);

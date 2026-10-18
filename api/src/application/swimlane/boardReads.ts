@@ -47,7 +47,7 @@ async function boardExists(db: Db, tenantId: number, boardId: string): Promise<b
 }
 
 /** The board's lanes in display order, or null when the board is not the tenant's. One statement. */
-export function readBoardLanes(env: Env, db: Db, tenantId: number, boardId: string) {
+export function readBoardLanesCached(env: Env, db: Db, tenantId: number, boardId: string) {
   return getOrSetCached(env, lanesKey(tenantId, boardId), async () => {
     const rows = await db
       .select({ lane: swimlanes })

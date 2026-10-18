@@ -62,7 +62,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { parseJsonArray } from '../../domain/shared/json';
 import { hireShape } from './engagementShape';
-import { clampScore } from '../../domain/shared/numbers';
+import { clampScoreRounded } from '../../domain/shared/numbers';
 
 /** How many candidates one ranking considers, and how many it returns. */
 export const RECOMMENDATION_POOL_LIMIT = 300;
@@ -131,8 +131,6 @@ export interface PostingMatch {
 // ---------------------------------------------------------------------------
 // Scoring
 // ---------------------------------------------------------------------------
-
-const clamp = (n: number): number => clampScore(Math.round(n));
 
 /** The recognised skill tokens in a blob of text plus a stored JSON skill list. */
 function skillTokens(...parts: Array<unknown>): Set<string> {
@@ -242,7 +240,7 @@ function scoreMatch(input: {
   }
 
   return {
-    score: clamp(score),
+    score: clampScoreRounded(score),
     reasons: reasons.sort((a, b) => b.points - a.points),
     matched: matched.map(displaySkill),
     missing: missing.slice(0, 8).map(displaySkill),

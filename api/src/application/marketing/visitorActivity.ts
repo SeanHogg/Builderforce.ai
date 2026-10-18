@@ -46,7 +46,7 @@
  * on the audit trail. See {@link purgeVisitorActivity}.
  */
 
-import { eq, lt, sql } from 'drizzle-orm';
+import { eq, inArray, lt, or, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { activityLog } from '../../infrastructure/database/schema';
@@ -146,18 +146,41 @@ export async function forgetVisitorActivity(db: Db, visitorId: string): Promise<
 }
 
 /**
- * Drop journey rows past the retention window.
+ * Machine lifecycle verbs on `activity_log` — ~75% of the table (104 MB on the operational
+ * endpoint, 2026-10-17). Each restates a fact the system of record already keeps: the
+ * `executions` row (status, timestamps, result), the outbox ledger, `manager_actions` and
+ * the chat transcript. The only reader that lists them is the per-ticket lifecycle ledger,
+ * which merges them with the `executions` / `task_status_transitions` rows it reads
+ * beside them, so a ticket older than the window loses a duplicate line, not a fact.
+ * Human-authored and compliance verbs are NOT named here and are kept indefinitely.
+ */
+export const MACHINE_LIFECYCLE_VERBS = [
+  'execution.running',
+  'execution.submitted',
+  'execution.completed',
+  'execution.failed',
+  'execution.snapshot',
+  'agent.replied',
+  'manager.pass',
+  'ticket.role.dispatched',
+] as const;
+
+/**
+ * Drop journey rows (and the machine lifecycle verbs above) past the retention window.
  *
  * A PREDICATE-scoped purge, because the table it lives in is the audit trail: it
- * names the visitor rows and touches nothing else, and the relation is never
- * vacuum-rewritten on their account. It is the `purge` of `activity_log`'s registry
- * entry, so it runs on every endpoint the relation exists on and the daily plain
+ * names the visitor rows and the machine verbs and touches nothing else, and the relation
+ * is never vacuum-rewritten on their account. It is the `purge` of `activity_log`'s
+ * registry entry, so it runs on every endpoint the relation exists on and the daily plain
  * vacuum follows it.
  */
 export function purgeVisitorActivity(db: Db, cutoff: Date): PurgeStatement {
   // Bounded + unexecuted so the retention pass batches it with the other purges.
   return boundedDelete(db, activityLog, acrossTenants(activityLog, 'scheduled_sweep',
-    eq(activityLog.actorType, VISITOR_ACTOR_TYPE),
+    or(
+      eq(activityLog.actorType, VISITOR_ACTOR_TYPE),
+      inArray(activityLog.verb, [...MACHINE_LIFECYCLE_VERBS]),
+    ),
     lt(activityLog.occurredAt, cutoff),
   ));
 }

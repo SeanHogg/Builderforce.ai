@@ -17,6 +17,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { and, desc, eq } from 'drizzle-orm';
 import { ideAgents, projects, projectRepositories, securityAudits } from '../../infrastructure/database/schema';
+import { findBuiltinAgentId } from '../agent/builtinAgentRef';
 import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import { stampExecutionAuthority, systemInitiated } from '../runtime/executionAuthority';
 import { buildRuntimeService } from '../../buildRuntimeService';
@@ -40,16 +41,7 @@ const AUDIT_LANE_KEY = '__security_audit__';
  * indexed lookup (idx_ide_agents_builtin_kind).
  */
 export async function findTenantSecurityRef(db: Db, tenantId: number): Promise<string | null> {
-  const [row] = await db
-    .select({ id: ideAgents.id })
-    .from(ideAgents)
-    .where(and(
-      eq(ideAgents.tenantId, tenantId),
-      eq(ideAgents.status, 'active'),
-      eq(ideAgents.builtinKind, 'security'),
-    ))
-    .limit(1);
-  return row?.id ?? null;
+  return findBuiltinAgentId(db, tenantId, 'security');
 }
 
 /** True when the tenant already has an audit in flight — don't pile a second on. */

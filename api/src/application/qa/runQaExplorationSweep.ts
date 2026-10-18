@@ -22,6 +22,7 @@ import { deriveTargetZones } from './deriveTargetRoutes';
 import { dispatchQaRunner } from './dispatchQaRunner';
 import { nextCronTime } from '../../domain/workflowSchedule';
 import type { Env } from '../../env';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** Max schedules processed per sweep — bounds work per cron tick. */
 const SWEEP_LIMIT = 25;
@@ -115,7 +116,7 @@ export async function runQaExplorationSweep(env: Env, db: Db = buildDatabase(env
     }
 
     // Re-arm from the cron expression so a malformed cron can't wedge the row.
-    const next = nextCronTime(s.cron, now, s.timezone) ?? new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const next = nextCronTime(s.cron, now, s.timezone) ?? new Date(now.getTime() + DAY_MS);
     await db
       .update(qaSchedules)
       .set({ lastRunAt: now, lastStatus, nextRunAt: next, updatedAt: now })

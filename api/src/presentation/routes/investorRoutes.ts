@@ -89,6 +89,7 @@ import type { AuditRunner } from '../../application/tools/AuditRunner';
 // Each handler type-guards every field it reads, so the body is any JSON object; an
 // absent body stays `{}` (the service answers "name is required" etc. itself).
 import { parseBody, parseOptionalBody, z, zJsonObject } from './requestBody';
+import { requireTenantId } from '../middleware/tenantContext';
 
 /** The startup listing's profile patch — every field optional, every value bounded.
  *  Vocabulary membership (stage, sector, seeking…) is the application's rule. */
@@ -155,11 +156,11 @@ export function createInvestorRoutes(
   // ── companies ────────────────────────────────────────────────────────────
 
   router.get('/companies', async (c) =>
-    Response.json({ companies: await listCompanies(db, c.get('tenantId') as number) }));
+    Response.json({ companies: await listCompanies(db, requireTenantId(c)) }));
 
   router.post('/companies', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseOptionalBody(c, zJsonObject);
-    const company = await createCompany(db, c.env as Env, c.get('tenantId') as number, {
+    const company = await createCompany(db, c.env as Env, requireTenantId(c), {
       name: String(body.name ?? ''),
       website: typeof body.website === 'string' ? body.website : null,
       stage: typeof body.stage === 'string' ? body.stage : null,
@@ -176,7 +177,7 @@ export function createInvestorRoutes(
   });
 
   router.get('/companies/:id', async (c) =>
-    Response.json({ company: await companyDetail(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))) }));
+    Response.json({ company: await companyDetail(db, requireTenantId(c), companyIdFrom(c.req.param('id'))) }));
 
   // ── IN-1: a company owns the work being done inside it ────────────────────
 
@@ -184,15 +185,15 @@ export function createInvestorRoutes(
     // The company id is validated even though the read does not filter on it: a
     // picker opened against a company that is not here must 404 rather than
     // listing this workspace's unassigned projects under somebody else's heading.
-    await companyDetail(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id')));
-    return Response.json({ projects: await unassignedProjects(db, c.get('tenantId') as number) });
+    await companyDetail(db, requireTenantId(c), companyIdFrom(c.req.param('id')));
+    return Response.json({ projects: await unassignedProjects(db, requireTenantId(c)) });
   });
 
   router.post('/companies/:id/projects', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseOptionalBody(c, zJsonObject);
     const projectId = Number(body.projectId);
     if (!Number.isFinite(projectId) || projectId <= 0) throw new CompanyError('projectId is required.', 400);
-    await linkProjectToCompany(db, c.env as Env, c.get('tenantId') as number, {
+    await linkProjectToCompany(db, c.env as Env, requireTenantId(c), {
       projectId: Math.floor(projectId),
       companyId: companyIdFrom(c.req.param('id')),
       actor: await resolveActorFromContext(c.env as Env, db, c),
@@ -203,8 +204,8 @@ export function createInvestorRoutes(
   router.delete('/companies/:id/projects/:projectId', requireRole(TenantRole.MANAGER), async (c) => {
     // The company id is still parsed, so a detach aimed at a company that is not
     // here fails as "not here" rather than silently clearing the column.
-    await companyDetail(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id')));
-    await linkProjectToCompany(db, c.env as Env, c.get('tenantId') as number, {
+    await companyDetail(db, requireTenantId(c), companyIdFrom(c.req.param('id')));
+    await linkProjectToCompany(db, c.env as Env, requireTenantId(c), {
       projectId: projectIdFrom(c.req.param('projectId')),
       companyId: null,
       actor: await resolveActorFromContext(c.env as Env, db, c),
@@ -216,7 +217,7 @@ export function createInvestorRoutes(
 
   router.get('/companies/:id/investors', async (c) =>
     Response.json({
-      investors: await listCompanyInvestors(db, c.env as Env, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))),
+      investors: await listCompanyInvestors(db, c.env as Env, requireTenantId(c), companyIdFrom(c.req.param('id'))),
     }));
 
   /**
@@ -228,7 +229,7 @@ export function createInvestorRoutes(
    */
   router.post('/companies/:id/investors', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseOptionalBody(c, zJsonObject);
-    const grant = await inviteInvestorToCompany(db, c.env as Env, c.get('tenantId') as number, {
+    const grant = await inviteInvestorToCompany(db, c.env as Env, requireTenantId(c), {
       companyId: companyIdFrom(c.req.param('id')),
       recipientName: String(body.recipientName ?? ''),
       recipientEmail: String(body.recipientEmail ?? ''),
@@ -249,7 +250,7 @@ export function createInvestorRoutes(
     const result = await revokeCompanyInvestor(
       db,
       c.env as Env,
-      c.get('tenantId') as number,
+      requireTenantId(c),
       companyIdFrom(c.req.param('id')),
       c.req.param('grantId'),
       await resolveActorFromContext(c.env as Env, db, c),
@@ -259,18 +260,18 @@ export function createInvestorRoutes(
 
   router.get('/companies/:id/investors/analytics', async (c) =>
     Response.json({
-      analytics: await companyInvestorAnalytics(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))),
+      analytics: await companyInvestorAnalytics(db, requireTenantId(c), companyIdFrom(c.req.param('id'))),
     }));
 
   // ── IN-4: the pack ───────────────────────────────────────────────────────
 
   router.get('/companies/:id/pack', async (c) =>
-    Response.json({ packs: await listCompanyPacks(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))) }));
+    Response.json({ packs: await listCompanyPacks(db, requireTenantId(c), companyIdFrom(c.req.param('id'))) }));
 
   router.post('/companies/:id/pack', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseOptionalBody(c, zJsonObject);
     const userId = (c.get('userId') as string | undefined) ?? '';
-    const pack = await buildFundraisingPack(packDeps(c.env as Env), c.get('tenantId') as number, userId, {
+    const pack = await buildFundraisingPack(packDeps(c.env as Env), requireTenantId(c), userId, {
       companyId: companyIdFrom(c.req.param('id')),
       // `undefined` means "pick the most recent project"; an explicit null is the
       // founder choosing the greenfield path. Those are different answers, so the
@@ -297,11 +298,11 @@ export function createInvestorRoutes(
   // numbers are what an investor reads — while the founder's own team may read.
 
   router.get('/companies/:id/listing', async (c) =>
-    Response.json({ listing: await readStartupListing(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))) }));
+    Response.json({ listing: await readStartupListing(db, requireTenantId(c), companyIdFrom(c.req.param('id'))) }));
 
   router.put('/companies/:id/listing', requireRole(TenantRole.MANAGER), async (c) => {
     const patch = await parseBody(c, zListingPatch);
-    const listing = await updateStartupListing(db, c.env as Env, c.get('tenantId') as number, {
+    const listing = await updateStartupListing(db, c.env as Env, requireTenantId(c), {
       companyId: companyIdFrom(c.req.param('id')),
       patch,
       actor: await resolveActorFromContext(c.env as Env, db, c),
@@ -311,7 +312,7 @@ export function createInvestorRoutes(
 
   router.put('/companies/:id/listing/finance', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseBody(c, zDeclaredFinance);
-    const listing = await declareFinance(db, c.env as Env, c.get('tenantId') as number, {
+    const listing = await declareFinance(db, c.env as Env, requireTenantId(c), {
       companyId: companyIdFrom(c.req.param('id')),
       ...body,
       actor: await resolveActorFromContext(c.env as Env, db, c),
@@ -321,7 +322,7 @@ export function createInvestorRoutes(
 
   router.post('/companies/:id/listing/visibility', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseBody(c, zVisibility);
-    const listing = await setListingVisibility(db, c.env as Env, c.get('tenantId') as number, {
+    const listing = await setListingVisibility(db, c.env as Env, requireTenantId(c), {
       companyId: companyIdFrom(c.req.param('id')),
       listed: body.listed,
       actor: await resolveActorFromContext(c.env as Env, db, c),
@@ -335,7 +336,7 @@ export function createInvestorRoutes(
 
   router.get('/companies/:id/inquiries', async (c) => {
     const companyId = companyIdFrom(c.req.param('id'));
-    const rows = await dealFlowQueue(db, c.get('tenantId') as number, undefined, {
+    const rows = await dealFlowQueue(db, requireTenantId(c), undefined, {
       source: INVESTOR_INQUIRY_SOURCE,
       subjectCompanyId: companyId,
     });
@@ -350,7 +351,7 @@ export function createInvestorRoutes(
     const row = await triageDealFlow(
       db,
       c.env as Env,
-      c.get('tenantId') as number,
+      requireTenantId(c),
       await resolveActorFromContext(c.env as Env, db, c),
       Math.floor(inquiryId),
       body.status,

@@ -40,6 +40,7 @@ import { requireSessionRole, type SessionAccess } from '../creation/sessionAcces
 import { computeControlCoverage } from '../finops/socControls';
 import { condenseTranscript } from '../llm/condense';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { DAY_MS } from '../../domain/shared/time';
 
 const text = (value: unknown, max: number): string =>
   typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -539,6 +540,6 @@ export async function provisionTrial(
     sessionId: copied.sessionId,
     objects: copied.objects,
     startsAt: startsAt.toISOString(),
-    expiresAt: new Date(startsAt.getTime() + days * 86_400_000).toISOString(),
+    expiresAt: new Date(startsAt.getTime() + days * DAY_MS).toISOString(),
   };
 }

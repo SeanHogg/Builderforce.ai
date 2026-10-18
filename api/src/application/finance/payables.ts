@@ -38,6 +38,7 @@ import type { Env } from '../../env';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { StatusError } from '../../domain/shared/errors';
+import { DAY_MS } from '../../domain/shared/time';
 
 export class PayableError extends StatusError<number> {
   constructor(message: string, status: number) {
@@ -389,7 +390,7 @@ const AGEING_LADDER: ReadonlyArray<{ label: string; from: number; to: number | n
 ];
 
 const daysPast = (due: Date | null, now: number): number =>
-  due == null ? 0 : Math.floor((now - due.getTime()) / 86_400_000);
+  due == null ? 0 : Math.floor((now - due.getTime()) / DAY_MS);
 
 /**
  * Ageing for one direction.

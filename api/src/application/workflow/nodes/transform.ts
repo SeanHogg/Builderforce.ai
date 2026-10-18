@@ -7,6 +7,7 @@
  * `domain/workflowExpr` (no eval/Function). An empty expression is a
  * pass-through, so legacy workflows are unaffected.
  */
+import { parseJsonOr } from '../../../domain/shared/json';
 import { evaluateBool, renderTransform } from '../../../domain/workflowExpr';
 import {
   regexMatch, htmlToText, htmlTable, htmlElements, matchElements,
@@ -34,7 +35,7 @@ export const TRANSFORM_NODE_HANDLERS: NodeHandlerTable = {
   merge: ({ node, inputText }) => {
     const strategy = typeof node.config.strategy === 'string' ? node.config.strategy : 'array';
     const parts = fanInParts(node, inputText);
-    const parseOrRaw = (s: string): unknown => { try { return JSON.parse(s); } catch { return s; } };
+    const parseOrRaw = (s: string): unknown => parseJsonOr<unknown>(s, s);
     if (strategy === 'first') return { output: parts[0] ?? '' };
     if (strategy === 'object-keys') {
       const keys = typeof node.config.keys === 'string'
@@ -67,7 +68,7 @@ export const TRANSFORM_NODE_HANDLERS: NodeHandlerTable = {
     // object — Make's Table aggregator collects structured rows, not a mix
     // of scalars and objects.
     const rows = fanInParts(node, inputText)
-      .map((p) => { try { return JSON.parse(p) as unknown; } catch { return null; } })
+      .map((p) => parseJsonOr<unknown>(p, null))
       .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object' && !Array.isArray(r));
     return { output: JSON.stringify(rows) };
   },

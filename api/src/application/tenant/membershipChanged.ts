@@ -28,6 +28,8 @@
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import { invalidateTeamCaches } from '../kernel/TeamRoster';
 import type { Env } from '../../env';
+import { bumpInboxes } from '../messaging/dmThreadsCache';
+import { invalidateMyWorkspaces, invalidateTenantSnapshot } from './tenantReadCache';
 
 /**
  * Announce that a tenant's membership changed.
@@ -49,5 +51,10 @@ export async function membershipChanged(
     invalidateTeamCaches(env, tenantId),
     // The JWT membership entry that decides whether this person still has access.
     ...userIds.map((userId) => invalidateJwtMembershipCache(env, tenantId, userId)),
+    // The snapshot lists every member; the affected people's workspace lists carry their role.
+    invalidateTenantSnapshot(env, tenantId),
+    invalidateMyWorkspaces(env, userIds),
+    // A DM inbox shows only people the viewer may reach, which membership decides.
+    bumpInboxes(env, userIds),
   ]).catch(() => undefined);
 }

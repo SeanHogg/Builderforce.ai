@@ -12,7 +12,9 @@
  * A cached entry embeds the tokens it depends on, so a write orphans it instead of
  * the writer enumerating keys. Entries are per (chat, user) because the access
  * verdict is part of what is cached — a hit costs zero statements, including the
- * access check. The KV TTL is only the backstop for a writer that bypasses these.
+ * access check. The KV TTL is only the backstop for a writer that bypasses these. A bump
+ * clears this isolate at once; others see it after KV propagation (about 60 s across PoPs)
+ * or their short L1 expiring, whichever is later.
  *
  * Bumps read the ambient request scope's env (see `requestScope.ts`) so the deep
  * write modules that hold only a `Db` do not need an `Env` threaded through them.
@@ -28,6 +30,7 @@ export const CHAT_READ_CACHE = { kvTtlSeconds: 120, l1TtlMs: 5_000 };
 const messagesKey = (chatId: number): string => `chat-messages-version:${chatId}`;
 const structureKey = (chatId: number): string => `chat-structure-version:${chatId}`;
 
+/** A transcript row was written or edited. `env` defaults to the ambient request scope. */
 export function bumpChatMessages(chatId: number, env: Env | undefined = ambientEnv()): Promise<void> {
   return bumpVersion(messagesKey(chatId), 'bumpChatMessages', env);
 }
@@ -38,6 +41,7 @@ export function bumpChatStructure(chatId: number, env: Env | undefined = ambient
 }
 
 export interface ChatReadScope {
+  tenantId: number;
   chatId: number;
   userId: string;
   /** Distinguishes variants of one read (limit, cursor, …). */
@@ -70,7 +74,7 @@ export async function cachedChatRead<T>(
     versionToken(env, structureKey(scope.chatId)),
     scope.messages ? versionToken(env, messagesKey(scope.chatId)) : Promise.resolve('-'),
   ]);
-  const key = `chat-read:${name}:${scope.chatId}:${scope.userId}:${scope.variant ?? '-'}:s${structure}:m${messages}:${(scope.tokens ?? []).join(':')}`;
+  const key = `chat-read:${name}:${scope.tenantId}:${scope.chatId}:${scope.userId}:${scope.variant ?? '-'}:s${structure}:m${messages}:${(scope.tokens ?? []).join(':')}`;
   try {
     return await getOrSetCached(env, key, async () => {
       const value = await load();

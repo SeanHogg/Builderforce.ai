@@ -54,6 +54,7 @@ import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { jobPostings, savedSearches, tenants } from '../../infrastructure/database/schema';
 import { notify } from '../notifications/notify';
 import { describeJobFilters, jobFilterMatches, normalizeJobFilters } from './jobFilters';
+import { WEEK_MS } from '../../domain/shared/time';
 
 /** The notification kind these rows carry, so the feed can group and the UI can route. */
 export const JOB_ALERT_NOTIFICATION_KIND = 'job_alert';
@@ -86,7 +87,6 @@ export const JOB_ALERT_TITLES_IN_BODY = 5;
  * must be a bounded window rather than "the beginning of time", because the one thing
  * this sweep must never do is mail somebody the entire board.
  */
-const FIRST_RUN_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface JobAlertSweepResult {
   /** Alerts evaluated this run. */
@@ -123,7 +123,7 @@ interface PostingRow {
 function watermark(alert: AlertRow, now: Date): Date {
   const stamp = alert.lastRunAt ?? alert.createdAt;
   if (stamp instanceof Date && Number.isFinite(stamp.getTime())) return stamp;
-  return new Date(now.getTime() - FIRST_RUN_LOOKBACK_MS);
+  return new Date(now.getTime() - WEEK_MS);
 }
 
 /** The alerts this run will evaluate: `scope='listing'`, not turned off. */

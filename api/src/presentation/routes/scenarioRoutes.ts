@@ -68,6 +68,8 @@ import {
   type RiskBand,
 } from '../../application/finance/churnPrediction';
 import { parseBody, parseOptionalBody, zJsonObject } from './requestBody';
+import { rowId, str, num } from '../../domain/shared/coerce';
+import { requireTenantId } from '../middleware/tenantContext';
 
 /**
  * Every write here reads its body field by field through `str` / `num` /
@@ -77,21 +79,13 @@ import { parseBody, parseOptionalBody, zJsonObject } from './requestBody';
  */
 const ScenarioWriteBody = zJsonObject;
 
-const rowId = (raw: string): number => {
-  const id = Number(raw);
-  if (!Number.isFinite(id) || id <= 0) throw new ScenarioError('That is not an id.', 400);
-  return Math.floor(id);
-};
-
-const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
-const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 
 export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
   const manager = requireRole(TenantRole.MANAGER);
-  const tenant = (c: { get: (k: string) => unknown }) => c.get('tenantId') as number;
+  const tenant = (c: { get: (k: string) => unknown }) => requireTenantId(c);
   const who = async (c: Parameters<typeof resolveActorFromContext>[2] & { env: unknown }) =>
     resolveActorFromContext(c.env as Env, db, c);
 

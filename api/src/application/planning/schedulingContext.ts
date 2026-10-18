@@ -21,6 +21,7 @@ import type { Env } from '../../env';
 import { readMemberMetrics, type MemberScorecard } from '../metrics/workforceMetrics';
 import { loadWorkingCalendar } from './workingCalendar';
 import type { AssigneeCapacity, SprintWindow, WorkingCalendar } from './scheduleWork';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** Window the member-load signal is read over. Matches the workforce surfaces. */
 export const CAPACITY_METRICS_DAYS = 30;
@@ -100,7 +101,7 @@ export async function loadSchedulingContext(
   tenantId: number,
   projectId?: number,
 ): Promise<SchedulingContext> {
-  const since = new Date(Date.now() - SPRINT_LOOKBACK_DAYS * 86_400_000);
+  const since = new Date(Date.now() - SPRINT_LOOKBACK_DAYS * DAY_MS);
   const [calendar, cards, sprintRows] = await Promise.all([
     loadWorkingCalendar(env, db, tenantId),
     loadMemberCapacityCards(env, db, tenantId, projectId),

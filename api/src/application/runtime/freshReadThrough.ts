@@ -9,7 +9,8 @@ import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cach
  * write, regaining focus) — and a busy tenant has many windows doing that at once. Each
  * cached value carries the time it was loaded; a `fresh` read that finds one younger than
  * `minIntervalMs` is served from it, so at most one reload per interval per key reaches the
- * database, across isolates (the stamp lives in the cached value, not in a module Map).
+ * database PER ISOLATE: the stamp rides the cached value, but that value reaches other isolates
+ * only after KV propagation (about 60 s), so the throttle is not global.
  */
 interface Stamped<T> { value: T; loadedAt: number }
 

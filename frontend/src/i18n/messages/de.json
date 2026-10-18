@@ -19443,7 +19443,11 @@
     "errorNoCode": "Kein Anmeldecode empfangen. Bitte versuchen Sie es erneut.",
     "errorProfile": "Das Profil Ihres Kontos konnte nicht geladen werden. Bitte melden Sie sich erneut an.",
     "popupDoneTitle": "Du bist angemeldet",
-    "popupDoneBody": "Du kannst dieses Fenster schließen und zu Builderforce zurückkehren."
+    "popupDoneBody": "Du kannst dieses Fenster schließen und zu Builderforce zurückkehren.",
+    "magicLinkNoToken": "Im Link wurde kein Token gefunden. Bitte fordere einen neuen an.",
+    "magicLinkInvalid": "Magischer Link ungültig oder abgelaufen.",
+    "magicLinkTitle": "Link abgelaufen oder ungültig",
+    "magicLinkVerifying": "Dein magischer Link wird überprüft…"
   },
   "footer": {
     "builtBy": "Entwickelt von",

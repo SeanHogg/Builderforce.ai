@@ -29,7 +29,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
-import { useFormat } from '@/i18n/useFormat';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import {
   chaseInvoice,
   collectionLadder,
@@ -56,7 +56,6 @@ const rowStyle: React.CSSProperties = {
 
 export function CollectionsWorklist({ onChased }: CollectionsWorklistProps) {
   const t = useTranslations('collections');
-  const fmt = useFormat();
   const [worklist, setWorklist] = useState<WorklistEntry[]>([]);
   const [ladder, setLadder] = useState<LadderRung[]>([]);
   const [busy, setBusy] = useState('');
@@ -93,14 +92,9 @@ export function CollectionsWorklist({ onChased }: CollectionsWorklistProps) {
     }
   };
 
-  const money = (amount: string, paid: string, currency: string): string => {
-    const outstanding = Number(amount) - Number(paid);
-    try {
-      return fmt.number(outstanding, { style: 'currency', currency });
-    } catch {
-      return `${outstanding.toFixed(2)} ${currency}`;
-    }
-  };
+  const { formatCents } = useMoneyFormat();
+  const money = (amount: string, paid: string, currency: string): string =>
+    formatCents(Math.round((Number(amount) - Number(paid)) * 100), { currency });
 
   if (loading) return <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: 0 }}>{t('loading')}</p>;
 

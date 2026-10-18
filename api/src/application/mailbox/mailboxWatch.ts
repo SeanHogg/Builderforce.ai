@@ -54,6 +54,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
 import { freshMailboxToken, toTriageMessages } from './mailboxService';
 import { watchDrainNeedsWrite } from './mailboxSweepWrites';
+import { backedOffConnections, clearArmBackoff, recordArmFailure } from './armBackoff';
 import {
   applyClientSideFilters,
   type MailboxMessage,
@@ -783,10 +784,20 @@ export async function armUnwatchedMailboxes(env: Env, db: Db, limit = 10): Promi
     .orderBy(desc(mailboxConnections.id))
     .limit(limit);
 
+  // Connections that failed to arm recently sit out an exponentially growing window
+  // (see armBackoff.ts) instead of costing a token refresh + provider call every tick.
+  const nowMs = Date.now();
+  const waiting = await backedOffConnections(env, rows.map((r) => r.id), nowMs);
   let armed = 0;
   for (const row of rows) {
+    if (waiting.has(row.id)) continue;
     const result = await ensureMailboxWatch(db, env, row.tenantId, row.id);
-    if (result.ok) armed += 1;
+    if (result.ok) {
+      armed += 1;
+      await clearArmBackoff(env, row.id);
+    } else {
+      await recordArmFailure(env, row.id, nowMs);
+    }
   }
   return armed;
 }

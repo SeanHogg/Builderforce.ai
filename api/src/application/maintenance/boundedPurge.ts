@@ -26,6 +26,14 @@ import type { Db } from '../../infrastructure/database/connection';
  */
 export const PURGE_BATCH_ROWS = 25_000;
 
+/**
+ * Max rows one UPDATE-based redaction rewrites. An UPDATE leaves a dead tuple per row until
+ * autovacuum reclaims it, so on a database at its storage cap (core 504/512 MB) a 25k-row
+ * rewrite bloats before it shrinks; 5k keeps the transient overshoot small and a backlog
+ * still drains over successive nightly ticks.
+ */
+export const REDACT_BATCH_ROWS = 5_000;
+
 /** One not-yet-executed statement `db.batch` accepts. */
 export type PurgeStatement = Parameters<Db['batch']>[0][number];
 

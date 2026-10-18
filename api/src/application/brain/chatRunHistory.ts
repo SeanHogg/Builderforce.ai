@@ -47,10 +47,10 @@
  */
 
 import { and, desc, eq, isNotNull, notInArray, sql } from 'drizzle-orm';
-import { agentHosts, chatTicketLinks, executions, ideAgents, tasks } from '../../infrastructure/database/schema';
+import { agentHosts, executions, ideAgents, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TERMINAL_EXECUTION_STATUSES } from '../../domain/execution/Execution';
-import { RUNNABLE_TICKET_KINDS } from './chatLinkedTickets';
+import { linkedTaskIdsSql } from './chatLinkedTickets';
 import { resolveAgentIdentities } from './agentDisplayNames';
 import { resolveChatAccess } from './chatAccess';
 import { cachedChatRead } from './chatCacheVersions';
@@ -297,20 +297,6 @@ async function readLiveChatSubagents(db: Db, tenantId: number, chatId: number): 
 }
 
 /**
- * The ids of the runnable tickets this chat links, as a SQL subquery. The `case` guards the
- * text-to-int cast: Postgres does not promise the `where` runs before the select list, and a
- * non-numeric ref must read as "no ticket", never as a cast error on the whole read.
- */
-function linkedTaskIdsSql(tenantId: number, chatId: number) {
-  const kinds = sql.join(RUNNABLE_TICKET_KINDS.map((k) => sql`${k}`), sql`, `);
-  return sql`(select case when ${chatTicketLinks.ticketRef} ~ '^[0-9]{1,9}$' then ${chatTicketLinks.ticketRef}::int end
-    from ${chatTicketLinks}
-    where ${chatTicketLinks.tenantId} = ${tenantId}
-      and ${chatTicketLinks.chatId} = ${chatId}
-      and ${chatTicketLinks.ticketKind} in (${kinds}))`;
-}
-
-/**
  * Every run started against a ticket this chat links, newest first.
  *
  * Bounded statements, never N+1: the runs come back in ONE query that already carries each
@@ -425,7 +411,7 @@ export async function readChatRunHistoryCached(
   return cachedChatRead(
     env,
     'runs',
-    { chatId, userId, variant: String(clampChatRunHistoryLimit(limit)), tokens: [execVersion] },
+    { tenantId, chatId, userId, variant: String(clampChatRunHistoryLimit(limit)), tokens: [execVersion] },
     () => readChatRunHistoryForCaller(db, tenantId, chatId, userId, limit),
     (history) => history !== null,
   );

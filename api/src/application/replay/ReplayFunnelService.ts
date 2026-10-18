@@ -29,6 +29,7 @@ import { replayTelemetryDb } from './replayDatabase';
 import { clampDays, filterCacheKey } from './replayReadModel';
 import { compileScopeFilter } from './replaySmartEventRules';
 import { scanKeptRecordings } from './replayKeptScan';
+import { DAY_MS } from '../../domain/shared/time';
 
 export const FUNNEL_STEPS_MIN = 2;
 export const FUNNEL_STEPS_MAX = 10;
@@ -186,7 +187,7 @@ export class ReplayFunnelService {
     return getOrSetCached(this.env, keys.funnelEval(funnelId, days, filterCacheKey(input.filter)), async () => {
       const { where } = await compileScopeFilter(this.env, this.db, scope, input.filter);
       const scan = await scanKeptRecordings(this.store, scope, {
-        since: new Date(this.clock().getTime() - days * 86_400_000),
+        since: new Date(this.clock().getTime() - days * DAY_MS),
         where,
       });
       const specs: FunnelStepSpec[] = funnel.steps.map((s) => ({ ...s }));

@@ -91,6 +91,6 @@ export async function admitToBoard(
     tenantId: input.tenantId,
     userId: input.userId,
     role: tenantRoleForSessionRole(input.sessionRole),
-  });
+  }, env);
   return null;
 }

@@ -34,7 +34,7 @@ import { and, isNotNull, lt, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executions } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
-import { PURGE_BATCH_ROWS } from '../maintenance/boundedPurge';
+import { REDACT_BATCH_ROWS } from '../maintenance/boundedPurge';
 
 /** Days a run keeps its dispatch payload. Shorter than any window a live run can span. */
 export const EXECUTION_PAYLOAD_RETENTION_DAYS = 30;
@@ -79,6 +79,6 @@ export const truncateTerminalOutputStatement = (cutoff: Date) => {
       WHERE status IN ('completed', 'failed', 'cancelled')
         AND created_at < ${cutoff.toISOString()}::timestamp
         AND (char_length(result) > ${limit} OR char_length(error_message) > ${limit})
-      LIMIT ${PURGE_BATCH_ROWS}
+      LIMIT ${REDACT_BATCH_ROWS}
     ))`;
 };

@@ -22,6 +22,7 @@
 
 import { STREAK_MILESTONES } from './pointsCatalog';
 import type { StreakState } from './pointsProfile';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface StreakRoll {
   next: StreakState;
@@ -54,7 +55,7 @@ export function daysBetween(from: string, to: string): number {
   const a = Date.parse(`${from}T00:00:00Z`);
   const b = Date.parse(`${to}T00:00:00Z`);
   if (Number.isNaN(a) || Number.isNaN(b)) return 0;
-  return Math.round((b - a) / 86_400_000);
+  return Math.round((b - a) / DAY_MS);
 }
 
 /**

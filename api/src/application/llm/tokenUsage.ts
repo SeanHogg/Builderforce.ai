@@ -129,9 +129,44 @@ export async function dailyTenantTextTokens(
 }
 
 /**
+ * The ONE day+month(+spend) statement. Month is the outer window; every figure is a
+ * FILTER over the same rows, reusing {@link rowWeight} and {@link billableRow} for
+ * tokens. The request-path gate also wants today's overflow/premium spend
+ * (`withSpend`), which is NOT subject to the billable-row predicate (spend is spend).
+ */
+async function sumTenantWindowTotals(
+  db: Db,
+  tenantId: number,
+  dayStart: Date,
+  monthStart: Date,
+  monthEnd: Date | undefined,
+  withSpend: boolean,
+): Promise<{ day: number; month: number; overflow: number; premium: number }> {
+  const today = sql`${llmUsageLog.createdAt} >= ${dayStart}`;
+  const [row] = await usageDatabaseOf(db)
+    .select({
+      month: sql<number>`COALESCE(SUM(${rowWeight}) FILTER (WHERE ${billableRow}), 0)`,
+      day: sql<number>`COALESCE(SUM(${rowWeight}) FILTER (WHERE ${billableRow} AND ${today}), 0)`,
+      ...(withSpend
+        ? {
+            overflow: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}) FILTER (WHERE ${llmUsageLog.paidOverflow} AND ${today}), 0)`,
+            premium: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}) FILTER (WHERE ${llmUsageLog.premium} AND ${today}), 0)`,
+          }
+        : {}),
+    })
+    .from(llmUsageLog)
+    .where(and(
+      eq(llmUsageLog.tenantId, tenantId),
+      gte(llmUsageLog.createdAt, monthStart),
+      ...(monthEnd ? [lt(llmUsageLog.createdAt, monthEnd)] : []),
+    ));
+  const r = row as Record<string, unknown> | undefined;
+  return { day: Number(r?.day ?? 0), month: Number(r?.month ?? 0), overflow: Number(r?.overflow ?? 0), premium: Number(r?.premium ?? 0) };
+}
+
+/**
  * Day + month usage in ONE table scan — the request-path gate needs both and a
- * single scan beats two round-trips. Month is the outer window; the day total is
- * a FILTER over the same rows, reusing the same {@link rowWeight} expression.
+ * single scan beats two round-trips.
  */
 export async function sumTenantTextTokensDayAndMonth(
   db: Db,
@@ -148,29 +183,23 @@ export async function sumTenantTextTokensDayAndMonth(
    */
   monthEnd?: Date,
 ): Promise<{ day: number; month: number }> {
-  const [row] = await usageDatabaseOf(db)
-    .select({
-      month: sql<number>`COALESCE(SUM(${rowWeight}), 0)`,
-      day: sql<number>`COALESCE(SUM(${rowWeight}) FILTER (WHERE ${llmUsageLog.createdAt} >= ${dayStart}), 0)`,
-    })
-    .from(llmUsageLog)
-    .where(and(
-      eq(llmUsageLog.tenantId, tenantId),
-      gte(llmUsageLog.createdAt, monthStart),
-      ...(monthEnd ? [lt(llmUsageLog.createdAt, monthEnd)] : []),
-      billableRow,
-    ));
-  return { day: toInt(row?.day), month: toInt(row?.month) };
+  const t = await sumTenantWindowTotals(db, tenantId, dayStart, monthStart, monthEnd, false);
+  return { day: toInt(t.day), month: toInt(t.month) };
 }
 
 // ── Per-request cap totals (cached) ─────────────────────────────────────────────────
 //
 // The gateway gates every request on FOUR usage figures — today's and this month's
-// text tokens, today's paid-overflow spend and today's premium spend — which used to be
-// three-plus separate uncached SUMs over `llm_usage_log`. They are ONE statement now
-// (FILTER clauses over the month window), cached per tenant per UTC day, and each
-// logged row adds its own contribution to the cached totals so a cap trips on the
+// text tokens, today's paid-overflow spend and today's premium spend. They are ONE
+// statement (see {@link sumTenantWindowTotals}), cached per tenant per UTC day, and each
+// logged row adds its own contribution to the ISOLATE-LOCAL copy so a cap trips on the
 // request after the one that crossed it rather than a cache-TTL later.
+//
+// Drift bound: an increment never writes KV and never extends the entry's life. The
+// value carries `loadedAt`; anything older than TOTALS_MAX_AGE_MS is a miss and reloads
+// from the DB SUM. So an isolate misses only what OTHER isolates logged in the last
+// ~60 s (KV also allows just one write per second per key, so per-row KV writes were
+// both lossy and rejected).
 
 export interface TenantUsageTotals {
   dayTokens: number;
@@ -179,10 +208,19 @@ export interface TenantUsageTotals {
   premiumMillicents: number;
 }
 
+/** The cached shape: the totals plus when the DB SUM that seeded them ran. */
+type CachedUsageTotals = TenantUsageTotals & { loadedAt: number };
+
+const TOTALS_MAX_AGE_MS = 60_000;
 const TOTALS_CACHE = { kvTtlSeconds: 60, l1TtlMs: 15_000 } as const;
 
 export const tenantUsageTotalsCacheKey = (tenantId: number, now: Date = new Date()): string =>
   `tokusage:${tenantId}:${utcDayStart(now).toISOString().slice(0, 10)}`;
+
+const isFresh = (c: CachedUsageTotals | null | undefined, now: number): c is CachedUsageTotals =>
+  !!c && typeof c.loadedAt === 'number' && now - c.loadedAt < TOTALS_MAX_AGE_MS;
+
+const stripLoadedAt = ({ loadedAt: _loadedAt, ...totals }: CachedUsageTotals): TenantUsageTotals => totals;
 
 /** Day/month text tokens + today's overflow and premium spend, from one cached statement. */
 export async function getTenantUsageTotals(
@@ -190,29 +228,24 @@ export async function getTenantUsageTotals(
   db: Db,
   tenantId: number,
 ): Promise<TenantUsageTotals> {
-  return getOrSetCached(
-    env,
-    tenantUsageTotalsCacheKey(tenantId),
-    async () => {
-      const dayStart = utcDayStart();
-      const [row] = await usageDatabaseOf(db)
-        .select({
-          month: sql<number>`COALESCE(SUM(${rowWeight}) FILTER (WHERE ${billableRow}), 0)`,
-          day: sql<number>`COALESCE(SUM(${rowWeight}) FILTER (WHERE ${billableRow} AND ${llmUsageLog.createdAt} >= ${dayStart}), 0)`,
-          overflow: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}) FILTER (WHERE ${llmUsageLog.paidOverflow} AND ${llmUsageLog.createdAt} >= ${dayStart}), 0)`,
-          premium: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}) FILTER (WHERE ${llmUsageLog.premium} AND ${llmUsageLog.createdAt} >= ${dayStart}), 0)`,
-        })
-        .from(llmUsageLog)
-        .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, utcMonthStart())));
-      return {
-        dayTokens: Number(row?.day ?? 0),
-        monthTokens: Number(row?.month ?? 0),
-        paidOverflowMillicents: Number(row?.overflow ?? 0),
-        premiumMillicents: Number(row?.premium ?? 0),
-      };
-    },
-    TOTALS_CACHE,
-  );
+  const key = tenantUsageTotalsCacheKey(tenantId);
+  const load = async (): Promise<CachedUsageTotals> => {
+    const t = await sumTenantWindowTotals(db, tenantId, utcDayStart(), utcMonthStart(), undefined, true);
+    return {
+      dayTokens: t.day,
+      monthTokens: t.month,
+      paidOverflowMillicents: t.overflow,
+      premiumMillicents: t.premium,
+      loadedAt: Date.now(),
+    };
+  };
+  const cached = await getOrSetCached<CachedUsageTotals>(env, key, load, TOTALS_CACHE);
+  if (isFresh(cached, Date.now())) return stripLoadedAt(cached);
+  // A hit older than the reload deadline (a lingering KV copy, or a legacy entry with no
+  // `loadedAt`): reload and overwrite — at most one KV write per tenant per ~60 s.
+  const reloaded = await load();
+  await setCached<CachedUsageTotals>(env, key, reloaded, TOTALS_CACHE);
+  return stripLoadedAt(reloaded);
 }
 
 /** The fields of a logged usage row that count toward the cap totals. */
@@ -237,21 +270,25 @@ export function textTokenWeightOf(r: UsageRowContribution): number {
 }
 
 /**
- * Fold a just-logged row into the tenant's cached totals. Only a WARM entry is touched:
- * on a cold miss the next load sums the table, which already includes this row, so
- * incrementing a cold read would double count.
+ * Fold a just-logged row into this isolate's copy of the tenant's cached totals. Only a
+ * WARM, still-fresh entry is touched: on a cold miss the next load sums the table, which
+ * already includes this row, so incrementing a cold read would double count. L1 ONLY and
+ * the entry keeps its ORIGINAL reload deadline (`loadedAt + 60 s`) — see the drift note above.
  */
 export async function addUsageToTenantTotals(env: Env, tenantId: number, r: UsageRowContribution): Promise<void> {
   const key = tenantUsageTotalsCacheKey(tenantId);
-  const cached = await peekCached<TenantUsageTotals>(env, key);
-  if (!cached) return;
+  const cached = await peekCached<CachedUsageTotals>(env, key);
+  const now = Date.now();
+  if (!isFresh(cached, now)) return;
   const weight = textTokenWeightOf(r);
-  await setCached<TenantUsageTotals>(env, key, {
+  // `undefined` env = no KV: the increment lands in this isolate's L1 and nowhere else.
+  await setCached<CachedUsageTotals>(undefined, key, {
     dayTokens: cached.dayTokens + weight,
     monthTokens: cached.monthTokens + weight,
     paidOverflowMillicents: cached.paidOverflowMillicents + (r.paidOverflow ? r.costUsdMillicents : 0),
     premiumMillicents: cached.premiumMillicents + (r.premium ? r.costUsdMillicents : 0),
-  }, TOTALS_CACHE);
+    loadedAt: cached.loadedAt,
+  }, { l1TtlMs: Math.max(1, cached.loadedAt + TOTALS_MAX_AGE_MS - now) });
 }
 
 /** Whole-token day/month figures for the request-path gate (same clamp as the SQL sums). */

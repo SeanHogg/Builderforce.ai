@@ -62,6 +62,7 @@ import { isLifecycleManagedTask } from '../kanban/managedExecutionGuard';
 import { BUILTIN_ROLES, parseDeliveryRoleKeys } from '../kanban/roleCatalog';
 import { bumpAgentRosterVersion } from '../agent/agentPersonaBrief';
 import { executeAsAddressedAgent } from '../brain/addressedAgentRun';
+import { bumpChatStructure } from '../brain/chatCacheVersions';
 import { DEP_TYPES } from '../task/taskDependencies';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
@@ -69,6 +70,7 @@ import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/
 import { parseJsonObject } from '../../domain/shared/json';
 import { findNearDuplicateByTitle } from '../../domain/shared/nearDuplicateTitle';
 import { signJwt } from '../../infrastructure/auth/JwtService';
+import { invalidateHostCronJobs } from '../agentHost/hostCronCache';
 import { specStatusEnum, workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { listAgentHostUsageSnapshots } from '../agentHost/agentHostUsage';
@@ -83,6 +85,7 @@ import { fetchWebDocumentCached } from '../web/webFetch';
 import { geocodeBatch, MAX_BATCH } from '../web/geocode';
 import { normalizeSearchQuery } from '../runtime/cloudWeb';
 import { bumpExecutionState } from '../runtime/executionStateVersion';
+import { readCloudRunUsage } from '../runtime/cloudRunUsage';
 import { buildInternetSearch } from '../webSearch/factory';
 import { searchOwnedThenDiscover } from '../webSearch/demandSearch';
 import { encryptCredentials } from '../integrations/credentialCrypto';
@@ -2048,10 +2051,11 @@ const CATALOG: BuiltinTool[] = [
       if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId));
       const [row] = await ctx.db.update(brainChats).set(patch).where(and(...conds)).returning();
       if (!row) throw new Error('chat not found');
+      await bumpChatStructure(row.id, ctx.env);
       return row;
     },
   },
-  { tool: 'brain.delete', mutates: true, description: 'Archive a Brain chat.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId)); const [row] = await ctx.db.update(brainChats).set({ isArchived: true, updatedAt: new Date() }).where(and(...conds)).returning({ id: brainChats.id }); return { archived: row != null }; } },
+  { tool: 'brain.delete', mutates: true, description: 'Archive a Brain chat.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId)); const [row] = await ctx.db.update(brainChats).set({ isArchived: true, updatedAt: new Date() }).where(and(...conds)).returning({ id: brainChats.id }); if (row) await bumpChatStructure(row.id, ctx.env); return { archived: row != null }; } },
 
   // ---- Chat ↔ ticket links, lineage, consolidation, agent invites ----
   // Tie a Brain chat to work items of ANY tier (portfolio | objective/OKR |
@@ -2469,6 +2473,7 @@ const CATALOG: BuiltinTool[] = [
         projectId: a.projectId != null ? num(a.projectId) : null,
         ...(typeof a.enabled === 'boolean' ? { enabled: a.enabled } : {}),
       }).returning();
+      if (ctx.env && row) await invalidateHostCronJobs(ctx.env, row.agentHostId);
       return row;
     },
   },
@@ -2484,10 +2489,11 @@ const CATALOG: BuiltinTool[] = [
       if (typeof a.enabled === 'boolean') patch.enabled = a.enabled;
       const [row] = await ctx.db.update(cronJobs).set(patch).where(and(eq(cronJobs.id, str(a.jobId)), eq(cronJobs.tenantId, ctx.tenantId), eq(cronJobs.segmentId, seg))).returning();
       if (!row) throw new Error('cron job not found');
+      if (ctx.env) await invalidateHostCronJobs(ctx.env, row.agentHostId);
       return row;
     },
   },
-  { tool: 'cron.delete', mutates: true, description: 'Delete a cron job by id.', parameters: obj({ jobId: S }, ['jobId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(cronJobs).where(and(eq(cronJobs.id, str(a.jobId)), eq(cronJobs.tenantId, ctx.tenantId), eq(cronJobs.segmentId, seg))).returning({ id: cronJobs.id }); return { deleted: rows.length > 0 ? str(a.jobId) : null }; } },
+  { tool: 'cron.delete', mutates: true, description: 'Delete a cron job by id.', parameters: obj({ jobId: S }, ['jobId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(cronJobs).where(and(eq(cronJobs.id, str(a.jobId)), eq(cronJobs.tenantId, ctx.tenantId), eq(cronJobs.segmentId, seg))).returning({ id: cronJobs.id, agentHostId: cronJobs.agentHostId }); if (ctx.env && rows[0]) await invalidateHostCronJobs(ctx.env, rows[0].agentHostId); return { deleted: rows.length > 0 ? str(a.jobId) : null }; } },
 
   // ---- Cloud agents (CRUD) — `ide_agents` rows with project_id NULL. Tenant-scoped (NO
   //       segment_id; id is a client-generated UUID stored as text). create/update/delete
@@ -3641,14 +3647,13 @@ const CATALOG: BuiltinTool[] = [
       // their own database: the SEGMENT boundary is the execution read above, which is
       // segment-checked on core, and every telemetry filter is keyed by that run.
       const isCloudRun = execution.agentHostId == null || !execution.sessionId;
-      const tenantIdUsageFilter = isCloudRun
-        ? and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.executionId, id))
-        : and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.agentHostId, execution.agentHostId!), eq(usageSnapshots.sessionKey, execution.sessionId!));
+      const hostUsageFilter = and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.agentHostId, execution.agentHostId!), eq(usageSnapshots.sessionKey, execution.sessionId!));
       const tenantIdToolFilter = isCloudRun
         ? and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.executionId, id))
         : and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.agentHostId, execution.agentHostId!), eq(toolAuditEvents.sessionKey, execution.sessionId!));
       const telemetryDb = runTelemetryDatabase(ctx.db);
-      const usage = await telemetryDb.select().from(usageSnapshots).where(tenantIdUsageFilter).orderBy(desc(usageSnapshots.ts)).limit(500);
+      // A cloud run's per-turn usage is its billing-ledger rows (no second written copy).
+      const usage = isCloudRun ? await readCloudRunUsage(ctx.db, ctx.tenantId, id) : await telemetryDb.select().from(usageSnapshots).where(hostUsageFilter).orderBy(desc(usageSnapshots.ts)).limit(500);
       const toolEvents = await telemetryDb.select().from(toolAuditEvents).where(tenantIdToolFilter).orderBy(desc(toolAuditEvents.ts)).limit(500);
       const messages = await ctx.db.select().from(executionMessages).where(and(eq(executionMessages.executionId, id), eq(executionMessages.tenantId, ctx.tenantId))).orderBy(executionMessages.createdAt).limit(500);
       return { execution, trace: { source: isCloudRun ? 'cloud-telemetry' : 'runtime-fallback', usageSnapshots: usage, toolEvents, messages } };

@@ -15,6 +15,7 @@
 import { and, eq, isNotNull } from 'drizzle-orm';
 import { ideAgents, tenantMembers, users } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseJsonOr } from '../../domain/shared/json';
 
 export interface AssigneeProfile {
   name: string;
@@ -24,11 +25,6 @@ export interface AssigneeProfile {
 
 /** Tenant-scoped cache key for the assignee-personality map. */
 export const assigneeProfilesCacheKey = (tenantId: number): string => `kanban:assignee-profiles:t:${tenantId}`;
-
-function parse(raw: string | null | undefined): unknown {
-  if (!raw) return null;
-  try { return JSON.parse(raw) as unknown; } catch { return null; }
-}
 
 const humanName = (u: { displayName: string | null; username: string | null; email: string | null }, fallback: string): string =>
   u.displayName?.trim() || u.username?.trim() || u.email?.trim() || fallback;
@@ -56,11 +52,11 @@ export async function loadAssigneeProfiles(db: Db, tenantId: number): Promise<Re
 
   const out: Record<string, AssigneeProfile> = {};
   for (const a of agentRows) {
-    const psychometric = parse(a.psychometric);
+    const psychometric = parseJsonOr<unknown>(a.psychometric, null);
     if (psychometric) out[`c:${a.id}`] = { name: a.name?.trim() || a.id, psychometric };
   }
   for (const h of humanRows) {
-    const psychometric = parse(h.psychometric);
+    const psychometric = parseJsonOr<unknown>(h.psychometric, null);
     if (psychometric) out[`u:${h.id}`] = { name: humanName(h, h.id), psychometric };
   }
   return out;

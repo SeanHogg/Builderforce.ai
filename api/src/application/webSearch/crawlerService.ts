@@ -4,6 +4,7 @@ import { isUrlAllowed, normalizeWebUrl } from '../../domain/webSearch/urlPolicy'
 import { tokenize } from '../../domain/webSearch/textIndex';
 import type { CrawlerHttpPort, WebSearchStore } from './ports';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface AddCrawlSourceInput { seedUrl: string; allowedDomains?: string[]; blockedDomains?: string[]; maxDepth?: number; crawlDelayMs?: number; perDomainConcurrency?: number }
 
@@ -20,7 +21,7 @@ export class WebCrawlerService {
     return this.store.addSource(tenantId, {
       seedUrl, allowedDomains, blockedDomains: input.blockedDomains ?? [],
       maxDepth: Math.max(0, Math.min(10, Math.floor(input.maxDepth ?? 2))),
-      crawlDelayMs: Math.max(100, Math.min(86_400_000, Math.floor(input.crawlDelayMs ?? 1000))),
+      crawlDelayMs: Math.max(100, Math.min(DAY_MS, Math.floor(input.crawlDelayMs ?? 1000))),
       perDomainConcurrency: Math.max(1, Math.min(16, Math.floor(input.perDomainConcurrency ?? 1))),
     });
   }

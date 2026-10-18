@@ -17,7 +17,7 @@ import { validateVisualPatch, type PageRect, type ReplayVisualDto } from '@build
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { replayPageCaptures } from '../../infrastructure/database/schema';
-import { asJsonObject } from '../../domain/shared/json';
+import { asJsonObject, parseJsonOr } from '../../domain/shared/json';
 import { VISUAL_AREAS } from '../../domain/replay/prescriptions/pageRules';
 import { readRectMap, toCaptureDto, type CaptureRow } from './pageCaptureStore';
 import { buildVisual, jsonLdDiff, serpBefore } from './pageVisual';
@@ -115,11 +115,7 @@ export async function buildPageDraftTranscript(
 function jsonField(text: string, name: string): unknown {
   const match = new RegExp(`^\\s*${name}\\s*:\\s*(.+)$`, 'im').exec(text);
   if (!match) return null;
-  try {
-    return JSON.parse(match[1]!.trim());
-  } catch {
-    return null;
-  }
+  return parseJsonOr<unknown>(match[1]!.trim(), null);
 }
 
 /**

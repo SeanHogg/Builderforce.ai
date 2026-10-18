@@ -17,9 +17,10 @@ import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { detectGroupDrift, type ScoredSample } from './driftMonitor';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** Last 60 days of eval-scored outcomes — enough for a baseline-vs-recent split. */
-const WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
+const WINDOW_MS = 60 * DAY_MS;
 
 /** Loads recent eval-scored runs for a tenant and computes per-group drift. */
 export async function buildTenantDriftReport(db: Db, tenantId: number) {

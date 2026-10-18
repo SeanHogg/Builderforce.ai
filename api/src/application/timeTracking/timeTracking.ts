@@ -14,6 +14,7 @@
 import { and, between, eq, inArray, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { tasks, timeEntries } from '../../infrastructure/database/schema';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** yyyy-mm-dd in UTC (matches the `date` column + the activity-chart buckets). */
 export function isoDay(d: Date): string {
@@ -39,7 +40,7 @@ export function bucketDailyHours(rows: TimeEntryRow[], days: number, now: Date):
   const out: DailyBucket[] = [];
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(start.getTime() - i * 86_400_000);
+    const d = new Date(start.getTime() - i * DAY_MS);
     const key = isoDay(d);
     out.push({ date: key, hours: (minutesByDay.get(key) ?? 0) / 60 });
   }
@@ -95,7 +96,7 @@ export async function computeMemberDailyHours(
   days: number,
   now: number,
 ): Promise<MemberDailyHours> {
-  const since = isoDay(new Date(now - (days - 1) * 86_400_000));
+  const since = isoDay(new Date(now - (days - 1) * DAY_MS));
   const rows = await db
     .select({
       id: timeEntries.id, taskId: timeEntries.taskId, minutes: timeEntries.minutes,

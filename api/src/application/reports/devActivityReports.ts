@@ -14,6 +14,7 @@ import {
   devTeams,
   devTeamMembers,
 } from '../../infrastructure/database/schema';
+import { DAY_MS, HOUR_MS, WEEK_MS } from '../../domain/shared/time';
 
 export async function generateStandupReport(db: Db, tenantId: number, date: Date) {
   const dayStart = new Date(date);
@@ -28,7 +29,7 @@ export async function generateStandupReport(db: Db, tenantId: number, date: Date
     db.select().from(contributorDailyMetrics)
       .where(and(
         eq(contributorDailyMetrics.tenantId, tenantId),
-        eq(contributorDailyMetrics.date, new Date(dayStart.getTime() - 86400_000)),
+        eq(contributorDailyMetrics.date, new Date(dayStart.getTime() - DAY_MS)),
       )),
   ]);
 
@@ -122,7 +123,7 @@ export async function generateCodeReviewReport(db: Db, tenantId: number, from: D
   const avgCycleTime = mergedAgg?.avgCycleHours != null ? Math.round(Number(mergedAgg.avgCycleHours)) : null;
 
   // Stale PRs (opened >7 days ago, not yet merged)
-  const staleThreshold = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const staleThreshold = new Date(Date.now() - WEEK_MS);
   const stalePrs = openPrs.filter((p) => p.occurredAt < staleThreshold);
 
   return {
@@ -142,7 +143,7 @@ export async function generateCodeReviewReport(db: Db, tenantId: number, from: D
       url:       p.url,
       repo:      p.repositoryName,
       openedAt:  p.occurredAt,
-      ageHours:  Math.round((Date.now() - p.occurredAt.getTime()) / 3_600_000),
+      ageHours:  Math.round((Date.now() - p.occurredAt.getTime()) / HOUR_MS),
     })),
     recentReviews: reviews.slice(0, 10).map((r) => ({
       title:     r.title,
@@ -237,7 +238,7 @@ export async function generateTeamComparisonReport(db: Db, tenantId: number, fro
 }
 
 export async function generateInactiveContributorsReport(db: Db, tenantId: number, inactiveDays: number) {
-  const threshold = new Date(Date.now() - inactiveDays * 24 * 60 * 60 * 1000);
+  const threshold = new Date(Date.now() - inactiveDays * DAY_MS);
   threshold.setUTCHours(0, 0, 0, 0);
 
   // All active contributors for tenant (not excluded from metrics)
@@ -278,7 +279,7 @@ export async function generateInactiveContributorsReport(db: Db, tenantId: numbe
     .map((c) => {
       const lastActive = lastActiveByContributor.get(c.id) ?? null;
       const daysSinceActive = lastActive
-        ? Math.floor((Date.now() - lastActive.getTime()) / 86_400_000)
+        ? Math.floor((Date.now() - lastActive.getTime()) / DAY_MS)
         : null;
       return { ...c, lastActiveDate: lastActive?.toISOString() ?? null, daysSinceActive };
     })

@@ -2,6 +2,7 @@ import { rrfTerm } from '@seanhogg/builderforce-memory/retrieval';
 import { makeSnippet, rankLexical, tokenize } from '../../domain/webSearch/textIndex';
 import { normalizeWebUrl } from '../../domain/webSearch/urlPolicy';
 import type { SemanticIndex, WebSearchStore } from './ports';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface SearchRequest { query: string; limit?: number; offset?: number; domains?: string[]; language?: string; freshness?: string; since?: string }
 
@@ -9,7 +10,7 @@ function sinceDate(request: Pick<SearchRequest, 'freshness' | 'since'>): Date | 
   if (request.since) { const date = new Date(request.since); if (!Number.isNaN(date.getTime())) return date; }
   const match = /^(\d+)([dhwmy])$/.exec(request.freshness ?? ''); if (!match) return undefined;
   const units: Record<string, number> = { d: 1, h: 1 / 24, w: 7, m: 30, y: 365 };
-  return new Date(Date.now() - Number(match[1]) * units[match[2]!]! * 86_400_000);
+  return new Date(Date.now() - Number(match[1]) * units[match[2]!]! * DAY_MS);
 }
 
 export class InternetSearchService {

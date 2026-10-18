@@ -21,6 +21,7 @@ import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
 import { TenantPlan } from '../../domain/shared/types';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
+import { HOUR_MS } from '../../domain/shared/time';
 
 /**
  * A few models that are notably more expensive than a free coder. When today's
@@ -204,7 +205,7 @@ export function builderInsightsCacheKey(
   userId: string | null,
   projectId?: number | null,
 ): string {
-  const hourBucket = Math.floor(Date.now() / 3_600_000);
+  const hourBucket = Math.floor(Date.now() / HOUR_MS);
   return `builder-insights:t:${tenantId}:u:${userId ?? '-'}:p:${projectId ?? '-'}:${hourBucket}`;
 }
 

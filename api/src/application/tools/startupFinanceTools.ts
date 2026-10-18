@@ -19,9 +19,10 @@
 import { computeRunway } from '@builderforce/creation-canvas-contract';
 import type { CalculatorTool, ToolResult } from './toolTypes';
 import { money, monthsLabel, percent } from './toolFormat';
+import { clamp } from '../../domain/shared/numbers';
 
-const clamp = (n: number | undefined, min: number, max = Number.POSITIVE_INFINITY): number =>
-  Math.min(max, Math.max(min, Number.isFinite(n) ? (n as number) : min));
+const clampInput = (n: number | undefined, min: number, max = Number.POSITIVE_INFINITY): number =>
+  clamp(Number.isFinite(n) ? (n as number) : min, min, max);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Runway
@@ -81,7 +82,7 @@ const runwayCalculator: CalculatorTool = {
       scoreLabel: RUNWAY_COPY[`health.${verdict.health}`],
       metrics: [
         { label: RUNWAY_COPY['metric.netBurn'], value: money(Math.max(0, verdict.netBurn)) },
-        { label: RUNWAY_COPY['metric.grossSpend'], value: money(clamp(v.monthlySpend, 0)) },
+        { label: RUNWAY_COPY['metric.grossSpend'], value: money(clampInput(v.monthlySpend, 0)) },
         { label: RUNWAY_COPY['metric.zeroCash'], value: verdict.zeroCashDate ? verdict.zeroCashDate.slice(0, 10) : RUNWAY_COPY['value.none'] },
         { label: RUNWAY_COPY['metric.health'], value: RUNWAY_COPY[`health.${verdict.health}`], tier: score },
       ],
@@ -130,9 +131,9 @@ const burnRateCalculator: CalculatorTool = {
     { id: 'monthlyRevenue', label: 'Monthly revenue', type: 'number', unit: 'USD', min: 0, step: 1_000, default: 15_000 },
   ],
   compute: (v): ToolResult => {
-    const payroll = clamp(v.payroll, 0);
-    const gross = payroll + clamp(v.toolsAndInfra, 0) + clamp(v.other, 0);
-    const revenue = clamp(v.monthlyRevenue, 0);
+    const payroll = clampInput(v.payroll, 0);
+    const gross = payroll + clampInput(v.toolsAndInfra, 0) + clampInput(v.other, 0);
+    const revenue = clampInput(v.monthlyRevenue, 0);
     const net = gross - revenue;
     const coverage = gross > 0 ? Math.min(1, revenue / gross) : 1;
     const payrollShare = gross > 0 ? payroll / gross : 0;
@@ -207,11 +208,11 @@ const breakEvenCalculator: CalculatorTool = {
     { id: 'monthlyGrowthPct', label: 'Monthly growth in units', type: 'number', unit: '%', min: 0, max: 100, step: 1, default: 8 },
   ],
   compute: (v): ToolResult => {
-    const fixed = clamp(v.fixedCosts, 0);
-    const price = clamp(v.pricePerUnit, 0);
-    const variable = clamp(v.variableCostPerUnit, 0);
-    const current = clamp(v.currentUnits, 0);
-    const growth = clamp(v.monthlyGrowthPct, 0, 100) / 100;
+    const fixed = clampInput(v.fixedCosts, 0);
+    const price = clampInput(v.pricePerUnit, 0);
+    const variable = clampInput(v.variableCostPerUnit, 0);
+    const current = clampInput(v.currentUnits, 0);
+    const growth = clampInput(v.monthlyGrowthPct, 0, 100) / 100;
     const margin = price - variable;
     const marginPct = price > 0 ? margin / price : 0;
     const rec = (key: 'margin' | 'negative' | 'growth' | 'near' | 'scenario') =>
@@ -303,9 +304,9 @@ const churnCalculator: CalculatorTool = {
     { id: 'arpu', label: 'Average revenue per customer per month', type: 'number', unit: 'USD', min: 0, step: 5, default: 90 },
   ],
   compute: (v): ToolResult => {
-    const start = clamp(v.customersStart, 1);
-    const lost = clamp(v.customersLost, 0, start);
-    const arpu = clamp(v.arpu, 0);
+    const start = clampInput(v.customersStart, 1);
+    const lost = clampInput(v.customersLost, 0, start);
+    const arpu = clampInput(v.arpu, 0);
     const monthly = lost / start;
     const annual = 1 - Math.pow(1 - monthly, 12);
     const lifetime = monthly > 0 ? Math.min(240, 1 / monthly) : 240;
@@ -371,12 +372,12 @@ const pricingSimulator: CalculatorTool = {
     { id: 'churnChangePts', label: 'Expected change in monthly churn', type: 'number', unit: 'pts', min: -50, max: 50, step: 0.5, default: 0.5 },
   ],
   compute: (v): ToolResult => {
-    const price = clamp(v.currentPrice, 0);
-    const customers = clamp(v.customers, 0);
-    const churn = clamp(v.monthlyChurnPct, 0.1, 100) / 100;
-    const cac = clamp(v.cac, 0);
-    const proposed = clamp(v.proposedPrice, 0);
-    const delta = clamp(v.churnChangePts, -50, 50);
+    const price = clampInput(v.currentPrice, 0);
+    const customers = clampInput(v.customers, 0);
+    const churn = clampInput(v.monthlyChurnPct, 0.1, 100) / 100;
+    const cac = clampInput(v.cac, 0);
+    const proposed = clampInput(v.proposedPrice, 0);
+    const delta = clampInput(v.churnChangePts, -50, 50);
     const churnAfter = Math.min(1, Math.max(0.001, churn + delta / 100));
     const mrrBefore = price * customers;
     const mrrAfter = proposed * customers;

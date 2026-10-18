@@ -25,7 +25,7 @@ describe('host telemetry rows', () => {
     expect(usageSnapshotRows(host, [{}])[0]).toMatchObject({ sessionKey: 'default', inputTokens: 0, compactionCount: 0 });
   });
 
-  it('file changes: one multi-row insert; an execution that is not this host's, or is another task's, is refused', async () => {
+  it('file changes: one multi-row insert; an execution not owned by this host, or for another task, is refused', async () => {
     const { db, inserts } = fakeDb([{ id: 100, taskId: 7 }]);
     const { inserted, rejected } = await ingestFileChanges(db, host, [
       { taskId: 7, executionId: 100, path: 'a.ts', change: 'created' },

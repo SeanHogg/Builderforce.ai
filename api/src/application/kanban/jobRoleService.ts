@@ -13,6 +13,9 @@ import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 
 const rolesKey = (tenantId: number) => `kanban:roles:${tenantId}`;
 
+/** Static-ish data, dropped by every write below, so the KV TTL is only the backstop. */
+const ROLES_CACHE = { kvTtlSeconds: 3_600 };
+
 function slugify(input: string): string {
   return slugifyBase(input, { maxLength: 60 });
 }
@@ -47,7 +50,7 @@ export class JobRoleService {
         builtin: false,
         position: r.position,
       }));
-    });
+    }, ROLES_CACHE);
     return [...BUILTIN_ROLES, ...custom];
   }
 

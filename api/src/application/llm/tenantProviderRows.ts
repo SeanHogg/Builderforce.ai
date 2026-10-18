@@ -9,7 +9,7 @@
  *
  * Only CIPHERTEXT is cached — decryption happens after the cache read, so KV never holds
  * a usable secret. Every writer of the table invalidates via
- * {@link invalidateTenantProviderRows}; the OAuth resolvers additionally re-read with
+ * {@link invalidateTenantProviderRows}; the OAuth resolvers additionally read the DB directly with
  * `fresh` before refreshing so a rotation made in another isolate is never raced with a
  * retired refresh token.
  */
@@ -41,31 +41,36 @@ export async function loadTenantProviderRows(
   tenantId: number,
   opts: { fresh?: boolean } = {},
 ): Promise<TenantProviderRow[]> {
-  if (opts.fresh) await invalidateTenantProviderRows(env, tenantId);
+  // `fresh` reads the DB directly: no KV delete (it retries past 429s and would run on
+  // EVERY request while an OAuth refresh keeps failing). A successful refresh already
+  // invalidates via setTenantProviderOAuth, which is what heals the cached copy.
+  if (opts.fresh) return selectTenantProviderRows(env, tenantId);
   return getOrSetCached(
     env,
     tenantProviderRowsCacheKey(tenantId),
-    async () => {
-      const selected = await buildDatabase(env)
-        .select({
-          id: tenantLlmProviderKeys.id,
-          provider: tenantLlmProviderKeys.provider,
-          keyEnc: tenantLlmProviderKeys.keyEnc,
-          authType: tenantLlmProviderKeys.authType,
-          priority: tenantLlmProviderKeys.priority,
-        })
-        .from(tenantLlmProviderKeys)
-        .where(eq(tenantLlmProviderKeys.tenantId, tenantId))
-        // `priority` NULL = unset and MUST sort last (a set precedence always wins).
-        .orderBy(sql`${tenantLlmProviderKeys.priority} ASC NULLS LAST`, asc(tenantLlmProviderKeys.provider));
-      return selected.map((r) => ({
-        id: r.id,
-        provider: r.provider,
-        keyEnc: r.keyEnc ?? null,
-        authType: r.authType ?? null,
-        priority: typeof r.priority === 'number' ? r.priority : null,
-      }));
-    },
+    () => selectTenantProviderRows(env, tenantId),
     { kvTtlSeconds: 3600, l1TtlMs: 15_000 },
   );
+}
+
+async function selectTenantProviderRows(env: Env, tenantId: number): Promise<TenantProviderRow[]> {
+  const selected = await buildDatabase(env)
+    .select({
+      id: tenantLlmProviderKeys.id,
+      provider: tenantLlmProviderKeys.provider,
+      keyEnc: tenantLlmProviderKeys.keyEnc,
+      authType: tenantLlmProviderKeys.authType,
+      priority: tenantLlmProviderKeys.priority,
+    })
+    .from(tenantLlmProviderKeys)
+    .where(eq(tenantLlmProviderKeys.tenantId, tenantId))
+    // `priority` NULL = unset and MUST sort last (a set precedence always wins).
+    .orderBy(sql`${tenantLlmProviderKeys.priority} ASC NULLS LAST`, asc(tenantLlmProviderKeys.provider));
+  return selected.map((r) => ({
+    id: r.id,
+    provider: r.provider,
+    keyEnc: r.keyEnc ?? null,
+    authType: r.authType ?? null,
+    priority: typeof r.priority === 'number' ? r.priority : null,
+  }));
 }

@@ -25,6 +25,7 @@ import { and, eq, isNotNull, lt } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { ticketRuns, swimlaneTransitions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { bumpBoardLive } from '../swimlane/boardReads';
 
 /** Default park-age cap before a stuck `awaiting_workflow` ticket is surfaced. */
 export const DEFAULT_PARK_AGE_TIMEOUT_MS = 6 * 60 * 60 * 1000; // 6h
@@ -103,6 +104,7 @@ export async function runParkAgeTimeoutSweep(
         .returning({ id: ticketRuns.id });
 
       if (updated.length === 0) continue; // raced — settled or unparked elsewhere
+      await bumpBoardLive(row.tenantId);
 
       // Timeline signal so the unpark is visible on the ticket, not silent.
       await db.insert(swimlaneTransitions).values({

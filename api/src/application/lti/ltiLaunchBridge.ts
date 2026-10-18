@@ -75,6 +75,8 @@ import {
   learnerSubmissionCopy, type DistributedSubmission,
 } from '../../domain/lti/learnerBoards';
 import type { LtiRegistration } from './LtiService';
+import type { Env } from '../../env';
+import { membershipChanged } from '../tenant/membershipChanged';
 
 /** The provider value on `oauth_accounts`. Fixed and short: the column is
  *  varchar(50) and an issuer URL does not fit, so the issuer goes in the account
@@ -172,7 +174,7 @@ async function resolveLaunchUser(
  * course in an LMS, which is not a claim about what they may do to the rest of
  * the institution's workspace. An owner promotes them if that is what they meant.
  */
-async function ensureWorkspaceMembership(db: Db, tenantId: number, userId: string): Promise<void> {
+async function ensureWorkspaceMembership(db: Db, tenantId: number, userId: string, env?: Env): Promise<void> {
   const [member] = await db
     .select({ id: tenantMembers.id })
     .from(tenantMembers)
@@ -180,6 +182,7 @@ async function ensureWorkspaceMembership(db: Db, tenantId: number, userId: strin
     .limit(1);
   if (member) return;
   await db.insert(tenantMembers).values({ tenantId, userId, role: 'viewer' });
+  if (env) await membershipChanged(env, tenantId, [userId]);
 }
 
 // ---------------------------------------------------------------------------
@@ -764,6 +767,7 @@ export async function bridgeLaunch(
   db: Db,
   registration: LtiRegistration,
   context: LtiLaunchContext,
+  env?: Env,
 ): Promise<LaunchBridgeResult> {
   if (!registration.tenantId) {
     return {
@@ -782,7 +786,7 @@ export async function bridgeLaunch(
   // what that helper grants, and it is the right floor for a learner — the board
   // they land on is theirs through its own membership row, not through the
   // workspace.
-  await ensureWorkspaceMembership(db, registration.tenantId, resolved.userId);
+  await ensureWorkspaceMembership(db, registration.tenantId, resolved.userId, env);
 
   // A learner NEVER reaches `resolveBoard`. That path creates and joins the
   // cohort board, which is the disclosure this whole branch exists to prevent.

@@ -17,7 +17,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentPurchases, ideAgents } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { parseJsonArray } from '../../domain/shared/json';
+import { parseJsonArray, parseJsonOr } from '../../domain/shared/json';
 import type { Env } from '../../env';
 import { publicAgentScope } from '../marketplace/publicAgentScope';
 
@@ -88,7 +88,7 @@ export function mapAgentRow<T extends Record<string, unknown>>(row: T | null | u
   if (row == null) return row;
   const psy = row.psychometric;
   const psychometric = typeof psy === 'string'
-    ? (() => { try { return JSON.parse(psy) as unknown; } catch { return null; } })()
+    ? parseJsonOr<unknown>(psy, null)
     : (psy ?? null);
   return { ...row, skills: parseJsonArray(row.skills), psychometric };
 }

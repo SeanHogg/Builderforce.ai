@@ -15,7 +15,7 @@
 import { InternalError } from '../../domain/shared/errors';
 import { failResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
-import { eq, and, sql, desc, isNull } from 'drizzle-orm';
+import { eq, and, desc, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
@@ -28,6 +28,7 @@ import {
   loadPublishedSkill,
   skillSeoCacheKey,
 } from '../../application/marketplace/marketplaceSkillCatalog';
+import { recordHit } from '../../application/counters/hitCounters';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
@@ -95,6 +96,9 @@ const CheckoutStartBody = z.object({
 });
 const CheckoutCompleteBody = z.object({ checkoutSessionId: zNonEmptyString });
 
+/** Per-username cache entry for the public profile read (exact username, as the lookup is). */
+const userProfileCacheKey = (username: string): string => `mkt:user:${encodeURIComponent(username)}`;
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -109,41 +113,47 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    */
   router.get('/users/:username', async (c) => {
     const username = c.req.param('username');
-    const [user] = await db
-      .select({
-        id:           schema.users.id,
-        username:     schema.users.username,
-        display_name: schema.users.displayName,
-        avatar_url:   schema.users.avatarUrl,
-        bio:          schema.users.bio,
-        created_at:   schema.users.createdAt,
-      })
-      .from(schema.users)
-      .where(eq(schema.users.username, username))
-      .limit(1);
-    if (!user) return c.json({ error: 'User not found' }, 404);
+    // Two statements per anonymous profile view, for data that changes when its owner
+    // edits it. Cached per username; the owner's PUT below invalidates, and the 60s KV
+    // TTL bounds how long a newly published skill / changed counter can lag.
+    const profile = await getOrSetCached(c.env as Env, userProfileCacheKey(username), async () => {
+      const [user] = await db
+        .select({
+          id:           schema.users.id,
+          username:     schema.users.username,
+          display_name: schema.users.displayName,
+          avatar_url:   schema.users.avatarUrl,
+          bio:          schema.users.bio,
+          created_at:   schema.users.createdAt,
+        })
+        .from(schema.users)
+        .where(eq(schema.users.username, username))
+        .limit(1);
+      if (!user) return null;
 
-    const skills = await db
-      .select({
-        id:          schema.marketplaceSkills.id,
-        name:        schema.marketplaceSkills.name,
-        slug:        schema.marketplaceSkills.slug,
-        description: schema.marketplaceSkills.description,
-        category:    schema.marketplaceSkills.category,
-        downloads:   schema.marketplaceSkills.downloads,
-        likes:       schema.marketplaceSkills.likes,
-        created_at:  schema.marketplaceSkills.createdAt,
-      })
-      .from(schema.marketplaceSkills)
-      .where(
-        and(
-          eq(schema.marketplaceSkills.authorId, user.id),
-          eq(schema.marketplaceSkills.published, true),
-        ),
-      )
-      .orderBy(desc(schema.marketplaceSkills.downloads)).limit(LIST_ROW_CAP);
-
-    return c.json({ user, skills });
+      const skills = await db
+        .select({
+          id:          schema.marketplaceSkills.id,
+          name:        schema.marketplaceSkills.name,
+          slug:        schema.marketplaceSkills.slug,
+          description: schema.marketplaceSkills.description,
+          category:    schema.marketplaceSkills.category,
+          downloads:   schema.marketplaceSkills.downloads,
+          likes:       schema.marketplaceSkills.likes,
+          created_at:  schema.marketplaceSkills.createdAt,
+        })
+        .from(schema.marketplaceSkills)
+        .where(
+          and(
+            eq(schema.marketplaceSkills.authorId, user.id),
+            eq(schema.marketplaceSkills.published, true),
+          ),
+        )
+        .orderBy(desc(schema.marketplaceSkills.downloads)).limit(LIST_ROW_CAP);
+      return { user, skills };
+    }, { kvTtlSeconds: 60, l1TtlMs: 30_000 });
+    if (!profile) return c.json({ error: 'User not found' }, 404);
+    return c.json(profile);
   });
 
   /**
@@ -170,6 +180,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
         avatar_url:   schema.users.avatarUrl,
         bio:          schema.users.bio,
       });
+    if (updated?.username) await invalidateCached(c.env as Env, userProfileCacheKey(updated.username));
     return c.json({ user: updated });
   });
 
@@ -204,13 +215,9 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     const row = await loadPublishedSkill(db, slug);
     if (!row) return c.json({ error: 'Skill not found' }, 404);
 
-    // Fire-and-forget download counter increment
-    c.executionCtx.waitUntil(
-      db
-        .update(schema.marketplaceSkills)
-        .set({ downloads: sql`${schema.marketplaceSkills.downloads} + 1` })
-        .where(eq(schema.marketplaceSkills.slug, slug)),
-    );
+    // Buffered, not written: a Postgres UPDATE per skill view is what kept the database
+    // awake for anonymous browsing. The `hit-counters` sweep applies the delta.
+    await recordHit(c.env as Env, db, 'skill.download', slug);
 
     return c.json({ skill: row });
   });

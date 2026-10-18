@@ -21,7 +21,7 @@ import { useCallback, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import styles from '../styles/ads.module.css';
 import { adSetsApi, type AdSet, type AdTargeting } from '@/lib/adSetsApi';
-import { formatMoney } from '@/lib/adsApi';
+import { formatCents } from '@/lib/canvasMoney';
 import { usePanelTask } from '@/hooks/usePanelTask';
 import { AdTargetingFields } from './AdTargetingFields';
 import { AdTargetingSummary } from './AdTargetingSummary';
@@ -80,7 +80,7 @@ export function AdSetRow({ connectionId, adSet, onChanged }: AdSetRowProps) {
           <span className={styles.driveRowName}>{adSet.name}</span>
           <small>{t('meta', {
             status: t(`status.${adSet.status}`),
-            budget: formatMoney(adSet.dailyBudgetCents, adSet.currency, locale),
+            budget: formatCents(adSet.dailyBudgetCents, { currency: adSet.currency, locale }),
           })}</small>
         </span>
         {adSet.status === 'active'

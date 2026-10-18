@@ -37,6 +37,8 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { SEAT_KIND } from '../../domain/tenant/SeatKind';
 import { mintWebSessionToken } from '../../infrastructure/auth/webSessionToken';
 import type { TenantRole } from '../../domain/shared/types';
+import type { Env } from '../../env';
+import { membershipChanged } from '../tenant/membershipChanged';
 
 /** The `users.account_type` value that marks an identity minted by a link claim. */
 export const GUEST_ACCOUNT_TYPE = 'guest';
@@ -95,6 +97,7 @@ export async function createGuestUser(db: Db, displayName: string): Promise<Canv
 export async function seatAsCollaborator(
   db: Db,
   input: { tenantId: number; userId: string; role: TenantRole },
+  env?: Env,
 ): Promise<void> {
   const [existing] = await db
     .select({ id: tenantMembers.id })
@@ -104,6 +107,7 @@ export async function seatAsCollaborator(
   if (existing) {
     await db.update(tenantMembers).set({ isActive: true })
       .where(scopedToTenant(tenantMembers, input.tenantId, eq(tenantMembers.id, existing.id)));
+    if (env) await membershipChanged(env, input.tenantId, [input.userId]);
     return;
   }
   await db.insert(tenantMembers).values({
@@ -114,6 +118,7 @@ export async function seatAsCollaborator(
     joinedAt: new Date(),
     seatKind: SEAT_KIND.COLLABORATOR,
   }).onConflictDoNothing();
+  if (env) await membershipChanged(env, input.tenantId, [input.userId]);
 }
 
 /**

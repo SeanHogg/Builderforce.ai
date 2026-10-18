@@ -31,10 +31,15 @@ import { BUILTIN_TEMPLATES, getBuiltinTemplate, isBuiltinTemplateId } from './te
 import type { KanbanTemplate, TemplateLane, TemplateVisibility } from './types';
 import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { invalidateSwimlaneOrdinals } from '../swimlane/laneOrdinals';
+import { invalidateBoardLanesCache } from '../swimlane/boardReads';
 
 const listKey = (tenantId: number) => `kanban:templates:${tenantId}`;
+
+/** Static-ish data, dropped by every write in this service, so the KV TTL is only the backstop. */
+const TEMPLATE_CACHE = { kvTtlSeconds: 3_600 };
 const publicKey = () => `kanban:templates:public`;
 const oneKey = (tenantId: number, id: string) => `kanban:template:${tenantId}:${id}`;
+const publicOneKey = (tenantId: number, id: string) => `kanban:template-public:${tenantId}:${id}`;
 
 function slugify(input: string): string {
   return slugifyBase(input, { maxLength: 110, fallback: 'template' });
@@ -133,7 +138,7 @@ export class KanbanTemplateService {
         .orderBy(desc(kanbanTemplates.updatedAt));
       const full = await Promise.all(rows.map((r) => this.assembleDbTemplate(r)));
       return full.map(summarize);
-    });
+    }, TEMPLATE_CACHE);
     return [...BUILTIN_TEMPLATES.map(summarize), ...custom];
   }
 
@@ -154,15 +159,20 @@ export class KanbanTemplateService {
   /** Full template (built-in or tenant-owned or a public one being previewed). */
   async get(env: Env, tenantId: number, id: string): Promise<KanbanTemplate | null> {
     if (isBuiltinTemplateId(id)) return getBuiltinTemplate(id) ?? null;
-    const own = await getOrSetCached(env, oneKey(tenantId, id), () => this.loadDbTemplate(tenantId, id));
+    const own = await getOrSetCached(env, oneKey(tenantId, id), () => this.loadDbTemplate(tenantId, id), TEMPLATE_CACHE);
     if (own) return own;
-    // Fall back to a public template from any tenant (for marketplace preview / install).
-    const [pub] = await this.db
-      .select()
-      .from(kanbanTemplates)
-      .where(scopedToTenant(kanbanTemplates, tenantId, eq(kanbanTemplates.id, id), eq(kanbanTemplates.published, true), eq(kanbanTemplates.visibility, 'public')))
-      .limit(1);
-    return pub ? this.assembleDbTemplate(pub) : null;
+    // Fall back to a public template (for marketplace preview / install). Wrapped, because
+    // the cache treats a bare null as a miss and a "not found" would otherwise cost two
+    // statements on every read.
+    const { template } = await getOrSetCached(env, publicOneKey(tenantId, id), async () => {
+      const [pub] = await this.db
+        .select()
+        .from(kanbanTemplates)
+        .where(scopedToTenant(kanbanTemplates, tenantId, eq(kanbanTemplates.id, id), eq(kanbanTemplates.published, true), eq(kanbanTemplates.visibility, 'public')))
+        .limit(1);
+      return { template: pub ? await this.assembleDbTemplate(pub) : null };
+    }, TEMPLATE_CACHE);
+    return template;
   }
 
   /** Persist a template's lanes + requirements (replace-children write). */
@@ -406,12 +416,13 @@ export class KanbanTemplateService {
 
     // Every lane's position/terminal/parking just changed (or the board is new):
     // drop the cached ordinal map the ticket-move path reads.
-    await invalidateSwimlaneOrdinals(env, projectId);
+    await Promise.all([invalidateSwimlaneOrdinals(env, projectId), invalidateBoardLanesCache(env, tenantId, boardId)]);
     return { boardId, lanesApplied: template.lanes.length, requirementsApplied, lanesStaffed: seeded.staffed };
   }
 
   private async invalidate(env: Env, tenantId: number, id: string): Promise<void> {
     await invalidateCached(env, listKey(tenantId));
     await invalidateCached(env, oneKey(tenantId, id));
+    await invalidateCached(env, publicOneKey(tenantId, id));
   }
 }

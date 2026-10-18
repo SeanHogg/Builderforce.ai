@@ -55,7 +55,7 @@ import {
   deleteWebsitePage,
   landingPageDetail,
   listLandingPages,
-  publicLandingPage,
+  publicLandingPageCached,
   publicWebsitePageCached,
   publishLandingPage,
   recordLandingPageConversion,
@@ -319,7 +319,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
 /**
  * The public half. No `authMiddleware`, so the tenant cannot come from a session
  * and is named in the path instead — the same shape every other public tenant
- * surface uses. `publicLandingPage` refuses to return a draft regardless of who
+ * surface uses. `publicLandingPage` (cached by `publicLandingPageCached`) refuses to return a draft regardless of who
  * asks, which is where the actual guarantee lives.
  */
 export function createPublicWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
@@ -332,7 +332,7 @@ export function createPublicWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
   };
 
   router.get('/:tenantId/l/:slug', (c) => handle(async () => {
-    const page = await publicLandingPage(db, tenantParam(c.req.param('tenantId')), c.req.param('slug'));
+    const page = await publicLandingPageCached(db, c.env as Env, tenantParam(c.req.param('tenantId')), c.req.param('slug'));
     if (!page) return Response.json({ error: 'No published page at that address.' }, { status: 404 });
     return Response.json(page);
   }));
@@ -342,15 +342,15 @@ export function createPublicWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
    *  performance to anyone who can load the page. */
   router.post('/:tenantId/l/:slug/view', (c) => handle(async () => {
     const tenantId = tenantParam(c.req.param('tenantId'));
-    const page = await publicLandingPage(db, tenantId, c.req.param('slug'));
-    if (page) await recordLandingPageView(db, tenantId, page.id);
+    const page = await publicLandingPageCached(db, c.env as Env, tenantId, c.req.param('slug'));
+    if (page) await recordLandingPageView(c.env as Env, db, tenantId, page.id);
     return new Response(null, { status: 204 });
   }));
 
   router.post('/:tenantId/l/:slug/convert', (c) => handle(async () => {
     const tenantId = tenantParam(c.req.param('tenantId'));
-    const page = await publicLandingPage(db, tenantId, c.req.param('slug'));
-    if (page) await recordLandingPageConversion(db, tenantId, page.id);
+    const page = await publicLandingPageCached(db, c.env as Env, tenantId, c.req.param('slug'));
+    if (page) await recordLandingPageConversion(c.env as Env, db, tenantId, page.id);
     return new Response(null, { status: 204 });
   }));
 

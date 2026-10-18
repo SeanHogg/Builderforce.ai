@@ -75,6 +75,8 @@ import {
 } from '../../application/approval/approvalChain';
 import { positiveIntParam } from './queryParams';
 import { parseBody, z, zJsonObject } from './requestBody';
+import { rowId, str, num, whenPatch } from '../../domain/shared/coerce';
+import { requireTenantId } from '../middleware/tenantContext';
 
 /**
  * Most writes here read their body field by field through `str` / `num` /
@@ -92,30 +94,13 @@ const OpenChainBody = z.object({
   approvers: z.array(zJsonObject).nullish(),
 });
 
-const rowId = (raw: string): number => {
-  const id = Number(raw);
-  if (!Number.isFinite(id) || id <= 0) throw new ActionItemError('That is not an id.', 400);
-  return Math.floor(id);
-};
-
-const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
-const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
-
-const when = (v: unknown): Date | null | undefined => {
-  if (v === null) return null;
-  const s = str(v);
-  if (s === undefined) return undefined;
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) throw new ActionItemError('That is not a date.', 400);
-  return d;
-};
 
 export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
   const manager = requireRole(TenantRole.MANAGER);
-  const tenant = (c: { get: (k: string) => unknown }) => c.get('tenantId') as number;
+  const tenant = (c: { get: (k: string) => unknown }) => requireTenantId(c);
   const who = async (c: Parameters<typeof resolveActorFromContext>[2] & { env: unknown }) =>
     resolveActorFromContext(c.env as Env, db, c);
 
@@ -153,7 +138,7 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
         title: String(body.title ?? ''),
         detail: str(body.detail) ?? null,
         ownerRef: str(body.ownerRef) ?? null,
-        dueAt: when(body.dueAt) ?? null,
+        dueAt: whenPatch(body.dueAt) ?? null,
         ...(sourceRef ? { source: { ref: sourceRef } } : {}),
       },
       (c.get('userId') as string | undefined) ?? null,
@@ -167,7 +152,7 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
     if (body.title !== undefined) patch.title = String(body.title);
     if (body.detail !== undefined) patch.detail = str(body.detail) ?? null;
     if (body.ownerRef !== undefined) patch.ownerRef = str(body.ownerRef) ?? null;
-    if (body.dueAt !== undefined) patch.dueAt = when(body.dueAt) ?? null;
+    if (body.dueAt !== undefined) patch.dueAt = whenPatch(body.dueAt) ?? null;
     if (body.status !== undefined) patch.status = String(body.status) as ActionStatus;
     return Response.json(await updateActionItem(
       db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id')), patch,

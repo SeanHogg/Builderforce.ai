@@ -19,6 +19,7 @@ import { handleCiEventOutcome } from '../../application/ci/handleCiEventOutcome'
 import { ciOutcomeDeps } from './ciOutcomeDeps';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { parseBody, z } from './requestBody';
+import { timingSafeEqual } from '../../infrastructure/crypto/constantTime';
 
 /**
  * A GitLab hook payload is large and vendor-shaped; only the project identity the
@@ -179,7 +180,7 @@ export function createGitLabWebhookRoutes(db: Db, runtimeService: RuntimeService
     const secret = c.env.GITLAB_WEBHOOK_SECRET;
     if (!secret) return c.json({ received: true, processed: false, reason: 'GITLAB_WEBHOOK_SECRET not configured' });
     // GitLab sends the configured secret verbatim in this header (no HMAC).
-    if (c.req.header('X-Gitlab-Token') !== secret) return c.json({ error: 'Invalid token' }, 401);
+    if (!timingSafeEqual(c.req.header('X-Gitlab-Token') ?? '', secret)) return c.json({ error: 'Invalid token' }, 401);
 
     const p: Record<string, unknown> = await parseBody(c, GitLabPayload);
 

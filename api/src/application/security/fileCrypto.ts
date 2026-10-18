@@ -15,6 +15,7 @@
  */
 
 import { deriveTenantAesKey } from '../integrations/credentialCrypto';
+import { randomBytes } from '../../domain/shared/bytes';
 
 /** Version byte prefixed to every sealed blob, so a future KDF/cipher change can
  *  be introduced without breaking rows sealed under this one. */
@@ -28,7 +29,7 @@ const IV_BYTES = 12;
  */
 export async function sealBytes(bytes: Uint8Array, secret: string, tenantId: number): Promise<Uint8Array> {
   const key = await deriveTenantAesKey(secret, tenantId);
-  const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const iv = randomBytes(IV_BYTES);
   const cipherBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes);
   const cipher = new Uint8Array(cipherBuf);
 

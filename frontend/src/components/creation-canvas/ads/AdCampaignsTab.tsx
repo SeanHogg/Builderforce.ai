@@ -19,9 +19,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import styles from '../styles/ads.module.css';
 import {
-  adsApi, formatMoney,
+  adsApi,
   type AdCampaign, type AdObjective,
 } from '@/lib/adsApi';
+import { formatCents } from '@/lib/canvasMoney';
 import { NETWORK_GLYPHS } from '@/lib/networkGlyph';
 import { usePanelTask } from '@/hooks/usePanelTask';
 import { AdSetTier } from './AdSetTier';
@@ -141,7 +142,7 @@ export function AdCampaignsTab() {
                   <span className={styles.driveRowName}>{campaign.name}</span>
                   <small>{t('campaignMeta', {
                     status: t(`status.${campaign.status}`),
-                    budget: formatMoney(campaign.dailyBudgetCents ?? campaign.totalBudgetCents, campaign.currency, locale),
+                    budget: formatCents(campaign.dailyBudgetCents ?? campaign.totalBudgetCents, { currency: campaign.currency, locale }),
                   })}</small>
                 </button>
                 {campaign.status === 'active'

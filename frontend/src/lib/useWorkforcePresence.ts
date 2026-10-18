@@ -3,9 +3,10 @@ import { useAuth } from '@/lib/AuthContext';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import { membersApi, type TenantMember } from '@/lib/auth/members';
 import {
-  agentHosts, vscodeConnections, isVscodeConnectionOnline,
+  vscodeConnections, isVscodeConnectionOnline,
   type AgentHost, type VscodeConnection,
 } from '@/lib/builderforceApi';
+import { readAgentHosts } from '@/lib/dashboardReads';
 import { createLiveRunsReader, EMPTY_LIVE_RUNS, type LiveRunsSnapshot } from '@/lib/liveRunsApi';
 
 /** The sparkline window — runs started per day, counted by the server. */
@@ -82,7 +83,7 @@ export function useWorkforcePresence({ live = true }: WorkforcePresenceOptions =
     if (!isAuthenticated || !hasTenant) return;
     const [conns, hostList, liveRuns] = await Promise.allSettled([
       vscodeConnections.list(),
-      agentHosts.list(),
+      readAgentHosts(),
       reader.read(),
     ]);
     // Each feed settles on its own: a failed one keeps its last value.

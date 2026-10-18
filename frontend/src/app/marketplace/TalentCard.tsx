@@ -10,6 +10,7 @@ import { TrustBadge } from '@/components/freelance/TrustBadge';
 import { ProBonoBadge } from '@/components/freelance/ProBonoBadge';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import type { FreelancerProfile } from '@/lib/freelance/talentProfile';
+import { initialsOf } from '@/lib/initials';
 
 const talentCardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,
@@ -21,10 +22,6 @@ export const TALENT_GRID_STYLE: React.CSSProperties = {
   display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
 };
 
-function talentInitials(name: string | null): string {
-  return (name ?? '?').trim().split(/\s+/).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? '').join('') || '?';
-}
-
 export function TalentCard({ profile: f }: { profile: FreelancerProfile }) {
   const tt = useTranslations('talent');
   const { formatCents } = useMoneyFormat();
@@ -32,7 +29,7 @@ export function TalentCard({ profile: f }: { profile: FreelancerProfile }) {
     <Link href={`/talent/${f.userId}`} style={talentCardStyle} className="hover-lift">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--surface-interactive)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--text-primary)', flexShrink: 0 }}>
-          {talentInitials(f.displayName)}
+          {initialsOf(f.displayName)}
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.displayName ?? '—'}</div>

@@ -30,6 +30,7 @@ import { computeComplianceSummary } from '../insights/complianceInsights';
 import { computeFinanceInsights } from '../insights/financeInsights';
 import { computeAllocationInsights, type AllocationGoalMap } from '../insights/allocationInsights';
 import type { Lens } from '../rbac/personaLens';
+import { HOUR_MS } from '../../domain/shared/time';
 
 /** Lenses that are meaningfully captured at TENANT grain (delivery/portfolio are
  *  scope-specific, so excluded from the tenant-wide cadence). */
@@ -205,7 +206,7 @@ export async function captureLensSnapshot(
 const MAX_TENANTS_PER_TICK = 100;
 /** Don't recompute a rolling snapshot more often than this (bounds compute cost;
  *  a closed period is already frozen and never re-swept). */
-const REFRESH_MS = 6 * 60 * 60 * 1000;
+const REFRESH_MS = 6 * HOUR_MS;
 
 /**
  * KV key: `{ [tenantId]: retryNotBeforeMs }` for tenants whose capture THREW.

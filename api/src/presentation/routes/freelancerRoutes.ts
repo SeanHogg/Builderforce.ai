@@ -1,3 +1,4 @@
+import { invalidateActiveEngagements } from '../../application/activity/activeEngagements';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Freelancer marketplace routes — /api/freelancers/* and /api/engagements/*.
@@ -1317,6 +1318,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       }).where(scopedToTenant(freelancerEngagements, tenantId, eq(freelancerEngagements.id, existing.id)));
       await notify(db, c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: `${tenantName} updated your engagement`, body: b.note ?? null, ref: existing.id as string });
       await invalidateCached(c.env as Env, freelancerStatsCacheKey(b.freelancerUserId));
+      await invalidateActiveEngagements(c.env as Env, b.freelancerUserId);
       return c.json({ id: existing.id, status, reused: true });
     }
     const id = crypto.randomUUID();
@@ -1339,6 +1341,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     });
     await notify(db, c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: status === 'active' ? `${tenantName} hired you` : `${tenantName} wants to ${status === 'interviewing' ? 'interview' : 'engage'} you`, body: b.title ?? b.note ?? null, ref: id });
     await invalidateCached(c.env as Env, freelancerStatsCacheKey(b.freelancerUserId));
+    await invalidateActiveEngagements(c.env as Env, b.freelancerUserId);
 
     // Unified audit stream: a hire / engagement decision, attributed to the
     // manager who made it. Target is the external talent + the new engagement.
@@ -1388,6 +1391,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const updated = rows[0];
     if (!updated) return c.json({ error: 'Not found' }, 404);
     await invalidateCached(c.env as Env, freelancerStatsCacheKey(updated.freelancer_user_id as string));
+    await invalidateActiveEngagements(c.env as Env, updated.freelancer_user_id as string);
     return c.json({ id, status: updated.status });
   });
 
@@ -1413,6 +1417,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       const [ten] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
       await notify(db, c.env, { userId: rows[0].freelancer_user_id as string, tenantId, kind: 'terminated', title: `${(ten?.name as string) ?? 'A workspace'} ended your engagement`, body: reason, ref: id });
       await invalidateCached(c.env as Env, freelancerStatsCacheKey(rows[0].freelancer_user_id as string));
+      await invalidateActiveEngagements(c.env as Env, rows[0].freelancer_user_id as string);
     }
     return c.json({ ok: true });
   });
@@ -1442,6 +1447,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const row = rows[0];
     if (!row) return c.json({ error: 'Not found or not pending' }, 404);
     await invalidateCached(c.env as Env, freelancerStatsCacheKey(userId));
+    await invalidateActiveEngagements(c.env as Env, userId);
     const [me] = await db.select({ display_name: users.displayName }).from(users).where(eq(users.id, userId));
     if (row.created_by_user_id) {
       await notify(db, c.env, {
@@ -1481,6 +1487,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     // Rating + JSS show on the (cached) public list and the freelancer's stat block.
     await bumpCacheVersion(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     await invalidateCached(c.env as Env, freelancerStatsCacheKey(eng.freelancer_user_id as string));
+    await invalidateActiveEngagements(c.env as Env, eng.freelancer_user_id as string);
     await notify(db, c.env, { userId: eng.freelancer_user_id as string, tenantId, kind: 'review', title: `You received a ${rating}★ review`, body: b.comment ?? null, ref: id });
     return c.json({ ok: true, rating });
   });

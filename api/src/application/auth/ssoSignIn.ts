@@ -13,6 +13,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { oauthAccounts, tenantMembers, users } from '../../infrastructure/database/schema';
 import { ensureStarterWorkspace } from '../tenant/starterWorkspace';
+import { membershipChanged } from '../tenant/membershipChanged';
 import type { Env } from '../../env';
 import type { SsoIdentity } from './enterpriseSso';
 import { TenantRole, isTenantRole } from '../../domain/shared/types';
@@ -117,6 +118,7 @@ export async function signInWithSso(
       userId,
       role: asTenantRole(connection.defaultRole),
     });
+    await membershipChanged(env, connection.tenantId, [userId]);
   }
 
   const [user] = await db

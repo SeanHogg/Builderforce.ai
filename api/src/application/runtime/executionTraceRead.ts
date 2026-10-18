@@ -1,5 +1,5 @@
 /**
- * One execution's trace — usage snapshots, tool-audit events, the steering
+ * One execution's trace — usage (host gauges, or the ledger rows of a cloud run), tool-audit events, the steering
  * thread, the structured LLM turns and the run's own spend.
  *
  * Moved out of `GET /executions/:id/trace` so the route holds no SQL, and given a
@@ -15,6 +15,7 @@ import { and, desc, eq, gt } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import { readCloudRunUsage } from './cloudRunUsage';
 import { listExecutionMessages } from './executionSteering';
 import { listExecutionLlmTurns } from '../llm/executionTraces';
 import { executionUsageCost } from '../llm/usageQuery';
@@ -41,10 +42,10 @@ export async function readExecutionTrace(env: Env, db: Db, run: ExecutionTraceRu
   // neither, so their telemetry (0092) is keyed by execution_id. Pick the filter
   // that matches the run shape rather than bailing out for cloud executions.
   const isCloudRun = hostId == null || !sessionId;
-  const usageFilter = and(
-    isCloudRun
-      ? and(eq(usageSnapshots.tenantId, tenantId), eq(usageSnapshots.executionId, executionId))
-      : and(eq(usageSnapshots.tenantId, tenantId), eq(usageSnapshots.agentHostId, hostId!), eq(usageSnapshots.sessionKey, sessionId!)),
+  // Host runs read their own gauge rows; a cloud run's per-turn usage is the billing
+  // ledger's row for the execution (see cloudRunUsage.ts) — never a second written copy.
+  const hostUsageFilter = and(
+    eq(usageSnapshots.tenantId, tenantId), eq(usageSnapshots.agentHostId, hostId!), eq(usageSnapshots.sessionKey, sessionId!),
     cursor.afterUsageId ? gt(usageSnapshots.id, cursor.afterUsageId) : undefined,
   );
   const toolFilter = and(
@@ -56,20 +57,22 @@ export async function readExecutionTrace(env: Env, db: Db, run: ExecutionTraceRu
 
   const telemetry = runTelemetryDatabase(db);
   const [usage, toolEvents, messages, llmTurns, cost] = await Promise.all([
-    telemetry
-      .select({
-        id: usageSnapshots.id,
-        ts: usageSnapshots.ts,
-        inputTokens: usageSnapshots.inputTokens,
-        outputTokens: usageSnapshots.outputTokens,
-        contextTokens: usageSnapshots.contextTokens,
-        contextWindowMax: usageSnapshots.contextWindowMax,
-        compactionCount: usageSnapshots.compactionCount,
-      })
-      .from(usageSnapshots)
-      .where(usageFilter)
-      .orderBy(desc(usageSnapshots.ts))
-      .limit(ROW_LIMIT),
+    isCloudRun
+      ? readCloudRunUsage(db, tenantId, executionId, cursor.afterUsageId)
+      : telemetry
+        .select({
+          id: usageSnapshots.id,
+          ts: usageSnapshots.ts,
+          inputTokens: usageSnapshots.inputTokens,
+          outputTokens: usageSnapshots.outputTokens,
+          contextTokens: usageSnapshots.contextTokens,
+          contextWindowMax: usageSnapshots.contextWindowMax,
+          compactionCount: usageSnapshots.compactionCount,
+        })
+        .from(usageSnapshots)
+        .where(hostUsageFilter)
+        .orderBy(desc(usageSnapshots.ts))
+        .limit(ROW_LIMIT),
     telemetry
       .select({
         id: toolAuditEvents.id,

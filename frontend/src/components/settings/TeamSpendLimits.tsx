@@ -25,6 +25,7 @@ import {
   type SeatCapMode,
 } from '@/lib/spendLimits';
 import { useFormat } from "@/i18n/useFormat";
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { usePanelTask } from '@/hooks/usePanelTask';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 const cardStyle: React.CSSProperties = {
@@ -51,10 +52,6 @@ const primaryBtn: React.CSSProperties = {
   background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none',
 };
 
-function fmtUsd(mc: number): string {
-  return `$${millicentsToUsd(mc).toFixed(2)}`;
-}
-
 /** A colour for the spend bar that escalates with utilisation (theme tokens). */
 function barColor(pct: number): string {
   if (pct >= 100) return 'var(--coral-bright)';
@@ -70,6 +67,8 @@ function SeatRow({
   onSave: (userId: string, mode: SeatCapMode, amountUsd?: number) => Promise<void>;
 }) {
   const t = useTranslations('settings');
+  const { formatCents } = useMoneyFormat();
+  const fmtUsd = (mc: number) => formatCents(Math.round(millicentsToUsd(mc) * 100));
   const [mode, setMode] = useState<SeatCapMode>(seatCapMode(seat.capMillicents));
   const [amount, setAmount] = useState<string>(
     seat.capMillicents != null && seat.capMillicents >= 0 ? String(millicentsToUsd(seat.capMillicents)) : '',

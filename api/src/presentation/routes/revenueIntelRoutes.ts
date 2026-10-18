@@ -85,6 +85,8 @@ import {
   type EntityKind,
   type ProspectStatus,
 } from '../../application/sales/revenueIntelligence';
+import { rowId, str, num, whenOrNull } from '../../domain/shared/coerce';
+import { requireTenantId } from '../middleware/tenantContext';
 
 /** The enrichment ask. `email` is required because it IS the vendor's lookup key —
  *  and the cache key — so an absent one must be a 400, never a lookup that spends
@@ -107,28 +109,12 @@ const ProspectBody = z.looseObject({
   attributes: zJsonObject.nullish(),
 });
 
-const rowId = (raw: string): number => {
-  const id = Number(raw);
-  if (!Number.isFinite(id) || id <= 0) throw new RevenueIntelError('That is not an id.', 400);
-  return Math.floor(id);
-};
-
-const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
-const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
-const when = (v: unknown): Date | null => {
-  const s = str(v);
-  if (!s) return null;
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) throw new RevenueIntelError('That is not a date.', 400);
-  return d;
-};
-
 export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
   const manager = requireRole(TenantRole.MANAGER);
-  const tenant = (c: { get: (k: string) => unknown }) => c.get('tenantId') as number;
+  const tenant = (c: { get: (k: string) => unknown }) => requireTenantId(c);
   const me = (c: { get: (k: string) => unknown }) => String(c.get('userId') ?? '');
   const who = async (c: Parameters<typeof resolveActorFromContext>[2] & { env: unknown }) =>
     resolveActorFromContext(c.env as Env, db, c);
@@ -176,8 +162,8 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
     return Response.json(await setExperience(db, tenant(c), c.req.param('ref'), {
       company: str(body.company) ?? null,
       title: str(body.title) ?? null,
-      startedAt: when(body.startedAt),
-      endedAt: when(body.endedAt),
+      startedAt: whenOrNull(body.startedAt),
+      endedAt: whenOrNull(body.endedAt),
       ...(typeof body.isCurrent === 'boolean' ? { isCurrent: body.isCurrent } : {}),
       location: str(body.location) ?? null,
     }), { status: 201 });
@@ -189,14 +175,14 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
       institution: str(body.institution) ?? null,
       degree: str(body.degree) ?? null,
       field: str(body.field) ?? null,
-      startedAt: when(body.startedAt),
-      endedAt: when(body.endedAt),
+      startedAt: whenOrNull(body.startedAt),
+      endedAt: whenOrNull(body.endedAt),
     }), { status: 201 });
   });
 
   router.post('/contacts/:ref/compensation', manager, async (c) => {
     const body = await parseBody(c, zJsonObject);
-    const observedAt = when(body.observedAt);
+    const observedAt = whenOrNull(body.observedAt);
     return Response.json(await recordCompensation(db, tenant(c), c.req.param('ref'), {
       base: num(body.base) ?? null,
       bonus: num(body.bonus) ?? null,

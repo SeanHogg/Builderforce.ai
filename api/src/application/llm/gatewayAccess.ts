@@ -12,12 +12,12 @@
  * from `presentation/routes/llmRoutes.ts`, so no importer changed.
  */
 import type { Context } from 'hono';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { requestDb } from '../shared/dbHandle';
 import { resolveTenantPlan, type TenantPlanSnapshot } from '../tenant/tenantPlanSnapshot';
-import { originAllowed, deserializeScopes } from './tenantApiKeyService';
+import { originAllowed, deserializeScopes, touchTenantApiKey } from './tenantApiKeyService';
 import { coerceStringArrayOrNull } from '../../domain/shared/jsonColumn';
 import { TenantRole } from '../../domain/shared/types';
 import { buildDatabase } from '../../infrastructure/database/connection';
@@ -217,15 +217,11 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       );
     }
 
-    const db = requestDb(c);
+    // Throttled (once per KEY_LAST_USED_THROTTLE_MS per key) — never an UPDATE per call.
     c.executionCtx.waitUntil(
-      db
-        .update(tenantApiKeys)
-        .set({ lastUsedAt: new Date() })
-        .where(and(eq(tenantApiKeys.id, keyId), eq(tenantApiKeys.tenantId, keyTenantId)))
-        .catch((error) => { /* never let bookkeeping fail the request */
-          reportCaughtError(error, { source: 'application/llm/gatewayAccess.ts', operation: 'requireTenantAccess' });
-        }),
+      touchTenantApiKey(requestDb(c), keyId).catch((error) => { /* never let bookkeeping fail the request */
+        reportCaughtError(error, { source: 'application/llm/gatewayAccess.ts', operation: 'requireTenantAccess' });
+      }),
     );
 
     // The key acts as the member who minted it (see `loadTenantApiKeyByHash`): their id

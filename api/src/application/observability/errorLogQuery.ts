@@ -14,6 +14,7 @@
 import { and, desc, eq, gte, ilike, isNotNull, or, sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { apiErrorLog } from '../../infrastructure/database/schema';
+import { HOUR_MS } from '../../domain/shared/time';
 
 export const ERROR_LOG_MAX_LIMIT = 200;
 export const ERROR_LOG_DEFAULT_LIMIT = 50;
@@ -106,7 +107,7 @@ function buildConditions(filters: ErrorLogFilters): SQL[] {
   }
 
   if (typeof filters.sinceHours === 'number' && filters.sinceHours > 0) {
-    const since = new Date(Date.now() - filters.sinceHours * 3_600_000);
+    const since = new Date(Date.now() - filters.sinceHours * HOUR_MS);
     conds.push(gte(apiErrorLog.createdAt, since));
   }
 
@@ -248,7 +249,7 @@ export async function getErrorLogEntry(db: Db, id: number): Promise<ErrorLogEntr
 export async function listErrorLogSources(db: Db, sinceHours?: number): Promise<string[]> {
   const conds: SQL[] = [isNotNull(apiErrorLog.source)];
   if (typeof sinceHours === 'number' && sinceHours > 0) {
-    conds.push(gte(apiErrorLog.createdAt, new Date(Date.now() - sinceHours * 3_600_000)));
+    conds.push(gte(apiErrorLog.createdAt, new Date(Date.now() - sinceHours * HOUR_MS)));
   }
   const rows = await db
     .selectDistinct({ source: apiErrorLog.source })

@@ -462,7 +462,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const guestChatService = new GuestChatService(db);
   const guestPromptService = new GuestPromptService(db);
   const platformBroadcastService = new PlatformBroadcastService(db);
-  const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
+  const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET, env);
   const agentService    = new AgentService(agentRepo, skillRepo);
   // RuntimeService.update is the single canonical execution-status transition;
   // its full wiring (self-heal, lane sync, autonomous chaining, audit) lives in

@@ -17,6 +17,7 @@ import {
   type SyncState,
 } from './reconciler';
 import type { BoardProvider, ChangeSet, NormalizedTicket } from './providers';
+import { HOUR_MS } from '../../domain/shared/time';
 
 // ---------------------------------------------------------------------------
 // Persistence port (implemented by a Drizzle adapter in the route layer)
@@ -145,7 +146,7 @@ const MAX_OUTBOX_ATTEMPTS = 6;
 export function computeBackoffMs(attempts: number): number {
   const base = 1000; // 1s
   const capped = Math.min(Math.max(attempts, 0), 20); // guard against huge exponents
-  return Math.min(base * 2 ** capped, 60 * 60 * 1000); // cap at 1h
+  return Math.min(base * 2 ** capped, HOUR_MS); // cap at 1h
 }
 
 export class SyncEngine {

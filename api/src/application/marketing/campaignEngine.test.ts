@@ -153,7 +153,7 @@ describe('addAudienceMembers', () => {
 
 describe('suppressedSubset', () => {
   it('is ONE query, never per-recipient', async () => {
-    const db = fakeDb([[{ email: 'b@x.com' }]]);
+    const db = fakeDb([[{ k: 'e', v: 'b@x.com' }]]);
     const blocked = await suppressedSubset(db as unknown as Db, 7, ['a@x.com', 'b@x.com', 'c@x.com']);
     expect([...blocked]).toEqual(['b@x.com']);
     expect(db.calls).toHaveLength(1);
@@ -290,7 +290,7 @@ describe('startCampaign — the gates that protect real people', () => {
     const db = fakeDb([
       [draftRow],
       [{ email: 'a@x.com' }],
-      [{ email: 'a@x.com' }],   // …and they are suppressed
+      [{ k: 'e', v: 'a@x.com' }],   // …and they are suppressed
     ]);
     const result = await startCampaign(env, db as unknown as Db, 7, 1);
     expect(result).toMatchObject({ ok: false, status: 400 });
@@ -301,7 +301,7 @@ describe('startCampaign — the gates that protect real people', () => {
     const db = fakeDb([
       [draftRow],
       [{ email: 'a@x.com' }, { email: 'b@x.com' }, { email: 'c@x.com' }],
-      [{ email: 'b@x.com' }],
+      [{ k: 'e', v: 'b@x.com' }],
       [],
       [{ id: 1, name: 'C', subject: 'Hello', status: 'sending', audienceId: 11, senderIdentityId: 5, projectId: null,
          recipients: 2, sent: 0, failed: 0, suppressed: 1, opened: 0, clicked: 0,
@@ -575,7 +575,7 @@ describe('startCampaign — SMS', () => {
       [smsDraftRow],
       twilioConnectionRow,
       [{ email: 'a@x.com', phone: '+14155550001', phoneStatus: 'subscribed' }],
-      [{ email: 'a@x.com' }],   // …and they are suppressed
+      [{ k: 'e', v: 'a@x.com' }],   // …and they are suppressed
     ]);
     const result = await startCampaign(env, db as unknown as Db, 7, 1);
     expect(result).toMatchObject({ ok: false, status: 400 });

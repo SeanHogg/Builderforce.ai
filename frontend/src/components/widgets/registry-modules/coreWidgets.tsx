@@ -6,7 +6,7 @@
  * badges; they are converted here into pinnable {@link ComponentDef}s that draw a
  * CHART/STAT via the shared `@/components/charts/*` primitives — the four stat
  * cards (Projects, Tasks, Agents online, Pending requests) backed by
- * `fetchProjects`, `tasksApi`, `agentHosts`, and `approvalsApi`, all from one
+ * `fetchProjects`, `readTasks`, `readAgentHosts`, and `approvalsApi`, all from one
  * shared, deduped read.
  *
  * (LLM-usage widgets used to live here too; they now ride the AI Insights hub —
@@ -24,13 +24,12 @@ import {
 } from '@/lib/api';
 import { listIdeProjects } from '@/lib/ideProjectsApi';
 import {
-  tasksApi,
-  agentHosts,
   approvalsApi,
   type Task,
   type AgentHost,
   type Approval,
 } from '@/lib/builderforceApi';
+import { readAgentHosts, readTasks } from '@/lib/dashboardReads';
 import type { Project, IdeProject } from '@/lib/types';
 import { MODALITIES, getModality } from '@/lib/modality';
 import { useModalityCopy } from '@/lib/useModalityCopy';
@@ -57,8 +56,8 @@ function useOverview() {
   return useSharedSource<OverviewData>('core:overview', async () => {
     const [projects, tasks, hosts, approvals] = await Promise.all([
       fetchProjects().catch(() => [] as Project[]),
-      tasksApi.list().catch(() => [] as Task[]),
-      agentHosts.list().catch(() => [] as AgentHost[]),
+      readTasks().catch(() => [] as Task[]),
+      readAgentHosts().catch(() => [] as AgentHost[]),
       approvalsApi.list({ status: 'pending' }).catch(() => [] as Approval[]),
     ]);
     return {

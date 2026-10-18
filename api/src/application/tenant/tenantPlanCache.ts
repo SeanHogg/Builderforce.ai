@@ -10,11 +10,16 @@
 
 import type { Env } from '../../env';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidateTenantSnapshot } from './tenantReadCache';
 
 export const tenantPlanCacheKey = (tenantId: number): string => `tenant:plan:${tenantId}`;
 
 /** Drop both cache layers for a tenant's plan snapshot. No-op without a worker env. */
 export async function invalidateTenantPlan(env: Env | undefined, tenantId: number): Promise<void> {
   if (!env) return;
-  await invalidateCached(env, tenantPlanCacheKey(tenantId));
+  await Promise.all([
+    invalidateCached(env, tenantPlanCacheKey(tenantId)),
+    // The workspace snapshot carries the same plan/billing columns.
+    invalidateTenantSnapshot(env, tenantId),
+  ]);
 }

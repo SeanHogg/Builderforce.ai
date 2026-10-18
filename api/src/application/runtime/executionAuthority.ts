@@ -1,3 +1,4 @@
+import { parseJsonOr } from '../../domain/shared/json';
 /**
  * WHO SAID THIS RUN MAY HAPPEN — the authority a dispatch carries when it is not a
  * stage role doing stage work.
@@ -126,11 +127,7 @@ export function markLifecycleNeutral(payload: string | undefined): string {
  */
 export function isLifecycleNeutralRun(payload: string | null | undefined): boolean {
   if (!payload) return false;
-  try {
-    return (JSON.parse(payload) as { lifecycleNeutral?: unknown }).lifecycleNeutral === true;
-  } catch {
-    return false;
-  }
+  return parseJsonOr<{ lifecycleNeutral?: unknown } | null>(payload, null)?.lifecycleNeutral === true;
 }
 
 /**

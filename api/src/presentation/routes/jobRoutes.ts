@@ -12,6 +12,7 @@
  * column back to the snake_case key the raw-SQL rows used, because `mapJob` /
  * `mapProposal` (and therefore the wire shape) are keyed on those names.
  */
+import { invalidateActiveEngagements } from '../../application/activity/activeEngagements';
 import { Hono } from 'hono';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
@@ -629,6 +630,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     if (!accepted) return c.json({ error: 'Not found' }, 404);
     if (accepted.conflict) return c.json({ error: 'This job has already been filled' }, 409);
     await invalidatePostingCaches(c.env as Env, tenantId, accepted.proposal.source_ticket_id as number | null);
+    await invalidateActiveEngagements(c.env as Env, accepted.proposal.freelancer_user_id as string);
     // The requisition is filled: everyone still open in its ATS pipeline leaves it
     // now, without a stage — this is the pipeline ending, not a candidate outcome.
     await closePipeline(db, c.env as Env, { tenantId, pipelineRef: pipelineRefForPosting(String(accepted.proposal.job_id)) });

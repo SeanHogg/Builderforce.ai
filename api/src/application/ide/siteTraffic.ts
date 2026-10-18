@@ -30,6 +30,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { sha256Fingerprint } from '../../infrastructure/crypto/digest';
 import { excluded } from '../../infrastructure/database/upsert';
 import { appsDatabaseOf } from './appsDatabase';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** One site's pending counts for one UTC day. */
 export interface TrafficDelta {
@@ -287,7 +288,7 @@ export async function getSiteTraffic(
     env,
     trafficCacheKey(projectId, days),
     async () => {
-      const since = utcDay(Date.now() - days * 86_400_000);
+      const since = utcDay(Date.now() - days * DAY_MS);
       const rows = await appsDatabaseOf(db)
         .select({
           day: siteTrafficDaily.day,

@@ -33,9 +33,11 @@ const dueRow = {
   updatedAt: new Date(),
 };
 
-function makeDb(opts: { insertError?: Error } = {}) {
+function makeDb(opts: { insertError?: Error; rows?: Array<typeof dueRow>; poisonKey?: string } = {}) {
+  const rows = opts.rows ?? [dueRow];
   const activityRows: Record<string, unknown>[] = [];
   const updateSets: Record<string, unknown>[] = [];
+  let insertCalls = 0;
   let updateCall = 0;
 
   const db = {
@@ -45,7 +47,7 @@ function makeDb(opts: { insertError?: Error } = {}) {
         return {
           where: () => ({
             orderBy: () => ({
-              limit: async () => [dueRow],
+              limit: async () => rows,
             }),
           }),
         };
@@ -58,21 +60,23 @@ function makeDb(opts: { insertError?: Error } = {}) {
         set: (patch: Record<string, unknown>) => {
           updateSets.push(patch);
           return {
-            where: () => updateCall === 1
-              ? { returning: async () => [{ id: dueRow.id }] }
-              : Promise.resolve(),
+            // The settle `RETURNING`s the ids it closed; the batched one returns them all.
+            where: () => ({ returning: async () => rows.map((r) => ({ id: r.id })) }),
           };
         },
       };
     },
     insert: (table: unknown) => {
       expect(table).toBe(activityLog);
+      insertCalls += 1;
       return {
-        values: (row: Record<string, unknown>) => {
-          activityRows.push(row);
+        values: (v: Record<string, unknown> | Record<string, unknown>[]) => {
+          const batch = Array.isArray(v) ? v : [v];
           return {
             onConflictDoNothing: async () => {
               if (opts.insertError) throw opts.insertError;
+              if (opts.poisonKey && batch.some((r) => r.eventKey === opts.poisonKey)) throw new Error('poison row');
+              activityRows.push(...batch);
             },
           };
         },
@@ -80,7 +84,7 @@ function makeDb(opts: { insertError?: Error } = {}) {
     },
   } as unknown as Db;
 
-  return { db, activityRows, updateSets };
+  return { db, activityRows, updateSets, calls: () => ({ insertCalls, updateCall }) };
 }
 
 describe('execution lifecycle outbox', () => {
@@ -103,6 +107,31 @@ describe('execution lifecycle outbox', () => {
     expect(updateSets.at(-1)).toMatchObject({ status: 'done', lastError: null });
     // One conditional settle — no separate `processing` claim write.
     expect(updateSets).toHaveLength(1);
+  });
+
+  it('projects a whole batch with ONE insert and ONE settle, not two statements per event', async () => {
+    const rows = [1, 2, 3].map((n) => ({ ...dueRow, id: 100 + n, eventKey: `execution:${n}:v:1:running` }));
+    const { db, activityRows, calls } = makeDb({ rows });
+
+    const result = await drainExecutionLifecycleOutbox({} as Env, db);
+
+    expect(result).toEqual({ claimed: 3, projected: 3, retried: 0, dead: 0 });
+    expect(activityRows.map((r) => r.eventKey)).toEqual(rows.map((r) => r.eventKey));
+    expect(calls()).toEqual({ insertCalls: 1, updateCall: 1 });
+  });
+
+  it('falls back to per-row handling when the batch throws, so one poison row parks only itself', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const good = { ...dueRow, id: 21, eventKey: 'execution:1:v:1:running' };
+    const bad = { ...dueRow, id: 22, eventKey: 'execution:2:v:1:running' };
+    const { db, activityRows, updateSets } = makeDb({ rows: [good, bad], poisonKey: bad.eventKey });
+
+    const result = await drainExecutionLifecycleOutbox({} as Env, db);
+
+    expect(result).toEqual({ claimed: 2, projected: 1, retried: 1, dead: 0 });
+    expect(activityRows.map((r) => r.eventKey)).toEqual([good.eventKey]);
+    expect(updateSets.map((u) => u.status)).toEqual(['done', 'retry']);
+    errorSpy.mockRestore();
   });
 
   it('records a projection exception and schedules an idempotent retry', async () => {

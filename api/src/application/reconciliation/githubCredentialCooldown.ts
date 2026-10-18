@@ -15,6 +15,7 @@
  */
 
 import { peekCached, setCached, type CacheEnv } from '../../infrastructure/cache/readThroughCache';
+import { clamp } from '../../domain/shared/numbers';
 
 /** Default cooldown when GitHub says nothing about when to come back. */
 export const DEFAULT_GITHUB_COOLDOWN_SECONDS = 60 * 60;
@@ -26,7 +27,7 @@ const MAX_COOLDOWN_SECONDS = 6 * 60 * 60;
 /** Statuses that mean "this credential is refused or throttled right now". */
 const THROTTLE_STATUSES: ReadonlySet<number> = new Set([403, 429]);
 
-const clamp = (s: number): number => Math.min(MAX_COOLDOWN_SECONDS, Math.max(MIN_COOLDOWN_SECONDS, Math.ceil(s)));
+const clampCooldown = (s: number): number => clamp(Math.ceil(s), MIN_COOLDOWN_SECONDS, MAX_COOLDOWN_SECONDS);
 
 /**
  * How long GitHub asked us to wait, from its response headers, or null when it
@@ -39,13 +40,13 @@ export function githubRetryAfterSeconds(headers: Pick<Headers, 'get'>, nowMs: nu
   const retryAfter = headers.get('retry-after')?.trim();
   if (retryAfter) {
     const asSeconds = Number(retryAfter);
-    if (Number.isFinite(asSeconds) && asSeconds >= 0) return clamp(asSeconds);
+    if (Number.isFinite(asSeconds) && asSeconds >= 0) return clampCooldown(asSeconds);
     const asDate = Date.parse(retryAfter);
-    if (Number.isFinite(asDate)) return clamp((asDate - nowMs) / 1000);
+    if (Number.isFinite(asDate)) return clampCooldown((asDate - nowMs) / 1000);
   }
   const remaining = headers.get('x-ratelimit-remaining')?.trim();
   const reset = Number(headers.get('x-ratelimit-reset')?.trim());
-  if (remaining === '0' && Number.isFinite(reset) && reset > 0) return clamp(reset - nowMs / 1000);
+  if (remaining === '0' && Number.isFinite(reset) && reset > 0) return clampCooldown(reset - nowMs / 1000);
   return null;
 }
 
@@ -71,7 +72,7 @@ export function githubCooldownFor(error: unknown): number | null {
   const rateLimitedText = typeof message === 'string' && /rate limit/i.test(message);
   if ((status == null || !THROTTLE_STATUSES.has(status)) && !rateLimitedText) return null;
   const hinted = typeof details?.retryAfterSeconds === 'number' ? details.retryAfterSeconds : null;
-  return hinted != null ? clamp(hinted) : DEFAULT_GITHUB_COOLDOWN_SECONDS;
+  return hinted != null ? clampCooldown(hinted) : DEFAULT_GITHUB_COOLDOWN_SECONDS;
 }
 
 export interface GithubCooldownRecord {
@@ -102,7 +103,7 @@ export async function recordGithubCooldown(
   failure: { status: number | null; reason: string },
   nowMs: number = Date.now(),
 ): Promise<GithubCooldownRecord> {
-  const ttl = clamp(seconds);
+  const ttl = clampCooldown(seconds);
   const record: GithubCooldownRecord = {
     until: new Date(nowMs + ttl * 1000).toISOString(),
     status: failure.status,

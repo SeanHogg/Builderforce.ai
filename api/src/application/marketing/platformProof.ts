@@ -16,10 +16,10 @@ import type { Db } from '../../infrastructure/database/connection';
 import { executions, projects, users } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, type CacheEnv } from '../../infrastructure/cache/readThroughCache';
+import { WEEK_MS } from '../../domain/shared/time';
 
 export const PLATFORM_PROOF_CACHE_KEY = 'marketing:platform-proof:v1';
 const ONE_HOUR_SECONDS = 3600;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface PlatformProof {
   /** Verified, unsuspended accounts. */

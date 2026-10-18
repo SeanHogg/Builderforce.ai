@@ -6,8 +6,9 @@
  * 0092/0096 make a run attributable by `cloud_agent_ref` + `execution_id` across
  *
  *   tool_audit_events   — every tool call the run made (the timeline)
- *   usage_snapshots     — the per-execution trace view of token usage
- *   llm_usage_log       — the canonical billing ledger
+ *   llm_usage_log       — the canonical billing ledger, and the ONLY per-turn usage
+ *                         write: the run trace projects it (cloudRunUsage.ts) instead
+ *                         of keeping a duplicate `usage_snapshots` copy
  *
  * …but nothing asserted it. A telemetry write that silently landed on the wrong
  * key (or not at all) would make a run invisible on the timeline and absent from
@@ -146,9 +147,9 @@ describe('GAP-O1 — a cloud run is fully reconstructable by execution_id', () =
     expect(run.audit.every((r) => r.executionId === EXECUTION_ID)).toBe(true);
   });
 
-  it('carries the join keys — cloud_agent_ref + execution_id — on every row of all three tables', async () => {
+  it('carries the join keys — cloud_agent_ref + execution_id — on every row of both tables', async () => {
     const { run } = await runFixture();
-    for (const row of [...run.audit, ...run.snapshots, ...run.ledger]) {
+    for (const row of [...run.audit, ...run.ledger]) {
       expect(row.executionId).toBe(EXECUTION_ID);
       expect(row.cloudAgentRef).toBe(CLOUD_AGENT_REF);
       // A cloud run is never host-attributed — that is what makes the CLOUD/ON-PREM
@@ -157,9 +158,9 @@ describe('GAP-O1 — a cloud run is fully reconstructable by execution_id', () =
     }
   });
 
-  it('joins the timeline to the trace view on the same session key (exec:<id>)', async () => {
+  it('keys the timeline on the session key exec:<id> (the trace projects the same key for usage)', async () => {
     const { run } = await runFixture();
-    const keys = new Set([...run.audit, ...run.snapshots].map((r) => r.sessionKey));
+    const keys = new Set(run.audit.map((r) => r.sessionKey));
     expect([...keys]).toEqual([`exec:${EXECUTION_ID}`]);
   });
 
@@ -172,9 +173,9 @@ describe('GAP-O1 — a cloud run is fully reconstructable by execution_id', () =
     }
   });
 
-  it('records one usage pair per LLM turn, so the run\'s turn count is recoverable', async () => {
+  it('records one ledger row per LLM turn and no usage_snapshots copy, so the turn count is recoverable', async () => {
     const { run } = await runFixture();
-    expect(run.snapshots).toHaveLength(RUN_TURNS.length);
+    expect(run.snapshots).toHaveLength(0);
     expect(run.ledger).toHaveLength(RUN_TURNS.length);
   });
 
@@ -188,34 +189,30 @@ describe('GAP-O1 — a cloud run is fully reconstructable by execution_id', () =
   });
 });
 
-describe('GAP-O2 — usage_snapshots and llm_usage_log agree (no double-count, no drift)', () => {
+describe('GAP-O2 — the one usage ledger carries exactly what each turn consumed (no double-count, no drift)', () => {
   const expectedInput = RUN_TURNS.reduce((n, t) => n + t.inputTokens, 0);
   const expectedOutput = RUN_TURNS.reduce((n, t) => n + t.outputTokens, 0);
 
-  it('ledger total === snapshot total for the execution', async () => {
+  it('ledger total === the sum of the turns for the execution', async () => {
     const { run } = await runFixture();
-    expect(run.snapshotTotal).toBe(expectedInput + expectedOutput);
-    expect(run.ledgerTotal).toBe(run.snapshotTotal);
+    expect(run.ledgerTotal).toBe(expectedInput + expectedOutput);
   });
 
-  it('agrees on the input/output SPLIT, not just the total', async () => {
+  it('keeps the input/output SPLIT, not just the total', async () => {
     const { run } = await runFixture();
-    expect(run.snapshotInput).toBe(expectedInput);
     expect(run.ledgerInput).toBe(expectedInput);
-    expect(run.snapshotOutput).toBe(expectedOutput);
     expect(run.ledgerOutput).toBe(expectedOutput);
   });
 
-  it('writes exactly ONE row per ledger per turn — a second write would double the bill', async () => {
+  it('writes exactly ONE ledger row per turn — a second write would double the bill', async () => {
     const { run } = await runFixture();
-    expect(run.snapshots).toHaveLength(run.ledger.length);
+    expect(run.snapshots).toHaveLength(0);
     for (const [i, turn] of RUN_TURNS.entries()) {
-      expect(run.snapshots[i]).toMatchObject({ inputTokens: turn.inputTokens, outputTokens: turn.outputTokens });
       expect(run.ledger[i]).toMatchObject({ promptTokens: turn.inputTokens, completionTokens: turn.outputTokens });
     }
   });
 
-  it('holds under a bad-usage turn: BOTH ledgers clamp identically, so they cannot drift apart', async () => {
+  it('clamps a bad-usage turn so it cannot poison the ledger total', async () => {
     const { db, rowsFor } = makeFakeDb();
     await recordCloudUsage(env, db, {
       tenantId: TENANT_ID, cloudAgentRef: CLOUD_AGENT_REF, executionId: EXECUTION_ID, taskId: TASK_ID,
@@ -230,15 +227,10 @@ describe('GAP-O2 — usage_snapshots and llm_usage_log agree (no double-count, n
       snapshots: rowsFor(usageSnapshots),
       ledger: rowsFor(llmUsageLog),
     }, EXECUTION_ID);
-    expect(run.snapshotTotal).toBe(120);
-    expect(run.ledgerTotal).toBe(run.snapshotTotal);
+    expect(run.ledgerTotal).toBe(120);
   });
 
-  it('a snapshot write that fails does NOT leave the ledger silently ahead of nothing — both are attempted', async () => {
-    // The two writes are independent (telemetry is best-effort), so the invariant a
-    // reader can rely on is "same inputs, same clamp, same attribution" — asserted
-    // above. Here we pin the weaker but load-bearing guarantee: a failing snapshot
-    // never takes the billing ledger down with it, and vice versa.
+  it('a failing ledger write never throws into the run, and is the only write attempted', async () => {
     const attempted: string[] = [];
     const db = {
       insert: (table: unknown) => ({
@@ -252,6 +244,6 @@ describe('GAP-O2 — usage_snapshots and llm_usage_log agree (no double-count, n
       tenantId: TENANT_ID, executionId: EXECUTION_ID, taskId: TASK_ID, model: 'm',
       inputTokens: 10, outputTokens: 5,
     })).resolves.toBeUndefined();
-    expect(attempted).toEqual(['snapshot', 'ledger']);
+    expect(attempted).toEqual(['ledger']);
   });
 });

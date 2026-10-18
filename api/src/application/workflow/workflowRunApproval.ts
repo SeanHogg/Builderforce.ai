@@ -20,6 +20,7 @@ import { instantiateWorkflowRun, runTargetFromDefinition } from './instantiateRu
 import { workflowDefinitions } from '../../infrastructure/database/schema';
 import { parseDefinition } from '../../domain/workflowGraph';
 import type { Db } from '../../infrastructure/database/connection';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** `approvals.action_type` for a gated workflow run. */
 export const WORKFLOW_RUN_ACTION_TYPE = 'workflow.run';
@@ -32,7 +33,6 @@ export const WORKFLOW_RUN_SUBJECT_KEY = 'workflowDefinitionId';
  * the expiry sweep can never escalate a forgotten request, so a gated workflow
  * would sit blocked in silence — the exact failure `executionPause` documents.
  */
-const APPROVAL_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** The definition fields the gate rules on. A structural subset of the row. */
 export interface WorkflowRunGateDefinition {
@@ -71,7 +71,7 @@ export async function evaluateWorkflowRunApprovalGate(
       requestedBy,
       cloudAgentRef: definition.runTargetCloudAgentRef,
       description: `Approve running the workflow "${definition.name}"`,
-      expiresAt: new Date(Date.now() + APPROVAL_TTL_MS),
+      expiresAt: new Date(Date.now() + DAY_MS),
     }),
   });
 

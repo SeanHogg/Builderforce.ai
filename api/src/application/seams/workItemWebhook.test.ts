@@ -32,11 +32,13 @@ function makeDb(opts: {
     },
     insert: () => ({
       values: (v: any) => {
-        inserts.push(v);
+        // The service inserts every matched subscription's delivery in ONE multi-row statement.
+        const batch: any[] = Array.isArray(v) ? v : [v];
+        inserts.push(...batch);
         // The delivery insert is idempotent on (subscription, event) so a redelivery of
         // the same event cannot fan out twice — the fake has to offer the same chain, or
         // it tests a shape the service no longer uses.
-        const result = { returning: async () => [{ id: `deliv-${inserts.length}` }] };
+        const result = { returning: async () => batch.map((r, i) => ({ id: `deliv-${inserts.length - batch.length + i + 1}`, subscriptionId: r.subscriptionId })) };
         return { ...result, onConflictDoNothing: () => result };
       },
     }),

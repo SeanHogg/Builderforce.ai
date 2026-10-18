@@ -12,6 +12,7 @@
  */
 import type { FetchLike } from '../repos/sources/repoSourceBase';
 import type { ActivitySource, IngestEvent } from './activityIngest';
+import { HOUR_MS } from '../../domain/shared/time';
 
 const BACKFILL_PAGES = 5;
 
@@ -80,7 +81,7 @@ export function mapGlMergeRequest(m: GlMergeRequest, repoFullName: string, repoN
   }];
   if (m.merged_at) {
     const cycle = m.created_at
-      ? Math.max(0, Math.round((new Date(m.merged_at).getTime() - new Date(m.created_at).getTime()) / 3_600_000))
+      ? Math.max(0, Math.round((new Date(m.merged_at).getTime() - new Date(m.created_at).getTime()) / HOUR_MS))
       : null;
     out.push({ ...base, eventType: 'pr_merged', externalId: `mr-${m.iid}`, cycleTimeHours: cycle, occurredAt: m.merged_at });
   } else if (m.state === 'closed' && m.closed_at) {

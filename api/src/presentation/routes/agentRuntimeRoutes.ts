@@ -42,6 +42,7 @@ import { parseBody } from './requestBody';
 // The host doors (agentHostRoutes) report into the same coordinator and open PRs
 // through the same helper, so both doors read ONE body contract.
 import { DispatchResultReport, PullRequestBody } from './agentHostRoutes.schemas';
+import { bumpBoardLive } from '../../application/swimlane/boardReads';
 
 type RuntimeEnv = {
   AGENT_HOST_RELAY?: AgentHostRelayNamespace;
@@ -93,6 +94,7 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
       .returning();
 
     if (!claimed) return c.json({ dispatch: null }); // lost the race
+    await bumpBoardLive(tenantId, c.env as Env);
 
     // Resolve the repo the agent should code against (default repo of the
     // task's project), so the browser worker can clone/edit/push via the proxy.
@@ -150,6 +152,7 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(agentDispatches.id, dispatchId), eq(agentDispatches.tenantId, tenantId)))
       .returning();
     if (!row) return c.json({ error: 'Dispatch not found' }, 404);
+    await bumpBoardLive(tenantId, c.env as Env);
     return c.json({ ok: true });
   });
 

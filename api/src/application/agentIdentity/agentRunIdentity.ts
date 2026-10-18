@@ -17,6 +17,7 @@ import {
 import type { Db } from '../../infrastructure/database/connection';
 import { scopedToTenant, acrossTenants } from '../../infrastructure/database/tenantScope';
 import { selectAgentRelease } from '../../domain/agentIdentity/releaseSelection';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface FrozenAgentDefinition {
   id: string;
@@ -129,7 +130,7 @@ export async function ensureAgentRunIdentity(
   await db.insert(agentRunPrincipals).values({
     tenantId: args.tenantId, executionId: args.executionId,
     agentDefinitionVersionId: frozen?.id ?? null, issuedBy: args.issuedBy,
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    expiresAt: new Date(Date.now() + DAY_MS),
   }).onConflictDoNothing();
   const [principal] = await db.select({ id: agentRunPrincipals.id }).from(agentRunPrincipals).where(and(
     eq(agentRunPrincipals.tenantId, args.tenantId), eq(agentRunPrincipals.executionId, args.executionId),

@@ -20,19 +20,19 @@ export function readMessagesCached(
 ) {
   return cachedChatRead(
     env, 'messages',
-    { chatId, userId, messages: true, variant: `${limit}:${afterSeq ?? '-'}` },
+    { tenantId, chatId, userId, messages: true, variant: `${limit}:${afterSeq ?? '-'}` },
     () => getMessages(db, chatId, tenantId, userId, limit, afterSeq),
     isNotError,
   );
 }
 
 export function listMembersCached(env: Env | undefined, db: Db, chatId: number, tenantId: number, userId: string) {
-  return cachedChatRead(env, 'members', { chatId, userId }, () => listMembers(db, chatId, tenantId, userId), isNotError);
+  return cachedChatRead(env, 'members', { tenantId, chatId, userId }, () => listMembers(db, chatId, tenantId, userId), isNotError);
 }
 
 export function listAgentsCached(env: Env, db: Db, tenantId: number, chatId: number, userId: string) {
   return cachedChatRead(
-    env, 'agents', { chatId, userId },
+    env, 'agents', { tenantId, chatId, userId },
     () => new ChatTicketService(db, env).listAgents(tenantId, chatId, userId),
     isNotError,
   );

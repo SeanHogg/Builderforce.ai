@@ -14,13 +14,13 @@
 
 import { useTranslations } from 'next-intl';
 import {
-  agentHosts,
   membersApi,
   type AgentHost,
   type MemberScorecard,
   type DoraRollup,
   type DisciplineRollup,
 } from '@/lib/builderforceApi';
+import { readAgentHosts } from '@/lib/dashboardReads';
 import { listMyAgents } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
 import { listTeams, type TeamSummary } from '@/lib/teams';
@@ -50,7 +50,7 @@ interface AgentsData {
 function useAgents() {
   return useSharedSource<AgentsData>('wf:agents', async () => {
     const [hosts, cloud] = await Promise.all([
-      agentHosts.list().catch(() => [] as AgentHost[]),
+      readAgentHosts().catch(() => [] as AgentHost[]),
       listMyAgents().catch(() => [] as PublishedAgent[]),
     ]);
     return { hosts: Array.isArray(hosts) ? hosts : [], cloud: Array.isArray(cloud) ? cloud : [] };

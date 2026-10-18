@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { auditApi, type AuditEvent } from '@/lib/builderforceApi';
 import { usePanelTask } from '@/hooks/usePanelTask';
-import { downloadText } from '@/lib/download';
+import { downloadText, toCsv } from '@/lib/download';
 import { RoleGate } from '@/components/RoleGate';
 import { useFormat } from '@/i18n/useFormat';
 
@@ -46,12 +46,6 @@ const td: React.CSSProperties = {
   padding: '8px 10px', fontSize: 'var(--font-size-small)', color: 'var(--text-primary)',
   borderBottom: '1px solid var(--border-subtle)', verticalAlign: 'top',
 };
-
-/** One CSV line, RFC 4180 quoting — a metadata blob with commas or quotes stays one cell. */
-function csvCell(value: string | number | null | undefined): string {
-  const s = value == null ? '' : String(value);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 
 export function WorkspaceAuditLogPanel() {
   const t = useTranslations('security');
@@ -90,10 +84,9 @@ export function WorkspaceAuditLogPanel() {
 
   const exportCsv = () => {
     const header = ['id', 'createdAt', 'eventType', 'userId', 'resourceType', 'resourceId', 'metadata'];
-    const lines = [header.join(','), ...events.map((e) => [
-      e.id, e.createdAt, e.eventType, e.userId, e.resourceType, e.resourceId, e.metadata,
-    ].map(csvCell).join(','))];
-    downloadText(lines.join('\n'), `audit-log-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
+    const rows = events.map((e) => [e.id, e.createdAt, e.eventType, e.userId, e.resourceType, e.resourceId, e.metadata]);
+    // Minimal quoting keeps a metadata blob with commas or quotes in ONE cell without noising every id.
+    downloadText(toCsv(header, rows, { quote: 'minimal', eol: '\n' }), `audit-log-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
   };
 
   const from = events.length ? offset + 1 : 0;

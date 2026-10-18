@@ -15,6 +15,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { professionalReferences, referenceShares } from '../../infrastructure/database/schema';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
+import { DAY_MS } from '../../domain/shared/time';
 
 export type ReferenceStatus = 'draft' | 'requested' | 'confirmed' | 'declined';
 
@@ -202,7 +203,7 @@ export class ReferenceService {
     const owned = new Set((await this.list(userId)).map((r) => r.id));
     const referenceIds = input.referenceIds.filter((id) => owned.has(id));
     const expiresAt = input.expiresInDays
-      ? new Date(Date.now() + Math.min(365, Math.max(1, input.expiresInDays)) * 86_400_000)
+      ? new Date(Date.now() + Math.min(365, Math.max(1, input.expiresInDays)) * DAY_MS)
       : null;
     const token = crypto.randomUUID().replace(/-/g, '');
     const [row] = await this.db

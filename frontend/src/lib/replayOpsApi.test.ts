@@ -4,8 +4,9 @@ import { REPLAY_PATHS } from '@builderforce/interaction-contract';
 /** The operator client: every path from `REPLAY_PATHS`, every call web-authenticated. */
 
 const transport = vi.hoisted(() => ({ apiRequest: vi.fn() }));
-vi.mock('./apiClient', () => transport);
-vi.mock('./auth', () => ({ getStoredWebToken: () => 'web-token' }));
+vi.mock('./apiClient', () => ({
+  adminRequest: (path: string, init: object = {}) => transport.apiRequest(path, { ...init, auth: 'web' }),
+}));
 
 import { replayOpsApi } from './replayOpsApi';
 

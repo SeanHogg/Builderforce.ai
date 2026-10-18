@@ -26,6 +26,7 @@
  * There is no second finding path and no second severity scale.
  */
 import { makeWebFinding, type ScanContext, type WebFinding } from './WebSecurityScanner';
+import { DAY_MS } from '../../domain/shared/time';
 
 /**
  * One peer certificate as a Node TLS socket describes it. Field names deliberately
@@ -169,7 +170,7 @@ export function matchesCertificateHost(host: string, cert: PeerCertificateDescri
 export function certificateDaysRemaining(cert: PeerCertificateDescription, now: Date): number | null {
   const expiry = Date.parse(cert.valid_to);
   if (Number.isNaN(expiry)) return null;
-  return Math.floor((expiry - now.getTime()) / 86_400_000);
+  return Math.floor((expiry - now.getTime()) / DAY_MS);
 }
 
 /** Certificate authority label for a finding body — issuer O, else CN, else "unknown". */

@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useOptionalAuth } from '@/lib/AuthContext';
 import { fetchPointsSummary, type PointsSummary } from '@/lib/pointsApi';
-import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
+import { createSharedResource } from '@/lib/useSharedResource';
 
 /**
  * The shared points snapshot — one fetch behind every points surface.
@@ -23,22 +21,14 @@ import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@
 const POINTS_TTL_MS = 60_000;
 const POINTS_CACHE_KEY = 'points:summary';
 
-const subscribers = new Set<(s: PointsSummary | null) => void>();
+const points = createSharedResource<PointsSummary>({
+  cacheKey: POINTS_CACHE_KEY,
+  ttlMs: POINTS_TTL_MS,
+  fetcher: () => fetchPointsSummary(),
+});
 
-export function fetchSharedPointsSummary(): Promise<PointsSummary | null> {
-  return getOrSetClientCached(POINTS_CACHE_KEY, () => fetchPointsSummary(), { ttlMs: POINTS_TTL_MS })
-    .then((data) => {
-      subscribers.forEach((fn) => fn(data));
-      return data;
-    })
-    // A failed read must not pin "no points" for a minute — leave the cache alone
-    // so the next mount retries.
-    .catch(() => null);
-}
-
-export function invalidatePoints(): void {
-  invalidateClientCache(POINTS_CACHE_KEY);
-}
+export const fetchSharedPointsSummary = points.fetchShared;
+export const invalidatePoints = points.invalidate;
 
 export interface UsePointsResult {
   summary: PointsSummary | null;
@@ -48,24 +38,6 @@ export interface UsePointsResult {
 }
 
 export function usePoints(): UsePointsResult {
-  const hasTenant = useOptionalAuth()?.hasTenant ?? false;
-  const [summary, setSummary] = useState<PointsSummary | null>(
-    readClientCached<PointsSummary>(POINTS_CACHE_KEY, POINTS_TTL_MS) ?? null,
-  );
-
-  useEffect(() => {
-    if (!hasTenant) return;
-    let active = true;
-    const notify = (s: PointsSummary | null) => { if (active) setSummary(s); };
-    subscribers.add(notify);
-    void fetchSharedPointsSummary().then(notify);
-    return () => { active = false; subscribers.delete(notify); };
-  }, [hasTenant]);
-
-  const refresh = useCallback(async () => {
-    invalidatePoints();
-    await fetchSharedPointsSummary();
-  }, []);
-
-  return { summary: hasTenant ? summary : null, refresh };
+  const { data, refresh } = points.use();
+  return { summary: data, refresh };
 }

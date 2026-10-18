@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { initialsOf } from '@/lib/initials';
 
 /** Deterministic accent from a name (theme-token hues, readable in both themes). */
 const HUES = ['var(--coral-bright)', 'var(--cyan-bright)', 'var(--violet-bright, var(--violet-bright))', 'var(--amber-bright, var(--amber-bright))', 'var(--emerald-bright, var(--emerald-bright))'];
@@ -6,9 +7,6 @@ function accentFor(name: string): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return HUES[h % HUES.length];
-}
-function initials(name: string): string {
-  return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
 }
 
 /**
@@ -106,7 +104,7 @@ export function VideoTile({
               fontWeight: 800, fontSize: expanded ? 34 : 20,
             }}
           >
-            {initials(name)}
+            {initialsOf(name)}
           </div>
         </div>
       )}

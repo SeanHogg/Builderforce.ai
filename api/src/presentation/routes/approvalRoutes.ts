@@ -97,7 +97,7 @@ function buildApprovalAuth(db: Db): MiddlewareHandler<ApprovalHonoEnv> {
     // legitimately does here. Widening it to the reads would let a host key page
     // through the tenant's whole approval queue, which it never could before.
     if (c.req.method === 'POST' && Number.isInteger(agentHostIdParam) && agentHostIdParam > 0 && apiKey) {
-      const agentHost = await verifyAgentHostApiKey(db, agentHostIdParam, apiKey);
+      const agentHost = await verifyAgentHostApiKey(db, agentHostIdParam, apiKey, c.env);
       if (!agentHost) return c.text('Unauthorized', 401);
       c.set('tenantId', agentHost.tenantId);
       c.set('approvalAgentHostId', agentHost.id);

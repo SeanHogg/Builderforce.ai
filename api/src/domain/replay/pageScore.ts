@@ -21,6 +21,7 @@ import type {
   ReplayPageSeoFacts,
 } from '@builderforce/interaction-contract';
 import type { PageBehaviour, PageVitals } from './prescriptions/pageFacts';
+import { clampScore } from '../shared/numbers';
 
 export interface PageScoreWeights {
   conversion: number;
@@ -54,19 +55,18 @@ export interface PageScoreFacts {
   vitals: PageVitals;
 }
 
-const clamp = (n: number): number => Math.max(0, Math.min(100, n));
 const round = (n: number): number => Math.round(n);
 
 function conversionScore(f: PageScoreFacts): number | null {
   if (f.behaviour.sessions < PAGE_SCORE_MIN_SESSIONS || f.site.sessions <= 0 || f.site.conversions <= 0) return null;
   const pageRate = f.behaviour.conversions / f.behaviour.sessions;
   const siteRate = f.site.conversions / f.site.sessions;
-  return round(clamp(50 * (pageRate / siteRate)));
+  return round(clampScore(50 * (pageRate / siteRate)));
 }
 
 function frustrationScore(f: PageScoreFacts): number | null {
   if (f.behaviour.sessions < PAGE_SCORE_MIN_SESSIONS) return null;
-  return round(clamp(100 * (1 - f.behaviour.frustrated / f.behaviour.sessions)));
+  return round(clampScore(100 * (1 - f.behaviour.frustrated / f.behaviour.sessions)));
 }
 
 /** The on-page SEO checks, as data. */
@@ -115,7 +115,7 @@ function accessibilityScore(f: PageScoreFacts): number | null {
   if (!f.a11y) return null;
   const a = f.a11y;
   const penalty = (count: number, p: { each: number; max: number }) => Math.min(p.max, count * p.each);
-  return round(clamp(100
+  return round(clampScore(100
     - penalty(a.contrastFailures.length, A11Y_PENALTIES.contrast)
     - penalty(a.smallTapTargets.length, A11Y_PENALTIES.tapTarget)
     - penalty(a.missingLabels.length, A11Y_PENALTIES.label)

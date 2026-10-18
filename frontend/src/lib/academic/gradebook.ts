@@ -20,6 +20,7 @@
  * and an exam board needs the second in week 14.
  */
 
+import { toCsv } from '../download';
 import {
   gradeFor, passMark,
   type GradeBand,
@@ -251,21 +252,15 @@ export function atRiskLearners(matrix: GradebookMatrix, bands: readonly GradeBan
  * entire row's marks one column to the left.
  */
 export function gradebookCsv(matrix: GradebookMatrix, stats: GradebookStats): string {
-  const cell = (value: unknown): string => `"${String(value ?? '').replace(/"/g, '""')}"`;
   const header = ['ref', 'name', ...matrix.columns, 'running %', 'final %', 'grade', 'missing'];
-  const lines = [header.map(cell).join(',')];
-  for (const row of matrix.rows) {
-    lines.push([
-      row.ref, row.label,
-      ...row.cells.map((value) => (value == null ? '' : value)),
-      row.runningPercent ?? '', row.finalPercent, row.grade, row.missing.join('; '),
-    ].map(cell).join(','));
-  }
-  lines.push('');
-  lines.push([cell('mean'), cell(stats.mean ?? '')].join(','));
-  lines.push([cell('median'), cell(stats.median ?? '')].join(','));
-  lines.push([cell('pass rate %'), cell(stats.passRate)].join(','));
-  return lines.join('\n');
+  const rows = matrix.rows.map((row) => [
+    row.ref, row.label,
+    ...row.cells,
+    row.runningPercent ?? '', row.finalPercent, row.grade, row.missing.join('; '),
+  ]);
+  // The empty row is the blank separator line before the summary figures.
+  const summary = [[], ['mean', stats.mean ?? ''], ['median', stats.median ?? ''], ['pass rate %', stats.passRate]];
+  return toCsv(header, [...rows, ...summary], { eol: '\n' });
 }
 
 // ---------------------------------------------------------------------------

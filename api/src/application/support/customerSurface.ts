@@ -46,6 +46,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
 import { StatusError } from '../../domain/shared/errors';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** `support_articles.status` — editorial. */
 export const ARTICLE_STATUSES = ['draft', 'published', 'archived'] as const;
@@ -321,7 +322,7 @@ export async function shouldPrompt(
   if (!widget.questionSetId) return { prompt: false, reason: 'widget has no question set', widget: summary };
   if (lastRespondedAt === null) return { prompt: true, reason: 'never asked', widget: summary };
 
-  const elapsedDays = (now.getTime() - lastRespondedAt.getTime()) / 86_400_000;
+  const elapsedDays = (now.getTime() - lastRespondedAt.getTime()) / DAY_MS;
   return elapsedDays >= widget.cooldownDays
     ? { prompt: true, reason: 'cooldown elapsed', widget: summary }
     : { prompt: false, reason: `asked ${Math.floor(elapsedDays)}d ago, cooldown is ${widget.cooldownDays}d`, widget: summary };

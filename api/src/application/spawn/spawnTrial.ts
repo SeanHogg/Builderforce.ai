@@ -38,8 +38,8 @@ import {
 } from './spawnMembership';
 import { spawnParentUrl } from './spawnParentLink';
 import { spawnWallet } from './spawnWallet';
+import { DAY_MS } from '../../domain/shared/time';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /** What the account page and the desktop app show about the trial. */

@@ -22,6 +22,7 @@ import { projects, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { projectsListVersionKey } from '../project/projectsListCache';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface TaskCounts {
   total: number;
@@ -47,7 +48,7 @@ export async function computeTaskCounts(db: Db, tenantId: number, projectId?: nu
     eq(projects.isIdeStorage, false),
     projectId != null ? eq(tasks.projectId, projectId) : undefined,
   );
-  const since = new Date(Date.now() - RECENT_WINDOW_DAYS * 86_400_000);
+  const since = new Date(Date.now() - RECENT_WINDOW_DAYS * DAY_MS);
   const [[agg], recent] = await Promise.all([
     db
       .select({

@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { activityApi, type ActivityActorType, type ActivityLogEvent } from '@/lib/builderforceApi';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { initialsOf } from '@/lib/initials';
 
 /**
  * Unified activity / audit trail — the tenant-wide, append-only stream of "who did
@@ -81,12 +82,6 @@ function readModelProvenance(metadata: unknown): ModelProvenance | null {
 function shortModel(model: string): string {
   const tail = model.split('/').pop() ?? model;
   return tail.length > 34 ? `${tail.slice(0, 33)}…` : tail;
-}
-
-function initials(name: string | null): string {
-  if (!name) return '·';
-  const parts = name.trim().split(/\s+/).slice(0, 2);
-  return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || name[0]?.toUpperCase() || '·';
 }
 
 function useRelativeTime() {
@@ -221,7 +216,7 @@ export function AuditTrailPanel() {
                     border: `1px solid color-mix(in srgb, ${as.color} 40%, transparent)`,
                   }}
                 >
-                  {initials(e.actorName)}
+                  {initialsOf(e.actorName, '·')}
                 </span>
 
                 <div style={{ minWidth: 0, flex: 1 }}>

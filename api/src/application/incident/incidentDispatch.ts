@@ -10,8 +10,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * so we dispatch straight against it with an `incidentTriage` payload marker — the
  * exact shape securityDispatch uses for audits.
  */
-import { and, eq } from 'drizzle-orm';
-import { ideAgents } from '../../infrastructure/database/schema';
+import { findBuiltinAgentId } from '../agent/builtinAgentRef';
 import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import { stampExecutionAuthority, systemInitiated } from '../runtime/executionAuthority';
 import { buildRuntimeService } from '../../buildRuntimeService';
@@ -25,16 +24,7 @@ import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
  * ide_agents row marked builtin_kind='incident_manager' — stable across a rename.
  */
 export async function findTenantIncidentManagerRef(db: Db, tenantId: number): Promise<string | null> {
-  const [row] = await db
-    .select({ id: ideAgents.id })
-    .from(ideAgents)
-    .where(and(
-      eq(ideAgents.tenantId, tenantId),
-      eq(ideAgents.status, 'active'),
-      eq(ideAgents.builtinKind, 'incident_manager'),
-    ))
-    .limit(1);
-  return row?.id ?? null;
+  return findBuiltinAgentId(db, tenantId, 'incident_manager');
 }
 
 /**

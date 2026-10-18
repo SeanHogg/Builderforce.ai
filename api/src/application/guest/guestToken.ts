@@ -20,7 +20,7 @@
  * membership cannot be claimed by editing a query string: the combined per-room
  * turn allowance and the room's WebSocket relay both trust `rid` and nothing else.
  */
-import { base64UrlDecode, base64UrlEncode, base64UrlToBytes } from '../../domain/shared/bytes';
+import { base64UrlDecode, randomBytes, base64UrlEncode, base64UrlToBytes } from '../../domain/shared/bytes';
 import { hmacBase64Url, hmacVerify } from '../../infrastructure/crypto/hmac';
 
 export const GUEST_TOKEN_PREFIX = 'bfguest_';
@@ -135,7 +135,7 @@ export function isValidRoomCode(value: unknown): value is string {
 
 /** Mint a fresh, unguessable room code (CSPRNG-backed). */
 export function newRoomCode(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(ROOM_CODE_LENGTH));
+  const bytes = randomBytes(ROOM_CODE_LENGTH);
   let out = '';
   for (const byte of bytes) out += ROOM_CODE_ALPHABET[byte % ROOM_CODE_ALPHABET.length];
   return out;

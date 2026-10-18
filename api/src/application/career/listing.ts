@@ -31,7 +31,7 @@
  */
 
 import { displaySkill, isSkillToken, parseResume, tokenSet } from '@builderforce/creation-canvas-contract';
-import { clampScore } from '../../domain/shared/numbers';
+import { clampScoreRounded } from '../../domain/shared/numbers';
 
 /**
  * What a person is open to.
@@ -129,8 +129,6 @@ export interface ListingReadiness {
   instruction: string;
 }
 
-const clamp = (n: number): number => clampScore(Math.round(n));
-
 /**
  * Grade a listing SEPARATELY per channel, because the two demand sides read different
  * fields and a listing can be excellent for one and invisible to the other.
@@ -154,7 +152,7 @@ export function listingReadiness(listing: CareerListing): ListingReadiness {
     if (!listing.hourlyRateCents) improving.push('No rate published. A rate filters out the wrong enquiries before they cost a conversation.');
     if (!text(listing.avatarKey)) improving.push('No profile picture — skipped in a grid of listings that have one.');
     if (text(listing.bio).length < 120) improving.push('The bio is under 120 characters and reads as unfinished.');
-    channels.push({ channel: 'services', score: clamp(100 - blocking.length * 22 - improving.length * 7), blocking, improving });
+    channels.push({ channel: 'services', score: clampScoreRounded(100 - blocking.length * 22 - improving.length * 7), blocking, improving });
   }
 
   if (seeksEmployment(listing.seeking)) {
@@ -169,7 +167,7 @@ export function listingReadiness(listing: CareerListing): ListingReadiness {
     if (!listing.workMode) improving.push('No work mode (remote / hybrid / onsite) — the first filter most employers apply.');
     if (listing.noticePeriodDays == null) improving.push('No notice period, so "when could you start?" is still a question rather than an answer.');
     if (!text(listing.location) && !text(listing.timezone)) improving.push('Neither location nor timezone — an employer cannot judge overlap or right-to-work.');
-    channels.push({ channel: 'employment', score: clamp(100 - blocking.length * 20 - improving.length * 6), blocking, improving });
+    channels.push({ channel: 'employment', score: clampScoreRounded(100 - blocking.length * 20 - improving.length * 6), blocking, improving });
   }
 
   if (!channels.length) {

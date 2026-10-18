@@ -112,7 +112,7 @@ describe('readAttention', () => {
     expect(callsFor(executions)).toBe(1); // the just-loaded entry answers every fresh read
   });
 
-  it('shares the tenant part across users and caches each user's unread map separately', async () => {
+  it('shares the tenant part across users and caches each user unread map separately', async () => {
     const { env } = fakeEnv();
     const rows = new Map<unknown, unknown[]>([...EMPTY_ROWS, [chatReadState, []]]);
     const { db, callsFor } = fakeDb(rows);
@@ -128,7 +128,7 @@ describe('readAttention', () => {
     expect(callsFor(chatReadState)).toBe(2); // idle polls cost nothing
   });
 
-  it('a chat read re-reads only that user's unread; a new message re-reads the tenant's', async () => {
+  it('a chat read re-reads only that user unread; a new message re-reads the tenant unread', async () => {
     const { env } = fakeEnv();
     const rows = new Map<unknown, unknown[]>([...EMPTY_ROWS, [chatReadState, []]]);
     const { db, callsFor } = fakeDb(rows);

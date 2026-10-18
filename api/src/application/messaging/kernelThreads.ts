@@ -191,8 +191,15 @@ export async function memberThreadIds(
   memberKind: ThreadMember['memberKind'] = 'user',
 ): Promise<string[]> {
   if (tenantIds.length === 0) return [];
-  const rows = await db.select({ objectId: memberships.objectId, updatedAt: memberships.updatedAt })
+  // One join: the thread narrowing happens BEFORE the limit, so a person with many
+  // non-thread memberships (boards, projects) no longer crowds their threads out of it.
+  const rows = await db.select({ refId: objects.refId })
     .from(memberships)
+    .innerJoin(objects, and(
+      eq(objects.id, memberships.objectId),
+      inArray(objects.tenantId, [...tenantIds]),
+      eq(objects.kind, 'thread'),
+    ))
     .where(and(
       inArray(memberships.tenantId, [...tenantIds]),
       eq(memberships.memberKind, memberKind),
@@ -201,14 +208,7 @@ export async function memberThreadIds(
     ))
     .orderBy(desc(memberships.updatedAt))
     .limit(limit);
-  if (rows.length === 0) return [];
-  const objectRows = await db.select({ refId: objects.refId }).from(objects)
-    .where(and(
-      inArray(objects.tenantId, [...tenantIds]),
-      inArray(objects.id, rows.map((row) => row.objectId)),
-      eq(objects.kind, 'thread'),
-    ));
-  return objectRows.map((row) => row.refId);
+  return rows.map((row) => row.refId);
 }
 
 /**

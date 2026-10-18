@@ -29,6 +29,7 @@ import { replayTelemetryDb } from './replayDatabase';
 import { clampDays, filterCacheKey } from './replayReadModel';
 import { compileScopeFilter } from './replaySmartEventRules';
 import { scanKeptRecordings, type KeptScanRow } from './replayKeptScan';
+import { DAY_MS } from '../../domain/shared/time';
 
 const TTL = { kvTtlSeconds: 300, l1TtlMs: 30_000 };
 /** Nodes the flow keeps (the fold trims the long tail and says so in its totals). */
@@ -71,7 +72,7 @@ export async function replayFlow(
   return getOrSetCached(env, keys.flow(days, filterCacheKey(input.filter)), async () => {
     const { where } = await compileScopeFilter(env, db, scope, input.filter);
     const scan = await scanKeptRecordings(replayTelemetryDb(env, db), scope, {
-      since: new Date((input.now ?? new Date()).getTime() - days * 86_400_000),
+      since: new Date((input.now ?? new Date()).getTime() - days * DAY_MS),
       where,
     });
     const conversions: VisitorFlowConversion[] = [];

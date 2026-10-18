@@ -18,7 +18,7 @@
  */
 
 import { displaySkill, isSkillToken, parseResume, skillGroupOf, tokenCounts, tokenSet } from '@builderforce/creation-canvas-contract';
-import { clampScore } from '../../domain/shared/numbers';
+import { clampScoreRounded } from '../../domain/shared/numbers';
 
 export interface KeywordOverlap {
   /** Skill keywords the posting names that the résumé also contains. */
@@ -45,8 +45,6 @@ export interface JobMatch {
   };
   instruction: string;
 }
-
-const clamp = (n: number): number => clampScore(Math.round(n));
 
 /**
  * The single overlap measurement every consumer in this module shares.
@@ -83,7 +81,7 @@ export function compareResumeToJob(resumeText: string, jobText: string): JobMatc
     byAreaMap.set(area, entry);
   }
   const byArea = [...byAreaMap.entries()]
-    .map(([area, v]) => ({ area, required: v.required, matched: v.matched, coverage: clamp((v.matched / v.required) * 100) }))
+    .map(([area, v]) => ({ area, required: v.required, matched: v.matched, coverage: clampScoreRounded((v.matched / v.required) * 100) }))
     .sort((a, b) => b.required - a.required);
 
   // With no recognisable skill in the posting there is nothing to measure; say so with a
@@ -92,7 +90,7 @@ export function compareResumeToJob(resumeText: string, jobText: string): JobMatc
   const contextPenalty = Math.min(12, missingContext.length * 1.5);
   const score = skillCoverage === null
     ? 50
-    : clamp(skillCoverage * 88 + Math.min(12, resume.skillTokens.length * 0.6) - contextPenalty);
+    : clampScoreRounded(skillCoverage * 88 + Math.min(12, resume.skillTokens.length * 0.6) - contextPenalty);
 
   return {
     score,
@@ -163,7 +161,7 @@ export function tailorResume(resumeText: string, jobText: string): TailorPlan {
       return {
         text: bullet.text,
         hits,
-        score: clamp(hits.length * 25 + (bullet.quantified ? 20 : 0) + (bullet.strongOpener ? 10 : 0)),
+        score: clampScoreRounded(hits.length * 25 + (bullet.quantified ? 20 : 0) + (bullet.strongOpener ? 10 : 0)),
       };
     })
     .sort((a, b) => b.score - a.score);

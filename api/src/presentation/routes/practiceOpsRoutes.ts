@@ -145,26 +145,15 @@ import {
   ToolCallBody,
   WidgetBody,
 } from './practiceOpsRoutes.schemas';
-
-const rowId = (raw: string): number => {
-  const id = Number(raw);
-  if (!Number.isFinite(id) || id <= 0) throw new BookingError('That is not an id.', 400);
-  return Math.floor(id);
-};
-
-const when = (s: string | null | undefined): Date | undefined => {
-  if (!s) return undefined;
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) throw new BookingError('That is not a date.', 400);
-  return d;
-};
+import { rowId, whenOrUndefined } from '../../domain/shared/coerce';
+import { requireTenantId } from '../middleware/tenantContext';
 
 export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
   const manager = requireRole(TenantRole.MANAGER);
-  const tenant = (c: { get: (k: string) => unknown }) => c.get('tenantId') as number;
+  const tenant = (c: { get: (k: string) => unknown }) => requireTenantId(c);
   const who = async (c: Parameters<typeof resolveActorFromContext>[2] & { env: unknown }) =>
     resolveActorFromContext(c.env as Env, db, c);
 
@@ -202,8 +191,8 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.get('/booking/services/:id/busy', async (c) => {
-    const from = when(c.req.query('from'));
-    const to = when(c.req.query('to'));
+    const from = whenOrUndefined(c.req.query('from'));
+    const to = whenOrUndefined(c.req.query('to'));
     if (!from || !to) throw new BookingError('from and to are required', 400);
     return Response.json({ busy: await busyIntervals(db, tenant(c), rowId(c.req.param('id')), from, to) });
   });
@@ -216,7 +205,7 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/booking/reservations', async (c) => {
     const body = await parseBody(c, ReserveBody);
-    const startsAt = when(body.startsAt);
+    const startsAt = whenOrUndefined(body.startsAt);
     const serviceId = body.serviceId;
     if (!startsAt || serviceId == null) throw new BookingError('serviceId and startsAt are required', 400);
     return Response.json(await reserve(db, c.env as Env, tenant(c), await who(c), {
@@ -273,7 +262,7 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       companyRef: body.companyRef ?? null,
       retainerCents: body.retainerCents ?? null,
       ...(body.currency != null ? { currency: body.currency } : {}),
-      startedAt: when(body.startedAt) ?? null,
+      startedAt: whenOrUndefined(body.startedAt) ?? null,
     }), { status: 201 });
   });
 
@@ -451,7 +440,7 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/people/cohorts', manager, async (c) => {
     const body = await parseBody(c, CohortBody);
-    const cohortStartedAt = when(body.cohortStartedAt);
+    const cohortStartedAt = whenOrUndefined(body.cohortStartedAt);
     if (!cohortStartedAt) throw new PeopleInsightError('cohortStartedAt is required', 400);
     return Response.json(await recordCohort(db, tenant(c), {
       cohortKey: String(body.cohortKey ?? ''),
@@ -588,7 +577,7 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
   });
 
   router.get('/support/widgets/:key/should-prompt', async (c) => {
-    const last = when(c.req.query('lastRespondedAt'));
+    const last = whenOrUndefined(c.req.query('lastRespondedAt'));
     return Response.json(await shouldPrompt(db, tenant(c), c.req.param('key'), last ?? null));
   });
 

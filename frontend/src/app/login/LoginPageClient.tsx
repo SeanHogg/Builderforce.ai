@@ -3,36 +3,35 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { BrandLockup } from '@/components/BrandLockup';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { getStoredWebToken, readIntent, registerHref, resumeIntent, workspaceChoiceHref } from '@/lib/auth';
 import { getSsoStartUrl, resolveAndSelectTenant, requestMagicLink } from '@/lib/auth/credentials';
 import { isPasskeyCancellation, isPasskeySupported } from '@/lib/passkeys';
 import { Icon } from '@/components/ui/Icon';
-import { ThemeToggleButton } from '@/components/ThemeToggleButton';
 import OAuthButtons from '@/components/OAuthButtons';
-import MarketingFaq from '@/components/marketing/MarketingFaq';
 import PasswordInput from '@/components/PasswordInput';
 import EmailVerificationStep from '@/components/account/EmailVerificationStep';
-import MarketingVisual from '@/components/account/MarketingVisual';
-import { resolveAuthPanel } from '@/lib/content/auth';
+import { AuthShell } from '@/components/account/AuthShell';
+import {
+  AuthErrorBanner, AuthFormCard, AuthSubmitButton,
+  authFocusIn, authFocusOut, authInputStyle, authLabelStyle,
+} from '@/components/account/AuthFormParts';
+import { useAuthAttempt } from '@/components/account/useAuthAttempt';
 import { ssoDiscoveryApi } from '@/lib/builderforceApi';
-import { faultMessage } from '@/lib/apiClient';
 export default function LoginPageClient() {
   const router = useRouter();
   const t = useTranslations('login');
-  const tRoot = useTranslations();
   const searchParams = useSearchParams();
   const { login, loginWithPasskey, isAuthenticated, hasTenant } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, attempt, isBusy } = useAuthAttempt();
+  const isLoading = isBusy('password');
+  const passkeyLoading = isBusy('passkey');
+  const magicLinkLoading = isBusy('magicLink');
   const [magicLinkSent, setMagicLinkSent] = useState(false);
-  const [magicLinkLoading, setMagicLinkLoading] = useState(false);
-  const [passkeyLoading, setPasskeyLoading] = useState(false);
   // Resolved on the client only: `isPasskeySupported()` reads `window`, and a
   // button rendered on the server that then disappears is a layout shift on the
   // one screen where a shift reads as something going wrong.
@@ -111,11 +110,9 @@ export default function LoginPageClient() {
     });
   }, [isAuthenticated, hasTenant, isLoading, router, searchParams]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setIsLoading(true);
-    try {
+    return attempt('password', async () => {
       const res = await login(email, password);
       if (res.needsVerification) {
         setPendingEmail(res.email);
@@ -123,11 +120,7 @@ export default function LoginPageClient() {
         return;
       }
       await finishAndRedirect();
-    } catch (err) {
-      setError(faultMessage(err, t('loginFailed')));
-    } finally {
-      setIsLoading(false);
-    }
+    }, t('loginFailed'));
   };
 
   /**
@@ -136,135 +129,48 @@ export default function LoginPageClient() {
    * step the credential makes unnecessary. When the field happens to be filled we
    * pass it, which narrows the browser's prompt to that account's keys.
    */
-  const handlePasskey = async () => {
-    setError(null);
-    setPasskeyLoading(true);
-    try {
-      await loginWithPasskey(email || undefined);
-      await finishAndRedirect();
-    } catch (err) {
-      // Dismissing the system prompt is a choice, not a failure to report.
-      if (!isPasskeyCancellation(err)) {
-        setError(faultMessage(err, t('passkeyFailed')));
-      }
-    } finally {
-      setPasskeyLoading(false);
-    }
-  };
+  // Dismissing the system prompt is a choice, not a failure to report.
+  const handlePasskey = () => attempt('passkey', async () => {
+    await loginWithPasskey(email || undefined);
+    await finishAndRedirect();
+  }, t('passkeyFailed'), isPasskeyCancellation);
 
-  const handleMagicLink = async () => {
+  const handleMagicLink = () => {
     if (!email) { setError(t('enterEmailFirst')); return; }
-    setError(null);
-    setMagicLinkLoading(true);
-    try {
+    return attempt('magicLink', async () => {
       const next = resumeIntent(readIntent(searchParams));
       await requestMagicLink(email, next);
       setMagicLinkSent(true);
-    } catch (err) {
-      setError(faultMessage(err, t('magicLinkFailed')));
-    } finally {
-      setMagicLinkLoading(false);
-    }
+    }, t('magicLinkFailed'));
   };
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    background: 'var(--bg-elevated)',
-    color: 'var(--text-primary)',
-    border: '1px solid var(--border-subtle)',
-    borderRadius: 'var(--radius-lg)',
-    padding: '11px 14px',
-    fontSize: '0.9rem',
-    outline: 'none',
-    transition: 'border-color 0.2s, box-shadow 0.2s',
-    fontFamily: 'var(--font-body)',
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: 'var(--text-secondary)',
-    marginBottom: 6,
-    fontFamily: 'var(--font-display)',
-    letterSpacing: '0.04em',
-    textTransform: 'uppercase',
-  };
-
-  const focusIn = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.currentTarget.style.borderColor = 'var(--coral-bright)';
-    e.currentTarget.style.boxShadow = '0 0 0 3px var(--surface-coral-soft)';
-  };
-  const focusOut = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.currentTarget.style.borderColor = 'var(--border-subtle)';
-    e.currentTarget.style.boxShadow = 'none';
-  };
-
-  const marketing = resolveAuthPanel(tRoot, 'login');
+  const signUpHref = registerHref(searchParams.get('next') ? resumeIntent(readIntent(searchParams)) : '', searchParams.get('intent') ?? undefined);
 
   return (
-    <>
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)', position: 'relative', zIndex: 1 }}>
-      {/* Nav */}
-      <nav style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-        borderBottom: '1px solid var(--border-subtle)',
-        background: 'color-mix(in srgb, var(--bg-surface) 90%, transparent)',
-        backdropFilter: 'blur(16px)',
-        padding: '0 24px',
-      }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <BrandLockup href="/" label="Builderforce.ai" size={28}>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
-              Builderforce.ai
-            </span>
-          </BrandLockup>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <ThemeToggleButton />
-            <Link href={registerHref(searchParams.get('next') ? resumeIntent(readIntent(searchParams)) : '', searchParams.get('intent') ?? undefined)} style={{
-              padding: '7px 16px', borderRadius: 'var(--radius-lg)',
-              background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: 'var(--text-on-accent)', textDecoration: 'none',
-              fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.875rem',
-            }}>
-              {t('navSignUp')}
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Split-panel layout: form left, marketing right */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', minHeight: 'calc(100vh - 60px)', alignItems: 'start' }} className="auth-split-grid">
-        {/* LEFT PANEL — form */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', minHeight: 'calc(100vh - 60px)' }}>
-        <div style={{ width: '100%', maxWidth: 400 }}>
-          {/* Heading */}
-          <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
-              {t('heading')}
-            </h1>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              {t('subtitle')}
-            </p>
-          </div>
-
-          {/* Feature pills */}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 28 }}>
-            {[t('pillLora'), t('pillRegistry'), t('pillEval')].map(f => (
-              <span key={f} style={{
-                fontSize: '0.75rem', fontWeight: 600,
-                background: 'var(--surface-coral-soft)',
-                color: 'var(--coral-bright)',
-                border: '1px solid var(--border-accent)',
-                borderRadius: 'var(--radius-full)', padding: '4px 12px',
-                fontFamily: 'var(--font-display)',
-              }}>{f}</span>
-            ))}
-          </div>
-
+    <AuthShell
+      navAction={
+        <Link href={signUpHref} style={{
+          padding: '7px 16px', borderRadius: 'var(--radius-lg)',
+          background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+          color: 'var(--text-on-accent)', textDecoration: 'none',
+          fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.875rem',
+        }}>
+          {t('navSignUp')}
+        </Link>
+      }
+      heading={t('heading')}
+      subtitle={t('subtitle')}
+      pills={[t('pillLora'), t('pillRegistry'), t('pillEval')]}
+      panel="login"
+      visual="standard"
+      faqHeading={t('commonQuestions')}
+      footer={<>
+        {t('noAccount')}{' '}
+        <Link href={signUpHref} style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
+          {t('signUpLink')}
+        </Link>
+      </>}
+    >
           {pendingEmail ? (
             <EmailVerificationStep
               email={pendingEmail}
@@ -274,18 +180,10 @@ export default function LoginPageClient() {
             />
           ) : (
           <>
-          {/* Glass card form */}
-          <div style={{
-            background: 'var(--surface-card)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-xl)',
-            padding: '32px 28px',
-            backdropFilter: 'blur(12px)',
-            boxShadow: '0 16px 48px var(--shadow-coral-soft)',
-          }}>
+          <AuthFormCard>
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
-                <label htmlFor="email" style={labelStyle}>{t('emailLabel')}</label>
+                <label htmlFor="email" style={authLabelStyle}>{t('emailLabel')}</label>
                 <input
                   id="email"
                   type="email"
@@ -294,10 +192,10 @@ export default function LoginPageClient() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder={t('emailPlaceholder')}
-                  style={inputStyle}
+                  style={authInputStyle}
                   required
-                  onFocus={focusIn}
-                  onBlur={focusOut}
+                  onFocus={authFocusIn}
+                  onBlur={authFocusOut}
                 />
               </div>
               {ssoLabel && (
@@ -327,7 +225,7 @@ export default function LoginPageClient() {
               )}
 
               <div>
-                <label htmlFor="password" style={labelStyle}>{t('passwordLabel')}</label>
+                <label htmlFor="password" style={authLabelStyle}>{t('passwordLabel')}</label>
                 <PasswordInput
                   id="password"
                   autoComplete="current-password"
@@ -335,38 +233,15 @@ export default function LoginPageClient() {
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  style={inputStyle}
+                  style={authInputStyle}
                 />
               </div>
 
-              {error && (
-                <div style={{ background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', fontSize: '0.875rem' }}>
-                  {error}
-                </div>
-              )}
+              <AuthErrorBanner message={error} />
 
-              <button
-                type="submit"
-                disabled={isLoading || !email || !password}
-                style={{
-                  width: '100%',
-                  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                  color: 'var(--text-on-accent)',
-                  border: 'none',
-                  borderRadius: 'var(--radius-lg)',
-                  padding: '13px',
-                  fontFamily: 'var(--font-display)',
-                  fontWeight: 700,
-                  fontSize: '0.95rem',
-                  cursor: isLoading ? 'wait' : 'pointer',
-                  opacity: (isLoading || !email || !password) ? 0.5 : 1,
-                  transition: 'opacity 0.2s, transform 0.2s, box-shadow 0.2s',
-                  boxShadow: '0 6px 20px var(--shadow-coral-mid)',
-                  letterSpacing: '0.02em',
-                }}
-              >
+              <AuthSubmitButton disabled={isLoading || !email || !password} busy={isLoading}>
                 {isLoading ? t('signingIn') : t('submit')}
-              </button>
+              </AuthSubmitButton>
             </form>
 
             {passkeyAvailable && (
@@ -426,100 +301,10 @@ export default function LoginPageClient() {
                 </button>
               )}
             </div>
-          </div>
+          </AuthFormCard>
           </>
           )}
 
-          <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>
-            {t('noAccount')}{' '}
-            <Link href={registerHref(searchParams.get('next') ? resumeIntent(readIntent(searchParams)) : '', searchParams.get('intent') ?? undefined)} style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
-              {t('signUpLink')}
-            </Link>
-          </p>
-        </div>
-        </div>
-
-        {/* RIGHT PANEL — marketing banner (hidden on mobile via CSS) */}
-        <aside className="auth-marketing-panel" style={{
-          display: 'none', /* overridden by media query */
-          flexDirection: 'column',
-          justifyContent: 'center',
-          padding: '48px 40px',
-          background: 'var(--surface-card)',
-          borderLeft: '1px solid var(--border-subtle)',
-        }}>
-          <div className="auth-marketing-content">
-            <span style={{
-              display: 'inline-block', marginBottom: 12,
-              fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-              color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)',
-              border: '1px solid var(--border-accent)', borderRadius: 'var(--radius-full)', padding: '4px 12px',
-              fontFamily: 'var(--font-display)',
-            }}>{marketing.eyebrow}</span>
-
-            <MarketingVisual variant="standard" />
-
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
-              {marketing.heading}
-            </h2>
-            <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 24 }}>
-              {marketing.intro}
-            </p>
-
-            {/* Stat cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
-              {marketing.stats.map(s => (
-                <div key={s.id} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Value-prop bullets */}
-            <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {marketing.bullets.map(b => (
-                <li key={b.id} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <span style={{ flexShrink: 0 }} aria-hidden><Icon source={b.icon} size={18} /></span>
-                  <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
-                </li>
-              ))}
-            </ul>
-
-            {/* Comparison quote */}
-            <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 var(--radius-lg) var(--radius-lg) 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-              &ldquo;{marketing.quote}&rdquo;
-            </blockquote>
-
-            {/* FAQ section for GEO citability */}
-            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 20 }}>
-              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                {t('commonQuestions')}
-              </h3>
-              <MarketingFaq items={marketing.faq} />
-            </div>
-          </div>
-        </aside>
-
-        </div>
-      </div>
-
-      {/* Split-panel responsive styles */}
-      <style>{`
-        @media (min-width: 900px) {
-          .auth-split-grid { grid-template-columns: 1fr 1fr !important; }
-          .auth-marketing-panel { display: flex !important; }
-        }
-        .auth-marketing-content { animation: authMarketingFade 0.35s ease; }
-        @keyframes authMarketingFade {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .auth-marketing-content { animation: none; }
-        }
-      `}</style>
-    </div>
-    </>
+    </AuthShell>
   );
 }

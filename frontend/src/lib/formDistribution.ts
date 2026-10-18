@@ -16,6 +16,7 @@ import {
   campaignBlockers, growthApi,
   type Campaign, type CampaignBlocker, type CampaignTransport, type SenderIdentity,
 } from './growthApi';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { mailboxApi } from './mailboxApi';
 import { socialApi, type SocialCampaignBlocker } from './socialApi';
 import { formRecipientUrl } from './formObject';
@@ -58,14 +59,6 @@ export function formCampaignBodyHtml(opts: { title: string; shareUrl: string; na
   const href = opts.named ? '{{formUrl}}' : escapeHtml(opts.shareUrl);
   const fallback = opts.named ? '{{formUrl}}' : escapeHtml(opts.shareUrl);
   return `<p>Please answer <a href="${href}">${title}</a>.</p><p>${fallback}</p>`;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 function invitationMembers(input: SendFormInput): Array<{ email: string; name?: string; attributes?: Record<string, unknown> }> {

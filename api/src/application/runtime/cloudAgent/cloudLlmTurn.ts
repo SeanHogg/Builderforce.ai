@@ -14,7 +14,6 @@ import type { ModelFallbackSurface } from '@builderforce/agent-stall';
 import type { ModelRole, ToolSchema } from '@builderforce/agent-tools';
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
-import { usageSnapshots } from '../../../infrastructure/database/schema';
 import { pricesForCall } from '../../llm/catalogView';
 import { codingFallbackSurface } from '../../llm/codingFallbackSurface';
 import { resolveEvermindCodingRoute } from '../../llm/evermindCodingEvalStore';
@@ -27,8 +26,6 @@ import { byoRoutingOptions } from '../../llm/tenantProxy';
 import { byoVendorIdsFromCredentials, resolveTenantLlmCredentials } from '../../llm/tenantProviderKeyService';
 import { logTrace } from '../../llm/traceLogger';
 import { clampTokenCount, normalizeByoProvider, recordUsageRow } from '../../llm/usageLedger';
-import { reportCaughtError } from '../../observability/caughtErrorReporter';
-import { runTelemetryDatabase } from '../../shared/runTelemetryDatabase';
 import type { RawToolCall } from '../cloudAgentTools';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { notifyExecutionSubscribers } from '../executionEvents';
@@ -59,28 +56,11 @@ export async function recordCloudUsage(
   },
 ): Promise<void> {
   // Clamp at the boundary so a bad-usage turn (NaN/negative tokens) can't poison the
-  // snapshot's context math or the billing ledger — same shared clamp recordUsageRow uses.
+  // billing ledger — same shared clamp recordUsageRow uses. This row is the ONLY per-turn
+  // usage write: the run trace (`readCloudRunUsage`) reads it back by execution id, so a
+  // second `usage_snapshots` copy of the same tokens would only be 100+ MB of duplicates.
   const inputTokens = clampTokenCount(args.inputTokens);
   const outputTokens = clampTokenCount(args.outputTokens);
-  try {
-    await runTelemetryDatabase(db).insert(usageSnapshots).values({
-      tenantId:      args.tenantId,
-      agentHostId:   null,
-      cloudAgentRef: args.cloudAgentRef ?? null,
-      executionId:   args.executionId,
-      sessionKey:    `exec:${args.executionId}`,
-      inputTokens,
-      outputTokens,
-      contextTokens: inputTokens + outputTokens,
-    });
-  } catch (error) {
-    reportCaughtError(error, { source: "application/runtime/cloudAgent/cloudLlmTurn.ts", operation: "recordCloudUsage", context: { logMessage: '[cloud-usage] execution usage snapshot failed', details: {
-      tenantId: args.tenantId,
-      executionId: args.executionId,
-      model: args.model,
-      error,
-    } } });
-  }
   await recordUsageRow(db, env, {
     tenantId:   args.tenantId,
     userId:     null,

@@ -46,6 +46,7 @@ import { isParticipantSatisfied } from '../kanban/participantStates';
 import { expectsCodeDeliverable } from '../manager/evaluateTicketReadiness';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
 import { laneAgentAssignments } from '../swimlane/laneAgentAssignments';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** How bad a violation is. `critical` = autonomy CANNOT complete work in this state. */
 export type WiringSeverity = 'critical' | 'warning' | 'info';
@@ -203,7 +204,7 @@ export async function auditAutonomyWiring(db: Db, args: { tenantId: number }): P
   }));
 
   // ── 3. Are PRs stranded? ──────────────────────────────────────────────────
-  const staleCutoff = new Date(Date.now() - STALE_PR_DAYS * 86_400_000);
+  const staleCutoff = new Date(Date.now() - STALE_PR_DAYS * DAY_MS);
   const [prAgg] = await db
     .select({
       open: sql<number>`count(*) FILTER (WHERE ${pullRequests.status} = 'open')::int`,

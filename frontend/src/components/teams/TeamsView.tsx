@@ -27,6 +27,7 @@ import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { TeamChatButton } from '@/components/brain/TeamChatButton';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { faultMessage } from '@/lib/apiClient';
+import { initialsOf } from '@/lib/initials';
 /**
  * Workforce → Teams. Groups the workforce (agents AND humans) into named teams
  * and attaches a team to projects. Mirrors the other Workforce collection
@@ -69,7 +70,7 @@ const manageIconStyle = (active: boolean): React.CSSProperties => ({
 /** A team's avatar — the uploaded image, or its initials on a tinted disc when
  *  none is set. Shared by the card, the list row, and the manage panel. */
 function TeamAvatar({ name, url, size = 30 }: { name: string; url?: string | null; size?: number }) {
-  const initials = name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
+  const initials = initialsOf(name);
   const box: React.CSSProperties = {
     width: size, height: size, flexShrink: 0, borderRadius: '50%',
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',

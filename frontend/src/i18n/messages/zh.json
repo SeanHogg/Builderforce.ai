@@ -19443,7 +19443,11 @@
     "errorNoCode": "未收到登录代码。请重试。",
     "errorProfile": "无法加载您的账户资料。请重新登录。",
     "popupDoneTitle": "你已登录",
-    "popupDoneBody": "你可以关闭此窗口并返回 Builderforce。"
+    "popupDoneBody": "你可以关闭此窗口并返回 Builderforce。",
+    "magicLinkNoToken": "链接中未找到令牌。请重新申请一个。",
+    "magicLinkInvalid": "魔法链接无效或已过期。",
+    "magicLinkTitle": "链接已过期或无效",
+    "magicLinkVerifying": "正在验证您的魔法链接…"
   },
   "footer": {
     "builtBy": "开发者",

@@ -36,6 +36,7 @@ import { siteCollections, siteTrafficDaily, siteUsers } from '../../infrastructu
 import { getOrSetCached, invalidateCached, type CacheEnv } from '../../infrastructure/cache/readThroughCache';
 import { appsDatabaseOf } from './appsDatabase';
 import { siteForProject, utcDay } from './siteTraffic';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** The windows the UI offers. Anything else is clamped to the default so the
  *  cache keyspace stays bounded (and invalidation can enumerate it). */
@@ -103,7 +104,7 @@ export async function getSiteAudienceSummary(
     async () => {
       const apps = appsDatabaseOf(db);
       // Same window rule as the traffic read model: UTC days back from today.
-      const sinceDay = utcDay(Date.now() - days * 86_400_000);
+      const sinceDay = utcDay(Date.now() - days * DAY_MS);
 
       const [userRows, trafficRows, leadRows] = await Promise.all([
         apps

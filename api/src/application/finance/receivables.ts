@@ -67,6 +67,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { accountHistoryCacheKey, documentLineTotal, setDocumentLines, type BilledLine } from './payables';
 import { chargeableMerchantId } from './merchantAccount';
 import { StatusError } from '../../domain/shared/errors';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** The `purchaseKind` a tenant-invoice payment link stamps; the purchase registry settles it by this name. */
 export const TENANT_INVOICE_KIND = 'tenant_invoice';
@@ -356,7 +357,7 @@ export async function issueInvoice(
   // and the ladder is the feature they actually want.
   const dueAt = explicitDue
     ?? invoice.dueAt
-    ?? new Date(now.getTime() + DEFAULT_PAYMENT_TERM_DAYS * 86_400_000);
+    ?? new Date(now.getTime() + DEFAULT_PAYMENT_TERM_DAYS * DAY_MS);
 
   const { token, tokenHash } = await mintShareToken();
   const documentUrl = invoiceDocumentUrl(env, invoice.reference, token);
@@ -1079,7 +1080,7 @@ export async function invoiceDocument(db: Db, tenantId: number, reference: strin
  */
 export function ageingDays(dueAt: Date | null, now = Date.now()): number {
   if (!dueAt) return 0;
-  return Math.floor((now - dueAt.getTime()) / 86_400_000);
+  return Math.floor((now - dueAt.getTime()) / DAY_MS);
 }
 
 /** The receivables one surface needs at once: the ledger plus each one's ageing,

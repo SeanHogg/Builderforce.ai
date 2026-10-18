@@ -4,7 +4,6 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
-  ideAgents,
   prReconciliationErrors,
   prReconciliationItems,
   prReconciliationRuns,
@@ -27,6 +26,7 @@ import {
 import { githubCooldownFor, githubRetryAfterSeconds } from './githubCredentialCooldown';
 import { ReconciliationError } from './reconciliationError';
 import { ReconciliationRunLedger, type ReconciliationPersistence } from './prReconciliationRunLedger';
+import { findBuiltinAgentId } from '../agent/builtinAgentRef';
 
 type FetchLike = typeof fetch;
 
@@ -327,15 +327,13 @@ export async function runPrTicketReconciliation(
   if (!repo) throw new ReconciliationError('REPOSITORY_NOT_FOUND', 'Repository not found');
   if (repo.provider !== 'github') throw new ReconciliationError('UNSUPPORTED_PROVIDER', 'PR reconciliation currently supports GitHub repositories only');
 
-  const [agent] = await db.select({ id: ideAgents.id }).from(ideAgents).where(and(
-    eq(ideAgents.tenantId, args.tenantId), eq(ideAgents.builtinKind, 'pr_reconciler'), eq(ideAgents.status, 'active'),
-  )).limit(1);
+  const agentId = await findBuiltinAgentId(db, args.tenantId, 'pr_reconciler');
 
   // Nothing is written up front: the ledger buffers the run row, items and errors and
   // writes them in `finish` — for the scheduled sweep only when the run changed something.
   const ledger = new ReconciliationRunLedger(db, {
     tenantId: args.tenantId, projectId: repo.projectId, repoId: repo.id,
-    agentRef: agent?.id ?? null, mode, requestedBy: args.requestedBy ?? null,
+    agentRef: agentId, mode, requestedBy: args.requestedBy ?? null,
     approvedPrNumbers: approved,
   }, args.persist ?? 'always');
   const runId = ledger.runId;

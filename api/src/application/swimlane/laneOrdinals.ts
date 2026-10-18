@@ -18,6 +18,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { boards, swimlanes } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidateBoardLanesCache } from './boardReads';
 
 export type LaneInfo = {
   position: number;
@@ -67,9 +68,12 @@ export async function invalidateSwimlaneOrdinals(env: Env | undefined, projectId
  */
 export async function invalidateBoardLaneOrdinals(env: Env | undefined, db: Db, boardId: string): Promise<void> {
   const [board] = await db
-    .select({ projectId: boards.projectId })
+    .select({ projectId: boards.projectId, tenantId: boards.tenantId })
     .from(boards)
     .where(eq(boards.id, boardId))
     .limit(1);
-  if (board?.projectId != null) await invalidateSwimlaneOrdinals(env, board.projectId);
+  if (!board) return;
+  // The board's cached lane list (`boardReads.ts`) is dropped by the same writers.
+  await invalidateBoardLanesCache(env, board.tenantId, boardId);
+  if (board.projectId != null) await invalidateSwimlaneOrdinals(env, board.projectId);
 }

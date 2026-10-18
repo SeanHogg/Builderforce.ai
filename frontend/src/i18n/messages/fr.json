@@ -19443,7 +19443,11 @@
     "errorNoCode": "Aucun code de connexion reçu. Veuillez réessayer.",
     "errorProfile": "Impossible de charger le profil de votre compte. Veuillez vous reconnecter.",
     "popupDoneTitle": "Vous êtes connecté",
-    "popupDoneBody": "Vous pouvez fermer cette fenêtre et revenir à Builderforce."
+    "popupDoneBody": "Vous pouvez fermer cette fenêtre et revenir à Builderforce.",
+    "magicLinkNoToken": "Aucun jeton trouvé dans le lien. Veuillez en demander un nouveau.",
+    "magicLinkInvalid": "Lien magique invalide ou expiré.",
+    "magicLinkTitle": "Lien expiré ou invalide",
+    "magicLinkVerifying": "Vérification de votre lien magique…"
   },
   "footer": {
     "builtBy": "Conçu par",

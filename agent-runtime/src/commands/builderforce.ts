@@ -4,7 +4,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { confirm, intro, note, outro, password, spinner, text } from "@clack/prompts";
+import { confirm, intro, note, outro, password, select, spinner, text } from "@clack/prompts";
 import { Command } from "commander";
 import {
   initializeBuilderForceAgentsProject,

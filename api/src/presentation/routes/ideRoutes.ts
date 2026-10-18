@@ -6,6 +6,7 @@ import { statusResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import { and, asc, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
+import { recordHit, scopedHitKey } from '../../application/counters/hitCounters';
 import { type Db } from '../../infrastructure/database/connection';
 import { requestDb } from '../../application/shared/dbHandle';
 import {
@@ -1352,10 +1353,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       .where(publicAgentScope(eq(ideAgents.id, agentId), isNotNull(ideAgents.tenantId)))
       .limit(1);
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
-    await db.update(ideAgents).set({ requestCount: sql`${ideAgents.requestCount} + 1`, lastUsedAt: new Date() }).where(and(
-      eq(ideAgents.id, agentId),
-      eq(ideAgents.tenantId, Number(agent.tenant_id)),
-    ));
+    // Buffered, not awaited per request: a pull of a public package is a read, and the
+    // usage counter is applied by the `hit-counters` sweep (request_count + last_used_at).
+    await recordHit(c.env as Env, db, 'agent.package', scopedHitKey(Number(agent.tenant_id), agentId));
     const skills: string[] = Array.isArray(agent.skills) ? agent.skills : JSON.parse(typeof agent.skills === 'string' ? agent.skills : '[]');
     const mambaState = agent.mamba_state ?? null;
     const version = mambaState ? '2.0' : '1.0';

@@ -34,6 +34,7 @@ import { replayTelemetryDb } from './replayDatabase';
 import { clampDays } from './replayReadModel';
 import { rulePredicate, smartEventPredicate } from './replayFilterCompiler';
 import { MAX_SITE_SMART_EVENTS, siteSmartEventRows } from './replaySmartEventRules';
+import { DAY_MS } from '../../domain/shared/time';
 
 const NAME_MAX = 120;
 const MATCH_MAX = 400;
@@ -85,7 +86,7 @@ async function weightedCounts(store: Db, scope: ReplayScope, since: Date, predic
   return predicates.map((_, i) => Math.round(Number((row as Record<string, unknown> | undefined)?.[`c${i}`] ?? 0) || 0));
 }
 
-const sinceOf = (now: Date, days: number) => new Date(now.getTime() - days * 86_400_000);
+const sinceOf = (now: Date, days: number) => new Date(now.getTime() - days * DAY_MS);
 
 /** Built-ins then the site's rules, each with its ≈ count in the window. */
 export async function listSmartEvents(

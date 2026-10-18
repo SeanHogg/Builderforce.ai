@@ -14,7 +14,10 @@
  * (credentials, delivery records, claims, analytics aggregates): the weekly `VACUUM FULL`
  * takes an ACCESS EXCLUSIVE lock, which is only acceptable for a feed whose writer may fail.
  *
- * NOT HERE: `agent_host_sync_history` (declared in the Drizzle schema but no migration ever
+ * NOT HERE: immutable audit tables (execution_claims / execution_claim_evidence, agent_context_contributions,
+ * agent_outbound_inspections, and agent_run_principals whose cascade hits the immutable agent_capability_grants)
+ * are protected by BEFORE UPDATE OR DELETE triggers, so a purge would fail nightly; they are deliberately not swept.
+ * `agent_host_sync_history` (declared in the Drizzle schema but no migration ever
  * created it, so there is nothing to sweep) and `replay_issue_representatives` (no time
  * column; it cascades from `replay_issues` / `replay_recordings`, which ARE swept).
  */
@@ -24,9 +27,7 @@ import { acrossTenants, type TenantOwnedTable } from '../../infrastructure/datab
 import { boundedDelete } from './boundedPurge';
 import type { SweptConnection, SweptTable } from './sweptTables';
 import {
-  agentContextContributions,
   agentInferenceLogs,
-  agentOutboundInspections,
   agentRunPrincipals,
   alertEvents,
   authTokens,
@@ -37,8 +38,6 @@ import {
   deviceAuthorizations,
   emailDeliveryFailures,
   emailOtpChallenges,
-  executionClaimEvidence,
-  executionClaims,
   executionLimits,
   ideTrainingLogs,
   magicLinkTokens,
@@ -135,20 +134,11 @@ export const BOUNDED_TELEMETRY_TABLES: readonly SweptTable[] = [
     rationale: 'Rebuilt per-page density aggregates (screenshots cascade); a page not recomputed for a quarter is not viewed.' }),
   entry({ relation: 'project_insight_events', connections: CORE, table: projectInsightEvents, tenanted: projectInsightEvents, column: projectInsightEvents.createdAt, days: 180, reclaimable: false,
     rationale: 'Project insight signal stream; six months covers the trend lines.' }),
-  entry({ relation: 'agent_context_contributions', connections: CORE, table: agentContextContributions, tenanted: agentContextContributions, column: agentContextContributions.createdAt, days: 90, floor: 14,
-    rationale: 'Per-run context-budget attribution, read while tuning a recent run.' }),
-  entry({ relation: 'agent_outbound_inspections', connections: CORE, table: agentOutboundInspections, tenanted: agentOutboundInspections, column: agentOutboundInspections.createdAt, days: 90, floor: 14,
-    rationale: 'Outbound-content inspection verdicts per run.' }),
   // ── Run telemetry, dual-resident (writers on the operational endpoint, core residue) ──
   entry({ relation: 'usage_snapshots', connections: BOTH, table: usageSnapshots, tenanted: usageSnapshots, column: usageSnapshots.ts, days: 90, floor: 14,
     rationale: 'Host usage gauges and per-run token snapshots; billing reads llm_usage_log.' }),
   entry({ relation: 'run_model_outcomes', connections: BOTH, table: runModelOutcomes, tenanted: runModelOutcomes, column: runModelOutcomes.createdAt, days: 400, reclaimable: false,
     rationale: 'Learned-routing outcome rows; 400d keeps the full-year signal the router weighs.' }),
-  // Evidence before claims only for readability: the FK cascades, so order is not load-bearing.
-  entry({ relation: 'execution_claim_evidence', connections: BOTH, table: executionClaimEvidence, tenanted: executionClaimEvidence, column: executionClaimEvidence.createdAt, days: 400, reclaimable: false,
-    rationale: 'Claim-to-trail citations, expiring with their claims.' }),
-  entry({ relation: 'execution_claims', connections: BOTH, table: executionClaims, tenanted: executionClaims, column: executionClaims.createdAt, days: 400, reclaimable: false,
-    rationale: 'Completion claims; a year of history covers the audit lookback.' }),
   entry({ relation: 'replay_visit_summaries', connections: BOTH, table: replayVisitSummaries, column: replayVisitSummaries.generatedAt, days: 400, reclaimable: false,
     rationale: 'AI summaries of recordings; the recordings themselves go at 90d, this is the 13-month Insights window.' }),
   entry({ relation: 'replay_releases', connections: BOTH, table: replayReleases, tenanted: replayReleases, column: replayReleases.lastSeenAt, days: 400, reclaimable: false,
@@ -173,10 +163,6 @@ export const EXPIRED_CREDENTIAL_TABLES: readonly SweptTable[] = [
     rationale: 'One-time codes, long dead a week after expiry.' }),
   entry({ relation: 'device_authorizations', connections: CORE, table: deviceAuthorizations, tenanted: deviceAuthorizations, column: deviceAuthorizations.expiresAt, days: EXPIRED_GRACE_DAYS, reclaimable: false,
     rationale: 'Device-code grants (CLI / VS Code sign-in); the issued key is encrypted on the row, so leaving expired ones is also a hygiene gap.' }),
-  // Principals cascade to agent_capability_grants and agent_credential_delegations (both
-  // ON DELETE CASCADE), so deleting the principal is the whole job for those two.
-  entry({ relation: 'agent_run_principals', connections: CORE, table: agentRunPrincipals, tenanted: agentRunPrincipals, column: agentRunPrincipals.expiresAt, days: EXPIRED_GRACE_DAYS, reclaimable: false,
-    rationale: 'Per-run scoped identity; all rows were expired. Capability grants and credential delegations cascade with it.' }),
   // execution_limits has no expiry of its own and is keyed by execution, not principal: a row
   // is dead once its run has no live principal. Order-independent — it tests the principal's
   // expiry, not its existence — so it works whether or not the principal is already gone.

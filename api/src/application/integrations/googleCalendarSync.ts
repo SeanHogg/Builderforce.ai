@@ -16,6 +16,7 @@ import type { Env } from '../../env';
 import { memberProfiles } from '../../infrastructure/database/schema';
 import type { PtoBlock } from '../member/ptoWindows';
 import { GOOGLE_OAUTH_ENDPOINTS, providerTokenClient, refreshAccessToken } from '../shared/providerOAuthConnect';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface BusyBlock { start: string; end: string; }
 export interface CalEvent { summary?: string; eventType?: string; start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string }; }
@@ -102,7 +103,7 @@ export async function syncMemberCalendar(
 
   const now = new Date();
   const timeMin = now.toISOString();
-  const timeMax = new Date(now.getTime() + (input.days ?? 14) * 86_400_000).toISOString();
+  const timeMax = new Date(now.getTime() + (input.days ?? 14) * DAY_MS).toISOString();
   const cal = encodeURIComponent(input.calendarId);
 
   const call = async (tok: string) => {

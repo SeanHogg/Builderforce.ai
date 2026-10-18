@@ -66,6 +66,7 @@ import { concludeCeremonySession } from './concludeCeremony';
 import { notifyCeremonyOpened } from './ceremonyNotifier';
 import { ensureCeremonyMeeting } from './ceremonyMeeting';
 import type { Env } from '../../env';
+import { DAY_MS, HOUR_MS } from '../../domain/shared/time';
 
 /** Max schedules processed per sweep — bounds work per cron tick. */
 const SWEEP_LIMIT = 25;
@@ -154,7 +155,7 @@ export function parseParticipants(raw: string | null | undefined): CeremonyRoste
  * via another writer, so the sweep never trusts the stored value.
  */
 export function computeNextCeremonyRun(cron: string, timezone: string, now: Date): Date {
-  const fallback = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const fallback = new Date(now.getTime() + DAY_MS);
   try {
     return nextCronTime(cron, now, timezone) ?? fallback;
   } catch {
@@ -372,7 +373,7 @@ export interface CeremonyReapResult {
  * rather than a double-close.
  */
 export async function runCeremonyReaper(env: Env, db: Db, now = new Date()): Promise<CeremonyReapResult> {
-  const cutoff = new Date(now.getTime() - MAX_SESSION_HOURS * 3_600_000);
+  const cutoff = new Date(now.getTime() - MAX_SESSION_HOURS * HOUR_MS);
 
   const stale = await db
     .select()

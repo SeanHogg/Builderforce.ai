@@ -33,6 +33,8 @@ import { activityLog, metricFacts, objects } from '../../infrastructure/database
 import type { Env } from '../../env';
 import { DOMAINS, type Domain } from './ObjectRegistry';
 import { activityDatabase, getActivityLog, type ActivityLogRow } from '../activity/activityLog';
+import { limitParam } from '../../domain/shared/boundedInt';
+import { DAY_MS, WEEK_MS } from '../../domain/shared/time';
 
 /**
  * The roster as data (PRD 20 §3, §7).
@@ -148,8 +150,8 @@ const metricsKey = (t: number, d: string, days: number) => `kernel:domain:${t}:$
 const rosterKey = (t: number) => `kernel:domain:${t}:roster`;
 
 const MAX_LIMIT = 200;
-const clamp = (n: number | undefined, def: number) =>
-  !n || n < 1 ? def : Math.min(Math.floor(n), MAX_LIMIT);
+const clampLimit = (n: number | undefined, def: number) =>
+  !n || n < 1 ? def : limitParam(n, def, MAX_LIMIT);
 
 /** Drop every cached read for a domain. Called after any write into it. */
 export async function invalidateDomain(env: Env, tenantId: number, domain: Domain): Promise<void> {
@@ -171,7 +173,7 @@ export async function getRosterSummary(db: Db, env: Env, tenantId: number): Prom
     env,
     rosterKey(tenantId),
     async () => {
-      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const since = new Date(Date.now() - WEEK_MS);
 
       const [counts, events] = await Promise.all([
         db
@@ -236,7 +238,7 @@ export async function getDomainItems(
   domain: Domain,
   opts: { kind?: string; limit?: number } = {},
 ) {
-  const limit = clamp(opts.limit, 50);
+  const limit = clampLimit(opts.limit, 50);
   const key = `${itemsKey(tenantId, domain, limit)}:${opts.kind ?? 'all'}`;
   return getOrSetCached(env, key, async () => {
     const where = [
@@ -268,7 +270,7 @@ export async function getDomainActivity(
   domain: Domain,
   limit?: number,
 ): Promise<ActivityLogRow[]> {
-  const page = await getActivityLog(env, db, tenantId, { domain, limit: clamp(limit, 50) });
+  const page = await getActivityLog(env, db, tenantId, { domain, limit: clampLimit(limit, 50) });
   return page.events;
 }
 
@@ -295,7 +297,7 @@ export async function getDomainMetrics(
     async () => {
       const keys = metricsFor(domain);
       if (keys.length === 0) return [];
-      const since = new Date(Date.now() - window * 24 * 60 * 60 * 1000);
+      const since = new Date(Date.now() - window * DAY_MS);
 
       const rows = await db
         .select({

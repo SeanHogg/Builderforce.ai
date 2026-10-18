@@ -22,6 +22,7 @@ import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { getOrSetCached, getCacheVersion, outcomesVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { mean, stdev } from './driftMonitor';
 import type { Env } from '../../env';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface VariantSummary {
   model: string;
@@ -180,7 +181,7 @@ export async function evaluateVariant(
   const ver = await getCacheVersion(env, outcomesVersionKey(params.tenantId));
   const key = `variant-eval:${params.tenantId}:${params.baseModel}:${params.candidateModel}:${params.actionType ?? '*'}:${windowDays}:${ver}`;
   return getOrSetCached(env, key, async () => {
-    const since = new Date(now.getTime() - windowDays * 86_400_000);
+    const since = new Date(now.getTime() - windowDays * DAY_MS);
     const [base, candidate] = await Promise.all([
       scoresForModel(db, params.tenantId, params.baseModel, params.actionType, since),
       scoresForModel(db, params.tenantId, params.candidateModel, params.actionType, since),

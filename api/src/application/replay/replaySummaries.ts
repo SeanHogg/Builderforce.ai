@@ -35,6 +35,7 @@ import { clampDays, filterCacheKey, toRecordingSummary } from './replayReadModel
 import { compileScopeFilter } from './replaySmartEventRules';
 import { takeReplayAiBudget } from './replayAiBudget';
 import { recordReplayTrace, REPLAY_TRACE_VERBS } from './replayTrace';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** Recordings a segment summary reads. */
 export const SEGMENT_SAMPLE = 30;
@@ -147,7 +148,7 @@ async function segmentSample(env: Env, db: Db, scope: ReplayScope, days: number,
     .where(and(
       eq(replayRecordings.tenantId, scope.tenantId),
       eq(replayRecordings.siteId, scope.siteId),
-      gte(replayRecordings.startedAt, new Date(Date.now() - days * 86_400_000)),
+      gte(replayRecordings.startedAt, new Date(Date.now() - days * DAY_MS)),
       where,
     ))
     .orderBy(desc(frustrated), desc(replayRecordings.startedAt))

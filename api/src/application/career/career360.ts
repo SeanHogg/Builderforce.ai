@@ -17,7 +17,7 @@
  */
 
 import { SKILL_GROUPS, displaySkill, isSkillToken, parseResume, tokenSet } from '@builderforce/creation-canvas-contract';
-import { clampScore } from '../../domain/shared/numbers';
+import { clampScoreRounded } from '../../domain/shared/numbers';
 
 export interface RoleProfile {
   id: string;
@@ -77,8 +77,6 @@ export interface Career360Targets {
   instruction: string;
 }
 
-const clamp = (n: number): number => clampScore(Math.round(n));
-
 /** Rank every declared destination by what the person can already evidence. */
 export function suggestTargets(resumeText: string, limit = 6): Career360Targets {
   const resume = parseResume(resumeText);
@@ -89,7 +87,7 @@ export function suggestTargets(resumeText: string, limit = 6): Career360Targets 
     const adjacentHave = role.adjacent.filter((token) => have.has(token));
     const coreShare = role.core.length ? coreHave.length / role.core.length : 0;
     const adjacentShare = role.adjacent.length ? adjacentHave.length / role.adjacent.length : 0;
-    const readiness = clamp(coreShare * 74 + adjacentShare * 26);
+    const readiness = clampScoreRounded(coreShare * 74 + adjacentShare * 26);
     const missingCore = role.core.filter((token) => !have.has(token));
     return {
       role,
@@ -157,7 +155,7 @@ export function planForTarget(resumeText: string, targetId: string): Career360Pl
   const coreHave = target.core.filter((token) => have.has(token));
   const missingCore = target.core.filter((token) => !have.has(token));
   const missingAdjacent = target.adjacent.filter((token) => !have.has(token));
-  const readiness = clamp(
+  const readiness = clampScoreRounded(
     (target.core.length ? coreHave.length / target.core.length : 0) * 74
     + (target.adjacent.length ? target.adjacent.filter((t) => have.has(t)).length / target.adjacent.length : 0) * 26,
   );

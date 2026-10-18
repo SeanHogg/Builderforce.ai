@@ -46,7 +46,7 @@ export function createMessageRoutes(db: Db): Hono<HonoEnv> {
   r.get('/contacts', async (c) => c.json({ contacts: await service(c).contacts(userId(c)) }));
 
   r.get('/threads', async (c) => {
-    const threads = await service(c).threads(userId(c));
+    const threads = await service(c).threadsCached(userId(c));
     return c.json({ threads, unread: threads.reduce((sum, thread) => sum + thread.unread, 0) });
   });
 

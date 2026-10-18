@@ -1,10 +1,11 @@
 /**
  * Leaf types + helpers shared by RepoSource and the concrete provider clients.
- * This module imports nothing so the clients can depend on it without creating
+ * This module imports nothing but the pure byte helpers so the clients can depend on it without creating
  * a cycle back through the RepoSource barrel (which imports the clients for its
  * factory). Keeping it dependency-free is what stops vitest's module transform
  * from looping during collection.
  */
+import { base64ToBytes } from '../../../domain/shared/bytes';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -60,6 +61,5 @@ export class RepoSourceError extends Error {
 
 /** Decode a base64 payload (provider file contents) as UTF-8 text. */
 export function decodeBase64Utf8(b64: string): string {
-  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
+  return new TextDecoder().decode(base64ToBytes(b64));
 }

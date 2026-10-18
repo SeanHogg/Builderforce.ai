@@ -15,6 +15,7 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  */
 import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
+import { runInDurableObjectScope } from '../../application/shared/requestScope';
 import { executions } from '../database/schema';
 import { scopedToTenant } from '../database/tenantScope';
 import { prepareCloudRun, resolveAgentEngine, markCloudExecutionRunning, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
@@ -101,7 +102,11 @@ export class CloudRunnerDO implements DurableObject {
     this.runtimeService = buildRuntimeService(env, this.db);
   }
 
-  async fetch(request: Request): Promise<Response> {
+  fetch(request: Request): Promise<Response> {
+    return runInDurableObjectScope('CloudRunnerDO', this.env, this.state, () => this.handleFetch(request));
+  }
+
+  private async handleFetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname.endsWith('/start')) {
       const body = (await request.json().catch(() => null)) as StartBody | null;
@@ -158,7 +163,11 @@ export class CloudRunnerDO implements DurableObject {
     await this.state.storage.setAlarm(Date.now());
   }
 
-  async alarm(): Promise<void> {
+  alarm(): Promise<void> {
+    return runInDurableObjectScope('CloudRunnerDO', this.env, this.state, () => this.handleAlarm());
+  }
+
+  private async handleAlarm(): Promise<void> {
     const cursor = (await this.state.storage.get<Cursor>(CURSOR_KEY)) ?? null;
     if (!cursor) return;
 

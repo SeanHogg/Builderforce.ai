@@ -38,6 +38,7 @@ import { proposeSlots } from '../calendar/attendeeAvailability';
 import { withinWindows, isBusy } from '../calendar/availabilitySolver';
 import { loadDeclaredAvailability, loadAllBusy } from '../calendar/attendeeAvailability';
 import type { Env } from '../../env';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface OfferedSlot { startISO: string; endISO: string }
 
@@ -131,7 +132,7 @@ export async function offerInterviewSlots(
   if (!row.objectId) return { error: 'This interview has no canvas object to share; open it on a board first.' };
 
   const fromMs = input.fromMs ?? Date.now();
-  const toMs = input.toMs ?? fromMs + 14 * 86_400_000;
+  const toMs = input.toMs ?? fromMs + 14 * DAY_MS;
   const durationMinutes = Math.min(480, Math.max(5, Math.round(input.durationMinutes || 30)));
 
   const slots = await proposeSlots(db, env, input.tenantId, input.panelRefs, {
@@ -144,7 +145,7 @@ export async function offerInterviewSlots(
 
   const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '');
   const tokenHash = await sha256Hex(token);
-  const expiresAt = new Date(Date.now() + Math.max(1, input.linkDays ?? DEFAULT_LINK_DAYS) * 86_400_000);
+  const expiresAt = new Date(Date.now() + Math.max(1, input.linkDays ?? DEFAULT_LINK_DAYS) * DAY_MS);
 
   // Revoke first, then create: an interview must never have two live booking links, and
   // ordering it this way means a failure leaves zero rather than two.

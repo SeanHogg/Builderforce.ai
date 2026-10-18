@@ -17,7 +17,7 @@ import { verifyAgentHostApiKey, type AuthedAgentHost } from '../../infrastructur
 export type { AuthedAgentHost };
 
 /** Verify the host's own API key (an inactive host never authenticates). */
-export function authenticateChatHost(db: Db, agentHostId: number, key: string | null | undefined, env?: Env): Promise<AuthedAgentHost | null> {
+export function authenticateChatHost(db: Db, agentHostId: number, key: string | null | undefined, env: Env): Promise<AuthedAgentHost | null> {
   return verifyAgentHostApiKey(db, agentHostId, key, env);
 }
 

@@ -29,6 +29,7 @@ import {
   type AnalyticsMeasures, type AnalyticsPoint, type AnalyticsPropertyField,
   type AnalyticsProvider, type AnalyticsQuery, type AnalyticsSource,
 } from './analyticsProviders';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** What every caller outside this module sees about a connected property. */
 export interface AnalyticsPropertyView {
@@ -142,7 +143,7 @@ export function analyticsWindowFrom(input: { since?: string | null; until?: stri
   // 28 days is the default because it is four whole weeks — a 30-day window compares
   // five Mondays against four Fridays and makes weekly seasonality look like a trend.
   const days = Number.isFinite(requested) && requested > 0 ? Math.min(Math.round(requested), 365) : 28;
-  return { since: day(new Date(new Date(`${until}T00:00:00Z`).getTime() - days * 86_400_000)), until };
+  return { since: day(new Date(new Date(`${until}T00:00:00Z`).getTime() - days * DAY_MS)), until };
 }
 
 /** Read one property, cached. Errors are RETURNED so one revoked grant does not blank

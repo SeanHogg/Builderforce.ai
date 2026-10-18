@@ -35,7 +35,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { apiRequest, getApiBaseUrl, faultText } from '@/lib/apiClient';
 import styles from '../signature/SignerConsole.module.css';
-import { useFormat } from "@/i18n/useFormat";
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 
 interface PublicInvoiceDocument {
   reference: string;
@@ -60,7 +60,6 @@ interface PublicInvoiceDocument {
  * second source for the same fact.
  */
 export function PublicInvoice() {
-  const fmt = useFormat();
   const t = useTranslations('publicInvoice');
   const locale = useLocale();
   const [invoice, setInvoice] = useState<PublicInvoiceDocument | null>(null);
@@ -112,13 +111,8 @@ export function PublicInvoice() {
       });
   }, [load, token]);
 
-  const money = (value: number, currency: string): string => {
-    try {
-      return fmt.number(value, { style: 'currency', currency });
-    } catch {
-      return `${value.toFixed(2)} ${currency}`;
-    }
-  };
+  const { formatCents } = useMoneyFormat();
+  const money = (value: number, currency: string): string => formatCents(Math.round(value * 100), { currency });
 
   if (loading) {
     return <main className={styles.page}><div className={styles.sheet}><p className={styles.notice}>{t('loading')}</p></div></main>;

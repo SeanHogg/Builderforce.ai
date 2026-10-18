@@ -26,6 +26,7 @@ import {
 } from '../../application/legal/documentTemplates';
 import { sendTemplatedDocument } from '../../application/legal/templateSigning';
 import { parseBody, zJsonObject } from './requestBody';
+import { requireTenantId } from '../middleware/tenantContext';
 
 /** The template's variables arrive as an untyped object because they ARE untyped —
  *  each template declares its own. Validation is the template's own job
@@ -49,7 +50,7 @@ export function createDocumentTemplateRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/:key/send', async (c) => {
     const body = await parseBody(c, zJsonObject);
-    const result = await sendTemplatedDocument(db, c.env as Env, c.get('tenantId') as number, {
+    const result = await sendTemplatedDocument(db, c.env as Env, requireTenantId(c), {
       templateKey: c.req.param('key'),
       values: values(body),
       // Omitted means the signers ARE the parties the document names — the default

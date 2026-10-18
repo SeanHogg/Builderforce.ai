@@ -12,6 +12,8 @@
  * The parts exist so an operator who disagrees with the rank can see WHY, not
  * so the UI has four gauges.
  */
+import { clamp } from '../../domain/shared/numbers';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface LeadScoreInput {
   promptCount: number;
@@ -47,12 +49,9 @@ const ENGAGEMENT_MAX = 30;
 const RECENCY_MAX = 15;
 const CONVERSION_MAX = 15;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
-function clamp(n: number, min: number, max: number): number {
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, Math.round(n)));
-}
+const clampRounded = (n: number, min: number, max: number): number =>
+  clamp(Number.isFinite(n) ? Math.round(n) : min, min, max);
 
 function asMs(value: string | Date | null | undefined): number {
   if (value instanceof Date) return value.getTime();
@@ -77,21 +76,21 @@ export function promptQuality(prompt: string | null): number {
   if (len >= 800) quality -= 3;
   if (/\s/.test(prompt) && len >= 12) quality += 2;
   if (prompt.includes('?')) quality += 2;
-  return clamp(quality, 0, 15);
+  return clampRounded(quality, 0, 15);
 }
 
 function intentPart(input: LeadScoreInput): number {
   const count = Number(input.promptCount) || 0;
   if (count <= 0) return 0;
   const volume = Math.min(25, 8 + count * 5);
-  return clamp(volume + promptQuality(input.lastPrompt), 0, INTENT_MAX);
+  return clampRounded(volume + promptQuality(input.lastPrompt), 0, INTENT_MAX);
 }
 
 function engagementPart(input: LeadScoreInput): number {
   const visits = Math.min(12, (Number(input.visitCount) || 0) * 4);
   const chats = Math.min(12, (Number(input.guestChatCount) || 0) * 3);
   const tools = Math.min(6, (Number(input.toolRuns) || 0) * 2);
-  return clamp(visits + chats + tools, 0, ENGAGEMENT_MAX);
+  return clampRounded(visits + chats + tools, 0, ENGAGEMENT_MAX);
 }
 
 function recencyPart(input: LeadScoreInput): number {
@@ -120,7 +119,7 @@ export function scoreLead(input: LeadScoreInput): LeadScore {
     conversion: conversionPart(input),
   };
   return {
-    total: clamp(parts.intent + parts.engagement + parts.recency + parts.conversion, 0, 100),
+    total: clampRounded(parts.intent + parts.engagement + parts.recency + parts.conversion, 0, 100),
     parts,
   };
 }

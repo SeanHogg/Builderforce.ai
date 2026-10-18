@@ -9,9 +9,9 @@
  *                    `auth:jwt:<sha256(tenantId:userId)>` for the JWT path. The
  *                    optional `v<n>` segment is the cached-VALUE schema version — see
  *                    {@link KEY_CACHE_SCHEMA}.
- * Cached value:      the ResolvedKey envelope — a rejection is cached too, so a
- *                    stranger hammering a dead key costs one DB read, not one per
- *                    request.
+ * Cached value:      the ResolvedKey envelope — a rejection is cached too (for
+ *                    {@link NEGATIVE_TTL_SECONDS} only), so a stranger hammering a
+ *                    dead key costs one DB read a minute, not one per request.
  *
  * Two TTL regimes: `bfk`/`clk` keys use the 365-day TTL and rely on explicit
  * `invalidateKeyCache` calls from every auth-affecting mutation. The `jwt`
@@ -40,7 +40,7 @@
  */
 
 import type { Env } from '../../env';
-import { getOrSetCached, invalidateCached } from '../cache/readThroughCache';
+import { getOrSetCached, invalidateCached, peekCached, setCached } from '../cache/readThroughCache';
 
 /** 365 days. Long-lived because mutations invalidate explicitly. */
 const TTL_SECONDS = 365 * 24 * 60 * 60;
@@ -53,6 +53,15 @@ const TTL_SECONDS = 365 * 24 * 60 * 60;
  * a removed/demoted member keeps cached access for at most this window.
  */
 export const JWT_TTL_SECONDS = 60;
+/**
+ * A REJECTION for a `bfk`/`clk` key lives only this long (60 s is Workers KV's
+ * minimum). The positive TTL is a year because mutations invalidate it; a negative
+ * has no mint hook (a typo'd key stays dead, a freshly provisioned one must not
+ * stay "invalid" for a year) and random-key spraying must not mint year-long KV
+ * entries. Revoke/deactivate still write the rejection through the loader.
+ */
+export const NEGATIVE_TTL_SECONDS = 60;
+const NEGATIVE_L1_TTL_MS = 15_000;
 /** In-isolate freshness. The JWT path's L1 is shorter than its KV TTL so a
  *  membership change never outlives the self-heal window by an L1 hit. */
 const L1_TTL_MS = 30_000;
@@ -105,10 +114,22 @@ export async function resolveKeyCached(
   loader: () => Promise<ResolvedKey>,
 ): Promise<ResolvedKey> {
   const jwt = keyType === 'jwt';
-  return getOrSetCached(env, keyCacheKey(keyType, hash), loader, {
-    kvTtlSeconds: jwt ? JWT_TTL_SECONDS : TTL_SECONDS,
-    l1TtlMs: jwt ? JWT_L1_TTL_MS : L1_TTL_MS,
-  });
+  if (jwt) {
+    return getOrSetCached(env, keyCacheKey(keyType, hash), loader, {
+      kvTtlSeconds: JWT_TTL_SECONDS,
+      l1TtlMs: JWT_L1_TTL_MS,
+    });
+  }
+  // The TTL depends on the loaded VALUE (positive = a year, rejection = seconds),
+  // which getOrSetCached cannot express — so peek, load, then set with the right one.
+  const key = keyCacheKey(keyType, hash);
+  const hit = await peekCached<ResolvedKey>(env, key);
+  if (hit) return hit;
+  const resolved = await loader();
+  await setCached(env, key, resolved, resolved.ok
+    ? { kvTtlSeconds: TTL_SECONDS, l1TtlMs: L1_TTL_MS }
+    : { kvTtlSeconds: NEGATIVE_TTL_SECONDS, l1TtlMs: NEGATIVE_L1_TTL_MS });
+  return resolved;
 }
 
 /**

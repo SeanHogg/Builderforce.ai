@@ -66,6 +66,8 @@ export function priorResearchDigest(history: readonly BrainMessage[]): string | 
     const parsed = parseStepMessage(message.metadata);
     if (!parsed || parsed.step.category !== 'tool') continue;
     const { label, args, result, isError } = parsed.step;
+    // A step whose payloads were both shed (or never recorded) tells the model nothing; listing it as "already done" would only mislead.
+    if (args == null && result == null) continue;
     const fullArgs = args == null ? '' : stableStringify(args);
     // The same call made twice is listed once — its newest result, which is the one
     // that still describes the target.

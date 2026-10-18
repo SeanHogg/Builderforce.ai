@@ -14,6 +14,7 @@
  */
 import type { FetchLike } from '../repos/sources/repoSourceBase';
 import type { ActivitySource, IngestEvent } from './activityIngest';
+import { HOUR_MS } from '../../domain/shared/time';
 
 /** Max pages (×100) of each list to pull in one sync — bounds a first backfill. */
 const BACKFILL_PAGES = 5;
@@ -94,7 +95,7 @@ export function mapPull(p: GhListPull, repoFullName: string, repoName: string): 
   }];
   if (p.merged_at) {
     const cycle = p.created_at
-      ? Math.max(0, Math.round((new Date(p.merged_at).getTime() - new Date(p.created_at).getTime()) / 3_600_000))
+      ? Math.max(0, Math.round((new Date(p.merged_at).getTime() - new Date(p.created_at).getTime()) / HOUR_MS))
       : null;
     out.push({ ...base, eventType: 'pr_merged', externalId: `pr-${p.number}`, cycleTimeHours: cycle, occurredAt: p.merged_at });
   } else if (p.state === 'closed' && p.closed_at) {

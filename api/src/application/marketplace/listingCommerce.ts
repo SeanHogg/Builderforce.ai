@@ -55,6 +55,7 @@ import { userAccount } from '../kernel/ledgerAccount';
 import { capabilityLicenceChanged } from '../tenant/heldCapabilities';
 import { traceCapabilityGranted } from '../replay/replayTrace';
 import { orderRefunderFor } from '../billing/purchaseRegistry';
+import { recordSaleSplit } from '../finance/saleLedger';
 
 
 /** The Stripe `purchaseKind` for a canvas-creation listing bought once. */
@@ -636,33 +637,18 @@ async function creditSeller(db: Db, input: {
   sellerCents: number;
   commissionCents: number;
 }): Promise<void> {
-  await db.insert(ledgerEntries).values([
-    {
-      tenantId: input.sellerTenantId,
-      // The seller's balance is a USER balance, because that is the account the
-      // payout subsystem already pays from (`PayoutAccountService.paidCents`).
-      // A separate 'seller' account would make earned and paid unsubtractable.
-      accountKind: 'user',
-      accountRef: input.sellerRef,
-      denomination: USD_CENTS,
-      amount: String(input.sellerCents),
-      entryKind: 'commission',
-      reference: `mp-sale:${input.orderId}`,
-      memo: `Marketplace sale — ${input.listingName}`,
-      metadata: { source: 'marketplace_listing', orderId: input.orderId },
-    },
-    {
-      tenantId: input.sellerTenantId,
-      accountKind: 'partner',
-      accountRef: 'platform',
-      denomination: USD_CENTS,
-      amount: String(input.commissionCents),
-      entryKind: 'commission',
-      reference: `mp-fee:${input.orderId}`,
-      memo: `Platform fee — ${input.listingName}`,
-      metadata: { source: 'marketplace_listing', orderId: input.orderId },
-    },
-  ]).onConflictDoNothing();
+  await recordSaleSplit(db, {
+    sellerTenantId: input.sellerTenantId,
+    sellerRef: input.sellerRef,
+    referencePrefix: 'mp',
+    saleId: input.orderId,
+    saleIdKey: 'orderId',
+    source: 'marketplace_listing',
+    saleLabel: 'Marketplace sale',
+    subject: input.listingName,
+    sellerCents: input.sellerCents,
+    commissionCents: input.commissionCents,
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@
 import type { Env } from '../../env';
 import { readCookie } from '../../domain/replay/abSplit';
 import type { SiteRecord } from './siteHosting';
+import { randomHex } from '../../domain/shared/bytes';
 
 export const SITE_PREVIEW_PARAM = 'bf_preview';
 export const SITE_PREVIEW_COOKIE = 'bf_preview';
@@ -44,7 +45,7 @@ export interface SitePreviewDecision {
 }
 
 function newToken(): string {
-  return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return randomHex(16);
 }
 
 /** API side: grant a preview of one release. Null when KV is not bound. */

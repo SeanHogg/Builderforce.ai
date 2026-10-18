@@ -4,6 +4,7 @@ import { privacyRequests, tenantMembers, userLegalAcceptances, users } from '../
 import { InternalError } from '../../domain/shared/errors';
 import type { UserId } from '../../domain/shared/types';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { DAY_MS } from '../../domain/shared/time';
 
 /**
  * Data-subject requests (CCPA / GDPR) — the application half of the privacy
@@ -34,7 +35,7 @@ import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
  */
 
 /** Statutory response window we commit to (45 days covers both CCPA and GDPR). */
-const RESPONSE_WINDOW_MS = 45 * 86_400_000;
+const RESPONSE_WINDOW_MS = 45 * DAY_MS;
 
 const ACCOUNT_REQUEST_TYPES = [
   'access', 'correction', 'deletion', 'portability', 'restriction', 'objection', 'opt_out', 'appeal', 'automated_decision_review',

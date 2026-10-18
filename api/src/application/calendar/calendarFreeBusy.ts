@@ -19,6 +19,7 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { getCalendarProvider } from './calendarProviders';
 import { freshAccessToken } from './calendarService';
 import type { BusyInterval } from './availabilitySolver';
+import { HOUR_MS } from '../../domain/shared/time';
 
 /**
  * Busy intervals (epoch-ms) per user ref, unioned across each user's connected
@@ -46,7 +47,7 @@ export async function loadExternalBusy(
   const timeMinISO = new Date(fromMs).toISOString();
   const timeMaxISO = new Date(toMs).toISOString();
   // Hour-bucketed window → a stable cache key (find-a-time uses now→+14d).
-  const winKey = `${Math.floor(fromMs / 3_600_000)}-${Math.floor(toMs / 3_600_000)}`;
+  const winKey = `${Math.floor(fromMs / HOUR_MS)}-${Math.floor(toMs / HOUR_MS)}`;
 
   await Promise.all(conns.map(async (conn) => {
     const provider = getCalendarProvider(conn.provider);

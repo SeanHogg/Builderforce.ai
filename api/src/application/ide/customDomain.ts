@@ -258,7 +258,23 @@ const SITE_DOMAIN_COLUMNS = {
   customDomainVerifiedAt: projectSites.customDomainVerifiedAt,
   customDomainError: projectSites.customDomainError,
   customDomainHostnameId: projectSites.customDomainHostnameId,
+  updatedAt: projectSites.updatedAt,
 } as const;
+
+/** A re-check that found the SAME state is only worth a write once an hour (the sweep
+ *  polls every stuck pending domain each tick; an unchanged row was one UPDATE per
+ *  domain per tick for no new information). */
+const UNCHANGED_REWRITE_MS = 60 * 60_000;
+
+function unchangedRecently(
+  row: { customDomainStatus: string; customDomainError: string | null; customDomainHostnameId: string | null; updatedAt: Date | null },
+  next: { status: string; error: string | null; hostnameId?: string | null },
+): boolean {
+  if (row.customDomainStatus !== next.status) return false;
+  if (row.customDomainError !== next.error) return false;
+  if (next.hostnameId !== undefined && (row.customDomainHostnameId ?? null) !== next.hostnameId) return false;
+  return !!row.updatedAt && Date.now() - row.updatedAt.getTime() < UNCHANGED_REWRITE_MS;
+}
 
 /** Read the current domain state for a project's site. */
 export async function getCustomDomain(
@@ -387,6 +403,7 @@ export async function verifyCustomDomain(
     const detail = proof.found.length
       ? `Found ${proof.found.length} TXT record(s) at ${proof.recordName}, none matching the token.`
       : `No TXT record found at ${proof.recordName} yet. DNS changes can take a few minutes.`;
+    if (unchangedRecently(row, { status: 'pending_dns', error: detail })) return { ok: true, state: toState(row) };
     const [updated] = await apps
       .update(projectSites)
       .set({ customDomainStatus: 'pending_dns', customDomainError: detail, updatedAt: sql`NOW()` })
@@ -418,6 +435,9 @@ export async function verifyCustomDomain(
     }
   }
 
+  if (unchangedRecently(row, { status, error, hostnameId: hostnameId ?? null })) {
+    return { ok: true, state: toState(row) };
+  }
   const [updated] = await apps
     .update(projectSites)
     .set({

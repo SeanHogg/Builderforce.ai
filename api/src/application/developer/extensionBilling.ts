@@ -47,6 +47,7 @@ import { meteredUnits } from './extensionUsage';
 import { recordExtensionSale, usageOccurrence } from './extensionEarnings';
 import { invalidateInstalls } from './extensionRepository';
 import { subscriptionEntitles, meteredChargeCents, planMeters } from './extensionContract';
+import { DAY_MS } from '../../domain/shared/time';
 
 /**
  * How long a metered window runs before it is closed.
@@ -56,7 +57,7 @@ import { subscriptionEntitles, meteredChargeCents, planMeters } from './extensio
  * in February, and inventing one is how a period silently doubles in length.
  */
 const PERIOD_DAYS = 30;
-const PERIOD_MS = PERIOD_DAYS * 24 * 60 * 60 * 1000;
+const PERIOD_MS = PERIOD_DAYS * DAY_MS;
 
 /** Most installs one sweep tick closes. Bounds the cron's subrequest cost. */
 const SWEEP_BATCH = 40;

@@ -119,7 +119,7 @@ interface CandidateTask extends CandidateInputs {
  * entirely in the WHERE clause, which no in-memory test of the sweep can see. Same reason
  * `managedTasksQuery` is split out of the manager pass.
  */
-export function autonomousCandidatesQuery(db: Db, limit: number) {
+function autonomousCandidateWhere(db: Db) {
   // A ticket with a run already in flight cannot be dispatched — the evaluator refuses
   // it — so it must not hold a slot in the bounded window. Rehearsals do not count
   // (`mode = 'live'`), or a dry run would park a ticket out of the window for its whole
@@ -186,6 +186,21 @@ export function autonomousCandidatesQuery(db: Db, limit: number) {
     )),
   );
 
+  return and(
+      eq(tasks.archived, false),
+      // Runnable lanes only — Done/Blocked are excluded here (a blocked ticket waits
+      // on a dependency, not an agent); the lane evaluator gates the rest per ticket.
+      inArray(tasks.status, RUNNABLE_STATUSES),
+      or(isNotNull(tasks.assignedAgentRef), laneStaffed),
+      // The window is a QUEUE, not a leaderboard — see MAX_CANDIDATES_PER_TICK.
+      not(hasLiveRun),
+      // Failed open PRs share one moving base branch. Only its stable head may
+      // consume an agent run; the tail becomes eligible as the head leaves.
+      or(not(hasFailedOpenPr), ownsFailedPrHead),
+    );
+}
+
+export function autonomousCandidatesQuery(db: Db, limit: number) {
   return db
     .select({
       taskId: tasks.id,
@@ -200,18 +215,7 @@ export function autonomousCandidatesQuery(db: Db, limit: number) {
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
-    .where(and(
-      eq(tasks.archived, false),
-      // Runnable lanes only — Done/Blocked are excluded here (a blocked ticket waits
-      // on a dependency, not an agent); the lane evaluator gates the rest per ticket.
-      inArray(tasks.status, RUNNABLE_STATUSES),
-      or(isNotNull(tasks.assignedAgentRef), laneStaffed),
-      // The window is a QUEUE, not a leaderboard — see MAX_CANDIDATES_PER_TICK.
-      not(hasLiveRun),
-      // Failed open PRs share one moving base branch. Only its stable head may
-      // consume an agent run; the tail becomes eligible as the head leaves.
-      or(not(hasFailedOpenPr), ownsFailedPrHead),
-    ))
+    .where(autonomousCandidateWhere(db))
     // Priority-first dispatch: the AI Manager's computed `manager_rank` (highest
     // value × urgency = rank 1) leads, then the raw priority tier, then oldest-waiting
     // as the final tiebreak. Unranked tickets (null rank) sort last so a groomed
@@ -224,6 +228,21 @@ export function autonomousCandidatesQuery(db: Db, limit: number) {
       asc(tasks.updatedAt),
     )
     .limit(limit);
+}
+
+/**
+ * Cheap `LIMIT 1` probe over the SAME predicate as {@link autonomousCandidatesQuery}, with
+ * no ranking: an idle tick (nothing runnable) pays one early-exit lookup instead of the
+ * ranked, limited cross-tenant sort, and stops before any further statement.
+ */
+export async function hasAutonomousCandidates(db: Db): Promise<boolean> {
+  const [row] = await db
+    .select({ one: sql<number>`1` })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(autonomousCandidateWhere(db))
+    .limit(1);
+  return !!row;
 }
 
 /** Run {@link autonomousCandidatesQuery}. */
@@ -255,10 +274,20 @@ export async function runAutonomousExecutionSweep(
   const db = buildDatabase(env);
   const runtimeService = buildRuntimeService(env, db);
 
+  const nowMs = Date.now();
+  if (!(await hasAutonomousCandidates(db))) {
+    // Idle tick: one statement. Still prune the KV memo (no DB) so entries for tickets
+    // that left the window do not outlive it.
+    await (await loadBlockMemo(env)).save(new Set(), nowMs);
+    return {
+      candidates: 0, dispatched: 0, tokenBlockedTenants: 0, pendingUnderBlockedTenants: 0,
+      upgradeEmailsSent: 0, capBlockedTenants: 0, pendingUnderCapBlockedTenants: 0, memoSkipped: 0,
+    };
+  }
+
   const candidates = await loadAutonomousCandidates(db, MAX_CANDIDATES_PER_TICK);
   const byTenant = groupByTenant(candidates);
   const memo = await loadBlockMemo(env);
-  const nowMs = Date.now();
 
   const result: AutonomousSweepResult = {
     candidates: candidates.length,
@@ -273,6 +302,14 @@ export async function runAutonomousExecutionSweep(
 
   for (const [tenantId, tenantCandidates] of byTenant) {
     try {
+      // Memo first: a tenant whose every candidate is still inside its blocked-on-
+      // unchanged-inputs window needs neither the token-gate nor the cloud-cap lookup
+      // (each a statement or more) — nothing would be dispatched either way.
+      if (tenantCandidates.every((c) => memo.isFresh(c.taskId, candidateFingerprint(c), nowMs))) {
+        result.memoSkipped += tenantCandidates.length;
+        continue;
+      }
+
       // Token gate — the ONLY reason to withhold autonomous execution. Fail OPEN on
       // an unknown (a usage-scan error must not silently freeze a tenant's board).
       //

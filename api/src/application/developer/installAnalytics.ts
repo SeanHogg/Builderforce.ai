@@ -71,6 +71,7 @@ import { acrossTenants, scopedToTenant } from '../../infrastructure/database/ten
 import { requirePublisher } from './publishers';
 import { catalogVersion } from './extensionRepository';
 import { REVIEW_SANDBOX_SLUG } from './reviewSandbox';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** How far back the series run. Ninety days is one quarter, which is the unit a
  *  vendor reports their own adoption in. */
@@ -191,7 +192,7 @@ export async function publisherAnalytics(
 
 async function loadPublisherAnalytics(db: Db, tenantId: number): Promise<PublisherAnalytics> {
   const now = new Date();
-  const from = new Date(now.getTime() - ANALYTICS_WINDOW_DAYS * 86_400_000);
+  const from = new Date(now.getTime() - ANALYTICS_WINDOW_DAYS * DAY_MS);
 
   // The publisher's OWN packages — a tenant-scoped read like any other, because
   // a listing belongs to the workspace that published it.

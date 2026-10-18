@@ -26,12 +26,12 @@ import type { Db } from '../../infrastructure/database/connection';
 import { companyKey, computeCapTable, cliffsDueWithin } from '../finance/equity';
 import { runwayReport } from '../finance/runwayReport';
 import type { MetricDef } from './metricRegistry';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** Days inside which a vesting cliff counts as "coming up" on the founder tile. */
 const CLIFF_HORIZON_DAYS = 90;
 
 /** Milliseconds in a day — for turning an ISO date into a UTC day number. */
-const MS_PER_DAY = 86_400_000;
 
 /**
  * The company a founder metric is about.
@@ -130,7 +130,7 @@ export const FOUNDER_METRICS: Record<string, MetricDef> = {
       // A metric is a number by contract, so the date travels as a UTC day
       // number and the frontend formatter turns it back into a date. Storing it
       // as an epoch millisecond would overflow the widget's number formatting.
-      return Math.floor(ms / MS_PER_DAY);
+      return Math.floor(ms / DAY_MS);
     },
   },
 

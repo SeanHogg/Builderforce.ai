@@ -28,6 +28,7 @@ import {
 import { deliverFormInvitations } from '../../application/collection/formInvitations';
 import { headerHints } from '../../application/email/emailLocaleResolver';
 import { parseBody, z, zJsonObject } from './requestBody';
+import { requireTenantId } from '../middleware/tenantContext';
 
 /** A response is keyed by question id; every per-answer rule (required, choice,
  *  audience) belongs to `submitFormResponse`, so this only insists on the map shape. */
@@ -37,7 +38,7 @@ export function createFormRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  const tenant = (c: Context<HonoEnv>) => c.get('tenantId') as number;
+  const tenant = requireTenantId;
 
   /**
    * Publish a form, SEND it, and get its address back.

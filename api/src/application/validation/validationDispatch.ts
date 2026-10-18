@@ -16,6 +16,7 @@
 import { and, eq, isNull, lt, or, sql, ne, inArray } from 'drizzle-orm';
 import { tasks, projects, ideAgents, executions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { findBuiltinAgentId } from '../agent/builtinAgentRef';
 import { dispatchCloudRunForTask } from '../runtime/dispatchCloudRun';
 import { stampExecutionAuthority, systemInitiated } from '../runtime/executionAuthority';
 import { buildRuntimeService } from '../../buildRuntimeService';
@@ -24,9 +25,10 @@ import { TaskStatus, TaskType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { VALIDATOR_REVIEW_LANE_KEY } from './validatorReviewMarker';
+import { HOUR_MS } from '../../domain/shared/time';
 
 /** Re-review a Done item at most this often — one fresh pass per interval. */
-const REVIEW_INTERVAL_MS = 20 * 60 * 60 * 1000; // ~daily, with slack for the cron tick
+const REVIEW_INTERVAL_MS = 20 * HOUR_MS; // ~daily, with slack for the cron tick
 /** Cap Done items reviewed per tenant per sweep so a big backlog can't fan out unbounded. */
 const MAX_REVIEWS_PER_TENANT = 15;
 /** A distinct lane key so the run isn't confused with (or suppressed by) board lane-auto-run.
@@ -40,16 +42,7 @@ const REVIEW_LANE_KEY = VALIDATOR_REVIEW_LANE_KEY;
  * (e.g. to "Alice") without breaking auto-review. Cheap indexed lookup.
  */
 export async function findTenantValidatorRef(db: Db, tenantId: number): Promise<string | null> {
-  const [row] = await db
-    .select({ id: ideAgents.id })
-    .from(ideAgents)
-    .where(and(
-      eq(ideAgents.tenantId, tenantId),
-      eq(ideAgents.status, 'active'),
-      eq(ideAgents.builtinKind, 'validator'),
-    ))
-    .limit(1);
-  return row?.id ?? null;
+  return findBuiltinAgentId(db, tenantId, 'validator');
 }
 
 /** True when the task already has a live (pending/running) execution — don't double-dispatch. */

@@ -31,6 +31,7 @@ import { eq } from 'drizzle-orm';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** One stage of a funnel, with the numbers that localise a loss to it. */
 export interface FunnelStage {
@@ -132,7 +133,7 @@ export async function computeHiringFunnel(
 ): Promise<HiringFunnel> {
   const days = Math.max(1, Math.min(365, Math.floor(opts.days ?? DEFAULT_WINDOW_DAYS)));
   const pipelineRef = opts.pipelineRef ?? null;
-  const since = new Date(Date.now() - days * 86_400_000);
+  const since = new Date(Date.now() - days * DAY_MS);
 
   // ONE grouped read. Grouping by (stage, source) rather than issuing a query per stage
   // is what keeps this O(1) round trips as the funnel gains stages — and the stage list

@@ -55,6 +55,7 @@ import { collectionActions, creationSessionObjects, creationSessions, invoices }
 import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { ageingDays, chaseInvoice } from './receivables';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** One rung: what it is called, when it becomes due, and who it reaches. */
 export interface CollectionRung {
@@ -206,7 +207,7 @@ export async function runCollectionsSweep(env: Env, db: Db = buildDatabase(env),
   // caller that has none. `collection_mode <> 'off'` and a due date are both
   // covered by `idx_invoices_collection`, so this is one range scan.
   const earliestRung = COLLECTION_LADDER[0]?.atDays ?? 0;
-  const horizon = new Date(now.getTime() - earliestRung * 86_400_000);
+  const horizon = new Date(now.getTime() - earliestRung * DAY_MS);
   const candidates = await db
     .select({
       tenantId: invoices.tenantId,

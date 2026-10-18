@@ -26,10 +26,14 @@ export interface UnreadSnapshot {
   total: number;
 }
 
-/** The uncached read: the per-chat map and its total. */
-export async function loadUnread(db: Db, tenantId: number, userId: string): Promise<UnreadSnapshot> {
-  const chatUnread = await unreadCountsForUser(db, tenantId, userId).catch(() => ({} as Record<number, number>));
+async function loadUnreadStrict(db: Db, tenantId: number, userId: string): Promise<UnreadSnapshot> {
+  const chatUnread = await unreadCountsForUser(db, tenantId, userId);
   return { chatUnread, total: Object.values(chatUnread).reduce((a, b) => a + b, 0) };
+}
+
+/** The uncached read (no-env path): a Neon error degrades to "nothing unread" — nothing is cached. */
+export async function loadUnread(db: Db, tenantId: number, userId: string): Promise<UnreadSnapshot> {
+  return loadUnreadStrict(db, tenantId, userId).catch(() => ({ chatUnread: {}, total: 0 }));
 }
 
 export async function readUnreadCached(
@@ -37,5 +41,6 @@ export async function readUnreadCached(
 ): Promise<UnreadSnapshot> {
   const [tenantToken, userToken] = await Promise.all([versionToken(env, unreadTenantKey(tenantId)), versionToken(env, unreadUserKey(tenantId, userId))]);
   const key = `attention:unread:${tenantId}:${userId}:t${tenantToken}:u${userToken}`;
-  return readThroughFresh(env, key, () => loadUnread(db, tenantId, userId), UNREAD_CACHE, fresh);
+  // Strict: an error must propagate so a failure is never cached for the TTL.
+  return readThroughFresh(env, key, () => loadUnreadStrict(db, tenantId, userId), UNREAD_CACHE, fresh);
 }

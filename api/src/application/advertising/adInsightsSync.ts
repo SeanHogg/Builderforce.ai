@@ -36,6 +36,7 @@ import {
 import {
   ADS_CONNECTOR_KEYS, AdsProviderError, isAdNetwork, type AdCampaignRemote, type AdNetwork,
 } from './adsProviders';
+import { DAY_MS } from '../../domain/shared/time';
 
 /**
  * How many days back each sweep re-reads.
@@ -59,7 +60,7 @@ const dayString = (date: Date): string => date.toISOString().slice(0, 10);
 /** The inclusive window a sweep re-reads, ending today. */
 export function restatementWindow(now: Date, days = AD_INSIGHT_RESTATEMENT_DAYS): { since: string; until: string } {
   return {
-    since: dayString(new Date(now.getTime() - days * 86_400_000)),
+    since: dayString(new Date(now.getTime() - days * DAY_MS)),
     until: dayString(now),
   };
 }

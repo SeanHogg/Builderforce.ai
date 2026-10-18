@@ -85,6 +85,7 @@ import { runMonitorSweep } from './application/monitoring/runMonitorSweep';
 import { runAutonomousExecutionSweep } from './application/runtime/autonomousExecutionSweep';
 import { runManagerSweep } from './application/manager/runManagerSweep';
 import { runWebhookRetrySweep } from './application/seams/webhookService';
+import { flushHitCounters } from './application/counters/hitCounters';
 import { runExtensionBillingSweep } from './application/developer/extensionBilling';
 import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
 import { runPrMergeSweep } from './application/repos/prMergeSweep';
@@ -967,6 +968,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env, db }) => {
       const redelivered = await runWebhookRetrySweep(env, Date.now(), { db });
       return redelivered > 0 ? `redelivered=${redelivered}` : null;
+    },
+  },
+  {
+    key: 'hit-counters',
+    cadence: 'frequent',
+    description: 'Apply buffered skill-download, agent-package, enrichment-hit and landing view/conversion counters to Postgres in one statement per kind.',
+    run: async ({ env, db }) => {
+      const applied = await flushHitCounters(env, db);
+      return applied > 0 ? `applied=${applied}` : null;
     },
   },
   {

@@ -26,6 +26,7 @@
 import { avg } from '../shared/stats';
 import { employed } from './orgReview';
 import type { RosterPerson } from './roster';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** Tenure below which a person cannot be fairly rated for a cycle. */
 export const DEFAULT_MIN_TENURE_DAYS = 90;
@@ -128,7 +129,7 @@ export function reviewCycleState(input: {
 
   const rows: ReviewRow[] = roster.map((person) => {
     const tenureDays = person.startedAt
-      ? Math.max(0, Math.round((now.getTime() - Date.parse(person.startedAt)) / 86_400_000))
+      ? Math.max(0, Math.round((now.getTime() - Date.parse(person.startedAt)) / DAY_MS))
       : null;
     const tooNew = tenureDays != null && tenureDays < minTenure;
     const outcome = byPerson.get(person.externalId);

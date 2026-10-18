@@ -34,6 +34,7 @@
  */
 import type { AutoRunReason } from '../swimlane/evaluateAutoRun';
 import type { ReadinessAction } from './evaluateTicketReadiness';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** How long a ticket may sit without a status change before it counts as stalled. */
 export const STALL_AFTER_MS = 24 * 60 * 60_000;
@@ -343,7 +344,7 @@ function classifyStall(input: StallInput): StallDiagnosis {
     return NOT_STALLED('moving', 'Changed status recently — still in motion.');
   }
 
-  const idleDays = Math.floor(input.idleMs / 86_400_000);
+  const idleDays = Math.floor(input.idleMs / DAY_MS);
   const age = idleDays >= 1 ? `${idleDays} day${idleDays === 1 ? '' : 's'}` : 'over a day';
   const stalled = (cause: StallCause, remedy: StallRemedy, detail: string): StallDiagnosis =>
     ({ stalled: true, cause, remedy, detail, escalated: false });

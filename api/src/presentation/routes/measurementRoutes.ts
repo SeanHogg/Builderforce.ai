@@ -36,6 +36,7 @@ import {
   resolveAnalyticsProperty,
 } from '../../application/analytics/analyticsService';
 import { ANALYTICS_DIMENSIONS, type AnalyticsDimension } from '../../application/analytics/analyticsProviders';
+import { requireTenantId } from '../middleware/tenantContext';
 
 const isDimension = (value: unknown): value is AnalyticsDimension =>
   typeof value === 'string' && (ANALYTICS_DIMENSIONS as readonly string[]).includes(value);
@@ -47,7 +48,7 @@ export function createMeasurementRoutes(db: Db): Hono<HonoEnv> {
 
   const ctx = (c: { env: unknown; get: (key: string) => unknown }) => ({
     env: c.env as Env,
-    tenantId: c.get('tenantId') as number,
+    tenantId: requireTenantId(c),
   });
 
   r.get('/sources', async (c) => {

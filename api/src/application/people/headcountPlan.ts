@@ -30,6 +30,7 @@
 import { median, sum } from '../shared/stats';
 import { employed } from './orgReview';
 import { isOpenRequisition, type CompensationBand, type CompensationRecord, type Requisition, type RosterPerson } from './roster';
+import { DAY_MS } from '../../domain/shared/time';
 
 /**
  * Employer cost on top of base pay, as a fraction.
@@ -218,7 +219,7 @@ export function planHeadcount(input: {
       location: req.location,
       source: req.source,
       openedAt: req.openedAt,
-      daysOpen: req.openedAt ? Math.max(0, Math.round((now.getTime() - Date.parse(req.openedAt)) / 86_400_000)) : null,
+      daysOpen: req.openedAt ? Math.max(0, Math.round((now.getTime() - Date.parse(req.openedAt)) / DAY_MS)) : null,
       basis,
       basisDetail,
       baseCents,

@@ -39,12 +39,13 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isSendableEmail, normalizeEmail } from '../shared/dnsVerification';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
 import { randomHex } from '../../domain/shared/bytes';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** How long a one-time code is good for. Long enough to switch to an inbox. */
 export const CODE_TTL_MS = 10 * 60 * 1000;
 
 /** How long a redeemed session lasts before the user signs in again. */
-export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const SESSION_TTL_MS = 30 * DAY_MS;
 
 /** Wrong-code attempts before the request is dead and a new code is needed. */
 export const MAX_CODE_ATTEMPTS = 5;

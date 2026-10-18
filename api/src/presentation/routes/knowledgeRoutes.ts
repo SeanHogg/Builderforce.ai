@@ -1202,7 +1202,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     }
     await db
       .update(marketplaceKnowledge)
-      .set({ installCount: listing.installCount + 1 })
+      .set({ installCount: sql`${marketplaceKnowledge.installCount} + 1` })
       .where(scopedToTenant(marketplaceKnowledge, tenantId, eq(marketplaceKnowledge.id, listingId)));
 
     await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));

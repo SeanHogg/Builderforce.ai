@@ -15,6 +15,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import { onCallRotations, onCallMembers } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
+import { DAY_MS } from '../../domain/shared/time';
 
 export type RotationKind = 'manual' | 'daily' | 'weekly';
 
@@ -26,7 +27,7 @@ export interface OnCallMemberInput {
 
 function dayOfYear(d: Date): number {
   const start = Date.UTC(d.getUTCFullYear(), 0, 0);
-  return Math.floor((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - start) / 86_400_000);
+  return Math.floor((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - start) / DAY_MS);
 }
 function isoWeek(d: Date): number {
   const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -35,7 +36,7 @@ function isoWeek(d: Date): number {
   const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
   const firstDay = (firstThursday.getUTCDay() + 6) % 7;
   firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDay + 3);
-  return 1 + Math.round((date.getTime() - firstThursday.getTime()) / (7 * 86_400_000));
+  return 1 + Math.round((date.getTime() - firstThursday.getTime()) / (7 * DAY_MS));
 }
 
 export class OnCallService {

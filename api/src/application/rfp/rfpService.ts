@@ -39,7 +39,8 @@ import { startArchitectAnalysis } from '../repos/architectRunner';
 import type { TaskService } from '../task/TaskService';
 import { completeJson, jsonSchemaFormat } from '../llm/completeJson';
 import { recordProxyUsage, usageDatabaseOf } from '../llm/usageLedger';
-import { findBuiltinAgentRef, personaDirectiveFor } from './rfpAgents';
+import { findBuiltinAgentRef } from '../agent/builtinAgentRef';
+import { personaDirectiveFor } from './rfpAgents';
 import { computeRfpCostModel, RFP_COST_DEFAULTS } from './rfpCost';
 import { projectRiskRegister } from './rfpRegister';
 import {
@@ -50,8 +51,9 @@ import type {
   RfpScanFreshness, RfpDeepFreshness, BrandPalette,
 } from './types';
 import { loadProjectInTenant } from '../project/projectOwnership';
+import { DAY_MS } from '../../domain/shared/time';
 
-const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+const FIVE_DAYS_MS = 5 * DAY_MS;
 const MILLICENTS_PER_USD = 100_000;
 
 const PORTFOLIO_MATCHES_SCHEMA = jsonSchemaFormat('portfolio_matches', {
@@ -217,7 +219,7 @@ async function ensureDeepAnalysis(
 ): Promise<RfpDeepFreshness> {
   const now = Date.now();
   const ageMs = latestArtifactAt ? now - latestArtifactAt.getTime() : null;
-  const ageDays = ageMs == null ? null : Math.floor(ageMs / (24 * 60 * 60 * 1000));
+  const ageDays = ageMs == null ? null : Math.floor(ageMs / (DAY_MS));
   const lastArtifactAt = latestArtifactAt ? isoDate(latestArtifactAt) : null;
   if (ageMs != null && ageMs <= FIVE_DAYS_MS) {
     return { lastArtifactAt, ageDays, state: 'fresh', runId: null };
@@ -282,7 +284,7 @@ async function ensureFreshScan(
   }
 
   const ageMs = lastScanAt ? now - new Date(lastScanAt).getTime() : null;
-  const ageDays = ageMs == null ? null : Math.floor(ageMs / (24 * 60 * 60 * 1000));
+  const ageDays = ageMs == null ? null : Math.floor(ageMs / (DAY_MS));
   const stale = ageMs == null || ageMs > FIVE_DAYS_MS;
 
   let refreshed = false;

@@ -27,6 +27,7 @@ import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCrede
 import { makeRepoFetch } from '../repos/sources/RepoSource';
 import { createActivitySource, POLLABLE_PROVIDERS } from './activitySourceFactory';
 import { ingestActivityEvents, type ActivityProvider } from './activityIngest';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface RepoActivitySweepResult {
   due: number;
@@ -68,7 +69,7 @@ async function syncRepoActivity(
   );
   if (!source) return null;   // provider not pollable
 
-  const since = repo.lastActivitySyncedAt ?? new Date(now.getTime() - BACKFILL_DAYS * 24 * 3_600_000);
+  const since = repo.lastActivitySyncedAt ?? new Date(now.getTime() - BACKFILL_DAYS * DAY_MS);
   const repoFullName = `${repo.owner}/${repo.repo}`;
 
   const events = await source.fetchSince(since, repoFullName, repo.repo);

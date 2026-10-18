@@ -28,6 +28,7 @@
 
 import { avg, median } from '../shared/stats';
 import type { CompensationRecord, RosterPerson } from './roster';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** Months of history the attrition window looks back over. */
 export const ATTRITION_WINDOW_MONTHS = 12;
@@ -82,7 +83,7 @@ export interface TeamHealthReport {
   instruction: string;
 }
 
-const MONTH_MS = 30.44 * 86_400_000;
+const MONTH_MS = 30.44 * DAY_MS;
 const EVIDENCE_CAP = 12;
 
 const monthsBetween = (from: string | null, to: Date): number | null => {

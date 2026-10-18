@@ -19,6 +19,7 @@ import {
 } from '@builderforce/interaction-contract';
 import { replayRecordings } from '../../infrastructure/database/schema';
 import type { RecordingRow } from './replayRecordingWriter';
+import { DAY_MS } from '../../domain/shared/time';
 
 export const RECORDINGS_PAGE = 50;
 export const ISSUES_PAGE = 50;
@@ -152,7 +153,7 @@ export function toIssueDto(row: IssueRow, stats: { sessions: number; routeSessio
 export function windowDays(now: Date, days: number): string[] {
   const out: string[] = [];
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  for (let i = days - 1; i >= 0; i--) out.push(new Date(today - i * 86_400_000).toISOString().slice(0, 10));
+  for (let i = days - 1; i >= 0; i--) out.push(new Date(today - i * DAY_MS).toISOString().slice(0, 10));
   return out;
 }
 

@@ -17,6 +17,7 @@ import { readToolAuditEvents } from '../../application/runtime/toolAuditRead';
 import { effectiveSkillsForHost } from '../../application/skills/skillAssignmentPort';
 import { listPlatformPersonas } from '../../application/persona/platformPersonaCatalog';
 import { invalidateAgentHostDirectory, listAgentHostDirectory } from '../../application/agentHost/agentHostDirectory';
+import { invalidateTenantPlan } from '../../application/tenant/tenantPlanCache';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   agentHosts,
@@ -62,7 +63,7 @@ import {
 } from '../../application/agentHost/agentHostChannels';
 import { agentDispatches } from '../../infrastructure/database/schema';
 import { taskInTenant } from '../../infrastructure/database/tenantScope';
-import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
+import { AGENT_HOST_STALE_MS, isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { invalidateOnlineAgentHost } from '../../application/llm/hostEgress';
 import { requestApproval } from '../../application/approval/requestApproval';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
@@ -255,18 +256,11 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
   const hashPath = (value: string): Promise<string> => sha256Hex(value.trim().toLowerCase());
 
-  // Worker bindings are the same object for every request in an isolate, so the first
-  // request's `c.env` is safe to keep: the verify below runs from ~40 handlers and two
-  // registered sub-routers that are handed this function without a context.
-  let bindings: Env | undefined;
-  router.use('*', async (c, next) => {
-    bindings = c.env;
-    await next();
-  });
-
   // Hash → shared key-resolution cache → id must match: a host poll costs no database
-  // read (see infrastructure/auth/agentHostKeyLookup).
-  const verifyAgentHostApiKey = (id: number, key?: string) => verifyAgentHostKey(bindings, db, id, key);
+  // read (see infrastructure/auth/agentHostKeyLookup). The request context is passed
+  // explicitly — its `env` carries the cache bindings.
+  const verifyAgentHostApiKey = (c: Context<AgentHostHonoEnv>, id: number, key?: string) =>
+    verifyAgentHostKey(c.env, db, id, key);
 
   /**
    * Extract the agentHost API key from the request.
@@ -313,7 +307,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       return c.json({ error: 'from parameter or X-AgentHost-From header (source agentHost id) is required' }, 400);
     }
 
-    const sourceAgentHost = await verifyAgentHostApiKey(fromId, key);
+    const sourceAgentHost = await verifyAgentHostApiKey(c, fromId, key);
     if (!sourceAgentHost) return c.text('Unauthorized', 401);
 
     const agentHosts = await agentHostService.listAgentHostsForTenant(Number(sourceAgentHost.tenantId));
@@ -450,6 +444,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
           isNull(tenants.defaultAgentHostId),
         ),
       );
+    await invalidateTenantPlan(c.env, tenantId);
 
     return c.json({
       agentHost:   inserted,
@@ -670,7 +665,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.get('/:id/assignment-context', async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key = extractAgentHostKey(c);
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const assignmentContext = await buildAssignmentContext(agentHostId, Number(agentHost.tenantId));
@@ -788,7 +783,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.put('/:id/directories/sync', async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key = extractAgentHostKey(c);
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const body = await parseBody(c, DirectorySyncBody);
@@ -980,7 +975,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHostId = Number(c.req.param('id'));
     let tenantId: number;
 
-    const agentHostFromKey = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    const agentHostFromKey = await verifyAgentHostApiKey(c, agentHostId, extractAgentHostKey(c));
     if (agentHostFromKey) {
       tenantId = agentHostFromKey.tenantId;
     } else {
@@ -1040,7 +1035,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHostId = Number(c.req.param('id'));
     let tenantId: number;
 
-    const agentHostFromKey = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    const agentHostFromKey = await verifyAgentHostApiKey(c, agentHostId, extractAgentHostKey(c));
     if (agentHostFromKey) {
       tenantId = agentHostFromKey.tenantId;
     } else {
@@ -1120,7 +1115,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHostId = Number(c.req.param('id'));
     let tenantId: number;
 
-    const agentHostFromKey = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    const agentHostFromKey = await verifyAgentHostApiKey(c, agentHostId, extractAgentHostKey(c));
     if (agentHostFromKey) {
       tenantId = agentHostFromKey.tenantId;
     } else {
@@ -1271,7 +1266,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const id  = Number(c.req.param('id'));
     const key = extractAgentHostKey(c);
 
-    const agentHost = await verifyAgentHostApiKey(id, key);
+    const agentHost = await verifyAgentHostApiKey(c, id, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     // Accept optional capabilities array from request body. The body is OPTIONAL: an
@@ -1317,8 +1312,13 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       })
       .where(eq(agentHosts.id, id));
     await rememberHeartbeatWrite(c.env, id, fingerprint, lastState);
-    // The beat changed what the host list shows (liveness / capabilities).
-    await invalidateAgentHostDirectory(c.env, Number(agentHost.tenantId));
+    // The list computes `online` at read time from its cached timestamps, so a routine
+    // beat needs no invalidation — only one that changed what is cached: new
+    // capabilities / profile, an unknown prior state, or a host that had gone stale.
+    const payloadChanged = fingerprint !== null && fingerprint !== (lastState?.fingerprint ?? null);
+    if (payloadChanged || !lastState || Date.now() - lastState.writtenAtMs >= AGENT_HOST_STALE_MS) {
+      await invalidateAgentHostDirectory(c.env, Number(agentHost.tenantId));
+    }
 
     return c.json({ ok: true });
   });
@@ -1387,7 +1387,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!env.AGENT_HOST_RELAY) return c.text('AGENT_HOST_RELAY binding not configured', 503);
     if (!key) return c.text('Unauthorized', 401);
 
-    const agentHost = await verifyAgentHostApiKey(id, key);
+    const agentHost = await verifyAgentHostApiKey(c, id, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     // Mark as connected, and drop the cached "which host is online" answer for this
@@ -1446,7 +1446,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     }
 
     // Authenticate the calling (source) agentHost
-    const sourceAgentHost = await verifyAgentHostApiKey(fromId, key);
+    const sourceAgentHost = await verifyAgentHostApiKey(c, fromId, key);
     if (!sourceAgentHost) return c.text('Unauthorized', 401);
 
     // Ensure target is in same tenant
@@ -1518,7 +1518,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
     if (!env.AGENT_HOST_RELAY) return c.text('AGENT_HOST_RELAY binding not configured', 503);
 
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     let payload: unknown;
@@ -1554,7 +1554,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.post('/:id/dispatch-result', async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key = extractAgentHostKey(c);
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const body = await parseBody(c, HostDispatchResultBody);
@@ -1590,7 +1590,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.get('/:id/dispatch/:dispatchId', async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key = extractAgentHostKey(c);
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const dispatchId = c.req.param('dispatchId');
@@ -1656,7 +1656,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // -------------------------------------------------------------------------
   router.get('/:id/workspace/:projectId/files', async (c) => {
     const agentHostId = Number(c.req.param('id'));
-    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
     const projectId = Number(c.req.param('projectId'));
     if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
@@ -1671,7 +1671,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
   router.post('/:id/workspace/:projectId/files', async (c) => {
     const agentHostId = Number(c.req.param('id'));
-    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
     const projectId = Number(c.req.param('projectId'));
     if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
@@ -1727,7 +1727,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     method: 'GET' | 'POST',
   ): Promise<Response> => {
     const agentHostId = Number(c.req.param('id'));
-    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
     return handleGitProxyRequest(
       c as unknown as Context<HonoEnv>,
@@ -1756,7 +1756,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.post('/:id/dispatch/:dispatchId/pull-request', async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key = extractAgentHostKey(c);
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const dispatchId = c.req.param('dispatchId');
@@ -1783,7 +1783,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // -------------------------------------------------------------------------
   router.post('/:id/channel-status', async (c) => {
     const agentHostId = Number(c.req.param('id'));
-    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const body = await parseOptionalBody(c, ChannelStatusBody);
@@ -1807,7 +1807,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // -------------------------------------------------------------------------
   router.post('/:id/tasks/:taskId/pull-request', async (c) => {
     const agentHostId = Number(c.req.param('id'));
-    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const taskId = Number(c.req.param('taskId'));
@@ -1872,7 +1872,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const key    = extractAgentHostKey(c);
     const env    = c.env;
 
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const body = await parseBody(c, ApprovalRequestBody);
@@ -1907,7 +1907,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHostId = Number(c.req.param('id'));
     const executionId = Number(c.req.param('eid'));
 
-    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const body = await parseBody(c, ExecutionStateBody);
@@ -1943,7 +1943,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.get('/:id/spec', async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key    = extractAgentHostKey(c);
-    const agentHost   = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost   = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const [assignment] = await db
@@ -1967,7 +1967,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHostId = Number(c.req.param('id'));
     const taskId = Number(c.req.param('taskId'));
     const key = extractAgentHostKey(c);
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const rows = await listTaskSpecs(db, Number(agentHost.tenantId), taskId);
@@ -1982,7 +1982,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.get('/:id/platform-personas', async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key    = extractAgentHostKey(c);
-    const agentHost   = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost   = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     // Same active catalogue as /api/v1/personas — one cached read.
@@ -1996,7 +1996,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.get('/:id/quota', async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key    = extractAgentHostKey(c);
-    const agentHost   = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost   = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -2019,7 +2019,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.patch('/:id/project-context', async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key    = extractAgentHostKey(c);
-    const agentHost   = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost   = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const body = await parseBody(c, ProjectContextBody);
@@ -2058,7 +2058,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.get('/:id/artifacts/resolve', async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key    = extractAgentHostKey(c);
-    const agentHost   = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost   = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const taskIdP    = c.req.query('taskId');
@@ -2092,7 +2092,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   router.put('/:id/personas', async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key    = extractAgentHostKey(c);
-    const agentHost   = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost   = await verifyAgentHostApiKey(c, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const body = await parseBody(c, PersonasBody);

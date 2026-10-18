@@ -59,6 +59,7 @@ import { convertibleInstruments, equityEvents, equityGrants, partyRoles, shareCl
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
+import { DAY_MS } from '../../domain/shared/time';
 
 export class EquityError extends Error {
   constructor(message: string, readonly status: number) {
@@ -1196,7 +1197,7 @@ export async function cliffsDueWithin(
       acceleration: row.acceleration as VestingSchedule['acceleration'],
     });
     if (!cliffAt) return [];
-    const remaining = Math.round((Date.parse(cliffAt) - nowMs) / 86_400_000);
+    const remaining = Math.round((Date.parse(cliffAt) - nowMs) / DAY_MS);
     if (remaining > days || remaining < 0) return [];
     return [{
       grantId: row.id,

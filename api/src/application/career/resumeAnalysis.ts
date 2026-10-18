@@ -22,7 +22,7 @@ import {
   STRONG_VERBS, displaySkill, isSkillToken, isTooShortToScore, parseResume, skillGroupOf,
   toneCounts, tokenCounts, type ParsedResume, type ResumeBullet,
 } from '@builderforce/creation-canvas-contract';
-import { clampScore } from '../../domain/shared/numbers';
+import { clampScoreRounded } from '../../domain/shared/numbers';
 
 export interface ScoreCategory {
   key: 'ats' | 'content' | 'keywords' | 'format' | 'impact';
@@ -50,8 +50,6 @@ export interface ResumeScore {
   };
 }
 
-const clamp = (n: number): number => clampScore(Math.round(n));
-
 /** Score a résumé across the five categories a screener actually filters on. */
 export function scoreResume(input: string): ResumeScore {
   const parsed = parseResume(input);
@@ -75,31 +73,31 @@ export function scoreResume(input: string): ResumeScore {
     (hasEducation ? 10 : 0) +
     (hasSummary ? 8 : 0) +
     (bullets.length >= 5 ? 8 : bullets.length * 1.5);
-  const ats = clamp(atsPoints);
+  const ats = clampScoreRounded(atsPoints);
 
   // ── Content: is there enough of it, and is it in bullets? ────────────────────
   const lengthScore = parsed.wordCount < 200 ? (parsed.wordCount / 200) * 70
     : parsed.wordCount > 1200 ? Math.max(45, 100 - (parsed.wordCount - 1200) / 25)
       : 70 + Math.min(30, (parsed.wordCount - 200) / 20);
   const bulletShare = bullets.length === 0 ? 0 : Math.min(1, bullets.length / 12);
-  const content = clamp(lengthScore * 0.65 + bulletShare * 100 * 0.35);
+  const content = clampScoreRounded(lengthScore * 0.65 + bulletShare * 100 * 0.35);
 
   // ── Keywords: how much of the document is recognisable skill vocabulary? ─────
   const distinctSkills = parsed.skillTokens.length;
   const groups = new Set(parsed.skillTokens.map(skillGroupOf).filter(Boolean));
-  const keywords = clamp(Math.min(100, distinctSkills * 6) * 0.7 + Math.min(100, groups.size * 22) * 0.3);
+  const keywords = clampScoreRounded(Math.min(100, distinctSkills * 6) * 0.7 + Math.min(100, groups.size * 22) * 0.3);
 
   // ── Format: consistent dates, scannable bullets, no walls of text ────────────
   const overlong = bullets.filter((b) => b.length > 220).length;
   const dateConsistency = dateStyles.length <= 1 ? 100 : dateStyles.length === 2 ? 65 : 35;
-  const bulletLengthScore = bullets.length === 0 ? 50 : clamp(100 - (overlong / bullets.length) * 90);
-  const format = clamp(dateConsistency * 0.45 + bulletLengthScore * 0.35 + (parsed.dates.length ? 100 : 40) * 0.2);
+  const bulletLengthScore = bullets.length === 0 ? 50 : clampScoreRounded(100 - (overlong / bullets.length) * 90);
+  const format = clampScoreRounded(dateConsistency * 0.45 + bulletLengthScore * 0.35 + (parsed.dates.length ? 100 : 40) * 0.2);
 
   // ── Impact: do the bullets claim a result, or a presence? ────────────────────
   const quantShare = bullets.length ? quantified / bullets.length : 0;
   const strongShare = bullets.length ? strong / bullets.length : 0;
   const weakPenalty = bullets.length ? (weak / bullets.length) * 45 : 0;
-  const impact = clamp(quantShare * 55 + strongShare * 45 + 12 - weakPenalty);
+  const impact = clampScoreRounded(quantShare * 55 + strongShare * 45 + 12 - weakPenalty);
 
   const categories: ScoreCategory[] = [
     { key: 'ats', label: 'ATS readability', score: ats, evidence: `${parsed.contact.email ? 'email present' : 'NO email'}, ${parsed.contact.phone ? 'phone present' : 'no phone'}, sections found: ${kinds.length ? kinds.join(', ') : 'none recognised'}` },
@@ -127,7 +125,7 @@ export function scoreResume(input: string): ResumeScore {
   if (distinctSkills < 6) weaknesses.push(`Only ${distinctSkills} recognised skill${distinctSkills === 1 ? '' : 's'} appear anywhere in the document.`);
 
   const recommendations = buildRecommendations(parsed, { quantified, weak, overlong, dateStyles, hasSummary, hasSkills, distinctSkills });
-  const overall = clamp(ats * 0.24 + content * 0.16 + keywords * 0.2 + format * 0.16 + impact * 0.24);
+  const overall = clampScoreRounded(ats * 0.24 + content * 0.16 + keywords * 0.2 + format * 0.16 + impact * 0.24);
 
   return {
     overall: isTooShortToScore(parsed) ? Math.min(overall, 35) : overall,
@@ -188,7 +186,7 @@ export function resumeSentiment(input: string): ResumeSentiment {
   const tone = toneCounts(parsed.text);
   const total = tone.positive + tone.negative + tone.hedges;
   const raw = total === 0 ? 50 : ((tone.positive - tone.negative - tone.hedges * 0.75) / total) * 50 + 50;
-  const score = clamp(raw);
+  const score = clampScoreRounded(raw);
   const flagged = parsed.bullets
     .filter((b) => b.weakOpener)
     .slice(0, 8)
@@ -528,7 +526,7 @@ export function auditProfile(profile: {
   const total = checks.reduce((sum, c) => sum + c.weight, 0);
   const earned = checks.filter((c) => c.ok).reduce((sum, c) => sum + c.weight, 0);
   return {
-    score: clamp((earned / total) * 100),
+    score: clampScoreRounded((earned / total) * 100),
     checks,
     missing: checks.filter((c) => !c.ok).map((c) => c.field),
     instruction: 'Report the score, then walk the failed checks in weight order. For `headline` and `bio`, draft a concrete replacement from the profile\'s own skills and résumé evidence and offer it for approval — do not save it without one.',

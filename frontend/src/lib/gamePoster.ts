@@ -20,16 +20,10 @@
  * the badge does not appear.
  */
 
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
+
 const MAX_TITLE = 26;
 const MAX_BRIEF = 96;
-
-function escapeXml(value: string): string {
-  return value.replace(
-    /[&<>'"]/g,
-    (character) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]!,
-  );
-}
 
 function clamp(value: string, length: number): string {
   const text = value.replace(/\s+/g, ' ').trim();
@@ -116,7 +110,7 @@ export function gamePosterSvg(input: { title: string; brief?: string; html?: str
         `<g transform="translate(${70 + index * 132} 470)">`
         + `<rect width="118" height="46" rx="23" fill="#ffffff" opacity=".14"/>`
         + `<text x="59" y="30" fill="#ffffff" font-family="system-ui,sans-serif" font-size="21" `
-        + `font-weight="650" text-anchor="middle" opacity=".92">${escapeXml(label)}</text></g>`,
+        + `font-weight="650" text-anchor="middle" opacity=".92">${escapeHtml(label)}</text></g>`,
     )
     .join('');
 
@@ -124,7 +118,7 @@ export function gamePosterSvg(input: { title: string; brief?: string; html?: str
     `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">`
     + '<defs>'
     + `<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">`
-    + `<stop offset="0" stop-color="#0b0e1a"/><stop offset="1" stop-color="${escapeXml(accent)}"/>`
+    + `<stop offset="0" stop-color="#0b0e1a"/><stop offset="1" stop-color="${escapeHtml(accent)}"/>`
     + '</linearGradient>'
     + '<pattern id="scan" width="6" height="6" patternUnits="userSpaceOnUse">'
     + '<rect width="6" height="3" fill="#ffffff" opacity=".045"/></pattern>'
@@ -145,10 +139,10 @@ export function gamePosterSvg(input: { title: string; brief?: string; html?: str
     + '<rect x="3" y="7" width="2" height="1"/><rect x="6" y="7" width="2" height="1"/>'
     + '</g>'
     + `<text x="70" y="392" fill="#ffffff" font-family="system-ui,sans-serif" font-size="84" `
-    + `font-weight="800" letter-spacing="-2">${escapeXml(title)}</text>`
+    + `font-weight="800" letter-spacing="-2">${escapeHtml(title)}</text>`
     + (brief
       ? `<text x="70" y="440" fill="#ffffff" opacity=".72" font-family="system-ui,sans-serif" `
-        + `font-size="26">${escapeXml(brief)}</text>`
+        + `font-size="26">${escapeHtml(brief)}</text>`
       : '')
     + badges
     + '</svg>'

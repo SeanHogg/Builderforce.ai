@@ -26,6 +26,7 @@ import {
   toOutcomeMetricValues,
   type OutcomeMetricValue,
 } from '../outcomes/outcomeMetricContract';
+import { DAY_MS } from '../../domain/shared/time';
 
 export interface OutcomeValueFilters {
   days: number;
@@ -63,8 +64,8 @@ async function queryPeriod(db: Db, start: Date, end: Date, filters: OutcomeValue
 
 export async function getOutcomeValueRollup(db: Db, filters: OutcomeValueFilters) {
   const now = new Date();
-  const currentStart = new Date(now.getTime() - filters.days * 86_400_000);
-  const previousStart = new Date(currentStart.getTime() - filters.days * 86_400_000);
+  const currentStart = new Date(now.getTime() - filters.days * DAY_MS);
+  const previousStart = new Date(currentStart.getTime() - filters.days * DAY_MS);
   const delivery = outcomeActionList(DELIVERY_ACTIONS);
   const tenantFilter = filters.tenantId ? sql`AND s.tenant_id = ${filters.tenantId}` : sql``;
   const projectFilter = filters.projectId

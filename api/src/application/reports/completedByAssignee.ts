@@ -8,6 +8,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, projects, tasks, users } from '../../infrastructure/database/schema';
 import { notSystemTask } from '../task/taskScope';
 import { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** Window (days) clamp — guards against unbounded scans / silly query params. */
 const COMPLETED_WINDOW_MIN_DAYS = 1;
@@ -110,7 +111,7 @@ export function groupCompletedByAssignee(rows: CompletedTaskRow[]): AssigneeRoll
  * as the backfill proxy. Tenant-scoped by joining projects (tasks carry no tenant_id).
  */
 export async function generateCompletedByAssigneeReport(db: Db, tenantId: number, days: number) {
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const since = new Date(Date.now() - days * DAY_MS);
   // Authoritative completion instant with a legacy fallback.
   const completedAtExpr = sql<Date>`COALESCE(${tasks.completedAt}, ${tasks.updatedAt})`;
 

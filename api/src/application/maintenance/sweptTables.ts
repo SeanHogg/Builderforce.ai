@@ -39,6 +39,7 @@ import { boundedDelete, type PurgeStatement } from './boundedPurge';
 import { rollUpToolAudit, TOOL_AUDIT_ROLLUP_AFTER_DAYS } from './toolAuditRollup';
 import { rollUpLlmUsage, LLM_USAGE_ROLLUP_AFTER_DAYS } from './llmUsageRollup';
 import { VISITOR_RETENTION_DAYS, purgeVisitorActivity } from '../marketing/visitorActivity';
+import { BOUNDED_TELEMETRY_TABLES, EXPIRED_CREDENTIAL_TABLES } from './sweptTablesBounded';
 import { DAY_MS, MINUTE_MS } from '../../domain/shared/time';
 import {
   activitySignals,
@@ -500,9 +501,10 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     rationale:
       'THE AUDIT TRAIL, and the one member here that is not a pure log — which is why its '
       + '`purge` is predicate-scoped rather than age-scoped. It deletes ONLY the anonymous '
-      + 'visitor journey (migration 1111), on the window declared beside the writer that '
-      + "produces it; every other actor's events are kept indefinitely and this sweep never "
-      + 'touches them. It is in the registry for the VACUUM half as much as the purge: the '
+      + 'visitor journey (migration 1111) and the MACHINE lifecycle verbs (`MACHINE_LIFECYCLE_VERBS`: '
+      + 'execution.*, agent.replied, manager.pass, ticket.role.dispatched — ~75% of the table, each '
+      + "duplicated by its system of record), on the window declared beside the writer; every "
+      + "other verb's events are kept indefinitely and this sweep never touches them. It is in the registry for the VACUUM half as much as the purge: the "
       + 'visitor purge was already deleting rows here and nothing vacuumed the relation '
       + 'afterwards, which is retention-without-a-vacuum — the exact shape that left 46k live '
       + '`manager_actions` rows inside 593 MB.',
@@ -588,6 +590,10 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     purge: (db, cutoff) => boundedDelete(db, replayLive, acrossTenants(replayLive, 'scheduled_sweep',
       lt(replayLive.lastSeenAt, new Date(cutoff.getTime() + DAY_MS - 5 * MINUTE_MS)))),
   },
+  // Append-only feeds that had no window, and credentials past their expiry — declared in
+  // their own module so this file stays the registry's contract, not its inventory.
+  ...BOUNDED_TELEMETRY_TABLES,
+  ...EXPIRED_CREDENTIAL_TABLES,
 ];
 
 /**

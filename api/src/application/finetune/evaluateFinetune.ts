@@ -11,6 +11,7 @@
  * runtime code), so both finetune paths score the same way.
  */
 import { completeJson, type JsonProxy } from '../llm/completeJson';
+import { clamp } from '../../domain/shared/numbers';
 
 /** One dataset row: an instruction (+ optional context) and its ideal output. */
 export interface FinetuneExample {
@@ -46,7 +47,7 @@ Return ONLY the JSON object, no other text.`;
 /** How many (example, output) pairs to send the judge — bounds cost + prompt size. */
 const JUDGE_SAMPLE = 5;
 
-const clamp01 = (v: number): number => Math.max(0, Math.min(1, Number.isNaN(v) ? 0.5 : v));
+const clamp01 = (v: number): number => (Number.isNaN(v) ? 0.5 : clamp(v, 0, 1));
 
 /** Neutral fallback used when the judge is unreachable or returns unparseable text. */
 function defaultResult(): FinetuneEvalResult {

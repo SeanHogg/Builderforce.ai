@@ -47,6 +47,7 @@ import { ensureSessionObject, findSessionObject, type SessionRef } from './sessi
 import { requireSessionRole, tenantRoleForSessionRole } from './sessionAccess';
 import { collaboratorCapacity, type CollaboratorCapacityRefusal } from './canvasCollaboratorCapacity';
 import { createGuestUser, seatAsCollaborator, type CanvasGuestIdentity } from './canvasGuestAccount';
+import { HOUR_MS } from '../../domain/shared/time';
 
 /** The board roles a LINK may carry. Not `runner` (spends the workspace's tokens) and
  *  not `owner` (can give the board away) — neither belongs in something forwardable. */
@@ -151,7 +152,7 @@ export async function mintCanvasInviteLink(
   const object = await ensureSessionObject(db, env, input.session);
   const hours = input.expiresInHours == null ? null
     : Math.min(MAX_EXPIRY_HOURS, Math.max(1, Math.floor(input.expiresInHours)));
-  const expiresAt = hours == null ? null : new Date(Date.now() + hours * 3_600_000);
+  const expiresAt = hours == null ? null : new Date(Date.now() + hours * HOUR_MS);
   const maxUses = input.maxUses == null ? null : Math.max(1, Math.min(1_000, Math.floor(input.maxUses)));
   const share = await createShareLink(db, env, {
     tenantId: input.session.tenantId,
@@ -318,7 +319,7 @@ export async function claimCanvasInviteLink(
     tenantId: target.tenantId,
     userId,
     role: tenantRoleForSessionRole(target.role),
-  });
+  }, env);
   await db.insert(creationSessionMembers)
     .values({ sessionId: target.sessionId, userId, role: target.role })
     .onConflictDoNothing();

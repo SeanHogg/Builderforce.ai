@@ -14,7 +14,7 @@
  * `mapInvoice` shapes are byte-identical to the raw-SQL implementation they replace.
  */
 import { Hono } from 'hono';
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { idempotentReplay } from '../middleware/idempotentReplay';

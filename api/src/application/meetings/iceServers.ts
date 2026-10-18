@@ -1,5 +1,6 @@
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { HOUR_MS } from '../../domain/shared/time';
 
 /**
  * ICE configuration for every mesh-P2P surface — tenant meetings/ceremonies AND
@@ -38,7 +39,7 @@ async function cloudflareTurn(env: Env): Promise<IceServer | null> {
         if (!ice?.urls) throw new Error('cloudflare turn: no urls');
         return { urls: ice.urls, username: ice.username, credential: ice.credential };
       },
-      { kvTtlSeconds: 43_200, l1TtlMs: 3_600_000 },
+      { kvTtlSeconds: 43_200, l1TtlMs: HOUR_MS },
     );
   } catch {
     return null;

@@ -7,6 +7,7 @@ import { ResumeDocumentView } from '@/components/resume/ResumeDocumentView';
 import type { FreelancerProfile, FreelancerStats } from '@/lib/freelance/talentProfile';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 
 /**
  * Presentational render of a for-hire profile — the SINGLE source of truth for how a
@@ -28,7 +29,8 @@ function TalentStats({ stats }: { stats: FreelancerStats }) {
   const fmt = useFormat();
   const t = useTranslations('talent');
   const num = (n: number) => fmt.number(n);
-  const money = (cents: number, cur: string) => `${cur} ${fmt.number((cents / 100), { maximumFractionDigits: 0 })}`;
+  const { formatCents } = useMoneyFormat();
+  const money = (cents: number, cur: string) => formatCents(cents, { currency: cur, maximumFractionDigits: 0 });
 
   const tiles: { key: string; value: string; label: string; sub: string; accent: string }[] = [
     { key: 'aiUsage', value: num(stats.aiActions), label: t('stats.aiUsage'), sub: t('stats.aiUsageSub'), accent: 'var(--cyan-bright, var(--cyan-bright))' },

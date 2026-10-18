@@ -14,7 +14,7 @@
  * history wants only the ids. Both are the same filter.
  */
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { chatTicketLinks, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
@@ -54,4 +54,18 @@ export async function linkedRunnableTickets(
     .select({ id: tasks.id, assignedAgentRef: tasks.assignedAgentRef })
     .from(tasks)
     .where(scopedToTenant(tasks, tenantId, inArray(tasks.id, ids)));
+}
+
+/**
+ * The ids of the runnable tickets this chat links, as a SQL subquery. The `case` guards the
+ * text-to-int cast: Postgres does not promise the `where` runs before the select list, and a
+ * non-numeric ref must read as "no ticket", never as a cast error on the whole read.
+ */
+export function linkedTaskIdsSql(tenantId: number, chatId: number) {
+  const kinds = sql.join(RUNNABLE_TICKET_KINDS.map((k) => sql`${k}`), sql`, `);
+  return sql`(select case when ${chatTicketLinks.ticketRef} ~ '^[0-9]{1,10}$' then ${chatTicketLinks.ticketRef}::bigint end
+    from ${chatTicketLinks}
+    where ${chatTicketLinks.tenantId} = ${tenantId}
+      and ${chatTicketLinks.chatId} = ${chatId}
+      and ${chatTicketLinks.ticketKind} in (${kinds}))`;
 }

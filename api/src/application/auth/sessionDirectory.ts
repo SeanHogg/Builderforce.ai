@@ -92,7 +92,11 @@ export async function loadMemberSecurityDetail(db: Db, userId: string, scope: Se
       lastSeenAt: authTokens.lastSeenAt,
     })
     .from(authTokens)
-    .where(eq(authTokens.userId, userId))
+    // A workspace manager must not read the member's tokens from OTHER workspaces.
+    .where(and(
+      eq(authTokens.userId, userId),
+      scope.tenantId !== undefined ? eq(authTokens.tenantId, scope.tenantId) : undefined,
+    ))
     .orderBy(desc(authTokens.lastSeenAt)).limit(LIST_ROW_CAP);
 
   const now = new Date();

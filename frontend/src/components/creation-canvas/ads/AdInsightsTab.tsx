@@ -10,7 +10,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import styles from '../styles/ads.module.css';
-import { adsApi, formatMoney, type AdInsightsRead } from '@/lib/adsApi';
+import { adsApi, type AdInsightsRead } from '@/lib/adsApi';
+import { formatCents } from '@/lib/canvasMoney';
 import { NETWORK_GLYPHS } from '@/lib/networkGlyph';
 import { useFormat } from '@/i18n/useFormat';
 import { usePanelTask } from '@/hooks/usePanelTask';
@@ -67,14 +68,14 @@ export function AdInsightsTab() {
         <>
           <p className={styles.driveEmpty}>{t('window', { since: insights.window.since, until: insights.window.until })}</p>
           <dl className={styles.socialStats}>
-            <div><dt>{t('spend')}</dt><dd>{formatMoney(totals?.spendCents ?? 0, currency, locale)}</dd></div>
+            <div><dt>{t('spend')}</dt><dd>{formatCents(totals?.spendCents ?? 0, { currency, locale })}</dd></div>
             <div><dt>{t('impressions')}</dt><dd>{fmt.number(totals?.impressions ?? 0)}</dd></div>
             <div><dt>{t('clicks')}</dt><dd>{fmt.number(totals?.clicks ?? 0)}</dd></div>
             <div><dt>{t('conversions')}</dt><dd>{fmt.number(totals?.conversions ?? 0)}</dd></div>
             {/* A null rate means the denominator was zero — shown as an em dash rather
                 than 0, because "no clicks yet" and "free per click" are different. */}
-            <div><dt>{t('costPerClick')}</dt><dd>{formatMoney(totals?.costPerClickCents, currency, locale)}</dd></div>
-            <div><dt>{t('costPerConversion')}</dt><dd>{formatMoney(totals?.costPerConversionCents, currency, locale)}</dd></div>
+            <div><dt>{t('costPerClick')}</dt><dd>{formatCents(totals?.costPerClickCents, { currency, locale })}</dd></div>
+            <div><dt>{t('costPerConversion')}</dt><dd>{formatCents(totals?.costPerConversionCents, { currency, locale })}</dd></div>
           </dl>
 
           <div className={styles.driveList} role="list">
@@ -86,7 +87,7 @@ export function AdInsightsTab() {
                   <span className={styles.driveRowName}>{row.campaignName}</span>
                   <small>{t('insightRow', {
                     date: row.date,
-                    spend: formatMoney(row.spendCents, row.currency, locale),
+                    spend: formatCents(row.spendCents, { currency: row.currency, locale }),
                     clicks: fmt.number(row.clicks),
                     conversions: fmt.number(row.conversions),
                   })}</small>

@@ -55,6 +55,7 @@ import { liveExecution } from '../rehearsal/executionMode';
 import { notSystemTask, SYSTEM_TASK_SOURCE_MANAGER } from '../task/taskScope';
 import { resolveActorByRef, type ActorType } from '../activity/activityLog';
 import { rollUpRunFailures, type RunFailureTally } from '../runtime/runFailureReasons';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** How long a computed digest is served from cache. Short: the day is still moving. */
 const DIGEST_TTL_SECONDS = 60;
@@ -199,8 +200,8 @@ export function dayWindow(now: Date, tzOffsetMinutes: number): DayWindow {
   const start = new Date(localMidnightUtc - offset * 60_000);
   return {
     start,
-    end: new Date(start.getTime() + 86_400_000),
-    prevStart: new Date(start.getTime() - 86_400_000),
+    end: new Date(start.getTime() + DAY_MS),
+    prevStart: new Date(start.getTime() - DAY_MS),
   };
 }
 

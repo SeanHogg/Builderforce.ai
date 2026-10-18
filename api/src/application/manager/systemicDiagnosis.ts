@@ -46,6 +46,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { completeJson, jsonSchemaFormat } from '../llm/completeJson';
 import type { StallCause } from './stallTriage';
 import type { StallCensus, CensusCohort } from './stallCensus';
+import { DAY_MS } from '../../domain/shared/time';
 
 /**
  * How many tickets must share ONE cause before it is a platform problem rather than
@@ -187,7 +188,7 @@ export function proposesWeakeningSafetyLimit(remediation: string): boolean {
 /** Deterministic finding from measured facts, when the model is unavailable. PURE. */
 export function heuristicFinding(cohort: CensusCohort, projectId: number): SystemicFinding {
   const brief = CAUSE_BRIEF[cohort.cause] ?? 'These tickets share one stall cause.';
-  const days = Math.floor(cohort.maxIdleMs / 86_400_000);
+  const days = Math.floor(cohort.maxIdleMs / DAY_MS);
   return {
     cause: cohort.cause,
     ticketCount: cohort.count,
@@ -215,7 +216,7 @@ export async function diagnoseSystemicCohort(
   ctx: { projectId: number; stalled: number; managed: number; personaDirective?: string | null },
 ): Promise<SystemicFinding | null> {
   try {
-    const days = Math.floor(cohort.maxIdleMs / 86_400_000);
+    const days = Math.floor(cohort.maxIdleMs / DAY_MS);
     const userPrompt =
       `Project ${ctx.projectId} has ${ctx.managed} active tickets, ${ctx.stalled} of them stalled.\n`
       + `${cohort.count} of the stalled tickets share the cause "${cohort.cause}".\n`

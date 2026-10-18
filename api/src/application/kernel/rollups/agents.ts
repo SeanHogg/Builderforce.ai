@@ -19,10 +19,15 @@
 
 import { sql } from 'drizzle-orm';
 import { fact, resultRows, rowsTable, type DomainRollup, type RowsColumn } from '../metricRollup';
-import type { Db } from '../../../infrastructure/database/connection';
+import type { RollupSources } from '../metricRollup';
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
 
 const WINDOW_DAYS = 90;
 const since = sql`DATE_TRUNC('day', NOW()) - (${WINDOW_DAYS} * INTERVAL '1 day')`;
+// Past days' usage facts persist (upsert), so the ledger scan only needs the
+// trailing days that can still change, not the whole 90-day window every sweep.
+const USAGE_TRAILING_DAYS = 3;
+const usageSince = sql`DATE_TRUNC('day', NOW()) - (${USAGE_TRAILING_DAYS} * INTERVAL '1 day')`;
 
 const USAGE_COLUMNS: readonly RowsColumn[] = [
   { name: 'tenant_id', type: 'int' },
@@ -39,7 +44,20 @@ const USAGE_COLUMNS: readonly RowsColumn[] = [
  * the ledger is unreachable: a missing source must skip the metric, not take the
  * sweep down (the honesty rule: no zero-fill).
  */
-async function usageRows(usage: Db) {
+const usageScans = new WeakMap<RollupSources, Promise<ReturnType<typeof resultRows> | null>>();
+
+/** Memoised per sweep (the `sources` object is built once per domain run), so tokens and
+ *  cost share ONE scan instead of running the same GROUP BY twice. */
+function usageRows(sources: RollupSources) {
+  let scan = usageScans.get(sources);
+  if (!scan) {
+    scan = scanUsage(sources);
+    usageScans.set(sources, scan);
+  }
+  return scan;
+}
+
+async function scanUsage({ usage }: RollupSources) {
   try {
     return resultRows(await usage.execute(sql`
       SELECT u.tenant_id,
@@ -49,10 +67,11 @@ async function usageRows(usage: Db) {
              SUM(COALESCE(u.prompt_tokens, 0) + COALESCE(u.completion_tokens, 0)) AS tokens,
              SUM(COALESCE(u.cost_usd_millicents, 0)) / 1000.0 AS cost_cents
         FROM llm_usage_log u
-       WHERE u.tenant_id IS NOT NULL AND u.created_at >= ${since}
+       WHERE u.tenant_id IS NOT NULL AND u.created_at >= ${usageSince}
        GROUP BY u.tenant_id, DATE_TRUNC('day', u.created_at), COALESCE(u.byo_provider, u.llm_product), u.byo
     `));
-  } catch {
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/kernel/rollups/agents.ts', operation: 'usageRows' });
     return null;
   }
 }
@@ -100,8 +119,8 @@ export const AGENTS_ROLLUP: DomainRollup = {
     {
       key: 'agents.tokens',
       requires: [],
-      build: async (_present, { usage }) => {
-        const rows = await usageRows(usage);
+      build: async (_present, sources) => {
+        const rows = await usageRows(sources);
         if (!rows) return null;
         const u = rowsTable('u', USAGE_COLUMNS, rows);
         return fact({
@@ -121,8 +140,8 @@ export const AGENTS_ROLLUP: DomainRollup = {
     {
       key: 'agents.cost_cents',
       requires: [],
-      build: async (_present, { usage }) => {
-        const rows = await usageRows(usage);
+      build: async (_present, sources) => {
+        const rows = await usageRows(sources);
         if (!rows) return null;
         const u = rowsTable('u', USAGE_COLUMNS, rows);
         return [

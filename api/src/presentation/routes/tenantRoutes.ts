@@ -1,7 +1,7 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
 import {
   acceptInvitation,
@@ -15,7 +15,9 @@ import {
 } from '../../application/kernel/InvitationService';
 import { getObject } from '../../application/kernel/ObjectRegistry';
 import { admitToBoard } from '../../application/creation/boardAdmission';
-import { tenantRoleOf } from '../../application/tenant/tenantRoles';
+import { isActiveTenantMember } from '../../application/tenant/tenantRoles';
+import { loadMemberSecurityDetail } from '../../application/auth/sessionDirectory';
+import { invalidateNavigationFeatures, navigationFeaturesKey, tenantSnapshotKey, TENANT_READ_TTL } from '../../application/tenant/tenantReadCache';
 import { landPendingInvitations } from '../../application/tenant/pendingInvitationLanding';
 import { invalidateTaskAssignees } from '../../application/task/taskAssigneeCache';
 import { sha256Hex } from '../../domain/shared/hash';
@@ -46,8 +48,6 @@ import { registerMemberCredentialRevocation } from './memberCredentialRevocation
 import { changeMemberRole } from '../../application/tenant/memberRoleChange';
 import type { Db } from '../../infrastructure/database/connection';
 import {
-  authTokens,
-  authUserSessions,
   sourceControlIntegrations,
   creationSessionMembers,
   tenantMembers,
@@ -96,7 +96,6 @@ import {
   SubscriptionCheckoutBody,
   TenantNameBody,
 } from './tenantRoutes.schemas';
-import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 /** Best-effort audit emit for a membership mutation (invite / add), attributed to
  *  the acting manager. Off the response path; never throws. */
@@ -121,13 +120,6 @@ function emitMemberActivity(
   })().catch((error) => {
     reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "emitMemberActivity" });
   }));
-}
-
-/** Is this person an active member of the workspace? Delegates to the ONE membership
- *  read (`application/tenant/tenantRoles.ts`), which already answers null for an
- *  inactive row — this file used to carry a second copy of that query. */
-async function assertTenantMember(db: Db, tenantId: number, userId: string): Promise<boolean> {
-  return (await tenantRoleOf(db, tenantId, userId)) !== null;
 }
 
 /**
@@ -192,7 +184,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       const redeemedObject = redeemed?.kind === 'session' && redeemed.objectId
         ? await getObject(db, c.env as Env, redeemed.tenantId, redeemed.objectId)
         : null;
-      if (redeemed && redeemedObject && await assertTenantMember(db, redeemed.tenantId, userId)) {
+      if (redeemed && redeemedObject && await isActiveTenantMember(db, redeemed.tenantId, userId)) {
         return c.json({ sessionId: redeemedObject.refId, tenantId: redeemed.tenantId, role: redeemed.role });
       }
       return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
@@ -260,12 +252,17 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const id = Number(c.req.param('id'));
     const denied = forbidCrossTenant(c, id);
     if (denied) return denied;
-    const tenant = await tenantService.getTenant(id);
-    return c.json({
-      ...tenant.toPlain(),
-      effectivePlan: tenant.effectivePlan(),
-      trialDaysRemaining: trialDaysRemaining(tenant.billingStatus, tenant.trialEndsAt),
-    });
+    // Read on every app-shell load and it hydrates every member row, so serve the
+    // assembled snapshot from cache; `invalidateTenantPlan` / `membershipChanged` clear it.
+    const snapshot = await getOrSetCached(c.env as Env, tenantSnapshotKey(id), async () => {
+      const tenant = await tenantService.getTenant(id);
+      return {
+        ...tenant.toPlain(),
+        effectivePlan: tenant.effectivePlan(),
+        trialDaysRemaining: trialDaysRemaining(tenant.billingStatus, tenant.trialEndsAt),
+      };
+    }, TENANT_READ_TTL);
+    return c.json(snapshot);
   });
 
   // GET /api/tenants/:id/default-agentHost
@@ -302,9 +299,13 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const id = Number(c.req.param('id'));
     const denied = forbidCrossTenant(c, id);
     if (denied) return denied;
-    const [row] = await db.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, id)).limit(1);
-    if (!row) return c.json({ error: 'Workspace not found' }, 404);
-    return c.json({ enabled: readNavigationFeatures(row.settings) });
+    // Read by the app shell on every load; the PUT below invalidates it.
+    const enabled = await getOrSetCached(c.env as Env, navigationFeaturesKey(id), async () => {
+      const [row] = await db.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, id)).limit(1);
+      return row ? readNavigationFeatures(row.settings) : null;
+    }, TENANT_READ_TTL);
+    if (!enabled) return c.json({ error: 'Workspace not found' }, 404);
+    return c.json({ enabled });
   });
 
   /**
@@ -346,6 +347,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       settings: writeNavigationFeatures(row.settings, enabled),
       updatedAt: new Date(),
     }).where(eq(tenants.id, id));
+    await invalidateNavigationFeatures(c.env as Env, id);
     return c.json({ enabled });
   });
 
@@ -1226,104 +1228,12 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const userId = c.req.param('userId');
     if (!userId) return c.json({ error: 'userId is required' }, 400);
 
-    const isMember = await assertTenantMember(db, tenantId, userId);
+    const isMember = await isActiveTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    const [user] = await db
-      .select({
-        id: users.id,
-        email: users.email,
-        username: users.username,
-        displayName: users.displayName,
-        mfaEnabled: users.mfaEnabled,
-        mfaTempExpiresAt: users.mfaTempExpiresAt,
-        mfaEnabledAt: users.mfaEnabledAt,
-        mfaRecoveryGeneratedAt: users.mfaRecoveryGeneratedAt,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user) return c.json({ error: 'User not found' }, 404);
-
-    const sessions = await db
-      .select()
-      .from(authUserSessions)
-      .where(eq(authUserSessions.userId, userId))
-      .orderBy(desc(authUserSessions.lastSeenAt));
-
-    const sessionIds = sessions.map((session) => session.id);
-    const tokenRows = sessionIds.length
-      ? await db
-        .select({
-          sessionId: authTokens.sessionId,
-          activeCount: sql<number>`COUNT(*)`,
-        })
-        .from(authTokens)
-        .where(
-          and(
-            eq(authTokens.userId, userId),
-            eq(authTokens.tenantId, tenantId),
-            inArray(authTokens.sessionId, sessionIds),
-            isNull(authTokens.revokedAt),
-            gt(authTokens.expiresAt, new Date()),
-          ),
-        )
-        .groupBy(authTokens.sessionId)
-      : [];
-
-    const activeBySession = new Map<string, number>();
-    for (const row of tokenRows) {
-      if (!row.sessionId) continue;
-      activeBySession.set(row.sessionId, Number(row.activeCount));
-    }
-
-    const tokenDetails = await db
-      .select({
-        jti: authTokens.jti,
-        tokenType: authTokens.tokenType,
-        tenantId: authTokens.tenantId,
-        sessionId: authTokens.sessionId,
-        issuedAt: authTokens.issuedAt,
-        expiresAt: authTokens.expiresAt,
-        revokedAt: authTokens.revokedAt,
-        userAgent: authTokens.userAgent,
-        ipAddress: authTokens.ipAddress,
-        lastSeenAt: authTokens.lastSeenAt,
-      })
-      .from(authTokens)
-      .where(eq(authTokens.userId, userId))
-      .orderBy(desc(authTokens.lastSeenAt)).limit(LIST_ROW_CAP);
-
-    return c.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        displayName: user.displayName,
-      },
-      mfa: {
-        enabled: user.mfaEnabled,
-        setupPending: Boolean(user.mfaTempExpiresAt && user.mfaTempExpiresAt > new Date()),
-        enabledAt: user.mfaEnabledAt,
-        recoveryGeneratedAt: user.mfaRecoveryGeneratedAt,
-      },
-      sessions: sessions.map((session) => ({
-        id: session.id,
-        sessionName: session.sessionName,
-        userAgent: session.userAgent,
-        ipAddress: session.ipAddress,
-        isActive: session.isActive,
-        revokedAt: session.revokedAt,
-        createdAt: session.createdAt,
-        lastSeenAt: session.lastSeenAt,
-        activeTokens: activeBySession.get(session.id) ?? 0,
-      })),
-      tokens: tokenDetails.map((row) => ({
-        ...row,
-        isActive: !row.revokedAt && row.expiresAt > new Date(),
-      })),
-    });
+    const detail = await loadMemberSecurityDetail(db, userId, { tenantId });
+    if (!detail) return c.json({ error: 'User not found' }, 404);
+    return c.json(detail);
   });
 
   // POST /api/tenants/:id/security/users/:userId/{sessions/:sessionId/revoke,

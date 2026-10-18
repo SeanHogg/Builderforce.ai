@@ -26,6 +26,7 @@ import {
   type AdCall, type AdCreativeRemote, type AdInsightRow, type AdObjective, type AdSetRemote,
   type AdStatus, type AdsProvider,
 } from '../adsProviders';
+import { DAY_MS } from '../../../domain/shared/time';
 
 const MICROS = 1_000_000;
 
@@ -549,7 +550,7 @@ export const xAdsProvider: AdsProvider = {
     const sinceMs = new Date(`${query.since}T00:00:00Z`).getTime();
     // The end bound is EXCLUSIVE on X, so including the requested last day means
     // asking for the start of the day after it.
-    const endExclusive = new Date(new Date(`${query.until}T00:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
+    const endExclusive = new Date(new Date(`${query.until}T00:00:00Z`).getTime() + DAY_MS).toISOString().slice(0, 10);
 
     const rows: AdInsightRow[] = [];
     // X caps `entity_ids` at 20 per request and rejects the whole call if it is longer,
@@ -580,7 +581,7 @@ export const xAdsProvider: AdsProvider = {
         const conversions = list(metrics.conversion_purchases);
         const days = Math.max(spend.length, impressions.length, clicks.length);
         for (let day = 0; day < days; day += 1) {
-          const date = toDay(new Date(sinceMs + day * 86_400_000).toISOString());
+          const date = toDay(new Date(sinceMs + day * DAY_MS).toISOString());
           if (!externalCampaignId || !date) continue;
           rows.push({
             date,

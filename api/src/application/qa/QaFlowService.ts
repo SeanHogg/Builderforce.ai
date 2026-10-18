@@ -17,6 +17,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { qaFlows, qaJourneyEvents } from '../../infrastructure/database/schema';
 import { inferPersonaRole, type QaStep, shortHash, toSlug } from './qaTypes';
 import { excluded } from '../../infrastructure/database/upsert';
+import { DAY_MS } from '../../domain/shared/time';
 
 interface JourneyRow {
   sessionId: string;
@@ -92,7 +93,7 @@ export class QaFlowService {
     // we now page deterministically by (sessionId, seq) and surface truncation.
     const maxEvents = Math.max(1, opts.maxEvents ?? 20_000);
     const pageSize = Math.min(Math.max(1, opts.pageSize ?? 5_000), maxEvents);
-    const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+    const since = new Date(Date.now() - sinceDays * DAY_MS);
     // Scope the EVENTS, not just the flow row we stamp with it. `projectId` used
     // to be applied only to the upserted `qa_flows` row, so aggregating for
     // project A built A's flows out of every project's sessions. Journey events

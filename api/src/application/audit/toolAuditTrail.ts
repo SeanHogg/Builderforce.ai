@@ -23,6 +23,7 @@ import { and, eq, gte, lte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { toolAuditDaily, toolAuditEvents } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import { DAY_MS } from '../../domain/shared/time';
 
 /**
  * One unit of audit evidence — EITHER a single raw tool call or a day already folded
@@ -61,7 +62,7 @@ export function auditWindow(from: Date): { since: Date; sinceDay: string } {
 
 /** `days` ago, in both forms. */
 export const auditWindowDays = (days: number): { since: Date; sinceDay: string } =>
-  auditWindow(new Date(Date.now() - days * 86_400_000));
+  auditWindow(new Date(Date.now() - days * DAY_MS));
 
 /** Dimension rows for a tenant's window, across both grains, for aggregation. */
 export async function readAuditWindow(db: Db, tenantId: number, days: number): Promise<AuditRow[]> {

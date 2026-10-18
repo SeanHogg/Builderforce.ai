@@ -35,7 +35,8 @@ import { ResearchTab } from '@/components/dashboard/ResearchTab';
 import { ProfileIdentityCard } from '@/components/profile/ProfileIdentityCard';
 import { WorkforcePresenceStripView } from '@/components/workforce/WorkforcePresenceStrip';
 import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
-import { agentHosts, creationSessionsApi, type AgentHost } from '@/lib/builderforceApi';
+import { creationSessionsApi, type AgentHost } from '@/lib/builderforceApi';
+import { readAgentHosts } from '@/lib/dashboardReads';
 import { fetchPendingApprovalCount, fetchTaskCounts } from '@/lib/dashboardCountsApi';
 import type { WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
 import { WorkspacePanelList } from '@/components/workspace-canvas/WorkspacePanelList';
@@ -123,7 +124,7 @@ export default function DashboardPage() {
     setLoading(true);
     Promise.all([
       fetchProjects().catch(() => [] as Project[]),
-      agentHosts.list().catch(() => [] as AgentHost[]),
+      readAgentHosts().catch(() => [] as AgentHost[]),
       // The tile shows a count and a per-day inflow — the narrow cached tally, not
       // the approval list.
       fetchPendingApprovalCount().catch(() => null),

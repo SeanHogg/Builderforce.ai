@@ -48,6 +48,7 @@ import {
 } from '../kernel/ObjectRegistry';
 import { recordActivity } from '../activity/activityLog';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { DAY_MS, HOUR_MS } from '../../domain/shared/time';
 
 /**
  * The registry kinds a prospect share may point at.
@@ -198,7 +199,7 @@ export async function mintProspectShare(
   }
 
   const expiresAt = input.expiresAt
-    ?? new Date(Date.now() + DEFAULT_PROSPECT_SHARE_DAYS * 86_400_000);
+    ?? new Date(Date.now() + DEFAULT_PROSPECT_SHARE_DAYS * DAY_MS);
 
   const share = await createShareLink(db, env, {
     tenantId: input.tenantId,
@@ -532,7 +533,7 @@ export async function recordProspectEvent(
   const grant = await resolveShareToken(db, input.token);
   if (!grant) return false;
 
-  const since = new Date(Date.now() - 3_600_000);
+  const since = new Date(Date.now() - HOUR_MS);
   const [recent] = await db.select({ count: sql<number>`count(*)::int` })
     .from(activityLog)
     .where(scopedToTenant(

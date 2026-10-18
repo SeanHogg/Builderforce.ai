@@ -918,16 +918,6 @@ export interface EffectivePermissions {
 }
 
 // ---------------------------------------------------------------------------
-// Request helper — uses Web token only
-// ---------------------------------------------------------------------------
-
-/**
- * Superadmin endpoints run on the WEB token (a platform operator is not acting
- * inside any one workspace), so this is `apiRequest` in `web` auth mode — not a
- * separate transport. The only extra behaviour is the friendlier "sign in with a
- * superadmin account" message when no token is stored at all.
- */
-// ---------------------------------------------------------------------------
 // Admin API
 // ---------------------------------------------------------------------------
 

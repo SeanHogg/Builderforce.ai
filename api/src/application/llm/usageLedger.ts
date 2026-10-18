@@ -493,7 +493,7 @@ export async function recordProxyUsage(
  *
  * Read at the usage-write boundary rather than threaded through the proxy: every
  * producer already arrives here with (tenant, provider), and none of them carries a
- * credential id. Cached for a minute — the value changes only on a rotation, and the
+ * credential id. Read from the cached tenant provider rows — the value changes only on a rotation, and the
  * worst case of a stale read is one row attributed to the key that was live seconds
  * earlier, which is a rounding error against the alternative of a query on every
  * logged call.
@@ -555,7 +555,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     );
     const savedCostUsdMillicents = computeSavedCostMillicents(pricing, savings);
     // Stamp the surcharge into metadata so an invoice/usage row can show it explicitly.
-    // Only the allowlisted keys are PERSISTED (see usageMetadata) — the raw caller bag held
+    // Only the non-denied, size-bounded keys are PERSISTED (see usageMetadata) — the raw caller bag held
     // guest prompt text and was the bulk of this table's size. `savings` above already read
     // the full bag.
     const keptMetadata = pickPersistedMetadata(row.metadata);
@@ -570,9 +570,9 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     // WHICH key instance paid (0953). Resolved here — the single write boundary —
     // rather than threaded through the proxy, because every producer already reaches
     // this function with the two facts it needs (tenant + the provider we stamped)
-    // and none of them would otherwise carry a credential id. Cached, so a BYO row
-    // costs at most one lookup per tenant+provider per minute; a platform-funded row
-    // costs nothing at all.
+    // and none of them would otherwise carry a credential id. Served from the cached
+    // tenant provider rows (shared with credential resolution, invalidated on every key
+    // write), so a warm BYO row costs no statement; a platform-funded row costs nothing.
     const byoCredentialId = row.byo && row.byoProvider && row.tenantId != null
       ? await resolveByoCredentialId(env, row.tenantId, row.byoProvider)
       : null;

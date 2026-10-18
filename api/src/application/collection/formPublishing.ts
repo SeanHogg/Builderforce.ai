@@ -39,6 +39,7 @@ import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Env } from '../../env';
 import { DAY_MS } from '../../domain/shared/time';
 import { StatusError } from '../../domain/shared/errors';
+import { randomBytes } from '../../domain/shared/bytes';
 
 /** The `question_sets.kind` a canvas `form` object projects to. A kind is a
  *  column value — see the table's own note. */
@@ -70,7 +71,7 @@ export class FormError extends StatusError<number> {
  * the one somebody reads aloud badly.
  */
 export function mintPublicSlug(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(SLUG_LENGTH));
+  const bytes = randomBytes(SLUG_LENGTH);
   return [...bytes].map((b) => SLUG_ALPHABET[b % SLUG_ALPHABET.length]).join('');
 }
 const mintSlug = mintPublicSlug;

@@ -37,6 +37,7 @@ import {
   type LocaleHeaderHints,
 } from './emailLocaleResolver';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { DAY_MS } from '../../domain/shared/time';
 
 /** What a template is handed once the locale (and consent) are settled. */
 export interface TransactionalSendContext {
@@ -173,7 +174,7 @@ export async function sendLifecycleEmail(
  * requires the mechanism to keep working for at least 30 days after the send.
  * A link that has expired would be a compliance failure, not a security win.
  */
-const UNSUBSCRIBE_TOKEN_MAX_AGE_MS = 5 * 365 * 24 * 60 * 60 * 1000;
+const UNSUBSCRIBE_TOKEN_MAX_AGE_MS = 5 * 365 * DAY_MS;
 
 /**
  * A tamper-proof unsubscribe token. Reuses the shared HMAC state primitives rather

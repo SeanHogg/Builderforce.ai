@@ -47,6 +47,7 @@ import { resolveAgentDisplayName, resolveAgentIdentities } from './agentDisplayN
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { broadcastBrainChatChanged } from '../../infrastructure/relay/broadcastRoom';
+import { bumpExecutionState } from '../runtime/executionStateVersion';
 import { bumpChatMessages, bumpChatStructure, bumpUnreadForTenant } from './chatCacheVersions';
 
 const CHAT_SCOPE = 'chat';
@@ -819,7 +820,8 @@ export class ChatTicketService {
         linkType, createdBy: input.createdBy ?? userId ?? null,
       }).returning();
     }
-    await bumpChatStructure(chatId, this.env);
+    // The attention snapshot (TTL 300 s) counts linked tickets, so it must be orphaned too.
+    await Promise.all([bumpChatStructure(chatId, this.env), bumpExecutionState(this.env, tenantId)]);
     // Handoff: if this task-tier ticket already has a cloud-agent owner, bring that agent
     // into the chat it was just linked to (the "assign the ticket, then link it" ordering
     // — the assignment-time trigger fires only for chats linked at assignment time).
@@ -844,7 +846,7 @@ export class ChatTicketService {
     const rows = await this.db.delete(chatTicketLinks)
       .where(and(eq(chatTicketLinks.tenantId, tenantId), eq(chatTicketLinks.chatId, chatId), eq(chatTicketLinks.ticketKind, kind), eq(chatTicketLinks.ticketRef, ref)))
       .returning({ id: chatTicketLinks.id });
-    if (rows.length > 0) await bumpChatStructure(chatId, this.env);
+    if (rows.length > 0) await Promise.all([bumpChatStructure(chatId, this.env), bumpExecutionState(this.env, tenantId)]);
     return { removed: rows.length > 0 };
   }
 
@@ -955,6 +957,7 @@ export class ChatTicketService {
     await Promise.all([
       bumpChatMessages(input.targetChatId, this.env),
       bumpUnreadForTenant(tenantId, this.env),
+      bumpExecutionState(this.env, tenantId),
       ...[input.targetChatId, ...sources].map((id) => bumpChatStructure(id, this.env)),
     ]);
     return { targetChatId: input.targetChatId, mergedChats: sources.length, messagesMoved, linksMoved };

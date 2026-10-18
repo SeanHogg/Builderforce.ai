@@ -22,7 +22,6 @@ import {
   listBenchmarkCohorts,
 } from '../../application/insights/benchmarkingInsights';
 import {
-  BenchmarkProfileError,
   assertKnownCohort,
   benchmarkProfileCacheKey,
   benchmarkVersionKey,
@@ -90,12 +89,7 @@ export function createBenchmarkingRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env;
     const body = await parseOptionalBody(c, BenchmarkProfileBody);
     const profile = await resolveBenchmarkProfilePatch(db, tenantId, body);
-    try {
-      await assertKnownCohort(db, profile);
-    } catch (err) {
-      if (err instanceof BenchmarkProfileError) return c.json({ error: err.message, ...err.detail }, err.status);
-      throw err;
-    }
+    await assertKnownCohort(db, profile);
     return c.json(await setBenchmarkProfile(db, env, tenantId, profile));
   });
 

@@ -220,7 +220,7 @@ function norm01(v: number | null | undefined): number | null {
 }
 
 const collectAgenticMaturity = async (db: Db, tenantId: number, days: number, projectId?: number | null): Promise<MaturityDataInputs> => {
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const since = new Date(Date.now() - days * DAY_MS);
   const forProject = projectId != null;
 
   // member_metrics_period is a per-member tenant snapshot (no project grain), so

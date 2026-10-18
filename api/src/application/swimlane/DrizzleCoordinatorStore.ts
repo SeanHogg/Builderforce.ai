@@ -30,6 +30,7 @@ import type {
 } from './coordinatorStore';
 import { forLane, laneAgentAssignments } from './laneAgentAssignments';
 import { normalizeLaneAgentRuntime } from './laneAutoRun';
+import { bumpBoardLive } from './boardReads';
 
 export class DrizzleCoordinatorStore implements CoordinatorStore {
   constructor(private readonly db: Db) {}
@@ -125,6 +126,7 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
       })
       .returning();
     if (!run) throw new Error('Failed to create ticket run.');
+    await bumpBoardLive(data.tenantId);
     return toRun(run);
   }
 
@@ -157,6 +159,7 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
       })
       .where(and(eq(ticketRuns.id, id), eq(ticketRuns.tenantId, tenantId)))
       .returning();
+    if (run) await bumpBoardLive(tenantId);
     return run ? toRun(run) : null;
   }
 
@@ -223,6 +226,7 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
       .values({ ...data, agentDefinitionVersionId: frozen?.id ?? null })
       .returning({ id: agentDispatches.id });
     if (!row) throw new Error('Failed to insert dispatch.');
+    await bumpBoardLive(data.tenantId);
     return row.id;
   }
 
@@ -245,7 +249,9 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
     if (patch.dependsOn !== undefined) set.dependsOn = patch.dependsOn;
     if (patch.completedAt !== undefined) set.completedAt = patch.completedAt ? new Date() : null;
     if (patch.status === 'claimed') set.claimedAt = new Date();
-    await this.db.update(agentDispatches).set(set).where(eq(agentDispatches.id, id));
+    const [updated] = await this.db.update(agentDispatches).set(set).where(eq(agentDispatches.id, id))
+      .returning({ tenantId: agentDispatches.tenantId });
+    if (updated) await bumpBoardLive(updated.tenantId);
   }
 
   async getDispatch(id: string, tenantId: number): Promise<DispatchLite | null> {

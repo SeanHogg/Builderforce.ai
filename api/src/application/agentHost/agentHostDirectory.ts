@@ -31,9 +31,8 @@ export interface AgentHostDirectoryFilter {
   env?: CacheEnv;
 }
 
-/** Bounds the staleness of writers that cannot invalidate (heartbeat liveness is
- *  written by the throttled beat and invalidated there; project-link edits in other
- *  routes are not). KV's minimum TTL is 60 s. */
+/** Bounds the staleness of writers that cannot invalidate (project-link edits in other
+ *  routes are not; heartbeat liveness is recomputed at read time). KV's minimum TTL is 60 s. */
 const DIRECTORY_TTL_SECONDS = 60;
 const DIRECTORY_L1_TTL_MS = 30_000;
 const directoryKey = (tenantId: number): string => `agent-hosts:dir:${tenantId}`;
@@ -83,10 +82,29 @@ export async function listAgentHostDirectory(
     () => loadEntries(db, tenantId, service, null),
     { kvTtlSeconds: DIRECTORY_TTL_SECONDS, l1TtlMs: DIRECTORY_L1_TTL_MS },
   );
-  const byStatus = status === 'online' ? all.filter((e) => e.online)
-    : status === 'offline' ? all.filter((e) => !e.online)
-    : all;
+  // `online` goes stale in the cache as the clock moves, so it (and the summary fields
+  // derived from it) is recomputed here from the cached liveness timestamps — which is
+  // why a routine heartbeat does not have to invalidate the entry.
+  const now = Date.now();
+  const live = all.map((e) => withLiveOnline(e, now));
+  const byStatus = status === 'online' ? live.filter((e) => e.online)
+    : status === 'offline' ? live.filter((e) => !e.online)
+    : live;
   return applyFilter(byStatus, filter);
+}
+
+/** Re-derive the clock-dependent fields of a (possibly cached) entry. */
+function withLiveOnline(e: AgentHostDirectoryEntry, now: number): AgentHostDirectoryEntry {
+  const online = isAgentHostOnline(e, now);
+  return {
+    ...e,
+    online,
+    capabilitySummary: {
+      ...e.capabilitySummary,
+      distributed: online && e.projectIds.length > 1,
+      remoteDispatch: online && e.capabilities.includes('remote-dispatch'),
+    },
+  };
 }
 
 const applyFilter = (entries: AgentHostDirectoryEntry[], filter: AgentHostDirectoryFilter): AgentHostDirectoryEntry[] =>

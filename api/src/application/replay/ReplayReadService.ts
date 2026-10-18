@@ -48,6 +48,7 @@ import { recordingLocation, type RecordingRow } from './replayRecordingWriter';
 import { readIssue, readIssues, readKpis } from './replayRollupReads';
 import { hasFilter, readIssuesEstimated, readKpisEstimated } from './replayFilteredReads';
 import { compileScopeFilter } from './replaySmartEventRules';
+import { DAY_MS } from '../../domain/shared/time';
 
 const LIST_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 const ROLLUP_TTL = { kvTtlSeconds: 300, l1TtlMs: 30_000 };
@@ -76,7 +77,7 @@ export class ReplayReadService {
     const keys = await replayReadKeys(this.env, scope);
     const key = keys.recordings(days, cursor ? `${input.cursor}~${limit}` : `~${limit}`, filterCacheKey(input.filter));
     return getOrSetCached(this.env, key, async () => {
-      const since = new Date(this.clock().getTime() - days * 86_400_000);
+      const since = new Date(this.clock().getTime() - days * DAY_MS);
       const { where: filterWhere } = await compileScopeFilter(this.env, this.db, scope, input.filter);
       const rows = await this.store
         .select()

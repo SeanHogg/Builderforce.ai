@@ -20,14 +20,14 @@ export interface AuthedAgentHost {
 /**
  * Verify an agent API key for agentHost `id`. Resolves the key BY HASH through the
  * shared key-resolution cache (`agentHostKeyLookup`), so a poll costs no database
- * read; pass `env` to get that cache (omitted ⇒ a direct, uncached read).
+ * read. `env` is required so no caller can fall back to an uncached read per request.
  * A deactivated/suspended host does not authenticate — the loader rejects it.
  */
 export function verifyAgentHostApiKey(
   db: Db,
   id: number,
-  key?: string | null,
-  env?: Env,
+  key: string | null | undefined,
+  env: Env,
 ): Promise<AuthedAgentHost | null> {
   return verifyAgentHostKey(env, db, id, key);
 }
@@ -37,7 +37,7 @@ async function verifyBearerAgentHost(
   db: Db,
   authHeader: string | undefined,
   agentHostIdHeader: string | undefined,
-  env?: Env,
+  env: Env,
 ): Promise<AuthedAgentHost | null> {
   if (!authHeader?.startsWith('Bearer ') || !agentHostIdHeader) return null;
   const key = authHeader.slice(7);

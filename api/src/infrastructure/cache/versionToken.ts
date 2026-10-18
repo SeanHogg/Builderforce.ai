@@ -5,7 +5,8 @@
  * `getCacheVersion` mints the same `ver:` token but with the default 30 s L1: a bump only
  * clears the isolate that made it, so a poller on another isolate would keep serving a
  * stale entry for up to that long. These reads use a 2 s L1 instead (the KV read behind it
- * is cheap; the Neon statement it saves is not).
+ * is cheap; the Neon statement it saves is not). The real cross-isolate staleness bound is
+ * KV propagation of the delete (about 60 s across PoPs), not the 2 s L1.
  *
  * Writers bump through {@link bumpVersion}, which defaults `env` to the ambient request
  * scope (`application/shared/requestScope.ts`) so no signature between the entry point and
@@ -14,7 +15,7 @@
  */
 
 import type { Env } from '../../env';
-import { currentRequestScope } from '../../application/shared/requestScope';
+import { currentRequestScope, deferPastResponse } from '../../application/shared/requestScope';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { bumpCacheVersion, getOrSetCached } from './readThroughCache';
 
@@ -26,12 +27,28 @@ export function versionToken(env: Env, key: string): Promise<string> {
 
 export const ambientEnv = (): Env | undefined => currentRequestScope()?.env as Env | undefined;
 
-/** Bump a token best-effort (never throws); `env` defaults to the ambient request scope. */
+/** KV allows one write per second per key; a repeat bump inside this window adds nothing. */
+const BUMP_DEDUPE_MS = 1_000;
+
+/**
+ * Bump a token best-effort (never throws); `env` defaults to the ambient request scope.
+ * A key already bumped in this scope within the last second is skipped (a burst of
+ * writes would otherwise 429 on KV's per-key write limit; the first bump already
+ * orphaned everything a reader could have cached before it). The KV delete runs past the
+ * response when the scope has a `waitUntil`, otherwise it is awaited.
+ */
 export async function bumpVersion(key: string, operation: string, env: Env | undefined = ambientEnv()): Promise<void> {
   if (!env) return;
-  try {
-    await bumpCacheVersion(env, key);
-  } catch (error) {
-    reportCaughtError(error, { source: 'infrastructure/cache/versionToken.ts', operation });
+  const scope = currentRequestScope();
+  if (scope) {
+    const seen = (scope.bumpedAt ??= new Map<string, number>());
+    const now = Date.now();
+    const last = seen.get(key);
+    if (last !== undefined && now - last < BUMP_DEDUPE_MS) return;
+    seen.set(key, now);
   }
+  const task = bumpCacheVersion(env, key).catch((error) => {
+    reportCaughtError(error, { source: 'infrastructure/cache/versionToken.ts', operation });
+  });
+  if (!deferPastResponse(task)) await task;
 }

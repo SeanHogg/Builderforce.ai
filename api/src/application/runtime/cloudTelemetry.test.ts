@@ -3,7 +3,7 @@
  *
  * A cloud run is observable only if every telemetry write actually lands a row:
  *   • recordCloudToolEvent    → tool_audit_events (the Observability timeline)
- *   • recordCloudUsage        → usage_snapshots  AND  llm_usage_log (billing ledger)
+ *   • recordCloudUsage        → llm_usage_log (billing ledger) ONLY; the run trace reads it back
  *   • emitModelSelection      → a `model.select`  planning event (why this model)
  *   • emitCodingModelDegraded → a `coding_model_degraded` llm event (only when degraded)
  *
@@ -130,8 +130,8 @@ describe('recordCloudToolEvent → tool_audit_events', () => {
   });
 });
 
-describe('recordCloudUsage → usage_snapshots AND llm_usage_log', () => {
-  it('writes BOTH ledgers so the trace view and the billing log reconcile', async () => {
+describe('recordCloudUsage → llm_usage_log', () => {
+  it('writes the billing ledger row and NO usage_snapshots duplicate', async () => {
     const { db, rowsFor } = makeFakeDb();
 
     await recordCloudUsage(env, db, {
@@ -145,21 +145,11 @@ describe('recordCloudUsage → usage_snapshots AND llm_usage_log', () => {
       outputTokens: 40,
     });
 
-    // 1) Per-execution trace snapshot.
-    const snap = rowsFor(usageSnapshots);
-    expect(snap).toHaveLength(1);
-    expect(snap[0]).toMatchObject({
-      tenantId: 1,
-      agentHostId: null,
-      cloudAgentRef: 'agent-x',
-      executionId: 42,
-      sessionKey: 'exec:42',
-      inputTokens: 100,
-      outputTokens: 40,
-      contextTokens: 140,            // input + output
-    });
+    // The trace view is projected from the ledger row (cloudRunUsage.ts); a second
+    // usage_snapshots write of the same tokens was removed to save database space.
+    expect(rowsFor(usageSnapshots)).toHaveLength(0);
 
-    // 2) Canonical billing ledger row, tagged with the cloud dimensions so cost
+    // Canonical billing ledger row, tagged with the cloud dimensions so cost
     //    can be split cloud-vs-on-prem and rolled up ticket → project → account.
     const usage = rowsFor(llmUsageLog);
     expect(usage).toHaveLength(1);
@@ -199,7 +189,6 @@ describe('recordCloudUsage → usage_snapshots AND llm_usage_log', () => {
       outputTokens: 5,
     });
 
-    expect(rowsFor(usageSnapshots)[0]).toMatchObject({ cloudAgentRef: null, executionId: 9 });
     expect(rowsFor(llmUsageLog)[0]).toMatchObject({ cloudAgentRef: null, executionId: 9, taskId: 4, projectId: null });
   });
 });
@@ -317,14 +306,14 @@ describe('cloud telemetry — defensive boundaries', () => {
     expect(rowsFor(toolAuditEvents)[0]).toMatchObject({ sessionKey: 'exec:NaN' });
   });
 
-  it('recordCloudUsage never throws even when BOTH ledger inserts fail', async () => {
+  it('recordCloudUsage never throws even when the ledger insert fails', async () => {
     const db = { insert: () => ({ values: async () => { throw new Error('db down'); } }) } as unknown as Db;
     await expect(
       recordCloudUsage(env, db, { tenantId: 1, executionId: 9, taskId: 1, model: 'm', inputTokens: 10, outputTokens: 5 }),
     ).resolves.toBeUndefined();
   });
 
-  it('recordCloudUsage CLAMPS non-finite / negative token counts to 0 in both ledgers', async () => {
+  it('recordCloudUsage CLAMPS non-finite / negative token counts to 0', async () => {
     const { db, rowsFor } = makeFakeDb();
     await expect(
       recordCloudUsage(env, db, {
@@ -333,7 +322,6 @@ describe('cloud telemetry — defensive boundaries', () => {
       }),
     ).resolves.toBeUndefined();
     // Bad usage is floored at the boundary so it can't poison SUM()-based cost rollups.
-    expect(rowsFor(usageSnapshots)[0]).toMatchObject({ inputTokens: 0, outputTokens: 0, contextTokens: 0 });
     expect(rowsFor(llmUsageLog)[0]).toMatchObject({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
   });
 

@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useOptionalAuth } from '@/lib/AuthContext';
 import { fetchPhoneOverview, type PhoneOverview } from '@/lib/phoneApi';
-import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
+import { createSharedResource } from '@/lib/useSharedResource';
 
 /**
  * The shared phone snapshot — one fetch behind every phone surface.
@@ -24,22 +22,14 @@ import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@
 const PHONE_TTL_MS = 30_000;
 const PHONE_CACHE_KEY = 'phone:overview';
 
-const subscribers = new Set<(s: PhoneOverview | null) => void>();
+const phone = createSharedResource<PhoneOverview>({
+  cacheKey: PHONE_CACHE_KEY,
+  ttlMs: PHONE_TTL_MS,
+  fetcher: () => fetchPhoneOverview(),
+});
 
-export function fetchSharedPhoneOverview(): Promise<PhoneOverview | null> {
-  return getOrSetClientCached(PHONE_CACHE_KEY, () => fetchPhoneOverview(), { ttlMs: PHONE_TTL_MS })
-    .then((data) => {
-      subscribers.forEach((fn) => fn(data));
-      return data;
-    })
-    // A failed read must not pin "no phone service" for half a minute — leave the
-    // cache alone so the next mount retries.
-    .catch(() => null);
-}
-
-export function invalidatePhone(): void {
-  invalidateClientCache(PHONE_CACHE_KEY);
-}
+export const fetchSharedPhoneOverview = phone.fetchShared;
+export const invalidatePhone = phone.invalidate;
 
 export interface UsePhoneResult {
   overview: PhoneOverview | null;
@@ -49,24 +39,6 @@ export interface UsePhoneResult {
 }
 
 export function usePhone(): UsePhoneResult {
-  const hasTenant = useOptionalAuth()?.hasTenant ?? false;
-  const [overview, setOverview] = useState<PhoneOverview | null>(
-    readClientCached<PhoneOverview>(PHONE_CACHE_KEY, PHONE_TTL_MS) ?? null,
-  );
-
-  useEffect(() => {
-    if (!hasTenant) return;
-    let active = true;
-    const notify = (s: PhoneOverview | null) => { if (active) setOverview(s); };
-    subscribers.add(notify);
-    void fetchSharedPhoneOverview().then(notify);
-    return () => { active = false; subscribers.delete(notify); };
-  }, [hasTenant]);
-
-  const refresh = useCallback(async () => {
-    invalidatePhone();
-    await fetchSharedPhoneOverview();
-  }, []);
-
-  return { overview: hasTenant ? overview : null, refresh };
+  const { data, refresh } = phone.use();
+  return { overview: data, refresh };
 }

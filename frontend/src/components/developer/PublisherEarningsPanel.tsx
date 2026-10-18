@@ -30,6 +30,7 @@
 
 import { useEffect, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
+import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import {
   developerApi,
   type PartnerStanding,
@@ -132,8 +133,8 @@ export function PublisherEarningsPanel({ busy, onRun }: Props) {
   }, [t]);
 
   /** Cents → the reader's own currency formatting. Never a hand-rolled `$${n}`. */
-  const money = (cents: number) =>
-    format.number(cents / 100, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+  const { formatCents } = useMoneyFormat();
+  const money = (cents: number) => formatCents(cents, { currency: 'USD' });
 
   if (error) return <p role="alert" style={{ ...muted, color: 'var(--coral-bright)' }}>{error}</p>;
   if (!earnings || !standing) return <p style={muted}>{t('loading')}</p>;

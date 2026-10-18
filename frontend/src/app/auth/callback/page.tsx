@@ -3,12 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
-import MascotIcon from '@/components/MascotIcon';
-import Link from 'next/link';
-import { AUTH_API_URL, persistSession } from '@/lib/auth';
-import { resolveAndSelectTenant } from '@/lib/auth/credentials';
-import { safeRedirectPath } from '@/lib/safeRedirect';
-import type { AuthUser } from '@/lib/types';
+import { AUTH_API_URL } from '@/lib/auth';
+import { AuthStatusScreen, completeTokenSignIn, type SignInExchange } from '@/components/account/AuthStatusScreen';
 
 /** Maps the server's `?error=` code to a translation key in the `authCallback` namespace. */
 const ERROR_KEYS: Record<string, string> = {
@@ -59,97 +55,18 @@ export default function OAuthCallbackPage() {
     })
       .then((res) => {
         if (!res.ok) throw new Error('exchange_failed');
-        return res.json() as Promise<{ token?: string; user?: AuthUser; redirect?: string }>;
+        return res.json() as Promise<SignInExchange>;
       })
-      .then(async (data) => {
-        if (!data.token || !data.user) throw new Error('exchange_failed');
-        persistSession(data.token, data.user);
-        await resolveAndSelectTenant(data.token);
-        // The onboarding gate (OnboardingGate) forces the Build-vs-Hired role
-        // choice for accounts that never picked one, so no special-casing here.
-        // safeRedirectPath is defence-in-depth — the server already validated it.
-        window.location.href = safeRedirectPath(data.redirect);
-      })
+      .then((data) => completeTokenSignIn(data, 'exchange_failed'))
       .catch(() => {
         setError(t('errorProfile'));
       });
   }, [code, error, t]);
 
-  if (error) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'var(--bg-deep)',
-          color: 'var(--text-primary)',
-          padding: 24,
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 420,
-            width: '100%',
-            background: 'var(--surface-card)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-xl)',
-            padding: '40px 32px',
-            textAlign: 'center',
-            backdropFilter: 'blur(12px)',
-          }}
-        >
-          <MascotIcon size={48} className="bf-mark-muted" />
-          <h2
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 'var(--font-size-section)',
-              fontWeight: 700,
-              marginBottom: 12,
-            }}
-          >
-            {t('title')}
-          </h2>
-          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginBottom: 24 }}>
-            {error}
-          </p>
-          <Link
-            href="/login"
-            style={{
-              display: 'inline-block',
-              background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              color: 'var(--text-on-accent)',
-              borderRadius: 'var(--radius-lg)',
-              padding: '10px 24px',
-              fontFamily: 'var(--font-display)',
-              fontWeight: 600,
-              fontSize: 'var(--font-size-body)',
-              textDecoration: 'none',
-            }}
-          >
-            {t('backToLogin')}
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--bg-deep)',
-        color: 'var(--text-primary)',
-      }}
-    >
-      <div style={{ textAlign: 'center' }}>
-        <MascotIcon size={56} className="bf-mark-pulse" />
-        <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)' }}>{t('signingIn')}</p>
-      </div>
-    </div>
+    <AuthStatusScreen
+      loadingLabel={t('signingIn')}
+      failure={error ? { title: t('title'), message: error, backLabel: t('backToLogin') } : null}
+    />
   );
 }

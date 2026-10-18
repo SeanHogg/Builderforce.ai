@@ -24,6 +24,7 @@ import { and, eq } from 'drizzle-orm';
 import { usageDatabaseOf } from '../../application/llm/usageLedger';
 import { estimateTokensFromText } from '../../application/llm/tokenUsage';
 import { buildDatabase, type Db } from '../database/connection';
+import { runInDurableObjectScope } from '../../application/shared/requestScope';
 import {
   integrationCredentials,
   projectMemories,
@@ -139,7 +140,11 @@ export class AnalysisRunnerDO implements DurableObject {
     this.db = buildDatabase(env);
   }
 
-  async fetch(request: Request): Promise<Response> {
+  fetch(request: Request): Promise<Response> {
+    return runInDurableObjectScope('AnalysisRunnerDO', this.env, this.state, () => this.handleFetch(request));
+  }
+
+  private async handleFetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname.endsWith('/start')) {
       const body = (await request.json().catch(() => null)) as StartBody | null;
@@ -232,7 +237,11 @@ export class AnalysisRunnerDO implements DurableObject {
     await this.state.storage.setAlarm(Date.now());
   }
 
-  async alarm(): Promise<void> {
+  alarm(): Promise<void> {
+    return runInDurableObjectScope('AnalysisRunnerDO', this.env, this.state, () => this.handleAlarm());
+  }
+
+  private async handleAlarm(): Promise<void> {
     const cursor = (await this.state.storage.get<Cursor>(CURSOR_KEY)) ?? null;
     if (!cursor) return;
     try {

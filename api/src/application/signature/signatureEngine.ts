@@ -46,6 +46,7 @@ import { signatureParties, signatureRequests } from '../../infrastructure/databa
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hashShareToken, mintShareToken } from '../security/shareToken';
 import { StatusError } from '../../domain/shared/errors';
+import { DAY_MS } from '../../domain/shared/time';
 
 export class SignatureError extends StatusError<number> {
   constructor(message: string, status: number) {
@@ -557,7 +558,7 @@ export async function signatureRemindersDue(db: Db, now = new Date()): Promise<R
   // request — the N+1 the batch cap above merely bounded.
   const dueRows = rows.filter((row) => {
     const since = (row.lastRemindedAt ?? row.sentAt)?.getTime();
-    return since != null && now.getTime() - since >= row.remindAfterDays * 86_400_000;
+    return since != null && now.getTime() - since >= row.remindAfterDays * DAY_MS;
   });
   if (!dueRows.length) return [];
 

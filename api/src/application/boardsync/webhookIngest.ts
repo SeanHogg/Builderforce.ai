@@ -7,7 +7,7 @@
  * feed the identical reconciler.
  */
 
-import { hmacSha256Hex, hmacSha256Base64Url, timingSafeEqualHex } from '../../infrastructure/crypto/webhookHmac';
+import { hmacSha256Hex, hmacSha256Base64Url, timingSafeEqualHex, verifyHmacHex } from '../../infrastructure/crypto/webhookHmac';
 
 /** Normalized result of a webhook body, ready to hand to the reconciler. */
 export interface NormalizedWebhookTicket {
@@ -32,14 +32,7 @@ export async function verifyWebhookSignature(
   signatureHeader: string,
   secret: string,
 ): Promise<boolean> {
-  try {
-    if (!signatureHeader.startsWith('sha256=')) return false;
-    const expected = signatureHeader.slice('sha256='.length);
-    if (!expected) return false;
-    return timingSafeEqualHex(await hmacSha256Hex(secret, rawBody), expected);
-  } catch {
-    return false;
-  }
+  return verifyHmacHex(rawBody, signatureHeader, secret, 'sha256=');
 }
 
 /** Reads a request header by name (case-insensitive at the Hono layer). */

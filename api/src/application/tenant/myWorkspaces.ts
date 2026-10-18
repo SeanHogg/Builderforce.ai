@@ -15,6 +15,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { UserId } from '../../domain/shared/types';
 import type { Tenant } from '../../domain/tenant/Tenant';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { myWorkspacesKey, TENANT_READ_TTL } from './tenantReadCache';
 import { UserRepository } from '../../infrastructure/repositories/UserRepository';
 import { provisionBuiltinAgents } from '../agent/provisionBuiltinAgents';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -42,15 +44,25 @@ export async function listMyWorkspaces(
   tenantService: WorkspaceLister,
   userId: string,
 ): Promise<MyWorkspaces> {
-  await landPendingInvitations(db, env, tenantService, userId);
-  const [tenants, storedDefault] = await Promise.all([
-    tenantService.listTenantsForUser(userId),
-    new UserRepository(db).getDefaultTenantId(userId as UserId),
-  ]);
-  // Leaving a workspace must not leave the account auto-landed on a token
-  // exchange that will fail.
-  const defaultTenantId = storedDefault !== null && tenants.some((t) => t.id === storedDefault) ? storedDefault : null;
-  return { defaultTenantId, tenants };
+  // Read on every app-shell load. A hit skips invitation landing too: landing writes
+  // memberships, which invalidate this key (`membershipChanged`), and a new invitation
+  // invalidates the invitee's key (`InvitationService.invite`). Single-flight so a
+  // burst of cold loads costs one set of queries; an EMPTY list is dropped right after
+  // so a first-time invitee is never held on the "create a workspace" detour.
+  const cacheKey = myWorkspacesKey(userId);
+  const result = await getOrSetCached<MyWorkspaces>(env, cacheKey, async () => {
+    await landPendingInvitations(db, env, tenantService, userId);
+    const [tenants, storedDefault] = await Promise.all([
+      tenantService.listTenantsForUser(userId),
+      new UserRepository(db).getDefaultTenantId(userId as UserId),
+    ]);
+    // Leaving a workspace must not leave the account auto-landed on a token
+    // exchange that will fail.
+    const defaultTenantId = storedDefault !== null && tenants.some((t) => t.id === storedDefault) ? storedDefault : null;
+    return { defaultTenantId, tenants };
+  }, TENANT_READ_TTL);
+  if (result.tenants.length === 0) await invalidateCached(env, cacheKey);
+  return result;
 }
 
 export type CreateWorkspaceResult =
