@@ -18,16 +18,22 @@
  */
 
 import { sql } from 'drizzle-orm';
+import type { Db } from '../../../infrastructure/database/connection';
 import { fact, resultRows, rowsTable, type DomainRollup, type RowsColumn } from '../metricRollup';
 import type { RollupSources } from '../metricRollup';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 
 const WINDOW_DAYS = 90;
 const since = sql`DATE_TRUNC('day', NOW()) - (${WINDOW_DAYS} * INTERVAL '1 day')`;
-// Past days' usage facts persist (upsert), so the ledger scan only needs the
-// trailing days that can still change, not the whole 90-day window every sweep.
-const USAGE_TRAILING_DAYS = 3;
+// Past days' usage facts persist (upsert), so AFTER the first sweep the ledger
+// scan only needs the trailing days that can still change — not the whole
+// history every pass. A fresh install has no `agents.tokens` / `agents.cost_cents`
+// snapshot yet, so that first pass reads from the earliest usage row instead.
+export const USAGE_TRAILING_DAYS = 3;
 const usageSince = sql`DATE_TRUNC('day', NOW()) - (${USAGE_TRAILING_DAYS} * INTERVAL '1 day')`;
+const USAGE_FACT_KEYS = ['agents.tokens', 'agents.cost_cents'] as const;
+/** First sweep: every tenant-scoped ledger row, from the earliest `created_at`. */
+const usageFromStart = sql`u.created_at >= (SELECT MIN(created_at) FROM llm_usage_log)`;
 
 const USAGE_COLUMNS: readonly RowsColumn[] = [
   { name: 'tenant_id', type: 'int' },
@@ -57,8 +63,30 @@ function usageRows(sources: RollupSources) {
   return scan;
 }
 
-async function scanUsage({ usage }: RollupSources) {
+/**
+ * True when `metric_facts` already has at least one snapshot for BOTH usage
+ * metrics. Missing table, probe error, or a partial write (tokens without cost)
+ * all look like "no history" so the next sweep backfills rather than leaving
+ * a gap the trailing window can never reach.
+ */
+async function hasUsageFacts(core: Db): Promise<boolean> {
   try {
+    const rows = resultRows(await core.execute(sql`
+      SELECT COUNT(DISTINCT metric) AS n
+        FROM metric_facts
+       WHERE metric IN ('agents.tokens', 'agents.cost_cents')
+    `));
+    return Number(rows[0]?.n ?? 0) >= USAGE_FACT_KEYS.length;
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/kernel/rollups/agents.ts', operation: 'hasUsageFacts' });
+    return false;
+  }
+}
+
+async function scanUsage({ usage, core }: RollupSources) {
+  try {
+    const backfill = !(await hasUsageFacts(core));
+    const createdAt = backfill ? usageFromStart : sql`u.created_at >= ${usageSince}`;
     return resultRows(await usage.execute(sql`
       SELECT u.tenant_id,
              DATE_TRUNC('day', u.created_at) AS bucket_at,
@@ -67,7 +95,7 @@ async function scanUsage({ usage }: RollupSources) {
              SUM(COALESCE(u.prompt_tokens, 0) + COALESCE(u.completion_tokens, 0)) AS tokens,
              SUM(COALESCE(u.cost_usd_millicents, 0)) / 1000.0 AS cost_cents
         FROM llm_usage_log u
-       WHERE u.tenant_id IS NOT NULL AND u.created_at >= ${usageSince}
+       WHERE u.tenant_id IS NOT NULL AND ${createdAt}
        GROUP BY u.tenant_id, DATE_TRUNC('day', u.created_at), COALESCE(u.byo_provider, u.llm_product), u.byo
     `));
   } catch (error) {

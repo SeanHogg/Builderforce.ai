@@ -29,7 +29,7 @@ import type { Db } from '../../infrastructure/database/connection';
  * all, so this never needs to look realistic.
  */
 const STUB_DB = { execute: async () => ({ rows: [] }) } as unknown as Db;
-const STUB_SOURCES: RollupSources = { apps: STUB_DB, usage: STUB_DB };
+const STUB_SOURCES: RollupSources = { core: STUB_DB, apps: STUB_DB, usage: STUB_DB };
 
 /**
  * Keys a writer produces as INPUTS to another metric rather than for a chart.

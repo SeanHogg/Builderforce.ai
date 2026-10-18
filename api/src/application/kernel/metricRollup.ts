@@ -128,14 +128,17 @@ export function fact(spec: FactSpec): SQL {
 export type PresentTables = ReadonlySet<string>;
 
 /**
- * The databases a metric may READ besides the core one it writes `metric_facts` to.
+ * The databases a metric may READ.
  *
- * `apps` holds `project_sites` and every `site_*` table (the core database itself when
- * the apps runtime is not split out). A statement cannot span two databases, so a
- * metric over site rows aggregates them HERE first and hands the result to its fact as
- * a derived table — see {@link rowsTable}.
+ * `core` is the handle `metric_facts` is written to. `apps` holds `project_sites`
+ * and every `site_*` table (the core database itself when the apps runtime is not
+ * split out). `usage` is the operational database: `llm_usage_log` and the other
+ * write-heavy ledgers. A statement cannot span two databases, so a metric over
+ * site or ledger rows aggregates them HERE first and hands the result to its fact
+ * as a derived table — see {@link rowsTable}.
  */
 export interface RollupSources {
+  core: Db;
   apps: Db;
   /** The operational database: `llm_usage_log` and the other write-heavy ledgers. */
   usage: Db;
@@ -218,7 +221,7 @@ export async function runDomainRollup(
   let extra: Record<string, number> = {};
 
   if (rollup.prepare) extra = await rollup.prepare(db, present);
-  const sources: RollupSources = { apps: appsDatabaseOf(db), usage: usageDatabaseOf(db) };
+  const sources: RollupSources = { core: db, apps: appsDatabaseOf(db), usage: usageDatabaseOf(db) };
 
   for (const spec of rollup.metrics) {
     const missing = spec.requires.filter((table) => !present.has(table));
