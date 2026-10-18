@@ -64,7 +64,10 @@ export interface CounterKv {
   AUTH_CACHE_KV?: KVNamespace;
 }
 
-const isolateId = crypto.randomUUID();
+// Minted on first use, never at import: Workers reject random values in global scope
+// (deploy fails with code 10021). The first flush always runs inside a handler.
+let isolateIdValue: string | undefined;
+const isolateId = (): string => (isolateIdValue ??= crypto.randomUUID());
 let flushSeq = 0;
 let lastFlushAt = 0;
 let tailScheduled = false;
@@ -72,7 +75,7 @@ const pending = new Map<string, { kind: string; key: string; n: number; t: numbe
 
 const mapKey = (kind: string, key: string): string => `${kind}|${key}`;
 const kvName = (kind: string, key: string, seq: number): string =>
-  `${PREFIX}${kind}|${encodeURIComponent(key)}|${isolateId}|${seq}`;
+  `${PREFIX}${kind}|${encodeURIComponent(key)}|${isolateId()}|${seq}`;
 
 function parseKvName(name: string): { kind: string; key: string } | null {
   if (!name.startsWith(PREFIX)) return null;
