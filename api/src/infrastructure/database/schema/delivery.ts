@@ -1482,6 +1482,55 @@ export const projectEvermind = pgTable('project_evermind', {
 }));
 
 
+/**
+ * Evermind learning pipeline (migration 1240). The product ledger the four
+ * roadmap key results are read from — a baseline snapshot, one row per text
+ * learn, and a reviewable candidate. Not a second weight store.
+ */
+export const evermindLearningBaselines = pgTable('evermind_learning_baselines', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:    integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  headVersion:  integer('head_version').notNull().default(0),
+  facts:        jsonb('facts').$type<Array<{ key: string; content: string }>>().notNull().default([]),
+  factCount:    integer('fact_count').notNull().default(0),
+  capturedAt:   timestamp('captured_at').notNull().defaultNow(),
+}, (t) => ({
+  uqProject: uniqueIndex('uq_evermind_learning_baseline_project').on(t.tenantId, t.projectId),
+}));
+
+export const evermindLearningRuns = pgTable('evermind_learning_runs', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  headVersion: integer('head_version').notNull().default(0),
+  produced:    boolean('produced').notNull().default(false),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byProject: index('idx_evermind_learning_runs_project').on(t.tenantId, t.projectId, t.createdAt),
+}));
+
+export const evermindLearningCandidates = pgTable('evermind_learning_candidates', {
+  id:               serial('id').primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:        integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  runId:            integer('run_id').notNull().references(() => evermindLearningRuns.id, { onDelete: 'cascade' }),
+  statement:        text('statement').notNull(),
+  factKey:          varchar('fact_key', { length: 120 }).notNull(),
+  baselineContent:  text('baseline_content'),
+  contradicts:      boolean('contradicts').notNull().default(false),
+  status:           varchar('status', { length: 16 }).notNull().default('pending'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  reviewedAt:       timestamp('reviewed_at'),
+  reviewedBy:       varchar('reviewed_by', { length: 36 }),
+  transferredAt:    timestamp('transferred_at'),
+  benchBefore:      real('bench_before'),
+  benchAfter:       real('bench_after'),
+}, (t) => ({
+  byProject: index('idx_evermind_learning_candidates_project').on(t.tenantId, t.projectId, t.status, t.createdAt),
+}));
+
+
 /** Incident → implicated DELIVERY ticket(s) (PRD §5.10): the ticket(s) whose change
  *  caused an incident, so RCA can pull their Accountability Reports and see where the
  *  process was skipped/waived. Distinct from `boardTaskId` (the incident's OWN ticket)

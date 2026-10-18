@@ -14,6 +14,9 @@ import {
   approvalActions,
   bottleneckAnalysis,
   capacityHeatmaps,
+  evermindLearningBaselines,
+  evermindLearningCandidates,
+  evermindLearningRuns,
   listItems,
   portfolioCompanies,
   portfolioItems,
@@ -59,6 +62,11 @@ export const DELIVERY_ENTITIES = defineDomainEntities('delivery', [
    *  a hand-edited `writes_count` or `pr_number` would claim a pull request nobody
    *  opened. */
   entity(taskRepoBindings, { readOnly: true }),
+  /** Learning-pipeline ledger. Written only by the capture / learn / review doors,
+   *  so a hand-edited status would invent a key result nothing measured. */
+  entity(evermindLearningBaselines, { readOnly: true }),
+  entity(evermindLearningRuns, { readOnly: true }),
+  entity(evermindLearningCandidates, { readOnly: true }),
   /** Customer discovery, the evidence a Realization is read against: a conversation
    *  with a real person, and a note toward answering the idea's own question. Same
    *  seat as `realizations` for the same reason (schema/discovery.ts's header) —

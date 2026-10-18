@@ -64,6 +64,7 @@ import {
   reseedProjectEvermind,
   generateDefaultEvermindBase,
 } from '../../application/llm/projectEvermind';
+import { captureLearningBaseline, learningPipelineReport, recordLearningRun, reviewLearningCandidate, transferLearningCandidate } from '../../application/llm/evermindLearningPipeline';
 import { projectInTenantCached } from '../../application/project/projectOwnership';
 import { MAX_DELTA_B64_CHARS, parseDeltaLearnPayload } from '@seanhogg/builderforce-memory-engine';
 import { deltaParseStatus } from '../../application/llm/evermindDeltaLearn';
@@ -323,11 +324,15 @@ async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: numb
   const weight = typeof body.weight === 'number' ? body.weight : undefined;
   if (fanOut) {
     const contributed = await contributeTextToProjectEverminds(env, db, tenantId, projectId, text, weight, prompt);
+    // The pipeline ledger is the extraction-rate denominator. A failed insert must
+    // not turn an accepted teach into a 500 — the weight write already happened.
+    await recordLearningRun(env, db, tenantId, projectId, text);
     // `baseVersion` kept for on-prem back-compat (it reads a single version); `contributed`
     // names every Evermind that received the text.
     return json({ ok: true, contributed, ...(contributed[0] ? { baseVersion: contributed[0].version } : {}) });
   }
   const result = await dispatchProjectEvermindLearnText(env, tenantId, projectId, text, weight, prompt);
+  if (result.status < 300) await recordLearningRun(env, db, tenantId, projectId, text);
   return json(result.body, result.status);
 }
 
@@ -747,6 +752,59 @@ export function createProjectEvermindRoutes(db: Db, door: FrontDoor = tenantDoor
    * frontier use. The local coherence screen alone needs no gate, but the endpoint runs
    * both, so the gate is applied up front for honesty about what it will spend.
    */
+  // The learning-pipeline ledger (roadmap 07bc5793). Manager-only: it is the
+  // curation surface, not a second weight store.
+  router.get('/:projectId/evermind/learning', requireRole(TenantRole.MANAGER), async (c) => {
+    const projectId = pid(c);
+    if (!projectId) return c.json({ error: 'invalid project id' }, 400);
+    if (!(await projectInTenantCached(c.env as Env, db, t(c), projectId))) return c.json({ error: 'project not found' }, 404);
+    return c.json(await learningPipelineReport(db, t(c), projectId));
+  });
+
+  router.post('/:projectId/evermind/learning/baseline', requireRole(TenantRole.MANAGER), async (c) => {
+    const projectId = pid(c);
+    if (!projectId) return c.json({ error: 'invalid project id' }, 400);
+    if (!(await projectInTenantCached(c.env as Env, db, t(c), projectId))) return c.json({ error: 'project not found' }, 404);
+    return c.json(await captureLearningBaseline(c.env as Env, db, t(c), projectId));
+  });
+
+  const CandidateBody = z.object({
+    verdict: z.enum(['approved', 'rejected']).optional(),
+    benchBefore: z.number().finite().optional(),
+    benchAfter: z.number().finite().optional(),
+  });
+
+  router.post('/:projectId/evermind/learning/candidates/:candidateId', requireRole(TenantRole.MANAGER), async (c) => {
+    const projectId = pid(c);
+    if (!projectId) return c.json({ error: 'invalid project id' }, 400);
+    const candidateId = Number(c.req.param('candidateId'));
+    if (!Number.isInteger(candidateId) || candidateId <= 0) return c.json({ error: 'invalid candidate id' }, 400);
+    if (!(await projectInTenantCached(c.env as Env, db, t(c), projectId))) return c.json({ error: 'project not found' }, 404);
+    const body = await parseOptionalBody(c, CandidateBody);
+    const reviewer = c.get('userId');
+    const reviewed = await reviewLearningCandidate(
+      db, t(c), projectId, candidateId, body?.verdict ?? 'approved',
+      typeof reviewer === 'string' ? reviewer : null,
+    );
+    if (!reviewed) return c.json({ error: 'candidate not found' }, 404);
+    return c.json(reviewed);
+  });
+
+  router.post('/:projectId/evermind/learning/candidates/:candidateId/transfer', requireRole(TenantRole.MANAGER), async (c) => {
+    const projectId = pid(c);
+    if (!projectId) return c.json({ error: 'invalid project id' }, 400);
+    const candidateId = Number(c.req.param('candidateId'));
+    if (!Number.isInteger(candidateId) || candidateId <= 0) return c.json({ error: 'invalid candidate id' }, 400);
+    if (!(await projectInTenantCached(c.env as Env, db, t(c), projectId))) return c.json({ error: 'project not found' }, 404);
+    const body = await parseOptionalBody(c, CandidateBody);
+    const transferred = await transferLearningCandidate(
+      c.env as Env, db, t(c), projectId, candidateId,
+      { before: body?.benchBefore, after: body?.benchAfter, reviewerId: c.get('userId') as string | undefined },
+    );
+    if (!transferred.ok) return c.json({ error: transferred.error }, transferred.status as 404 | 409 | 503);
+    return c.json(transferred);
+  });
+
   router.post('/:projectId/evermind/analyze', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);

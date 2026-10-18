@@ -64,6 +64,67 @@ export async function teachProjectEvermindFromText(
  * in-browser Workflow Builder "Build" path): base64 model bytes + its tokenizer.
  * Manager-only server-side; validates the artifact before writing version 1.
  */
+export interface LearningPipelineReport {
+  baseline: { headVersion: number; factCount: number; capturedAt: string } | null;
+  pending: Array<{
+    id: number;
+    statement: string;
+    factKey: string;
+    contradicts: boolean;
+    baselineContent: string | null;
+    createdAt: string;
+  }>;
+  metrics: {
+    runs: number;
+    produced: number;
+    candidates: number;
+    extractionRate: number;
+    contradictionRate: number;
+    reviewHours: number | null;
+    transferUplift: number | null;
+  };
+}
+
+/** Manager review surface for the learning pipeline (roadmap 07bc5793). 403 is expected for non-managers. */
+export async function getLearningPipeline(projectId: number): Promise<LearningPipelineReport> {
+  return apiRequest<LearningPipelineReport>(`/api/projects/${projectId}/evermind/learning`, { expectedErrors: [403, 404] });
+}
+
+export async function captureLearningBaseline(projectId: number): Promise<{ factCount: number; headVersion: number; capturedAt: string }> {
+  return apiRequest(`/api/projects/${projectId}/evermind/learning/baseline`, {
+    method: 'POST',
+    expectedErrors: [403],
+  });
+}
+
+export async function reviewLearningCandidate(
+  projectId: number,
+  candidateId: number,
+  verdict: 'approved' | 'rejected',
+): Promise<{ id: number; status: string }> {
+  return apiRequest(`/api/projects/${projectId}/evermind/learning/candidates/${candidateId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ verdict }),
+  });
+}
+
+export async function transferLearningCandidate(
+  projectId: number,
+  candidateId: number,
+): Promise<{ ok: boolean; id: number }> {
+  return apiRequest(`/api/projects/${projectId}/evermind/learning/candidates/${candidateId}/transfer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+}
+
+/**
+ * Seed the project base directly from a freshly-built `.evermind` artifact (the
+ * in-browser Workflow Builder "Build" path): base64 model bytes + its tokenizer.
+ * Manager-only server-side; validates the artifact before writing version 1.
+ */
 export async function seedProjectEvermindFromArtifact(
   projectId: number,
   params: { model: string; tokenizer: { vocab: Record<string, number>; merges: string[] }; name?: string },

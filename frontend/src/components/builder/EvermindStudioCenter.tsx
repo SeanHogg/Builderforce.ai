@@ -20,6 +20,7 @@ const EvermindBrainMap = dynamic(
   { ssr: false },
 );
 import { EvermindLearnings } from './EvermindLearnings';
+import { EvermindLearningReview } from './EvermindLearningReview';
 import { useEvermindValidation } from './EvermindValidationContext';
 
 export function EvermindStudioCenter({ projectId }: { projectId: number | null }) {
@@ -42,6 +43,7 @@ export function EvermindStudioCenter({ projectId }: { projectId: number | null }
         />
       </div>
       <div className="ev-studio-learn">
+        <EvermindLearningReview projectId={projectId} />
         <EvermindLearnings data={data} selectedRegion={selectedRegion} onClearRegion={() => setSelectedRegion(null)} />
       </div>
     </div>
