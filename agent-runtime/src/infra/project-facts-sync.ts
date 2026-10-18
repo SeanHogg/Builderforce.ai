@@ -20,13 +20,24 @@ function authHeaders(cfg: ProjectFactsSyncConfig): Record<string, string> {
 }
 
 /** Write-through a belief to the shared project store (replace-on-write by key). */
-export async function pushProjectFact(cfg: ProjectFactsSyncConfig, key: string, content: string): Promise<boolean> {
+export async function pushProjectFact(
+  cfg: ProjectFactsSyncConfig,
+  key: string,
+  content: string,
+): Promise<boolean> {
   if (!key.trim() || !content.trim()) return false;
   try {
     const res = await fetch(`${cfg.gatewayUrl}/api/agent/projects/${cfg.projectId}/facts`, {
       method: "POST",
       headers: { ...authHeaders(cfg), "Content-Type": "application/json" },
       body: JSON.stringify({ key: key.slice(0, 255), content, source: "onprem" }),
+      // Bounded like `pushMemoryToMesh` (knowledge-loop.ts), which posts to the same
+      // gateway with the same host-key auth. A gateway that ACCEPTS the connection and
+      // never answers would otherwise hold this request — and its socket — open
+      // indefinitely. Callers void this call, so the wait never delays a run; it only
+      // fails to close. The abort surfaces through the existing `catch` as `false`,
+      // exactly like a non-ok response, so the return contract is unchanged.
+      signal: AbortSignal.timeout(10_000),
     });
     return res.ok;
   } catch {
@@ -44,9 +55,12 @@ export async function recallSharedProjectFacts(
     const qs = new URLSearchParams();
     if (query) qs.set("query", query);
     qs.set("limit", String(limit));
-    const res = await fetch(`${cfg.gatewayUrl}/api/agent/projects/${cfg.projectId}/facts?${qs.toString()}`, {
-      headers: authHeaders(cfg),
-    });
+    const res = await fetch(
+      `${cfg.gatewayUrl}/api/agent/projects/${cfg.projectId}/facts?${qs.toString()}`,
+      {
+        headers: authHeaders(cfg),
+      },
+    );
     if (!res.ok) return [];
     const j = (await res.json()) as { facts?: Array<{ key: string; content: string }> };
     return Array.isArray(j.facts) ? j.facts : [];
