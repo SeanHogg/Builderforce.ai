@@ -1,106 +1,100 @@
 /**
  * The Status tab's copy (plan, meters, Evermind) and the spend & savings readouts (the
- * chat's spend pill, the Status tab's period card), from Rovr's catalogs. `{used}`,
- * `{amount}`, `{pct}`… stay in the messages as the shared components' own placeholders;
- * they substitute the figures.
+ * chat's spend pill, the Status tab's period card), from Rovr's catalogs through
+ * brain-ui's ONE key tables (`workStatusLabelsFrom`, `spendLabelsFrom`). This file only
+ * says which Rovr message each canonical key reads. `{used}`, `{amount}`, `{pct}`… stay
+ * in the messages as the shared components' own placeholders; they substitute the figures.
+ * "Evermind" (a brand) and "v{version}" (a version tag) are not translated — brain-ui's
+ * defaults stand for them.
  */
-import type { SpendLabels, WorkStatusLabels } from '@seanhogg/builderforce-brain-ui';
-import { t } from '../../i18n/t';
+import { spendLabelsFrom, workStatusLabelsFrom, type SpendLabels, type WorkStatusLabels } from '@seanhogg/builderforce-brain-ui';
+import type { MessageKey } from '../../i18n/t';
+import { rovrLookup } from './rovrLookup';
 
-/** A count in the panel's locale (token budgets, ticket counts). */
-export const formatCount = (n: number): string => n.toLocaleString(chrome.i18n.getUILanguage());
+export { formatCount } from './rovrLookup';
+
+/** Status-tab canonical key → Rovr message. */
+export const STATUS_KEY: Readonly<Record<string, MessageKey>> = {
+  loading: 'stLoading',
+  account: 'stAccount',
+  plan: 'stPlan',
+  resets: 'stResets',
+  limitsLifted: 'stLimitsLifted',
+  limitsLiftedHint: 'stLimitsLiftedHint',
+  usage: 'stUsage',
+  usageEmpty: 'stUsageEmpty',
+  unlimited: 'stUnlimited',
+  meterOf: 'stMeterOf',
+  upgrade: 'stUpgrade',
+  managePlan: 'stManagePlan',
+  'billing.past_due': 'stBillingPastDue',
+  'billing.canceled': 'stBillingCanceled',
+  'billing.trialing': 'stBillingTrialing',
+  'billing.incomplete': 'stBillingIncomplete',
+  'plans.free': 'stPlanFree',
+  'plans.pro': 'stPlanPro',
+  'plans.teams': 'stPlanTeams',
+  'plans.enterprise': 'stPlanEnterprise',
+  'meters.ai_tokens': 'stMeterAiTokens',
+  'meters.cloud_runs': 'stMeterCloudRuns',
+  'meters.stage_sandbox_runs': 'stMeterSandboxRuns',
+  'meters.ingestion': 'stMeterIngestion',
+  'meters.error_events': 'stMeterErrorEvents',
+  'meters.outbound_fetches': 'stMeterOutboundFetches',
+  'meters.feedback_submissions': 'stMeterFeedback',
+  'meters.replay_recordings': 'stMeterRecordings',
+  'units.tokens': 'stUnitTokens',
+  'units.bytes': 'stUnitBytes',
+  'units.runs': 'stUnitRuns',
+  'units.events': 'stUnitEvents',
+  'units.fetches': 'stUnitFetches',
+  'units.submissions': 'stUnitSubmissions',
+  'units.sandbox_runs': 'stUnitRuns',
+  'units.recordings': 'stUnitRecordings',
+  evermindLearning: 'stEvermindLearning',
+  evermindFrozen: 'stEvermindFrozen',
+  evermindAnswersOn: 'stEvermindAnswersOn',
+  evermindAnswersOff: 'stEvermindAnswersOff',
+  evermindHint: 'stEvermindHint',
+};
+
+/** Spend canonical key → Rovr message. */
+export const SPEND_KEY: Readonly<Record<string, MessageKey>> = {
+  spent: 'spSpent',
+  saved: 'spSaved',
+  savedApprox: 'spSavedApprox',
+  tokens: 'spTokens',
+  pillTitle: 'spPillTitle',
+  spendHeading: 'spSpendHeading',
+  platform: 'spPlatform',
+  yourKey: 'spYourKey',
+  yourKeyHint: 'spYourKeyHint',
+  unpriced: 'spUnpriced',
+  savedHeading: 'spSavedHeading',
+  savedShare: 'spSavedShare',
+  estimated: 'spEstimated',
+  measured: 'spMeasured',
+  events: 'spEvents',
+  nothingSaved: 'spNothingSaved',
+  periodHeading: 'spPeriodHeading',
+  'sources.prompt_cache': 'spSourcePromptCache',
+  'sources.memory_answer': 'spSourceMemoryAnswer',
+  'sources.evermind_answer': 'spSourceEvermindAnswer',
+  'sources.response_cache': 'spSourceResponseCache',
+  'sources.context_trim': 'spSourceContextTrim',
+  'sources.recall_overhead': 'spSourceRecallOverhead',
+  'sourceHints.prompt_cache': 'spHintPromptCache',
+  'sourceHints.memory_answer': 'spHintMemoryAnswer',
+  'sourceHints.evermind_answer': 'spHintEvermindAnswer',
+  'sourceHints.response_cache': 'spHintResponseCache',
+  'sourceHints.context_trim': 'spHintContextTrim',
+  'sourceHints.recall_overhead': 'spHintRecallOverhead',
+};
 
 export function rovrStatusLabels(): WorkStatusLabels {
-  return {
-    loading: t('stLoading'),
-    account: t('stAccount'),
-    plan: t('stPlan'),
-    resets: t('stResets'),
-    limitsLifted: t('stLimitsLifted'),
-    limitsLiftedHint: t('stLimitsLiftedHint'),
-    usage: t('stUsage'),
-    usageEmpty: t('stUsageEmpty'),
-    unlimited: t('stUnlimited'),
-    meterOf: t('stMeterOf'),
-    upgrade: t('stUpgrade'),
-    managePlan: t('stManagePlan'),
-    billing: {
-      past_due: t('stBillingPastDue'),
-      canceled: t('stBillingCanceled'),
-      trialing: t('stBillingTrialing'),
-      incomplete: t('stBillingIncomplete'),
-    },
-    plans: {
-      free: t('stPlanFree'),
-      pro: t('stPlanPro'),
-      teams: t('stPlanTeams'),
-      enterprise: t('stPlanEnterprise'),
-    },
-    meters: {
-      ai_tokens: t('stMeterAiTokens'),
-      cloud_runs: t('stMeterCloudRuns'),
-      stage_sandbox_runs: t('stMeterSandboxRuns'),
-      ingestion: t('stMeterIngestion'),
-      error_events: t('stMeterErrorEvents'),
-      outbound_fetches: t('stMeterOutboundFetches'),
-      feedback_submissions: t('stMeterFeedback'),
-      replay_recordings: t('stMeterRecordings'),
-    },
-    units: {
-      tokens: t('stUnitTokens'),
-      bytes: t('stUnitBytes'),
-      runs: t('stUnitRuns'),
-      events: t('stUnitEvents'),
-      fetches: t('stUnitFetches'),
-      submissions: t('stUnitSubmissions'),
-      sandbox_runs: t('stUnitRuns'),
-      recordings: t('stUnitRecordings'),
-    },
-    // A brand name and a version tag — not translated.
-    evermind: 'Evermind',
-    evermindVersion: 'v{version}',
-    evermindLearning: t('stEvermindLearning'),
-    evermindFrozen: t('stEvermindFrozen'),
-    evermindAnswersOn: t('stEvermindAnswersOn'),
-    evermindAnswersOff: t('stEvermindAnswersOff'),
-    evermindHint: t('stEvermindHint'),
-  };
+  return workStatusLabelsFrom(rovrLookup((key) => STATUS_KEY[key]));
 }
 
 export function rovrSpendLabels(): SpendLabels {
-  return {
-    spent: t('spSpent'),
-    saved: t('spSaved'),
-    savedApprox: t('spSavedApprox'),
-    tokens: t('spTokens'),
-    pillTitle: t('spPillTitle'),
-    spendHeading: t('spSpendHeading'),
-    platform: t('spPlatform'),
-    yourKey: t('spYourKey'),
-    yourKeyHint: t('spYourKeyHint'),
-    unpriced: t('spUnpriced'),
-    savedHeading: t('spSavedHeading'),
-    savedShare: t('spSavedShare'),
-    estimated: t('spEstimated'),
-    measured: t('spMeasured'),
-    events: t('spEvents'),
-    nothingSaved: t('spNothingSaved'),
-    periodHeading: t('spPeriodHeading'),
-    sources: {
-      prompt_cache: t('spSourcePromptCache'),
-      memory_answer: t('spSourceMemoryAnswer'),
-      evermind_answer: t('spSourceEvermindAnswer'),
-      response_cache: t('spSourceResponseCache'),
-      context_trim: t('spSourceContextTrim'),
-      recall_overhead: t('spSourceRecallOverhead'),
-    },
-    sourceHints: {
-      prompt_cache: t('spHintPromptCache'),
-      memory_answer: t('spHintMemoryAnswer'),
-      evermind_answer: t('spHintEvermindAnswer'),
-      response_cache: t('spHintResponseCache'),
-      context_trim: t('spHintContextTrim'),
-      recall_overhead: t('spHintRecallOverhead'),
-    },
-  };
+  return spendLabelsFrom(rovrLookup((key) => SPEND_KEY[key]));
 }

@@ -90,15 +90,15 @@ function AccountSection() {
       )}
       <div className="rovr-row">
         {signedIn ? (
-          <button type="button" className="rovr-btn" onClick={() => void services.session.signOut()}>
+          <button type="button" className="bf-btn" onClick={() => void services.session.signOut()}>
             {t('signOut')}
           </button>
         ) : code ? (
-          <button type="button" className="rovr-btn" onClick={() => abort.current?.abort()}>
+          <button type="button" className="bf-btn" onClick={() => abort.current?.abort()}>
             {t('cancel')}
           </button>
         ) : (
-          <button type="button" className="rovr-btn rovr-btn--primary" onClick={() => void signIn()}>
+          <button type="button" className="bf-btn bf-btn--primary" onClick={() => void signIn()}>
             {t('signIn')}
           </button>
         )}
@@ -118,7 +118,7 @@ function SitesSection() {
       <h2 className="rovr-h2">{t('sitesHeading')}</h2>
       <p className="rovr-muted">{t('sitesIntro')}</p>
       {here && !sites.includes(here) && (
-        <button type="button" className="rovr-btn" onClick={() => void services.sites.request(here)}>
+        <button type="button" className="bf-btn" onClick={() => void services.sites.request(here)}>
           {t('allowSite', here)}
         </button>
       )}
@@ -129,7 +129,7 @@ function SitesSection() {
           {sites.map((site) => (
             <li key={site} className="rovr-row rovr-row--spread">
               <span className="rovr-ellipsis">{site}</span>
-              <button type="button" className="rovr-btn" onClick={() => void services.sites.remove(site)} aria-label={t('removeSiteLabel', site)}>
+              <button type="button" className="bf-btn" onClick={() => void services.sites.remove(site)} aria-label={t('removeSiteLabel', site)}>
                 {t('remove')}
               </button>
             </li>
@@ -165,7 +165,7 @@ function LocalModelsSection() {
             <li key={p.provider} className="rovr-row rovr-row--spread">
               {/* Runtime brands are not translated ("Ollama" is "Ollama" everywhere). */}
               <span>{localRuntime(p.provider).label}</span>
-              <span className={`rovr-chip rovr-chip--${p.reachable && p.models.length ? 'ok' : 'off'}`}>
+              <span className={`bf-chip bf-chip--${p.reachable && p.models.length ? 'ok' : 'off'}`}>
                 {p.reachable ? t('localModels', p.models.length) : t('localNotRunning')}
               </span>
             </li>
@@ -175,14 +175,14 @@ function LocalModelsSection() {
       <label className="rovr-field">
         <span>{t('synapseAddress')}</span>
         <input
-          className="rovr-input"
+          className="bf-input"
           value={synapseUrl}
           placeholder={SYNAPSE_DEFAULT_URL}
           onChange={(e) => setSynapseUrl(e.target.value)}
           onBlur={() => void services.settings.setSynapseUrl(synapseUrl || null).then(refresh)}
         />
       </label>
-      <button type="button" className="rovr-btn" onClick={refresh}>
+      <button type="button" className="bf-btn" onClick={refresh}>
         {t('refresh')}
       </button>
     </div>
@@ -211,7 +211,7 @@ function TaskProjectSection() {
       <label className="rovr-field">
         <span>{t('taskProjectLabel')}</span>
         <select
-          className="rovr-select"
+          className="bf-select"
           value={projectId ?? ''}
           disabled={!signedIn}
           onChange={(e) => {

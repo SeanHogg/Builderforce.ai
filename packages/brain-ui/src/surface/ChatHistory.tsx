@@ -1,5 +1,6 @@
 import { memo, type ReactNode } from 'react';
 import { chatSwitcherLabel } from '../chatTickets/chatSwitcherLabel';
+import { stringsFrom, type LabelLookup } from '../labelCatalog';
 
 /**
  * The ONE chat-history list every AI surface opens from its header's History lever —
@@ -38,6 +39,11 @@ export const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels = {
   summarize: 'Summarize',
   delete: 'Delete',
 };
+
+/** THE chat-history copy from a host catalog (canonical keys = the field names). */
+export function chatHistoryLabelsFrom(lookup: LabelLookup): ChatHistoryLabels {
+  return stringsFrom(DEFAULT_CHAT_HISTORY_LABELS, lookup);
+}
 
 export interface ChatHistoryChat {
   id: number;

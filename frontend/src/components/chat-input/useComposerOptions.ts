@@ -1,7 +1,7 @@
 // No `'use client'`: this module exports a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
 import { useMemo } from 'react';
-import type { ComposerOptions } from '@seanhogg/builderforce-brain-ui';
+import { composerModel, type ComposerOptions } from '@seanhogg/builderforce-brain-ui';
 import { browserLocalModelStore } from '@/lib/brain/localModelStore';
 import type { ChatInputProps } from './types';
 
@@ -35,16 +35,19 @@ export function useComposerOptions(p: ComposerOptionProps): ComposerOptions {
     ...(onThinkingChange ? { thinking: { value: !!thinking, onChange: onThinkingChange } } : {}),
     ...(onModelSelectionChange && modelOptions && modelSelection
       ? {
-          model: {
+          // brain-ui's ONE Model-section builder (the editor and Rovr build theirs there too).
+          model: composerModel({
+            catalog: { options: modelOptions, identity: modelIdentity },
             selection: modelSelection,
-            options: modelOptions,
             onChange: onModelSelectionChange,
             effective: effectiveModel,
-            identity: modelIdentity,
             // The page engines' store is the on-device list's port: models downloaded
             // into THIS browser (WebGPU `bfi`, WebLLM) are listed, fetched and pinned here.
             localStore: browserLocalModelStore,
-          },
+            // The web reads its catalogue through `useChatModelOptions`, whose identity is
+            // the account's own verdict — never a pending placeholder.
+            identityPending: false,
+          }),
         }
       : {}),
     ...(onAutoModeChange ? { autoMode: { enabled: !!autoMode, onChange: onAutoModeChange } } : {}),

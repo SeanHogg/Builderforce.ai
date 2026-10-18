@@ -22,7 +22,7 @@
  * The service worker is the ONLY owner of this outbox (two contexts draining one store
  * would race); the side panel hands it items over `chrome.runtime` messages.
  */
-import { createOutbox, type Outbox, type OutboxOnlineSignal, type OutboxStore } from '@builderforce/write-outbox';
+import { createOutbox, type Outbox, type OutboxOnlineSignal, type OutboxSendContext, type OutboxStore } from '@builderforce/write-outbox';
 import type { ApiClient } from '../api/apiClient';
 import type { MessageInput, RovrRecords } from '../store/records';
 
@@ -101,41 +101,90 @@ async function syncTask(deps: ChatSyncDeps, serverChatId: number, taskId: string
   await deps.records.putTask({ ...task, serverTaskId, state: 'synced' });
 }
 
-export function createChatSync(deps: ChatSyncDeps): Outbox<SyncItem, number> {
-  return createOutbox<SyncItem, number>({
+/**
+ * The chat outbox plus a CHANGE signal: `subscribe` hears every change to its
+ * {@link Outbox.stats} — an enqueue, a batch going out or settling, a drop, the durable
+ * store loading its backlog — so whoever shows "waiting to sync" reacts to the queue
+ * instead of polling it. Coalesced to one call per task (a burst of enqueues is one).
+ */
+export interface ChatSync extends Outbox<SyncItem, number> {
+  subscribe(listener: () => void): () => void;
+}
+
+export function createChatSync(deps: ChatSyncDeps): ChatSync {
+  const listeners = new Set<() => void>();
+  let pending = false;
+  // Deferred to the next task: the outbox updates its counters around `send` (and after
+  // `onError`) in microtasks of its own, so a listener reads the settled numbers.
+  const changed = (): void => {
+    if (pending) return;
+    pending = true;
+    setTimeout(() => {
+      pending = false;
+      for (const listener of [...listeners]) listener();
+    }, 0);
+  };
+  const outbox = createOutbox<SyncItem, number>({
     maxItems: SYNC_BATCH_MAX,
     maxWaitMs: SYNC_BATCH_WAIT_MS,
     retry: {},
     store: deps.store,
     online: deps.online,
     scope: deps.scope,
-    ...(deps.onError ? { onError: deps.onError } : {}),
+    onError: (error) => {
+      changed();
+      deps.onError?.(error);
+    },
+    onDrop: changed,
     async send(localChatId, items, ctx) {
-      const serverChatId = await ensureServerChat(deps, localChatId, ctx.scope);
-      // Consecutive message rows travel together; a task is sent in its place in order.
-      let rows: Array<MessageInput & { eventKey: string }> = [];
-      const flushRows = async () => {
-        if (rows.length === 0) return;
-        const batch = rows;
-        rows = [];
-        await deps.api.request(`/api/brain/chats/${serverChatId}/messages`, {
-          method: 'POST',
-          json: { messages: batch },
-          // Replay-safe through each row's `eventKey`, not a request key: one batch can
-          // carry several row groups (split by a task), which must not share one.
-          ...(ctx.scope !== undefined ? { asScope: ctx.scope } : {}),
-        });
-      };
-      for (const [i, item] of items.entries()) {
-        const entryId = ctx.ids[i] ?? `${ctx.idempotencyKey}:${i}`;
-        if (item.kind === 'message') {
-          rows.push({ ...item.row, eventKey: `rovr:${entryId}` });
-          continue;
-        }
-        await flushRows();
-        await syncTask(deps, serverChatId, item.taskId, `rovr-task:${entryId}`, ctx.scope);
+      changed();
+      try {
+        await sendBatch(deps, localChatId, items, ctx);
+      } finally {
+        changed();
       }
-      await flushRows();
     },
   });
+  void outbox.ready().then(changed, () => undefined);
+  return {
+    ...outbox,
+    enqueue(key, item) {
+      const id = outbox.enqueue(key, item);
+      changed();
+      return id;
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+/** Send one batch of a local chat's queue: the chat first, then its rows and tasks in order. */
+async function sendBatch(deps: ChatSyncDeps, localChatId: number, items: SyncItem[], ctx: OutboxSendContext): Promise<void> {
+  const serverChatId = await ensureServerChat(deps, localChatId, ctx.scope);
+  // Consecutive message rows travel together; a task is sent in its place in order.
+  let rows: Array<MessageInput & { eventKey: string }> = [];
+  const flushRows = async () => {
+    if (rows.length === 0) return;
+    const batch = rows;
+    rows = [];
+    await deps.api.request(`/api/brain/chats/${serverChatId}/messages`, {
+      method: 'POST',
+      json: { messages: batch },
+      // Replay-safe through each row's `eventKey`, not a request key: one batch can
+      // carry several row groups (split by a task), which must not share one.
+      ...(ctx.scope !== undefined ? { asScope: ctx.scope } : {}),
+    });
+  };
+  for (const [i, item] of items.entries()) {
+    const entryId = ctx.ids[i] ?? `${ctx.idempotencyKey}:${i}`;
+    if (item.kind === 'message') {
+      rows.push({ ...item.row, eventKey: `rovr:${entryId}` });
+      continue;
+    }
+    await flushRows();
+    await syncTask(deps, serverChatId, item.taskId, `rovr-task:${entryId}`, ctx.scope);
+  }
+  await flushRows();
 }

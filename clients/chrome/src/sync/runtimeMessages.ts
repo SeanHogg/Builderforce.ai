@@ -25,6 +25,29 @@ export function isRovrRuntimeMessage(value: unknown): value is RovrRuntimeMessag
   return !!value && typeof value === 'object' && TYPES.has((value as { type?: RovrRuntimeMessage['type'] }).type!);
 }
 
+/**
+ * The worker's one message the OTHER way: the sync queue changed, with its new stats.
+ * Broadcast on every change of the outbox (`ChatSync.subscribe`) so an open panel shows
+ * what is waiting to sync without polling; nobody listening (panel closed) is fine.
+ */
+export interface SyncStatsChanged {
+  type: 'rovr.sync.changed';
+  stats: SyncStats;
+}
+
+export function isSyncStatsChanged(value: unknown): value is SyncStatsChanged {
+  return !!value && typeof value === 'object' && (value as { type?: unknown }).type === 'rovr.sync.changed';
+}
+
+/** Hear the worker's {@link SyncStatsChanged} broadcasts (extension pages only); returns an unsubscribe. */
+export function onSyncStatsChanged(listener: (stats: SyncStats) => void): () => void {
+  const handle = (message: unknown, sender: chrome.runtime.MessageSender): void => {
+    if (sender.id === chrome.runtime.id && !sender.tab && isSyncStatsChanged(message)) listener(message.stats);
+  };
+  chrome.runtime.onMessage.addListener(handle);
+  return () => chrome.runtime.onMessage.removeListener(handle);
+}
+
 /** Where the panel hands a write for the platform — the worker, over `chrome.runtime`. */
 export interface SyncSink {
   enqueue(chatId: number, items: SyncItem[]): void;

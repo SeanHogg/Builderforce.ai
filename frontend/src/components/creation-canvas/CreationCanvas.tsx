@@ -8,7 +8,6 @@ import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canv
 import { canvasSurfaceDefinition, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { type ConnectionStyle, DEFAULT_CONNECTION_STYLE } from '@/lib/canvasConnectionStyle';
 import { type CanvasSurfaceNodes } from './CanvasSurfaceRouter';
-import { type CanvasDockPanel } from './CanvasBoardMenuBody';
 import { usePhoneViewport } from '@/lib/usePhoneViewport';
 import { useLivePresence } from '@/lib/canvas/useLivePresence';
 import type { CanvasPresenceState, CreationConnectionKind } from '@builderforce/creation-canvas-contract';
@@ -20,16 +19,13 @@ import { DEFAULT_BRAIN_DOCK_PREFERENCES } from './brainDockPreferences';
 import { useToast } from '@/components/ToastProvider';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData } from './types';
-import { shouldAcquireCanvasObjectLock } from '@/domains/canvas/domain/selection';
 import { type ProposedCanvasChange } from '@/domains/canvas/domain/canvasChange';
-import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
 import { CARD_ACTS } from '@/domains/canvas/application/cardActs';
 import { CardActProvider } from './cardActRunner';
 import { CanvasBoardBridgeProvider } from './canvasBoardBridge';
 import { CanvasSpacePresenceProvider } from './canvasSpacePresence';
 import { cardActFor } from '@/domains/canvas/application/CardAct';
-import { createCanvasNotices, type CanvasNotices } from '@/domains/canvas/application/PersistCanvas';
-import { type CreationOutcomeMetrics, type CreationSessionDetail, type CreationSessionInvitation, creationSessionsApi, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate } from '@/lib/builderforceApi';
+import { type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationTemplate as ServerCreationTemplate } from '@/lib/builderforceApi';
 import { creationStorageKey } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { useSharedCanvasRoom } from '@/domains/canvas/presentation/useSharedCanvasRoom';
 
@@ -45,22 +41,15 @@ import { useSharedCanvasRoom } from '@/domains/canvas/presentation/useSharedCanv
  */
 export const CREATION_CANVAS_TOUR = { sectionId: 'creation-canvas', version: 2 } as const;
 import { useCanvasLiveRoom } from '@/lib/live/useCanvasLiveRoom';
-import { canvasNoticesFrom } from '@/lib/canvasNotices';
 import { useRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
 import { canvasRunKey } from './brainTurn/canvasRunKey';
 import '@seanhogg/builderforce-brain-ui/styles.css';
-import { type LocalCheckpointSummary } from '@/lib/creationCheckpoints';
 import { creationObjectDefinition } from './creationObjectRegistry';
-import { type CreationTemplate } from '@/lib/templates/creationTemplates';
-import { useLocale, useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { type CanvasGesture } from './canvasPointerMode';
 import { type DrawingPreferences } from './drawingPreferences';
-import { useChromeSpace } from './useChromeSpace';
-import { type ImportTranslator } from '@/domains/canvas/application/ImportCanvasFile';
-import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { usePublishBoardToShell } from '@/lib/canvas/usePublishBoardToShell';
-import { clearActiveCanvasSync, setActiveCanvasSync } from '@/lib/activeCanvasSyncStatus';
 import { placeAppendedCanvasNodes } from './creationCanvasLayout';
 import { useCanvasLayoutViewport } from '@/components/canvas/useCanvasLayoutViewport';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -83,7 +72,6 @@ import '@/lib/canvasKindSettings.qa';
 import '@/lib/canvasKindSettings.delivery';
 import { builtinAgentSurfaceHref, type BuiltinAgentSurfaceIntent } from '@/lib/team/builtinAgentSurface';
 import { useFormat } from "@/i18n/useFormat";
-import { faultText } from '@/lib/apiClient';
 import { useErrorText } from '@/i18n/useErrorMessage';
 import type { AccountGate, CanvasTimelineMessage, FramePreset, MergeReview } from './canvasBoardTypes';
 import { initialEdges, initialNodes } from './canvasSeed';
@@ -140,7 +128,7 @@ import { useCanvasResumeShares } from './hooks/useCanvasResumeShares';
 import { CanvasSessionProvider, type CanvasSessionFacts } from './chrome/canvasSessionContext';
 import { useCanvasChromeMenus } from './chrome/useCanvasChromeMenus';
 import { useCanvasSessionActionHandlers } from './chrome/useCanvasSessionActionHandlers';
-import { CanvasPromptComposer } from './chrome/CanvasPromptComposer';
+import { CanvasComposer } from './CanvasComposer';
 import { useCanvasPromptPlacement } from './chrome/useCanvasPromptPlacement';
 import { canvasLensDefinition, type CanvasLens } from '@/lib/canvasLens';
 import { CanvasLensBar } from './chrome/CanvasLensBar';
@@ -184,73 +172,25 @@ import { CanvasBrainLauncher } from './stage/CanvasBrainLauncher';
 import { useCanvasSessionApp, useOpenCanvasApp } from './hooks/useCanvasSessionApp';
 import { sessionHasApp } from '@/lib/canvasSessionApp';
 import { useCanvasConversationProps } from './stage/useCanvasConversationProps';
-
-/** The air between the command bar and the prompt floating above it. The bar's HEIGHT is
- *  measured (see `useChromeSpace`); this is the only part of that band a number can
- *  honestly state, because it is a spacing decision rather than a fact about an element. */
-const COMMAND_BAR_CLEARANCE = 10;
-/** The air between the floating TOP chrome and anything drawn under it — the panels that
- *  open in the top-right corner, and every full-bleed surface. Same reasoning as
- *  `COMMAND_BAR_CLEARANCE`, at the other edge: the cards' height is measured, and only the
- *  gap is a number this file is entitled to state. */
-const TOP_CHROME_CLEARANCE = 8;
+import { useCanvasTranslators } from './hooks/useCanvasTranslators';
+import { useCanvasLiveSessionControls } from './hooks/useCanvasLiveSessionControls';
+import { useCanvasFocusState } from './hooks/useCanvasFocusState';
+import { useCanvasNotice } from './hooks/useCanvasNotice';
+import { useCanvasRealtimeState } from './hooks/useCanvasRealtimeState';
+import { useCanvasDockPanel } from './hooks/useCanvasDockPanel';
+import { useCanvasObjectLock } from './hooks/useCanvasObjectLock';
+import { useCanvasChromeBands } from './hooks/useCanvasChromeBands';
+import { useCanvasSessionPanelsState } from './hooks/useCanvasSessionPanelsState';
+import { useCanvasTurnRefs } from './hooks/useCanvasTurnRefs';
 
 function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, initialShareOpen = false, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true, hostSurfaces, initialSurface, onExitToLibrary }: { sessionId: string; persistence: 'local' | 'server'; lens?: CanvasLens; initialFocusId?: string | null; initialShareOpen?: boolean; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean; hostSurfaces?: CanvasSurfaceNodes; initialSurface?: CanvasSurfaceId; onExitToLibrary?: () => void }) {
   const fmt = useFormat();
   /** The board's language — recorded on content minted INTO the board (the worked
    *  course's `language`), alongside the copy `canvasText` mints in it. */
   const locale = useLocale();
-  const t = useTranslations('creationCanvas');
+  const { t, canvasText, canvasTextRef, canvasNotices, templateText, tMiro, tSocial, tStep, tPoll, importLabel } = useCanvasTranslators();
   const errorText = useErrorText();
-  /**
-   * The plain-module translator, built ONCE.
-   *
-   * Three places had written the same cast inline — the materialisation deps, the
-   * card-act runner and the shared room — because `useTranslations` returns a
-   * key-typed function and `CanvasTextTranslator` is the widened seam a use case
-   * takes (see `domains/canvas/domain/canvasText.ts`). A third copy is what the
-   * DRY rule exists to stop, and a fourth would have been written by whoever adds
-   * the next use case.
-   */
-  const canvasText = useMemo<CanvasTextTranslator>(
-    () => (key, values) => t(key as never, values as never),
-    [t],
-  );
-  // The proposal stage is built once, so it reads the CURRENT translator through a
-  // ref — a new object's default title is persisted in the board's language.
-  const canvasTextRef = useRef(canvasText);
-  useEffect(() => { canvasTextRef.current = canvasText; }, [canvasText]);
-  /**
-   * A turn's runtime notices, already in the viewer's language. Built here because the
-   * turn runner is not a component and cannot translate for itself, and memoized so the
-   * three call sites below pass a stable object.
-   */
-  const noticeText = useTranslations('creationCanvas.notice');
-  const canvasNotices = useMemo(() => canvasNoticesFrom(noticeText), [noticeText]);
   const router = useRouter();
-  /**
-   * A shipped pack's name and blurb are product copy, so they come from the
-   * catalogs; the English in `creationTemplates.ts` is the source string and the
-   * last-resort fallback while a new pack's translations land.
-   */
-  const templateText = useCallback((template: CreationTemplate, field: 'name' | 'description') => {
-    const key = `template.${template.id}.${field}`;
-    return t.has(key) ? t(key) : template[field];
-  }, [t]);
-  const tMiro = useTranslations('creationCanvas.miro');
-  const tSocial = useTranslations('creationCanvas.social');
-  // The step catalog names itself out of the builder's namespace — the same keys the
-  // standalone palette reads, because they name the same steps.
-  const tStep = useTranslations('evermindBuild');
-  const tImport = useTranslations('creationCanvas.import');
-  // The facilitation vocabulary. Its own namespace rather than `creationCanvas.poll.*`
-  // because the SAME strings are read by the participant's page — which is not a canvas
-  // at all — and a phone must not have to load the board's catalogue to say "voting
-  // closed".
-  const tPoll = useTranslations('poll');
-  /** The import engine is a plain module, so it is handed the catalog rather
-   * than reaching for one — every string it produces stays translated. */
-  const importLabel = useCallback<ImportTranslator>((key, values) => tImport(key as never, values as never), [tImport]);
   const { guestLimit, setGuestLimit, describeTurnError } = useCanvasTurnErrors({ sessionId, t });
   const confirm = useConfirm();
   const toast = useToast();
@@ -311,21 +251,11 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const { openObjectPicker, setNodePanel, openNodeInspector, openNodePanel, setObjectPicker, openInsertPicker, nodePanel, anchorFrom, objectPicker, objectPickerOpen } = useCanvasNodePanels({ boardRef: flowWrapRef, selectedId, setInspectorFocus });
   const { journalRef, recentJournalEvidence, brainRuntimeRef, disableBrainModel, recordBrainCompletion, lastTurnProvenance } = useCanvasBrainRuntime({ sessionId });
 
-  const liveSession = useOptionalLiveSession();
+  const { liveSession, presentMode, presentModeRef, setPresentMode, followingUserId, setFollowingUserId } = useCanvasLiveSessionControls(initialPresent);
   // "Is there a room here, may I open it, and is one already running" — one decision,
   // owned by the hook, read by the session action below. The canvas never assembles a
   // room out of auth and a session id itself.
   const liveRoom = useCanvasLiveRoom();
-  const [localPresentMode, setLocalPresentMode] = useState(initialPresent);
-  const presentMode = liveSession ? liveSession.presentMode : localPresentMode;
-  // A ref, because the functional-updater form (`setPresentMode(v => !v)`) has to
-  // read the CURRENT value, and the shell's value does not live in this closure.
-  const presentModeRef = useLatestRef(presentMode);
-  const setPresentMode = useCallback((value: boolean | ((current: boolean) => boolean)) => {
-    const next = typeof value === 'function' ? value(presentModeRef.current) : value;
-    if (liveSession) liveSession.setPresentMode(next);
-    else setLocalPresentMode(next);
-  }, [liveSession, presentModeRef]);
   /** The pen currently in hand — `null` means the pointer pans and selects.
    *  Colour, width and the last tool persist, because marking up a board is
    *  twenty strokes in a row and choosing the pen twenty times is not a tool. */
@@ -336,44 +266,9 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   // do one of the two things — see `canvasPointerMode.ts`.
   const [canvasGesture, setCanvasGesture] = useState<CanvasGesture>('pan');
   const [showHidden, setShowHidden] = useState(false);
-  const [localFollowingUserId, setLocalFollowingUserId] = useState<string | null>(null);
-  const followingUserId = liveSession ? liveSession.followingUserId : localFollowingUserId;
-  const followingRef = useLatestRef(followingUserId);
-  const setFollowingUserId = useCallback((value: string | null | ((current: string | null) => string | null)) => {
-    const next = typeof value === 'function' ? value(followingRef.current) : value;
-    if (liveSession) liveSession.setFollowing(next);
-    else setLocalFollowingUserId(next);
-  }, [followingRef, liveSession]);
   const [branchParentId, setBranchParentId] = useState<string | null>(null);
   const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
-  /**
-   * The section being worked on alone — a canvas within a canvas.
-   *
-   * This replaced `workflowFocus`, which mounted the standalone workflow builder in a
-   * modal over the board: a SECOND canvas, with its own palette, node renderer and
-   * selection model, drawn on top of a board that already had all three. Focusing a
-   * frame is the same board showing one section, so everything that works on the board
-   * — the palette, Brain, undo, presence, the inspector — works inside it unchanged.
-   */
-  const [frameFocus, setFrameFocus] = useState<string | null>(null);
-  const [trainingFocus, setTrainingFocus] = useState<{ nodeId: string; projectId: number | string; localOnly: boolean } | null>(null);
-  /**
-   * The game whose SHIP panel is open — distribution, not play.
-   *
-   * Playing moved to the `play` surface (`surface` + `surfaceTarget` below), because a
-   * build in a drawer is a build nobody can judge. This boolean used to carry both jobs
-   * under the name `gameFocus`, which is how "open the game" meant "open a 620px panel
-   * about publishing it".
-   */
-  const [gameShipFocus, setGameShipFocus] = useState<string | null>(null);
-  /** The object being listed for sale, by node id — `''` publishes the whole board. */
-  const [publishFocus, setPublishFocus] = useState<string | null>(null);
-  // Build → Stage → Live for one card. Held separately from `publishFocus` because
-  // they are two different questions: "what is this and what does it cost" is a
-  // form, and "which version is on sale and is the next one fit to be" is a
-  // lifecycle. An empty string means the whole board.
-  const [releaseFocus, setReleaseFocus] = useState<string | null>(null);
-  const [talktrackOpen, setTalktrackOpen] = useState(false);
+  const { frameFocus, setFrameFocus, trainingFocus, setTrainingFocus, gameShipFocus, setGameShipFocus, publishFocus, setPublishFocus, releaseFocus, setReleaseFocus, talktrackOpen, setTalktrackOpen } = useCanvasFocusState();
   const [creatingBuild, setCreatingBuild] = useState(false);
   const [framePresets, setFramePresets] = useState<FramePreset[]>([]);
   const [serverTemplates, setServerTemplates] = useState<ServerCreationTemplate[]>([]);
@@ -403,21 +298,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const [activeAgentIds, setActiveAgentIds] = useState<Set<string>>(() => new Set());
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
   const { options: canvasModelOptions, identity: modelIdentity } = useChatModelOptions();
-  const [notice, setNoticeText] = useState('');
-  /**
-   * The pill's one status line, arbitrated by the use case rather than here.
-   *
-   * `outcome()` is what the user did — shown until the next thing happens.
-   * `saveState()` is the routine autosave tick; it no longer has anything of its
-   * own to say, so it clears the line once a recent outcome's hold has expired,
-   * rather than replacing it with ambient "Saving…" / "Saved on this device"
-   * chatter. The rule and the reason for it are in `application/PersistCanvas.ts`
-   * — what matters at this call site is that the two are DIFFERENT verbs, so a
-   * new message cannot pick the wrong one by picking the only one.
-   */
-  const [notices] = useState<CanvasNotices>(() => createCanvasNotices(setNoticeText));
-  const setNotice = useCallback((text: string) => notices.outcome(text), [notices]);
-  const noteSaveState = useCallback(() => notices.saveState(''), [notices]);
+  const { notice, setNotice, noteSaveState } = useCanvasNotice();
 
   /**
    * SHARED FREE SESSION, and the account-less board's ONE write.
@@ -454,16 +335,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const presenceLive = persistence === 'server' || inRoom;
   /** The guest room's presence send, read by the relay constructed once below. */
   const sendRoomPresenceRef = useLatestRef(sharedRoom.sendPresence);
-  const [loadingSession, setLoadingSession] = useState(persistence === 'server');
-  const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
-  // Published for the session rail, which lives outside this component's tree
-  // (a sibling in the app shell, not a child) and so cannot read this state as
-  // a prop. A local-only board has no connection to report, so it publishes
-  // nothing rather than a fifth state the rail would have to invent a label for.
-  useEffect(() => {
-    setActiveCanvasSync(sessionId, realtimeState === 'local' ? undefined : realtimeState);
-  }, [sessionId, realtimeState]);
-  useEffect(() => () => clearActiveCanvasSync(sessionId), [sessionId]);
+  const { loadingSession, setLoadingSession, realtimeState, setRealtimeState } = useCanvasRealtimeState(sessionId, persistence);
   const [members, setMembers] = useState<CreationSessionDetail['members']>([]);
   // Merged over the roster for rendering (`liveMembers`), never kept as a rival roster.
   const livePresence = liveRelay.live;
@@ -492,46 +364,15 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
    * its place. `presentationStepAt` clamps, so the control never blanks.
    */
   const [presentStep, setPresentStep] = useState(0);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [history, setHistory] = useState<CreationSnapshotSummary[]>([]);
-  /**
-   * The same two verbs for a board with no server — see `creationCheckpoints.ts`.
-   *
-   * A SECOND list rather than a mapped one: a server revision is a monotonic number the
-   * API restores by, and a local checkpoint is an id in this browser. Coercing them into
-   * one shape would mean one of the two restore paths taking an identifier that means
-   * nothing to it, which is the kind of collapse that reads as tidy and fails silently.
-   * The PANEL is one panel; the stores are two, because they genuinely are.
-   */
-  const [localCheckpoints, setLocalCheckpoints] = useState<LocalCheckpointSummary[]>([]);
-  /** The checkpoint name being typed, inline. See `createCheckpoint` for why it is not a prompt. */
-  const [checkpointName, setCheckpointName] = useState('');
+  const { historyOpen, setHistoryOpen, history, setHistory, localCheckpoints, setLocalCheckpoints, checkpointName, setCheckpointName, conversationOpen, setConversationOpen, diagnosticsOpen, setDiagnosticsOpen, outcomeMetricsOpen, setOutcomeMetricsOpen, outcomeMetrics, setOutcomeMetrics, outcomeMetricsLoading, setOutcomeMetricsLoading, outcomeMetricsError, setOutcomeMetricsError } = useCanvasSessionPanelsState();
   const [timeline, setTimeline, setTimelineOnScreen] = useSessionBoardState<CanvasTimelineMessage[]>(sessionId, persistence, 'timeline', []);
-  const [conversationOpen, setConversationOpen] = useState(false);
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
-  /** The left dock holds ONE panel at a time. Six booleans used to stack panels invisibly at
-   *  the same coordinates; one value cannot express that, so exclusivity is the data model,
-   *  not a rule each toggle remembers. */
-  const [dockPanel, setDockPanel] = useState<CanvasDockPanel | null>(null);
-  // "A hit is listed but not SHOWN" — the outline panel's own search already ranks
-  // and filters real board content (see its header comment); this is the board HALF
-  // that was missing: while a query is active, everything NOT in its result set
-  // dims, so the query reads as a map rather than only a list. Gated on `dockPanel`
-  // rather than cleared on unmount — the panel closing already means this stops
-  // applying, without needing its own cleanup effect.
-  const [outlineHighlightIds, setOutlineHighlightIds] = useState<ReadonlySet<string> | null>(null);
-  const toggleDockPanel = useCallback((panel: CanvasDockPanel) => setDockPanel((current) => (current === panel ? null : panel)), [setDockPanel]);
-  const closeDockPanel = useCallback(() => setDockPanel(null), [setDockPanel]);
+  const { dockPanel, setDockPanel, outlineHighlightIds, setOutlineHighlightIds, toggleDockPanel, closeDockPanel } = useCanvasDockPanel();
   const [fullscreen, setFullscreen] = useState(false);
   /** True while the BROWSER is what put us full screen, false for the CSS fallback. */
   const nativeFullscreenRef = useRef(false);
   // ONE Brain surface: which side it is parked on, how wide, and whether the user
   // wants the step list. Read from storage after mount so SSR stays deterministic.
   const [brainDock, setBrainDock] = useState(DEFAULT_BRAIN_DOCK_PREFERENCES);
-  const [outcomeMetricsOpen, setOutcomeMetricsOpen] = useState(false);
-  const [outcomeMetrics, setOutcomeMetrics] = useState<CreationOutcomeMetrics | null>(null);
-  const [outcomeMetricsLoading, setOutcomeMetricsLoading] = useState(false);
-  const [outcomeMetricsError, setOutcomeMetricsError] = useState<string | null>(null);
   const [proposedChanges, setProposedChanges] = useSessionBoardState<ProposedCanvasChange[]>(sessionId, persistence, 'proposedChanges', []);
   const [acceptedProposalIds, setAcceptedProposalIds] = useSessionBoardState<Set<string>>(sessionId, persistence, 'acceptedProposalIds', () => new Set());
   const [autoApply, setAutoApply] = useState(true);
@@ -542,8 +383,6 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const [pendingBrainActions, setPendingBrainActions] = useState<Array<{ objectId: string; action: string }>>([]);
   const [dispatchedBrainAction, setDispatchedBrainAction] = useState<{ objectId: string; action: string } | null>(null);
   const [sessionRole, setSessionRole] = useState<CreationSessionSummary['role']>('owner');
-  /** Whether the lock on the selected object was refused — recorded against the object it was asked for. */
-  const [lockRefusal, setLockRefusal] = useState<{ objectId: string; blocked: boolean } | null>(null);
   // Locks are server records. A freshly added Canvas node exists in React state
   // before the debounced graph save creates its database row, so attempting to
   // lock it immediately produces a misleading 404. Track confirmed server IDs
@@ -622,59 +461,8 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const placeAppendedRef = useLatestRef<(current: readonly CreationFlowNode[], additions: readonly CreationFlowNode[]) => CreationFlowNode[]>(
     (current, additions) => placeAppendedCanvasNodes(current, additions, layoutViewport()),
   );
-  // The prompt's real height, published to the board as `--composer-space` — the
-  // band every bottom-anchored panel and the phone command rail sit above. It
-  // was a hardcoded 112px, which the execution chip alone overran.
-  const composerDockRef = useChromeSpace(flowWrapRef, '--composer-space');
-  // The command bar's real height, published to the SHELL as `--canvas-command-bar-space`
-  // — the band the floating prompt sits above. Measured for the same reason and by the
-  // same hook: the bar grows by whatever the SURFACE contributes to it (the App surface's
-  // Run, its three readings, its width switcher), and the literal `66px` it used to be is
-  // how the bar came to be drawn straight over the prompt on exactly that surface.
-  const commandBarSpaceRef = useChromeSpace(shellRef, '--canvas-command-bar-space', { gap: COMMAND_BAR_CLEARANCE });
-  // The band the floating chrome owns at the TOP of the shell, published as
-  // `--canvas-top-chrome-space`. It is measured off the fused phase/surface card because
-  // that is the TALLER of the two cards sharing that line now that Invite / Publish / •••
-  // moved into the bottom bar (see `handoffChrome`'s own header for why) — the session
-  // pill is a single row, the fused widget is two, so clearing the widget clears the pill.
-  //
-  // TWO things read it, and both were broken without it. Every FULL-BLEED surface draws
-  // from the shell's top edge, so the conversation surface drew its own header underneath
-  // the pill — the session's name painted over by the same session's name, with its
-  // participants marooned beside the surface tabs. And a panel anchored to the shell's top
-  // edge needs to know how much of it the floating cards already own. Measured rather than
-  // declared for the reason the bottom bands are: the widget grows by a row when a surface
-  // is added to `CANVAS_SURFACES`, and its content changes with the phase.
-  const topChromeSpaceRef = useChromeSpace(shellRef, '--canvas-top-chrome-space', { edge: 'top', gap: TOP_CHROME_CLEARANCE });
-  /**
-   * The executive contract THIS TURN is running, read off the prompt when the
-   * run starts.
-   *
-   * A ref rather than state because it is read inside a tool `run`, which the
-   * Brain calls mid-turn from a closure that must see the CURRENT value — state
-   * would hand it whatever was captured when `canvasActions` was memoised. It
-   * is what lets `canvas_prepare_executive_use_case` recover from a model that
-   * mistypes the one argument it was given.
-   */
-  const inFlightUseCaseIdRef = useRef<string | null>(null);
-  /**
-   * Every tool this turn actually CALLED, by its advertised name.
-   *
-   * A ref rather than state: it is read inside tool handlers that run mid-turn, and a
-   * re-render per tool call would rebuild the whole action list underneath the loop
-   * that is walking it. Cleared at the start of every turn beside `brainTrace`, which
-   * is the other per-turn record and must not disagree with it about which turn it is.
-   *
-   * This is what makes `ExecutiveCanvasWorkflow.requiredTools` an enforcement rather
-   * than a sentence: a completion condition a model can satisfy by reasoning is not a
-   * contract, and the career intents are the set where reasoning produces a confident,
-   * unreproducible number.
-   */
-  const turnToolCallsRef = useRef<Set<string>>(new Set());
-  /** Set by the turn runner when the string it returned is a RUNTIME NOTICE rather
-   *  than an answer Brain produced — read once when the turn settles so the notice is
-   *  shown to the user without entering the transcript the next turn is built from. */
-  const turnUnansweredRef = useRef<{ reason: string; detail?: string } | null>(null);
+  const { composerDockRef, commandBarSpaceRef, topChromeSpaceRef } = useCanvasChromeBands({ boardRef: flowWrapRef, shellRef });
+  const { inFlightUseCaseIdRef, turnToolCallsRef, turnUnansweredRef } = useCanvasTurnRefs();
   const undoStackRef = useRef<string[]>([]);
   const redoStackRef = useRef<string[]>([]);
   const historyBaselineRef = useRef<string | null>(null);
@@ -742,10 +530,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
    * viewer on a shared board, or an editor whose lock has gone, gets no Edit
    * button rather than one that silently does nothing.
    */
-  // Derived rather than cleared by the lock effect: an object that needs no lock is never
-  // blocked, and a refusal only ever applies to the object it was for.
-  const lockObjectId = shouldAcquireCanvasObjectLock(persistence, selectedId, canEdit, persistedObjectIds) ? selectedId : null;
-  const lockBlocked = lockObjectId !== null && lockRefusal?.objectId === lockObjectId && lockRefusal.blocked;
+  const { lockBlocked } = useCanvasObjectLock({ persistence, selectedId, canEdit, persistedObjectIds, sessionId, setNotice, lockedNotice: t('noticeObjectLocked') });
   const cardsEditable = canEdit && !lockBlocked;
 
   const syncSocialCampaign = useCanvasSocialCampaignSync({ setNodes, setNotice, tSocial });
@@ -756,26 +541,6 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
 
   useBrainObjectMirror({ brainRunStartedAt, brainTrace, setNodes, thinking, timeline });
 
-  useEffect(() => {
-    if (lockObjectId === null) return;
-    const lockedObjectId = lockObjectId;
-    let stopped = false;
-    const acquire = async (action: 'acquire' | 'renew') => {
-      try {
-        await creationSessionsApi.lock(sessionId, lockedObjectId, action);
-        if (!stopped) setLockRefusal({ objectId: lockedObjectId, blocked: false });
-      } catch (error) {
-        if (!stopped) { setLockRefusal({ objectId: lockedObjectId, blocked: true }); setNotice(faultText(error, t('noticeObjectLocked'))); }
-      }
-    };
-    void acquire('acquire');
-    const timer = window.setInterval(() => void acquire('renew'), 45_000);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-      void creationSessionsApi.lock(sessionId, lockedObjectId, 'release').catch(() => undefined);
-    };
-  }, [lockObjectId, sessionId, setNotice, t]);
   const { attachmentBytesStrategy, importDataset } = useCanvasDatasetImport({ canvasText, datasetRowLimit, fmt, importLabel, persistence, selectedId, setNodes, setNotice, t }); useCanvasHistoryCheckpoint({ edges, historyApplyingRef, historyBaselineRef, hydratedRef, journalRef, nodes, redoStackRef, undoStackRef });
   const { selectionIds, redo, undo, deleteObjects, duplicateSelection, copySelection, pasteSelection, openFrame, deleteNodeFromCard, alignSelection, frameSelection, togglePlacementLock, toggleHidden, deleteSelection, exitFrame } = useCanvasEditing({ canEdit, canvasClipboardRef, cardsEditable, edges, flowRef, historyApplyingRef, historyBaselineRef, journalRef, nodes, nodesRef, placeAppendedRef, redoStackRef, selectedId, selectedIds, setEdges, setFrameFocus, setNodePanel, setNodes, setNotice, setScopeMode, setSelectedId, setSelectedIds, t, undoStackRef });
 
@@ -972,19 +737,23 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
      and is deliberately NOT part of the Brain surface: it stays reachable whether Brain
      is inline in its Object, docked to either edge, or closed entirely. */
   const { brainDockDrawn, placement: effectivePromptPlacement, inBrainPanel: promptInBrainPanel } = useCanvasPromptPlacement({ hostOwnsSurface: !!hostSurfaces?.[surface], brainIsSurface: surfaceDef.brainIsSurface, preference: promptPlacement, setPreference: setPromptPlacement, brainSurfaceOpen, brainPlacement, lensPlacement: lensDef.promptPlacement });
-  /** THE ONE COMPOSER — see `CanvasPromptComposer`. One element, drawn in exactly one of
+  /** THE ONE COMPOSER — see `CanvasComposer`. One element, drawn in exactly one of
    *  its two homes below: the Brain panel's last row, or floating over the board. */
-  const composer = !presentMode && effectivePromptPlacement !== 'closed' && <CanvasPromptComposer
+  const composer = !presentMode && effectivePromptPlacement !== 'closed' && <CanvasComposer
     docked={promptInBrainPanel} surface={surfaceDef.id} editable={cardsEditable} preferAsk={phoneViewport && brainSurfaceOpen}
-    startTurn={startCanvasTurn} onCaptureIdea={captureIdeaFromComposer} hostRef={composerDockRef} actionsOpen={actionsOpen} onToggleActions={toggleActionsSheet}
-    running={thinking} trace={brainTrace} runStartedAt={brainRunStartedAt} brainIsSurface={surfaceDef.brainIsSurface}
+    onAsk={() => startCanvasTurn()} onCaptureIdea={captureIdeaFromComposer} hostRef={composerDockRef} actions={{ open: actionsOpen, onToggle: toggleActionsSheet }}
+    runStartedAt={brainRunStartedAt} brainIsSurface={surfaceDef.brainIsSurface}
     promptPlacement={promptPlacement} setPromptPlacement={setPromptPlacement} brainDockDrawn={brainDockDrawn} updateBrainDock={updateBrainDock}
-    prompt={prompt} setPrompt={setPrompt} onStop={stopCanvasRun} queued={queuedTurns}
-    scopeMode={scopeMode} setScopeMode={setScopeMode} scopeLabel={scopeLabel} selectionCount={effectiveSelectedIds.length} frameSelected={selectedNode?.data.kind === 'frame'}
-    onAttach={attachCanvasArtifact} onAddContext={openObjectPicker} autoMode={autoApply} onAutoModeChange={setAutoApplyMode}
-    modelSelection={modelSelection} modelOptions={canvasModelOptions} onModelSelectionChange={setModelSelection} modelIdentity={modelIdentity}
-    chatMode={sessionMode} onChatModeChange={setSessionMode} memoryEnabled={memoryEnabled} onMemoryChange={setMemoryMode}
-    memoryProjectId={evermindProjectId} runShaping={runShapingControls} onTwilioJourney={setTwilioPromptSelected} applyTemplate={applyTemplate} conversationStarted={brainMessages.length > 0}
+    scope={{ mode: scopeMode, setMode: setScopeMode, autoLabel: scopeLabel, selectionCount: effectiveSelectedIds.length, frameSelected: selectedNode?.data.kind === 'frame' }}
+    memoryProjectId={evermindProjectId} onTwilioJourney={setTwilioPromptSelected} applyTemplate={applyTemplate} conversationStarted={brainMessages.length > 0}
+    input={{
+      // NEVER disabled while Brain works: an empty composer offers Stop, typing queues the next turn.
+      value: prompt, onChange: setPrompt, running: thinking, onStop: stopCanvasRun, queued: queuedTurns,
+      onAttach: attachCanvasArtifact, onAddContext: openObjectPicker, autoMode: autoApply, onAutoModeChange: setAutoApplyMode,
+      modelSelection, modelOptions: canvasModelOptions, onModelSelectionChange: setModelSelection, modelIdentity,
+      chatMode: sessionMode, onChatModeChange: setSessionMode, memoryEnabled, onMemoryChange: setMemoryMode,
+      effort: runShapingControls.effort, onEffortChange: runShapingControls.setEffort, thinking: runShapingControls.thinking, onThinkingChange: runShapingControls.setThinking,
+    }}
   />;
 
   const sessionActionHandlers = useCanvasSessionActionHandlers({

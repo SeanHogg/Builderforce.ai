@@ -12,7 +12,7 @@
  *
  * WHAT IS PROBED AND WHAT IS DB-DERIVED — AND WHY NOTHING IS PROBED HERE
  * Build status + open pulls come from `repo_delivery_status`, a table a scheduled
- * sweep (`repos/repoDelivery.ts` → `runRepoDeliverySweep`) keeps current for EVERY
+ * sweep (`repos/repoDeliverySweep.ts` → `runRepoDeliverySweep`) keeps current for EVERY
  * provider. This composer used to call the provider itself, and that produced two
  * cohorts of permanent `unknown`: GitLab/Bitbucket repos, for which no reader
  * existed, and every repo past a per-composition subrequest budget. Moving the
@@ -180,7 +180,7 @@ export async function buildProjectConnections(
 
   // The sweep's persisted verdicts — one query for the whole tenant, no provider
   // calls, no per-repo budget. A repo the sweep has not reached yet is simply absent.
-  const probes = await loadRepoDelivery(db, tenantId);
+  const probes = await loadRepoDelivery(db, tenantId, env);
 
   const byProject = new Map<number, ProjectConnection[]>();
   const push = (projectId: number, conn: ProjectConnection) => {

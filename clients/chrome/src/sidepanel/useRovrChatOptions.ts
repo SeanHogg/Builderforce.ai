@@ -14,17 +14,17 @@
  */
 import { useCallback, useMemo, useState } from 'react';
 import {
-  EMPTY_GATEWAY_MODEL_OPTIONS,
   invalidateGatewayModelOptions,
   loadGatewayModelOptions,
   type GatewayModelOptions,
 } from '@seanhogg/builderforce-brain-embedded';
 import {
+  composerModel,
+  modelSelectionFrom,
   planIsPaid,
   productForPlan,
   useChatMemorySwitch,
   useConsumptionSnapshot,
-  type ChatModelOptions,
   type ChatModelSelection,
   type ComposerOptions,
   type JsonRequest,
@@ -50,9 +50,6 @@ export interface RovrChatOptions {
   /** The project memory and the Status tab's Evermind read (Settings → tasks project). */
   projectId: number | null;
 }
-
-/** Signed out there is no catalogue: the menu offers this panel's on-device models only. */
-const NO_GATEWAY_MODELS: ChatModelOptions = EMPTY_GATEWAY_MODEL_OPTIONS.options;
 
 export function useRovrChatOptions(chat: LocalChat | undefined, onChatsChanged: () => void): RovrChatOptions {
   const services = useServices();
@@ -107,15 +104,15 @@ export function useRovrChatOptions(chat: LocalChat | undefined, onChatsChanged: 
   const isPaid = snapshot ? planIsPaid(snapshot) : false;
   const store = services.pageEngines.store;
   const model = useMemo<PromptOptionsModel>(
-    () => ({
-      selection: pinned ? { mode: 'model', model: pinned } : { mode: 'auto' },
-      options: catalog?.options ?? NO_GATEWAY_MODELS,
+    // brain-ui's shared builder: signed out (no catalogue) the menu offers this panel's
+    // on-device models over the ONE empty shape; until the gateway's verdict is read (or
+    // when it is unreadable) entitlement is PENDING, so the menu never claims the plan
+    // forbids choosing — and names the plan the consumption snapshot reports meanwhile.
+    () => composerModel({
+      catalog,
+      selection: modelSelectionFrom({ model: pinned }),
       onChange: (selection: ChatModelSelection) => choosePinned(selection.mode === 'model' ? selection.model : null),
-      // The gateway's verdict once read. Until then (or signed out, or unreadable) the
-      // menu is told entitlement is PENDING: it offers the on-device models, which need
-      // no plan, without claiming the plan forbids choosing.
-      identity: catalog?.identity ?? { product: productForPlan(isPaid), canChoose: false },
-      identityPending: !catalog || catalog === EMPTY_GATEWAY_MODEL_OPTIONS,
+      fallbackIdentity: { product: productForPlan(isPaid), canChoose: false },
       localStore: store,
     }),
     [pinned, choosePinned, catalog, isPaid, store],

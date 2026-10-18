@@ -5,6 +5,7 @@ import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import { parseSuggestedActions, type useBrainActions, type useBrainChats, type useBrainConversation } from '@/lib/brain';
 import type { BrainMessage } from '@/lib/builderforceApi';
 import { useTranscriptReplies } from '@/lib/brain/useTranscriptReplies';
+import type { BrainPanelTurn } from './useBrainPanelTurns';
 
 /**
  * Everything the shared <BrainTimeline> and the pending-question banner are
@@ -15,7 +16,7 @@ import { useTranscriptReplies } from '@/lib/brain/useTranscriptReplies';
  * otherwise the memo never skips and the transcript re-parses markdown on
  * every keystroke/streaming token (mirrors the VS Code webview App.tsx).
  */
-export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, runTool, bumpParticipants, submitQueued }: {
+export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, runTool, bumpParticipants, submitTurn }: {
   conv: ReturnType<typeof useBrainConversation>;
   chats: ReturnType<typeof useBrainChats>;
   recipient: ReturnType<typeof useRecipientChoice>['recipient'];
@@ -24,11 +25,12 @@ export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, ru
   /** Re-reads the chat's participant roster (after an invite/remove). */
   bumpParticipants: () => void;
   /**
-   * The composer's queue (`useQueuedTurns().submit`): holds the turn and returns true
-   * while a run is in flight. An answer or replay goes through it like a typed turn —
-   * `conv.send` alone refuses a busy chat silently, which lost answered questions.
+   * THE panel's turn door (`useBrainPanelTurns().submitTurn` — the shared `useChatTurns`):
+   * holds the turn while a run is in flight, else sends it. An answer or replay goes
+   * through it like a typed turn — `conv.send` alone refuses a busy chat silently, which
+   * lost answered questions.
    */
-  submitQueued: (text: string) => boolean;
+  submitTurn: (turn: BrainPanelTurn) => Promise<boolean>;
 }) {
   const hasTool = useCallback(
     (name: string) => toolSpecs.some((t) => t.function.name === name),
@@ -63,12 +65,11 @@ export function useBrainTimelineBindings({ conv, chats, recipient, toolSpecs, ru
     timelineCtxRef.current = { conv, chats, recipient };
   });
   // "Send again" and an ask_user answer are the next turn with that text — the ONE
-  // shared reply path. Through the composer's queue first, then addressed to the same
-  // recipient as a freshly typed turn, so a multi-party chat reaches whoever the composer
-  // is pointed at rather than silently the Brain.
+  // shared reply path, through the composer's door and addressed to the same recipient
+  // as a freshly typed turn, so a multi-party chat reaches whoever the composer is
+  // pointed at rather than silently the Brain.
   const { onAnswerQuestion: onAnswerTimelineQuestion, onReplayMessage: onReplayTimelineMessage } = useTranscriptReplies((text) => {
-    if (submitQueued(text)) return;
-    void conv.send(text, { addressedTo: recipient });
+    void submitTurn({ text, addressedTo: recipient });
   });
 
   const renderTimelineMessage = useCallback(

@@ -9,11 +9,8 @@ import { useTimelineCatalog } from './useBrainTimelineLabels';
  * transcript's own labels use, so a run narrates itself identically in the panel and
  * on the board. Memoized because `<BrainTimeline>` and `<LiveActivity>` are both
  * `React.memo`'d on their label object.
- *
- * `overrides` lets a surface that derives its own phase line (the canvas dock reads
- * one off the run trace) keep it while still gaining the animation.
  */
-export function useLiveActivityLabels(overrides?: Partial<LiveActivityLabels>): LiveActivityLabels {
+export function useLiveActivityLabels(): LiveActivityLabels {
   const lookup = useTimelineCatalog();
-  return useMemo(() => liveActivityLabelsFrom(lookup, overrides), [lookup, overrides]);
+  return useMemo(() => liveActivityLabelsFrom(lookup), [lookup]);
 }

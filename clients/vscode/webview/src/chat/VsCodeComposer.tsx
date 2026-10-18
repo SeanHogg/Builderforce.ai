@@ -34,7 +34,7 @@ import { openUpgrade } from '../accountPlan';
 import type { createChatTicketsAdapter } from '../chatTicketsAdapter';
 import { webviewLocalModelStore } from '../pageEngines';
 import { post, request, type InitData } from '../vscodeBridge';
-import { makeT, personaModalityOptions, personaPickerLabels, recipientPickerLabels } from './chatLabels';
+import { makeT, personaModalityOptions, personaPickerLabels, queuedTurnLabels, recipientPickerLabels } from './chatLabels';
 import { brainComposerLabels } from './composerLabels';
 import { editorStarters } from './editorStarters';
 import { steerRun } from './chatChildren';
@@ -56,6 +56,10 @@ export interface VsCodeComposerProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  /** The composer's Stop — `useChatSend().stop`: drops the held turns AND stops the run. */
+  onStop: () => void;
+  /** Seed the box with a fixed starter's prompt and focus it — the empty state's tiles do the same. */
+  onPickStarter: (prompt: string) => void;
   focusToken?: number;
   chatId: number | null;
   /** The chat's project (chat-first, else the sidebar's) — the Status tab's Evermind and the Memory row. */
@@ -90,7 +94,7 @@ export interface VsCodeComposerProps {
 
 export function VsCodeComposer(props: VsCodeComposerProps) {
   const {
-    init, apiReq, conv, value, onChange, onSubmit, focusToken, chatId, projectId, ensureChatId,
+    init, apiReq, conv, value, onChange, onSubmit, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
     ticketAdapter, ticketRefresh, onTicketLinked, participants, mentionable, hasLiveChildren,
     recipient, chooseRecipient, persona, onPersona, personaAgents, queue, onRemoveQueued,
     mode, memory, shaping, models, servedModel, autoMode, session, suggest = true,
@@ -103,6 +107,7 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
   const personaLabels = useMemo(() => personaPickerLabels(init.labels), [init.labels]);
   const personaModalities = useMemo(() => personaModalityOptions(init.labels), [init.labels]);
   const recipientLabels = useMemo(() => recipientPickerLabels(init.labels), [init.labels]);
+  const queuedLabels = useMemo(() => queuedTurnLabels(init.labels), [init.labels]);
 
   // #-ticket typeahead: the chat's linked tickets. A chat that does not exist yet has
   // none — asking for `/chats/null/tickets` was a failing request on every new chat.
@@ -177,14 +182,15 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
       // list the empty state shows as tiles (`editorStarters`), so not both at once.
       suggestions={suggest ? {
         label: t('app.suggestions', 'Suggested next steps'),
-        items: editorStarters(t).map((s) => ({ id: s.id, label: s.label, onSelect: () => onChange(s.prompt) })),
+        items: editorStarters(t).map((s) => ({ id: s.id, label: s.label, onSelect: () => onPickStarter(s.prompt) })),
       } : undefined}
       className="bf-composer"
       value={value}
       onChange={onChange}
       onSubmit={onSubmit}
       running={conv.sending}
-      onStop={conv.stop}
+      // Stop drops the held turns too — the person stopped the conversation, not one sentence.
+      onStop={onStop}
       focusToken={focusToken}
       placeholder={recipient
         ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name)
@@ -235,13 +241,7 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
             onSteer: (item: QueuedItem<QueuedTurn>) => { steerRun(chatId, item.value.text); onRemoveQueued(item.id); },
             canSteer: (item: QueuedItem<QueuedTurn>) => !item.value.recipient,
           } : {})}
-          labels={{
-            list: t('app.queuedLabel', 'Queued messages'),
-            hint: t('app.queuedHint', 'Queued — sends when the run finishes'),
-            steer: t('app.steerNow', 'Steer now'),
-            steerHint: t('app.steerNowHint', 'Send it into the running turn now instead of after it'),
-            remove: t('app.remove', 'Remove'),
-          }}
+          labels={queuedLabels}
         />
       )}
       labels={labels}

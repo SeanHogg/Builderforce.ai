@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
-import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { CreationNodeData } from '../types';
 import styles from '../styles/brain.module.css';
 import bodiesStyles from '../styles/bodies.module.css';
 import nodeStyles from '../styles/node.module.css';
-import { BrainActivityBar, brainActivityLine, useBrainActivity } from '../BrainActivityView';
+import { useLiveActivityLabels } from '@/i18n/useLiveActivityLabels';
+import { CanvasRunActivity } from '../CanvasRunActivity';
 import { BrainSurface } from '../BrainSurface';
 import { BrainSurfaceActions } from '../BrainSurfaceActions';
 import { BrainSurfaceViewProvider } from '../brainSurfaceView';
@@ -73,6 +73,7 @@ export function BrainObjectBody({ id: nodeId, data }: CreationBodyProps) {
       // surface context (`useBrainUnreadReplies`) rather than counted twice, because two
       // answers to "did anything arrive" drift the first time either changes.
       unread={surface?.unreadReplies ?? 0}
+      runKey={surface?.runKey}
       onOpen={surface?.canOpen ? () => surface.onOpen(nodeId) : undefined}
     />;
   }
@@ -120,16 +121,12 @@ export function BrainObjectBody({ id: nodeId, data }: CreationBodyProps) {
   );
 }
 
-/**
- * The run, read off the Object's own data. The mark and the anchor narrate the same
- * turn from the same three fields, so they derive it once and can never disagree.
- */
-function useBrainNodeActivity(data: CreationNodeData) {
-  return useBrainActivity(
-    data.brainRunning === true,
-    Array.isArray(data.trace) ? data.trace as BrainTraceEvent[] : [],
-    typeof data.brainRunStartedAt === 'number' ? data.brainRunStartedAt : null,
-  );
+/** Whether the turn mirrored onto this Object is in flight, and since when. */
+function brainNodeRun(data: CreationNodeData) {
+  return {
+    running: data.brainRunning === true,
+    startedAt: typeof data.brainRunStartedAt === 'number' ? data.brainRunStartedAt : null,
+  };
 }
 
 /**
@@ -147,19 +144,21 @@ function useBrainNodeActivity(data: CreationNodeData) {
  */
 function BrainMarkerBody({ data, onOpen }: { data: CreationNodeData; onOpen: () => void }) {
   const t = useTranslations('creationCanvas.node');
-  const activity = useBrainNodeActivity(data);
-  const phase = brainActivityLine(activity.live);
-  const label = phase ? t('brainMarkerBusy', { phase }) : t('openBrainChat');
+  const { running } = brainNodeRun(data);
+  // The step itself is narrated by the shared live row wherever the conversation is
+  // read; the mark only says THAT Brain is working, in the shared row's own word.
+  const { thinking } = useLiveActivityLabels();
+  const label = running ? t('brainMarkerBusy', { phase: thinking }) : t('openBrainChat');
 
   return <button
     type="button"
     className={nodeStyles.brainMarker}
-    data-state={activity.live ? 'running' : 'idle'}
+    data-state={running ? 'running' : 'idle'}
     aria-label={label}
     title={label}
     onClick={onOpen}
   >
-    <BrainMark running={!!activity.live} size={26} />
+    <BrainMark running={running} size={26} />
   </button>;
 }
 
@@ -174,14 +173,14 @@ function BrainMarkerBody({ data, onOpen }: { data: CreationNodeData; onOpen: () 
  * newest exchange scrolled into view, since the anchor is short and the reply that
  * just landed is the only one worth reading.
  */
-function BrainAnchorBody({ data, unread = 0, onOpen }: { data: CreationNodeData; unread?: number; onOpen?: () => void }) {
+function BrainAnchorBody({ data, runKey, unread = 0, onOpen }: { data: CreationNodeData; runKey?: string; unread?: number; onOpen?: () => void }) {
   const t = useTranslations('creationCanvas.node');
   const tCanvas = useTranslations('creationCanvas');
   const messages = canvasChatMessages(data);
   const lastUser = [...messages].reverse().find((message) => message.role === 'user');
   const lastAssistant = [...messages].reverse().find((message) => message.role !== 'user');
   const reply = lastAssistant?.content || (typeof data.aiResponse === 'string' ? data.aiResponse : '');
-  const activity = useBrainNodeActivity(data);
+  const run = brainNodeRun(data);
   // The live phase is narrated ONCE, by the bar below — a turn with no reply yet
   // shows the invitation rather than repeating "Churning…" twice in one card.
   const brainText = reply || t('brainAnchorReplyFallback');
@@ -202,7 +201,7 @@ function BrainAnchorBody({ data, unread = 0, onOpen }: { data: CreationNodeData;
       <span><small>{t('brainAnchorYou')}</small><p>{lastUser?.content || data.subtitle || t('brainAnchorPromptFallback')}</p></span>
       <span ref={latestRef}><small>{t('brainAnchorBrain')}</small><p>{brainText}</p></span>
     </div>
-    <BrainActivityBar state={activity} variant="inline" />
+    <CanvasRunActivity runKey={runKey} running={run.running} startedAt={run.startedAt} variant="inline" />
     {/* The way in NAMES what is waiting when something is. "Open Brain chat" beside a
         badge would be the control naming itself twice, so the count replaces the word —
         exactly as the docked launcher pill does it, from the same string. */}

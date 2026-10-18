@@ -10,8 +10,15 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 // Rendered outside an app router there is none, exactly as `ChatInput.running.test` says.
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-import type { CanvasComposerIntentId } from '@/lib/canvasComposerIntents';
 import { CanvasComposer } from './CanvasComposer';
+import { CanvasSessionProvider, type CanvasSessionFacts } from './chrome/canvasSessionContext';
+
+const session: CanvasSessionFacts = {
+  sessionId: 'composer-test', persistence: 'local', role: 'owner', canEdit: true, notify: vi.fn(),
+  requireAccount: vi.fn() as unknown as CanvasSessionFacts['requireAccount'], lens: 'canvas', boardPath: '/create/composer-test',
+};
+
+type Props = React.ComponentProps<typeof CanvasComposer>;
 
 /**
  * ONE COMPOSER, ONE MEANING PER SURFACE.
@@ -23,21 +30,34 @@ import { CanvasComposer } from './CanvasComposer';
  * the submit. So the properties worth pinning are: the choice is only drawn when there
  * IS one, Enter goes where the armed verb says, a viewer who cannot edit is never
  * offered a verb that writes, and changing surface does not leave the last surface's
- * verb armed under the new one's placeholder.
+ * verb armed under the new one's placeholder. The Ideas surface offers two verbs; the
+ * board (`graph`) offers Ask alone.
  */
-
-function renderComposer(overrides: Partial<React.ComponentProps<typeof CanvasComposer>> = {}) {
-  const props: React.ComponentProps<typeof CanvasComposer> = {
-    placement: 'float',
-    intents: ['captureIdea', 'ask'] as readonly CanvasComposerIntentId[],
+function renderComposer(overrides: Partial<Props> = {}) {
+  const props: Props = {
+    docked: false,
+    surface: 'ideas',
     editable: true,
+    preferAsk: false,
     onAsk: vi.fn(),
     onCaptureIdea: vi.fn(),
+    runStartedAt: null,
+    brainIsSurface: false,
+    promptPlacement: 'float',
+    setPromptPlacement: vi.fn(),
+    brainDockDrawn: false,
+    updateBrainDock: vi.fn(),
+    scope: { mode: 'auto', setMode: vi.fn(), autoLabel: 'Whole canvas', selectionCount: 0, frameSelected: false },
+    memoryProjectId: null,
+    onTwilioJourney: vi.fn(),
+    applyTemplate: vi.fn(),
+    conversationStarted: false,
     input: { value: 'Dog walking for towers', onChange: vi.fn() },
     ...overrides,
   };
-  const view = render(<CanvasComposer {...props} />);
-  return { ...props, rerender: (next: Partial<React.ComponentProps<typeof CanvasComposer>>) => view.rerender(<CanvasComposer {...props} {...next} />) };
+  const draw = (next: Props) => <CanvasSessionProvider value={session}><CanvasComposer {...next} /></CanvasSessionProvider>;
+  const view = render(draw(props));
+  return { ...props, rerender: (next: Partial<Props>) => view.rerender(draw({ ...props, ...next })) };
 }
 
 /** The box, by the name the ARMED verb gives it. */
@@ -57,7 +77,7 @@ describe('the one composer', () => {
     // One verb: nothing to choose, so nothing is drawn. A segmented control with one
     // segment is a label wearing a control's chrome — the placeholder already says what
     // the field is for.
-    rerender({ intents: ['ask'] });
+    rerender({ surface: 'graph' });
     expect(screen.queryByTestId('canvas-composer-intent')).toBeNull();
   });
 
@@ -123,10 +143,10 @@ describe('the one composer', () => {
     fireEvent.click(screen.getByTestId('canvas-composer-intent-ask'));
     expect(screen.getByTestId('canvas-composer-intent-ask')).toHaveAttribute('aria-checked', 'true');
 
-    rerender({ intents: ['ask'] });
+    rerender({ surface: 'graph' });
     expect(screen.queryByTestId('canvas-composer-intent')).toBeNull();
 
-    rerender({ intents: ['captureIdea', 'ask'] });
+    rerender({ surface: 'ideas' });
     expect(screen.getByTestId('canvas-composer-intent-captureIdea')).toHaveAttribute('aria-checked', 'true');
   });
 
@@ -138,34 +158,49 @@ describe('the one composer', () => {
    */
   it('arms the preferred verb while the host asks for it, and restores the default after', () => {
     const { rerender } = renderComposer();
-    rerender({ preferIntent: 'ask' });
+    rerender({ preferAsk: true });
     expect(screen.getByTestId('canvas-composer-intent-ask')).toHaveAttribute('aria-checked', 'true');
 
-    rerender({});
+    rerender({ preferAsk: false });
     expect(screen.getByTestId('canvas-composer-intent-captureIdea')).toHaveAttribute('aria-checked', 'true');
   });
 
   /**
-   * The phone's whole command bar rides in the composer's leading slot. It is a NODE the
-   * host supplies rather than a flag, because the sheet, its state and its handlers all
-   * belong to the host — this only gives it the slot in front of the field.
+   * The phone's whole command bar rides in front of the field. The sheet, its state and
+   * its handlers all belong to the host — this only gives its trigger the slot.
    */
-  it('gives the host a slot in front of the field', () => {
-    renderComposer({ leading: <button type="button">Actions</button> });
-    expect(screen.getByRole('button', { name: 'Actions' })).toBeInTheDocument();
+  it('gives the host actions sheet a trigger in front of the field', () => {
+    const onToggle = vi.fn();
+    renderComposer({ actions: { open: false, onToggle } });
+    fireEvent.click(screen.getByTestId('canvas-actions-trigger'));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  /** Floating, a running turn is narrated by THE shared live row in a pill above the box. */
+  it('narrates a running turn with the shared live row while it floats', () => {
+    renderComposer({ input: { value: '', onChange: vi.fn(), running: true } });
+    expect(screen.getByTestId('canvas-run-activity')).toBeInTheDocument();
   });
 
   /** Docked into the Brain panel the composer is that panel's last row, so it draws
-   *  neither its own header nor the run receipt the panel's footer already narrates. */
+   *  neither its own header nor the run pill the panel's transcript already narrates. */
   it('drops its own chrome when it is docked into the Brain panel', () => {
     renderComposer({
-      placement: 'docked',
-      activity: <p>Executing</p>,
-      dockControls: { docked: true, onToggleDock: vi.fn(), onClose: vi.fn() },
+      docked: true,
+      promptPlacement: 'docked',
+      input: { value: '', onChange: vi.fn(), running: true },
     });
     expect(screen.getByTestId('canvas-composer')).toHaveAttribute('data-placement', 'docked');
     expect(screen.queryByTestId('canvas-prompt-dock')).toBeNull();
     expect(screen.queryByTestId('canvas-prompt-close')).toBeNull();
-    expect(screen.queryByText('Executing')).toBeNull();
+    expect(screen.queryByTestId('canvas-run-activity')).toBeNull();
+  });
+
+  /** Docking puts the prompt in the Brain panel, so it opens that panel too. */
+  it('opens the Brain panel when the prompt is docked into it', () => {
+    const { setPromptPlacement, updateBrainDock } = renderComposer();
+    fireEvent.click(screen.getByTestId('canvas-prompt-dock'));
+    expect(setPromptPlacement).toHaveBeenCalledWith('docked');
+    expect(updateBrainDock).toHaveBeenCalledWith({ open: true, mode: 'docked' });
   });
 });

@@ -24,6 +24,10 @@ export interface TicketAutocompleteLabels {
   noMatches?: string;
 }
 
+/** English defaults for a host catalog's missing fields. The popup itself falls back to
+ *  the ticket's own status when no `status` label is given. */
+export const DEFAULT_TICKET_TAG_LABELS: Required<TicketAutocompleteLabels> = { title: 'Tag ticket', status: 'Status', noMatches: 'No tickets found' };
+
 export interface UseTicketAutocompleteOptions {
   /** Ref to the composer's <textarea> — read for the live caret position. */
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -130,7 +134,7 @@ function TicketPopup({ matches, index, labels, onHover, onPick }: {
     return (
       <div style={POP.anchor}>
         <div style={POP.empty}>
-          {labels?.noMatches ?? 'No tickets found'}
+          {labels?.noMatches ?? DEFAULT_TICKET_TAG_LABELS.noMatches}
         </div>
       </div>
     );
@@ -138,7 +142,7 @@ function TicketPopup({ matches, index, labels, onHover, onPick }: {
 
   return (
     <div style={POP.anchor}>
-      <ul role="listbox" aria-label={labels?.title ?? 'Tag ticket'} style={POP.list}>
+      <ul role="listbox" aria-label={labels?.title ?? DEFAULT_TICKET_TAG_LABELS.title} style={POP.list}>
         {labels?.title && <li aria-hidden style={POP.group}>{labels.title}</li>}
         {matches.map((t, i) => {
           const ref = t.key ?? String(t.id);

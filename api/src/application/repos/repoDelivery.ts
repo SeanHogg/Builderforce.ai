@@ -1,5 +1,4 @@
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * repoDelivery — "is this repo's build green, and how many pulls are open",
  * for EVERY provider, read off a scheduled sweep rather than the request.
@@ -38,9 +37,11 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * 404 (Actions disabled, no Pipelines configured), which is not a fault — the
  * connection is healthy and simply has no build to report.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
-import { buildDatabase, type Db } from '../../infrastructure/database/connection';
-import { projectRepositories, repoDeliveryStatus } from '../../infrastructure/database/schema';
+import { eq } from 'drizzle-orm';
+import type { Db } from '../../infrastructure/database/connection';
+import { repoDeliveryStatus } from '../../infrastructure/database/schema';
+import { loadSweepStamps } from '../../infrastructure/cache/sweepStampLedger';
+import type { CacheEnv } from '../../infrastructure/cache/readThroughCache';
 import { githubRequest, repoPath, resolveRepoAuth, type ResolvedRepoAuth } from './githubClient';
 import { makeRepoFetch } from './sources/RepoSource';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
@@ -341,126 +342,15 @@ export async function probeRepoDelivery(
   });
 }
 
-export interface RepoDeliverySweepResult {
-  due: number;
-  probed: number;
-  errors: number;
-}
-
-/** Max repos probed per tick — bounds the sweep's subrequest budget. Unlike the
- *  read-time cap this replaced, a repo past the cap is not degraded: it is simply
- *  next in the rotation, because the ordering is oldest-probe-first. */
-const MAX_REPOS_PER_TICK = 25;
 /**
- * Re-probe a repo at most this often.
- *
- * It was 5 minutes — exactly the cron cadence — so every connected repo was due on
- * every tick: two provider calls plus an upsert per repo, 288 times a day, for a
- * verdict (open-PR count, latest CI run) that a dashboard only needs to be roughly
- * current. Attaching a repo still shows a verdict at once via {@link refreshRepoDelivery}.
+ * KV key of the sweep's "last probed" ledger (see `infrastructure/cache/sweepStampLedger`).
+ * The sweep (`repoDeliverySweep.ts`) stamps it on every probe; `probed_at` is written only
+ * with a verdict change. Readers take the newer of the two.
  */
-export const REPO_DELIVERY_PROBE_INTERVAL_MS = 30 * 60_000;
+export const REPO_DELIVERY_STAMPS_KEY = 'sweep:repo-delivery:probed';
 
-/** The persisted verdict columns, as the due query reads them back for comparison. */
-interface StoredVerdictColumns {
-  health: string | null;
-  reason: string | null;
-  openPullRequests: number | null;
-  buildStatus: string | null;
-  buildUrl: string | null;
-  buildBranch: string | null;
-  buildAt: Date | string | null;
-}
-
-/**
- * Does a fresh probe say anything the stored row does not? `null` previous = no row
- * yet (the left join found nothing), which is always a change.
- */
-export function repoDeliveryVerdictChanged(prev: StoredVerdictColumns | null, next: RepoDeliveryProbe): boolean {
-  if (!prev || prev.health === null) return true;
-  const prevBuildAt = prev.buildAt ? new Date(prev.buildAt).getTime() : null;
-  const nextBuildAt = next.buildAt ? new Date(next.buildAt).getTime() : null;
-  return prev.health !== next.health
-    || (prev.reason ?? null) !== next.reason
-    || (prev.openPullRequests ?? null) !== next.openPullRequests
-    || (prev.buildStatus ?? null) !== next.buildStatus
-    || (prev.buildUrl ?? null) !== next.buildUrl
-    || (prev.buildBranch ?? null) !== next.buildBranch
-    || prevBuildAt !== nextBuildAt;
-}
-
-/**
- * Probe every due connected repo and persist its verdict. Safe on every tick.
- *
- * Only a CHANGED verdict is upserted. An unchanged one still stamps `probed_at` (one
- * narrow UPDATE) because `probed_at` is the rotation key — without it the repo would be
- * due again next tick and re-probed — but `updated_at` is left alone, so it now reads as
- * "when the verdict last changed".
- *
- * Ordering is `probed_at asc nulls first`, so a repo that has NEVER been probed
- * goes first and the rest rotate — a tenant with more repos than one tick can
- * cover gets all of them refreshed over successive ticks instead of the same
- * prefix forever (which is precisely what the read-time budget did wrong).
- */
-export async function runRepoDeliverySweep(env: Env): Promise<RepoDeliverySweepResult> {
-  const db = buildDatabase(env as unknown as Parameters<typeof buildDatabase>[0]);
-  const secret = integrationCredentialSecret(env);
-  const cutoff = new Date(Date.now() - REPO_DELIVERY_PROBE_INTERVAL_MS);
-
-  const due = await db
-    .select({
-      id: projectRepositories.id,
-      tenantId: projectRepositories.tenantId,
-      owner: projectRepositories.owner,
-      repo: projectRepositories.repo,
-      probedAt: repoDeliveryStatus.probedAt,
-      // The stored verdict, so an unchanged probe can skip the full upsert.
-      health: repoDeliveryStatus.health,
-      reason: repoDeliveryStatus.reason,
-      openPullRequests: repoDeliveryStatus.openPullRequests,
-      buildStatus: repoDeliveryStatus.buildStatus,
-      buildUrl: repoDeliveryStatus.buildUrl,
-      buildBranch: repoDeliveryStatus.buildBranch,
-      buildAt: repoDeliveryStatus.buildAt,
-    })
-    .from(projectRepositories)
-    .leftJoin(repoDeliveryStatus, eq(repoDeliveryStatus.repoId, projectRepositories.id))
-    .where(and(
-      inArray(projectRepositories.provider, [...PROBEABLE_PROVIDERS]),
-      sql`${projectRepositories.credentialId} is not null`,
-      sql`(${repoDeliveryStatus.probedAt} is null or ${repoDeliveryStatus.probedAt} < ${cutoff})`,
-    ))
-    // `asc nulls first` must be ONE fragment: wrapping it in drizzle's `asc()`
-    // emits `... nulls first asc`, which Postgres rejects outright.
-    .orderBy(sql`${repoDeliveryStatus.probedAt} asc nulls first`)
-    .limit(MAX_REPOS_PER_TICK);
-
-  let probed = 0;
-  let errors = 0;
-  for (const repo of due) {
-    try {
-      const verdict = await probeRepoDelivery(env, db, secret, repo.tenantId, repo.id);
-      if (repoDeliveryVerdictChanged(repo, verdict)) {
-        await storeRepoDelivery(db, repo.tenantId, repo.id, verdict);
-      } else {
-        await db.update(repoDeliveryStatus)
-          .set({ probedAt: new Date() })
-          .where(eq(repoDeliveryStatus.repoId, repo.id));
-      }
-      probed++;
-    } catch (e) {
-      errors++;
-      reportCaughtError(e, {
-        source: 'application/repos/repoDelivery.ts',
-        operation: 'runRepoDeliverySweep',
-        context: { logMessage: `[cron:repo-delivery] repo ${repo.id} (${repo.owner}/${repo.repo}) failed`, details: e },
-      });
-    }
-  }
-  return { due: due.length, probed, errors };
-}
-
-/** Upsert one repo's verdict. The sweep is the single writer of this table. */
+/** Upsert one repo's verdict, `probed_at` included — the column moves only with a
+ *  verdict, never on an unchanged probe (that is a KV stamp, see the sweep). */
 export async function storeRepoDelivery(
   db: Db,
   tenantId: number,
@@ -492,12 +382,16 @@ export interface StoredRepoDelivery extends RepoDeliveryProbe {
   probedAt: string;
 }
 
-/** Every persisted verdict for a tenant, keyed by repo id. ONE query, no provider calls. */
-export async function loadRepoDelivery(db: Db, tenantId: number): Promise<Map<string, StoredRepoDelivery>> {
-  const rows = await db
-    .select()
-    .from(repoDeliveryStatus)
-    .where(eq(repoDeliveryStatus.tenantId, tenantId));
+/**
+ * Every persisted verdict for a tenant, keyed by repo id. ONE query, no provider calls.
+ * `probedAt` is the newer of the sweep's KV stamp and the column (which only moves with
+ * a verdict change), so an unchanged-but-recently-probed repo still reads as fresh.
+ */
+export async function loadRepoDelivery(db: Db, tenantId: number, env?: CacheEnv): Promise<Map<string, StoredRepoDelivery>> {
+  const [rows, stamps] = await Promise.all([
+    db.select().from(repoDeliveryStatus).where(eq(repoDeliveryStatus.tenantId, tenantId)),
+    loadSweepStamps(env, REPO_DELIVERY_STAMPS_KEY),
+  ]);
   return new Map(rows.map((r) => [r.repoId, {
     health: r.health as ProjectConnectionHealth,
     reason: (r.reason ?? null) as ProjectConnectionReason,
@@ -506,7 +400,7 @@ export async function loadRepoDelivery(db: Db, tenantId: number): Promise<Map<st
     buildUrl: r.buildUrl,
     buildBranch: r.buildBranch,
     buildAt: r.buildAt ? new Date(r.buildAt).toISOString() : null,
-    probedAt: new Date(r.probedAt).toISOString(),
+    probedAt: new Date(stamps.lastChecked(r.repoId, r.probedAt) ?? r.probedAt).toISOString(),
   }]));
 }
 

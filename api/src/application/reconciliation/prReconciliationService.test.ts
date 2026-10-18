@@ -122,10 +122,13 @@ describe('GitHub PR reconciliation collector', () => {
 });
 
 describe('reconciliation run write discipline', () => {
-  it('restates the approved allowlist only when the policy added a close candidate', async () => {
+  it('writes the run row once, through the ledger, never as an up-front lease', async () => {
     const { readFileSync } = await import('node:fs');
     const { fileURLToPath } = await import('node:url');
     const source = readFileSync(fileURLToPath(new URL('./prReconciliationService.ts', import.meta.url).href), 'utf8');
-    expect(source).toContain("if (mode === 'apply' && resolvedApproved.length !== approved.length) {");
+    expect(source).not.toContain('db.insert(prReconciliationRuns)');
+    expect(source).not.toContain('db.update(prReconciliationRuns)');
+    expect(source).not.toContain('db.insert(prReconciliationItems)');
+    expect(source).toContain('changed: writes > 0');
   });
 });

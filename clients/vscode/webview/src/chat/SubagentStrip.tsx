@@ -10,9 +10,9 @@
 
 import { useState } from 'react';
 import { resolveRunConfirm, stopRun } from '@seanhogg/builderforce-brain-embedded';
-import { LiveActivity, ToolConfirmBar, type LiveActivityLabels } from '@seanhogg/builderforce-brain-ui';
+import { LiveActivity, ToolConfirmBar, type LiveActivityLabels, type ToolConfirmBarLabels } from '@seanhogg/builderforce-brain-ui';
 import type { LabelBundle } from '../vscodeBridge';
-import { makeT } from './chatLabels';
+import { makeT, toolConfirmLabels } from './chatLabels';
 import { steerRun, useChatChildren, useRunSnapshotOf, type ChildView } from './chatChildren';
 
 interface Props {
@@ -35,6 +35,7 @@ export function SubagentStrip({ chatId, labels, liveLabels }: Props) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const t = makeT(labels);
   if (children.length === 0) return null;
+  const confirmLabels = toolConfirmLabels(labels);
   const toggle = () => setCollapsed((c) => { writeCollapsed(!c); return !c; });
   return (
     <section className={`bf-subagents${collapsed ? ' bf-subagents--collapsed' : ''}`} aria-label={t('sub.region', 'Sub-agents working in this chat')}>
@@ -60,7 +61,7 @@ export function SubagentStrip({ chatId, labels, liveLabels }: Props) {
       {!collapsed && (
         <ul className="bf-subagents__list">
           {children.map((child) => (
-            <SubagentRow key={child.key} child={child} t={t} liveLabels={liveLabels} />
+            <SubagentRow key={child.key} child={child} t={t} confirmLabels={confirmLabels} liveLabels={liveLabels} />
           ))}
         </ul>
       )}
@@ -68,7 +69,12 @@ export function SubagentStrip({ chatId, labels, liveLabels }: Props) {
   );
 }
 
-function SubagentRow({ child, t, liveLabels }: { child: ChildView; t: ReturnType<typeof makeT>; liveLabels?: Partial<LiveActivityLabels> }) {
+function SubagentRow({ child, t, confirmLabels, liveLabels }: {
+  child: ChildView;
+  t: ReturnType<typeof makeT>;
+  confirmLabels: ToolConfirmBarLabels;
+  liveLabels?: Partial<LiveActivityLabels>;
+}) {
   const run = useRunSnapshotOf(child.key);
   const [draft, setDraft] = useState<string | null>(null);
   const send = () => {
@@ -91,11 +97,9 @@ function SubagentRow({ child, t, liveLabels }: { child: ChildView; t: ReturnType
           onApprove={() => resolveRunConfirm(child.key, true)}
           onDeny={() => resolveRunConfirm(child.key, false)}
           labels={{
+            ...confirmLabels,
             // "{child} wants to run {tool}" — the child's name filled here, the tool by the bar.
             prompt: `${t('sub.asks', '{name} wants to run').replace('{name}', child.name)} {name}`,
-            approve: t('app.approve', 'Approve'),
-            deny: t('app.cancel', 'Cancel'),
-            aria: t('app.confirmAria', 'Approve this action'),
           }}
         />
       )}

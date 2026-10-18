@@ -1141,6 +1141,62 @@
  * API. Reflows to one column on a narrow panel.
  * ========================================================================== */
 
+/* ==========================================================================
+ * Base controls — THE button, field and chip every host and shared part uses.
+ * Moved here from the Rovr panel and the editor webview, which each declared their
+ * own `.bf-btn`. A host restyles them through tokens, never by re-declaring rules:
+ *   --bf-btn-bg / -fg / -hover, --bf-btn-primary-bg / -fg / -hover,
+ *   --bf-btn-pad, --bf-btn-size, --bf-btn-radius, --bf-field-bg.
+ * ========================================================================== */
+.bf-btn {
+  padding: var(--bf-btn-pad, 6px 12px);
+  border: 1px solid var(--bf-border);
+  border-radius: var(--bf-btn-radius, var(--bf-radius, 6px));
+  background: var(--bf-btn-bg, var(--bf-surface));
+  color: var(--bf-btn-fg, var(--bf-text));
+  font: inherit;
+  font-size: var(--bf-btn-size, inherit);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bf-btn:hover:not(:disabled) { background: var(--bf-btn-hover, var(--bf-btn-bg, var(--bf-surface-2, var(--bf-surface)))); }
+.bf-btn:disabled { opacity: 0.55; cursor: default; }
+.bf-btn--primary {
+  border-color: var(--bf-btn-primary-border, var(--bf-accent));
+  background: var(--bf-btn-primary-bg, var(--bf-accent));
+  color: var(--bf-btn-primary-fg, var(--bf-on-accent));
+}
+.bf-btn--primary:hover:not(:disabled) { background: var(--bf-btn-primary-hover, var(--bf-btn-primary-bg, var(--bf-accent))); }
+.bf-btn--link { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--bf-accent); }
+.bf-btn--link:hover:not(:disabled) { background: none; text-decoration: underline; }
+
+.bf-input,
+.bf-select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--bf-border);
+  border-radius: var(--bf-radius, 6px);
+  background: var(--bf-field-bg, var(--bf-bg));
+  color: var(--bf-text);
+  font: inherit;
+}
+/* Native options paint with the OS palette unless told otherwise (unreadable in dark). */
+.bf-select option { background: var(--bf-field-bg, var(--bf-bg)); color: var(--bf-text); }
+
+.bf-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: var(--bf-surface-2, var(--bf-surface));
+  color: var(--bf-text-muted);
+}
+.bf-chip--ok { background: var(--bf-success-bg); color: var(--bf-success); }
+.bf-chip--pending { background: var(--bf-warning-bg); color: var(--bf-warning); }
+.bf-chip--off { background: var(--bf-error-bg); color: var(--bf-error); }
+.bf-chip--local { background: var(--bf-accent-soft); color: var(--bf-accent); }
+
 /* The glyph-only header button (refresh ⟳) Project 360 and the project list pages share.
    Doubled class: it must beat a host's own `.bf-btn` padding, whichever loads last. */
 .bf-btn.bf-btn--icon { padding: 4px 7px; line-height: 1; }

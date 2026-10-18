@@ -19,9 +19,12 @@ function renderRecipientAvatar(r: DirectedRecipient, avatar: ReactNode) {
 }
 
 /**
- * One composer instance for both the pre-chat and active-chat states. Sending
- * from the empty state creates the chat through conv.ensureChatId; selecting a
- * capability can still seed and focus this same input.
+ * The Brain panel's binding of its controller (`useBrainPanel`) onto THE web composer,
+ * `ChatInput` — nothing of the composer itself is re-implemented here, only which panel
+ * state feeds which prop, plus the panel's own context controls (preview picks, "Acting
+ * as", capability, "To"). One instance for both the pre-chat and active-chat states:
+ * sending from the empty state creates the chat through conv.ensureChatId, and selecting
+ * a capability can still seed and focus this same input.
  */
 export function BrainComposer() {
   const {
@@ -34,6 +37,7 @@ export function BrainComposer() {
     chooseRecipient,
     participants,
     queued,
+    stopTurn,
     repoContext,
     prefs,
     modelOptions,
@@ -87,11 +91,9 @@ export function BrainComposer() {
       onSubmit={handleSend}
       // A builder's chat is about changing the thing on screen, so it says so.
       placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain(capabilitySurface === 'build' ? 'messagePlaceholderBuild' : 'messagePlaceholder')}
-      disabled={false}
       running={conv.sending}
-      onStop={conv.stop}
+      onStop={stopTurn}
       queued={queued}
-      rows={2}
       onAttach={conv.attach}
       onAddContext={repoContext.onAddContext}
       webBrowsing={prefs.webBrowsing}

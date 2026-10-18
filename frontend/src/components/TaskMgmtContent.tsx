@@ -601,7 +601,7 @@ export function TaskMgmtContent({
   // fired right after a status PATCH so the user's own drag updates instantly.
   const { executions, dispatches, refresh: refreshRuns } = useBoardLiveRuns(
     view === 'board' && !compact ? board?.id : undefined,
-    view === 'board' || view === 'table',
+    view === 'board' || view === 'table', effectiveProjectId,
   );
 
   // Real-time project room: the server pushes `{type:"changed"}` over a WebSocket

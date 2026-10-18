@@ -346,3 +346,26 @@ export { SpendBreakdown } from './spend/SpendBreakdown';
 export { DEFAULT_SPEND_LABELS, spendLabels } from './spend/labels';
 export type { SpendLabels } from './spend/labels';
 export { formatUsd, formatTokens } from './spend/format';
+
+// The ONE catalog → labels contract: each shared component's `xxxLabelsFrom(lookup)`
+// holds its key table + English defaults; a host supplies only a lookup over its catalog.
+export { stringsFrom, bundleLookup } from './labelCatalog';
+export type { LabelLookup, LabelValues } from './labelCatalog';
+export { composerLabelsFrom } from './composer/labels';
+export { promptOptionsLabelsFrom } from './promptOptions/types';
+export { workStatusLabelsFrom } from './workStatus/labels';
+export { spendLabelsFrom } from './spend/labels';
+export { chatTicketsLabelsFrom } from './chatTickets/labelBundle';
+export { chatHistoryLabelsFrom } from './surface/ChatHistory';
+export { toolConfirmLabelsFrom } from './ToolConfirmBar';
+export {
+  brainComposerLabelsFrom,
+  DEFAULT_MENTION_LABELS,
+  DEFAULT_TICKET_TAG_LABELS,
+} from './composer/brainComposerLabels';
+export type { FullBrainComposerLabels } from './composer/brainComposerLabels';
+
+// The `/` menu's Model section from a host's catalogue — empty fallback, on-device merge,
+// pending entitlement and the pin → choice rule, once for every host.
+export { composerModel, composerCatalogLoaded, withLocalModels, modelSelectionFrom } from './composer/composerModel';
+export type { ComposerModelCatalog, ComposerModelInput } from './composer/composerModel';

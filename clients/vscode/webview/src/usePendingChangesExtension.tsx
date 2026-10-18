@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  DEFAULT_PENDING_CHANGES_LABELS,
   PendingChangesList,
+  bundleLookup,
   pendingChangesSummary,
-  resolvePendingChangesLabels,
+  stringsFrom,
   type ChatTicketsExtension,
   type PendingChangeVM,
   type PendingChangesLabels,
@@ -53,24 +55,12 @@ export function usePendingChangesExtension(labels: LabelBundle, chatFiles: reado
   );
 
   const listLabels = useMemo<PendingChangesLabels>(() => {
-    const t = (key: string, fallback: string) => labels[key] ?? fallback;
-    return resolvePendingChangesLabels({
-      pill: t('changes.pill', 'Changes'),
-      summary: t('changes.summary', '{count} uncommitted changes'),
-      summaryOne: t('changes.summaryOne', '1 uncommitted change'),
-      hint: t('changes.hint', 'Changed in your workspace and not committed yet.'),
-      review: t('changes.review', 'Review'),
-      staged: t('changes.staged', 'staged'),
-      status: {
-        modified: t('changes.status.modified', 'modified'),
-        added: t('changes.status.added', 'added'),
-        deleted: t('changes.status.deleted', 'deleted'),
-        renamed: t('changes.status.renamed', 'renamed'),
-        untracked: t('changes.status.untracked', 'new'),
-        conflict: t('changes.status.conflict', 'conflict'),
-        typechange: t('changes.status.typechange', 'type changed'),
-      },
-    });
+    // The bundle's `changes.<field>` / `changes.status.<kind>` over brain-ui's English.
+    const lookup = bundleLookup(labels, (key) => `changes.${key}`);
+    return {
+      ...stringsFrom(DEFAULT_PENDING_CHANGES_LABELS, lookup),
+      status: stringsFrom(DEFAULT_PENDING_CHANGES_LABELS.status, lookup, 'status.'),
+    };
   }, [labels]);
 
   return useMemo<ChatTicketsExtension | null>(() => {

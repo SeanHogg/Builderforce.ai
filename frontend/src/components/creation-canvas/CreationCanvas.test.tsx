@@ -1307,9 +1307,11 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
     expect(screen.getByRole('log', { name: 'Brain chat history' })).toBeInTheDocument();
     expect(screen.getAllByText('Show which agents are active').length).toBeGreaterThan(0);
-    const working = container.querySelector('[data-variant="composer"][data-state="running"]');
+    // THE shared live row, in the pill above the prompt — whichever phase the run store
+    // has published by now, with its elapsed clock.
+    const working = container.querySelector('[data-testid="canvas-run-activity"][data-variant="composer"]');
     expect(working).toBeInTheDocument();
-    expect(working).toHaveTextContent('Thinking…');
+    expect(working).toHaveTextContent(/Starting…|Thinking…|Writing the reply…/);
     expect(working).toHaveTextContent(/\d+s/);
   });
 

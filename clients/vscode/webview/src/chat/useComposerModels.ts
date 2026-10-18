@@ -8,8 +8,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { EMPTY_GATEWAY_MODEL_OPTIONS, loadGatewayModelOptions, nextFallbackModel, type GatewayModelOptions } from '@seanhogg/builderforce-brain-embedded';
-import type { ChatModelSelection, PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
+import { loadGatewayModelOptions, nextFallbackModel, type GatewayModelOptions } from '@seanhogg/builderforce-brain-embedded';
+import {
+  composerCatalogLoaded,
+  modelSelectionFrom,
+  withLocalModels,
+  type ChatModelSelection,
+  type PromptOptionsLabels,
+} from '@seanhogg/builderforce-brain-ui';
 import type { AuthedFetch } from '../authedFetch';
 import { post, type InitData } from '../vscodeBridge';
 
@@ -38,19 +44,16 @@ export function useComposerModels(
    * offline) — so local models also stand the menu up on their own. The placeholder
    * identity is NOT an entitlement verdict: the menu is told it is pending.
    */
-  const composerModels = useMemo<GatewayModelOptions>(() => {
-    const local = init.localModels ?? [];
-    // No catalogue yet: brain-embedded's ONE empty shape (Rovr starts from it too).
-    const base = modelChoices ?? EMPTY_GATEWAY_MODEL_OPTIONS;
-    return local.length === 0 && modelChoices ? modelChoices : { ...base, options: { ...base.options, local } };
-  }, [modelChoices, init.localModels]);
+  const composerModels = useMemo<GatewayModelOptions>(
+    // No catalogue yet: brain-embedded's ONE empty shape (brain-ui's shared merge).
+    () => withLocalModels(modelChoices, init.localModels),
+    [modelChoices, init.localModels],
+  );
 
   // The user's CHOICE, reconstructed from what the host resolved: a strict pin, the
   // BYO pool, or auto (in which case `init.model` is whatever auto landed on).
   const modelSelection = useMemo<ChatModelSelection>(
-    () => (init.modelStrict && init.model
-      ? { mode: 'model', model: init.model }
-      : init.routingMode === 'byo_pool' ? { mode: 'byo_pool' } : { mode: 'auto' }),
+    () => modelSelectionFrom({ model: init.model, strict: !!init.modelStrict, routingMode: init.routingMode }),
     [init.model, init.modelStrict, init.routingMode],
   );
   // Host state (it drives BOTH editor chat surfaces and survives this panel): the pick
@@ -67,9 +70,9 @@ export function useComposerModels(
   );
 
   // A failed read resolves to that same empty shape — entitlement is still UNKNOWN then,
-  // so it counts as not loaded (the menu must not claim the plan forbids choosing), the
-  // rule Rovr's options already apply.
-  const catalogLoaded = modelChoices != null && modelChoices !== EMPTY_GATEWAY_MODEL_OPTIONS;
+  // so it counts as not loaded (the menu must not claim the plan forbids choosing): the
+  // shared rule Rovr's options read too.
+  const catalogLoaded = composerCatalogLoaded(modelChoices);
 
   return { catalogLoaded, modelSurface, composerModels, modelSelection, chooseModel, pickFallbackModel };
 }

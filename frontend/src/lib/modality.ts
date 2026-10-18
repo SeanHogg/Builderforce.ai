@@ -114,13 +114,12 @@ export const RIGHT_TAB_ICONS: Record<RightTab, string> = {
   state: '🔬',
 };
 
-/** A registry entry before its Brain persona (prompt + glyph) is joined in. */
-type ModalityEntry = Omit<ModalityDef, 'brainSystemPrompt' | 'icon'>;
+/** A registry entry before its Brain persona (name + prompt + glyph) is joined in. */
+type ModalityEntry = Omit<ModalityDef, 'brainSystemPrompt' | 'icon' | 'label'>;
 
 const BASE_MODALITIES: ModalityEntry[] = [
   {
     id: 'designer',
-    label: 'Website',
     tagline: 'Generate and build a website or web app with Preview, Code, and a live dev server.',
     rightTabs: ['files', 'media', 'versions', 'agent', 'train', 'publish', 'state'],
     showRunButton: true,
@@ -132,7 +131,6 @@ const BASE_MODALITIES: ModalityEntry[] = [
   },
   {
     id: 'mobile',
-    label: 'Mobile',
     tagline: 'Build a phone app and preview it in a device simulator, then scan to open it on your own handset.',
     rightTabs: ['files', 'media', 'versions', 'agent', 'publish', 'state'],
     showRunButton: true,
@@ -144,7 +142,6 @@ const BASE_MODALITIES: ModalityEntry[] = [
   },
   {
     id: 'webmobile',
-    label: 'Web + Mobile',
     tagline: 'Build a web application and a mobile app together from one codebase — preview both side by side.',
     rightTabs: ['files', 'media', 'versions', 'agent', 'publish', 'state'],
     showRunButton: true,
@@ -157,7 +154,6 @@ const BASE_MODALITIES: ModalityEntry[] = [
   },
   {
     id: 'evermind',
-    label: 'Evermind',
     tagline: 'Grow a living Evermind model that learns from every project — teach it and watch its Knowledge Map fill in.',
     rightTabs: ['files', 'versions', 'publish', 'state'],
     showRunButton: false,
@@ -169,7 +165,6 @@ const BASE_MODALITIES: ModalityEntry[] = [
   },
   {
     id: 'finetune',
-    label: 'Fine-tune',
     tagline: 'Design datasets and train a custom LoRA model, then benchmark, publish, and export it.',
     rightTabs: ['files', 'versions', 'train', 'publish', 'state'],
     showRunButton: false,
@@ -181,7 +176,6 @@ const BASE_MODALITIES: ModalityEntry[] = [
   },
   {
     id: 'voice',
-    label: 'Voice',
     tagline: 'Clone and design a custom voice, then synthesize speech from it.',
     rightTabs: ['voice', 'files', 'versions', 'state'],
     showRunButton: true,
@@ -197,6 +191,7 @@ const BASE_MODALITIES: ModalityEntry[] = [
  *  carries the shared strategy/OKR note), so getModality and direct reads agree. */
 export const MODALITIES: ModalityDef[] = BASE_MODALITIES.map((m) => ({
   ...m,
+  label: MODALITY_PERSONAS[m.id].label,
   icon: MODALITY_PERSONAS[m.id].icon,
   brainSystemPrompt: MODALITY_PERSONAS[m.id].prompt,
 }));

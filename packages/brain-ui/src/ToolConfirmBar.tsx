@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, type ReactNode } from 'react';
+import { stringsFrom, type LabelLookup } from './labelCatalog';
 
 /**
  * The human-in-the-loop approval — ONE bar for every surface that pauses a run on a
@@ -37,6 +38,12 @@ export const DEFAULT_TOOL_CONFIRM_LABELS: ToolConfirmBarLabels = {
   deny: 'Cancel',
   aria: 'Approve this action',
 };
+
+/** THE confirm bar's copy from a host catalog (canonical keys = the field names). */
+export function toolConfirmLabelsFrom(lookup: LabelLookup): ToolConfirmBarLabels {
+  const approveAllTitle = lookup('approveAllTitle');
+  return { ...stringsFrom(DEFAULT_TOOL_CONFIRM_LABELS, lookup), ...(approveAllTitle ? { approveAllTitle } : {}) };
+}
 
 export interface ToolConfirmBarProps {
   req: { name: string; args: unknown };

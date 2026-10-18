@@ -89,7 +89,7 @@ export function toggledCanvasPromptPlacement(current: CanvasPromptPlacement): Ca
  * so a composer wired to the in-page `evaluateCanvas` would be a second, quieter way
  * to start a turn that behaves differently from the one the reader can see.
  *
- * Moved here from `CanvasPromptComposer.tsx`: it is a pure rule over this module's type,
+ * Kept here rather than in the composer: it is a pure rule over this module's type,
  * and a rule worth a unit test should not need a component tree to import.
  */
 export function effectiveCanvasPromptPlacement({ hostOwnsSurface, brainIsSurface, preference, brainDockDrawn, lensPlacement = null }: {

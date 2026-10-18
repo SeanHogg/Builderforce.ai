@@ -91,7 +91,7 @@ import { runPrMergeSweep } from './application/repos/prMergeSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
 import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
 import { runRepoActivitySweep } from './application/contributors/runRepoActivitySweep';
-import { runRepoDeliverySweep } from './application/repos/repoDelivery';
+import { runRepoDeliverySweep } from './application/repos/repoDeliverySweep';
 import { runPublisherDomainSweep } from './application/developer/domainVerification';
 import { runDueReports } from './application/reports/runDueReports';
 import { dueSnapshots } from './application/reports/lensSnapshots';

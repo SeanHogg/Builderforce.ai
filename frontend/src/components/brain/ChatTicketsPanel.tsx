@@ -6,7 +6,7 @@
  *   1. mount `createChatTicketsRestAdapter` on the web's authenticated request
  *      function, supplying the one thing the package cannot know — whether this
  *      viewer's tenant role permits dispatching a run,
- *   2. map the next-intl `brain.tickets` catalog into the shared labels bundle, and
+ *   2. point brain-ui's one chat-tickets label table at the next-intl `brain.tickets` catalog, and
  *   3. own the web-only chrome: routing a clicked ticket, and the owner's lock toggle,
  *   4. hand the chat's spend (attached to the chat payload) to the strip's spend pill.
  *
@@ -20,7 +20,8 @@ import {
   ChatTicketsPanel as SharedChatTicketsPanel,
   createChatTicketsRestAdapter,
   useChatActivitySignal,
-  type ChatTicketsAdapter, type ChatTicketsLabels, type ChatSubagentVM, type TicketLinkVM,
+  chatTicketsLabelsFrom,
+  type ChatTicketsAdapter, type ChatSubagentVM, type TicketLinkVM,
 } from '@seanhogg/builderforce-brain-ui';
 import { artifactRoutePath, type SpendSavingsSummary } from '@seanhogg/builderforce-brain-embedded';
 import { brain, type BrainChat } from '@/lib/builderforceApi';
@@ -30,6 +31,16 @@ import { usePermission } from '@/lib/rbac';
 import { asChatSubagents, runHistoryHasSubagents } from './cloudChatSubagents';
 import { useSpendLabels } from '@/components/chat-input/useSpendLabels';
 import { usePolledResource } from '@/hooks/usePolledResource';
+import { useLabelLookup } from '@/i18n/useLabelLookup';
+
+/**
+ * brain-ui's canonical chat-tickets keys → the `brain.tickets` catalog: every key sits
+ * at `brain.tickets.<key>`, except the count, whose one ICU plural message covers both
+ * of the table's `ticketCountOne` / `ticketCountMany`.
+ */
+function ticketsPath(key: string): string {
+  return key === 'ticketCountOne' || key === 'ticketCountMany' ? 'brain.tickets.ticketCount' : `brain.tickets.${key}`;
+}
 
 const NO_TRANSCRIPT: ReadonlyArray<{ metadata?: string | null }> = [];
 /** Live children appear and settle without a page reload — the web has no host registry. */
@@ -54,7 +65,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
 }) {
   const spendLabels = useSpendLabels();
   const locale = useLocale();
-  const t = useTranslations('brain.tickets');
+  const lookup = useLabelLookup(ticketsPath);
   const tc = useTranslations('common');
   const router = useRouter();
   // "Tag to execute" DISPATCHES a run, so it needs the same DEVELOPER+ gate as
@@ -102,31 +113,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
     return () => { live = false; };
   }, [chatId, refreshSignal]);
 
-  const labels = useMemo<ChatTicketsLabels>(() => ({
-    none: t('none'), spawned: t('spawned'), run: t('run'), open: t('open'), lineage: t('lineage'), unlink: t('unlink'),
-    pickAgent: t('pickAgent'), lineageTitle: t('lineageTitle'), lineageEmpty: t('lineageEmpty'), merged: t('merged'),
-    runNoAgent: t('runNoAgent'), runFailed: t('runFailed'), link: t('link'), agents: t('agents'), merge: t('merge'),
-    questions: t('questions'), noQuestions: t('noQuestions'), answerPlaceholder: t('answerPlaceholder'),
-    submitAnswer: t('submitAnswer'), answering: t('answering'),
-    linkFailed: t('linkFailed'), kindLabel: t('kindLabel'), pickTicket: t('pickTicket'), searchTicket: t('searchTicket'),
-    searching: t('searching'), noMatches: t('noMatches'), refine: t('refine'), linkTypeLabel: t('linkTypeLabel'),
-    linkTypeLinked: t('linkTypeLinked'), linkTypeCreated: t('linkTypeCreated'), linkAction: t('linkAction'),
-    noAgents: t('noAgents'), removeAgent: t('removeAgent'), inviteAgent: t('inviteAgent'), agentsHint: t('agentsHint'), subagentOf: t('subagentOf'),
-    people: t('people'), noPeople: t('noPeople'), invitePerson: t('invitePerson'), invitePersonHint: t('invitePersonHint'),
-    removePerson: t('removePerson'), inviteSent: t('inviteSent'), invitePending: t('invitePending'),
-    visibilityShared: t('visibilityShared'), visibilityLocked: t('visibilityLocked'), lockHint: t('lockHint'),
-    mergeHint: t('mergeHint'), mergeNoOthers: t('mergeNoOthers'),
-    showTickets: t('showTickets'), hideTickets: t('hideTickets'),
-    sortLabel: t('sortLabel'), sortOpen: t('sortOpen'), sortDone: t('sortDone'), sortTitle: t('sortTitle'), sortLinked: t('sortLinked'),
-    kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap'), spec: t('kind.spec'), retro: t('kind.retro'), poker: t('kind.poker') },
-    ringAria: (label, pct) => t('ringAria', { label, pct }),
-    inParent: (parent) => t('inParent', { parent }),
-    ticketCount: (n) => t('ticketCount', { n }),
-    overallAria: (pct) => t('overallAria', { pct }),
-    runStarted: (agent) => t('runStarted', { agent }),
-    mergeAction: (n) => t('mergeAction', { n }),
-    mergedN: (n) => t('mergedN', { n }),
-  }), [t]);
+  const labels = useMemo(() => chatTicketsLabelsFrom(lookup), [lookup]);
 
   const adapter = useMemo<ChatTicketsAdapter>(() => createChatTicketsRestAdapter({
     request: apiRequest,

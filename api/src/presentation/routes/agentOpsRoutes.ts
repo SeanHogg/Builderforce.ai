@@ -43,6 +43,7 @@ import {
 import type { DbHandle } from '../../application/shared/dbHandle';
 import type { HonoEnv } from '../../env';
 import { getReconciliationDiagnostics, listReconciliationRuns, reconciliationRequesterId, runPrTicketReconciliation } from '../../application/reconciliation/prReconciliationService';
+import { prReconciliationLastCheckedAt } from '../../application/reconciliation/runPrReconciliationSweep';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { listIdeAgentVersions, releaseIdeAgentVersion } from '../../application/agentIdentity/agentRunIdentity';
 import { parseOptionalBody, z, zJsonObject } from './requestBody';
@@ -139,11 +140,20 @@ export function createAgentOpsRoutes(db: DbHandle) {
 
   // ── PR/ticket reconciliation ───────────────────────────────────────────────
 
-  /** Durable run history. Every item and every handled error is retained per run. */
+  /**
+   * Durable run history. Every item and every handled error is retained per run.
+   *
+   * A scheduled check that changed nothing records no run, so for one repo the response
+   * also carries `lastCheckedAt` — the sweep's KV stamp, or the newest apply run when KV
+   * has none — so "when did the reconciler last look" survives the idle-silent ledger.
+   */
   router.get('/pr-reconciliation/runs', async (c) => {
     const repoId = c.req.query('repoId') || undefined;
     const limit = numQuery(c.req.query('limit')) ?? 25;
-    return json({ runs: await listReconciliationRuns(db, c.get('tenantId'), repoId, limit) });
+    const runs = await listReconciliationRuns(db, c.get('tenantId'), repoId, limit);
+    if (!repoId) return json({ runs });
+    const lastCheckedAt = await prReconciliationLastCheckedAt(c.env, repoId, runs.find((run) => run.mode === 'apply')?.startedAt);
+    return json({ runs, lastCheckedAt: lastCheckedAt == null ? null : new Date(lastCheckedAt).toISOString() });
   });
 
   /** Full evidence, recommendations, errors, and self-verifying ledger invariants. */

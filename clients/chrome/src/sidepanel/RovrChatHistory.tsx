@@ -6,9 +6,32 @@
  * or summarize on the device record, so the rows do not offer them.
  */
 import { useMemo } from 'react';
-import { ChatHistoryList, ChatHistoryRow, type ChatHistoryLabels, type ChatRowActions } from '@seanhogg/builderforce-brain-ui';
-import { t } from '../i18n/t';
+import {
+  ChatHistoryList,
+  ChatHistoryRow,
+  chatHistoryLabelsFrom,
+  type ChatHistoryLabels,
+  type ChatRowActions,
+} from '@seanhogg/builderforce-brain-ui';
+import type { MessageKey } from '../i18n/t';
+import { rovrLookup } from './labels/rovrLookup';
 import type { LocalChat } from '../store/records';
+
+/** Canonical chat-history key → Rovr message (one "no chats" line for both empty states). */
+const CHAT_HISTORY_KEY: Readonly<Record<string, MessageKey>> = {
+  loading: 'loading',
+  empty: 'noChats',
+  noMatch: 'noChats',
+  actions: 'chatActions',
+  actionsAria: 'chatActionsFor',
+  rename: 'chatRename',
+};
+
+/** The rows' copy through brain-ui's one table. `chatActionsFor`'s `$1` gets the literal `{title}` the row fills. */
+function rovrChatHistoryLabels(): ChatHistoryLabels {
+  const lookup = rovrLookup((key) => CHAT_HISTORY_KEY[key]);
+  return chatHistoryLabelsFrom((key, values) => lookup(key, key === 'actionsAria' ? { title: '{title}' } : values));
+}
 
 export interface RovrChatHistoryProps {
   /** The element the header's History lever controls. */
@@ -21,17 +44,7 @@ export interface RovrChatHistoryProps {
 }
 
 export function RovrChatHistory({ id, chats, loading, chatId, rows }: RovrChatHistoryProps) {
-  const labels = useMemo<Partial<ChatHistoryLabels>>(
-    () => ({
-      loading: t('loading'),
-      empty: t('noChats'),
-      noMatch: t('noChats'),
-      actions: t('chatActions'),
-      actionsAria: t('chatActionsFor', '{title}'),
-      rename: t('chatRename'),
-    }),
-    [],
-  );
+  const labels = useMemo(rovrChatHistoryLabels, []);
 
   return (
     <ChatHistoryList id={id} className="rovr-history" loading={loading} total={chats.length} labels={labels}>

@@ -2942,29 +2942,6 @@ export interface ExecutionTrace {
 }
 
 /** One currently-running (non-terminal) execution in the fleet. */
-export interface ActiveRun {
-  id: number;
-  status: 'pending' | 'submitted' | 'running';
-  taskId: number;
-  taskTitle: string;
-  projectId: number;
-  projectName: string;
-  agentHostId: number | null;
-  cloudAgentRef: string | null;
-  agentName: string | null;
-  submittedBy: string;
-  startedAt: string | null;
-  createdAt: string;
-  kind: 'cloud' | 'on-prem';
-  elapsedMs: number | null;
-}
-
-export interface ActiveRunsResponse {
-  active: ActiveRun[];
-  /** Cloud agent refs with at least one in-flight run (for the "running" pill). */
-  runningCloudRefs: string[];
-}
-
 /** Cross-surface "needs attention" state for a work item, most-severe wins.
  *  `awaiting_input` = an agent paused on ask_human and a person must answer;
  *  `running` = actively executing. Idle items are omitted from the response. */
@@ -3024,16 +3001,8 @@ export const runtimeApi = {
   taskCost: (taskId: number): Promise<{ estimatedCostUsd: number; totalTokens: number; requests: number }> =>
     request<{ estimatedCostUsd: number; totalTokens: number; requests: number }>(`/api/runtime/tasks/${taskId}/cost`),
 
-  /** Recent executions across the tenant (newest first) — used to surface which
-   *  agent is actively running each task on the board. */
-  listRecent: (limit = 200): Promise<Execution[]> =>
-    request<Execution[]>(`/api/runtime/executions?limit=${limit}`),
-
-  /** Fleet "what's running right now": every non-terminal execution, tagged with
-   *  task title, the executing agent, and elapsed time. `runningCloudRefs` lets
-   *  the UI mark a cloud agent as actively running. */
-  listActive: (): Promise<ActiveRunsResponse> =>
-    request<ActiveRunsResponse>(`/api/runtime/active`),
+  // The live / active runs read (fleet panel, workforce presence, board chips) is
+  // `liveRunsApi` in lib/liveRunsApi.ts — version-gated, slim columns.
 
   /** The ONE cross-surface "what's live / what needs me" signal: per-task and
    *  per-Brain-chat attention state (running / awaiting_input). Poll this and

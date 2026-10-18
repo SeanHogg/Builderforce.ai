@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createChatTicketsRestAdapter, useChatParticipants, useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
+import { useCallback, useEffect, useState } from 'react';
+import { useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import {
-  nextFallbackModel,
   effortProfile,
   reasoningForRun,
-  useChatTurns,
   useToolConfirmationGate,
 } from '@seanhogg/builderforce-brain-embedded';
 import {
@@ -18,12 +16,7 @@ import {
 // closure and this module's only consumers load dynamically (check:root-closure).
 import { useRegisterInlineBrain } from '@/lib/brain/inlineBrainHost';
 import { BRAIN_AUTO_APPROVE_DEFAULT, brainAutoApprovePersistence } from '@/lib/brain/autoApprove';
-import { trackActivity } from '@/lib/activity/tracker';
 import { useAttention } from '@/lib/useAttention';
-import { useChatModelOptions, useLlmModels } from '@/lib/useLlmModels';
-import { browserRunWindowSources } from '@/lib/brain/runWindowSources';
-import { apiRequest } from '@/lib/apiClient';
-import { useAssistantGate } from '@/lib/academic/useAssistantGate';
 /** The docked panel shows the conversation or, toggled from the header, the chat list. */
 export type BrainDockedTab = 'chat' | 'history';
 import type { BrainPanelProps } from '../panel/brainPanelTypes';
@@ -45,7 +38,9 @@ import { useBrainChatRowActions } from './useBrainChatRowActions';
 import { useBrainNewProject } from './useBrainNewProject';
 import { useBrainCaptureExecution } from './useBrainCaptureExecution';
 import { useBrainPanelBanners } from './useBrainPanelBanners';
-import { useDockedComposer } from '@/lib/brain/dockedBrain';
+import { useBrainPanelModels } from './useBrainPanelModels';
+import { useBrainPanelParticipants } from './useBrainPanelParticipants';
+import { useBrainPanelTurns } from './useBrainPanelTurns';
 
 /**
  * The ONE Brain panel's state machine: composes the focused hooks (preferences,
@@ -180,45 +175,13 @@ export function useBrainPanelController({
 
   const memory = useBrainChatMemory({ chats, pinnedProjectId, viewingProjectId });
 
-  // The shared (module-cached) model surface. Read here — ABOVE the conversation hook
-  // — because the run loop needs it to fail over when a model will not emit tool
-  // calls; the diagnostics capture reads the same cached object.
-  const llmModels = useLlmModels();
-  const { options: modelOptions, identity: modelIdentity } = useChatModelOptions();
+  // Read ABOVE the conversation hook: the run loop needs the model surface to fail over
+  // when a model will not emit tool calls.
   const { modelSelection } = prefs;
-  const selectedModel = modelSelection.mode === 'model' ? modelSelection.model : undefined;
-  // Tool-call failover: the SHARED selector over that surface, so "which model next"
-  // is decided in one place for every host rather than per surface.
-  const pickFallbackModel = useCallback(
-    (tried: readonly string[]) => nextFallbackModel({ ...llmModels.fundingSurface, codingModels: llmModels.codingModels }, tried),
-    [llmModels],
-  );
-  // The window fit's sources: a failover onto a smaller model is packed for its window.
-  const windowSources = useMemo(() => browserRunWindowSources(llmModels.fundingSurface), [llmModels]);
+  const { llmModels, modelOptions, modelIdentity, selectedModel, pickFallbackModel, windowSources } = useBrainPanelModels(modelSelection);
 
   const activeChatId = chats.activeChat?.id ?? null;
-
-  /**
-   * The ONE chat-scoped REST client this panel uses — the same factory the VS Code
-   * webview and the tickets panel build. It backs the participant roster AND the
-   * diagnostics capture's chat reads, so both read the endpoints exactly one way.
-   * Its agent-pool fetch is lazy and memoised for the adapter's lifetime.
-   */
-  const ticketAdapter = useMemo(() => createChatTicketsRestAdapter({ request: apiRequest }), []);
-
-  // Multi-party chat: the invited participants of the active chat as addressable
-  // recipients — so a message can be sent to a teammate instead of the BRAIN. Bumped on
-  // invite/remove.
-  //
-  // This used to be ~25 lines of state + effect + memo here, a transcription of the
-  // SHARED `useChatParticipants` the VS Code webview already called. Same two fetches,
-  // same pool cross-reference, same shape out — through a different client, which meant
-  // "who is in this chat" had two implementations that only happened to agree. The hook
-  // now resolves an agent's name from the invited row the server names, so the pool
-  // lookup this copy depended on is not even needed.
-  const [participantsRefresh, setParticipantsRefresh] = useState(0);
-  const bumpParticipants = useCallback(() => setParticipantsRefresh((n) => n + 1), []);
-  const participants = useChatParticipants(ticketAdapter, activeChatId, participantsRefresh);
+  const { ticketAdapter, participants, bumpParticipants } = useBrainPanelParticipants(activeChatId);
 
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
@@ -283,51 +246,16 @@ export function useBrainPanelController({
 
   const rows = useBrainChatRowActions({ chats, isPage, showChatTab });
   const newProject = useBrainNewProject({ chats, setProjects });
-  // THE ONE turn door (shared with every composer host): a turn typed while a run is
-  // streaming is HELD and flushed one at a time as each run completes, so the composer
-  // NEVER blocks typing while the AI is thinking; Stop clears what is held. `addressedTo`
-  // routes the turn: a participant is talked to (no BRAIN run); null runs the BRAIN.
-  const turns = useChatTurns<string>({
-    running: conv.sending,
-    runKey: chats.activeChatId,
-    send: (text) => conv.send(text, { addressedTo: recipient }),
+  // THE ONE turn door (shared with every composer host), the exam gate, and text a
+  // neighbouring surface hands the page's chat (docked, no close).
+  const { queued, submitTurn, stopTurn, handleSend } = useBrainPanelTurns({
+    conv, chats, recipient, input, setInput, showChatTab, acceptsHandover: !isPage && !onClose,
   });
-  // After the queue: an answered question or a replay is a turn like a typed one, and
+  // After the door: an answered question or a replay is a turn like a typed one, and
   // queues behind a running turn the same way.
   const timeline = useBrainTimelineBindings({
-    conv, chats, recipient, toolSpecs, runTool, bumpParticipants, submitQueued: turns.queued.submit,
+    conv, chats, recipient, toolSpecs, runTool, bumpParticipants, submitTurn,
   });
-
-  // The exam gate — the composer already refuses, and so must every other path into a
-  // send (a suggestion, a replayed prompt): a refusal, never a silent allow.
-  const assistantGate = useAssistantGate();
-
-  // The panel that IS the page's chat (docked, no close) takes text a neighbouring
-  // surface hands it: to finish and send (Studio's Media panel "use in app"), or to
-  // send now (the preview's "Fix it for me" — the click is the person sending it).
-  // A send goes through the same gate and door as a typed one.
-  const { submit: submitTurn } = turns;
-  const dockedComposer = useMemo(() => ({
-    seed: (text: string) => { setInput(text); showChatTab(); },
-    send: (text: string) => {
-      if (!assistantGate.assistantAllowed) return;
-      showChatTab();
-      void submitTurn(text);
-    },
-  }), [setInput, showChatTab, assistantGate.assistantAllowed, submitTurn]);
-  useDockedComposer(!isPage && !onClose, dockedComposer);
-
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    if (!text || !assistantGate.assistantAllowed) return;
-    setInput('');
-    // Audited engagement signal: interacting with the AI agent is billable activity.
-    trackActivity('agent_message', { weight: 2 });
-    // Restore the text if the send fails before it's persisted (e.g. an expired
-    // session) so the user's message is never silently lost.
-    const ok = await submitTurn(text);
-    if (!ok) setInput((cur) => cur || text);
-  }, [assistantGate.assistantAllowed, input, setInput, submitTurn]);
 
   const { captureExecution, captureState } = useBrainCaptureExecution({
     chats,
@@ -385,9 +313,9 @@ export function useBrainPanelController({
     setInput,
     handleSend,
     composerFocusToken,
-    queued: turns.queued,
+    queued,
     /** Stop the run AND drop the held turns — the composer's Stop. */
-    stopTurn: turns.stop,
+    stopTurn,
     prefs,
     modelOptions,
     modelIdentity,

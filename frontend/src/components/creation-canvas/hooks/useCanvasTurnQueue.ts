@@ -1,9 +1,8 @@
-/** Starting, queueing and stopping Brain turns. */
+/** Starting, queueing and stopping Brain turns — the canvas's binding of the ONE turn door (`useChatTurns`). */
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useInsertionEffect, useRef } from 'react';
 import type { CanvasExportAction } from '@/lib/canvasExports';
 import { useLatestRef } from './useLatestRef';
-import { useQueuedTurns } from '@seanhogg/builderforce-brain-ui';
-import { clearRunError, stopRun, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
+import { clearRunError, useChatTurns, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
 import { canvasRunKey } from '../brainTurn/canvasRunKey';
 import { creationSessionsApi, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import type { useTranslations } from 'next-intl';
@@ -42,27 +41,30 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRun, e
     void exportRef.current(nodeId, action).then(setNotice);
   }, [exportRef, setNotice]);
   const evaluateCanvasRef = useLatestRef(evaluateCanvas);
-  /**
-   * Turns typed while Brain is working.
-   *
-   * The composer stays live for the whole run (see the `ChatInput` below): a turn
-   * typed mid-run is HELD and sent the moment the current one finishes, so a long
-   * research turn never means a dead input box. Shared with the Brain panel — one
-   * queueing rule for every composer in the product.
-   */
-  /** Assigned below, once `startCanvasTurn` exists — the queue and the board
-   *  callbacks both need the newest closure without re-registering. */
+  /** Assigned below, once `startCanvasTurn` exists — the board callbacks need the
+   *  newest closure without re-registering. */
   const startCanvasTurnRef = useRef<(text?: string) => void>(() => {});
-  const queuedTurns = useQueuedTurns({
+  /**
+   * Turns typed while Brain is working — THE shared turn door (`useChatTurns`, the same
+   * one the Brain panel, the editor chat and Rovr mount). The composer stays live for the
+   * whole run: a turn typed mid-run is HELD and sent the moment the current one finishes,
+   * so a long research turn never means a dead input box; Stop drops what is held and
+   * stops this session's run cell.
+   */
+  const turns = useChatTurns<string>({
     // The CELL's running, not the narrated turn: a turn typed while a stopped loop is
     // still unwinding waits for it rather than being refused by the single-flight claim.
     running: canvasRun.running,
-    // Flushed turns take the same door every other turn takes — see
-    // `startCanvasTurn`. Re-queueing is impossible here: the queue only flushes
-    // once the run it was held behind has finished.
-    send: (text) => startCanvasTurnRef.current(text),
-    resetKey: sessionId,
+    runKey: canvasRunKey(sessionId),
+    // A flushed turn still answers to the exam gate: a closed-book assessment that began
+    // while it was held refuses it like any other turn.
+    send: (text) => {
+      if (!assistantGate.assistantAllowed) return false;
+      evaluateCanvasRef.current(text);
+    },
   });
+  const queuedTurns = turns.queued;
+  const { stop: stopTurns } = turns;
   /**
    * STOP. Interrupts the in-flight turn: the model stream is aborted, the loop
    * refuses to start another round-trip or tool, and anything the user had queued
@@ -78,9 +80,9 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRun, e
     // on the run cell, so a board remounted mid-turn still stops it, and the store clears
     // it at the first press — a second press while the loop unwinds is inert.
     if (!turn) return;
-    // The run store aborts the stream, declines a pending approval and settles the cell.
-    stopRun(canvasRunKey(sessionId));
-    queuedTurns.clear();
+    // Drops the held turns; the run store aborts the stream, declines a pending approval
+    // and settles the cell.
+    stopTurns();
     setActiveAgentIds(new Set());
     setNotice(t('noticeBrainStopped'));
     appendTimeline('system', t('noticeBrainStopped'), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, turn.id ? `${turn.id}:stopped` : undefined);
@@ -88,7 +90,7 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRun, e
       correlationId: turn.id, action: 'prompt.evaluate', phase: 'failed', actorType: 'user',
       durationMs: Date.now() - turn.startedAt, metadata: { stopped: true },
     }).catch(() => undefined);
-  }, [appendTimeline, persistence, queuedTurns, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setNotice, t, turn]);
+  }, [appendTimeline, persistence, resolvedScopeMode, scopedNodeIds, sessionId, setActiveAgentIds, setNotice, stopTurns, t, turn]);
   /**
    * The canvas narrates its own turn failures (`settleCanvasTurnFailure`). An error that
    * escaped the engine body before it could — the run cell's error — is said here once,
@@ -109,15 +111,18 @@ export function useCanvasTurnQueue({ appendTimeline, assistantGate, canvasRun, e
    * a turn on the floor while `thinking` (it is single-flight), so anything that
    * bypasses this door is silently ignored mid-run.
    */
+  const { submit: holdTurn } = queuedTurns;
   const startCanvasTurn = useCallback((text?: string) => {
     const value = (text ?? prompt).trim();
     if (!value || !assistantGate.assistantAllowed) return; // a closed-book assessment refuses every turn, composer or not
-    if (queuedTurns.submit(value)) {
+    // The raw hold-or-not step of the door, so an undefined `text` (the composer's own
+    // prompt) reaches `evaluateCanvas` as undefined — it reads and clears the prompt itself.
+    if (holdTurn(value)) {
       if (text === undefined) setPrompt('');
       return;
     }
     evaluateCanvasRef.current(text);
-  }, [assistantGate.assistantAllowed, evaluateCanvasRef, prompt, queuedTurns, setPrompt]);
+  }, [assistantGate.assistantAllowed, evaluateCanvasRef, holdTurn, prompt, setPrompt]);
   // eslint-disable-next-line react-hooks/refs
   // Same timing as `useLatestRef`: after commit, before any layout effect.
   useInsertionEffect(() => { startCanvasTurnRef.current = startCanvasTurn; });

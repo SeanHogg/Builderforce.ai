@@ -19,21 +19,24 @@ import { parseByoUnresolved, type UseBrainConversation } from '@seanhogg/builder
 import { ChatErrorBanner, useDismissibleNotice } from '@seanhogg/builderforce-brain-ui';
 import { openUpgrade } from '../accountPlan';
 import { invalidatePlanSnapshot } from '../planSnapshot';
-import { post, refreshToken } from '../vscodeBridge';
+import { post, refreshToken, type LabelBundle } from '../vscodeBridge';
+import { chatErrorLabels, makeT } from './chatLabels';
 
-export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, t }: {
+export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundle }: {
   conv: UseBrainConversation;
   chatsError: string;
   onDismissChatsError: () => void;
-  t: (key: string, fallback: string) => string;
+  /** The host's label bundle. */
+  bundle: LabelBundle;
 }) {
+  const t = makeT(bundle);
+  const errorLabels = useMemo(() => chatErrorLabels(bundle), [bundle]);
   const byo = useDismissibleNotice(conv.byoUnresolved);
   const byoKey = conv.byoUnresolved.join(',');
   const byoEntries = useMemo(() => parseByoUnresolved(conv.byoUnresolved), [byoKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const byoProviders = byoEntries.map((e) => e.provider).join(', ');
   const byoOtherWorkspace = byoEntries.length > 0 && byoEntries.every((e) => e.reason === 'other-workspace');
   const cap = useDismissibleNotice(conv.providerCap);
-  const dismiss = t('app.dismiss', 'Dismiss');
 
   return (
     <>
@@ -43,7 +46,7 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, t }: 
           role="status"
           action={null}
           onDismiss={byo.dismiss}
-          labels={{ dismiss }}
+          labels={errorLabels}
           error={(byoOtherWorkspace
             ? t(
                 'app.byoOtherWorkspace',
@@ -62,7 +65,7 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, t }: 
           role="status"
           action={null}
           onDismiss={cap.dismiss}
-          labels={{ dismiss }}
+          labels={errorLabels}
           error={t(
             'app.providerCapHit',
             'Your {providers} API key hit its usage limit this run, so it fell back to the shared model pool. Manage your API keys in the web app under Settings ▸ API Keys.',
@@ -70,7 +73,7 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, t }: 
         />
       )}
       {/* A chat the first send could not create fails the turn too — show that once. */}
-      <ChatErrorBanner className="bf-error" error={chatsError === conv.error ? '' : chatsError} action={null} onDismiss={onDismissChatsError} labels={{ dismiss }} />
+      <ChatErrorBanner className="bf-error" error={chatsError === conv.error ? '' : chatsError} action={null} onDismiss={onDismissChatsError} labels={errorLabels} />
       <ChatErrorBanner
         className="bf-error"
         error={conv.error}
@@ -81,15 +84,7 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, t }: 
         onValidateCard={() => { invalidatePlanSnapshot(); openUpgrade('billing'); }}
         onSignIn={() => post('signin')}
         onDismiss={conv.clearError}
-        labels={{
-          reconnect: t('app.reconnect', 'Reconnect'),
-          upgrade: t('app.upgrade', 'Upgrade'),
-          upgradeToPlan: t('app.upgradeToPlan', 'Upgrade to {plan}'),
-          addCard: t('app.addCard', 'Add a card'),
-          signIn: t('app.signIn', 'Sign in'),
-          noModel: t('app.noModel', 'No model is available. Sign in, or start a model on this device.'),
-          dismiss,
-        }}
+        labels={errorLabels}
       />
     </>
   );

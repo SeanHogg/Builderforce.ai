@@ -20,7 +20,7 @@ import { chromeKeyValue } from '../platform/keyValue';
 import { createSettings } from '../platform/settings';
 import { createIdbRecords } from '../store/idbRecords';
 import { createChatSync, type SyncItem } from '../sync/chatSync';
-import { isRovrRuntimeMessage, type SyncStats } from '../sync/runtimeMessages';
+import { isRovrRuntimeMessage, type SyncStats, type SyncStatsChanged } from '../sync/runtimeMessages';
 import type { ClientErrorEvent } from '../telemetry/errorEvents';
 import { createErrorReports, REPORT_LANE } from '../telemetry/errorReports';
 
@@ -63,6 +63,13 @@ const stats = (): SyncStats => {
   const a = chatSync.stats();
   return { queued: a.queued, inFlight: a.inFlight, dropped: a.dropped };
 };
+
+// Every change of the queue reaches an open panel's "waiting to sync" — pushed, never polled.
+// With no panel open there is no receiver and the send rejects; that is expected.
+chatSync.subscribe(() => {
+  const message: SyncStatsChanged = { type: 'rovr.sync.changed', stats: stats() };
+  chrome.runtime.sendMessage(message).catch(() => undefined);
+});
 
 /** Keep an alarm while there is a backlog, so the worker wakes to replay it. */
 const keepAlarm = async (): Promise<void> => {

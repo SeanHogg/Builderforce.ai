@@ -34,7 +34,7 @@ export function ModelPickerSection() {
       <p className="rovr-muted">{t('modelIntro')}</p>
       <button
         type="button"
-        className={`rovr-btn${pinned ? '' : ' rovr-btn--primary'}`}
+        className={`bf-btn${pinned ? '' : ' bf-btn--primary'}`}
         aria-pressed={!pinned}
         onClick={() => choose(null)}
       >

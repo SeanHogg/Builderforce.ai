@@ -57,7 +57,7 @@ import { evaluateExecutionApprovalGate } from '../../application/runtime/executi
 import { revertRun } from '../../application/runtime/runRollback';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
 import { readAttention } from '../../application/runtime/attentionSnapshot';
-import { readActiveRuns } from '../../application/runtime/activeRuns';
+import { parseLiveRunsQuery, readActiveRuns } from '../../application/runtime/activeRuns';
 import { executionStateVersion } from '../../application/runtime/executionStateVersion';
 import { readRuntimeDashboard } from '../../application/runtime/runtimeDashboard';
 import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
@@ -565,9 +565,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       const executions = await runtimeService.listBySession(tenantId, sessionId, limit);
       return c.json(executions.map(e => e.toPlain()));
     }
-    // The tenant-wide list is polled (workforce presence, every 30s per open
-    // workspace), so it is shared behind the execution-state version — any status
-    // change orphans it. See `executionStateVersion.ts` for the bump and the TTL backstop.
+    // The tenant-wide list is shared behind the execution-state version — any status
+    // change orphans it. (The web panels no longer poll it: they read the slim live-runs
+    // projection at `/active`.) See `executionStateVersion.ts` for the bump and the TTL backstop.
     const env = c.env as Env;
     const version = await executionStateVersion(env, tenantId);
     return c.json(await getOrSetCached(
@@ -589,11 +589,10 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       async () => (await runtimeService.listByTenant(tenantId, limit)).map((execution) => execution.toPlain())));
   });
 
-  // Fleet "what's running right now" — see `readActiveRuns` for what it returns and
-  // why it is cached behind the execution-state version rather than read live.
+  // The ONE live-runs read (fleet panel, workforce presence, board chips) — see
+  // `readActiveRuns` for the opt-in projections and the `since` version short-circuit.
   router.get('/active', async (c) => {
-    const limit = limitParam(c.req.query('limit'), 200, 500);
-    return c.json(await readActiveRuns(c.env as Env, db, c.get('tenantId'), limit));
+    return c.json(await readActiveRuns(c.env as Env, db, c.get('tenantId'), parseLiveRunsQuery((key) => c.req.query(key))));
   });
 
   // Persisted workspace execution override. This is deliberately separate from

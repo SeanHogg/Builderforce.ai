@@ -23,6 +23,7 @@ const plain: BrainPersonaAgent = { kind: 'registered', ref: '3', name: 'Ops Bot'
 describe('modality personas', () => {
   it('gives every modality a glyph and a prompt carrying the strategy note', () => {
     for (const id of PERSONA_MODALITY_IDS) {
+      expect(MODALITY_PERSONAS[id].label).toBeTruthy();
       expect(MODALITY_PERSONAS[id].icon).toBeTruthy();
       expect(MODALITY_PERSONAS[id].prompt).toContain('OKRs/Objectives');
     }

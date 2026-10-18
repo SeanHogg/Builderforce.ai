@@ -43,7 +43,7 @@ export function ActionsView({ chatId }: { chatId: number | null }) {
         <li key={e.id} className={`rovr-card rovr-card--${e.outcome}`}>
           <div className="rovr-row rovr-row--spread">
             <span className="rovr-card__title">{t(toolLabelKey(e.tool))}</span>
-            <span className={`rovr-chip rovr-chip--${e.outcome === 'done' ? 'ok' : e.outcome === 'declined' ? 'local' : 'off'}`}>
+            <span className={`bf-chip bf-chip--${e.outcome === 'done' ? 'ok' : e.outcome === 'declined' ? 'local' : 'off'}`}>
               {t(OUTCOME_KEY[e.outcome])}
             </span>
           </div>

@@ -3,7 +3,6 @@ import { useTranslations } from 'next-intl';
 import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import { WebAiSurface } from '@/components/ai-surface/WebAiSurface';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
-import { useLiveActivityLabels } from '@/i18n/useLiveActivityLabels';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
@@ -14,7 +13,7 @@ import type { Edge } from '@xyflow/react';
 import styles from './styles/brain.module.css';
 import { creationObjectDefinition, creationObjectName } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
-import { brainActivityLine, useBrainActivity } from './BrainActivityView';
+import { useCanvasRunActivity } from './CanvasRunActivity';
 import type { BrainSurfaceCollaborator } from './brainSurfaceContext';
 import { useBrainSurfaceView } from './brainSurfaceView';
 
@@ -40,7 +39,7 @@ export interface BrainSurfaceBodyProps {
   messages: BrainMessage[];
   trace: BrainTraceEvent[];
   running: boolean;
-  /** Epoch ms the in-flight turn began, so every surface narrates the same phase. */
+  /** Epoch ms the in-flight turn began — narrates a collaborator's run, which has no entry in this browser's run store. */
   runStartedAt?: number | null;
   /** The session's run (`canvasRunKey`) — its pending tool approval shows in the footer. */
   runKey?: string;
@@ -102,26 +101,16 @@ export function BrainSurface({
   // surface renders in three placements and inside a guest session, and each of those
   // would otherwise have to remember to thread the same fact through.
   const modelIdentity = useModelIdentity();
-  const activity = useBrainActivity(running, trace, runStartedAt);
-  const liveLine = brainActivityLine(activity.live);
-  // The board derives its own phase line off the canvas run trace, so it OVERRIDES the
-  // two phases the shared indicator would otherwise word generically — and keeps
-  // everything else (the elapsed clock, the tool subject, the slow-step reassurance)
-  // from the one shared bundle.
-  const liveOverrides = useMemo(
-    () => (liveLine ? { starting: liveLine, thinking: liveLine } : undefined),
-    [liveLine],
-  );
-  const liveLabels = useLiveActivityLabels(liveOverrides);
-  // Only the copy the BOARD words differently: who is speaking, what an empty board
-  // says, and the phase line it derives itself. Everything else comes from the ONE
+  // THE run's in-flight step (the run store's `activity`, by `runKey`) — the same reading
+  // the panel and VS Code animate their transcript's live row off.
+  const activity = useCanvasRunActivity(runKey, running, runStartedAt);
+  // Only the copy the BOARD words differently: who is speaking and what an empty board
+  // says. Everything else — the live row's phase lines included — comes from the ONE
   // shared transcript bundle.
   const timelineOverrides = useMemo(() => ({
     you: t('you'),
     assistant: t('brain'),
     empty: t('brainEmpty'),
-    thinking: liveLine ?? t('brainPhase.thinking'),
-    live: liveLabels,
     thoughtFor: t('thoughtFor', { duration: '{duration}' }),
     thought: t('thought'),
     copy: t('copyMessage'),
@@ -129,7 +118,7 @@ export function BrainSurface({
     replay: t('replayMessage'),
     rateUp: t('rateUp'),
     rateDown: t('rateDown'),
-  }), [liveLine, t, liveLabels]);
+  }), [t]);
   const timelineLabels = useBrainTimelineLabels(timelineOverrides);
   // A room bubble asked to show a reply: the transcript is on the chat tab, so leave
   // Context if that is where the reader was.
@@ -170,6 +159,7 @@ export function BrainSurface({
             trace={showExecutionDetail ? trace : []}
             streamingText=""
             isRunning={running}
+            activity={activity}
             assistantName={t('brain')}
             labels={timelineLabels}
             modelIdentity={modelIdentity}

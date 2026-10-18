@@ -36,7 +36,7 @@ export function PlaybooksView() {
         <label className="rovr-field">
           <span>{t('playbookTrigger')}</span>
           <input
-            className="rovr-input"
+            className="bf-input"
             value={draft.trigger}
             maxLength={TRIGGER_MAX}
             placeholder={t('playbookTriggerPlaceholder')}
@@ -46,7 +46,7 @@ export function PlaybooksView() {
         <label className="rovr-field">
           <span>{t('playbookSteps')}</span>
           <textarea
-            className="rovr-input"
+            className="bf-input"
             rows={4}
             value={draft.steps}
             maxLength={STEPS_MAX}
@@ -57,7 +57,7 @@ export function PlaybooksView() {
         <label className="rovr-field">
           <span>{t('playbookSite')}</span>
           <input
-            className="rovr-input"
+            className="bf-input"
             value={draft.site}
             placeholder={t('playbookSitePlaceholder')}
             onChange={(e) => setDraft({ ...draft, site: e.target.value })}
@@ -69,11 +69,11 @@ export function PlaybooksView() {
           </p>
         )}
         <div className="rovr-row">
-          <button type="submit" className="rovr-btn rovr-btn--primary">
+          <button type="submit" className="bf-btn bf-btn--primary">
             {draft.id ? t('playbookUpdate') : t('playbookSave')}
           </button>
           {draft.id && (
-            <button type="button" className="rovr-btn" onClick={() => setDraft(EMPTY)}>
+            <button type="button" className="bf-btn" onClick={() => setDraft(EMPTY)}>
               {t('cancel')}
             </button>
           )}
@@ -98,10 +98,10 @@ export function PlaybooksView() {
                   />
                   {t('playbookEnabled')}
                 </label>
-                <button type="button" className="rovr-btn" onClick={() => setDraft({ id: p.id, trigger: p.trigger, steps: p.steps, site: p.site, enabled: p.enabled })}>
+                <button type="button" className="bf-btn" onClick={() => setDraft({ id: p.id, trigger: p.trigger, steps: p.steps, site: p.site, enabled: p.enabled })}>
                   {t('edit')}
                 </button>
-                <button type="button" className="rovr-btn" onClick={() => void services.playbooks.remove(p.id).then(reload)}>
+                <button type="button" className="bf-btn" onClick={() => void services.playbooks.remove(p.id).then(reload)}>
                   {t('delete')}
                 </button>
               </div>

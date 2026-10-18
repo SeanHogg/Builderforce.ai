@@ -32,6 +32,9 @@ export interface MentionLabels {
   human?: string;
 }
 
+/** English defaults — the fallback for any field a host catalog lacks. */
+export const DEFAULT_MENTION_LABELS: Required<MentionLabels> = { title: 'Direct to', agent: 'Agent', human: 'Person' };
+
 export interface UseMentionAutocompleteOptions {
   /** Ref to the composer's <textarea> — read for the live caret position. */
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -136,7 +139,7 @@ function MentionPopup({ matches, index, labels, onHover, onPick }: {
 }) {
   return (
     <div style={POP.anchor}>
-      <ul role="listbox" aria-label={labels?.title ?? 'Direct to'} style={POP.list}>
+      <ul role="listbox" aria-label={labels?.title ?? DEFAULT_MENTION_LABELS.title} style={POP.list}>
         {labels?.title && <li aria-hidden style={POP.group}>{labels.title}</li>}
         {matches.map((m, i) => (
           <li
@@ -151,7 +154,7 @@ function MentionPopup({ matches, index, labels, onHover, onPick }: {
           >
             <Avatar name={m.name} kind={m.kind} size={20} />
             <span style={POP.name}>{m.name}</span>
-            <span style={POP.kind}>{m.kind === 'agent' ? (labels?.agent ?? 'Agent') : (labels?.human ?? 'Person')}</span>
+            <span style={POP.kind}>{m.kind === 'agent' ? (labels?.agent ?? DEFAULT_MENTION_LABELS.agent) : (labels?.human ?? DEFAULT_MENTION_LABELS.human)}</span>
           </li>
         ))}
       </ul>

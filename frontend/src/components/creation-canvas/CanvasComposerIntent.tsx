@@ -2,9 +2,11 @@
 // inside the `CreationCanvas` client boundary already — the same reason
 // `CanvasBarGroup` and `CanvasSessionActions` each state at the top of themselves. A
 // second declaration would only add a file to the architecture ratchet's tally.
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   canvasComposerIntent,
+  offeredCanvasComposerIntents,
   type CanvasComposerIntentId,
 } from '@/lib/canvasComposerIntents';
 import styles from './styles/composer.module.css';
@@ -31,9 +33,9 @@ import { BrainMark } from '@seanhogg/builderforce-brain-ui';
  * on, and a state where neither is — neither of which this control can be in.
  *
  * ── PURE PRESENTATION ────────────────────────────────────────────────────────────
- * It holds no state. The composer owns the armed intent, because the composer is what
- * routes the submit — a control that remembered its own answer would be a second
- * source of truth for the one decision the Enter key reads.
+ * It holds no state. The composer owns the armed intent (`useComposerIntent`, below),
+ * because the composer is what routes the submit — a control that remembered its own
+ * answer would be a second source of truth for the one decision the Enter key reads.
  */
 export interface CanvasComposerIntentProps {
   /** The verbs this surface offers, in offer order. One or none draws nothing. */
@@ -88,4 +90,35 @@ export function CanvasComposerIntent({ intents, value, onChange }: CanvasCompose
       })}
     </div>
   );
+}
+
+/**
+ * The armed verb for a composer offering `intents`, reset whenever the OFFER changes.
+ *
+ * The previous offer is held IN state beside the choice — React's documented way to
+ * adjust state during render — rather than in a ref or an effect. An effect would paint
+ * one frame with a verb this surface does not offer, and that frame is the one somebody
+ * presses; a ref read during render is the pattern the hooks ratchet exists to stop.
+ *
+ * Keyed on the joined ids and not on the array's identity: the host rebuilds the list on
+ * every render (a `readonly` row off a registry), so an identity check would throw the
+ * reader's choice away on every keystroke. A verb the host PREFERS (the phone Brain
+ * sheet's `ask`) overrides the standing choice while it holds, and never permanently.
+ */
+export function useComposerIntent(
+  intents: readonly CanvasComposerIntentId[],
+  editable: boolean,
+  preferIntent?: CanvasComposerIntentId,
+) {
+  const offered = offeredCanvasComposerIntents(intents, editable);
+  const fallback = offered[0]!;
+  const offerKey = offered.join(',');
+  const [chosen, setChosen] = useState<{ offer: string; id: CanvasComposerIntentId }>({ offer: offerKey, id: fallback });
+  if (chosen.offer !== offerKey) {
+    setChosen({ offer: offerKey, id: fallback });
+  }
+  const active = preferIntent && offered.includes(preferIntent)
+    ? preferIntent
+    : chosen.offer === offerKey && offered.includes(chosen.id) ? chosen.id : fallback;
+  return { offered, active, choose: (id: CanvasComposerIntentId) => setChosen({ offer: offerKey, id }) };
 }

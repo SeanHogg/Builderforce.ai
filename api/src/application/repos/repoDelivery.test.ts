@@ -14,7 +14,6 @@ vi.mock('./githubClient', async (importOriginal) => ({
 
 const {
   probeRepoDelivery, runToBuildStatus, pipelineToBuildStatus, bitbucketPipelineToBuildStatus,
-  repoDeliveryVerdictChanged, REPO_DELIVERY_PROBE_INTERVAL_MS,
 } = await import('./repoDelivery');
 
 const ENV = { JWT_SECRET: 'test-secret' } as unknown as Env;
@@ -168,31 +167,5 @@ describe('probeRepoDelivery', () => {
     mocks.resolveRepoAuth.mockResolvedValue(auth('gitea'));
     expect(await probeRepoDelivery(ENV, DB, 's', 1, 'repo-1'))
       .toMatchObject({ health: 'unknown', reason: 'not_probed', buildStatus: null });
-  });
-});
-
-describe('repo-delivery sweep write discipline', () => {
-  const verdict = {
-    health: 'ok' as const, reason: null, openPullRequests: 3,
-    buildStatus: 'success' as const, buildUrl: 'https://ci/1', buildBranch: 'main',
-    buildAt: '2026-10-17T10:00:00.000Z',
-  };
-  const stored = { ...verdict, buildAt: new Date('2026-10-17T10:00:00.000Z') };
-
-  it('probes far less often than the 5-minute tick', () => {
-    expect(REPO_DELIVERY_PROBE_INTERVAL_MS).toBeGreaterThanOrEqual(30 * 60_000);
-  });
-
-  it('treats an identical probe as unchanged (Date vs ISO buildAt compare by instant)', () => {
-    expect(repoDeliveryVerdictChanged(stored, verdict)).toBe(false);
-  });
-
-  it('flags any changed field, and a missing row, as a change', () => {
-    expect(repoDeliveryVerdictChanged(null, verdict)).toBe(true);
-    expect(repoDeliveryVerdictChanged({ ...stored, health: null }, verdict)).toBe(true);
-    expect(repoDeliveryVerdictChanged(stored, { ...verdict, openPullRequests: 4 })).toBe(true);
-    expect(repoDeliveryVerdictChanged(stored, { ...verdict, buildStatus: 'failure' })).toBe(true);
-    expect(repoDeliveryVerdictChanged(stored, { ...verdict, buildAt: '2026-10-17T11:00:00.000Z' })).toBe(true);
-    expect(repoDeliveryVerdictChanged(stored, { ...verdict, health: 'error', reason: 'unauthorized' })).toBe(true);
   });
 });

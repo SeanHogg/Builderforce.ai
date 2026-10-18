@@ -3,25 +3,32 @@
  * and spend) as its rail, the shared `<BrainTimeline>` over the device record and the
  * live run — or, before the first message, the shared empty state with Rovr's fixed
  * starters — the error card as its notice, and a footer holding the confirmation card
- * the safety gate pauses on and the shared composer. Which chat is open is chosen from
+ * the safety gate pauses on, the question the agent is blocked on (the shared pending-
+ * question banner) and the shared composer. Every turn — typed, a starter sent, an
+ * answered question — leaves through THE shared `useChatTurns` door, and the first one
+ * creates the chat through THE shared `useChatCreation`. Which chat is open is chosen from
  * the header's History lever (`RovrChatHistory`).
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AiSurface,
   BrainTimeline,
   ChatErrorBanner,
+  DEFAULT_ASK_USER_LABELS,
+  PendingQuestionBanner,
   QueuedTurnChips,
   StarterGroup,
   StarterTile,
   SurfaceEmptyState,
   SurfaceFooter,
+  askUserAnchorId,
+  selectPendingAskUser,
+  stringsFrom,
   timelineCatalogLookup,
   timelineLabelsFrom,
-  useQueuedTurns,
 } from '@seanhogg/builderforce-brain-ui';
 import catalogs from 'virtual:rovr-timeline-catalogs';
-import { deriveChatTitle, type BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import { deriveChatTitle, useChatCreation, useChatTurns, type BrainMessage } from '@seanhogg/builderforce-brain-embedded';
 import { PRICING_URL } from '../config';
 import { t, uiCatalogLocale } from '../i18n/t';
 import type { LocalChat } from '../store/records';
@@ -46,10 +53,14 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   const [draft, setDraft] = useState('');
   const chat = chats.find((c) => c.id === chatId);
   const chatOptions = useRovrChatOptions(chat, onChatsChanged);
-  const labels = useMemo(
-    () => timelineLabelsFrom(timelineCatalogLookup(catalogs[uiCatalogLocale()]), { assistant: 'Rovr', empty: t('chatEmpty') }),
-    [],
-  );
+  // The transcript's copy — and the pending question's, from the same `brain.timeline` catalog.
+  const [labels, askLabels] = useMemo(() => {
+    const lookup = timelineCatalogLookup(catalogs[uiCatalogLocale()]);
+    return [
+      timelineLabelsFrom(lookup, { assistant: 'Rovr', empty: t('chatEmpty') }),
+      { ...stringsFrom(DEFAULT_ASK_USER_LABELS, lookup), askDismiss: t('dismiss') },
+    ] as const;
+  }, []);
   const [messages, reload] = useLoaded<BrainMessage[]>(
     () => (chatId === null ? Promise.resolve([]) : services.records.listMessages(chatId)),
     [],
@@ -58,38 +69,31 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   // The loop persisted a turn (or the run settled) — re-read the device record.
   useEffect(reload, [run.messagesEpoch, run.running, reload]);
 
-  // The first message's chat creation while it is in flight: a second send before the
-  // device record's write lands JOINS it instead of minting a second chat (and splitting
-  // the conversation across two). Cleared once the panel is on a real chat.
-  const creating = useRef<Promise<number> | null>(null);
-  useEffect(() => {
-    if (chatId !== null) creating.current = null;
-  }, [chatId]);
-
-  // One turn, start to finish. A turn typed while a run streams is HELD by the queue
-  // and delivered on the run's falling edge — the composer's Send says "Queue message".
-  const deliver = async (text: string) => {
-    let id = chatId;
-    if (id === null) {
-      // The first message creates the chat — with the `/` choices made before it existed.
-      creating.current ??= (async () => {
-        const created = await onNewChat();
-        await services.records.updateChat(created, chatOptions.draft);
-        return created;
-      })().catch((error: unknown) => {
-        creating.current = null;
-        throw error;
-      });
-      id = await creating.current;
-    }
-    const current = await services.records.getChat(id);
-    if (current && current.title === t('newChatTitle')) {
-      // The ONE first-message title rule every surface uses (brain-embedded).
+  // The first message creates the chat — with the `/` choices made before it existed —
+  // and names it by THE one first-message title rule (brain-embedded). A second send
+  // before the device record's write lands JOINS that creation.
+  const { ensureChatId, onFirstUserTurn } = useChatCreation({
+    chatId,
+    create: async () => {
+      const created = await onNewChat();
+      await services.records.updateChat(created, chatOptions.draft);
+      return created;
+    },
+    autoTitle: async (id, text) => {
+      const current = await services.records.getChat(id);
+      if (current?.title !== t('newChatTitle')) return;
       const title = deriveChatTitle(text);
       if (title) await services.records.updateChat(id, { title });
       onChatsChanged();
-    }
+    },
+  });
+
+  // One turn, start to finish.
+  const deliver = async (text: string) => {
     try {
+      const id = await ensureChatId();
+      if (id === null) return;
+      await onFirstUserTurn(id, text);
       const sending = services.host.send(id, text);
       reload();
       await sending;
@@ -101,18 +105,32 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     }
   };
 
-  const queued = useQueuedTurns({ running: run.running, send: (text) => void deliver(text), resetKey: chatId });
+  // THE one door a turn leaves through: a turn typed while a run streams is HELD and
+  // delivered on the run's falling edge (the composer's Send says "Queue message");
+  // Stop drops what is held, then stops the run.
+  const turns = useChatTurns<string>({
+    running: run.running,
+    runKey: chatId,
+    send: deliver,
+    stop: () => {
+      if (chatId !== null) services.host.stop(chatId);
+    },
+  });
   const send = () => {
     const text = draft.trim();
     if (!text) return;
     setDraft('');
-    if (queued.submit(text)) return;
-    void deliver(text);
+    void turns.submit(text);
   };
-  const stop = () => {
-    queued.clear();
-    if (chatId !== null) services.host.stop(chatId);
-  };
+  const answer = useCallback((text: string) => void turns.submit(text), [turns.submit]);
+
+  // The question this chat is blocked on, restated above the composer — the same
+  // predicate the transcript's card uses, so banner and card never disagree.
+  const pendingQuestion = useMemo(() => selectPendingAskUser(messages), [messages]);
+  const revealQuestion = useCallback(() => {
+    if (!pendingQuestion) return;
+    document.getElementById(askUserAnchorId(pendingQuestion.messageId))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [pendingQuestion]);
 
   const empty = messages.length === 0 && !run.running && !run.streamingText;
 
@@ -139,6 +157,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
           activity={run.activity}
           labels={labels}
           assistantName="Rovr"
+          onAnswerQuestion={answer}
         />
       )}
       empty={empty ? (
@@ -179,18 +198,27 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
       footer={(
         <SurfaceFooter
           confirm={run.pendingConfirm && chatId !== null ? <ConfirmCard chatId={chatId} call={run.pendingConfirm} /> : null}
+          question={pendingQuestion && (
+            <PendingQuestionBanner
+              key={pendingQuestion.messageId}
+              payload={pendingQuestion.payload}
+              labels={askLabels}
+              onAnswer={answer}
+              onReveal={revealQuestion}
+            />
+          )}
           composer={(
             <RovrComposer
               value={draft}
               onChange={setDraft}
               onSubmit={send}
               running={run.running}
-              onStop={stop}
+              onStop={turns.stop}
               above={(
                 <QueuedTurnChips
-                  items={queued.items}
+                  items={turns.queued.items}
                   textOf={(text) => text}
-                  onRemove={queued.remove}
+                  onRemove={turns.queued.remove}
                   labels={{ list: t('queuedList'), hint: t('queuedHint'), remove: t('queuedRemove') }}
                 />
               )}

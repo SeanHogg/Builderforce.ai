@@ -5,8 +5,10 @@
  * is the standard History lever, which swaps the body to the shared history list.
  */
 
+import { useMemo } from 'react';
 import { HeaderIcon, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
-import { post } from '../vscodeBridge';
+import { post, type LabelBundle } from '../vscodeBridge';
+import { makeT, surfaceHeaderLabels } from './chatLabels';
 import type { CopyState } from './useCopyDiagnostics';
 
 const COPY_ICON: Record<CopyState, string> = {
@@ -24,10 +26,13 @@ export interface VsCodeChatHeaderProps {
   copy: { state: CopyState; enabled: boolean; onCopy: () => void };
   history: { open: boolean; onToggle: () => void; controls: string };
   onNewChat: () => void;
-  t: (key: string, fallback: string) => string;
+  /** The host's label bundle. */
+  bundle: LabelBundle;
 }
 
-export function VsCodeChatHeader({ projectName, chatTitle, running, copy, history, onNewChat, t }: VsCodeChatHeaderProps) {
+export function VsCodeChatHeader({ projectName, chatTitle, running, copy, history, onNewChat, bundle }: VsCodeChatHeaderProps) {
+  const t = makeT(bundle);
+  const headerLabels = useMemo(() => surfaceHeaderLabels(bundle), [bundle]);
   const title = projectName ?? 'BuilderForce';
   const copyLabel = copy.state === 'error'
     ? t('app.copyFailed', 'Could not build the chat diagnostics report.')
@@ -63,11 +68,7 @@ export function VsCodeChatHeader({ projectName, chatTitle, running, copy, histor
       )}
       history={history}
       onNewChat={onNewChat}
-      labels={{
-        newChat: t('app.newChat', 'New chat'),
-        historyShow: t('app.historyShow', 'Chat history'),
-        historyHide: t('app.historyHide', 'Back to the chat'),
-      }}
+      labels={headerLabels}
     />
   );
 }

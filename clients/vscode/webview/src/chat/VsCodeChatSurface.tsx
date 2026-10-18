@@ -56,7 +56,7 @@ import { authedFetch } from '../authedFetch';
 import { getToken, post, refreshToken, type InitData } from '../vscodeBridge';
 import { setHostRunContext } from '../hostRunDriver';
 import { autoApprovePersistence } from '../autoApprove';
-import { makeT, promptMenuLabels, timelineLabels } from './chatLabels';
+import { askUserLabels, makeT, promptMenuLabels, timelineLabels, toolConfirmLabels } from './chatLabels';
 import { EditorEmptyState } from './editorStarters';
 import { SubagentStrip } from './SubagentStrip';
 import { useChatAudience } from './useChatAudience';
@@ -107,6 +107,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // Stable reference so a keystroke does not hand <BrainTimeline> a fresh `labels` object
   // and defeat its React.memo (every message's markdown re-parsing per character).
   const tlLabels = useMemo(() => timelineLabels(init.labels), [init.labels]);
+  const confirmLabels = useMemo(() => toolConfirmLabels(init.labels), [init.labels]);
   // Composer run-shaping toggles (Effort / Thinking / Browse the web) — REAL request params.
   const shaping = useRunShaping();
   const { effort, thinking, webBrowsing } = shaping;
@@ -185,7 +186,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
 
   // A run's steps are persisted as durable step rows by the run loop the HOST drives
   // (`brainRunHost.ts`), not here: runs outlive this view.
-  const { queued, submit, answerQuestion, replayMessage } = useChatSend({
+  const { queued, submit, stop, answerQuestion, replayMessage } = useChatSend({
     conv, chatId, input, setInput, recipient, liveChildren, setTurnLimbic, reloadChats,
   });
 
@@ -194,17 +195,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const pendingQuestion = useMemo(() => selectPendingAskUser(conv.messages), [conv.messages]);
   // What actually answered, not what was requested (under auto `init.model` is the plan default).
   const servedModel = useMemo(() => lastServedModel(conv.messages), [conv.messages]);
-  const askLabels = useMemo(
-    () => ({
-      askSubmit: t('tl.askSubmit', 'Send'),
-      askAnswered: t('tl.askAnswered', 'Answered'),
-      askPending: t('app.askPending', 'Answer needed'),
-      askJumpTo: t('app.askJumpTo', 'Show in conversation'),
-      askDismiss: t('app.dismiss', 'Dismiss'),
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [init.labels],
-  );
+  const askLabels = useMemo(() => askUserLabels(init.labels), [init.labels]);
   const revealQuestion = useCallback(() => {
     if (!pendingQuestion) return;
     document
@@ -235,7 +226,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           copy={{ state: copyState, enabled: canCopy, onCopy: () => void copyTranscript() }}
           history={{ open: historyOpen, onToggle: toggleHistory, controls: HISTORY_ID }}
           onNewChat={() => openChat(null)}
-          t={t}
+          bundle={init.labels}
         />
       )}
       rail={chatId != null && !historyOpen && (
@@ -268,7 +259,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           titleOf={titleOf}
           runStatus={runStatus}
           rows={rows}
-          t={t}
+          bundle={init.labels}
         />
       ) : chatId == null ? <EditorEmptyState t={t} onPick={pickStarter} /> : undefined}
       thread={(
@@ -288,7 +279,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           ratings={conv.ratings}
         />
       )}
-      notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} t={t} />}
+      notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} bundle={init.labels} />}
       footer={(
         <SurfaceFooter
           // The chat's live sub-agents: who works for whom, and the owner's levers.
@@ -300,13 +291,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               onDeny={() => conv.resolveConfirm(false)}
               // "Always" turns on auto-approve and lets this one through.
               onApproveAll={() => { setAutoApproveMode(true); conv.resolveConfirm(true); }}
-              labels={{
-                prompt: t('app.confirmRun', 'Run {name}?'),
-                approve: t('app.approve', 'Approve'),
-                approveAll: t('app.always', 'Always'),
-                deny: t('app.cancel', 'Cancel'),
-                aria: t('app.confirmAria', 'Approve this action'),
-              }}
+              labels={confirmLabels}
             />
           )}
           question={pendingQuestion && (
@@ -326,6 +311,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
               value={input}
               onChange={setInput}
               onSubmit={submit}
+              onStop={stop}
+              onPickStarter={pickStarter}
               focusToken={focusToken}
               chatId={chatId}
               projectId={associatedProjectId}

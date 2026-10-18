@@ -1,12 +1,26 @@
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { ChatHistoryList, ChatHistoryRow, type ChatHistoryLabels } from '@seanhogg/builderforce-brain-ui';
+import { ChatHistoryList, ChatHistoryRow, chatHistoryLabelsFrom } from '@seanhogg/builderforce-brain-ui';
 import { AttentionDot } from '@/components/AttentionDot';
 import { UnreadBadge } from '@/components/UnreadBadge';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { useFormat } from '@/i18n/useFormat';
+import { useLabelLookup } from '@/i18n/useLabelLookup';
 import { useBrainPanel } from './BrainPanelContext';
 import { formatTime } from './brainPanelUtils';
+
+/** brain-ui's canonical chat-history keys → the web catalog (the row fills `{title}` itself). */
+const CHAT_HISTORY_PATH: Readonly<Record<string, string>> = {
+  loading: 'common.loading',
+  empty: 'brain.noChatsYet',
+  noMatch: 'brain.noChatsMatch',
+  actions: 'brain.chatActions',
+  actionsAria: 'brain.chatActionsAria',
+  rename: 'brain.rename',
+  summarize: 'brain.summarize',
+  delete: 'common.delete',
+};
+const chatHistoryPath = (key: string): string | undefined => CHAT_HISTORY_PATH[key];
 
 /**
  * The panel's binding of the shared chat history (page sidebar / docked history tab):
@@ -17,18 +31,8 @@ export function BrainChatList() {
   const { chats, filteredChats, rows, attn, pinnedProjectId, projects, projectName, newProject } = useBrainPanel();
   const fmt = useFormat();
   const tBrain = useTranslations('brain');
-  const tCommon = useTranslations('common');
-  const labels = useMemo<ChatHistoryLabels>(() => ({
-    loading: tCommon('loading'),
-    empty: tBrain('noChatsYet'),
-    noMatch: tBrain('noChatsMatch'),
-    actions: tBrain('chatActions'),
-    // The shared row fills `{title}` itself.
-    actionsAria: tBrain('chatActionsAria', { title: '{title}' }),
-    rename: tBrain('rename'),
-    summarize: tBrain('summarize'),
-    delete: tCommon('delete'),
-  }), [tBrain, tCommon]);
+  const lookup = useLabelLookup(chatHistoryPath);
+  const labels = useMemo(() => chatHistoryLabelsFrom(lookup), [lookup]);
   const projectOptions = useMemo(() => [
     { value: '', label: tBrain('addToProject') },
     { value: '__new__', label: tBrain('createNewProject') },

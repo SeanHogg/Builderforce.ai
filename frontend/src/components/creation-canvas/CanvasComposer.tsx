@@ -1,298 +1,185 @@
 // No 'use client' directive: rendered only by `CreationCanvas`, which already declares
 // the boundary — the same reason `CanvasCommandBar` and `CanvasSessionActions` each
 // state at the top of themselves.
-import { useCallback, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { ChatInput, type ChatInputProps } from '@/components/ChatInput';
+import { PreviewPickChips } from '@/components/builder/PreviewPickChip';
 import { Icon } from '@/components/ui/Icon';
 import { mergeRefs } from '@/lib/mergeRefs';
-import {
-  canvasComposerIntent,
-  offeredCanvasComposerIntents,
-  type CanvasComposerIntentId,
-} from '@/lib/canvasComposerIntents';
-import { CanvasComposerIntent } from './CanvasComposerIntent';
+import { canvasComposerIntent } from '@/lib/canvasComposerIntents';
+import { CANVAS_RESPONSE_TOKENS } from '@/lib/canvasAiTurnBudget';
+import type { CanvasPromptPlacement } from '@/lib/canvasPromptPlacement';
+import { canvasSurfaceDefinition, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
+import type { CreationTemplate } from '@/lib/templates/creationTemplates';
+import { REPLAY_MASK } from '@/lib/replaySensitive';
+import { CanvasActionsTrigger } from './CanvasActionsTrigger';
+import { CanvasComposerIntent, useComposerIntent } from './CanvasComposerIntent';
+import { CanvasRunActivity } from './CanvasRunActivity';
 import { PanelDragHandle } from './PanelDragHandle';
 import { usePanelDragOffset } from './usePanelDragOffset';
+import { MAX_PROMPT_HEIGHT, MIN_PROMPT_HEIGHT, usePromptResize } from './usePromptResize';
+import type { BrainDockPreferences } from './brainDockPreferences';
+import { canvasRunKey } from './brainTurn/canvasRunKey';
+import { CanvasScopeChip, type CanvasScopeMode } from './chrome/CanvasScopeChip';
+import { useCanvasSessionFacts } from './chrome/canvasSessionContext';
+import { useCanvasNextSteps, useCanvasStarters } from './chrome/useCanvasComposerOffers';
 import styles from './styles/composer.module.css';
-import { REPLAY_MASK } from '@/lib/replaySensitive';
 
 /**
- * THE ONE COMPOSER. One box per screen, whatever surface is under it.
+ * THE ONE CANVAS PROMPT. One box per screen, whatever surface is under it.
  *
- * ── THE DEFECT IT CLOSES ─────────────────────────────────────────────────────────
- * This markup used to be ~190 lines inline in `CreationCanvas.tsx`, and the Ideas
- * surface drew a SECOND text field of its own beside it (`IdeaCaptureForm`). Two
- * boxes, one screen, both asking for a sentence, and nothing saying which one the
- * Enter key you were about to press belonged to. On a phone the pair cost the screen
- * two lots of chrome for one act.
+ * The text box itself is `ChatInput` — THE web adapter over the shared composer, the same
+ * one the Brain panel, home and Studio mount — so its `+` menu, `/` panel, queue, model
+ * and mode controls are never re-implemented here. What this owns is only what the
+ * canvas adds AROUND that box:
  *
- * The composer is now a component with a narrow contract, and a surface contributes a
- * VERB rather than an input: `intents` comes straight off `CanvasSurfaceDef`
- * (`lib/canvasComposerIntents.ts`). The scratchpad offers `captureIdea` first and
- * `ask` beside it; every other surface offers `ask` alone, so it draws no segment at
- * all and looks exactly as it always did.
+ *  - WHAT ENTER MEANS. A surface contributes a VERB, not a second input: `intents` comes
+ *    off `CanvasSurfaceDef` (`lib/canvasComposerIntents.ts`). The scratchpad offers
+ *    `captureIdea` first and `ask` beside it; every other surface offers `ask` alone and
+ *    draws no segment. Enter and Send go through ONE submit branch.
+ *  - THE FLOATING CARD'S CHROME: its drag handle, its dock/close controls, its resize grip
+ *    and the run pill above it. Docked into the Brain panel the whole header stands down —
+ *    that panel names the conversation and narrates the run itself.
+ *  - THE CANVAS'S OFFERS: starting points and next-step chips fed with its phase and
+ *    surface, the scope chip, and memory/account facts read off the session.
  *
- * ── WHO OWNS WHAT ────────────────────────────────────────────────────────────────
- * THIS owns the armed intent, the prompt's height (its resize grip is chrome of this
- * card, and nothing outside it ever read the number) and its drag offset. The HOST
- * owns the text — templates seed it, an @-mention appends to it and Brain's tools
- * read it — so `value`/`onChange` arrive with the rest of the `ChatInput` wiring as
- * one typed group rather than as twenty loose props.
+ * The HOST owns the text — templates seed it, an @-mention appends to it and Brain's tools
+ * read it — so the `ChatInput` wiring arrives as one typed `input` group. Where the box is
+ * drawn (floating, or the Brain panel's last row) is the host's decision
+ * (`CanvasPromptPlacement`): it renders exactly one of the two.
  *
- * ── THE ONE-INSTANCE RULE ────────────────────────────────────────────────────────
- * Not enforced here, deliberately. Where the composer is drawn — floating over the
- * board, or as the last row of the Brain panel's column — is the HOST's decision
- * (`CanvasPromptPlacement`), and it renders exactly one of the two. A component that
- * also had an opinion would be a second answer to a question with one.
- *
- * ── WHY `hostRef` IS A PROP AND NOT A HOOK IN HERE ───────────────────────────────
- * `--composer-space` is measured against the BOARD's own box, which this component
- * cannot see. Same seam `CanvasCommandBar` uses for `--canvas-command-bar-space`: the
- * host owns the measurement, this owns the node. It is absent while docked, because
- * inside the Brain panel this is that panel's last row rather than the board's chrome
- * and the band the board reserves for it is zero.
+ * `hostRef` publishes `--composer-space`, measured against the BOARD's box, which this
+ * cannot see — the same seam `CanvasCommandBar` uses. It is absent while docked, where
+ * the band the board reserves for the prompt is zero.
  */
 
-/**
- * The composer's text box, typed by `ChatInput` itself rather than re-declared here.
- *
- * A `Pick` and not a hand-written interface on purpose: the alternative is a grab-bag
- * that drifts from what `ChatInput` actually accepts, and the canvas's composer wiring
- * is twenty props long. Adding one is one name in this list.
- */
-export type CanvasComposerInputProps = Pick<ChatInputProps,
-  | 'value'
-  | 'onChange'
-  | 'running'
-  | 'onStop'
-  | 'queued'
-  | 'contextControls'
-  | 'onAttach'
-  | 'onAddContext'
-  | 'autoMode'
-  | 'onAutoModeChange'
-  | 'modelSelection'
-  | 'modelOptions'
-  | 'onModelSelectionChange'
-  | 'modelIdentity'
-  | 'chatMode'
-  | 'onChatModeChange'
-  | 'memoryEnabled'
-  | 'onMemoryChange'
-  | 'memoryUnavailableReason'
-  | 'effort'
-  | 'onEffortChange'
-  | 'effortMinAnswerTokens'
-  | 'thinking'
-  | 'onThinkingChange'
-  | 'account'
-  | 'accountSettingsHref'
-  | 'addMenuItems'
-  | 'starters'
-  | 'suggestions'
->;
-
-/** How the reader has placed the prompt. `closed` is the host's business: it draws nothing. */
-export type CanvasComposerPlacement = 'float' | 'docked';
+/** The `ChatInput` wiring the host owns. Everything else `ChatInput` takes is set here. */
+export type CanvasComposerInputProps = Omit<ChatInputProps,
+  | 'onSubmit' | 'placeholder' | 'submitLabel' | 'rows' | 'submitOnEnter' | 'showVoice' | 'className'
+  | 'contextControls' | 'starters' | 'suggestions' | 'memoryUnavailableReason' | 'account' | 'accountSettingsHref'
+  | 'effortMinAnswerTokens'>;
 
 export interface CanvasComposerProps {
-  placement: CanvasComposerPlacement;
-  /** The verbs this surface offers, first = its default. From `CanvasSurfaceDef`. */
-  intents: readonly CanvasComposerIntentId[];
-  /**
-   * Whether this viewer may change the board. False narrows the offer to `ask` — a
-   * verb that creates a card is a button whose only outcome would be a silent no.
-   */
+  /** Docked = the Brain panel's last row; otherwise it floats over the board. */
+  docked: boolean;
+  /** The surface on screen: its verbs and its next steps come off its registry row. */
+  surface: CanvasSurfaceId;
+  /** False narrows the offer to `ask` — a verb that writes would be a silent no. */
   editable: boolean;
-  /**
-   * Arm this verb instead of the surface's default, while the condition that asked
-   * for it holds. The phone Brain sheet passes `'ask'`: a reader who has just opened
-   * the conversation is talking to it, and a line typed with the sheet open landing
-   * silently on the board as a card is the surprise this prevents. Withdrawing it
-   * restores the surface's own default.
-   */
-  preferIntent?: CanvasComposerIntentId;
+  /** Opening the conversation on a phone means you are talking to it: arm `ask`. */
+  preferAsk: boolean;
   /** Enter, or Send, while `ask` is armed. */
   onAsk: (text: string) => void;
   /** Enter, or Send, while `captureIdea` is armed. */
   onCaptureIdea: (text: string) => void;
-  /**
-   * The phone's "+" — the trigger for the actions sheet that IS the command bar at
-   * that width. A node rather than a flag because the sheet, its state and its
-   * handlers all belong to the host; this only gives it the slot in front of the
-   * field. CSS stands it down above the phone breakpoint.
-   */
-  leading?: ReactNode;
-  /** The run receipt. Host-built, and absent while docked — the panel narrates its own. */
-  activity?: ReactNode;
-  /**
-   * Put the prompt away, or move it into the Brain panel. Absent when Brain IS the
-   * surface: there is nothing to dock into and no board to hand the space back to.
-   */
-  dockControls?: {
-    docked: boolean;
-    onToggleDock: () => void;
-    onClose: () => void;
-  };
-  /** Publishes `--composer-space`. Absent while docked — see the header. */
+  /** Publishes `--composer-space` while floating. */
   hostRef?: (node: HTMLElement | null) => void;
+  /** The phone's "+" — the actions sheet that IS the command bar at that width. */
+  actions?: { open: boolean; onToggle: () => void };
+  /** Epoch ms the running turn began (the run pill's clock for a collaborator's turn). */
+  runStartedAt: number | null;
+  /** Brain IS the surface — there is nothing to dock into and no board to hand space back to. */
+  brainIsSurface: boolean;
+  promptPlacement: CanvasPromptPlacement;
+  setPromptPlacement: (placement: CanvasPromptPlacement) => void;
+  /** The Brain panel is on screen, so docking needs no extra step to be visible. */
+  brainDockDrawn: boolean;
+  updateBrainDock: (patch: Partial<BrainDockPreferences>) => void;
+  scope: {
+    mode: CanvasScopeMode;
+    setMode: (mode: CanvasScopeMode) => void;
+    autoLabel: string;
+    selectionCount: number;
+    frameSelected: boolean;
+  };
+  /** The Evermind project on (or behind) this board. Null ⇒ memory has nowhere to live. */
+  memoryProjectId: number | null;
+  onTwilioJourney: (selected: boolean) => void;
+  applyTemplate: (template: CreationTemplate) => void;
+  /** The Brain conversation has turns, so next-step chips are offered above an empty box. */
+  conversationStarted: boolean;
   input: CanvasComposerInputProps;
 }
 
-const MIN_PROMPT_HEIGHT = 34;
-const MAX_PROMPT_HEIGHT = 240;
-
 export function CanvasComposer({
-  placement,
-  intents,
-  editable,
-  preferIntent,
-  onAsk,
-  onCaptureIdea,
-  leading,
-  activity,
-  dockControls,
-  hostRef,
-  input,
+  docked, surface, editable, preferAsk, onAsk, onCaptureIdea, hostRef, actions, runStartedAt, brainIsSurface,
+  promptPlacement, setPromptPlacement, brainDockDrawn, updateBrainDock, scope, memoryProjectId,
+  onTwilioJourney, applyTemplate, conversationStarted, input,
 }: CanvasComposerProps) {
   const t = useTranslations('creationCanvas');
-  const offered = offeredCanvasComposerIntents(intents, editable);
-  const fallback = offered[0]!;
-
-  /**
-   * The armed verb, reset whenever the OFFER changes.
-   *
-   * The previous offer is held IN state beside the choice — React's documented way to
-   * adjust state during render — rather than in a ref or an effect. An effect would
-   * paint one frame with a verb this surface does not offer, and that frame is the one
-   * somebody presses; a ref read during render is the pattern the hooks ratchet exists
-   * to stop this file from adding.
-   *
-   * Keyed on the joined ids and not on the array's identity: the host rebuilds the list
-   * on every render (it is a `readonly` row off a registry), so an identity check would
-   * throw the reader's choice away on every keystroke.
-   */
-  const offerKey = offered.join(',');
-  const [chosen, setChosen] = useState<{ offer: string; id: CanvasComposerIntentId }>(
-    { offer: offerKey, id: fallback },
-  );
-  if (chosen.offer !== offerKey) {
-    setChosen({ offer: offerKey, id: fallback });
-  }
-  // A preference the host asserts (the phone Brain sheet) overrides the reader's
-  // standing choice for as long as it holds, and never permanently — closing the sheet
-  // hands the surface's own default back.
-  const active = preferIntent && offered.includes(preferIntent)
-    ? preferIntent
-    : chosen.offer === offerKey && offered.includes(chosen.id) ? chosen.id : fallback;
+  const { persistence, sessionId } = useCanvasSessionFacts();
+  const surfaceDef = canvasSurfaceDefinition(surface);
+  const signedIn = persistence === 'server';
+  const { offered, active, choose } = useComposerIntent(surfaceDef.composerIntents, editable, preferAsk ? 'ask' : undefined);
   const activeDef = canvasComposerIntent(active);
-
-  /**
-   * How tall the reader has pulled the box. Local, because nothing outside this card
-   * has ever read it — it lived in `CreationCanvas` only because the markup did.
-   */
-  const [height, setHeight] = useState(MIN_PROMPT_HEIGHT);
-  const resizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
-  const clamp = useCallback((value: number) => Math.min(MAX_PROMPT_HEIGHT, Math.max(MIN_PROMPT_HEIGHT, value)), []);
-  const onResizeStart = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    resizeRef.current = { pointerId: event.pointerId, startY: event.clientY, startHeight: height };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  }, [height]);
-  const onResizeMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    const resize = resizeRef.current;
-    if (!resize || resize.pointerId !== event.pointerId) return;
-    setHeight(clamp(resize.startHeight + resize.startY - event.clientY));
-  }, [clamp]);
-  const onResizeEnd = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (resizeRef.current?.pointerId !== event.pointerId) return;
-    resizeRef.current = null;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-  }, []);
-  const onResizeKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = event.shiftKey ? 32 : 16;
-    if (event.key === 'ArrowUp') setHeight((current) => clamp(current + step));
-    else if (event.key === 'ArrowDown') setHeight((current) => clamp(current - step));
-    else if (event.key === 'Home') setHeight(MIN_PROMPT_HEIGHT);
-    else if (event.key === 'End') setHeight(MAX_PROMPT_HEIGHT);
-    else return;
-    event.preventDefault();
-  }, [clamp]);
-
-  // One of the floating cards a reader can pull clear of the board with its own
-  // handle. Only meaningful while it floats: docked, it is a row in the Brain panel's
-  // column, not a positioned card of its own.
+  const resize = usePromptResize();
+  // One of the floating cards a reader can pull clear of the board with its own handle.
+  // Only meaningful while it floats: docked, it is a row in the Brain panel's column.
   const drag = usePanelDragOffset('composer');
-  const docked = placement === 'docked';
+  // The two affordances every prompt has — starting points from `+`, next-step chips
+  // above an empty box — fed with what the canvas knows: its phase and its surface.
+  const starters = useCanvasStarters({ onPrompt: input.onChange, onTwilioJourney, onPack: applyTemplate });
+  const suggestions = useCanvasNextSteps({ surface, conversationStarted, onPrompt: input.onChange });
 
-  /**
-   * The ONE submit branch. Enter and the Send button go through it, so the two can
-   * never disagree about what a line meant — which is the whole point of naming the
-   * verb on screen.
-   */
+  /** The ONE submit branch: Enter and Send cannot disagree about what a line meant. */
   const submit = () => {
     const text = input.value.trim();
     if (!text) return;
     if (active === 'captureIdea') onCaptureIdea(text);
     else onAsk(text);
   };
+  const toggleDock = () => {
+    // Docking puts the prompt in the Brain panel, so it OPENS that panel: a control whose
+    // effect is invisible until you find the launcher reads as one that did nothing.
+    const next = promptPlacement === 'docked' ? 'float' : 'docked';
+    setPromptPlacement(next);
+    if (next === 'docked' && !brainDockDrawn) updateBrainDock({ open: true, mode: 'docked' });
+  };
+  const dockedPreference = promptPlacement === 'docked';
 
   // What a person types to the Brain is masked in session replay wherever the prompt
   // sits — floating on the board as well as docked in a masked surface footer.
   return (
     <div {...REPLAY_MASK}
-      // Measured ONLY while it floats over the board. In the Brain panel it is that
-      // panel's last row rather than the board's chrome, so the band the board reserves
-      // for it is zero — `useChromeSpace` publishes `0px` the moment this ref stops
-      // being handed the node.
       ref={docked ? undefined : mergeRefs(hostRef, drag.elementRef)}
       data-testid="canvas-composer"
       className={styles.composerDock}
-      data-placement={placement}
+      data-placement={docked ? 'docked' : 'float'}
       data-intent={active}
       data-tour="creation-brain-dock"
       style={docked ? undefined : drag.style}
     >
-      {/* The prompt's own header, and the only place the dock decision is made. Closing
-          is offered from here and from the command bar; DOCKING is deliberate enough to
-          belong only on the thing being docked. Inside the Brain panel the whole row
-          stands down: that panel has a header of its own naming this conversation, and
-          the way back out is a control in it. */}
+      {/* The prompt's own header, and the only place the dock decision is made. Neither
+          control means anything once Brain IS the surface. */}
       {!docked && <div className={styles.promptChrome}>
         <PanelDragHandle isMoved={drag.isMoved} {...drag.handleProps} />
         <span className={styles.promptChromeName}>{t('promptName')}</span>
-        {dockControls && <>
+        {!brainIsSurface && <>
           <button
             type="button"
             data-testid="canvas-prompt-dock"
-            aria-pressed={dockControls.docked}
-            aria-label={dockControls.docked ? t('floatPrompt') : t('dockPrompt')}
-            title={dockControls.docked ? t('floatPrompt') : t('dockPrompt')}
-            onClick={dockControls.onToggleDock}
-          ><Icon name={dockControls.docked ? 'external-link' : 'message'} size={14} /></button>
+            aria-pressed={dockedPreference}
+            aria-label={dockedPreference ? t('floatPrompt') : t('dockPrompt')}
+            title={dockedPreference ? t('floatPrompt') : t('dockPrompt')}
+            onClick={toggleDock}
+          ><Icon name={dockedPreference ? 'external-link' : 'message'} size={14} /></button>
           <button
             type="button"
             data-testid="canvas-prompt-close"
             aria-label={t('hidePrompt')}
             title={t('hidePrompt')}
-            onClick={dockControls.onClose}
+            onClick={() => setPromptPlacement('closed')}
           ><Icon name="close" size={15} /></button>
         </>}
       </div>}
-      {/* The run receipt. Kept mounted after the run so token consumption does not
-          disappear at the moment the answer arrives. Absent while docked: that panel's
-          own footer is the same reading of the same run, and two copies of "Executing…
-          read object · 36s" eight pixels apart is one live turn reported twice. */}
-      {!docked && activity && <div className={styles.composerUtilities}>{activity}</div>}
-      {/* THE ONE CARD. Everything that changes what Enter does lives inside it: the
-          intent segment in its top row, then the field with its own tool row (scope,
-          mode, model, send). Starting points and next-step chips are `ChatInput`'s own,
-          the same on every prompt — the catalogue opens from `+`, inside the box.
-          `.composerCard` places each by grid area. */}
-      <div className={styles.composerCard} style={{ '--canvas-prompt-height': `${height}px` } as CSSProperties}>
-        {/* The grip is a strip along the card's top edge rather than a knob sitting
-            ON the border, where it covered the first line of text. */}
+      {/* The run pill — THE shared live row, off the run store. Absent while docked: that
+          panel's transcript is the same reading of the same run. */}
+      {!docked && input.running && <div className={styles.composerUtilities}>
+        <CanvasRunActivity runKey={canvasRunKey(sessionId)} running startedAt={runStartedAt} variant="composer" />
+      </div>}
+      <div className={styles.composerCard} style={{ '--canvas-prompt-height': `${resize.height}px` } as CSSProperties}>
+        {/* The grip is a strip along the card's top edge rather than a knob ON the border. */}
         <div
           role="separator"
           tabIndex={0}
@@ -301,42 +188,40 @@ export function CanvasComposer({
           aria-orientation="horizontal"
           aria-valuemin={MIN_PROMPT_HEIGHT}
           aria-valuemax={MAX_PROMPT_HEIGHT}
-          aria-valuenow={height}
-          onPointerDown={onResizeStart}
-          onPointerMove={onResizeMove}
-          onPointerUp={onResizeEnd}
-          onPointerCancel={onResizeEnd}
-          onLostPointerCapture={() => { resizeRef.current = null; }}
-          onKeyDown={onResizeKeyDown}
+          aria-valuenow={resize.height}
+          {...resize.handleProps}
         />
-        {/* WHAT ENTER MEANS, leading the card's top row. It draws nothing on a
-            surface with one verb. */}
-        <CanvasComposerIntent intents={offered} value={active} onChange={(id) => setChosen({ offer: offerKey, id })} />
-        {/* The row the finger actually uses: the phone's "+" (the whole command bar, in
-            one button), then the field. `leading` is absent on a desktop and CSS-hidden
-            above the phone breakpoint, so the box keeps its full width where there is
-            room for a bar. */}
+        <CanvasComposerIntent intents={offered} value={active} onChange={choose} />
         <div className={styles.composerInputRow}>
-          {leading}
+          {actions && <CanvasActionsTrigger open={actions.open} onToggle={actions.onToggle} />}
           <ChatInput
             {...input}
             className={styles.composer}
             onSubmit={submit}
-            // The active verb names the box AND its button. Two strings from one
-            // registry row, so a surface cannot ask for an idea and offer to send it
-            // to Brain.
+            // The active verb names the box AND its button — two strings from one registry row.
             placeholder={t(activeDef.placeholderKey as 'share')}
             submitLabel={t(activeDef.submitLabelKey as 'share')}
-            // Two rows — the text, then one tool row. Scope joins that row (and only
-            // shows when something is selected), the `/` trigger names just the mode,
-            // and the plan chip row is not drawn: a chat box, not a form.
             rows={1}
             submitOnEnter
             showVoice
+            // What the next request is about: an element picked in the app's preview, and
+            // the board scope — only on a surface that SHOWS the board.
+            contextControls={<>
+              <PreviewPickChips />
+              {surfaceDef.showsBoard && <CanvasScopeChip scopeMode={scope.mode} onScopeModeChange={scope.setMode} autoLabel={scope.autoLabel} selectionCount={scope.selectionCount} frameSelected={scope.frameSelected} />}
+            </>}
+            starters={starters}
+            {...(suggestions ? { suggestions } : {})}
+            memoryUnavailableReason={memoryProjectId == null || !signedIn ? t('memoryNeedsProject') : undefined}
+            // `canvasTurnShape` raises a level's ceiling to the canvas's own, never lowers it.
+            effortMinAnswerTokens={CANVAS_RESPONSE_TOKENS}
+            // A board that lives only on this device has no workspace behind it, so it gets
+            // neither the Status tab nor the settings link.
+            account={signedIn ? { projectId: memoryProjectId } : null}
+            {...(signedIn ? { accountSettingsHref: '/settings' } : {})}
           />
         </div>
       </div>
     </div>
   );
 }
-

@@ -15,7 +15,6 @@ import {
 } from '../../infrastructure/database/schema';
 import { TaskPriority, TaskStatus } from '../../domain/shared/types';
 import { isResolveError, resolveRepoCredential } from '../repos/resolveRepoCredential';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { recordManagerActionOnChange, stateFingerprint } from '../manager/managerActionJournal';
 import { withDirectTaskKey } from '../task/taskKeys';
 import {
@@ -26,6 +25,8 @@ import {
   type ReconciliationDecision,
 } from './prReconciliationClassifier';
 import { githubCooldownFor, githubRetryAfterSeconds } from './githubCredentialCooldown';
+import { ReconciliationError } from './reconciliationError';
+import { ReconciliationRunLedger, type ReconciliationPersistence } from './prReconciliationRunLedger';
 
 type FetchLike = typeof fetch;
 
@@ -81,12 +82,6 @@ query ReconcilePullRequests($owner: String!, $repo: String!, $cursor: String) {
     }
   }
 }`;
-
-export class ReconciliationError extends Error {
-  constructor(readonly code: string, message: string, readonly details: Record<string, unknown> = {}) {
-    super(message);
-  }
-}
 
 const githubBase = (host: string | null): string =>
   !host || host === 'github.com' ? 'https://api.github.com' : `https://${host}/api/v3`;
@@ -158,45 +153,6 @@ export async function fetchOpenPullRequests(
   throw new ReconciliationError('GITHUB_PAGE_LIMIT', 'Open PR inventory exceeded the 1,000 PR safety limit');
 }
 
-interface ErrorContext {
-  runId: string;
-  tenantId: number;
-  repoId: string;
-  prNumber?: number;
-  phase: 'configuration' | 'collection' | 'correlation' | 'classification' | 'action' | 'persistence';
-  code?: string;
-  details?: Record<string, unknown>;
-}
-
-async function recordError(
-  db: Db,
-  context: ErrorContext,
-  error: unknown,
-  opts: { report?: boolean } = {},
-): Promise<void> {
-  const normalized = error instanceof Error ? error : new Error(String(error));
-  const code = error instanceof ReconciliationError ? error.code : (context.code ?? 'UNEXPECTED_ERROR');
-  const details = { ...context.details, ...(error instanceof ReconciliationError ? error.details : {}) };
-  if (opts.report !== false) reportCaughtError(error, {
-    source: 'application/reconciliation/prReconciliationService.ts',
-    operation: `prReconciliation.${context.phase}`,
-    context: { runId: context.runId, repoId: context.repoId, prNumber: context.prNumber, code, details },
-  });
-  try {
-    await db.insert(prReconciliationErrors).values({
-      runId: context.runId, tenantId: context.tenantId, repoId: context.repoId,
-      prNumber: context.prNumber, phase: context.phase, code,
-      message: normalized.message, stack: normalized.stack ?? null, details,
-    });
-  } catch (persistenceError) {
-    reportCaughtError(persistenceError, {
-      source: 'application/reconciliation/prReconciliationService.ts',
-      operation: 'prReconciliation.persistError',
-      context: { runId: context.runId, originalCode: code, originalMessage: normalized.message },
-    });
-  }
-}
-
 export interface RunReconciliationArgs {
   tenantId: number;
   repoId: string;
@@ -205,6 +161,10 @@ export interface RunReconciliationArgs {
   /** Internal scheduled-agent policy. Never populated from an HTTP request. */
   autoApplyCloseCandidates?: boolean;
   requestedBy?: string | null;
+  /** `always` (default): every run is recorded — an operator's run id is their handle on
+   *  its diagnostics. `on_change`: the scheduled sweep — a run that wrote nothing else and
+   *  hit no error records nothing either (see prReconciliationRunLedger). */
+  persist?: ReconciliationPersistence;
 }
 
 /**
@@ -278,7 +238,7 @@ export async function ensureDependencyReviewTask(
     tenantId: number; projectId: number; repoId: string; prNumber: number; prUrl: string;
     title: string; body: string; headBranch: string;
   },
-): Promise<{ id: number; status: string; completedAt: Date | null; description: string | null } | null> {
+): Promise<{ id: number; status: string; completedAt: Date | null; description: string | null; wrote: boolean } | null> {
   const [existing] = await db.select({
     id: tasks.id, status: tasks.status, completedAt: tasks.completedAt, description: tasks.description,
   })
@@ -290,9 +250,9 @@ export async function ensureDependencyReviewTask(
       }).where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, existing.id))).returning({
         id: tasks.id, status: tasks.status, completedAt: tasks.completedAt, description: tasks.description,
       });
-      return reopened ?? existing;
+      return reopened ? { ...reopened, wrote: true } : { ...existing, wrote: false };
     }
-    return existing;
+    return { ...existing, wrote: false };
   }
 
   const [project] = await db.select({ key: projects.key }).from(projects)
@@ -319,12 +279,13 @@ export async function ensureDependencyReviewTask(
       id: tasks.id, status: tasks.status, completedAt: tasks.completedAt, description: tasks.description,
     });
     if (!created) throw new Error(`Could not create dependency review ticket for PR #${args.prNumber}`);
-    return created;
+    return { ...created, wrote: true };
   });
 }
 
 export interface ReconciliationRunResult {
-  runId: string;
+  /** The recorded run, or null when an `on_change` run changed nothing and was not recorded. */
+  runId: string | null;
   status: 'completed' | 'completed_with_errors';
   summary: Record<string, number>;
   errors: number;
@@ -370,14 +331,17 @@ export async function runPrTicketReconciliation(
     eq(ideAgents.tenantId, args.tenantId), eq(ideAgents.builtinKind, 'pr_reconciler'), eq(ideAgents.status, 'active'),
   )).limit(1);
 
-  const [created] = await db.insert(prReconciliationRuns).values({
+  // Nothing is written up front: the ledger buffers the run row, items and errors and
+  // writes them in `finish` — for the scheduled sweep only when the run changed something.
+  const ledger = new ReconciliationRunLedger(db, {
     tenantId: args.tenantId, projectId: repo.projectId, repoId: repo.id,
     agentRef: agent?.id ?? null, mode, requestedBy: args.requestedBy ?? null,
     approvedPrNumbers: approved,
-  }).returning({ id: prReconciliationRuns.id });
-  if (!created) throw new ReconciliationError('RUN_CREATE_FAILED', 'The reconciliation run could not be created');
-  const runId = created.id;
-  let errorCount = 0;
+  }, args.persist ?? 'always');
+  const runId = ledger.runId;
+  /** Rows this run wrote OUTSIDE its own ledger — what makes it worth recording. */
+  let writes = 0;
+  let outcome: { status: ReconciliationRunResult['status']; summary: Record<string, number>; approved: number[] };
 
   try {
     const secret = integrationCredentialSecret(env);
@@ -388,11 +352,10 @@ export async function runPrTicketReconciliation(
     try {
       githubPrs = await fetchOpenPullRequests(resolved.token, repo.owner, repo.repo, repo.host, fetchFn);
     } catch (error) {
-      errorCount++;
       // A refused/throttled credential is persisted on the run but NOT reported:
       // the sweep starts a credential cooldown and reports that once instead of
       // filing the same 403 every tick (githubCredentialCooldown).
-      await recordError(db, { runId, tenantId: args.tenantId, repoId: repo.id, phase: 'collection' }, error, {
+      ledger.recordError({ phase: 'collection' }, error, {
         report: githubCooldownFor(error) == null,
       });
       throw error;
@@ -446,13 +409,12 @@ export async function runPrTicketReconciliation(
           prUrl: pr.url, title: pr.title, body: pr.body, headBranch: pr.headBranch,
         });
         if (ticket) {
+          if (ticket.wrote) writes++;
           taskById.set(ticket.id, ticket);
           taskRefByPr.set(pr.number, ticket.id);
         } else {
-          errorCount++;
-          await recordError(db, {
-            runId, tenantId: args.tenantId, repoId: repo.id, prNumber: pr.number,
-            phase: 'action', code: 'DEPENDENCY_TICKET_FAILED',
+          ledger.recordError({
+            prNumber: pr.number, phase: 'action', code: 'DEPENDENCY_TICKET_FAILED',
           }, new Error(`Could not create or recover a dependency review ticket for PR #${pr.number}`));
         }
       }
@@ -494,6 +456,7 @@ export async function runPrTicketReconciliation(
           id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId,
           updatedAt: pullRequests.updatedAt,
         });
+        writes += inserted.length;
         for (const row of inserted) if (row.number != null) canonicalByNumber.set(row.number, row);
       }
 
@@ -518,6 +481,7 @@ export async function runPrTicketReconciliation(
             buildStatus: build.buildStatus, buildError: build.buildError,
           };
           if (storedValuesMatch(internalByNumber.get(pr.number), next)) return null;
+          writes++;
           return db.update(pullRequests).set({ ...next, updatedAt: new Date() }).where(and(
             eq(pullRequests.tenantId, args.tenantId), eq(pullRequests.repoId, repo.id),
             eq(pullRequests.number, pr.number),
@@ -538,20 +502,16 @@ export async function runPrTicketReconciliation(
 
     // The scheduled reconciler is itself the policy approver for the one action it
     // is allowed to take unattended: closing HIGH-confidence close candidates.
-    // Persist the resolved numbers before acting so diagnostics always show the
+    // The resolved numbers are recorded on the run so diagnostics always show the
     // exact allowlist the run used. HTTP callers cannot enable this flag.
     const policyApproved = args.autoApplyCloseCandidates
       ? policyApprovedCloseNumbers(decisions)
       : [];
     const resolvedApproved = [...new Set([...approved, ...policyApproved])].sort((a, b) => a - b);
-    // The run row was inserted with `approved`; `resolvedApproved` is a superset of it, so
-    // equal length means the stored allowlist is already exact. That is every run with no
-    // close candidate — skip an UPDATE that would only restate it.
-    if (mode === 'apply' && resolvedApproved.length !== approved.length) {
-      await db.update(prReconciliationRuns)
-        .set({ approvedPrNumbers: resolvedApproved })
-        .where(scopedToTenant(prReconciliationRuns, args.tenantId, eq(prReconciliationRuns.id, runId)));
-    }
+    // The run row is written once, in `finish`, carrying `resolvedApproved` — the exact
+    // allowlist this run acted on. A policy-approved close is an action, so such a run
+    // is always recorded.
+    if (policyApproved.length > 0) writes++;
 
     for (let offset = 0; offset < decisions.length; offset += 100) {
       const batch = decisions.slice(offset, offset + 100).map(({ pr, taskId, ticket, decision }) => {
@@ -582,7 +542,7 @@ export async function runPrTicketReconciliation(
         },
       });
       });
-      if (batch.length) await db.insert(prReconciliationItems).values(batch);
+      ledger.addItems(batch);
     }
 
     let applied = 0;
@@ -641,10 +601,8 @@ export async function runPrTicketReconciliation(
       for (const item of decisions.filter(({ decision }) => decision.recommendedAction !== 'close')) {
         const canonical = canonicalByNumber.get(item.pr.number);
         if (!canonical) {
-          errorCount++;
-          await recordError(db, {
-            runId, tenantId: args.tenantId, repoId: repo.id, prNumber: item.pr.number,
-            phase: 'persistence', code: 'CANONICAL_PR_MISSING',
+          ledger.recordError({
+            prNumber: item.pr.number, phase: 'persistence', code: 'CANONICAL_PR_MISSING',
           }, new Error(`PR #${item.pr.number} could not be handed to the manager queue`));
           continue;
         }
@@ -670,10 +628,8 @@ export async function runPrTicketReconciliation(
       const approvedSet = new Set(resolvedApproved);
       for (const item of decisions.filter((d) => approvedSet.has(d.pr.number))) {
         if (item.decision.classification !== 'close_candidate' || item.decision.confidence !== 'high') {
-          errorCount++;
-          await recordError(db, {
-            runId, tenantId: args.tenantId, repoId: repo.id, prNumber: item.pr.number,
-            phase: 'action', code: 'ACTION_NOT_ALLOWED',
+          ledger.recordError({
+            prNumber: item.pr.number, phase: 'action', code: 'ACTION_NOT_ALLOWED',
             details: { classification: item.decision.classification, confidence: item.decision.confidence },
           }, new Error('Approved PR is not a high-confidence close candidate; no action was taken'));
           continue;
@@ -691,17 +647,13 @@ export async function runPrTicketReconciliation(
           if (!response.ok) throw new ReconciliationError('GITHUB_CLOSE_FAILED', `GitHub returned HTTP ${response.status} while closing PR #${item.pr.number}`, {
             status: response.status, response: (await response.text().catch(() => '')).slice(0, 2_000),
           });
-          await db.update(prReconciliationItems).set({ appliedAction: 'close', appliedAt: new Date() }).where(scopedToTenant(
-            prReconciliationItems, args.tenantId,
-            eq(prReconciliationItems.runId, runId), eq(prReconciliationItems.prNumber, item.pr.number),
-          ));
+          ledger.markClosed(item.pr.number);
           await db.update(pullRequests).set({ status: 'closed', updatedAt: new Date() }).where(and(
             eq(pullRequests.repoId, repo.id), eq(pullRequests.number, item.pr.number), eq(pullRequests.tenantId, args.tenantId),
           ));
           applied++;
         } catch (error) {
-          errorCount++;
-          await recordError(db, { runId, tenantId: args.tenantId, repoId: repo.id, prNumber: item.pr.number, phase: 'action' }, error);
+          ledger.recordError({ prNumber: item.pr.number, phase: 'action' }, error);
         }
       }
     }
@@ -718,19 +670,22 @@ export async function runPrTicketReconciliation(
       policyApproved: policyApproved.length,
     };
     for (const { decision } of decisions) summary[decision.classification] = (summary[decision.classification] ?? 0) + 1;
-    const status = errorCount > 0 ? 'completed_with_errors' : 'completed';
-    await db.update(prReconciliationRuns).set({ status, summary, errorCount, finishedAt: new Date() })
-      .where(scopedToTenant(prReconciliationRuns, args.tenantId, eq(prReconciliationRuns.id, runId)));
-    return { runId, status, summary, errors: errorCount };
+    // Every write the actions above actually made (the journal and the ticket moves are
+    // already change-gated; `queued` is not — it counts every routed PR every run).
+    writes += reviewTicketsQueued + repairTicketsReopened + journaled + applied;
+    outcome = { status: ledger.errorCount > 0 ? 'completed_with_errors' : 'completed', summary, approved: resolvedApproved };
   } catch (error) {
-    if (errorCount === 0) {
-      errorCount++;
-      await recordError(db, { runId, tenantId: args.tenantId, repoId: repo.id, phase: 'configuration' }, error);
-    }
-    await db.update(prReconciliationRuns).set({ status: 'failed', errorCount, finishedAt: new Date() })
-      .where(scopedToTenant(prReconciliationRuns, args.tenantId, eq(prReconciliationRuns.id, runId)));
+    if (ledger.errorCount === 0) ledger.recordError({ phase: 'configuration' }, error);
+    // A failed run always has an error to show, so it is always recorded.
+    await ledger.finish({ status: 'failed', changed: true });
     throw error;
   }
+  // Written AFTER the try: a failure while persisting must not re-enter the failure path
+  // and insert the same run row twice.
+  const persisted = await ledger.finish({
+    status: outcome.status, summary: outcome.summary, approvedPrNumbers: outcome.approved, changed: writes > 0,
+  });
+  return { runId: persisted ? runId : null, status: outcome.status, summary: outcome.summary, errors: ledger.errorCount };
 }
 
 export async function listReconciliationRuns(db: Db, tenantId: number, repoId?: string, limit = 25) {

@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, u
 import { getRunSnapshot, subscribeRun, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
 import type { PanelServices } from '../host/panelServices';
 import type { RovrSettings } from '../platform/settings';
+import { onSyncStatsChanged, type SyncStats } from '../sync/runtimeMessages';
 import { originOf } from '../tools/safety';
 
 export const ServicesContext = createContext<PanelServices | null>(null);
@@ -89,6 +90,25 @@ export function usePinnedModel(): [string | null, (ref: string | null) => void] 
     [settings],
   );
   return [optimistic ? optimistic.ref : stored, choose];
+}
+
+/** What is waiting to sync — read once, then kept current by the worker's change
+ *  broadcasts (`rovr.sync.changed`); null until the first answer. */
+export function useSyncStats(): SyncStats | null {
+  const { sendRuntime } = useServices();
+  const [stats, setStats] = useState<SyncStats | null>(null);
+  useEffect(() => {
+    let live = true;
+    const off = onSyncStatsChanged((next) => live && setStats(next));
+    sendRuntime({ type: 'rovr.sync.stats' })
+      .then((s) => live && setStats((current) => current ?? (s as SyncStats)))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+      off();
+    };
+  }, [sendRuntime]);
+  return stats;
 }
 
 /** The browser's connectivity. */

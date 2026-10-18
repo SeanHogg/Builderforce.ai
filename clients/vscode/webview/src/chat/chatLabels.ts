@@ -12,16 +12,27 @@
  * memoized by their one input and read without the surface around them.
  */
 
+import { MODALITY_PERSONAS, PERSONA_MODALITY_IDS } from '@seanhogg/builderforce-brain-embedded';
 import {
-  MODALITY_PERSONAS,
-  PERSONA_MODALITY_IDS,
-  type PersonaModalityId,
-} from '@seanhogg/builderforce-brain-embedded';
-import {
-  DEFAULT_PROMPT_OPTIONS_LABELS,
-  localModelLabelsFrom,
+  DEFAULT_ASK_USER_LABELS,
+  DEFAULT_CHAT_ERROR_LABELS,
+  DEFAULT_PERSONA_PICKER_LABELS,
+  DEFAULT_QUEUED_TURN_LABELS,
+  DEFAULT_RECIPIENT_PICKER_LABELS,
+  DEFAULT_SURFACE_HEADER_LABELS,
+  bundleLookup,
+  chatHistoryLabelsFrom,
+  promptOptionsLabelsFrom,
+  stringsFrom,
   timelineLabelsFrom,
+  toolConfirmLabelsFrom,
+  type AskUserLabels,
   type BrainTimelineLabels,
+  type ChatErrorBannerLabels,
+  type ChatHistoryLabels,
+  type QueuedTurnChipsLabels,
+  type SurfaceHeaderLabels,
+  type ToolConfirmBarLabels,
   type TimelineCatalogLookup,
   type ModelChoiceLabels,
   type PersonaModalityOption,
@@ -59,97 +70,137 @@ export function timelineLabels(labels: LabelBundle): BrainTimelineLabels {
   return timelineLabelsFrom(timelineCatalogFromBundle(labels));
 }
 
+/** The pickers' fields → the bundle's keys (the English is brain-ui's defaults). */
+const RECIPIENT_KEY: Readonly<Record<string, string>> = {
+  to: 'app.to',
+  title: 'app.recipientPickerTitle',
+  brain: 'app.brainRecipient',
+  brainHint: 'app.brainRecipientHint',
+  agentHint: 'app.agentRecipientHint',
+  humanHint: 'app.humanRecipientHint',
+};
+const PERSONA_KEY: Readonly<Record<string, string>> = {
+  actingAs: 'app.actingAs',
+  title: 'app.personaTitle',
+  defaultBrain: 'app.defaultBrain',
+  personas: 'app.personas',
+  assignedAgents: 'app.assignedAgents',
+};
+
 /** The composer's "To" control (shared `RecipientPicker`) copy. */
 export function recipientPickerLabels(labels: LabelBundle): RecipientPickerLabels {
-  const t = makeT(labels);
-  return {
-    to: t('app.to', 'To'),
-    title: t('app.recipientPickerTitle', 'Send to'),
-    brain: t('app.brainRecipient', 'BuilderForce'),
-    brainHint: t('app.brainRecipientHint', 'Runs it'),
-    agentHint: t('app.agentRecipientHint', 'Replies & acts'),
-    humanHint: t('app.humanRecipientHint', 'Notified'),
-  };
+  return stringsFrom(DEFAULT_RECIPIENT_PICKER_LABELS, bundleLookup(labels, (k) => RECIPIENT_KEY[k]));
 }
 
 /** The composer's "Acting as" control (shared `PersonaPicker`) copy. */
 export function personaPickerLabels(labels: LabelBundle): PersonaPickerLabels {
-  const t = makeT(labels);
-  return {
-    actingAs: t('app.actingAs', 'Acting as'),
-    title: t('app.personaTitle', 'Brain agent or persona'),
-    defaultBrain: t('app.defaultBrain', 'Default Brain'),
-    personas: t('app.personas', 'Personas'),
-    assignedAgents: t('app.assignedAgents', 'Assigned agents'),
-  };
+  return stringsFrom(DEFAULT_PERSONA_PICKER_LABELS, bundleLookup(labels, (k) => PERSONA_KEY[k]));
 }
 
-/** English fallbacks for the modality persona names (localized via the host bundle). */
-const MODALITY_LABEL_FALLBACK: Record<PersonaModalityId, string> = {
-  designer: 'Website',
-  mobile: 'Mobile',
-  webmobile: 'Web + Mobile',
-  evermind: 'Evermind',
-  finetune: 'Fine-tune',
-  voice: 'Voice',
+/** The shared header's levers, the history rows and the run-confirm bar → the bundle's keys. */
+const HEADER_KEY: Readonly<Record<string, string>> = {
+  newChat: 'app.newChat',
+  historyShow: 'app.historyShow',
+  historyHide: 'app.historyHide',
+};
+const CHAT_HISTORY_KEY: Readonly<Record<string, string>> = {
+  loading: 'app.historyLoading',
+  empty: 'app.historyEmpty',
+  actions: 'app.chatActions',
+  actionsAria: 'app.chatActionsAria',
+  rename: 'app.rename',
+  summarize: 'app.chatSummarize',
+  delete: 'app.chatDelete',
+};
+const TOOL_CONFIRM_KEY: Readonly<Record<string, string>> = {
+  prompt: 'app.confirmRun',
+  approve: 'app.approve',
+  approveAll: 'app.always',
+  deny: 'app.cancel',
+  aria: 'app.confirmAria',
 };
 
-/** The modality personas "Acting as" offers — the shared catalog, named in the editor's language. */
+const ASK_USER_KEY: Readonly<Record<string, string>> = {
+  askSubmit: 'tl.askSubmit',
+  askAnswered: 'tl.askAnswered',
+  askPending: 'app.askPending',
+  askJumpTo: 'app.askJumpTo',
+  askDismiss: 'app.dismiss',
+};
+const QUEUED_TURN_KEY: Readonly<Record<string, string>> = {
+  list: 'app.queuedLabel',
+  hint: 'app.queuedHint',
+  steer: 'app.steerNow',
+  steerHint: 'app.steerNowHint',
+  remove: 'app.remove',
+};
+
+/** The shared `ChatErrorBanner` (remedy buttons + dismiss): every field is `app.<field>`. */
+export function chatErrorLabels(labels: LabelBundle): ChatErrorBannerLabels {
+  return stringsFrom(DEFAULT_CHAT_ERROR_LABELS, bundleLookup(labels, (k) => `app.${k}`));
+}
+
+/** The shared ask-user copy (the question card's submit, the pending-question banner). */
+export function askUserLabels(labels: LabelBundle): AskUserLabels {
+  return stringsFrom(DEFAULT_ASK_USER_LABELS, bundleLookup(labels, (k) => ASK_USER_KEY[k]));
+}
+
+/** The shared queued-turn chips above the composer. */
+export function queuedTurnLabels(labels: LabelBundle): QueuedTurnChipsLabels {
+  return stringsFrom(DEFAULT_QUEUED_TURN_LABELS, bundleLookup(labels, (k) => QUEUED_TURN_KEY[k]));
+}
+
+/** The chat surface's `SurfaceHeader` levers (New chat, History). */
+export function surfaceHeaderLabels(labels: LabelBundle): SurfaceHeaderLabels {
+  return stringsFrom(DEFAULT_SURFACE_HEADER_LABELS, bundleLookup(labels, (k) => HEADER_KEY[k]));
+}
+
+/** The shared chat-history list and rows. */
+export function chatHistoryLabels(labels: LabelBundle): ChatHistoryLabels {
+  return chatHistoryLabelsFrom(bundleLookup(labels, (k) => CHAT_HISTORY_KEY[k]));
+}
+
+/** The shared run-confirm bar (the chat's own run and each sub-agent's). */
+export function toolConfirmLabels(labels: LabelBundle): ToolConfirmBarLabels {
+  return toolConfirmLabelsFrom(bundleLookup(labels, (k) => TOOL_CONFIRM_KEY[k]));
+}
+
+/**
+ * The modality personas "Acting as" offers — the shared catalog, named in the editor's
+ * language (`app.persona.modality.<id>`) over the persona's own English name.
+ */
 export function personaModalityOptions(labels: LabelBundle): PersonaModalityOption[] {
-  const t = makeT(labels);
   return PERSONA_MODALITY_IDS.map((id) => ({
     id,
-    label: t(`app.persona.modality.${id}`, MODALITY_LABEL_FALLBACK[id]),
+    label: labels[`app.persona.modality.${id}`] || MODALITY_PERSONAS[id].label,
     icon: MODALITY_PERSONAS[id].icon,
   }));
+}
+
+/**
+ * Where a `/` menu field lives in the host bundle: `app.<field>` (the on-device list's
+ * fields included, `src/localModelLabels.ts`), except `chooseModel` (`app.pickModel`).
+ * The bundle's `app.autoModeHint` is the COMPOSER's sentence, so the menu's own field
+ * is left to brain-ui's default.
+ */
+export function optionBundleKey(field: string): string | undefined {
+  if (field === 'autoModeHint') return undefined;
+  return field === 'chooseModel' ? 'app.pickModel' : `app.${field}`;
 }
 
 /**
  * The `/` menu's copy: its own chrome from the host's label bundle, and the model
  * rows' copy from `init.modelLabels` — the SAME object the host's `Change model`
  * QuickPick renders from, so the two pickers cannot describe a row differently.
- * The menu itself is the shared control (`PromptOptionsMenu`), identical to the
- * web composer's.
+ * The key table and English are brain-ui's (`promptOptionsLabelsFrom`).
  */
 export function promptMenuLabels(
   t: (key: string, fallback: string) => string,
   modelLabels: ModelChoiceLabels | undefined,
 ): PromptOptionsLabels {
-  return {
-    ...DEFAULT_PROMPT_OPTIONS_LABELS,
-    ...(modelLabels ?? {}),
-    options: t('app.options', 'Options'),
-    mode: t('app.mode', 'Mode'),
-    effort: t('app.effort', 'Effort'),
-    effortQuick: t('app.effortQuick', 'Quick'),
-    effortBalanced: t('app.effortBalanced', 'Balanced'),
-    effortThorough: t('app.effortThorough', 'Thorough'),
-    thinking: t('app.thinking', 'Thinking'),
-    on: t('app.on', 'On'),
-    off: t('app.off', 'Off'),
-    memory: t('app.memory', 'Memory'),
-    conversation: t('app.conversation', 'Conversation'),
-    consolidate: t('app.consolidate', 'Consolidate'),
-    consolidating: t('app.consolidating', 'Consolidating…'),
-    consolidateHint: t('app.consolidateHint', 'Summarize this chat into a compact context the rest of the conversation builds on'),
-    fork: t('app.fork', 'Fork'),
-    forking: t('app.forking', 'Forking…'),
-    forkHint: t('app.forkHint', 'Summarize this chat and continue in a new one from that summary'),
-    sessionUnavailable: t('app.sessionUnavailable', 'Available once this chat has a few messages and no run in flight'),
-    model: t('app.model', 'Model'),
-    modelInUse: t('app.modelInUse', 'Model in use'),
-    searchModels: t('app.searchModels', 'Search models…'),
-    filterModels: t('app.filterModels', 'Filter models'),
-    chooseModel: t('app.pickModel', 'Change model'),
-    noModels: t('app.noModels', 'No matching models'),
-    all: t('app.all', 'All'),
-    modelLocked: t('app.modelLocked', 'Model choice needs a paid plan or a connected provider account.'),
-    accountSettings: t('app.accountSettings', 'Account settings'),
-    status: t('app.status', 'Status'),
-    // The on-device list — the page engines this webview runs on WebGPU, from the host
-    // bundle's `app.<field>` keys (`src/localModelLabels.ts`) through brain-ui's ONE key
-    // table, which supplies the English for a key the bundle lacks (an empty fallback
-    // reads as "none"); placeholders are filled per row by the shared list.
-    ...localModelLabelsFrom((field) => t(`app.${field}`, '')),
-  };
+  const rows = (modelLabels ?? {}) as Partial<Record<string, string>>;
+  return promptOptionsLabelsFrom((field) => {
+    const key = optionBundleKey(field);
+    return (key ? t(key, '') : '') || rows[field];
+  });
 }

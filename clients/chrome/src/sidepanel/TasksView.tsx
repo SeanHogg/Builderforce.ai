@@ -41,16 +41,16 @@ export function TasksView({ chatId, onNewChat }: { chatId: number | null; onNewC
         </label>
         <input
           id="rovr-task-title"
-          className="rovr-input"
+          className="bf-input"
           value={title}
           placeholder={t('taskAddPlaceholder')}
           onChange={(e) => setTitle(e.target.value)}
         />
-        <button type="submit" className="rovr-btn rovr-btn--primary" disabled={!title.trim()}>
+        <button type="submit" className="bf-btn bf-btn--primary" disabled={!title.trim()}>
           {t('taskAdd')}
         </button>
       </form>
-      <button type="button" className="rovr-btn rovr-btn--link" onClick={reload}>
+      <button type="button" className="bf-btn bf-btn--link" onClick={reload}>
         {t('refresh')}
       </button>
       {tasks.length === 0 ? (
@@ -61,7 +61,7 @@ export function TasksView({ chatId, onNewChat }: { chatId: number | null; onNewC
             <li key={task.id} className="rovr-card">
               <p className="rovr-card__title">{task.title}</p>
               {task.description && <p className="rovr-muted">{task.description}</p>}
-              <span className={`rovr-chip rovr-chip--${task.state === 'synced' ? 'ok' : task.state === 'queued' ? 'pending' : 'local'}`}>
+              <span className={`bf-chip bf-chip--${task.state === 'synced' ? 'ok' : task.state === 'queued' ? 'pending' : 'local'}`}>
                 {t(STATE_KEY[task.state])}
               </span>
             </li>

@@ -181,85 +181,9 @@ body {
   gap: 10px;
 }
 
-.rovr-input,
-.rovr-select {
-  width: 100%;
-  min-width: 0;
-  padding: 7px 9px;
-  border: 1px solid var(--bf-border);
-  border-radius: var(--bf-radius);
-  background: var(--bf-bg);
-  color: var(--bf-text);
-  font: inherit;
-}
-
-.rovr-select option {
-  background: var(--bf-bg);
-  color: var(--bf-text);
-}
-
-.rovr-row > .rovr-input {
+.rovr-row > .bf-input {
   flex: 1 1 160px;
   width: auto;
-}
-
-.rovr-btn {
-  padding: 6px 12px;
-  border: 1px solid var(--bf-border);
-  border-radius: var(--bf-radius);
-  background: var(--bf-surface);
-  color: var(--bf-text);
-  font: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.rovr-btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.rovr-btn--primary {
-  background: var(--bf-accent);
-  border-color: var(--bf-accent);
-  color: var(--bf-on-accent);
-}
-
-.rovr-btn--link {
-  align-self: flex-start;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--bf-accent);
-}
-
-.rovr-chip {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  background: var(--bf-surface-2);
-  color: var(--bf-text-muted);
-}
-
-.rovr-chip--ok {
-  background: var(--bf-success-bg);
-  color: var(--bf-success);
-}
-
-.rovr-chip--pending {
-  background: var(--bf-warning-bg);
-  color: var(--bf-warning);
-}
-
-.rovr-chip--off {
-  background: var(--bf-error-bg);
-  color: var(--bf-error);
-}
-
-.rovr-chip--local {
-  background: var(--bf-accent-soft);
-  color: var(--bf-accent);
 }
 
 .rovr-chat__error {

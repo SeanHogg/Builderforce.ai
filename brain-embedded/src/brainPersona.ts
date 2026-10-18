@@ -25,8 +25,11 @@ export type PersonaModalityId = 'designer' | 'mobile' | 'webmobile' | 'evermind'
 /** Display order of the modality personas. */
 export const PERSONA_MODALITY_IDS: readonly PersonaModalityId[] = ['designer', 'mobile', 'webmobile', 'evermind', 'finetune', 'voice'];
 
-/** A modality persona: its glyph and the Brain prompt it runs under. */
+/** A modality persona: its English name, its glyph and the Brain prompt it runs under. */
 export interface ModalityPersona {
+  /** The English display name — THE default every host localizes over (web `modality.<id>.label`,
+   *  the editor's `app.persona.modality.<id>`); no host keeps a copy of its own. */
+  label: string;
   icon: string;
   prompt: string;
 }
@@ -68,6 +71,7 @@ export const FILE_DELIVERY_RULE = [
 
 const BASE_PERSONAS: Record<PersonaModalityId, ModalityPersona> = {
   designer: {
+    label: 'Website',
     icon: '🌐',
     prompt: [
       'You are an expert AI coding assistant built into Builderforce.ai, a browser-based Builder. Help users generate and build websites and web apps.',
@@ -77,6 +81,7 @@ const BASE_PERSONAS: Record<PersonaModalityId, ModalityPersona> = {
     ].join('\n'),
   },
   mobile: {
+    label: 'Mobile',
     icon: '📱',
     prompt: [
       "You are an expert mobile app developer operating Builderforce.ai's Canvas Builder. The user is building a MOBILE app and previews it in a phone-sized device simulator.",
@@ -87,6 +92,7 @@ const BASE_PERSONAS: Record<PersonaModalityId, ModalityPersona> = {
     ].join('\n'),
   },
   webmobile: {
+    label: 'Web + Mobile',
     icon: '🖥️',
     prompt: [
       "You are an expert full-stack app developer built into Builderforce.ai's browser Builder. The user is building ONE app that ships as BOTH a responsive web application AND a mobile app, from a single codebase.",
@@ -96,6 +102,7 @@ const BASE_PERSONAS: Record<PersonaModalityId, ModalityPersona> = {
     ].join('\n'),
   },
   evermind: {
+    label: 'Evermind',
     icon: '🧠',
     prompt: [
       "You are assisting with growing an Evermind — Builderforce.ai's self-updating model that learns continuously (Write-Through Cognition) instead of being frozen after training.",
@@ -104,6 +111,7 @@ const BASE_PERSONAS: Record<PersonaModalityId, ModalityPersona> = {
     ].join('\n'),
   },
   finetune: {
+    label: 'Fine-tune',
     icon: '🔧',
     prompt: [
       'You are assisting with building and fine-tuning a custom LLM inside Builderforce.ai. This is the classic pipeline: design a dataset, train a LoRA adapter in-browser (WebGPU), benchmark it, then publish and export it.',
@@ -111,6 +119,7 @@ const BASE_PERSONAS: Record<PersonaModalityId, ModalityPersona> = {
     ].join('\n'),
   },
   voice: {
+    label: 'Voice',
     icon: '🎙',
     prompt: [
       "You are a voice director inside Builderforce.ai's Voice Studio.",

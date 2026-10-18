@@ -11,7 +11,9 @@
 
 import { useMemo } from 'react';
 import type { BrainChat } from '@seanhogg/builderforce-brain-embedded';
-import { ChatHistoryList, ChatHistoryRow, type ChatHistoryLabels, type ChatRowActions } from '@seanhogg/builderforce-brain-ui';
+import { ChatHistoryList, ChatHistoryRow, type ChatRowActions } from '@seanhogg/builderforce-brain-ui';
+import type { LabelBundle } from '../vscodeBridge';
+import { chatHistoryLabels, makeT } from './chatLabels';
 import type { ChatRunStatus } from './useVsCodeChats';
 
 export interface VsCodeChatHistoryProps {
@@ -22,7 +24,8 @@ export interface VsCodeChatHistoryProps {
   titleOf: (chat: BrainChat) => string;
   runStatus: (id: number) => ChatRunStatus;
   rows: ChatRowActions;
-  t: (key: string, fallback: string) => string;
+  /** The host's label bundle. */
+  bundle: LabelBundle;
 }
 
 /** A live run (a filled dot) or a question waiting on you (a question mark in a ring). */
@@ -42,16 +45,9 @@ function RunMarker({ status, label }: { status: Exclude<ChatRunStatus, null>; la
   );
 }
 
-export function VsCodeChatHistory({ id, chats, loading, activeId, titleOf, runStatus, rows, t }: VsCodeChatHistoryProps) {
-  const labels = useMemo<Partial<ChatHistoryLabels>>(() => ({
-    loading: t('app.historyLoading', 'Loading…'),
-    empty: t('app.historyEmpty', 'No chats yet'),
-    actions: t('app.chatActions', 'Chat actions'),
-    actionsAria: t('app.chatActionsAria', 'Actions for {title}'),
-    rename: t('app.rename', 'Rename chat'),
-    summarize: t('app.chatSummarize', 'Summarize'),
-    delete: t('app.chatDelete', 'Delete'),
-  }), [t]);
+export function VsCodeChatHistory({ id, chats, loading, activeId, titleOf, runStatus, rows, bundle }: VsCodeChatHistoryProps) {
+  const labels = useMemo(() => chatHistoryLabels(bundle), [bundle]);
+  const t = makeT(bundle);
   const runningLabel = t('app.chatRunning', 'Running');
   const awaitingLabel = t('app.chatAwaiting', 'Needs an answer');
 

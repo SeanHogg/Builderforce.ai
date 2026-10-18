@@ -11,6 +11,17 @@
  * colour theme (light AND dark) natively.
  */
 :root {
+  /* Base controls live in brain-ui; the editor restyles them through tokens. */
+  --bf-btn-pad: 4px 10px;
+  --bf-btn-size: 12px;
+  --bf-btn-radius: 5px;
+  --bf-btn-bg: var(--vscode-button-secondaryBackground, transparent);
+  --bf-btn-fg: var(--vscode-button-secondaryForeground, var(--bf-text));
+  --bf-btn-hover: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+  --bf-btn-primary-border: transparent;
+  --bf-btn-primary-bg: var(--vscode-button-background);
+  --bf-btn-primary-fg: var(--vscode-button-foreground);
+  --bf-btn-primary-hover: var(--vscode-button-hoverBackground, var(--vscode-button-background));
   --bf-text: var(--vscode-foreground);
   --bf-text-muted: var(--vscode-descriptionForeground, var(--vscode-disabledForeground));
   --bf-surface: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
@@ -177,36 +188,6 @@ body {
 select option {
   background: var(--vscode-dropdown-background, Canvas);
   color: var(--vscode-dropdown-foreground, CanvasText);
-}
-
-.bf-btn {
-  font-family: inherit;
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 5px;
-  border: 1px solid var(--bf-border);
-  background: var(--vscode-button-secondaryBackground, transparent);
-  color: var(--vscode-button-secondaryForeground, var(--bf-text));
-  cursor: pointer;
-}
-
-.bf-btn:hover {
-  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
-}
-
-.bf-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.bf-btn--primary {
-  border-color: transparent;
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-}
-
-.bf-btn--primary:hover {
-  background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
 }
 
 .bf-error,

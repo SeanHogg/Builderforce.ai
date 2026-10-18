@@ -1,6 +1,7 @@
 /*
  * No `'use client'`. The hook this replaced carried one, and it bought nothing: this module
- * is imported only by `CreationCanvas.tsx`, which already declares the boundary, so the
+ * is imported only by the canvas (`hooks/useCanvasChromeBands.ts`), inside the boundary
+ * `CreationCanvas.tsx` already declares, so the
  * directive marked an entry point that does not exist and spent a slot in the architecture
  * ratchet's client-file tally. Same reasoning `CanvasAppSurface` and `CanvasSiteSurface`
  * state in their own headers.
