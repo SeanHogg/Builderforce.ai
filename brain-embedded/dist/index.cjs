@@ -3991,11 +3991,16 @@ var list = (v) => Array.isArray(v) ? v : [];
 var path = (v) => String(v ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
 var line = (v) => Math.max(1, Number(v) || 1);
 var hash = (value) => {
-  let n = 14695981039346656037n;
-  for (let i = 0; i < value.length; i++) n = BigInt.asUintN(64, (n ^ BigInt(value.charCodeAt(i))) * 1099511628211n);
+  let n = BigInt("14695981039346656037");
+  const prime = BigInt("1099511628211");
+  for (let i = 0; i < value.length; i++) n = BigInt.asUintN(64, (n ^ BigInt(value.charCodeAt(i))) * prime);
   return n.toString(16);
 };
-function normalizeAnalysis(dependencies, duplicates, unused) {
+function normalizeAnalysis(dependencies, duplicates, unused, scope = ".") {
+  const unusedPath = (value) => {
+    const file = path(value);
+    return scope === "." || file.startsWith(`${scope}/`) ? file : `${scope}/${file}`;
+  };
   const nodes = /* @__PURE__ */ new Set();
   const edges = /* @__PURE__ */ new Map();
   for (const module2 of list(record(dependencies).modules)) {
@@ -4016,7 +4021,8 @@ function normalizeAnalysis(dependencies, duplicates, unused) {
       const file = record(raw);
       return { path: path(file.name), startLine: line(file.start), endLine: line(file.end) };
     });
-    const identity = clone.fragment || locations.map((l) => `${l.path}:${l.startLine}-${l.endLine}`).sort().join("|");
+    locations.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : a.startLine - b.startLine);
+    const identity = typeof clone.fragment === "string" ? clone.fragment.replace(/\r\n/g, "\n") : locations.map((l) => `${l.path}:${l.startLine}-${l.endLine}`).sort().join("|");
     issues.push({
       id: `duplicate:${hash(JSON.stringify([locations.map((l) => l.path).sort(), identity]))}`,
       kind: "duplicate",
@@ -4024,9 +4030,9 @@ function normalizeAnalysis(dependencies, duplicates, unused) {
       ...typeof clone.fragment === "string" ? { snippet: clone.fragment.slice(0, 4e3) } : {}
     });
   }
-  for (const file of list(record(unused).files)) issues.push({ id: `unused-file:${path(file)}`, kind: "unused-file", locations: [{ path: path(file), startLine: 1, endLine: 1 }] });
+  for (const file of list(record(unused).files)) issues.push({ id: `unused-file:${unusedPath(file)}`, kind: "unused-file", locations: [{ path: unusedPath(file), startLine: 1, endLine: 1 }] });
   for (const issue of list(record(unused).issues)) {
-    const file = path(issue.file);
+    const file = unusedPath(issue.file);
     for (const field of ["exports", "types", "dependencies", "devDependencies", "unlisted"]) {
       for (const raw of list(issue[field])) {
         const item = typeof raw === "string" ? { name: raw } : record(raw);
@@ -4041,31 +4047,60 @@ function normalizeAnalysis(dependencies, duplicates, unused) {
 
 // ../packages/agent-tools/src/codeAnalysisTool.ts
 var ANALYZERS = [
-  { name: "dependency-cruiser", version: "16.10.4", command: 'npm exec --yes --package=dependency-cruiser@16.10.4 -- depcruise --no-config --output-type json --exclude "(^|/)(node_modules|dist|out|build|\\.git|\\.builderforce)(/|$)" .' },
-  { name: "jscpd", version: "4.0.5", command: 'npm exec --yes --package=jscpd@4.0.5 -- jscpd --silent --reporters json --min-lines 5 --min-tokens 50 --ignore "**/node_modules/**,**/.git/**,**/dist/**,**/out/**,**/build/**,**/.builderforce/**" --output .builderforce/code-analysis .' },
-  { name: "knip", version: "5.30.0", command: "npm exec --yes --package=knip@5.30.0 -- knip --reporter json --no-progress" }
+  { name: "dependency-cruiser", version: "16.10.4", command: 'npm exec --yes --package=dependency-cruiser@16.10.4 --package=typescript@5.6.3 --call="depcruise --config=.builderforce/code-analysis/dependencies.json --output-type=json ."' },
+  { name: "jscpd", version: "4.0.5", command: 'npm exec --yes --package=jscpd@4.0.5 --call="jscpd --silent --reporters=json --min-lines=5 --min-tokens=50 --ignore=**/node_modules/**,**/.git/**,**/dist/**,**/out/**,**/build/**,**/.builderforce/** --output=.builderforce/code-analysis ."' },
+  { name: "knip", version: "5.30.0", command: 'npm exec --yes --package=knip@5.30.0 --package=typescript@5.6.3 --call="knip --reporter=json --no-progress"' }
 ];
+function parseAnalyzerJson(text) {
+  const start = text.indexOf("{");
+  if (start < 0) throw new Error("No JSON report in analyzer output");
+  let depth = 0, quoted = false, escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const char = text[i];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') quoted = false;
+    } else if (char === '"') quoted = true;
+    else if (char === "{") depth++;
+    else if (char === "}" && --depth === 0) return JSON.parse(text.slice(start, i + 1));
+  }
+  throw new Error("Truncated analyzer JSON report");
+}
 var analyzeCodebaseTool = defineTool({
   name: "analyze_codebase",
-  description: "Measure JS/TS dependency edges and cycles with dependency-cruiser, duplicate code with jscpd, and unused-file/export/dependency candidates with Knip. Downloads pinned analyzer packages through npm cache on first use. Writes the jscpd JSON artifact under .builderforce/code-analysis. Returns a structured snapshot for the audit visualizer. Preserve failed-tool coverage; do not claim missing results are clean. Include the snapshot as analysis in save_audit_findings or audits.report_findings.",
-  parameters: { type: "object", properties: {} },
+  description: "Measure JS/TS dependency edges and cycles with dependency-cruiser, duplicate code with jscpd, and unused-file/export/dependency candidates with Knip. Downloads pinned analyzer packages through npm cache on first use. Writes per-scan artifacts under .builderforce/code-analysis. The audit host saves the full snapshot for the visualizer; cloud images return a bounded summary after upload. Report findings normally after this tool. Preserve failed-tool coverage; do not claim missing results are clean.",
+  parameters: { type: "object", properties: { path: { type: "string", description: "Relative project/package directory; use a smaller package for large monorepos. Defaults to repository root." } } },
   requires: ["shell", "repo.read"],
-  async execute(_args, ctx) {
+  async execute(args, ctx) {
+    const scope = typeof args.path === "string" ? args.path : ".";
+    if (!/^[a-zA-Z0-9_.][a-zA-Z0-9_./-]*$/.test(scope) || scope.split("/").includes("..")) return { data: { error: "path must be a relative project directory without traversal or shell syntax" } };
     const tools = [];
+    const id = crypto.randomUUID();
+    const outputDir = `.builderforce/code-analysis/${id}`;
     const outputs = [];
     for (const analyzer of ANALYZERS) {
       try {
-        if (analyzer.name === "jscpd") await ctx.caps.shell.run(`node -e "require('fs').rmSync('.builderforce/code-analysis/jscpd-report.json',{force:true})"`);
-        const result = await ctx.caps.shell.run(analyzer.command);
-        const artifact = analyzer.name === "jscpd" ? await ctx.caps.repo.read(".builderforce/code-analysis/jscpd-report.json") : void 0;
+        if (analyzer.name === "dependency-cruiser") {
+          const config = await ctx.caps.shell.run(`node -e "const f=require('fs');f.mkdirSync('${outputDir}',{recursive:true});f.writeFileSync('${outputDir}/dependencies.json',JSON.stringify({options:{exclude:{path:'(^|/)(node_modules|[.]git|[.]builderforce|dist|out|build)(/|$)'}}}))"`);
+          if (!config.ok) throw new Error("Could not create dependency analysis configuration");
+        }
+        if (analyzer.name === "jscpd") {
+          const cleanup = await ctx.caps.shell.run(`node -e "require('fs').mkdirSync('${outputDir}',{recursive:true})"`);
+          if (!cleanup.ok) throw new Error("Could not clear the previous duplication artifact");
+        }
+        const command = analyzer.name === "knip" ? scope === "." ? analyzer.command : analyzer.command.replace("knip --reporter", `cd ${scope} && knip --reporter`) : analyzer.command.replace(/ \."$/, ` ${scope}"`);
+        const result = await ctx.caps.shell.run(command.replaceAll(".builderforce/code-analysis", outputDir));
+        const artifact = analyzer.name === "jscpd" ? await ctx.caps.repoRead.readFile(`${outputDir}/jscpd-report.json`) : void 0;
         const text = artifact ? artifact.content : result.stdout;
         if (!text || artifact?.truncated) throw new Error("Analyzer output is empty or truncated; scan a smaller project");
-        const value = JSON.parse(text);
+        const value = parseAnalyzerJson(text);
         if (analyzer.name === "dependency-cruiser" && !Array.isArray(value.modules)) throw new Error("Invalid dependency report");
         if (analyzer.name === "jscpd" && !Array.isArray(value.duplicates)) throw new Error("Invalid duplication report");
         if (analyzer.name === "knip" && (!Array.isArray(value.files) || !Array.isArray(value.issues))) throw new Error("Invalid unused-code report");
+        const unresolved = analyzer.name === "dependency-cruiser" ? value.modules.flatMap((m) => m.dependencies ?? []).filter((d) => d.couldNotResolve).length : 0;
         outputs.push(value);
-        tools.push({ name: analyzer.name, version: analyzer.version, status: "complete" });
+        tools.push({ name: analyzer.name, version: analyzer.version, status: unresolved ? "failed" : "complete", ...unresolved ? { error: `${unresolved} imports could not be resolved; graph coverage is incomplete.` } : {} });
       } catch (error) {
         outputs.push(null);
         tools.push({ name: analyzer.name, version: analyzer.version, status: "failed", error: String(error).slice(0, 1e3) });
@@ -4081,16 +4116,17 @@ var analyzeCodebaseTool = defineTool({
     };
     const commit = await git("git rev-parse HEAD");
     const branch = await git("git branch --show-current");
-    const dirty = await git("git status --porcelain --untracked-files=no");
+    const dirty = await git("git status --porcelain --untracked-files=all");
+    const sourceChanges = dirty?.split("\n").filter((line2) => line2.trim() && !line2.slice(3).replace(/^"|"$/g, "").startsWith(".builderforce/code-analysis/"));
     const remote = (await git("git remote get-url origin"))?.replace(/^git@github.com:/, "https://github.com/").replace(/\.git$/, "");
     const repository = remote && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(remote) ? remote : void 0;
     const snapshot = {
       version: 1,
-      id: crypto.randomUUID(),
+      id,
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      source: { commit, branch, dirty: dirty === null ? null : dirty.length > 0, ...repository ? { repository } : {} },
+      source: { commit, branch, scope, dirty: dirty === null ? null : !!sourceChanges?.length, ...repository ? { repository } : {} },
       tools,
-      ...normalizeAnalysis(outputs[0], outputs[1], outputs[2])
+      ...normalizeAnalysis(outputs[0], outputs[1], outputs[2], scope)
     };
     return { data: { snapshot } };
   }
@@ -13505,7 +13541,6 @@ var GUEST_CANVAS_TOOL_NAMES = /* @__PURE__ */ new Set([
   ...GUEST_CAREER_TOOL_NAMES
 ]);
 var ACCOUNT_REQUIRED_SET = new Set(ACCOUNT_REQUIRED_CANVAS_TOOLS);
-var GUEST_GATED_SET = new Set(GUEST_GATED_CANVAS_TOOLS);
 var CANVAS_IMAGE_TOOL = "canvas_add_image";
 var CANVAS_GAME_TOOL = "canvas_add_game";
 var CANVAS_GAME_ACCOUNT_GATE = `Authoring a Roblox place needs a free Builderforce account: the Luau and the .rbxlx are written on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the Roblox build needs a free account, and then offer to build a playable WEB game right now with ${CANVAS_GAME_TOOL} at platform "web" \u2014 that works on this board with no account, plays immediately, and installs on a phone. Do NOT say that you cannot make games, and do NOT describe this as a technical limitation: it is the account, and it is one click away.`;
@@ -13862,7 +13897,6 @@ var PEOPLE_OBJECT_KINDS = [
   // terminated in a document and finished its real work somewhere else.
   "form"
 ];
-var PEOPLE_KIND_SET = new Set(PEOPLE_OBJECT_KINDS);
 var CONFIDENTIALITY_LEVELS = ["public", "internal", "restricted"];
 function isConfidentialityLevel(value) {
   return typeof value === "string" && CONFIDENTIALITY_LEVELS.includes(value);
@@ -13963,7 +13997,6 @@ var DATA_SCIENCE_OBJECT_KINDS = [
   // with no history and nothing to diff against.
   "prompt"
 ];
-var DATA_SCIENCE_KIND_SET = new Set(DATA_SCIENCE_OBJECT_KINDS);
 
 // ../packages/creation-canvas-contract/src/operations.ts
 var OPERATIONS_OBJECT_KINDS = [
@@ -14100,27 +14133,6 @@ var POSITIVE_TONE = [
   "accelerated"
 ];
 
-// ../packages/creation-canvas-contract/src/parties.ts
-var PARTY_ROLES = [
-  /** An account you have WON — the thing every commercial reference points at. */
-  "customer",
-  /** Somebody you buy from. The counterparty on a `bill`. */
-  "vendor",
-  /** A firm or angel in the raise. Not yet, and possibly never, a shareholder. */
-  "investor",
-  /** Owns shares today. The cap table's own row — see the note above. */
-  "equity_holder",
-  "partner",
-  "candidate",
-  "employee",
-  "freelancer",
-  "recruiter",
-  "seller",
-  /** Known to us and not yet any of the above. The honest default. */
-  "contact"
-];
-var PARTY_ROLE_SET = new Set(PARTY_ROLES);
-
 // ../packages/creation-canvas-contract/src/website.ts
 var WEBSITE_SECTION_KINDS = ["hero", "features", "content", "stats", "testimonial", "cta"];
 var WEBSITE_ADDABLE_SECTION_KINDS = WEBSITE_SECTION_KINDS.filter((kind) => kind !== "hero");
@@ -14147,7 +14159,6 @@ var SELL_MOTION_OBJECT_KINDS = [
   // handoff that carries what was built during the sale into the customer's workspace.
   "mutualActionPlan"
 ];
-var SELL_MOTION_KIND_SET = new Set(SELL_MOTION_OBJECT_KINDS);
 
 // ../packages/creation-canvas-contract/src/career.ts
 var CAREER_OBJECT_KINDS = [
@@ -14202,7 +14213,6 @@ var MARKETING_OBJECT_KINDS = [
   // invisible in exactly the place a person decides to press send.
   "audience"
 ];
-var MARKETING_KIND_SET = new Set(MARKETING_OBJECT_KINDS);
 var BRAND_BOUND_KINDS = [
   // The `creative.*` capabilities — every one of them reaches `builtin_creative_compose`.
   "image",
@@ -16953,10 +16963,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
     return creating.current;
   }, []);
   const onFirstUserTurn = (0, import_react14.useCallback)(async (id, firstUserText) => {
-    try {
-      captureRef.current?.(id, firstUserText);
-    } catch {
-    }
+    void captureRef.current?.(id, firstUserText);
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
   return { ensureChatId, onFirstUserTurn };

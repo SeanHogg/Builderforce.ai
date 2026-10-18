@@ -88,7 +88,7 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
 describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)', () => {
   it('advertises exactly what the image implements', () => {
     expect(names(CONTAINER_AGENT_TOOLS)).toEqual([
-      'ask_human', 'claim_resource', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status',
+      'analyze_codebase', 'ask_human', 'claim_resource', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status',
       'git_sync_latest', 'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
       'message_agent', 'read_file', 'release_resource', 'run_command', 'skill_list', 'skill_propose',
       'spawn_agent', 'spawn_agents', 'stop_agent', 'update_prd', 'wait_agents', 'web_search',

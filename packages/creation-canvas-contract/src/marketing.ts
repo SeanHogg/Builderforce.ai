@@ -63,7 +63,6 @@ export const MARKETING_OBJECT_KINDS = [
 
 export type MarketingObjectKind = typeof MARKETING_OBJECT_KINDS[number];
 
-const MARKETING_KIND_SET: ReadonlySet<string> = new Set<string>(MARKETING_OBJECT_KINDS);
 
 // ---------------------------------------------------------------------------
 // The brand binding

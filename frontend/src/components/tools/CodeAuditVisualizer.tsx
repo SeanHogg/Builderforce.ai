@@ -39,7 +39,7 @@ export function CodeAuditVisualizer({ analysis, openSource }: { analysis: CodeAn
     const historical = source !== current;
     return <div key={i}>{openSource && !(historical && (source.source.dirty !== false || !source.source.commit)) ? <button type="button" onClick={() => historical ? openSource(location, source.source.commit ?? undefined) : openSource(location)}>{text}</button> : href ? <a href={href} target="_blank" rel="noreferrer">{text}</a> : <code>{text}</code>}</div>;
   });
-  const issues = (items: AnalysisIssue[], source = snapshot) => items.length ? items.map((issue) => <article key={issue.id} style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 6 }}>
+  const issues = (items: AnalysisIssue[], source = snapshot) => items.length ? items.map((issue) => <article key={issue.id} style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
     <strong>{t(issue.kind)}</strong>{issue.symbol && <code> {issue.symbol}</code>}{locations(issue, source)}
     {issue.snippet && <pre style={{ overflow: 'auto', maxHeight: 180 }}>{issue.snippet}</pre>}
   </article>) : <p>{t('noFindings')}</p>;
@@ -63,20 +63,20 @@ export function CodeAuditVisualizer({ analysis, openSource }: { analysis: CodeAn
       <svg aria-label={t('graph')} role="img" viewBox="0 0 1000 450" style={{ width: '100%', minHeight: 350, background: 'var(--bg-base)', touchAction: 'none', border: '1px solid var(--border-subtle)' }}
         onPointerDown={(e) => { if (e.target === e.currentTarget) { setDrag({ x: e.clientX, y: e.clientY }); e.currentTarget.setPointerCapture(e.pointerId); } }}
         onPointerMove={(e) => { if (drag) { setPan({ x: pan.x + e.clientX - drag.x, y: pan.y + e.clientY - drag.y }); setDrag({ x: e.clientX, y: e.clientY }); } }} onPointerUp={() => setDrag(null)}>
-        <defs><marker id={markerId} viewBox="0 0 10 10" refX={10} refY={5} markerWidth={6} markerHeight={6} orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#64748b" /></marker></defs>
+        <defs><marker id={markerId} viewBox="0 0 10 10" refX={10} refY={5} markerWidth={6} markerHeight={6} orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--text-muted)" /></marker></defs>
         <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
           {graph.edges.map((edge) => {
             const from = graph.positions.get(group(edge.from)); const to = graph.positions.get(group(edge.to));
             if (!from || !to || group(edge.from) === group(edge.to)) return null;
             const removed = compareView && !newEdges.has(edgeId(edge));
             const added = compareView && !oldEdges.has(edgeId(edge));
-            return <path key={edgeId(edge)} d={`M${from.x + 100},${from.y + 45} L${to.x + 100},${to.y}`} markerEnd={`url(#${markerId})`} stroke={removed ? '#dc2626' : added ? '#16a34a' : edge.circular ? '#d97706' : '#64748b'} strokeWidth={edge.circular ? 3 : 1} strokeDasharray={removed ? '5 4' : undefined}><title>{`${edge.from} → ${edge.to}`}</title></path>;
+            return <path key={edgeId(edge)} d={`M${from.x + 100},${from.y + 45} L${to.x + 100},${to.y}`} markerEnd={`url(#${markerId})`} stroke={removed ? 'var(--error)' : added ? 'var(--success)' : edge.circular ? 'var(--warning)' : 'var(--text-muted)'} strokeWidth={edge.circular ? 3 : 1} strokeDasharray={removed ? '5 4' : undefined}><title>{`${edge.from} → ${edge.to}`}</title></path>;
           })}
           {graph.visible.map((name) => { const p = graph.positions.get(name)!;
             const removed = compareView && !current.nodes.some((file) => group(file) === name);
             const added = compareView && !baseline?.nodes.some((file) => group(file) === name);
             return <g key={name} role="button" tabIndex={0} aria-label={name} onClick={() => setSelected(name)} onKeyDown={(e) => { if (e.key === 'Enter') setSelected(name); }}>
-              <rect x={p.x} y={p.y} width={215} height={45} rx={5} fill="var(--bg-elevated, var(--vscode-editor-background, #fff))" stroke={removed ? '#dc2626' : added ? '#16a34a' : selected === name ? '#2563eb' : snapshot.edges.some((e) => e.circular && group(e.from) === name) ? '#d97706' : '#64748b'} strokeWidth={selected === name ? 3 : 1} />
+              <rect x={p.x} y={p.y} width={215} height={45} rx={5} fill="var(--bg-elevated)" stroke={removed ? 'var(--error)' : added ? 'var(--success)' : selected === name ? 'var(--info)' : snapshot.edges.some((e) => e.circular && group(e.from) === name) ? 'var(--warning)' : 'var(--text-muted)'} strokeWidth={selected === name ? 3 : 1} />
               <text x={p.x + 8} y={p.y + 26} fill="currentColor" fontSize={12}>{name.length > 28 ? `…${name.slice(-27)}` : name}</text><title>{name}</title>
             </g>; })}
         </g>

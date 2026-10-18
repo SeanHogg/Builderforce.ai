@@ -132,7 +132,6 @@ export const PEOPLE_OBJECT_KINDS = [
 
 export type PeopleObjectKind = typeof PEOPLE_OBJECT_KINDS[number];
 
-const PEOPLE_KIND_SET: ReadonlySet<string> = new Set<string>(PEOPLE_OBJECT_KINDS);
 
 // ---------------------------------------------------------------------------
 // Confidentiality — the precondition, not a feature

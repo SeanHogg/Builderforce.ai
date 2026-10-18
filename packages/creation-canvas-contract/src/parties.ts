@@ -57,7 +57,6 @@ export const PARTY_ROLES = [
 
 export type PartyRole = typeof PARTY_ROLES[number];
 
-const PARTY_ROLE_SET: ReadonlySet<string> = new Set<string>(PARTY_ROLES);
 
 /**
  * The roles a canvas `account` object may declare.

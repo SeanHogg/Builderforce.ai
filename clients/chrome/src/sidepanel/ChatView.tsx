@@ -97,12 +97,16 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     // reaches the cloud (migration 1245), which also covers an offline first turn.
     // Write-once: a chat that already has one keeps it, and the panel reads it from
     // the platform chat. Never awaited (the seam's contract) so a failed device write
-    // cannot break the first turn.
+    // cannot break the first turn — and so this port reports its own failure.
     onCaptureOriginalRequest: async (id, text) => {
-      const current = await services.records.getChat(id);
-      if (current?.originalRequest) return;
-      await services.records.updateChat(id, { originalRequest: text });
-      onChatsChanged();
+      try {
+        const current = await services.records.getChat(id);
+        if (current?.originalRequest) return;
+        await services.records.updateChat(id, { originalRequest: text });
+        onChatsChanged();
+      } catch (error) {
+        services.reportError(error, 'chat.captureOriginalRequest');
+      }
     },
   });
 

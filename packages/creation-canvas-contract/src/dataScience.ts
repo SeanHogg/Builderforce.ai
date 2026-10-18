@@ -82,7 +82,6 @@ export const DATA_SCIENCE_OBJECT_KINDS = [
 
 export type DataScienceObjectKind = typeof DATA_SCIENCE_OBJECT_KINDS[number];
 
-const DATA_SCIENCE_KIND_SET: ReadonlySet<string> = new Set<string>(DATA_SCIENCE_OBJECT_KINDS);
 
 // ---------------------------------------------------------------------------
 // The notebook kernel contract

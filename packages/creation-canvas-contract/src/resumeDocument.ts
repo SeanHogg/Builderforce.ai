@@ -121,7 +121,7 @@ function splitHeadings(headings: string[]): { organisation: string; role: string
   const roleIndex = parts.findIndex((part) => ROLE_WORDS.test(part));
   if (roleIndex === -1) return { organisation: parts[0]!, role: parts[1]! };
   const role = parts[roleIndex]!;
-  const organisation = parts.find((part, index) => index !== roleIndex) ?? '';
+  const organisation = parts.find((_, index) => index !== roleIndex) ?? '';
   return { organisation, role };
 }
 
@@ -150,7 +150,7 @@ function toEducation(entries: DatedEntry[]): CanvasResumeEducation[] {
       .filter((part) => part.length > 1);
     const studyIndex = parts.findIndex((part) => STUDY_WORDS.test(part));
     const studyType = studyIndex === -1 ? '' : parts[studyIndex]!;
-    const institution = parts.find((part, i) => i !== studyIndex) ?? '';
+    const institution = parts.find((_, i) => i !== studyIndex) ?? '';
     return {
       id: `education-${index + 1}`,
       institution,
@@ -219,7 +219,7 @@ function inferSummary(parsed: ParsedResume): string {
  * A résumé rarely states one, and a profile that shows a blank headline reads as
  * broken — so it is derived rather than left empty.
  */
-function inferHeadline(name: string, work: CanvasResumeWork[]): string {
+function inferHeadline(work: CanvasResumeWork[]): string {
   const current = work.find((entry) => entry.position);
   if (!current?.position) return '';
   return current.name ? `${current.position} at ${current.name}` : String(current.position);
@@ -239,7 +239,7 @@ export function resumeDocumentFromText(text: string): CanvasResumeDocument {
   return {
     basics: {
       name,
-      label: inferHeadline(name, work),
+      label: inferHeadline(work),
       ...(parsed.contact.email ? { email: parsed.contact.email } : {}),
       ...(parsed.contact.phone ? { phone: parsed.contact.phone } : {}),
       ...(linkedIn ?? parsed.contact.links[0] ? { url: linkedIn ?? parsed.contact.links[0] } : {}),

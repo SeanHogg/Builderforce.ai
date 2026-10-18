@@ -632,7 +632,6 @@ export const GUEST_CANVAS_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
 ]);
 
 const ACCOUNT_REQUIRED_SET: ReadonlySet<string> = new Set<string>(ACCOUNT_REQUIRED_CANVAS_TOOLS);
-const GUEST_GATED_SET: ReadonlySet<string> = new Set<string>(GUEST_GATED_CANVAS_TOOLS);
 
 /** True when this tool needs a signed-in tenant session to do anything at all. */
 export function canvasToolRequiresAccount(name: string): boolean {

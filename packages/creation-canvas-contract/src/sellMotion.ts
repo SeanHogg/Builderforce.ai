@@ -98,7 +98,6 @@ export const SELL_MOTION_OBJECT_KINDS = [
 
 export type SellMotionObjectKind = typeof SELL_MOTION_OBJECT_KINDS[number];
 
-const SELL_MOTION_KIND_SET: ReadonlySet<string> = new Set<string>(SELL_MOTION_OBJECT_KINDS);
 
 // ---------------------------------------------------------------------------
 // The quote — ONE definition of what a deal costs

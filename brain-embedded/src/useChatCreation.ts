@@ -45,10 +45,12 @@ export interface ChatCreationOptions {
    *
    * Same contract as `autoTitle`, deliberately: it is fired from the same place, in the
    * same turn, so the two can never drift apart, and it is NOT awaited — the first user
-   * turn must never wait on, or fail because of, a bookkeeping write. A host that does
-   * not pass it is unaffected (the default is a no-op).
+   * turn must never wait on, or fail because of, a bookkeeping write. Because nothing
+   * awaits it, the port OWNS its failure: it must catch and report its own rejection
+   * (as `useBrainChats.captureOriginalRequest` does) — one it lets escape is an
+   * unhandled rejection. A host that does not pass it is unaffected.
    */
-  onCaptureOriginalRequest?: (chatId: number, text: string) => void;
+  onCaptureOriginalRequest?: (chatId: number, text: string) => Promise<void> | void;
 }
 
 export interface ChatCreation {
@@ -100,17 +102,9 @@ export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRe
   const onFirstUserTurn = useCallback(async (id: number, firstUserText: string) => {
     // The origin-text capture is fired HERE, beside the auto-title, so it cannot drift
     // from it: every host that titles a chat from its first turn captures the request
-    // from that same turn. Fire-and-forget and fully guarded — a throwing or rejecting
-    // capture port must not surface into (nor abort) the user's first message, which is
-    // why this is wrapped in its own try/catch rather than sharing `autoTitle`'s await:
-    // `autoTitle` owns its failure and may reject (a host returning a promise it handles
-    // downstream), and awaiting it first would put the capture behind that latency and
-    // behind its rejection.
-    try {
-      captureRef.current?.(id, firstUserText);
-    } catch {
-      /* capture is best-effort bookkeeping — never let it break the first turn */
-    }
+    // from that same turn. Fired before, and not behind, `autoTitle`'s await so the
+    // capture never waits on that latency or its rejection; the port owns its failure.
+    void captureRef.current?.(id, firstUserText);
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
 

@@ -21,6 +21,17 @@
  * belongs in the baseline as work. If no, the argument goes here.
  */
 export default {
+  "system_audit_runs":
+    'the EXECUTION is already a kernel row — `execution_id` points at the cloud run that ' +
+      'reviews the source, and a local-executor audit has no execution at all. This row is ' +
+      'the audit REQUEST around it: the client-supplied `id` is the idempotency key a ' +
+      'retried POST resolves to, `baseline` is the provisional score frozen at request ' +
+      'time so a retry is never penalised twice, and `report_id` / `task_id` bind the ' +
+      'report and the remediation ticket it produced. `runs` has a bigserial id (no caller ' +
+      'key), no project, and no foreign keys to `tool_runs` or `tasks`; folding it in would ' +
+      'drop the `project_id` cascade and move the three bindings the claim-then-report ' +
+      'compare-and-set filters on into an `output` blob.',
+
   "evermind_learning_runs":
     'a ledger entry for one text-learn, not an execution the platform queues or ' +
       'retries: it is written once, synchronously, after the weight update already ' +

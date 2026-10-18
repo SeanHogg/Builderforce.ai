@@ -14,9 +14,7 @@ import { toolLocaleFromHeaders, type ToolLocale } from '../../application/tools/
 import { headerHints } from '../../application/email/emailLocaleResolver';
 import { dispatchCloudRunForTask, dispatchError } from '../../application/runtime/dispatchCloudRun';
 import { humanDirected, stampExecutionAuthority } from '../../application/runtime/executionAuthority';
-import { and, desc, eq, inArray } from 'drizzle-orm';
-import { systemAuditRuns, projects } from '../../infrastructure/database/schema';
-import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { findSoleActiveAuditRunId } from '../../application/tools/auditRunLookup';
 import { daysParam } from './queryParams';
 import { parseBody, parseOptionalBody, z } from './requestBody';
 
@@ -177,16 +175,8 @@ export function createToolRoutes(
     const body = await parseBody(c, FindingsBody);
     const tenantId = c.get('tenantId') as number;
     const auditId = c.req.param('auditId');
-    await loadProjectInTenant(db, tenantId, body.projectId, { id: projects.id });
-    let runId = body.runId;
-    if (!runId) {
-      const active = await db.select({ id: systemAuditRuns.id }).from(systemAuditRuns).where(and(
-        eq(systemAuditRuns.tenantId, tenantId), eq(systemAuditRuns.projectId, body.projectId), eq(systemAuditRuns.auditId, auditId),
-        inArray(systemAuditRuns.status, ['running', 'queued', 'remediation_pending']),
-      )).orderBy(desc(systemAuditRuns.createdAt)).limit(2);
-      if (active.length !== 1) return c.json({ error: 'Supply runId to identify the audit run' }, 409);
-      runId = active[0]!.id;
-    }
+    const runId = body.runId ?? await findSoleActiveAuditRunId(db, { tenantId, projectId: body.projectId, auditId });
+    if (!runId) return c.json({ error: 'Supply runId to identify the audit run' }, 409);
     const outcome = await auditRunner.reportFindings(c.env as Env, {
       tenantId, projectId: body.projectId, auditId, runId, findings: body.findings, ...(body.analysis ? { analysis: body.analysis } : {}), userId: c.get('userId') as string,
     });

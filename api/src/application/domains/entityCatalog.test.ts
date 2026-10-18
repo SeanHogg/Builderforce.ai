@@ -301,7 +301,20 @@ describe('the entity catalog', () => {
     // ingest, and presence that expires in five minutes; every reader is
     // `ReplayReadService`, scoped `{ tenantId, siteId }` (D17). The seven Insights
     // DEFINITION tables of 1216 ARE registered (growth/entities.ts).
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(41);
+    //
+    // Ceiling moved 41 → 43 (2026-10-18) with `system_audit_runs` and
+    // `system_audit_remediations` (migration 1243), adjudicated rather than counted.
+    // `system_audit_runs` is the family reason: the thing a person opens is the audit
+    // REPORT, a `tool_runs` row (`report_id`), and `tool_runs` predates the 0418 series so
+    // it is not in the catalog to be joined. The run row is that report's lifecycle — a
+    // status machine (queued → running → reporting → completed / remediation_pending)
+    // whose transitions are guarded compare-and-sets in `AuditRunner` (claim before
+    // report, retry sweep after 180s); a generic PATCH of `status` would skip the claim
+    // and file duplicate remediation tickets. `system_audit_remediations` is not
+    // entity-shaped at all: no title, no status, just a (tenant, project, fingerprint)
+    // uniqueness key and a lease, the dedup index `auditRemediation.ts` claims so one
+    // finding maps to one ticket across retries. Nobody opens a lease.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(43);
   });
 
   it('declares nothing that no migration creates', () => {

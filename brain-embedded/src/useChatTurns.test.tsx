@@ -82,17 +82,18 @@ describe('useChatCreation — original-request capture seam', () => {
     expect(onCaptureOriginalRequest).toHaveBeenCalledTimes(1);
   });
 
-  it('does not await the capture: a THROWING port cannot break the first turn', async () => {
+  it('does not await the capture: a port that never settles cannot hold up the first turn', async () => {
     const autoTitle = vi.fn().mockResolvedValue(undefined);
-    const onCaptureOriginalRequest = vi.fn(() => { throw new Error('persistence down'); });
+    // A hung bookkeeping write — the port owns its failure, so the hook never waits on it.
+    const onCaptureOriginalRequest = vi.fn(() => new Promise<void>(() => {}));
     const { result } = renderHook(() => useChatCreation({
       chatId: 3, create: vi.fn(), autoTitle, onCaptureOriginalRequest,
     }));
 
     await expect(result.current.onFirstUserTurn(3, 'first prompt')).resolves.toBeUndefined();
     expect(onCaptureOriginalRequest).toHaveBeenCalledTimes(1);
-    // The failure is swallowed, so the auto-title on the SAME turn still runs —
-    // a broken bookkeeping write must not silently cost the chat its title either.
+    // The auto-title on the SAME turn still runs — a stuck capture must not cost the
+    // chat its title either.
     expect(autoTitle).toHaveBeenCalledWith(3, 'first prompt');
   });
 
