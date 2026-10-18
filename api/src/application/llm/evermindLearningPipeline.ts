@@ -174,7 +174,7 @@ export async function reviewLearningCandidate(
     status: verdict,
     reviewedAt: new Date(),
     reviewedBy: reviewerId,
-  }).where(eq(evermindLearningCandidates.id, row.id)).returning({
+  }).where(scopedToTenant(evermindLearningCandidates, tenantId, eq(evermindLearningCandidates.id, row.id))).returning({
     id: evermindLearningCandidates.id,
     status: evermindLearningCandidates.status,
   });
@@ -207,7 +207,7 @@ export async function transferLearningCandidate(
     transferredAt: now,
     ...(typeof bench.before === 'number' ? { benchBefore: bench.before } : {}),
     ...(typeof bench.after === 'number' ? { benchAfter: bench.after } : {}),
-  }).where(eq(evermindLearningCandidates.id, row.id));
+  }).where(scopedToTenant(evermindLearningCandidates, tenantId, eq(evermindLearningCandidates.id, row.id)));
   return { ok: true, id: row.id };
 }
 

@@ -86,34 +86,32 @@ describe('the verify plan the image asks for', () => {
 describe('the container verify op: events, then memory (findings 11 & 12)', () => {
   /**
    * A DB stub that records what a run wrote onto its timeline. `recordCloudToolEvent`
-   * inserts through Drizzle (`insert(table).values(row)`), so the stub intercepts that
-   * chain rather than raw SQL, and reads the tool name back off the recorded row.
+   * inserts through Drizzle (`insert(table).values(row).returning(...)`) and stores the
+   * event's detail as a JSON string in the row's `args` column — so the stub intercepts
+   * that chain and parses `args` back out, which is how the real rows read.
    */
   function stubDb() {
     const events: Array<{ toolName: string; category: string; detail?: unknown }> = [];
-    const values = (row: Record<string, unknown>) => {
-      events.push({
-        toolName: String(row.toolName ?? ''),
-        category: String(row.category ?? ''),
-        detail: row.detail,
-      });
-      return { onConflictDoNothing: async () => undefined };
-    };
+    const values = (row: Record<string, unknown>) => ({
+      returning: async () => {
+        events.push({
+          toolName: String(row.toolName ?? ''),
+          category: String(row.category ?? ''),
+          detail: typeof row.args === 'string' ? JSON.parse(row.args) : row.args,
+        });
+        return [{ id: events.length }];
+      },
+    });
     const db = {
       insert: () => ({ values }),
       update: () => ({ set: () => ({ where: async () => undefined }) }),
       prepare: () => ({ bind: () => ({ first: async () => null, run: async () => undefined, all: async () => ({ results: [] }) }) }),
     } as never;
-    return {
-      events,
-      db,
-      /** The recorded events carrying a run-policy detail — i.e. phase transitions. */
-      policyEvents: () => events.filter((e) => e.category === 'policy'),
-    };
+    return { events, db };
   }
 
   it('emits verify_started and the paired completion, then commits memory', async () => {
-    const { db, events, policyEvents } = stubDb();
+    const { db, events } = stubDb();
     const result = await OP_HANDLERS.verify!({
       db,
       env: { KV: { get: async () => null, put: async () => undefined } } as never,
