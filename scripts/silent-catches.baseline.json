@@ -10,7 +10,7 @@
     "empty-catch": 178,
     "empty-promise-catch": 76,
     "literal-promise-catch": 263,
-    "console-only": 17,
+    "console-only": 16,
     "durable-object-direct-report": 0
   },
   "agent-runtime/src": {

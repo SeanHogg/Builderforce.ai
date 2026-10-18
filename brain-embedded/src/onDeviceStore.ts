@@ -29,6 +29,7 @@
  */
 
 import { hasWebGPU } from './pageEngines/webgpu';
+import { reportPageEngineFailure } from './pageEngines/engineFailure';
 import { ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore } from './onDeviceMemory';
 
 /**
@@ -65,7 +66,10 @@ function sharedEmbedder(): Promise<Embedder | null> {
     // Drop the memoised promise so the next question retries rather than inheriting
     // a transient failure for the rest of the tab.
     if (embedder === attempt) embedder = null;
-    console.warn('[on-device-store] unavailable — on-device memory off:', err);
+    // Through the package reporter, not a bare console.warn: the silent-catch guard
+    // ratchets console-only catches in this package to zero, and a dropped reason is
+    // exactly how "on-device memory never answers" becomes undiagnosable.
+    reportPageEngineFailure('browser', 'load', err);
     return null;
   });
   embedder = attempt;
@@ -98,7 +102,7 @@ export function loadOnDeviceAnswerStore(scope: OnDeviceStoreScope): Promise<OnDe
       ttlMs: 24 * 60 * 60 * 1_000,
     });
   })().catch((err) => {
-    console.warn('[on-device-store] unavailable — on-device memory off:', err);
+    reportPageEngineFailure('browser', 'load', err);
     return null;
   });
   // Pin a store only when one was built. A null is a failed load, and pinning it would

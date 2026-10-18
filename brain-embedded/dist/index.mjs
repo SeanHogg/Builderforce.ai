@@ -6230,7 +6230,7 @@ function sharedEmbedder() {
     return (text) => runtime.embed(text);
   })().catch((err) => {
     if (embedder === attempt) embedder = null;
-    console.warn("[on-device-store] unavailable \u2014 on-device memory off:", err);
+    reportPageEngineFailure("browser", "load", err);
     return null;
   });
   embedder = attempt;
@@ -6251,7 +6251,7 @@ function loadOnDeviceAnswerStore(scope) {
       ttlMs: 24 * 60 * 60 * 1e3
     });
   })().catch((err) => {
-    console.warn("[on-device-store] unavailable \u2014 on-device memory off:", err);
+    reportPageEngineFailure("browser", "load", err);
     return null;
   });
   stores.set(scope, built);
