@@ -211,6 +211,10 @@ export default defineConfig({
   worker: { format: 'es' },
   build: {
     outDir: path.resolve(HERE, '../media/webview'),
+    // The webview runs in VS Code's own (current) Chromium, so nothing needs lowering to
+    // Vite's default browser floor — and esbuild ≥0.28 refuses to lower some destructuring
+    // (the Mamba worker's `const [a, b] = await …`) to it, failing the worker build.
+    target: 'es2022',
     /**
      * ONE stylesheet.
      *
