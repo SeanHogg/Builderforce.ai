@@ -336,249 +336,53 @@
      `data-host="editor"` from the first paint — it is a prop, not a media query —
      so a 500px editor panel keeps desktop chrome. Nested rules below are descendants
      of that shell, not a second `.canvasShell` selector. */
-  .canvasShell:not([data-host='editor']) { flex:1; height:100%; min-height:0;
-  .saved,.secondaryButton { display:none; }
-  /* THE CANVAS APP BAR AND THE SURFACE STRIP, the phone's own chrome. Absolute at the
-     top of the shell, opaque, and MEASURED — `--canvas-top-chrome-space` is taken off
-     this wrapper (see `CreationCanvas.tsx`), so the band it publishes is the bar plus
-     the strip rather than one of them. */
-  .canvasPhoneChrome { position:absolute; z-index:20; top:0; left:0; right:0; display:flex; flex-direction:column; }
-  .surfaceStrip { display:flex; }
-  /* The header has already given up its save button and its collaborators by here, so
-     the segmented switcher stands down too and the phone's own control column carries
-     the surface decision. Exactly ONE of the two is ever on screen.
-
-     The CARD stands down, not just the tabs inside it. `.surfaceTabs` is only ever drawn
-     inside `.surfaceChips`, so hiding the inner group left the phone with an empty float
-     card — invisible while it was 3px of padding, a 44px hole once the top row got one
-     shared height. Hiding the card is the same decision stated on the box that has it. */
-  .surfaceChips { display:none; }
-  /* ── The phone's session actions ────────────────────────────────────────────────
-     `display:none` on a class name is what used to take undo, redo, diagnostics, the
-     outcome scorecard AND every way to invite anybody off a phone — silently, because
-     nothing in the code said those five were meant to survive. Placement is declared in
-     `lib/canvasSessionActions.ts` now: an action marked `phone:'bar'` keeps its own
-     button here, everything else is drawn by the ••• sheet below, and the two sets are
-     complements of each other so an action cannot fall out of both.
-
-     The troughs go with them — a segmented shell around two 30px buttons is border on a
-     screen that has none to spare — leaving the commands themselves at a 40px touch
-     target, which is what they were missing even where they did survive. */
-  .barGroupRow { min-height:0; }
-  .barGroupRow[data-shell='trough'] { gap:2px; padding:0; border:0; border-radius:0; background:transparent; }
-  /* The bare shell carries the trough's padding on a desktop so the two line up; on a
-     phone the trough gives that padding back, so the bare row has to give back the
-     same or it becomes the one group inset from the rest. */
-  .barGroupRow[data-shell='bare'] { padding:0; border:0; }
-  /* NOTE THE SCOPE. This used to be a bare `.barGroupCaption { display:none }`, which
-     was correct while the command bar was the only thing drawing a captioned group. The
-     actions sheet draws the SAME groups with the SAME captions now, and that sheet is a
-     phone-only chrome — an unscoped rule would have hidden the one set of captions this
-     redesign exists to put in front of a phone user. */
-  .commandBar .barGroupCaption { display:none; }
-  /* NOTHING STANDS DOWN INSIDE THE BAR ANY MORE, because the BAR stands down. Six
-     rules used to live here — a 40px control token, a `[data-phone='menu']` hide, a
-     `:has()` rule that removed a group once every member had gone, and a phone-only
-     section inside the ••• sheet to catch what the hide had taken. They were all the
-     same idea: fit the desktop bar onto a 360px screen by removing most of it. The bar
-     is not rendered at this width at all (`CreationCanvas.tsx`), and the composer's "+"
-     opens one sheet with every action in it, captioned by the same arc groups. The rule
-     below is belt-and-braces for the one frame before `usePhoneViewport` has an
-     answer — `false` until mount, by design. */
-  .commandBar { display:none; }
-  /* PHONE CHROME. Everything floats, so a narrow screen tightens the cards rather than
-     dropping what is in them. The roster in particular STAYS — it is the slot the whole
-     collapse rule exists to protect, and a 360px screen is exactly where "who else is
-     editing this" is hardest to work out from the board itself. The bar scrolls
-     sideways instead, which loses placement and never loses a control. */
-  .sessionPill { left:8px; top:8px; right:auto; max-width:calc(100% - 16px); gap:4px; padding:4px 7px 4px 6px; }
-  .sessionPill .spark { display:none; }
-  /* NO LITERAL HERE ANY MORE. The fused phase/surface widget stands down
-     (`.surfaceChips { display:none }` above) and the canvas app bar plus the surface
-     strip take the top of the screen instead — a real, always-present band that
-     `useChromeSpace` measures off `.canvasPhoneChrome`. The `46px` guess that used to
-     sit here was in force at every phone width, because the element the variable is
-     measured from was the one element `display:none` on a phone. */
-  .commandBar { left:8px; right:8px; bottom:8px; transform:none; max-width:none; gap:4px; padding:5px; overflow-x:auto; scrollbar-width:none; }
-  .commandBar::-webkit-scrollbar { display:none; }
-  .commandBar > * { flex:none; }
-  .sessionActions { flex:none; gap:2px; }
+  .canvasShell:not([data-host='editor']) {
+  flex:1;
+  height:100%;
+  min-height:0;
+  .secondaryButton { display:none; }
   /* The VS Code webview is routinely narrower than this breakpoint, and its capture
-     actions are the whole reason the canvas is in an editor. They stay, and scroll
-     sideways rather than pushing the title off the bar. */
+       actions are the whole reason the canvas is in an editor. They stay, and scroll
+       sideways rather than pushing the title off the bar. */
   .hostActions { max-width:34vw; overflow-x:auto; scrollbar-width:none; }
   .hostActions::-webkit-scrollbar { display:none; }
   .hostActions .secondaryButton { display:grid; min-width:36px; }
   .flowWrap {
-    /* On a phone the dock is a bottom sheet, so it claims NO side. The width is
-       written inline by the component, and !important is what lets the phone
-       layout win against it — otherwise the palette toggle and the board chrome
-       are pushed a dock's width off a 360px screen. */
-    --brain-dock-left:0px !important;
-    --brain-dock-right:0px !important;
-    height:calc(100% - 50px);
+  /* On a phone the dock is a bottom sheet, so it claims NO side. The width is
+         written inline by the component, and !important is what lets the phone
+         layout win against it — otherwise the palette toggle and the board chrome
+         are pushed a dock's width off a 360px screen. */
+      --brain-dock-left:0px !important;
+      --brain-dock-right:0px !important;
+      height:calc(100% - 50px);
   }
   /* The composer is a dock on phones, so the interactive viewport must end
-     above it. Nodes and React Flow controls can no longer settle underneath
-     the prompt. */
+       above it. Nodes and React Flow controls can no longer settle underneath
+       the prompt. */
   .flowWrap :global(.react-flow) { height:calc(100% - var(--composer-space)); }
-  .node { max-width:calc(100vw - 32px); }
-  .mobileAction { display:inline-flex; min-width:36px; min-height:36px; align-items:center; justify-content:center; padding:7px 8px; }.mobileAction span { display:none; }.primaryButton { min-height:36px; padding:7px 10px; font-size:10px; }
-  /* The sheet is now the phone's ONLY route to five session actions, so it stops being
-     a two-column grid of 28px rows. One column, one 40px target per row, and it may
-     scroll — a menu that runs off the bottom of a phone is a menu with a hidden half. */
-  /* A SHEET, not a popover. `placement='sheet'` is what the actions sheet and the app
-     bar's own menus declare: they are not opened from a bar (there is no bar at this
-     width), so "above the button that opened me" has no anchor to mean anything against.
-     It stops under the canvas app bar and sits ON the composer, both measured, and
-     scrolls down — the direction a thumb expects. */
-  .moreMenu[data-placement='sheet'] {
-    top:calc(var(--canvas-top-chrome-space) + 8px);
-    right:0; bottom:var(--composer-space); left:0;
-    z-index:18;
-    width:auto; max-height:none;
-    display:flex; flex-direction:column; gap:4px;
-    padding:0 16px 20px;
-    border-bottom:0; border-radius:var(--radius-lg) var(--radius-lg) 0 0;
-    overflow-y:auto; overscroll-behavior:contain;
-  }
-  .moreMenu { bottom:calc(100% + 10px); right:0; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 120px); overflow-y:auto; overscroll-behavior:contain; grid-template-columns:1fr; box-sizing:border-box; }
-  .moreMenu button,.moreMenu label { min-height:40px; padding:8px 10px; font-size:12px; }
-  .moreMenu select { max-width:50%; min-height:32px; }
-  .shareMenu { bottom:calc(100% + 10px); right:0; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 120px); overflow-y:auto; overscroll-behavior:contain; box-sizing:border-box; }
-  .shareMenu button { min-height:40px; }
-  .shareMenu > div { flex-wrap:wrap; }
-  .shareMenu input,.shareMenu select { min-height:40px; flex:1 1 140px; }
-  /* A big picker sheet, not a tight popover — it still reads from the TOP of the
-     screen regardless of where its `•••` trigger sits, so `bottom` is reset rather
-     than restated. */
-  .templateMenu { top:8px; right:8px; left:8px; bottom:auto; width:auto; max-height:calc(100% - var(--composer-space) - 16px); box-sizing:border-box; }
-  .mergePanel { inset:var(--canvas-top-chrome-space) 8px calc(var(--composer-space) + 8px); width:auto; box-sizing:border-box; }
   /* The phone session bar is 50px, not 54 — keep the board's height in step with
-     it while the canvas owns the viewport. */
+       it while the canvas owns the viewport. */
   &[data-fullscreen='true'] .flowWrap { height:calc(100% - 50px); }
-  /* On a phone the panel is the width of the screen and sits under the top chrome; a
-     560px wide reading has nowhere to go, so both readings share the same box and only
-     the CONTENT changes between them. */
-  .anchoredPanel, .anchoredPanel[data-expanded='true'] {
-    left:8px !important;
-    right:8px;
-    top:var(--canvas-top-chrome-space) !important;
-    width:auto;
-    max-height:calc(100% - var(--canvas-top-chrome-space) - var(--composer-space) - 16px);
-  }
-  .anchoredPanel::before { display:none; }
-  /* THE COMPOSER OWNS THE BOTTOM EDGE. There is no command bar under it at this width,
-     so `--canvas-command-bar-space` is 0 (the bar is unmounted, and `useChromeSpace`
-     publishes `0px` for a host it is not given a node for — which is precisely why the
-     bar is not merely `display:none`: a hidden box measures zero from the TOP of the
-     viewport, and the prompt would be pushed most of a screen up).
-
-     Edge to edge and squared off, like a phone's own keyboard accessory row: an inset
-     card with a radius floating above the bottom nav reads as something that might
-     scroll away, and this is the one control that never does. */
-  .composerDock {
-    left:0; right:0; bottom:0; width:auto; min-width:0; max-width:none; margin-inline:0;
-    padding:8px 10px 10px;
-    border-top:1px solid var(--bf-border);
-    background:var(--bf-surface);
-    box-shadow:0 -10px 34px var(--canvas-shadow);
-  }
-  /* The drag handle and the float/dock control are desktop affordances: there is
-     nowhere on a 360px screen to drag a full-width card TO, and no Brain panel beside
-     the board to dock it into. Closing stays — it is the way to see the whole surface. */
-  .composerDock .dragHandle { display:none; }
-  .composerActionsTrigger { display:grid; }
-  .composerIntent { min-height:44px; }
-  .composerIntentSegment { height:40px; padding:0 12px 0 10px; font-size:13px; }
-  .composer { --prompt-panel-action-gap:4px; }
-  .scopeChip { max-width:120px; padding:0 8px; }
-  .scopeChip select { width:100%; max-width:none; }
-  /* `.composer:global(.bf-model-picker) [role='dialog']` used to sit here, nudging the
-     model picker back onto a narrow screen. `bf-model-picker` is not a class any
-     component in this repo has ever set — grep the whole tree and this rule was its only
-     mention — so it was a second dead selector beside the thirteen above, and one that
-     would have silently kept a dialog off-screen if the picker ever needed the nudge.
-     Removed rather than repaired: there is nothing to key on. */
-  .iconButton { width:32px; height:32px; }
   .flowWrap :global(.react-flow__minimap) { display:none; }
   .flowWrap :global(.react-flow__controls) { display:none; }
   /* BRAIN NEVER COVERS THE SURFACE UNINVITED, and on a phone that means a SHEET with a
-     declared top and bottom rather than a card with a height.
+       declared top and bottom rather than a card with a height.
 
-     `height: min(58%, 420px)` was the bug: 58% of a 640px viewport is 371px of
-     conversation starting wherever the arithmetic put it — over the surface's heading on
-     a short screen, three lines tall on a tall one, and in neither case related to what
-     was above it. The sheet now starts UNDER the app bar and the surface strip
-     (`--canvas-top-chrome-space`, measured) and ends ON the composer
-     (`--composer-space`, measured), so the two things a reader must keep — which canvas
-     this is, and the box they type in — are never underneath it. `[data-size]` goes with
-     the height: a sheet between two measured edges has one size.
+       `height: min(58%, 420px)` was the bug: 58% of a 640px viewport is 371px of
+       conversation starting wherever the arithmetic put it — over the surface's heading on
+       a short screen, three lines tall on a tall one, and in neither case related to what
+       was above it. The sheet now starts UNDER the app bar and the surface strip
+       (`--canvas-top-chrome-space`, measured) and ends ON the composer
+       (`--composer-space`, measured), so the two things a reader must keep — which canvas
+       this is, and the box they type in — are never underneath it. `[data-size]` goes with
+       the height: a sheet between two measured edges has one size.
 
-     An inline Brain needs nothing here: it is an Object, and Objects already size
-     themselves to the board. */
-  .brainDock {
-    top:calc(var(--canvas-top-chrome-space) + 8px);
-    left:0; right:0; bottom:var(--composer-space);
-    width:auto; height:auto; max-height:none;
-    border-radius:var(--radius-lg) var(--radius-lg) 0 0;
-    border-left:0; border-right:0; border-bottom:0;
-    box-shadow:0 -10px 34px var(--canvas-shadow);
-  }
-  .brainDockResizer { display:none; }
-  .brainDockGrabber { display:grid; }
-  /* The veil stops at the app bar, deliberately: the bar and the strip stay LIVE, so a
-     reader who opened the conversation can still leave the canvas or change surface
-     without dismissing it first. Tapping the veil closes the sheet, which is the gesture
-     a bottom sheet already teaches. */
-  .canvasSheetVeil { display:block; top:var(--canvas-top-chrome-space); bottom:var(--composer-space); }
-  /* Centred above the composer rather than pinned to a corner: it carries a COUNT now,
-     which is an announcement and not a corner affordance. */
-  .brainDockLauncher[data-side='left'],
-  .brainDockLauncher[data-side='right'] {
-    left:50%; right:auto; transform:translateX(-50%);
-    min-height:44px; padding:0 16px 0 10px; font-size:13px;
-  }
-  .canvasOutline { left:8px; right:8px; width:auto; max-height:min(46%,300px); }
+       An inline Brain needs nothing here: it is an Object, and Objects already size
+       themselves to the board. */
+  .brainDock { top:calc(var(--canvas-top-chrome-space) + 8px); left:0; right:0; bottom:var(--composer-space); width:auto; height:auto; max-height:none; border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-left:0; border-right:0; border-bottom:0; box-shadow:0 -10px 34px var(--canvas-shadow); }
   /* The bottom sheet claims no side (the side insets zero out with the dock width
-     above), so a surface that has taken the centre gives up the bottom edge instead. */
-  .flowWrap:not([data-view='graph']) {
-    --canvas-reserved-bottom:var(--composer-space, 0px);
-  }
-  /* A phone has no room for a reading measure — the column IS the viewport. The rail
-     still owns the left edge, so the transcript starts clear of it. */
-  .chatSurface { --chat-surface-width:100%; }
-  /* Same on the object surfaces: the sheet gives up its measure, and the header stops
-     reserving the rail's gutter because the rail moves to the bottom edge here. */
-  .pageSheet { --page-sheet-width:100%; padding:12px 10px 20px; }
-  .pageSheet[data-runtime='document'] { --page-sheet-width:100%; padding:8px 6px 16px; }
-  .objectSurfaceHeader { gap:8px; padding:8px 10px; }
-  .objectSurfaceTitle strong { font-size:12px; }
-  .playStage,.timelineStage,.sceneGeneratorStage { padding:10px 8px 14px; }
-  /* Two side-by-side columns don't fit a phone either — stack controls above preview,
-     same call `.worldStage` makes for its own three columns just below. */
-  .sceneGeneratorStage { flex-direction:column; }
-  /* Three side-by-side columns don't fit a phone. The viewport keeps the room; the
-     palette and the properties rail become short horizontal-scroll strips above and
-     below it instead of disappearing — a phone can still place and edit a prop. */
-  .worldStage { flex-direction:column; }
-  .worldPalette,.worldProperties { width:auto; max-height:112px; border-right:0; border-left:0; border-bottom:1px solid var(--canvas-line); overflow-y:hidden; overflow-x:auto; }
-  .worldPaletteGroup { display:inline-block; vertical-align:top; padding-right:4px; }
-  .worldPaletteTiles { grid-auto-flow:column; grid-template-columns:none; grid-auto-columns:56px; }
-  .chatSurfaceHeader { padding:10px 12px 8px; }
-  .chatSurface > :global(.bf-surface__body) { padding:0 2px 0 54px; }
-  .chatSurface .chatSurfaceFooter { padding:4px 12px 8px; }
-  /* NO FLOATING RAIL. The phone's surface switcher was a column of five unlabelled
-     glyphs parked over the board's top-left corner — over the surface's own heading —
-     with a `[data-brain-open='true']` rule that laid it DOWN in a row across that
-     heading whenever the Brain sheet opened. Both the column and the flip are gone:
-     `.surfaceStrip` is a worded band under the canvas app bar, where a phone's tabs
-     belong, and it is never over the work. */
-  .historyPanel,.diagnosticsPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; }
-  .changeSetPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; max-height:none; display:flex; flex-direction:column; }
-  .changeSetPanel > div { flex:1; min-height:0; max-height:none; }
-  .selectionToolbar { right:8px; left:8px; max-width:none; transform:none; overflow-x:auto; justify-content:flex-start; }
-  .collaborators span:nth-child(2),.collaborators span:nth-child(3) { display:none; }
+       above), so a surface that has taken the centre gives up the bottom edge instead. */
+  .flowWrap:not([data-view='graph']) { --canvas-reserved-bottom:var(--composer-space, 0px); }
   }
   /* Capture actions in a narrow editor still scroll rather than pushing the title. */
   .canvasShell[data-host='editor'] .hostActions { max-width:34vw; overflow-x:auto; scrollbar-width:none; }

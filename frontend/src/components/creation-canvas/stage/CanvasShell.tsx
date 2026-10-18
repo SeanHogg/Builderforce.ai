@@ -32,6 +32,7 @@ export function CanvasShell({ shellRef, fullscreen, hosted, lens, brainDockSide,
       ref={shellRef}
       className={`${styles.canvasShell} app-full-height`}
       data-fullscreen={fullscreen ? 'true' : 'false'}
+      data-canvas-shell=""
       data-host={hosted ? 'editor' : undefined}
       data-lens={lens}
       data-phase={phase.phase}

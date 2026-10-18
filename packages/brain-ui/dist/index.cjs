@@ -32,7 +32,7 @@ var src_exports = {};
 __export(src_exports, {
   AiSurface: () => AiSurface,
   Avatar: () => Avatar,
-  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded19.BUILDERFORCE_PRODUCT_NAME,
+  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded20.BUILDERFORCE_PRODUCT_NAME,
   BrainComposer: () => BrainComposer,
   BrainMark: () => BrainMark,
   BrainTimeline: () => BrainTimeline,
@@ -50,7 +50,8 @@ __export(src_exports, {
   DEFAULT_EVERMIND_LABELS: () => DEFAULT_EVERMIND_LABELS,
   DEFAULT_LIVE_ACTIVITY_LABELS: () => DEFAULT_LIVE_ACTIVITY_LABELS,
   DEFAULT_LOCAL_MODEL_LABELS: () => DEFAULT_LOCAL_MODEL_LABELS,
-  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded19.DEFAULT_MODEL_IDENTITY,
+  DEFAULT_MENTION_LABELS: () => DEFAULT_MENTION_LABELS,
+  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded20.DEFAULT_MODEL_IDENTITY,
   DEFAULT_MODEL_MOVE_LABELS: () => DEFAULT_MODEL_MOVE_LABELS,
   DEFAULT_PENDING_CHANGES_LABELS: () => DEFAULT_PENDING_CHANGES_LABELS,
   DEFAULT_PERSONA_PICKER_LABELS: () => DEFAULT_PERSONA_PICKER_LABELS,
@@ -61,6 +62,7 @@ __export(src_exports, {
   DEFAULT_RECIPIENT_PICKER_LABELS: () => DEFAULT_RECIPIENT_PICKER_LABELS,
   DEFAULT_SPEND_LABELS: () => DEFAULT_SPEND_LABELS,
   DEFAULT_SURFACE_HEADER_LABELS: () => DEFAULT_SURFACE_HEADER_LABELS,
+  DEFAULT_TICKET_TAG_LABELS: () => DEFAULT_TICKET_TAG_LABELS,
   DEFAULT_TIMELINE_LABELS: () => DEFAULT_TIMELINE_LABELS,
   DEFAULT_TOOL_CONFIRM_LABELS: () => DEFAULT_TOOL_CONFIRM_LABELS,
   DEFAULT_WORK_STATUS_LABELS: () => DEFAULT_WORK_STATUS_LABELS,
@@ -73,9 +75,9 @@ __export(src_exports, {
   LiveActivity: () => LiveActivity,
   LocalModelList: () => LocalModelList,
   LocalModelRow: () => LocalModelRow,
-  MODEL_CATEGORIES: () => import_builderforce_brain_embedded19.MODEL_CATEGORIES,
+  MODEL_CATEGORIES: () => import_builderforce_brain_embedded20.MODEL_CATEGORIES,
   Markdown: () => Markdown,
-  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded19.PROJECT_EVERMIND_MODEL_PREFIX,
+  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded20.PROJECT_EVERMIND_MODEL_PREFIX,
   PendingChangesList: () => PendingChangesList,
   PendingQuestionBanner: () => PendingQuestionBanner,
   PersonaPicker: () => PersonaPicker,
@@ -104,29 +106,36 @@ __export(src_exports, {
   ToolConfirmBar: () => ToolConfirmBar,
   ToolStep: () => ToolStep,
   WorkStatusPanel: () => WorkStatusPanel,
-  activeModelKey: () => import_builderforce_brain_embedded19.activeModelKey,
+  activeModelKey: () => import_builderforce_brain_embedded20.activeModelKey,
   askUserAnchorId: () => import_builderforce_brain_embedded3.askUserAnchorId,
   attachmentsOf: () => attachmentsOf,
   avatarColor: () => avatarColor,
-  buildModelItems: () => import_builderforce_brain_embedded19.buildModelItems,
+  brainComposerLabelsFrom: () => brainComposerLabelsFrom,
+  buildModelItems: () => import_builderforce_brain_embedded20.buildModelItems,
   buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
-  byoVendorLabel: () => import_builderforce_brain_embedded19.byoVendorLabel,
+  bundleLookup: () => bundleLookup,
+  byoVendorLabel: () => import_builderforce_brain_embedded20.byoVendorLabel,
   cachedConsumptionSnapshot: () => cachedConsumptionSnapshot,
   chatActivityLabelsFrom: () => chatActivityLabelsFrom,
   chatDiagnosticsReads: () => chatDiagnosticsReads,
+  chatHistoryLabelsFrom: () => chatHistoryLabelsFrom,
   chatSwitcherLabel: () => chatSwitcherLabel,
+  chatTicketsLabelsFrom: () => chatTicketsLabelsFrom,
   chatTicketsLabelsFromBundle: () => chatTicketsLabelsFromBundle,
   commandOf: () => commandOf,
+  composerCatalogLoaded: () => composerCatalogLoaded,
   composerLabels: () => composerLabels,
+  composerLabelsFrom: () => composerLabelsFrom,
+  composerModel: () => composerModel,
   createChatTicketsRestAdapter: () => createChatTicketsRestAdapter,
   createEvermindRestAdapter: () => createEvermindRestAdapter,
-  displayModelName: () => import_builderforce_brain_embedded19.displayModelName,
+  displayModelName: () => import_builderforce_brain_embedded20.displayModelName,
   evermindLabelsFromBundle: () => evermindLabelsFromBundle,
   evermindLearnedStatus: () => evermindLearnedStatus,
   evermindNextAction: () => evermindNextAction,
   fetchConsumptionSnapshot: () => fetchConsumptionSnapshot,
-  filterModelItems: () => import_builderforce_brain_embedded19.filterModelItems,
+  filterModelItems: () => import_builderforce_brain_embedded20.filterModelItems,
   formatContextTokens: () => formatContextTokens,
   formatDownloadSize: () => formatDownloadSize,
   formatDuration: () => formatDuration,
@@ -138,38 +147,43 @@ __export(src_exports, {
   healthRingColor: () => healthRingColor,
   initialsOf: () => initialsOf,
   invalidateConsumptionSnapshot: () => invalidateConsumptionSnapshot,
-  isManagerRole: () => import_builderforce_brain_embedded20.isManagerRole,
+  isManagerRole: () => import_builderforce_brain_embedded21.isManagerRole,
   liveActivityLabelsFrom: () => liveActivityLabelsFrom,
   loadEvermindBuilds: () => loadEvermindBuilds,
   localModelLabelsFrom: () => localModelLabelsFrom,
-  modelCategoryLabel: () => import_builderforce_brain_embedded19.modelCategoryLabel,
-  modelInUse: () => import_builderforce_brain_embedded19.modelInUse,
+  modelCategoryLabel: () => import_builderforce_brain_embedded20.modelCategoryLabel,
+  modelInUse: () => import_builderforce_brain_embedded20.modelInUse,
   modelMoveLine: () => modelMoveLine,
   modelMoveOf: () => modelMoveOf,
+  modelSelectionFrom: () => modelSelectionFrom,
   parseAskUser: () => import_builderforce_brain_embedded3.parseAskUser,
   pendingChangesSummary: () => pendingChangesSummary,
-  perMillionUsd: () => import_builderforce_brain_embedded19.perMillionUsd,
+  perMillionUsd: () => import_builderforce_brain_embedded20.perMillionUsd,
   planIsPaid: () => planIsPaid,
   preferredEvermindBuild: () => preferredEvermindBuild,
-  premiumCostLabel: () => import_builderforce_brain_embedded19.premiumCostLabel,
-  productForPlan: () => import_builderforce_brain_embedded19.productForPlan,
-  productModelName: () => import_builderforce_brain_embedded19.productModelName,
+  premiumCostLabel: () => import_builderforce_brain_embedded20.premiumCostLabel,
+  productForPlan: () => import_builderforce_brain_embedded20.productForPlan,
+  productModelName: () => import_builderforce_brain_embedded20.productModelName,
   promptOptionsLabels: () => promptOptionsLabels,
+  promptOptionsLabelsFrom: () => promptOptionsLabelsFrom,
   promptTrailingAction: () => promptTrailingAction,
   publishedEvermindModels: () => publishedEvermindModels,
   resolvePendingChangesLabels: () => resolvePendingChangesLabels,
   resolveTeacherOptions: () => resolveTeacherOptions,
-  revealsModelId: () => import_builderforce_brain_embedded19.revealsModelId,
+  revealsModelId: () => import_builderforce_brain_embedded20.revealsModelId,
   selectPendingAskUser: () => import_builderforce_brain_embedded3.selectPendingAskUser,
   serializeAskUser: () => import_builderforce_brain_embedded3.serializeAskUser,
   shellOutcomeOf: () => shellOutcomeOf,
   spendLabels: () => spendLabels,
+  spendLabelsFrom: () => spendLabelsFrom,
   strandedReplyKey: () => strandedReplyKey,
   streamingNode: () => streamingNode,
+  stringsFrom: () => stringsFrom,
   stripAskUser: () => import_builderforce_brain_embedded3.stripAskUser,
   subscribeConsumptionSnapshot: () => subscribeConsumptionSnapshot,
   timelineCatalogLookup: () => timelineCatalogLookup,
   timelineLabelsFrom: () => timelineLabelsFrom,
+  toolConfirmLabelsFrom: () => toolConfirmLabelsFrom,
   toolConfirmPreview: () => toolConfirmPreview,
   toolPreview: () => toolPreview,
   toolStepView: () => toolStepView,
@@ -182,11 +196,12 @@ __export(src_exports, {
   useLocalModels: () => useLocalModels,
   useMentionAutocomplete: () => useMentionAutocomplete,
   usePopover: () => usePopover,
-  useQueuedTurns: () => useQueuedTurns,
   useRecipientChoice: () => useRecipientChoice,
   useTicketAutocomplete: () => useTicketAutocomplete,
   useVoiceDictation: () => useVoiceDictation,
-  workStatusLabels: () => workStatusLabels
+  withLocalModels: () => withLocalModels,
+  workStatusLabels: () => workStatusLabels,
+  workStatusLabelsFrom: () => workStatusLabelsFrom
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -1835,6 +1850,50 @@ function BrainTimelineInner({
 }
 var BrainTimeline = import_react7.default.memo(BrainTimelineInner);
 
+// src/spend/format.ts
+function formatUsd(usd, locale) {
+  const abs = Math.abs(usd);
+  if (abs > 0 && abs < 0.01) {
+    const tiny = new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(0.01);
+    return `${usd < 0 ? "\u2212" : ""}<${tiny}`;
+  }
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: abs >= 100 ? 0 : 2
+  }).format(usd);
+}
+function formatTokens(tokens, locale) {
+  return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(tokens);
+}
+function formatPct(fraction) {
+  return String(Math.round(fraction * 100));
+}
+function fill(template, values) {
+  return template.replace(/\{(\w+)\}/g, (whole, key) => key in values ? String(values[key]) : whole);
+}
+
+// src/labelCatalog.ts
+function stringsFrom(defaults, lookup, prefix = "") {
+  const out = { ...defaults };
+  for (const [key, fallback] of Object.entries(defaults)) {
+    if (typeof fallback === "string") out[key] = lookup(`${prefix}${key}`) || fallback;
+  }
+  return out;
+}
+function bundleLookup(bundle, keyOf, format = String) {
+  return (key, values) => {
+    const bundleKey = keyOf(key);
+    const text = bundleKey ? bundle[bundleKey] : void 0;
+    if (!text) return void 0;
+    if (!values) return text;
+    const formatted = {};
+    for (const [k, v] of Object.entries(values)) formatted[k] = typeof v === "number" ? format(v) : v;
+    return fill(text, formatted);
+  };
+}
+
 // src/timelineCatalog.ts
 function timelineCatalogLookup(namespace) {
   return (path) => {
@@ -1845,13 +1904,6 @@ function timelineCatalogLookup(namespace) {
     }
     return typeof node === "string" && node.length > 0 ? node : void 0;
   };
-}
-function stringsFrom(defaults, lookup, prefix = "") {
-  const out = { ...defaults };
-  for (const [key, fallback] of Object.entries(defaults)) {
-    if (typeof fallback === "string") out[key] = lookup(`${prefix}${key}`) ?? fallback;
-  }
-  return out;
 }
 function liveActivityLabelsFrom(lookup, overrides) {
   return { ...stringsFrom(DEFAULT_LIVE_ACTIVITY_LABELS, lookup, "live."), ...overrides };
@@ -1989,6 +2041,10 @@ var DEFAULT_TOOL_CONFIRM_LABELS = {
   deny: "Cancel",
   aria: "Approve this action"
 };
+function toolConfirmLabelsFrom(lookup) {
+  const approveAllTitle = lookup("approveAllTitle");
+  return { ...stringsFrom(DEFAULT_TOOL_CONFIRM_LABELS, lookup), ...approveAllTitle ? { approveAllTitle } : {} };
+}
 var PREVIEW_MAX = 240;
 function toolConfirmPreview(req) {
   const command = req.name === "run_command" && typeof req.args?.command === "string" ? req.args.command : null;
@@ -2513,6 +2569,9 @@ var DEFAULT_CHAT_HISTORY_LABELS = {
   summarize: "Summarize",
   delete: "Delete"
 };
+function chatHistoryLabelsFrom(lookup) {
+  return stringsFrom(DEFAULT_CHAT_HISTORY_LABELS, lookup);
+}
 function ChatHistoryList({ loading, total, children, labels: overrides, id, className }) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const hasRows = Array.isArray(children) ? children.length > 0 : children != null && children !== false;
@@ -2954,12 +3013,7 @@ var DEFAULT_LOCAL_MODEL_LABELS = {
 };
 var LOCAL_MODEL_LABEL_FIELDS = Object.keys(DEFAULT_LOCAL_MODEL_LABELS);
 function localModelLabelsFrom(lookup) {
-  const out = { ...DEFAULT_LOCAL_MODEL_LABELS };
-  for (const field of LOCAL_MODEL_LABEL_FIELDS) {
-    const text = lookup(field);
-    if (text) out[field] = text;
-  }
-  return out;
+  return stringsFrom(DEFAULT_LOCAL_MODEL_LABELS, (key) => lookup(key));
 }
 var LOCAL_UNSUPPORTED_LABEL = {
   webgpu_unavailable: "localReasonWebgpu",
@@ -3005,6 +3059,9 @@ var DEFAULT_PROMPT_OPTIONS_LABELS = {
 };
 function promptOptionsLabels(overrides) {
   return overrides ? { ...DEFAULT_PROMPT_OPTIONS_LABELS, ...overrides } : DEFAULT_PROMPT_OPTIONS_LABELS;
+}
+function promptOptionsLabelsFrom(lookup) {
+  return stringsFrom(DEFAULT_PROMPT_OPTIONS_LABELS, lookup);
 }
 
 // src/popover/usePopover.ts
@@ -3170,30 +3227,6 @@ var import_builderforce_brain_embedded11 = require("@seanhogg/builderforce-brain
 
 // src/localModels/LocalModelRow.tsx
 var import_react17 = require("react");
-
-// src/spend/format.ts
-function formatUsd(usd, locale) {
-  const abs = Math.abs(usd);
-  if (abs > 0 && abs < 0.01) {
-    const tiny = new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(0.01);
-    return `${usd < 0 ? "\u2212" : ""}<${tiny}`;
-  }
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: abs >= 100 ? 0 : 2
-  }).format(usd);
-}
-function formatTokens(tokens, locale) {
-  return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(tokens);
-}
-function formatPct(fraction) {
-  return String(Math.round(fraction * 100));
-}
-function fill(template, values) {
-  return template.replace(/\{(\w+)\}/g, (whole, key) => key in values ? String(values[key]) : whole);
-}
 
 // src/localModels/localModelView.ts
 var GB = 1e9;
@@ -3663,7 +3696,7 @@ function PromptOptionsMenu({
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded19 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded20 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/picker/PickerShell.tsx
 var import_jsx_runtime34 = require("react/jsx-runtime");
@@ -4299,6 +4332,14 @@ function spendLabels(overrides) {
     ...overrides,
     sources: { ...DEFAULT_SPEND_LABELS.sources, ...overrides.sources },
     sourceHints: { ...DEFAULT_SPEND_LABELS.sourceHints, ...overrides.sourceHints }
+  };
+}
+function spendLabelsFrom(lookup) {
+  const d = DEFAULT_SPEND_LABELS;
+  return {
+    ...stringsFrom(d, lookup),
+    sources: stringsFrom(d.sources, lookup, "sources."),
+    sourceHints: stringsFrom(d.sourceHints, lookup, "sourceHints.")
   };
 }
 
@@ -5177,6 +5218,7 @@ function useChatActivitySignal(messages) {
 var import_react31 = require("react");
 var import_builderforce_brain_embedded16 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime48 = require("react/jsx-runtime");
+var DEFAULT_MENTION_LABELS = { title: "Direct to", agent: "Agent", human: "Person" };
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
   const [token, setToken] = (0, import_react31.useState)(null);
@@ -5249,7 +5291,7 @@ function useMentionAutocomplete(opts) {
   return { onKeyDown, onSelect: recompute, popup, open };
 }
 function MentionPopup({ matches, index, labels, onHover, onPick }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("div", { style: POP.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("ul", { role: "listbox", "aria-label": labels?.title ?? "Direct to", style: POP.list, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("div", { style: POP.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("ul", { role: "listbox", "aria-label": labels?.title ?? DEFAULT_MENTION_LABELS.title, style: POP.list, children: [
     labels?.title && /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("li", { "aria-hidden": true, style: POP.group, children: labels.title }),
     matches.map((m, i) => /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)(
       "li",
@@ -5265,7 +5307,7 @@ function MentionPopup({ matches, index, labels, onHover, onPick }) {
         children: [
           /* @__PURE__ */ (0, import_jsx_runtime48.jsx)(Avatar, { name: m.name, kind: m.kind, size: 20 }),
           /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { style: POP.name, children: m.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { style: POP.kind, children: m.kind === "agent" ? labels?.agent ?? "Agent" : labels?.human ?? "Person" })
+          /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { style: POP.kind, children: m.kind === "agent" ? labels?.agent ?? DEFAULT_MENTION_LABELS.agent : labels?.human ?? DEFAULT_MENTION_LABELS.human })
         ]
       },
       `${m.kind}:${m.ref}`
@@ -5312,6 +5354,7 @@ var POP = {
 var import_react32 = require("react");
 var import_builderforce_brain_embedded17 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime49 = require("react/jsx-runtime");
+var DEFAULT_TICKET_TAG_LABELS = { title: "Tag ticket", status: "Status", noMatches: "No tickets found" };
 function useTicketAutocomplete(opts) {
   const { textareaRef, value, setValue, tickets, onPick, labels, disabled } = opts;
   const [token, setToken] = (0, import_react32.useState)(null);
@@ -5386,9 +5429,9 @@ function useTicketAutocomplete(opts) {
 }
 function TicketPopup({ matches, index, labels, onHover, onPick }) {
   if (matches.length === 0) {
-    return /* @__PURE__ */ (0, import_jsx_runtime49.jsx)("div", { style: POP2.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime49.jsx)("div", { style: POP2.empty, children: labels?.noMatches ?? "No tickets found" }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime49.jsx)("div", { style: POP2.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime49.jsx)("div", { style: POP2.empty, children: labels?.noMatches ?? DEFAULT_TICKET_TAG_LABELS.noMatches }) });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime49.jsx)("div", { style: POP2.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime49.jsxs)("ul", { role: "listbox", "aria-label": labels?.title ?? "Tag ticket", style: POP2.list, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime49.jsx)("div", { style: POP2.anchor, children: /* @__PURE__ */ (0, import_jsx_runtime49.jsxs)("ul", { role: "listbox", "aria-label": labels?.title ?? DEFAULT_TICKET_TAG_LABELS.title, style: POP2.list, children: [
     labels?.title && /* @__PURE__ */ (0, import_jsx_runtime49.jsx)("li", { "aria-hidden": true, style: POP2.group, children: labels.title }),
     matches.map((t, i) => {
       const ref = t.key ?? String(t.id);
@@ -5464,32 +5507,23 @@ var POP2 = {
 };
 
 // src/chatTickets/labelBundle.ts
-function chatTicketsLabelsFromBundle(bundle, prefix = "ct.") {
+function chatTicketsLabelsFrom(lookup) {
   const d = DEFAULT_CHAT_TICKETS_LABELS;
-  const s = (key) => bundle[`${prefix}${key}`] || void 0;
-  const out = { ...d };
-  for (const [key, fallback] of Object.entries(d)) {
-    if (typeof fallback === "string") out[key] = s(key) ?? fallback;
-  }
-  const kind = { ...d.kind };
-  for (const k of Object.keys(kind)) kind[k] = s(`kind.${k}`) ?? kind[k];
-  const tpl = (key, fallback, vars) => {
-    const template = s(key);
-    return template ? (...args) => fill(template, vars(...args)) : fallback;
-  };
-  const one = s("ticketCountOne");
-  const many = s("ticketCountMany");
+  const tpl = (key, fallback, vars) => (...args) => lookup(key, vars(...args)) || fallback(...args);
   return {
-    ...out,
-    kind,
+    ...stringsFrom(d, lookup),
+    kind: stringsFrom(d.kind, lookup, "kind."),
     ringAria: tpl("ringAria", d.ringAria, (label, pct) => ({ label, pct })),
     inParent: tpl("inParent", d.inParent, (parent) => ({ parent })),
-    ticketCount: one && many ? (n2) => fill(n2 === 1 ? one : many, { n: n2 }) : d.ticketCount,
+    ticketCount: (n2) => lookup(n2 === 1 ? "ticketCountOne" : "ticketCountMany", { n: n2 }) || d.ticketCount(n2),
     overallAria: tpl("overallAria", d.overallAria, (pct) => ({ pct })),
     runStarted: tpl("runStarted", d.runStarted, (agent) => ({ agent })),
     mergeAction: tpl("mergeAction", d.mergeAction, (n2) => ({ n: n2 })),
     mergedN: tpl("mergedN", d.mergedN, (n2) => ({ n: n2 }))
   };
+}
+function chatTicketsLabelsFromBundle(bundle, prefix = "ct.") {
+  return chatTicketsLabelsFrom(bundleLookup(bundle, (key) => `${prefix}${key}`));
 }
 
 // src/chatTickets/chatDiagnosticsReads.ts
@@ -7303,7 +7337,7 @@ function preferredEvermindBuild(builds, pick = {}) {
 }
 
 // src/index.ts
-var import_builderforce_brain_embedded20 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded21 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/evermind/labelBundle.ts
 var STATIC_KEYS = [
@@ -7988,6 +8022,16 @@ function workStatusLabels(overrides) {
 function labelForKey(map, key) {
   return map[key] ?? key.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
+function workStatusLabelsFrom(lookup) {
+  const d = DEFAULT_WORK_STATUS_LABELS;
+  return {
+    ...stringsFrom(d, lookup),
+    billing: stringsFrom(d.billing, lookup, "billing."),
+    plans: stringsFrom(d.plans, lookup, "plans."),
+    meters: stringsFrom(d.meters, lookup, "meters."),
+    units: stringsFrom(d.units, lookup, "units.")
+  };
+}
 
 // src/workStatus/relativeTime.ts
 function relativeFuture(iso, locale, now = Date.now()) {
@@ -8295,6 +8339,18 @@ var DEFAULT_COMPOSER_LABELS = {
 function composerLabels(overrides) {
   return overrides ? { ...DEFAULT_COMPOSER_LABELS, ...overrides } : DEFAULT_COMPOSER_LABELS;
 }
+function composerLabelsFrom(lookup, overrides) {
+  const d = DEFAULT_COMPOSER_LABELS;
+  return {
+    ...stringsFrom(d, lookup),
+    modeLabel: (mode) => lookup(`modeLabel.${mode}`) || d.modeLabel(mode),
+    modeHint: (mode) => lookup(`modeHint.${mode}`) || d.modeHint(mode),
+    effortDesc: (level, answer) => lookup(`effortDesc.${level}`, { answer }) || d.effortDesc(level, answer),
+    effortThinkingSuffix: (thinking) => lookup("effortThinkingSuffix", { thinking }) || d.effortThinkingSuffix(thinking),
+    thinkingOnDesc: (budget) => lookup("thinkingOnDesc", { budget }) || d.thinkingOnDesc(budget),
+    ...overrides
+  };
+}
 
 // src/composer/BrainComposer.tsx
 var import_jsx_runtime66 = require("react/jsx-runtime");
@@ -8508,40 +8564,46 @@ function useChatMemorySwitch(opts) {
   return { enabled, setEnabled };
 }
 
-// src/composer/useQueuedTurns.ts
-var import_react45 = require("react");
-function useQueuedTurns({ running, send, resetKey = null, textOf }) {
-  const [queued, setQueued] = (0, import_react45.useState)([]);
-  const nextId = (0, import_react45.useRef)(0);
-  const sendRef = (0, import_react45.useRef)(send);
-  sendRef.current = send;
-  const textOfRef = (0, import_react45.useRef)(textOf);
-  textOfRef.current = textOf;
-  const runningRef = (0, import_react45.useRef)(running);
-  const submit = (0, import_react45.useCallback)((value) => {
-    const text = typeof value === "string" ? value.trim() : (textOfRef.current?.(value) ?? "").trim();
-    if (!text) return false;
-    if (!runningRef.current) return false;
-    const held = typeof value === "string" ? text : value;
-    setQueued((current) => [...current, { id: nextId.current += 1, value: held }]);
-    return true;
-  }, []);
-  runningRef.current = running;
-  const remove = (0, import_react45.useCallback)((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
-  const clear = (0, import_react45.useCallback)(() => setQueued((current) => current.length ? [] : current), []);
-  const prev = (0, import_react45.useRef)({ key: resetKey, running });
-  (0, import_react45.useEffect)(() => {
-    const was = prev.current;
-    prev.current = { key: resetKey, running };
-    if (was.key !== resetKey || !was.running || running || queued.length === 0) return;
-    const [next, ...rest] = queued;
-    setQueued(rest);
-    if (next) sendRef.current(next.value);
-  }, [running, queued, resetKey]);
-  (0, import_react45.useEffect)(() => {
-    setQueued([]);
-  }, [resetKey]);
-  return { items: queued, count: queued.length, submit, remove, clear };
+// src/composer/brainComposerLabels.ts
+function scopedLookup(lookup, part) {
+  return (key, values) => lookup(`${part}.${key}`, values);
+}
+function brainComposerLabelsFrom(lookup, overrides) {
+  return {
+    composer: composerLabelsFrom(scopedLookup(lookup, "composer"), overrides?.composer),
+    options: { ...promptOptionsLabelsFrom(scopedLookup(lookup, "options")), ...overrides?.options },
+    status: workStatusLabelsFrom(scopedLookup(lookup, "status")),
+    spend: spendLabelsFrom(scopedLookup(lookup, "spend")),
+    mention: stringsFrom(DEFAULT_MENTION_LABELS, scopedLookup(lookup, "mention")),
+    ticket: stringsFrom(DEFAULT_TICKET_TAG_LABELS, scopedLookup(lookup, "ticket"))
+  };
+}
+
+// src/composer/composerModel.ts
+var import_builderforce_brain_embedded19 = require("@seanhogg/builderforce-brain-embedded");
+function composerCatalogLoaded(catalog) {
+  return catalog != null && catalog !== import_builderforce_brain_embedded19.EMPTY_GATEWAY_MODEL_OPTIONS;
+}
+function withLocalModels(catalog, local) {
+  const base = catalog ?? import_builderforce_brain_embedded19.EMPTY_GATEWAY_MODEL_OPTIONS;
+  if (!local || local.length === 0) return base;
+  return { ...base, options: { ...base.options, local } };
+}
+function modelSelectionFrom(pin) {
+  if (pin.model && pin.strict !== false) return { mode: "model", model: pin.model };
+  return pin.routingMode === "byo_pool" ? { mode: "byo_pool" } : { mode: "auto" };
+}
+function composerModel(input) {
+  const listed = withLocalModels(input.catalog, input.local);
+  return {
+    selection: input.selection,
+    options: listed.options,
+    onChange: input.onChange,
+    effective: input.effective,
+    identity: (input.catalog ? input.catalog.identity : void 0) ?? input.fallbackIdentity,
+    localStore: input.localStore,
+    identityPending: input.identityPending ?? !composerCatalogLoaded(input.catalog)
+  };
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
@@ -8565,6 +8627,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf }) {
   DEFAULT_EVERMIND_LABELS,
   DEFAULT_LIVE_ACTIVITY_LABELS,
   DEFAULT_LOCAL_MODEL_LABELS,
+  DEFAULT_MENTION_LABELS,
   DEFAULT_MODEL_IDENTITY,
   DEFAULT_MODEL_MOVE_LABELS,
   DEFAULT_PENDING_CHANGES_LABELS,
@@ -8576,6 +8639,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf }) {
   DEFAULT_RECIPIENT_PICKER_LABELS,
   DEFAULT_SPEND_LABELS,
   DEFAULT_SURFACE_HEADER_LABELS,
+  DEFAULT_TICKET_TAG_LABELS,
   DEFAULT_TIMELINE_LABELS,
   DEFAULT_TOOL_CONFIRM_LABELS,
   DEFAULT_WORK_STATUS_LABELS,
@@ -8623,17 +8687,24 @@ function useQueuedTurns({ running, send, resetKey = null, textOf }) {
   askUserAnchorId,
   attachmentsOf,
   avatarColor,
+  brainComposerLabelsFrom,
   buildModelItems,
   buildSettledTimeline,
   buildTimeline,
+  bundleLookup,
   byoVendorLabel,
   cachedConsumptionSnapshot,
   chatActivityLabelsFrom,
   chatDiagnosticsReads,
+  chatHistoryLabelsFrom,
   chatSwitcherLabel,
+  chatTicketsLabelsFrom,
   chatTicketsLabelsFromBundle,
   commandOf,
+  composerCatalogLoaded,
   composerLabels,
+  composerLabelsFrom,
+  composerModel,
   createChatTicketsRestAdapter,
   createEvermindRestAdapter,
   displayModelName,
@@ -8661,6 +8732,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf }) {
   modelInUse,
   modelMoveLine,
   modelMoveOf,
+  modelSelectionFrom,
   parseAskUser,
   pendingChangesSummary,
   perMillionUsd,
@@ -8670,6 +8742,7 @@ function useQueuedTurns({ running, send, resetKey = null, textOf }) {
   productForPlan,
   productModelName,
   promptOptionsLabels,
+  promptOptionsLabelsFrom,
   promptTrailingAction,
   publishedEvermindModels,
   resolvePendingChangesLabels,
@@ -8679,12 +8752,15 @@ function useQueuedTurns({ running, send, resetKey = null, textOf }) {
   serializeAskUser,
   shellOutcomeOf,
   spendLabels,
+  spendLabelsFrom,
   strandedReplyKey,
   streamingNode,
+  stringsFrom,
   stripAskUser,
   subscribeConsumptionSnapshot,
   timelineCatalogLookup,
   timelineLabelsFrom,
+  toolConfirmLabelsFrom,
   toolConfirmPreview,
   toolPreview,
   toolStepView,
@@ -8697,10 +8773,11 @@ function useQueuedTurns({ running, send, resetKey = null, textOf }) {
   useLocalModels,
   useMentionAutocomplete,
   usePopover,
-  useQueuedTurns,
   useRecipientChoice,
   useTicketAutocomplete,
   useVoiceDictation,
-  workStatusLabels
+  withLocalModels,
+  workStatusLabels,
+  workStatusLabelsFrom
 });
 //# sourceMappingURL=index.cjs.map

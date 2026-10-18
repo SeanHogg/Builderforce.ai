@@ -395,3 +395,95 @@
 /* THE BAR'S CURRENT GROUP — the phase this canvas is in, tinted in its own hue. */
 .barGroup[data-current='true'] .barGroupRow { background:color-mix(in srgb, var(--bar-stage-hue) 14%, var(--canvas-panel)); border-color:var(--bar-stage-hue); }
 .barGroup[data-current='true'] .barGroupCaption { font-weight:700; }
+
+/* PHONE LAYOUT (<=767px) for this module's classes. Moved from CreationCanvas.module.css: the classes live
+   here now, so a rule written there matched nothing (CSS-Module hashing). The shell is found by
+   `data-canvas-shell` instead of a class. The editor host (`data-host="editor"`) keeps desktop chrome. */
+@media (max-width:767px) {
+  /* The header has already given up its save button and its collaborators by here, so
+       the segmented switcher stands down too and the phone's own control column carries
+       the surface decision. Exactly ONE of the two is ever on screen.
+
+       The CARD stands down, not just the tabs inside it. `.surfaceTabs` is only ever drawn
+       inside `.surfaceChips`, so hiding the inner group left the phone with an empty float
+       card — invisible while it was 3px of padding, a 44px hole once the top row got one
+       shared height. Hiding the card is the same decision stated on the box that has it. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .surfaceChips { display:none; }
+  /* ── The phone's session actions ────────────────────────────────────────────────
+       `display:none` on a class name is what used to take undo, redo, diagnostics, the
+       outcome scorecard AND every way to invite anybody off a phone — silently, because
+       nothing in the code said those five were meant to survive. Placement is declared in
+       `lib/canvasSessionActions.ts` now: an action marked `phone:'bar'` keeps its own
+       button here, everything else is drawn by the ••• sheet below, and the two sets are
+       complements of each other so an action cannot fall out of both.
+
+       The troughs go with them — a segmented shell around two 30px buttons is border on a
+       screen that has none to spare — leaving the commands themselves at a 40px touch
+       target, which is what they were missing even where they did survive. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .barGroupRow { min-height:0; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .barGroupRow[data-shell='trough'] { gap:2px; padding:0; border:0; border-radius:0; background:transparent; }
+  /* The bare shell carries the trough's padding on a desktop so the two line up; on a
+       phone the trough gives that padding back, so the bare row has to give back the
+       same or it becomes the one group inset from the rest. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .barGroupRow[data-shell='bare'] { padding:0; border:0; }
+  /* NOTE THE SCOPE. This used to be a bare `.barGroupCaption { display:none }`, which
+       was correct while the command bar was the only thing drawing a captioned group. The
+       actions sheet draws the SAME groups with the SAME captions now, and that sheet is a
+       phone-only chrome — an unscoped rule would have hidden the one set of captions this
+       redesign exists to put in front of a phone user. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .commandBar .barGroupCaption { display:none; }
+  /* NOTHING STANDS DOWN INSIDE THE BAR ANY MORE, because the BAR stands down. Six
+       rules used to live here — a 40px control token, a `[data-phone='menu']` hide, a
+       `:has()` rule that removed a group once every member had gone, and a phone-only
+       section inside the ••• sheet to catch what the hide had taken. They were all the
+       same idea: fit the desktop bar onto a 360px screen by removing most of it. The bar
+       is not rendered at this width at all (`CreationCanvas.tsx`), and the composer's "+"
+       opens one sheet with every action in it, captioned by the same arc groups. The rule
+       below is belt-and-braces for the one frame before `usePhoneViewport` has an
+       answer — `false` until mount, by design. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .commandBar { display:none; }
+  /* PHONE CHROME. Everything floats, so a narrow screen tightens the cards rather than
+       dropping what is in them. The roster in particular STAYS — it is the slot the whole
+       collapse rule exists to protect, and a 360px screen is exactly where "who else is
+       editing this" is hardest to work out from the board itself. The bar scrolls
+       sideways instead, which loses placement and never loses a control. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .sessionPill { left:8px; top:8px; right:auto; max-width:calc(100% - 16px); gap:4px; padding:4px 7px 4px 6px; }
+  /* NO LITERAL HERE ANY MORE. The fused phase/surface widget stands down
+       (`.surfaceChips { display:none }` above) and the canvas app bar plus the surface
+       strip take the top of the screen instead — a real, always-present band that
+       `useChromeSpace` measures off `.canvasPhoneChrome`. The `46px` guess that used to
+       sit here was in force at every phone width, because the element the variable is
+       measured from was the one element `display:none` on a phone. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .commandBar { left:8px; right:8px; bottom:8px; transform:none; max-width:none; gap:4px; padding:5px; overflow-x:auto; scrollbar-width:none; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .commandBar::-webkit-scrollbar { display:none; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .commandBar > * { flex:none; }
+  /* The sheet is now the phone's ONLY route to five session actions, so it stops being
+       a two-column grid of 28px rows. One column, one 40px target per row, and it may
+       scroll — a menu that runs off the bottom of a phone is a menu with a hidden half. */
+  /* A SHEET, not a popover. `placement='sheet'` is what the actions sheet and the app
+       bar's own menus declare: they are not opened from a bar (there is no bar at this
+       width), so "above the button that opened me" has no anchor to mean anything against.
+       It stops under the canvas app bar and sits ON the composer, both measured, and
+       scrolls down — the direction a thumb expects. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .moreMenu[data-placement='sheet'] {
+  top:calc(var(--canvas-top-chrome-space) + 8px);
+      right:0; bottom:var(--composer-space); left:0;
+      z-index:18;
+      width:auto; max-height:none;
+      display:flex; flex-direction:column; gap:4px;
+      padding:0 16px 20px;
+      border-bottom:0; border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+      overflow-y:auto; overscroll-behavior:contain;
+  }
+  :global([data-canvas-shell]:not([data-host='editor'])) .moreMenu { bottom:calc(100% + 10px); right:0; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 120px); overflow-y:auto; overscroll-behavior:contain; grid-template-columns:1fr; box-sizing:border-box; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .moreMenu button, :global([data-canvas-shell]:not([data-host='editor'])) .moreMenu label { min-height:40px; padding:8px 10px; font-size:12px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .moreMenu select { max-width:50%; min-height:32px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .shareMenu { bottom:calc(100% + 10px); right:0; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 120px); overflow-y:auto; overscroll-behavior:contain; box-sizing:border-box; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .shareMenu button { min-height:40px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .shareMenu > div { flex-wrap:wrap; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .shareMenu input, :global([data-canvas-shell]:not([data-host='editor'])) .shareMenu select { min-height:40px; flex:1 1 140px; }
+  /* A big picker sheet, not a tight popover — it still reads from the TOP of the
+       screen regardless of where its `•••` trigger sits, so `bottom` is reset rather
+       than restated. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .templateMenu { top:8px; right:8px; left:8px; bottom:auto; width:auto; max-height:calc(100% - var(--composer-space) - 16px); box-sizing:border-box; }
+}

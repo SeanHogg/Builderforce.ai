@@ -408,8 +408,11 @@ __export(src_exports, {
   useBrainConfig: () => useBrainConfig,
   useBrainContext: () => useBrainContext,
   useBrainConversation: () => useBrainConversation,
+  useChatCreation: () => useChatCreation,
+  useChatTurns: () => useChatTurns,
   useMcpExtensions: () => useMcpExtensions,
   useOptionalBrainContext: () => useOptionalBrainContext,
+  useQueuedTurns: () => useQueuedTurns,
   useRegisterBrainActions: () => useRegisterBrainActions,
   useRunSnapshot: () => useRunSnapshot,
   useToolConfirmationGate: () => useToolConfirmationGate,
@@ -7431,7 +7434,13 @@ function useArmedNewChat(chats) {
   }, []);
   const createArmed = (0, import_react7.useCallback)(async (opts) => {
     const created = await create({ ...opts, mode: opts?.mode ?? pendingModeRef.current });
-    if (created && !pendingMemoryRef.current) await setMemoryEnabled(created.id, false).catch(() => void 0);
+    if (created && !pendingMemoryRef.current) {
+      try {
+        await setMemoryEnabled(created.id, false);
+      } catch {
+        return created;
+      }
+    }
     return created;
   }, [create, setMemoryEnabled]);
   const chatMode = activeChat ? normalizeChatMode(activeChat.mode) : pendingMode;
@@ -13592,6 +13601,7 @@ var FILE_DELIVERY_RULE = [
 ].join("\n");
 var BASE_PERSONAS = {
   designer: {
+    label: "Website",
     icon: "\u{1F310}",
     prompt: [
       "You are an expert AI coding assistant built into Builderforce.ai, a browser-based Builder. Help users generate and build websites and web apps.",
@@ -13601,6 +13611,7 @@ var BASE_PERSONAS = {
     ].join("\n")
   },
   mobile: {
+    label: "Mobile",
     icon: "\u{1F4F1}",
     prompt: [
       "You are an expert mobile app developer operating Builderforce.ai's Canvas Builder. The user is building a MOBILE app and previews it in a phone-sized device simulator.",
@@ -13611,6 +13622,7 @@ var BASE_PERSONAS = {
     ].join("\n")
   },
   webmobile: {
+    label: "Web + Mobile",
     icon: "\u{1F5A5}\uFE0F",
     prompt: [
       "You are an expert full-stack app developer built into Builderforce.ai's browser Builder. The user is building ONE app that ships as BOTH a responsive web application AND a mobile app, from a single codebase.",
@@ -13620,6 +13632,7 @@ var BASE_PERSONAS = {
     ].join("\n")
   },
   evermind: {
+    label: "Evermind",
     icon: "\u{1F9E0}",
     prompt: [
       "You are assisting with growing an Evermind \u2014 Builderforce.ai's self-updating model that learns continuously (Write-Through Cognition) instead of being frozen after training.",
@@ -13628,6 +13641,7 @@ var BASE_PERSONAS = {
     ].join("\n")
   },
   finetune: {
+    label: "Fine-tune",
     icon: "\u{1F527}",
     prompt: [
       "You are assisting with building and fine-tuning a custom LLM inside Builderforce.ai. This is the classic pipeline: design a dataset, train a LoRA adapter in-browser (WebGPU), benchmark it, then publish and export it.",
@@ -13635,6 +13649,7 @@ var BASE_PERSONAS = {
     ].join("\n")
   },
   voice: {
+    label: "Voice",
     icon: "\u{1F399}",
     prompt: [
       "You are a voice director inside Builderforce.ai's Voice Studio.",
@@ -14622,6 +14637,109 @@ function withUsageSurface(fetchImpl, surface) {
     headers: { ...init.headers ?? {}, [USAGE_SURFACE_HEADER]: surface }
   });
 }
+
+// src/useChatTurns.ts
+var import_react12 = require("react");
+
+// src/useQueuedTurns.ts
+var import_react11 = require("react");
+function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
+  const [queued, setQueued] = (0, import_react11.useState)([]);
+  const nextId = (0, import_react11.useRef)(0);
+  const sendRef = (0, import_react11.useRef)(send);
+  sendRef.current = send;
+  const textOfRef = (0, import_react11.useRef)(textOf2);
+  textOfRef.current = textOf2;
+  const runningRef = (0, import_react11.useRef)(running);
+  const submit = (0, import_react11.useCallback)((value) => {
+    const text = typeof value === "string" ? value.trim() : (textOfRef.current?.(value) ?? "").trim();
+    if (!text) return false;
+    if (!runningRef.current) return false;
+    const held = typeof value === "string" ? text : value;
+    setQueued((current) => [...current, { id: nextId.current += 1, value: held }]);
+    return true;
+  }, []);
+  runningRef.current = running;
+  const remove = (0, import_react11.useCallback)((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
+  const clear = (0, import_react11.useCallback)(() => setQueued((current) => current.length ? [] : current), []);
+  const prev = (0, import_react11.useRef)({ key: resetKey, running });
+  (0, import_react11.useEffect)(() => {
+    const was = prev.current;
+    prev.current = { key: resetKey, running };
+    if (was.key !== resetKey || !was.running || running || queued.length === 0) return;
+    const [next, ...rest] = queued;
+    setQueued(rest);
+    if (next) sendRef.current(next.value);
+  }, [running, queued, resetKey]);
+  (0, import_react11.useEffect)(() => {
+    setQueued([]);
+  }, [resetKey]);
+  return { items: queued, count: queued.length, submit, remove, clear };
+}
+
+// src/useChatTurns.ts
+function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
+  const ports = (0, import_react12.useRef)({ send, steer, stop, textOf: textOf2, runKey });
+  ports.current = { send, steer, stop, textOf: textOf2, runKey };
+  const queued = useQueuedTurns({
+    running,
+    send: (turn) => {
+      void ports.current.send(turn);
+    },
+    resetKey: runKey,
+    textOf: textOf2
+  });
+  const { submit: hold, clear } = queued;
+  const submit = (0, import_react12.useCallback)(async (turn) => {
+    const { send: deliver, steer: route, textOf: text } = ports.current;
+    const body = typeof turn === "string" ? turn.trim() : (text?.(turn) ?? "").trim();
+    if (!body) return false;
+    if (route?.(turn)) return true;
+    if (hold(turn)) return true;
+    return await deliver(turn) !== false;
+  }, [hold]);
+  const stopTurns = (0, import_react12.useCallback)(() => {
+    clear();
+    const { stop: halt, runKey: key } = ports.current;
+    if (halt) halt();
+    else if (key != null) stopRun(key);
+  }, [clear]);
+  return { queued, submit, stop: stopTurns };
+}
+
+// src/useChatCreation.ts
+var import_react13 = require("react");
+function useChatCreation({ chatId, create, autoTitle }) {
+  const chatIdRef = (0, import_react13.useRef)(chatId);
+  chatIdRef.current = chatId;
+  const createRef = (0, import_react13.useRef)(create);
+  createRef.current = create;
+  const autoTitleRef = (0, import_react13.useRef)(autoTitle);
+  autoTitleRef.current = autoTitle;
+  const creating = (0, import_react13.useRef)(null);
+  (0, import_react13.useEffect)(() => {
+    if (chatId != null) creating.current = null;
+  }, [chatId]);
+  const ensureChatId = (0, import_react13.useCallback)(() => {
+    const open = chatIdRef.current;
+    if (open != null) return Promise.resolve(open);
+    creating.current ??= createRef.current().then(
+      (id) => {
+        if (id == null) creating.current = null;
+        return id;
+      },
+      (error) => {
+        creating.current = null;
+        throw error;
+      }
+    );
+    return creating.current;
+  }, []);
+  const onFirstUserTurn = (0, import_react13.useCallback)(async (id, firstUserText) => {
+    await autoTitleRef.current?.(id, firstUserText);
+  }, []);
+  return { ensureChatId, onFirstUserTurn };
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   ADDRESSED_TO_META_KEY,
@@ -15002,8 +15120,11 @@ function withUsageSurface(fetchImpl, surface) {
   useBrainConfig,
   useBrainContext,
   useBrainConversation,
+  useChatCreation,
+  useChatTurns,
   useMcpExtensions,
   useOptionalBrainContext,
+  useQueuedTurns,
   useRegisterBrainActions,
   useRunSnapshot,
   useToolConfirmationGate,

@@ -44,27 +44,25 @@ export async function markNotificationsRead(env: CacheEnv, db: Db, userId: strin
 }
 
 async function loadFeed(db: Db, userId: string): Promise<NotificationFeed> {
-  const [rows, unreadRows] = await Promise.all([
-    db
-      .select({
-        id: freelancerNotifications.id,
-        kind: freelancerNotifications.kind,
-        title: freelancerNotifications.title,
-        body: freelancerNotifications.body,
-        ref: freelancerNotifications.ref,
-        readAt: freelancerNotifications.readAt,
-        createdAt: freelancerNotifications.createdAt,
-      })
-      .from(freelancerNotifications)
-      .where(acrossTenants(freelancerNotifications, 'subject_own_rows', eq(freelancerNotifications.userId, userId)))
-      .orderBy(desc(freelancerNotifications.createdAt))
-      .limit(FEED_LIMIT),
-    db.select({ value: sql<number>`count(*)::int` })
-      .from(freelancerNotifications)
-      .where(acrossTenants(freelancerNotifications, 'subject_own_rows', eq(freelancerNotifications.userId, userId), isNull(freelancerNotifications.readAt))),
-  ]);
+  // The unread total rides the list statement as a scalar subquery — one round trip, not two.
+  // It counts ALL unread rows, not just the 100 listed, so it is a subquery rather than a fold.
+  const rows = await db
+    .select({
+      id: freelancerNotifications.id,
+      kind: freelancerNotifications.kind,
+      title: freelancerNotifications.title,
+      body: freelancerNotifications.body,
+      ref: freelancerNotifications.ref,
+      readAt: freelancerNotifications.readAt,
+      createdAt: freelancerNotifications.createdAt,
+      unreadTotal: sql<number>`(select count(*)::int from ${freelancerNotifications} n2 where n2.user_id = ${userId} and n2.read_at is null)`,
+    })
+    .from(freelancerNotifications)
+    .where(acrossTenants(freelancerNotifications, 'subject_own_rows', eq(freelancerNotifications.userId, userId)))
+    .orderBy(desc(freelancerNotifications.createdAt))
+    .limit(FEED_LIMIT);
   return {
-    unread: Number(unreadRows[0]?.value ?? 0),
+    unread: Number(rows[0]?.unreadTotal ?? 0),
     items: rows.map((r) => ({
       id: Number(r.id),
       kind: r.kind,

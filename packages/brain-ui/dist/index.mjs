@@ -1658,6 +1658,50 @@ function BrainTimelineInner({
 }
 var BrainTimeline = React4.memo(BrainTimelineInner);
 
+// src/spend/format.ts
+function formatUsd(usd, locale) {
+  const abs = Math.abs(usd);
+  if (abs > 0 && abs < 0.01) {
+    const tiny = new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(0.01);
+    return `${usd < 0 ? "\u2212" : ""}<${tiny}`;
+  }
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: abs >= 100 ? 0 : 2
+  }).format(usd);
+}
+function formatTokens(tokens, locale) {
+  return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(tokens);
+}
+function formatPct(fraction) {
+  return String(Math.round(fraction * 100));
+}
+function fill(template, values) {
+  return template.replace(/\{(\w+)\}/g, (whole, key) => key in values ? String(values[key]) : whole);
+}
+
+// src/labelCatalog.ts
+function stringsFrom(defaults, lookup, prefix = "") {
+  const out = { ...defaults };
+  for (const [key, fallback] of Object.entries(defaults)) {
+    if (typeof fallback === "string") out[key] = lookup(`${prefix}${key}`) || fallback;
+  }
+  return out;
+}
+function bundleLookup(bundle, keyOf, format = String) {
+  return (key, values) => {
+    const bundleKey = keyOf(key);
+    const text = bundleKey ? bundle[bundleKey] : void 0;
+    if (!text) return void 0;
+    if (!values) return text;
+    const formatted = {};
+    for (const [k, v] of Object.entries(values)) formatted[k] = typeof v === "number" ? format(v) : v;
+    return fill(text, formatted);
+  };
+}
+
 // src/timelineCatalog.ts
 function timelineCatalogLookup(namespace) {
   return (path) => {
@@ -1668,13 +1712,6 @@ function timelineCatalogLookup(namespace) {
     }
     return typeof node === "string" && node.length > 0 ? node : void 0;
   };
-}
-function stringsFrom(defaults, lookup, prefix = "") {
-  const out = { ...defaults };
-  for (const [key, fallback] of Object.entries(defaults)) {
-    if (typeof fallback === "string") out[key] = lookup(`${prefix}${key}`) ?? fallback;
-  }
-  return out;
 }
 function liveActivityLabelsFrom(lookup, overrides) {
   return { ...stringsFrom(DEFAULT_LIVE_ACTIVITY_LABELS, lookup, "live."), ...overrides };
@@ -1812,6 +1849,10 @@ var DEFAULT_TOOL_CONFIRM_LABELS = {
   deny: "Cancel",
   aria: "Approve this action"
 };
+function toolConfirmLabelsFrom(lookup) {
+  const approveAllTitle = lookup("approveAllTitle");
+  return { ...stringsFrom(DEFAULT_TOOL_CONFIRM_LABELS, lookup), ...approveAllTitle ? { approveAllTitle } : {} };
+}
 var PREVIEW_MAX = 240;
 function toolConfirmPreview(req) {
   const command = req.name === "run_command" && typeof req.args?.command === "string" ? req.args.command : null;
@@ -2336,6 +2377,9 @@ var DEFAULT_CHAT_HISTORY_LABELS = {
   summarize: "Summarize",
   delete: "Delete"
 };
+function chatHistoryLabelsFrom(lookup) {
+  return stringsFrom(DEFAULT_CHAT_HISTORY_LABELS, lookup);
+}
 function ChatHistoryList({ loading, total, children, labels: overrides, id, className }) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const hasRows = Array.isArray(children) ? children.length > 0 : children != null && children !== false;
@@ -2781,12 +2825,7 @@ var DEFAULT_LOCAL_MODEL_LABELS = {
 };
 var LOCAL_MODEL_LABEL_FIELDS = Object.keys(DEFAULT_LOCAL_MODEL_LABELS);
 function localModelLabelsFrom(lookup) {
-  const out = { ...DEFAULT_LOCAL_MODEL_LABELS };
-  for (const field of LOCAL_MODEL_LABEL_FIELDS) {
-    const text = lookup(field);
-    if (text) out[field] = text;
-  }
-  return out;
+  return stringsFrom(DEFAULT_LOCAL_MODEL_LABELS, (key) => lookup(key));
 }
 var LOCAL_UNSUPPORTED_LABEL = {
   webgpu_unavailable: "localReasonWebgpu",
@@ -2832,6 +2871,9 @@ var DEFAULT_PROMPT_OPTIONS_LABELS = {
 };
 function promptOptionsLabels(overrides) {
   return overrides ? { ...DEFAULT_PROMPT_OPTIONS_LABELS, ...overrides } : DEFAULT_PROMPT_OPTIONS_LABELS;
+}
+function promptOptionsLabelsFrom(lookup) {
+  return stringsFrom(DEFAULT_PROMPT_OPTIONS_LABELS, lookup);
 }
 
 // src/popover/usePopover.ts
@@ -3004,30 +3046,6 @@ import {
 
 // src/localModels/LocalModelRow.tsx
 import { useState as useState10 } from "react";
-
-// src/spend/format.ts
-function formatUsd(usd, locale) {
-  const abs = Math.abs(usd);
-  if (abs > 0 && abs < 0.01) {
-    const tiny = new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(0.01);
-    return `${usd < 0 ? "\u2212" : ""}<${tiny}`;
-  }
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: abs >= 100 ? 0 : 2
-  }).format(usd);
-}
-function formatTokens(tokens, locale) {
-  return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(tokens);
-}
-function formatPct(fraction) {
-  return String(Math.round(fraction * 100));
-}
-function fill(template, values) {
-  return template.replace(/\{(\w+)\}/g, (whole, key) => key in values ? String(values[key]) : whole);
-}
 
 // src/localModels/localModelView.ts
 var GB = 1e9;
@@ -4160,6 +4178,14 @@ function spendLabels(overrides) {
     sourceHints: { ...DEFAULT_SPEND_LABELS.sourceHints, ...overrides.sourceHints }
   };
 }
+function spendLabelsFrom(lookup) {
+  const d = DEFAULT_SPEND_LABELS;
+  return {
+    ...stringsFrom(d, lookup),
+    sources: stringsFrom(d.sources, lookup, "sources."),
+    sourceHints: stringsFrom(d.sourceHints, lookup, "sourceHints.")
+  };
+}
 
 // src/spend/SpendPill.tsx
 import { Fragment as Fragment12, jsx as jsx42, jsxs as jsxs40 } from "react/jsx-runtime";
@@ -5039,6 +5065,7 @@ import {
   filterMentionCandidates
 } from "@seanhogg/builderforce-brain-embedded";
 import { jsx as jsx48, jsxs as jsxs46 } from "react/jsx-runtime";
+var DEFAULT_MENTION_LABELS = { title: "Direct to", agent: "Agent", human: "Person" };
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
   const [token, setToken] = useState22(null);
@@ -5111,7 +5138,7 @@ function useMentionAutocomplete(opts) {
   return { onKeyDown, onSelect: recompute, popup, open };
 }
 function MentionPopup({ matches, index, labels, onHover, onPick }) {
-  return /* @__PURE__ */ jsx48("div", { style: POP.anchor, children: /* @__PURE__ */ jsxs46("ul", { role: "listbox", "aria-label": labels?.title ?? "Direct to", style: POP.list, children: [
+  return /* @__PURE__ */ jsx48("div", { style: POP.anchor, children: /* @__PURE__ */ jsxs46("ul", { role: "listbox", "aria-label": labels?.title ?? DEFAULT_MENTION_LABELS.title, style: POP.list, children: [
     labels?.title && /* @__PURE__ */ jsx48("li", { "aria-hidden": true, style: POP.group, children: labels.title }),
     matches.map((m, i) => /* @__PURE__ */ jsxs46(
       "li",
@@ -5127,7 +5154,7 @@ function MentionPopup({ matches, index, labels, onHover, onPick }) {
         children: [
           /* @__PURE__ */ jsx48(Avatar, { name: m.name, kind: m.kind, size: 20 }),
           /* @__PURE__ */ jsx48("span", { style: POP.name, children: m.name }),
-          /* @__PURE__ */ jsx48("span", { style: POP.kind, children: m.kind === "agent" ? labels?.agent ?? "Agent" : labels?.human ?? "Person" })
+          /* @__PURE__ */ jsx48("span", { style: POP.kind, children: m.kind === "agent" ? labels?.agent ?? DEFAULT_MENTION_LABELS.agent : labels?.human ?? DEFAULT_MENTION_LABELS.human })
         ]
       },
       `${m.kind}:${m.ref}`
@@ -5177,6 +5204,7 @@ import {
   filterTicketCandidates
 } from "@seanhogg/builderforce-brain-embedded";
 import { jsx as jsx49, jsxs as jsxs47 } from "react/jsx-runtime";
+var DEFAULT_TICKET_TAG_LABELS = { title: "Tag ticket", status: "Status", noMatches: "No tickets found" };
 function useTicketAutocomplete(opts) {
   const { textareaRef, value, setValue, tickets, onPick, labels, disabled } = opts;
   const [token, setToken] = useState23(null);
@@ -5251,9 +5279,9 @@ function useTicketAutocomplete(opts) {
 }
 function TicketPopup({ matches, index, labels, onHover, onPick }) {
   if (matches.length === 0) {
-    return /* @__PURE__ */ jsx49("div", { style: POP2.anchor, children: /* @__PURE__ */ jsx49("div", { style: POP2.empty, children: labels?.noMatches ?? "No tickets found" }) });
+    return /* @__PURE__ */ jsx49("div", { style: POP2.anchor, children: /* @__PURE__ */ jsx49("div", { style: POP2.empty, children: labels?.noMatches ?? DEFAULT_TICKET_TAG_LABELS.noMatches }) });
   }
-  return /* @__PURE__ */ jsx49("div", { style: POP2.anchor, children: /* @__PURE__ */ jsxs47("ul", { role: "listbox", "aria-label": labels?.title ?? "Tag ticket", style: POP2.list, children: [
+  return /* @__PURE__ */ jsx49("div", { style: POP2.anchor, children: /* @__PURE__ */ jsxs47("ul", { role: "listbox", "aria-label": labels?.title ?? DEFAULT_TICKET_TAG_LABELS.title, style: POP2.list, children: [
     labels?.title && /* @__PURE__ */ jsx49("li", { "aria-hidden": true, style: POP2.group, children: labels.title }),
     matches.map((t, i) => {
       const ref = t.key ?? String(t.id);
@@ -5329,32 +5357,23 @@ var POP2 = {
 };
 
 // src/chatTickets/labelBundle.ts
-function chatTicketsLabelsFromBundle(bundle, prefix = "ct.") {
+function chatTicketsLabelsFrom(lookup) {
   const d = DEFAULT_CHAT_TICKETS_LABELS;
-  const s = (key) => bundle[`${prefix}${key}`] || void 0;
-  const out = { ...d };
-  for (const [key, fallback] of Object.entries(d)) {
-    if (typeof fallback === "string") out[key] = s(key) ?? fallback;
-  }
-  const kind = { ...d.kind };
-  for (const k of Object.keys(kind)) kind[k] = s(`kind.${k}`) ?? kind[k];
-  const tpl = (key, fallback, vars) => {
-    const template = s(key);
-    return template ? (...args) => fill(template, vars(...args)) : fallback;
-  };
-  const one = s("ticketCountOne");
-  const many = s("ticketCountMany");
+  const tpl = (key, fallback, vars) => (...args) => lookup(key, vars(...args)) || fallback(...args);
   return {
-    ...out,
-    kind,
+    ...stringsFrom(d, lookup),
+    kind: stringsFrom(d.kind, lookup, "kind."),
     ringAria: tpl("ringAria", d.ringAria, (label, pct) => ({ label, pct })),
     inParent: tpl("inParent", d.inParent, (parent) => ({ parent })),
-    ticketCount: one && many ? (n2) => fill(n2 === 1 ? one : many, { n: n2 }) : d.ticketCount,
+    ticketCount: (n2) => lookup(n2 === 1 ? "ticketCountOne" : "ticketCountMany", { n: n2 }) || d.ticketCount(n2),
     overallAria: tpl("overallAria", d.overallAria, (pct) => ({ pct })),
     runStarted: tpl("runStarted", d.runStarted, (agent) => ({ agent })),
     mergeAction: tpl("mergeAction", d.mergeAction, (n2) => ({ n: n2 })),
     mergedN: tpl("mergedN", d.mergedN, (n2) => ({ n: n2 }))
   };
+}
+function chatTicketsLabelsFromBundle(bundle, prefix = "ct.") {
+  return chatTicketsLabelsFrom(bundleLookup(bundle, (key) => `${prefix}${key}`));
 }
 
 // src/chatTickets/chatDiagnosticsReads.ts
@@ -7853,6 +7872,16 @@ function workStatusLabels(overrides) {
 function labelForKey(map, key) {
   return map[key] ?? key.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
+function workStatusLabelsFrom(lookup) {
+  const d = DEFAULT_WORK_STATUS_LABELS;
+  return {
+    ...stringsFrom(d, lookup),
+    billing: stringsFrom(d.billing, lookup, "billing."),
+    plans: stringsFrom(d.plans, lookup, "plans."),
+    meters: stringsFrom(d.meters, lookup, "meters."),
+    units: stringsFrom(d.units, lookup, "units.")
+  };
+}
 
 // src/workStatus/relativeTime.ts
 function relativeFuture(iso, locale, now = Date.now()) {
@@ -8160,6 +8189,18 @@ var DEFAULT_COMPOSER_LABELS = {
 function composerLabels(overrides) {
   return overrides ? { ...DEFAULT_COMPOSER_LABELS, ...overrides } : DEFAULT_COMPOSER_LABELS;
 }
+function composerLabelsFrom(lookup, overrides) {
+  const d = DEFAULT_COMPOSER_LABELS;
+  return {
+    ...stringsFrom(d, lookup),
+    modeLabel: (mode) => lookup(`modeLabel.${mode}`) || d.modeLabel(mode),
+    modeHint: (mode) => lookup(`modeHint.${mode}`) || d.modeHint(mode),
+    effortDesc: (level, answer) => lookup(`effortDesc.${level}`, { answer }) || d.effortDesc(level, answer),
+    effortThinkingSuffix: (thinking) => lookup("effortThinkingSuffix", { thinking }) || d.effortThinkingSuffix(thinking),
+    thinkingOnDesc: (budget) => lookup("thinkingOnDesc", { budget }) || d.thinkingOnDesc(budget),
+    ...overrides
+  };
+}
 
 // src/composer/BrainComposer.tsx
 import { Fragment as Fragment19, jsx as jsx66, jsxs as jsxs62 } from "react/jsx-runtime";
@@ -8373,40 +8414,48 @@ function useChatMemorySwitch(opts) {
   return { enabled, setEnabled };
 }
 
-// src/composer/useQueuedTurns.ts
-import { useCallback as useCallback19, useEffect as useEffect21, useRef as useRef14, useState as useState34 } from "react";
-function useQueuedTurns({ running, send, resetKey = null, textOf }) {
-  const [queued, setQueued] = useState34([]);
-  const nextId = useRef14(0);
-  const sendRef = useRef14(send);
-  sendRef.current = send;
-  const textOfRef = useRef14(textOf);
-  textOfRef.current = textOf;
-  const runningRef = useRef14(running);
-  const submit = useCallback19((value) => {
-    const text = typeof value === "string" ? value.trim() : (textOfRef.current?.(value) ?? "").trim();
-    if (!text) return false;
-    if (!runningRef.current) return false;
-    const held = typeof value === "string" ? text : value;
-    setQueued((current) => [...current, { id: nextId.current += 1, value: held }]);
-    return true;
-  }, []);
-  runningRef.current = running;
-  const remove = useCallback19((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
-  const clear = useCallback19(() => setQueued((current) => current.length ? [] : current), []);
-  const prev = useRef14({ key: resetKey, running });
-  useEffect21(() => {
-    const was = prev.current;
-    prev.current = { key: resetKey, running };
-    if (was.key !== resetKey || !was.running || running || queued.length === 0) return;
-    const [next, ...rest] = queued;
-    setQueued(rest);
-    if (next) sendRef.current(next.value);
-  }, [running, queued, resetKey]);
-  useEffect21(() => {
-    setQueued([]);
-  }, [resetKey]);
-  return { items: queued, count: queued.length, submit, remove, clear };
+// src/composer/brainComposerLabels.ts
+function scopedLookup(lookup, part) {
+  return (key, values) => lookup(`${part}.${key}`, values);
+}
+function brainComposerLabelsFrom(lookup, overrides) {
+  return {
+    composer: composerLabelsFrom(scopedLookup(lookup, "composer"), overrides?.composer),
+    options: { ...promptOptionsLabelsFrom(scopedLookup(lookup, "options")), ...overrides?.options },
+    status: workStatusLabelsFrom(scopedLookup(lookup, "status")),
+    spend: spendLabelsFrom(scopedLookup(lookup, "spend")),
+    mention: stringsFrom(DEFAULT_MENTION_LABELS, scopedLookup(lookup, "mention")),
+    ticket: stringsFrom(DEFAULT_TICKET_TAG_LABELS, scopedLookup(lookup, "ticket"))
+  };
+}
+
+// src/composer/composerModel.ts
+import {
+  EMPTY_GATEWAY_MODEL_OPTIONS
+} from "@seanhogg/builderforce-brain-embedded";
+function composerCatalogLoaded(catalog) {
+  return catalog != null && catalog !== EMPTY_GATEWAY_MODEL_OPTIONS;
+}
+function withLocalModels(catalog, local) {
+  const base = catalog ?? EMPTY_GATEWAY_MODEL_OPTIONS;
+  if (!local || local.length === 0) return base;
+  return { ...base, options: { ...base.options, local } };
+}
+function modelSelectionFrom(pin) {
+  if (pin.model && pin.strict !== false) return { mode: "model", model: pin.model };
+  return pin.routingMode === "byo_pool" ? { mode: "byo_pool" } : { mode: "auto" };
+}
+function composerModel(input) {
+  const listed = withLocalModels(input.catalog, input.local);
+  return {
+    selection: input.selection,
+    options: listed.options,
+    onChange: input.onChange,
+    effective: input.effective,
+    identity: (input.catalog ? input.catalog.identity : void 0) ?? input.fallbackIdentity,
+    localStore: input.localStore,
+    identityPending: input.identityPending ?? !composerCatalogLoaded(input.catalog)
+  };
 }
 export {
   AiSurface,
@@ -8429,6 +8478,7 @@ export {
   DEFAULT_EVERMIND_LABELS,
   DEFAULT_LIVE_ACTIVITY_LABELS,
   DEFAULT_LOCAL_MODEL_LABELS,
+  DEFAULT_MENTION_LABELS,
   DEFAULT_MODEL_IDENTITY3 as DEFAULT_MODEL_IDENTITY,
   DEFAULT_MODEL_MOVE_LABELS,
   DEFAULT_PENDING_CHANGES_LABELS,
@@ -8440,6 +8490,7 @@ export {
   DEFAULT_RECIPIENT_PICKER_LABELS,
   DEFAULT_SPEND_LABELS,
   DEFAULT_SURFACE_HEADER_LABELS,
+  DEFAULT_TICKET_TAG_LABELS,
   DEFAULT_TIMELINE_LABELS,
   DEFAULT_TOOL_CONFIRM_LABELS,
   DEFAULT_WORK_STATUS_LABELS,
@@ -8487,17 +8538,24 @@ export {
   askUserAnchorId,
   attachmentsOf,
   avatarColor,
+  brainComposerLabelsFrom,
   buildModelItems3 as buildModelItems,
   buildSettledTimeline,
   buildTimeline,
+  bundleLookup,
   byoVendorLabel,
   cachedConsumptionSnapshot,
   chatActivityLabelsFrom,
   chatDiagnosticsReads,
+  chatHistoryLabelsFrom,
   chatSwitcherLabel,
+  chatTicketsLabelsFrom,
   chatTicketsLabelsFromBundle,
   commandOf,
+  composerCatalogLoaded,
   composerLabels,
+  composerLabelsFrom,
+  composerModel,
   createChatTicketsRestAdapter,
   createEvermindRestAdapter,
   displayModelName2 as displayModelName,
@@ -8525,6 +8583,7 @@ export {
   modelInUse2 as modelInUse,
   modelMoveLine,
   modelMoveOf,
+  modelSelectionFrom,
   parseAskUser,
   pendingChangesSummary,
   perMillionUsd,
@@ -8534,6 +8593,7 @@ export {
   productForPlan,
   productModelName,
   promptOptionsLabels,
+  promptOptionsLabelsFrom,
   promptTrailingAction,
   publishedEvermindModels,
   resolvePendingChangesLabels,
@@ -8543,12 +8603,15 @@ export {
   serializeAskUser,
   shellOutcomeOf,
   spendLabels,
+  spendLabelsFrom,
   strandedReplyKey,
   streamingNode,
+  stringsFrom,
   stripAskUser,
   subscribeConsumptionSnapshot,
   timelineCatalogLookup,
   timelineLabelsFrom,
+  toolConfirmLabelsFrom,
   toolConfirmPreview,
   toolPreview,
   toolStepView,
@@ -8561,10 +8624,11 @@ export {
   useLocalModels,
   useMentionAutocomplete,
   usePopover,
-  useQueuedTurns,
   useRecipientChoice,
   useTicketAutocomplete,
   useVoiceDictation,
-  workStatusLabels
+  withLocalModels,
+  workStatusLabels,
+  workStatusLabelsFrom
 };
 //# sourceMappingURL=index.mjs.map

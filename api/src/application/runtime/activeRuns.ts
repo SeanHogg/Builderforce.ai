@@ -32,7 +32,8 @@ import { loadTaskRuns, type TaskRun } from './taskRunChips';
  * and nothing else while no run has moved — one KV/L1 read, no Neon, no payload.
  * `elapsedMs` is derived from the clock at read time, never cached.
  */
-const LIVE_RUNS_CACHE = { kvTtlSeconds: 60, l1TtlMs: 3_000 };
+// The key embeds the version token, so a status change orphans it; the TTL only bounds orphans.
+const LIVE_RUNS_CACHE = { kvTtlSeconds: 600, l1TtlMs: 3_000 };
 
 /** The default and ceiling for the active list — a panel shows a handful of rows. */
 export const ACTIVE_RUNS_DEFAULT_LIMIT = 50;

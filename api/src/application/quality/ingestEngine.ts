@@ -277,8 +277,8 @@ export async function ingestErrorEvents(
 
 /**
  * Maintain the EXACT `error_groups.user_count`: record (group, user) pairs in the
- * set table and bump each group's count by the number of genuinely-new pairs (the
- * RETURNING rows). Idempotent — a repeat user contributes nothing. Best-effort:
+ * set table and bump each group's count by the number of genuinely-new pairs (one CTE
+ * statement, see `groupUserCounts.ts`). Idempotent — a repeat user contributes nothing. Best-effort:
  * a failure here only skews the affected-user count, never the error data itself.
  */
 async function bumpGroupUserCounts(
@@ -289,21 +289,7 @@ async function bumpGroupUserCounts(
 ): Promise<void> {
   if (pairs.length === 0) return;
   try {
-    const inserted = await db
-      .insert(errorGroupUsers)
-      .values(pairs.map((p) => ({ groupId: p.groupId, userKey: p.userKey, firstSeen: now })))
-      .onConflictDoNothing()
-      .returning({ groupId: errorGroupUsers.groupId });
-
-    const deltas = new Map<string, number>();
-    for (const row of inserted) deltas.set(row.groupId, (deltas.get(row.groupId) ?? 0) + 1);
-
-    for (const [groupId, delta] of deltas) {
-      await db
-        .update(errorGroups)
-        .set({ userCount: sql`${errorGroups.userCount} + ${delta}` })
-        .where(scopedToTenant(errorGroups, tenantId, eq(errorGroups.id, groupId)));
-    }
+    await bumpGroupUserCountsSql(db, tenantId, pairs, now);
   } catch (error) {
     // Affected-user count is non-critical; never fail the ingest over it.
   

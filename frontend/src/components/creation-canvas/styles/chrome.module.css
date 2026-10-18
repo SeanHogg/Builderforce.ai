@@ -330,3 +330,17 @@
      pushing the sheet's first row halfway down the screen, under the prompt. */
   .canvasPhoneChrome:has(.canvasAppBarTitle[aria-expanded='true']) .phasePath { display:none; }
 }
+
+/* PHONE LAYOUT (<=767px) for this module's classes. Moved from CreationCanvas.module.css: the classes live
+   here now, so a rule written there matched nothing (CSS-Module hashing). The shell is found by
+   `data-canvas-shell` instead of a class. The editor host (`data-host="editor"`) keeps desktop chrome. */
+@media (max-width:767px) {
+  :global([data-canvas-shell]:not([data-host='editor'])) .saved { display:none; }
+  /* THE CANVAS APP BAR AND THE SURFACE STRIP, the phone's own chrome. Absolute at the
+       top of the shell, opaque, and MEASURED — `--canvas-top-chrome-space` is taken off
+       this wrapper (see `CreationCanvas.tsx`), so the band it publishes is the bar plus
+       the strip rather than one of them. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .canvasPhoneChrome { position:absolute; z-index:20; top:0; left:0; right:0; display:flex; flex-direction:column; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .surfaceStrip { display:flex; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .spark { display:none; }
+}

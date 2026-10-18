@@ -25,6 +25,7 @@ import {
   PersonaPicker,
   QueuedTurnChips,
   RecipientPicker,
+  composerModel,
   type ComposerOptions,
   type QueuedItem,
   type RecipientPickerProps,
@@ -160,18 +161,7 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
     memory: { enabled: memory.enabled, onChange: memory.onChange, available: projectId != null },
     effort: { value: shaping.effort, onChange: shaping.setEffort },
     thinking: { value: shaping.thinking, onChange: shaping.setThinking },
-    model: {
-      selection: modelSelection,
-      options: composerModels.options,
-      onChange: chooseModel,
-      effective: servedModel ?? init.model,
-      identity: composerModels.identity,
-      // The webview's own page engines — a pin crosses the bridge like any `model.set`.
-      localStore: webviewLocalModelStore,
-      // No gateway catalog yet: entitlement is unknown, so the menu must not say the
-      // plan forbids choosing a model.
-      identityPending: !catalogLoaded,
-    },
+    model: composerModel({ catalog: composerModels, selection: modelSelection, onChange: chooseModel, effective: servedModel ?? init.model, localStore: webviewLocalModelStore, identityPending: !catalogLoaded }),
     autoMode,
     session,
   };

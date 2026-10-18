@@ -71,3 +71,12 @@
 .worldVec3Axis { display:flex; align-items:center; gap:3px; }
 .worldVec3Axis span { flex:none; width:9px; color:var(--canvas-muted); font-size:10px; }
 .worldVec3Axis input { width:100%; min-width:0; padding:3px 4px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:10px; }
+
+/* PHONE LAYOUT (<=767px) for this module's classes. Moved from CreationCanvas.module.css: the classes live
+   here now, so a rule written there matched nothing (CSS-Module hashing). The shell is found by
+   `data-canvas-shell` instead of a class. The editor host (`data-host="editor"`) keeps desktop chrome. */
+@media (max-width:767px) {
+  :global([data-canvas-shell]:not([data-host='editor'])) .worldPalette, :global([data-canvas-shell]:not([data-host='editor'])) .worldProperties { width:auto; max-height:112px; border-right:0; border-left:0; border-bottom:1px solid var(--canvas-line); overflow-y:hidden; overflow-x:auto; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .worldPaletteGroup { display:inline-block; vertical-align:top; padding-right:4px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .worldPaletteTiles { grid-auto-flow:column; grid-template-columns:none; grid-auto-columns:56px; }
+}

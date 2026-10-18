@@ -323,7 +323,7 @@ export type { ComposerOptions } from './composer/composerOptions';
 export { DEFAULT_COMPOSER_LABELS, composerLabels } from './composer/labels';
 export type { ComposerLabels } from './composer/labels';
 export { useChatMemorySwitch } from './composer/useChatMemorySwitch';
-export { useQueuedTurns, type QueuedTurns, type QueuedItem, type QueuedTurnsOptions } from './composer/useQueuedTurns';
+export type { QueuedTurns, QueuedItem, QueuedTurnsOptions } from './composer/useQueuedTurns';
 
 // The `/` menu's Status tab — plan, meters, 30-day spend & savings, Evermind.
 export { WorkStatusPanel } from './workStatus/WorkStatusPanel';

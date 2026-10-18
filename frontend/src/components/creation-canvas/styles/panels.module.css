@@ -415,3 +415,14 @@
   background: var(--canvas-widget-icon-bg);
   color: var(--canvas-widget-icon);
 }
+
+/* PHONE LAYOUT (<=767px) for this module's classes. Moved from CreationCanvas.module.css: the classes live
+   here now, so a rule written there matched nothing (CSS-Module hashing). The shell is found by
+   `data-canvas-shell` instead of a class. The editor host (`data-host="editor"`) keeps desktop chrome. */
+@media (max-width:767px) {
+  :global([data-canvas-shell]:not([data-host='editor'])) .canvasOutline { left:8px; right:8px; width:auto; max-height:min(46%,300px); }
+  :global([data-canvas-shell]:not([data-host='editor'])) .sceneGeneratorStage { padding:10px 8px 14px; }
+  /* Two side-by-side columns don't fit a phone either — stack controls above preview,
+       same call `.worldStage` makes for its own three columns just below. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .sceneGeneratorStage { flex-direction:column; }
+}

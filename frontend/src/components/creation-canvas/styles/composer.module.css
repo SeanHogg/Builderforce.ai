@@ -219,3 +219,35 @@
   backdrop-filter: none;
 }
 .composerDock[data-placement='docked'] .composerCard:focus-within { border-color: var(--bf-accent); box-shadow: 0 0 0 1px var(--bf-accent); }
+
+/* PHONE LAYOUT (<=767px) for this module's classes. Moved from CreationCanvas.module.css: the classes live
+   here now, so a rule written there matched nothing (CSS-Module hashing). The shell is found by
+   `data-canvas-shell` instead of a class. The editor host (`data-host="editor"`) keeps desktop chrome. */
+@media (max-width:767px) {
+  /* THE COMPOSER OWNS THE BOTTOM EDGE. There is no command bar under it at this width,
+       so `--canvas-command-bar-space` is 0 (the bar is unmounted, and `useChromeSpace`
+       publishes `0px` for a host it is not given a node for — which is precisely why the
+       bar is not merely `display:none`: a hidden box measures zero from the TOP of the
+       viewport, and the prompt would be pushed most of a screen up).
+
+       Edge to edge and squared off, like a phone's own keyboard accessory row: an inset
+       card with a radius floating above the bottom nav reads as something that might
+       scroll away, and this is the one control that never does. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .composerDock {
+  left:0; right:0; bottom:0; width:auto; min-width:0; max-width:none; margin-inline:0;
+      padding:8px 10px 10px;
+      border-top:1px solid var(--bf-border);
+      background:var(--bf-surface);
+      box-shadow:0 -10px 34px var(--canvas-shadow);
+  }
+  /* The drag handle and the float/dock control are desktop affordances: there is
+       nowhere on a 360px screen to drag a full-width card TO, and no Brain panel beside
+       the board to dock it into. Closing stays — it is the way to see the whole surface. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .composerDock [data-testid='canvas-panel-drag-handle'] { display:none; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .composerActionsTrigger { display:grid; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .composerIntent { min-height:44px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .composerIntentSegment { height:40px; padding:0 12px 0 10px; font-size:13px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .composer { --prompt-panel-action-gap:4px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .scopeChip { max-width:120px; padding:0 8px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .scopeChip select { width:100%; max-width:none; }
+}

@@ -1,13 +1,3 @@
-## ✅ RESOLVED 2026-10-18 — Neon load audit: the eight partly-fixed items closed (api 2026.10.54 · frontend 2026.10.71)
-
-Status per finding: https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q. Code in `cffa66885` (swept from the working tree) and this commit.
-- **Cron, now silent when idle:** the PR reconciler buffers its run in memory and records it only when it changed something or failed (`prReconciliationRunLedger.ts`, `persist: 'on_change'`); repo-delivery no longer stamps `probed_at` every 30 min (moved to `repoDeliverySweep.ts`); repo-activity updates watermarks only for repos that saw events. Per-repo cadence lives in one KV entry per sweep (`infrastructure/cache/sweepStampLedger.ts`) with the old columns as fallback. `GET /pr-reconciliation/runs?repoId=` adds `lastCheckedAt`, answered only for the caller's own repos.
-- **Canvas presence:** each poll returns full rows only for members whose drawn presence changed (fingerprints, `presenceDelta.ts` on both sides); older clients without `known` still get the full list. The tracker resets per board.
-- **Live runs:** one cached, version-keyed read serves the active-runs panel, workforce presence (active runs + a server-side 14-day count instead of 200 full rows) and the board chips (seven columns, project-scoped). A client that sends its version gets `{unchanged}` without a database query.
-- **Founder journey:** one cached `GET /api/realizations/journey-summary` replaces four list reads.
-- **Also fixed:** HEAD `cffa66885` did not compile (`listRecent`/`listActive` removed while two callers remained); nine silent `.catch` fallbacks removed in the frontend (baseline 273 → 264).
-- **Measured live** (2026-10-18 01:30 UTC): core 8.3 txn/min (was ~46), transactional 6.3 (was ~39), no cron writes. Confirming autosuspend needs a quiet window (ROADMAP).
-
 ## ✅ RESOLVED 2026-10-18 — In-browser runtime 2026.10.10: `node:wasi` and single-threaded napi-rs bindings (api 2026.10.53 · frontend 2026.10.70)
 
 - **`node:wasi`** in builderforce-webcontainers: WASI preview1 over the process's file system and stdio. File descriptors are backed by real process-fs fds. Preopens are sandboxed (NOTCAPABLE outside them), unimplemented imports get ENOSYS stubs, bad guest pointers return FAULT instead of trapping, and decoding and random fills are safe on shared memory. emnapi/napi-rs WebAssembly packages now load.
@@ -17,6 +7,28 @@ Status per finding: https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q. Code in `
   - Nuxt 3 pins an oxc-parser with only a threaded build.
   - Nuxt 4 installs but stalls after "Starting Nuxt...".
 - Opus reviewed the work twice and Sonnet applied every finding; 68 targeted runtime tests pass.
+
+## ✅ RESOLVED 2026-10-18 — AI surface reuse: the duplicate logic removed across Web, VS Code and Rovr (brain-embedded 2026.10.32 · brain-ui 2026.10.16 · frontend 2026.10.69 · VSIX 2026.10.44 · Rovr 2026.10.10)
+
+Closes the AI Surface Reuse Audit. Each duplicate was folded into the best existing copy and every caller migrated; an Opus review of the pass found one regression and five leftovers, all fixed.
+
+- **One turn door.** `useChatTurns` (send / hold-while-running / steer / Stop drops held turns) and `useChatCreation` (create-on-first-send, auto-title) live in brain-embedded with `useQueuedTurns`; the web panel, docked composer, canvas, VS Code and Rovr all mount them. The web panel's Stop now drops held turns (`stopTurn`). The panel controller split into `useBrainPanelTurns` / `useBrainPanelModels` / `useBrainPanelParticipants`.
+- **One label contract.** brain-ui `labelCatalog.ts` (`LabelLookup`, `stringsFrom`) plus one `xxxLabelsFrom` builder per component; hosts supply only a lookup (web `useLabelLookup`, VS Code bundle map, Rovr `rovrLookup`). The last hand-built maps (chat history, tool confirm, chat header, tickets, persona/recipient pickers, queued-turn chips, modality copy) moved onto it. `{owner}` now passes through, so "sub-agent of" localizes.
+- **One model-options builder.** brain-ui `composerModel.ts`; the web, Rovr and VS Code `/` menus all build from it.
+- **One set of base controls.** `.bf-btn` / `.bf-input` / `.bf-select` / `.bf-chip` live in brain-ui `styles.css`; Rovr's `rovr-*` copies and VS Code's `.bf-btn` block are gone (hosts restyle through `--bf-btn-*` / `--bf-field-bg` tokens).
+- **Canvas.** Live activity renders brain-ui `LiveActivity` from the run store (`CanvasRunActivity`); `BrainActivityView`/`brainActivity` deleted. `CanvasPromptComposer` folded into `CanvasComposer` (`usePromptResize`, `useComposerIntent`). `CreationCanvas.tsx` 1158 → 927 lines via ten state hooks; `CreationCanvas.module.css` 5706 → ~670 lines split into 19 `styles/*.module.css`. The phone (≤767px) rules, left behind by the split and matching nothing, moved to their owning modules under `[data-canvas-shell]`.
+- **VS Code** `vscodeBridge.ts` split (types / transport / state / `hostFetch`). **Rovr** history and stats follow a `rovr.sync.changed` broadcast instead of a 5s poll.
+- Dead code: brain-ui's `useQueuedTurns` re-export, `useLiveActivityLabels` overrides, three canvas-only i18n keys, stale comments.
+
+## ✅ RESOLVED 2026-10-18 — Neon load audit: the eight partly-fixed items closed (api 2026.10.54 · frontend 2026.10.71)
+
+Status per finding: https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q. Code in `cffa66885` (swept from the working tree) and this commit.
+- **Cron, now silent when idle:** the PR reconciler buffers its run in memory and records it only when it changed something or failed (`prReconciliationRunLedger.ts`, `persist: 'on_change'`); repo-delivery no longer stamps `probed_at` every 30 min (moved to `repoDeliverySweep.ts`); repo-activity updates watermarks only for repos that saw events. Per-repo cadence lives in one KV entry per sweep (`infrastructure/cache/sweepStampLedger.ts`) with the old columns as fallback. `GET /pr-reconciliation/runs?repoId=` adds `lastCheckedAt`, answered only for the caller's own repos.
+- **Canvas presence:** each poll returns full rows only for members whose drawn presence changed (fingerprints, `presenceDelta.ts` on both sides); older clients without `known` still get the full list. The tracker resets per board.
+- **Live runs:** one cached, version-keyed read serves the active-runs panel, workforce presence (active runs + a server-side 14-day count instead of 200 full rows) and the board chips (seven columns, project-scoped). A client that sends its version gets `{unchanged}` without a database query.
+- **Founder journey:** one cached `GET /api/realizations/journey-summary` replaces four list reads.
+- **Also fixed:** HEAD `cffa66885` did not compile (`listRecent`/`listActive` removed while two callers remained); nine silent `.catch` fallbacks removed in the frontend (baseline 273 → 264).
+- **Measured live** (2026-10-18 01:30 UTC): core 8.3 txn/min (was ~46), transactional 6.3 (was ~39), no cron writes. Confirming autosuspend needs a quiet window (ROADMAP).
 
 ## ✅ RESOLVED 2026-10-17 — Route consolidation: one implementation per entity and pattern (api 2026.10.52 · frontend 2026.10.68 · agent-runtime 2026.10.10 · VS Code 2026.10.43)
 

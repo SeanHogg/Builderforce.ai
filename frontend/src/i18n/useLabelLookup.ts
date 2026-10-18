@@ -11,7 +11,7 @@ import type { LabelLookup } from '@seanhogg/builderforce-brain-ui';
 const PASSTHROUGH = {
   amount: '{amount}', tokens: '{tokens}', pct: '{pct}', count: '{count}', days: '{days}',
   used: '{used}', limit: '{limit}', unit: '{unit}', version: '{version}',
-  size: '{size}', percent: '{percent}', runtime: '{runtime}', title: '{title}',
+  size: '{size}', percent: '{percent}', runtime: '{runtime}', title: '{title}', owner: '{owner}',
 } as const;
 
 /**

@@ -386,3 +386,14 @@
 .placeStats li { display:grid; gap:2px; align-content:start; min-width:0; padding:8px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
 .placeStats strong { font-size:18px; font-weight:700; line-height:1.2; font-variant-numeric:tabular-nums; color:var(--canvas-ink); overflow-wrap:anywhere; }
 .placeStats span { font-size:12px; line-height:1.4; color:var(--canvas-muted); }
+
+/* PHONE LAYOUT (<=767px) for this module's classes. Moved from CreationCanvas.module.css: the classes live
+   here now, so a rule written there matched nothing (CSS-Module hashing). The shell is found by
+   `data-canvas-shell` instead of a class. The editor host (`data-host="editor"`) keeps desktop chrome. */
+@media (max-width:767px) {
+  /* On a phone the panel is the width of the screen and sits under the top chrome; a
+       560px wide reading has nowhere to go, so both readings share the same box and only
+       the CONTENT changes between them. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .anchoredPanel, :global([data-canvas-shell]:not([data-host='editor'])) .anchoredPanel[data-expanded='true'] { left:8px !important; right:8px; top:var(--canvas-top-chrome-space) !important; width:auto; max-height:calc(100% - var(--canvas-top-chrome-space) - var(--composer-space) - 16px); }
+  :global([data-canvas-shell]:not([data-host='editor'])) .anchoredPanel::before { display:none; }
+}

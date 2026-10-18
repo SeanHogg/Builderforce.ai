@@ -6953,7 +6953,13 @@ function useArmedNewChat(chats) {
   }, []);
   const createArmed = useCallback5(async (opts) => {
     const created = await create({ ...opts, mode: opts?.mode ?? pendingModeRef.current });
-    if (created && !pendingMemoryRef.current) await setMemoryEnabled(created.id, false).catch(() => void 0);
+    if (created && !pendingMemoryRef.current) {
+      try {
+        await setMemoryEnabled(created.id, false);
+      } catch {
+        return created;
+      }
+    }
     return created;
   }, [create, setMemoryEnabled]);
   const chatMode = activeChat ? normalizeChatMode(activeChat.mode) : pendingMode;
@@ -13114,6 +13120,7 @@ var FILE_DELIVERY_RULE = [
 ].join("\n");
 var BASE_PERSONAS = {
   designer: {
+    label: "Website",
     icon: "\u{1F310}",
     prompt: [
       "You are an expert AI coding assistant built into Builderforce.ai, a browser-based Builder. Help users generate and build websites and web apps.",
@@ -13123,6 +13130,7 @@ var BASE_PERSONAS = {
     ].join("\n")
   },
   mobile: {
+    label: "Mobile",
     icon: "\u{1F4F1}",
     prompt: [
       "You are an expert mobile app developer operating Builderforce.ai's Canvas Builder. The user is building a MOBILE app and previews it in a phone-sized device simulator.",
@@ -13133,6 +13141,7 @@ var BASE_PERSONAS = {
     ].join("\n")
   },
   webmobile: {
+    label: "Web + Mobile",
     icon: "\u{1F5A5}\uFE0F",
     prompt: [
       "You are an expert full-stack app developer built into Builderforce.ai's browser Builder. The user is building ONE app that ships as BOTH a responsive web application AND a mobile app, from a single codebase.",
@@ -13142,6 +13151,7 @@ var BASE_PERSONAS = {
     ].join("\n")
   },
   evermind: {
+    label: "Evermind",
     icon: "\u{1F9E0}",
     prompt: [
       "You are assisting with growing an Evermind \u2014 Builderforce.ai's self-updating model that learns continuously (Write-Through Cognition) instead of being frozen after training.",
@@ -13150,6 +13160,7 @@ var BASE_PERSONAS = {
     ].join("\n")
   },
   finetune: {
+    label: "Fine-tune",
     icon: "\u{1F527}",
     prompt: [
       "You are assisting with building and fine-tuning a custom LLM inside Builderforce.ai. This is the classic pipeline: design a dataset, train a LoRA adapter in-browser (WebGPU), benchmark it, then publish and export it.",
@@ -13157,6 +13168,7 @@ var BASE_PERSONAS = {
     ].join("\n")
   },
   voice: {
+    label: "Voice",
     icon: "\u{1F399}",
     prompt: [
       "You are a voice director inside Builderforce.ai's Voice Studio.",
@@ -14144,6 +14156,109 @@ function withUsageSurface(fetchImpl, surface) {
     headers: { ...init.headers ?? {}, [USAGE_SURFACE_HEADER]: surface }
   });
 }
+
+// src/useChatTurns.ts
+import { useCallback as useCallback8, useRef as useRef8 } from "react";
+
+// src/useQueuedTurns.ts
+import { useCallback as useCallback7, useEffect as useEffect8, useRef as useRef7, useState as useState10 } from "react";
+function useQueuedTurns({ running, send, resetKey = null, textOf: textOf2 }) {
+  const [queued, setQueued] = useState10([]);
+  const nextId = useRef7(0);
+  const sendRef = useRef7(send);
+  sendRef.current = send;
+  const textOfRef = useRef7(textOf2);
+  textOfRef.current = textOf2;
+  const runningRef = useRef7(running);
+  const submit = useCallback7((value) => {
+    const text = typeof value === "string" ? value.trim() : (textOfRef.current?.(value) ?? "").trim();
+    if (!text) return false;
+    if (!runningRef.current) return false;
+    const held = typeof value === "string" ? text : value;
+    setQueued((current) => [...current, { id: nextId.current += 1, value: held }]);
+    return true;
+  }, []);
+  runningRef.current = running;
+  const remove = useCallback7((id) => setQueued((current) => current.filter((item) => item.id !== id)), []);
+  const clear = useCallback7(() => setQueued((current) => current.length ? [] : current), []);
+  const prev = useRef7({ key: resetKey, running });
+  useEffect8(() => {
+    const was = prev.current;
+    prev.current = { key: resetKey, running };
+    if (was.key !== resetKey || !was.running || running || queued.length === 0) return;
+    const [next, ...rest] = queued;
+    setQueued(rest);
+    if (next) sendRef.current(next.value);
+  }, [running, queued, resetKey]);
+  useEffect8(() => {
+    setQueued([]);
+  }, [resetKey]);
+  return { items: queued, count: queued.length, submit, remove, clear };
+}
+
+// src/useChatTurns.ts
+function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
+  const ports = useRef8({ send, steer, stop, textOf: textOf2, runKey });
+  ports.current = { send, steer, stop, textOf: textOf2, runKey };
+  const queued = useQueuedTurns({
+    running,
+    send: (turn) => {
+      void ports.current.send(turn);
+    },
+    resetKey: runKey,
+    textOf: textOf2
+  });
+  const { submit: hold, clear } = queued;
+  const submit = useCallback8(async (turn) => {
+    const { send: deliver, steer: route, textOf: text } = ports.current;
+    const body = typeof turn === "string" ? turn.trim() : (text?.(turn) ?? "").trim();
+    if (!body) return false;
+    if (route?.(turn)) return true;
+    if (hold(turn)) return true;
+    return await deliver(turn) !== false;
+  }, [hold]);
+  const stopTurns = useCallback8(() => {
+    clear();
+    const { stop: halt, runKey: key } = ports.current;
+    if (halt) halt();
+    else if (key != null) stopRun(key);
+  }, [clear]);
+  return { queued, submit, stop: stopTurns };
+}
+
+// src/useChatCreation.ts
+import { useCallback as useCallback9, useEffect as useEffect9, useRef as useRef9 } from "react";
+function useChatCreation({ chatId, create, autoTitle }) {
+  const chatIdRef = useRef9(chatId);
+  chatIdRef.current = chatId;
+  const createRef = useRef9(create);
+  createRef.current = create;
+  const autoTitleRef = useRef9(autoTitle);
+  autoTitleRef.current = autoTitle;
+  const creating = useRef9(null);
+  useEffect9(() => {
+    if (chatId != null) creating.current = null;
+  }, [chatId]);
+  const ensureChatId = useCallback9(() => {
+    const open = chatIdRef.current;
+    if (open != null) return Promise.resolve(open);
+    creating.current ??= createRef.current().then(
+      (id) => {
+        if (id == null) creating.current = null;
+        return id;
+      },
+      (error) => {
+        creating.current = null;
+        throw error;
+      }
+    );
+    return creating.current;
+  }, []);
+  const onFirstUserTurn = useCallback9(async (id, firstUserText) => {
+    await autoTitleRef.current?.(id, firstUserText);
+  }, []);
+  return { ensureChatId, onFirstUserTurn };
+}
 export {
   ADDRESSED_TO_META_KEY,
   AGENT_POOL_PATHS,
@@ -14523,8 +14638,11 @@ export {
   useBrainConfig,
   useBrainContext,
   useBrainConversation,
+  useChatCreation,
+  useChatTurns,
   useMcpExtensions,
   useOptionalBrainContext,
+  useQueuedTurns,
   useRegisterBrainActions,
   useRunSnapshot,
   useToolConfirmationGate,

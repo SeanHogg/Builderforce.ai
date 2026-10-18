@@ -193,3 +193,26 @@
 :global(html:not([data-theme='light'])) .aiMessage {
   background:#241f43;
 }
+
+/* PHONE LAYOUT (<=767px) for this module's classes. Moved from CreationCanvas.module.css: the classes live
+   here now, so a rule written there matched nothing (CSS-Module hashing). The shell is found by
+   `data-canvas-shell` instead of a class. The editor host (`data-host="editor"`) keeps desktop chrome. */
+@media (max-width:767px) {
+  :global([data-canvas-shell]:not([data-host='editor'])) .brainDockResizer { display:none; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .brainDockGrabber { display:grid; }
+  /* The veil stops at the app bar, deliberately: the bar and the strip stay LIVE, so a
+       reader who opened the conversation can still leave the canvas or change surface
+       without dismissing it first. Tapping the veil closes the sheet, which is the gesture
+       a bottom sheet already teaches. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .canvasSheetVeil { display:block; top:var(--canvas-top-chrome-space); bottom:var(--composer-space); }
+  /* Centred above the composer rather than pinned to a corner: it carries a COUNT now,
+       which is an announcement and not a corner affordance. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .brainDockLauncher[data-side='left'], :global([data-canvas-shell]:not([data-host='editor'])) .brainDockLauncher[data-side='right'] { left:50%; right:auto; transform:translateX(-50%); min-height:44px; padding:0 16px 0 10px; font-size:13px; }
+  /* A phone has no room for a reading measure — the column IS the viewport. The rail
+       still owns the left edge, so the transcript starts clear of it. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .chatSurface { --chat-surface-width:100%; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .chatSurfaceHeader { padding:10px 12px 8px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .chatSurface > :global(.bf-surface__body) { padding:0 2px 0 54px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .chatSurface .chatSurfaceFooter { padding:4px 12px 8px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .collaborators span:nth-child(2), :global([data-canvas-shell]:not([data-host='editor'])) .collaborators span:nth-child(3) { display:none; }
+}

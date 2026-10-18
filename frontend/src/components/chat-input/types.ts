@@ -59,7 +59,7 @@ export interface ChatInputProps {
   onStop?: () => void;
   /**
    * Turns the user typed while a run was in flight and this composer is holding
-   * (the host's `useQueuedTurns`). Listed above the input as the shared
+   * (the host's `useChatTurns`). Listed above the input as the shared
    * `QueuedTurnChips`, each removable — the same chips on every surface.
    */
   queued?: Pick<QueuedTurns<string>, 'items' | 'remove'>;

@@ -620,3 +620,10 @@
 @media (prefers-reduced-motion: reduce) {
   .node[data-phase-focus='out'], .nodeOrb[data-phase-focus='out'] { transition:none; }
 }
+
+/* PHONE LAYOUT (<=767px) for this module's classes. Moved from CreationCanvas.module.css: the classes live
+   here now, so a rule written there matched nothing (CSS-Module hashing). The shell is found by
+   `data-canvas-shell` instead of a class. The editor host (`data-host="editor"`) keeps desktop chrome. */
+@media (max-width:767px) {
+  :global([data-canvas-shell]:not([data-host='editor'])) .node { max-width:calc(100vw - 32px); }
+}

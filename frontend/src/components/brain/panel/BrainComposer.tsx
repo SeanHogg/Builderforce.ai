@@ -1,6 +1,9 @@
 import { useMemo, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { PersonaPicker, RecipientPicker } from '@seanhogg/builderforce-brain-ui';
+import {
+  PersonaPicker, RecipientPicker, stringsFrom,
+  DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS,
+} from '@seanhogg/builderforce-brain-ui';
 import { lastServedModel, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import { ChatInput } from '@/components/ChatInput';
 import { PreviewPickChips } from '@/components/builder/PreviewPickChip';
@@ -10,6 +13,19 @@ import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import AssigneeHovercard from '../../workforce/AssigneeHovercard';
 import { useBrainPanel } from './BrainPanelContext';
 import { modeVocabularyFor } from '@/lib/brain/useChatModeCopy';
+import { useLabelLookup } from '@/i18n/useLabelLookup';
+
+/** brain-ui's canonical "Acting as" / "To" picker keys → the web catalog (module scope: memo deps). */
+const PERSONA_PATH: Readonly<Record<string, string>> = {
+  actingAs: 'brain.actingAs', title: 'brain.personaAria', defaultBrain: 'brain.defaultBrain',
+  personas: 'brain.personas', assignedAgents: 'brain.assignedAgents',
+};
+const RECIPIENT_PATH: Readonly<Record<string, string>> = {
+  to: 'brain.to', title: 'brain.recipientPickerTitle', brain: 'brain.brainRecipient',
+  brainHint: 'brain.brainRecipientHint', agentHint: 'brain.agentRecipientHint', humanHint: 'brain.humanRecipientHint',
+};
+const personaPath = (key: string): string | undefined => PERSONA_PATH[key];
+const recipientPath = (key: string): string | undefined => RECIPIENT_PATH[key];
 
 /** A recipient's avatar inside the shared hovercard — module scope, so its identity never changes. */
 function renderRecipientAvatar(r: DirectedRecipient, avatar: ReactNode) {
@@ -68,21 +84,10 @@ export function BrainComposer() {
   const effectiveModel = useMemo(() => lastServedModel(conv.messages), [conv.messages]);
   // The Status tab reads the Evermind of the project this chat is about.
   const account = useMemo(() => ({ projectId: ctxProjectId ?? null }), [ctxProjectId]);
-  const personaLabels = useMemo(() => ({
-    actingAs: tBrain('actingAs'),
-    title: tBrain('personaAria'),
-    defaultBrain: tBrain('defaultBrain'),
-    personas: tBrain('personas'),
-    assignedAgents: tBrain('assignedAgents'),
-  }), [tBrain]);
-  const recipientLabels = useMemo(() => ({
-    to: tBrain('to'),
-    title: tBrain('recipientPickerTitle'),
-    brain: tBrain('brainRecipient'),
-    brainHint: tBrain('brainRecipientHint'),
-    agentHint: tBrain('agentRecipientHint'),
-    humanHint: tBrain('humanRecipientHint'),
-  }), [tBrain]);
+  const personaLookup = useLabelLookup(personaPath);
+  const personaLabels = useMemo(() => stringsFrom(DEFAULT_PERSONA_PICKER_LABELS, personaLookup), [personaLookup]);
+  const recipientLookup = useLabelLookup(recipientPath);
+  const recipientLabels = useMemo(() => stringsFrom(DEFAULT_RECIPIENT_PICKER_LABELS, recipientLookup), [recipientLookup]);
 
   return (
     <ChatInput

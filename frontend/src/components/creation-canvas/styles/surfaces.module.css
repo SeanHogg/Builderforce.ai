@@ -439,3 +439,20 @@
   .placeSurfaceBody { padding:12px; }
   .placeSection .phasePathButton { min-height:44px; }
 }
+
+/* PHONE LAYOUT (<=767px) for this module's classes. Moved from CreationCanvas.module.css: the classes live
+   here now, so a rule written there matched nothing (CSS-Module hashing). The shell is found by
+   `data-canvas-shell` instead of a class. The editor host (`data-host="editor"`) keeps desktop chrome. */
+@media (max-width:767px) {
+  /* Same on the object surfaces: the sheet gives up its measure, and the header stops
+       reserving the rail's gutter because the rail moves to the bottom edge here. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .pageSheet { --page-sheet-width:100%; padding:12px 10px 20px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .pageSheet[data-runtime='document'] { --page-sheet-width:100%; padding:8px 6px 16px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .objectSurfaceHeader { gap:8px; padding:8px 10px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .objectSurfaceTitle strong { font-size:12px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .playStage, :global([data-canvas-shell]:not([data-host='editor'])) .timelineStage { padding:10px 8px 14px; }
+  /* Three side-by-side columns don't fit a phone. The viewport keeps the room; the
+       palette and the properties rail become short horizontal-scroll strips above and
+       below it instead of disappearing — a phone can still place and edit a prop. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .worldStage { flex-direction:column; }
+}

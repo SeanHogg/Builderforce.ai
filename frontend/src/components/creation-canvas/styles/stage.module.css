@@ -217,3 +217,21 @@
 .drawingWidth input{width:90px}
 .drawingDone{margin-left:auto}
 @media(max-width:767px){.drawingToolbar{bottom:120px;gap:4px;padding:6px}.drawingToolbar button b{display:none}.drawingWidth input{width:64px}}
+
+/* PHONE LAYOUT (<=767px) for this module's classes. Moved from CreationCanvas.module.css: the classes live
+   here now, so a rule written there matched nothing (CSS-Module hashing). The shell is found by
+   `data-canvas-shell` instead of a class. The editor host (`data-host="editor"`) keeps desktop chrome. */
+@media (max-width:767px) {
+  :global([data-canvas-shell]:not([data-host='editor'])) .primaryButton { min-height:36px; padding:7px 10px; font-size:10px; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .mergePanel { inset:var(--canvas-top-chrome-space) 8px calc(var(--composer-space) + 8px); width:auto; box-sizing:border-box; }
+  /* NO FLOATING RAIL. The phone's surface switcher was a column of five unlabelled
+       glyphs parked over the board's top-left corner — over the surface's own heading —
+       with a `[data-brain-open='true']` rule that laid it DOWN in a row across that
+       heading whenever the Brain sheet opened. Both the column and the flip are gone:
+       `.surfaceStrip` is a worded band under the canvas app bar, where a phone's tabs
+       belong, and it is never over the work. */
+  :global([data-canvas-shell]:not([data-host='editor'])) .historyPanel, :global([data-canvas-shell]:not([data-host='editor'])) .diagnosticsPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .changeSetPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; max-height:none; display:flex; flex-direction:column; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .changeSetPanel > div { flex:1; min-height:0; max-height:none; }
+  :global([data-canvas-shell]:not([data-host='editor'])) .selectionToolbar { right:8px; left:8px; max-width:none; transform:none; overflow-x:auto; justify-content:flex-start; }
+}

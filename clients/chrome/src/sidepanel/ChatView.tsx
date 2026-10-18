@@ -15,6 +15,7 @@ import {
   BrainTimeline,
   ChatErrorBanner,
   DEFAULT_ASK_USER_LABELS,
+  DEFAULT_QUEUED_TURN_LABELS,
   PendingQuestionBanner,
   QueuedTurnChips,
   StarterGroup,
@@ -30,14 +31,18 @@ import {
 import catalogs from 'virtual:rovr-timeline-catalogs';
 import { deriveChatTitle, useChatCreation, useChatTurns, type BrainMessage } from '@seanhogg/builderforce-brain-embedded';
 import { PRICING_URL } from '../config';
-import { t, uiCatalogLocale } from '../i18n/t';
+import { t, uiCatalogLocale, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
 import { ChatInfoStrip } from './ChatInfoStrip';
 import { ConfirmCard } from './ConfirmCard';
 import { useLoaded, useRun, useServices } from './hooks';
+import { rovrLookup } from './labels/rovrLookup';
 import { RovrComposer } from './RovrComposer';
 import { ROVR_STARTERS } from './rovrStarters';
 import { useRovrChatOptions } from './useRovrChatOptions';
+
+/** brain-ui's canonical queued-turn keys → Rovr messages. */
+const QUEUED_KEY: Readonly<Record<string, MessageKey>> = { list: 'queuedList', hint: 'queuedHint', remove: 'queuedRemove' };
 
 export interface ChatViewProps {
   chats: LocalChat[];
@@ -219,7 +224,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
                   items={turns.queued.items}
                   textOf={(text) => text}
                   onRemove={turns.queued.remove}
-                  labels={{ list: t('queuedList'), hint: t('queuedHint'), remove: t('queuedRemove') }}
+                  labels={stringsFrom(DEFAULT_QUEUED_TURN_LABELS, rovrLookup((k) => QUEUED_KEY[k]))}
                 />
               )}
               showSuggestions={!empty}
