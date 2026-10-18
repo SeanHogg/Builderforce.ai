@@ -14,10 +14,41 @@
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { runCommandTool, type Capability } from '@builderforce/agent-tools';
 import { createWorkspaceShell } from '@/lib/browserRuntime/workspaceShell';
+import { recordBuildFailure } from '@/lib/buildDiagnostics';
 import type { BoundCanvasBuild, CanvasBuildToolsContext } from '@/lib/canvasBuildTools';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
+import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 
 const SHARED = runCommandTool.schema.function;
+
+/**
+ * The shared tool rejects a blank command before the shell starts. That is a bad
+ * tool call, not a workspace failure — recording it would make
+ * `canvas_read_build_diagnostics` blame a build that never ran.
+ */
+const COMMAND_NOT_RUN = 'command is required';
+
+/**
+ * A command the agent ran that failed. The manual Run button already writes here
+ * (`useWorkspaceRun`); this is the only other way a build command runs, and until
+ * it wrote the same ledger the agent was told "no errors recorded" for a command
+ * it had just watched fail.
+ */
+function recordFailedCommand(workspaceId: WorkspaceId, command: unknown, data: Record<string, unknown>): void {
+  if (data.ok !== false) return;
+  const error = typeof data.error === 'string' ? data.error : '';
+  if (error === COMMAND_NOT_RUN) return;
+  const exitCode = typeof data.exitCode === 'number' ? data.exitCode : undefined;
+  const stdout = typeof data.stdout === 'string' ? data.stdout : '';
+  const commandText = typeof command === 'string' ? command.trim() : '';
+  recordBuildFailure(workspaceId, {
+    source: 'build',
+    ...(commandText ? { command: commandText } : {}),
+    ...(exitCode != null ? { exitCode } : {}),
+    message: error || (exitCode != null ? `Command failed (exit ${exitCode}).` : 'The command failed.'),
+    ...(stdout.trim() ? { detail: stdout } : {}),
+  });
+}
 
 /** The shared tool's own description of its one argument. */
 const COMMAND_PARAMETER = (SHARED.parameters.properties as { command: Record<string, unknown> }).command;
@@ -43,7 +74,7 @@ export function canvasRunBuildCommandAction(
 ): BrainAction {
   return {
     name: 'canvas_run_build_command',
-    description: `${SHARED_DESCRIPTION} It runs in this browser's own Node runtime against the build's current files — npm, node, npx and the usual shell built-ins, pipes and && work; native addons and system binaries do not. Files the command creates, changes or deletes are saved back to the workspace (dependencies and build output are not). Do NOT start a long-running server or watcher (npm run dev, vite): it never exits and is stopped at the timeout — the live preview already runs the app; use canvas_read_build_diagnostics for its errors.`,
+    description: `${SHARED_DESCRIPTION} It runs in this browser's own Node runtime against the build's current files — npm, node, npx and the usual shell built-ins, pipes and && work; native addons and system binaries do not. Files the command creates, changes or deletes are saved back to the workspace (dependencies and build output are not). Do NOT start a long-running server or watcher (npm run dev, vite): it never exits and is stopped at the timeout — the live preview already runs the app. A command that fails, including that timeout, is recorded for canvas_read_build_diagnostics; use that for the preview's own errors too.`,
     mutates: true,
     parameters: {
       type: 'object', required: ['command'], additionalProperties: false,
@@ -68,9 +99,12 @@ export function canvasRunBuildCommandAction(
           { command: args.command },
           { caps: { capabilities: new Set<Capability>(['shell']), shell } },
         );
+        recordFailedCommand(build.store.id, args.command, result.data);
         return result.data;
       } catch (error) {
-        return { ok: false, error: toolErrorMessage(error, 'The command could not be run.') };
+        const message = toolErrorMessage(error, 'The command could not be run.');
+        recordFailedCommand(build.store.id, args.command, { ok: false, error: message });
+        return { ok: false, error: message };
       }
     },
   };
