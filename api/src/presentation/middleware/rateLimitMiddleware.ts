@@ -34,6 +34,18 @@ const RPM_LIMITS: Record<TenantPlan, number> = {
   [TenantPlan.TEAMS]: 3000,
 };
 
+/** Requests the limiter never counts or blocks. Persisting a chat turn is the user's
+ *  own work — a 429 there drops the turn ("Could not save the turn"), so it must not
+ *  share the tenant bucket with polling/abuse traffic (operator, 2026-10-18). Still
+ *  authenticated by the router's own authMiddleware. Add routes here as DATA. */
+const EXEMPT_ROUTES: ReadonlyArray<{ method: string; path: RegExp }> = [
+  { method: 'POST', path: /^\/api\/brain\/chats\/[^/]+\/messages\/?$/ },
+];
+
+export function isRateLimitExempt(method: string, path: string): boolean {
+  return EXEMPT_ROUTES.some((r) => r.method === method.toUpperCase() && r.path.test(path));
+}
+
 type RateLimitHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
     TENANT_RATE_LIMITER?: DurableObjectNamespace;
@@ -44,7 +56,7 @@ export const rateLimitMiddleware: MiddlewareHandler<RateLimitHonoEnv> = async (c
   const env = c.env;
 
   // DO binding is optional — skip in dev/environments without it
-  if (!env.TENANT_RATE_LIMITER) {
+  if (!env.TENANT_RATE_LIMITER || isRateLimitExempt(c.req.method, c.req.path)) {
     return next();
   }
 

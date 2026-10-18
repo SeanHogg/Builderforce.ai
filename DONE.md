@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-10-18 — Saving a chat turn hit the tenant rate limit (api 2026.10.58)
+
+- `POST /api/brain/chats/:id/messages` returned 429 from the app-wide per-tenant limiter, dropping the turn ("Could not save the turn"). `rateLimitMiddleware.ts` now has an `EXEMPT_ROUTES` data list (`isRateLimitExempt`); turn saves are neither counted nor blocked, while reads of the same path keep the limit. Covered in `rateLimitMiddleware.test.ts`.
+
 ## ✅ RESOLVED 2026-10-18 — A steer in one chat restarted another running chat (brain-embedded 2026.10.35 · VSIX 2026.10.49)
 
 - **Reported.** "Only do analysis", steered into chat #149's live run, stopped chat #148, which was running four sub-agents in parallel. The text was saved correctly to #149 (row 88935, `midTurn`). 20 s later #148's top-level run started fresh, at step 0, on those exact words. No user row was written to #148.

@@ -76,6 +76,22 @@ describe('rateLimitMiddleware', () => {
     expect(Number(res.headers.get('Retry-After'))).toBeGreaterThanOrEqual(1);
   });
 
+  it('never counts or blocks saving a chat turn', async () => {
+    const { ns, limits } = fakeLimiter(false);
+    resolveBearerTenantId.mockResolvedValue(41);
+    resolveTenantEffectivePlan.mockResolvedValue('free');
+    const a = new Hono();
+    a.use('*', rateLimitMiddleware as never);
+    a.post('/api/brain/chats/:id/messages', (c) => c.text('saved'));
+    a.get('/api/brain/chats/:id/messages', (c) => c.text('read'));
+    const save = await a.request('/api/brain/chats/112/messages', { method: 'POST' }, { TENANT_RATE_LIMITER: ns });
+    expect(save.status).toBe(200);
+    expect(limits).toEqual([]);
+    // Only the save is exempt — reads still take the tenant limit.
+    const read = await a.request('/api/brain/chats/112/messages', {}, { TENANT_RATE_LIMITER: ns });
+    expect(read.status).toBe(429);
+  });
+
   it('lets anonymous callers through un-throttled', async () => {
     const { ns, limits } = fakeLimiter();
     resolveBearerTenantId.mockResolvedValue(null);
