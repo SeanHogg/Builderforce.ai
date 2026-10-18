@@ -13,7 +13,6 @@ import {
   aiToolCalls,
   aiUsageRecords,
   aiVoiceAgentCalls,
-  answerCache,
   agentCapabilityGrants,
   agentContextContributions,
   agentCredentialDelegations,
@@ -61,7 +60,6 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
   entity(aiEmailClassifications, { readOnly: true }),
   entity(aiVoiceAgentCalls, { readOnly: true }),
   /** Caches: keyed by their input, refilled by a miss, expired by their TTL. */
-  entity(answerCache, { readOnly: true }),
   entity(enrichmentCache, { readOnly: true }),
   entity(geocoderCache, { readOnly: true }),
   /** A lock is held or it is not. Editing one by hand is how two workers get the

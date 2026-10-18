@@ -2553,7 +2553,7 @@ export const ideTrainingLogs = pgTable('ide_training_logs', {
 // One flattening move ran here (§3.2): `agent_host_projects` was ≤3 payload
 // columns — the thin move — so it is a JSONB key on the host rather than a table.
 //
-// THE FOUR CACHES ARE FOUR TABLES ON PURPOSE. `answer_cache`, `enrichment_cache`,
+// THE REMAINING CACHES ARE SEPARATE TABLES ON PURPOSE. `enrichment_cache`,
 // `geocoder_cache` and `model_locks` look like one shape and are not: they differ
 // in key derivation, eviction rule and correctness consequence, and a shared
 // cache table would need every one of those as a nullable column — the
@@ -2561,27 +2561,9 @@ export const ideTrainingLogs = pgTable('ide_training_logs', {
 // replacements: that primitive is the read-through for tenant-scoped reads, and
 // these are cross-tenant, provider-priced, long-lived stores whose whole value is
 // that they survive an isolate.
-
-/** A cached answer to a semantically-identical question, keyed by prompt hash.
- *  Cross-tenant by design and therefore explicitly scoped: the cache key includes
- *  the tenant unless the answer is provably tenant-independent. */
-export const answerCache = pgTable('answer_cache', {
-  id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id'),
-  /** SHA-256 of (normalised prompt + model + tool set). */
-  keyHash:     varchar('key_hash', { length: 64 }).notNull(),
-  model:       varchar('model', { length: 96 }),
-  answer:      text('answer'),
-  payload:     jsonb('payload'),
-  tokensSaved: integer('tokens_saved').notNull().default(0),
-  hitCount:    integer('hit_count').notNull().default(0),
-  lastHitAt:   timestamp('last_hit_at'),
-  expiresAt:   timestamp('expires_at'),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-}, (t) => [
-  uniqueIndex('uq_answer_cache_key').on(t.tenantId, t.keyHash),
-  index('idx_answer_cache_expiry').on(t.expiresAt),
-]);
+//
+// `answer_cache` was the fourth and is gone (migration 1239): live Q&A cache is
+// `project_facts` (`qa:v2:` keys).
 
 /** A cached enrichment result. Keyed by the provider request, because the SPEND
  *  is what is being avoided — a miss costs money, not just latency. */

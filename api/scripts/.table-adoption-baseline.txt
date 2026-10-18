@@ -8,7 +8,6 @@
 activity_feed
 affiliate_referrals
 ai_voice_agent_calls
-answer_cache
 asset_inspections
 availability_slots
 billing_plans

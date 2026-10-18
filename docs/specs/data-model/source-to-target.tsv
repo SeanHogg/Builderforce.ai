@@ -424,7 +424,7 @@ HV	assessment_attempts	Hiring	primitive	run
 HV	assessment_runs	Hiring	primitive	run
 HV	assessment_dimension_norms	Hiring	flatten	an enum + CHECK
 HV	application_form_answers	Hiring	primitive	message
-HV	answer_cache	Agents & runtime	keep	answer_cache
+HV	answer_cache	Agents & runtime	merged	project_facts
 HV	subscription_plans	Finance	merged	billing_plans
 HV	subscriptions	Finance	primitive	connection
 HV	payment_methods	Finance	keep	payment_methods

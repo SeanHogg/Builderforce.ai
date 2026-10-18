@@ -1,0 +1,12 @@
+-- 1239 · Drop `answer_cache` — SUPERSEDED by the `project_facts` Q&A cache, not unbuilt.
+--
+-- WHY. Interactive chats (web / vsix / rovr) cache Q&A in `project_facts` under
+-- `qa:v2:` keys (`projectMemory.ts`). Nothing in `api/src` reads or writes this
+-- table except the read-only entity registration and the Drizzle declaration —
+-- the table-adoption guard carries it as registry-only. ROADMAP.md names it
+-- dead. Indexes `uq_answer_cache_key` and `idx_answer_cache_expiry` and FK
+-- `fk_answer_cache_tenant` fall with the table (CASCADE).
+--
+-- Idempotent: safe on a database where the table was already dropped.
+-- Do not VACUUM here; Neon reclaims in its own time.
+DROP TABLE IF EXISTS answer_cache CASCADE;
