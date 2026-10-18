@@ -49,7 +49,7 @@
     "audit:burnrate-tenancy:validate": "node scripts/audit-burnrate-tenancy.mjs --validate-only",
     "check": "node ../scripts/run-checks.mjs scripts/checks.manifest.mjs",
     "pretest": "npm run check",
-    "test": "vitest run",
+    "test": "node scripts/vitest-run.mjs",
     "qa:cloud-agents": "vitest run src/application/runtime/cloudRunReconstruction.test.ts src/application/runtime/cloudLoopControl.test.ts src/application/runtime/cloudTelemetry.test.ts src/application/runtime/cloudRunLedger.test.ts src/application/runtime/cloudAgentEngine.test.ts src/application/llm/cloudByoPolicy.test.ts",
     "typecheck:native": "tsgo --noEmit",
     "check:table-adoption": "node scripts/check-table-adoption.mjs",
