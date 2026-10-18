@@ -37,8 +37,13 @@ export function canvasModelPort(run: CanvasRun): LoopPorts<ChatCompletionMessage
     // three turns before the reserved window it never reaches. Having already ignored
     // an explicit act-now directive is the stronger signal of the two, so it arms the
     // same phase: research and re-reads withdrawn, authoring tools only.
+    // Countdown arms only for a finite cap. An omitted cap is unbounded; subtracting
+    // it is NaN and the comparison used to fail closed by accident. Prose recovery
+    // still arms authoring on its own.
+    const stepCap = budget.stepCap;
     run.authoringOnly = mutationRequested && !run.canvasChanged
-      && (run.mutationRecoveries > 0 || budget.stepCap - turn <= RESERVED_AUTHORING_TURNS);
+      && (run.mutationRecoveries > 0
+        || (typeof stepCap === 'number' && Number.isFinite(stepCap) && stepCap - turn <= RESERVED_AUTHORING_TURNS));
     if (run.authoringOnly && !run.authoringDirectiveIssued) {
       run.authoringDirectiveIssued = true;
       messages.push({

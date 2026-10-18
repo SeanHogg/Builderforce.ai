@@ -7,7 +7,7 @@ import {
   toolOutcomeChangedCanvas,
 } from '@/lib/canvasTurnOutcome';
 import { CANVAS_BUILD_FILE_WRITE_TOOLS, CANVAS_BUILD_TOOLS, CANVAS_BUILD_WORKSPACE_WRITE_TOOLS, workspacePathArg } from '@/lib/canvasBuildTools';
-import { CANVAS_TRUNCATED_RETRY_HINT, MAX_CANVAS_BUILD_TURNS, MAX_NARROW_SEARCHES } from '@/lib/canvasAiTurnBudget';
+import { CANVAS_TRUNCATED_RETRY_HINT, MAX_NARROW_SEARCHES } from '@/lib/canvasAiTurnBudget';
 import { executeCanvasTool } from '@/lib/canvasAiToolExecution';
 import { reportToPolicy, type CanvasRun } from '@/lib/canvasAiRun';
 
@@ -17,7 +17,7 @@ import { reportToPolicy, type CanvasRun } from '@/lib/canvasAiRun';
  * through the shared canvas executor, and records what it changed on the board.
  */
 export function canvasToolPort(run: CanvasRun): LoopPorts<ChatCompletionMessage>['dispatch'] {
-  const { options, byName, budget, toolsUsedThisTurn, changedFiles } = run;
+  const { options, byName, toolsUsedThisTurn, changedFiles } = run;
   return async (call) => {
     const toolStartedAt = Date.now();
     const action = byName.get(call.name);
@@ -43,13 +43,12 @@ export function canvasToolPort(run: CanvasRun): LoopPorts<ChatCompletionMessage>
     }
     toolsUsedThisTurn.add(call.name);
     if (!run.workspaceTurn && CANVAS_BUILD_TOOLS.has(call.name)) {
-      // The turn is working in an app from here on (see CANVAS_BUILD_RESPONSE_TOKENS
-      // and MAX_CANVAS_BUILD_TURNS). Widened once; never narrowed back. Building the
-      // app is the hand-off from analysis to code: every later round-trip asks the
-      // gateway for a coding model.
+      // The turn is working in an app from here on (see CANVAS_BUILD_RESPONSE_TOKENS).
+      // Building the app is the hand-off from analysis to code: every later round-trip
+      // asks the gateway for a coding model. There is no step cap to widen — a canvas
+      // turn has the same unbounded budget as Rovr and the VSIX.
       run.workspaceTurn = true;
       reportToPolicy(run, { type: 'hand_off' });
-      budget.stepCap = Math.max(budget.stepCap, MAX_CANVAS_BUILD_TURNS);
     }
     const words = call.name === 'canvas_add_object' ? authoredDocumentWords(args) : null;
     if (words != null) {

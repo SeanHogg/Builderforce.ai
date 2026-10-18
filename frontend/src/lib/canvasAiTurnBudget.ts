@@ -3,7 +3,10 @@
  * spent it badly.
  *
  * Every number and directive here answers the same question — how far does a turn
- * go before it stops — and each carries the measurement that set it. They lived in
+ * go before it stops — and each carries the measurement that set it. The step
+ * ceiling used to live here too. It does not: a canvas turn passes `budget: {}`,
+ * and the kernel's failure streak is the only stop that is not the model finishing
+ * or the user cancelling. The remaining numbers lived in
  * `creationCanvasAi.ts` beside the loop that reads them, which meant retuning a
  * budget and rewriting the runner were edits to the same file. They are separate
  * reasons to change: a ceiling moves when a provider or a workload changes, the
@@ -14,21 +17,13 @@
 import { effortProfile, type Effort } from '@seanhogg/builderforce-brain-embedded';
 
 /**
- * Model round-trips one composer submit may take before the loop gives up.
+ * How many turns a finite step cap would reserve for authoring after research.
  *
- * This was 3, which is enough to author an object and answer, and NOT enough to
- * research anything: the pipeline the canvas system prompt prescribes is search →
- * fetch a source → fetch another → create the Dataset → geocode it → materialize
- * the visual, so a research turn ran out of rounds mid-pipeline and returned a
- * half-built board. These extra rounds are tool continuations of ONE user turn —
- * the guest allowance charges per turn (idempotent on `guestTurnId`), so a deeper
- * loop costs the visitor nothing from their message budget.
+ * The canvas loop no longer sets a step cap — it passes `budget: {}`, the same
+ * budget Rovr and the VSIX pass — so this window does not arm from a countdown.
+ * The model port still reads it when a cap is present; a prose recovery
+ * (`mutationRecoveries`) arms authoring on its own.
  */
-export const MAX_CANVAS_TOOL_TURNS = 8;
-
-/** Keep enough of a bounded turn to author the requested Canvas artifacts after
- * research. Without this reservation, a model can spend all eight continuations
- * retrying a narrow search backend and never reach canvas_add_object. */
 export const RESERVED_AUTHORING_TURNS = 2;
 
 /** Two encyclopedic results are enough evidence that repeating differently worded
@@ -83,16 +78,6 @@ export function canvasTurnShape(base: number, shaping: CanvasRunShaping | undefi
     ...(shaping.thinking ? { reasoning: { level: profile.reasoningLevel } } : {}),
   };
 }
-
-/**
- * The step budget once a turn is writing code. One file is one step, and the seeded
- * starter project needs list → read → several writes before it is the user's app, so
- * the eight steps sized for research-then-author ran out with the app half-written and
- * the runner reporting that nothing had happened. Sixteen is enough for a small app
- * with room for a diagnostics read; a bigger one continues on the next turn, and the
- * `stepsExhausted` notice tells the user exactly that.
- */
-export const MAX_CANVAS_BUILD_TURNS = 16;
 
 /**
  * How many tools one canvas completion advertises.

@@ -21,7 +21,7 @@ import {
 } from '@/lib/canvasTurnOutcome';
 import { canvasSystemMessages, promptNamedTools } from '@/lib/canvasAiSystemPrompt';
 import { CanvasRunAbortedError, GuestAiUnavailableError } from '@/lib/canvasAiErrors';
-import { MALFORMED_TOOL_CALL_DIRECTIVE, MAX_CANVAS_TOOL_TURNS, TRUNCATED_ROUND_DIRECTIVE } from '@/lib/canvasAiTurnBudget';
+import { MALFORMED_TOOL_CALL_DIRECTIVE, TRUNCATED_ROUND_DIRECTIVE } from '@/lib/canvasAiTurnBudget';
 import { runAgentLoop, openAiChatCodec } from '@builderforce/agent-loop';
 import { initialRunPolicy } from '@builderforce/run-policy';
 import { composeTurnTail, documentShortfallAnswer } from '@/lib/canvasAiTurnTail';
@@ -31,7 +31,14 @@ import { canvasModelPort } from '@/lib/canvasModelPort';
 import { canvasToolPort } from '@/lib/canvasToolPort';
 import { canvasNoToolCallsHook } from '@/lib/canvasNoToolCalls';
 
-/** Run a small, bounded agent loop over the active canvas and shared MCP catalog. */
+/**
+ * Run the canvas agent loop over the active canvas and shared MCP catalog.
+ *
+ * No step cap — the same budget Rovr and the VSIX pass (`runLoop.ts`: `budget: {}`).
+ * A turn stops when the model finishes, the user cancels, or the kernel's
+ * consecutive-tool-failure breaker trips. A step ceiling is what cut a Stripe
+ * checkout off after 16 tool calls.
+ */
 export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<string> {
   /** Every await boundary a stopped turn must not cross. */
   const throwIfStopped = () => { if (options.signal?.aborted) throw new CanvasRunAbortedError(); };
@@ -136,7 +143,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     throwIfStopped,
     toolsUsedThisTurn: new Set<string>(),
     changedFiles: new Set<string>(),
-    budget: { stepCap: MAX_CANVAS_TOOL_TURNS },
+    // Omitted `stepCap` is unbounded (`stepCap ?? Infinity` in the kernel). The
+    // authoring countdown arms only when a finite cap is set; a prose recovery
+    // still arms authoring on its own.
+    budget: {},
     finalText: '',
     canvasChanged: false,
     executiveRequestRecoveryUsed: false,
@@ -217,7 +227,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     canvasChanged: run.canvasChanged,
     abandonedMidTurn: run.abandonedMidTurn,
     providerFailures: run.providerFailures,
-    stepsExhausted: loop.exhausted,
+    // Only a step cap produces this notice (`exhaustedBy: 'steps'`). An empty budget
+    // never exhausts that way; a failure-streak stop must not be reported as
+    // "I used every step this turn allows".
+    stepsExhausted: loop.exhaustedBy === 'steps',
     workspaceTurn: run.workspaceTurn,
     buildTurn: run.buildTurn,
     buildAuthored: run.buildAuthored,

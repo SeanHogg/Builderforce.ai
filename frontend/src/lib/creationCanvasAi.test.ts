@@ -27,8 +27,9 @@ const { StreamInterruptedError, RepetitionLoopError } = await import('@seanhogg/
 // limits and the two ways it can end without failing change for reasons the loop
 // does not. Imported statically because neither reaches a transport.
 const {
-  MAX_CANVAS_TOOL_TURNS, MAX_CANVAS_BUILD_TURNS, CANVAS_BUILD_RESPONSE_TOKENS, BUILD_NOT_AUTHORED_DIRECTIVE, CANVAS_TOOL_LIMIT, CANVAS_STREAM_IDLE_MS,
+  CANVAS_BUILD_RESPONSE_TOKENS, BUILD_NOT_AUTHORED_DIRECTIVE, CANVAS_TOOL_LIMIT, CANVAS_STREAM_IDLE_MS,
 } = await import('./canvasAiTurnBudget');
+const { DEFAULT_TOOL_FAILURE_STREAK } = await import('@builderforce/agent-loop');
 const { CanvasRunAbortedError, isCanvasRunAborted } = await import('./canvasAiErrors');
 
 /**
@@ -527,7 +528,8 @@ describe('runCreationCanvasAi', () => {
           { id: 'add-site', name: 'canvas_add_object', args: JSON.stringify({ kind: 'website', title: 'BurnRateOS redesign', fields: { pages: [{ id: 'home', name: 'Home', path: '/', sections: [{ id: 'hero', kind: 'hero', heading: 'Know your runway. Decide what comes next.', body: 'One operating view for founders.', cta: 'Start free' }, { id: 'proof', kind: 'features', heading: 'Operate with confidence', items: [{ title: 'Runway', body: 'See risk before it becomes urgent.' }] }] }], websiteTheme: { style: 'technical' } } }) },
           { id: 'add-guide', name: 'canvas_add_object', args: JSON.stringify({ kind: 'document', title: 'Current vs proposed design and implementation guide', fields: { content: 'Evidence, side-by-side comparison, priorities, and step-by-step implementation guidance.', sources: ['https://burnrateos.com/'] } }) },
         ],
-      });
+      })
+      .mockResolvedValueOnce({ text: 'The redesign and the implementation guide are on the board.', toolCalls: [] });
 
     const answer = await runTurn({
       prompt,
@@ -544,10 +546,11 @@ describe('runCreationCanvasAi', () => {
     expect(search).toHaveBeenCalledTimes(2);
     expect(addObject).toHaveBeenCalledTimes(2);
     expect(addObject.mock.calls.map(([args]) => args.kind)).toEqual(['website', 'document']);
-    expect(answer).toBe('I added the requested content to the canvas.');
+    expect(answer).toBe('The redesign and the implementation guide are on the board.');
     expect(mocks.streamChatCompletion.mock.calls[0][0].maxTokens).toBe(3_200);
     expect(mocks.streamChatCompletion.mock.calls[0][0].messages.some((message: { content: string }) => message.content.includes('A generic SaaS-principles summary is not completion'))).toBe(true);
-    const authoringRequest = mocks.streamChatCompletion.mock.calls[6][0];
+    // Prose recovery arms authoring; there is no step-cap countdown to do it earlier.
+    const authoringRequest = mocks.streamChatCompletion.mock.calls[7][0];
     expect(authoringRequest.tools.map((tool: { function: { name: string } }) => tool.function.name)).toEqual(['canvas_add_object']);
     expect(authoringRequest.messages.some((message: { content: string }) => message.content.includes('research phase is over'))).toBe(true);
   });
@@ -691,11 +694,15 @@ describe('runCreationCanvasAi', () => {
     expect(answer).not.toContain('400-page document');
   });
 
-  it('does not claim changes were applied when the bounded tool loop is exhausted', async () => {
+  it('does not stop a successful canvas turn at the old eight-step cap', async () => {
     const run = vi.fn(() => ({ ok: true, proposed: true }));
-    mocks.streamChatCompletion.mockResolvedValue({
-      text: '',
-      toolCalls: [{ id: 'call-1', name: 'canvas_add_object', args: JSON.stringify({ kind: 'note' }) }],
+    let step = 0;
+    mocks.streamChatCompletion.mockImplementation(async () => {
+      step += 1;
+      if (step <= 9) {
+        return { text: '', toolCalls: [{ id: `call-${step}`, name: 'canvas_add_object', args: JSON.stringify({ kind: 'note' }) }] };
+      }
+      return { text: 'Nine notes are on the board.', toolCalls: [] };
     });
 
     const answer = await runTurn({
@@ -703,8 +710,10 @@ describe('runCreationCanvasAi', () => {
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
     });
 
-    expect(run).toHaveBeenCalledTimes(MAX_CANVAS_TOOL_TURNS);
-    expect(answer).toBe('I added the requested content to the canvas.');
+    expect(run).toHaveBeenCalledTimes(9);
+    expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(10);
+    expect(answer).toBe('Nine notes are on the board.');
+    expect(answer).not.toBe(NOTICES.stepsExhausted([]));
   });
 
   it('reports a rejected layout operation instead of claiming that changes exist', async () => {
@@ -983,44 +992,47 @@ describe('runCreationCanvasAi', () => {
       expect(answer).toBe(NOTICES.buildNotAuthored);
     });
 
-    it('gives a build turn the code step budget, and says so when it runs out mid-work', async () => {
+    it('does not stop a build turn at the old sixteen-step cap', async () => {
       const run = vi.fn(() => ({ ok: true, applied: true, path: 'src/x.js' }));
-      mocks.streamChatCompletion.mockResolvedValue({
-        text: '', finishReason: 'tool_calls',
-        toolCalls: [{ id: 'c', name: 'canvas_write_build_file', args: JSON.stringify({ path: 'src/x.js', content: '// more' }) }],
+      let step = 0;
+      mocks.streamChatCompletion.mockImplementation(async () => {
+        step += 1;
+        if (step <= 17) {
+          return {
+            text: '', finishReason: 'tool_calls',
+            toolCalls: [{ id: `c${step}`, name: 'canvas_write_build_file', args: JSON.stringify({ path: 'src/x.js', content: `// ${step}` }) }],
+          };
+        }
+        return { text: 'The app is written.', toolCalls: [], finishReason: 'stop' };
       });
 
       const answer = await runTurn({ prompt: 'create app', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [writeTool(run)] });
 
-      expect(MAX_CANVAS_BUILD_TURNS).toBeGreaterThan(MAX_CANVAS_TOOL_TURNS);
-      expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(MAX_CANVAS_BUILD_TURNS);
-      expect(run).toHaveBeenCalledTimes(MAX_CANVAS_BUILD_TURNS);
-      // The notice is what the transcript keeps of this turn, so it names what was written
-      // — once, however many times the turn rewrote it.
-      expect(answer).toBe(NOTICES.stepsExhausted(['src/x.js']));
-      expect(answer).toContain('src/x.js');
+      expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(18);
+      expect(run).toHaveBeenCalledTimes(17);
+      expect(answer).toBe('The app is written.');
+      expect(answer).not.toBe(NOTICES.stepsExhausted(['src/x.js']));
     });
 
-    it('gives a turn that only READS an app the code step budget, and says it stopped before changing anything', async () => {
-      // Session local-148925cf: "continue" re-read the app for eight research-sized steps,
-      // never reached an edit, and answered "I couldn't prepare any canvas changes".
-      const read = vi.fn(() => ({ ok: true, path: 'src/App.jsx', content: 'export default 1;' }));
-      let step = 0;
-      mocks.streamChatCompletion.mockImplementation(async () => {
-        step += 1;
-        return {
-          text: '', finishReason: 'tool_calls',
-          toolCalls: [{ id: `r${step}`, name: 'canvas_read_build_file', args: JSON.stringify({ path: `src/page${step}.jsx` }) }],
-        };
-      });
+    it('stops a turn whose app reads keep failing on the failure streak, not a step notice', async () => {
+      // Session local-148925cf: "continue" re-read the app and never reached an edit.
+      // A step cap used to cut that off. The stop is now the kernel's failure streak,
+      // and the notice is the tool error — not "I used every step".
+      const read = vi.fn(() => ({ error: 'missing' }));
+      mocks.streamChatCompletion.mockImplementation(async () => ({
+        text: '', finishReason: 'tool_calls',
+        toolCalls: [{ id: 'r', name: 'canvas_read_build_file', args: JSON.stringify({ path: 'src/App.jsx' }) }],
+      }));
 
       const answer = await runTurn({
         prompt: 'continue', canvasSnapshot: '{"objects":[]}', persistence: 'local',
         canvasActions: [{ name: 'canvas_read_build_file', description: 'Read a file', parameters: { type: 'object' }, mutates: false, run: read }],
       });
 
-      expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(MAX_CANVAS_BUILD_TURNS);
-      expect(answer).toBe(NOTICES.stepsExhaustedUnchanged);
+      expect(read).toHaveBeenCalledTimes(DEFAULT_TOOL_FAILURE_STREAK);
+      expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(DEFAULT_TOOL_FAILURE_STREAK);
+      expect(answer).toBe(NOTICES.toolError('missing'));
+      expect(answer).not.toBe(NOTICES.stepsExhaustedUnchanged);
     });
 
     /**

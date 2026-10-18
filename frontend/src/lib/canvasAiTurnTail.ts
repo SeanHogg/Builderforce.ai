@@ -81,14 +81,14 @@ export function composeTurnTail(facts: CanvasTurnTailFacts): CanvasTurnTail {
   // simply ended on a tool call.
   //
   // `stepsExhausted` alone is NOT the discriminator, and reading it as one is a
-  // regression this line already shipped once. Exhausted means "the cap stopped the
-  // model", which is equally true of a turn that authored everything it was asked for
-  // on its LAST step — and `stepsExhausted` then tells a user holding a finished
-  // website and its comparison document that the work is half-done and to say
-  // "continue". `buildTurn` is the case the notice was written for and says so in its
-  // own docstring (see MAX_CANVAS_BUILD_TURNS): a workspace is written one file per
-  // step, so hitting the cap there really does mean a part-written app. Everywhere
-  // else, a changed board at the cap is a delivered board.
+  // regression this line already shipped once. Exhausted means "a step cap stopped the
+  // model". The canvas runner sets it only when a cap is in force, so an uncapped turn
+  // never takes this branch. It is equally true of a turn that authored everything it
+  // was asked for on its LAST step — and `stepsExhausted` then tells a user holding a
+  // finished website and its comparison document that the work is half-done and to say
+  // "continue". `buildTurn` is the case the notice was written for: a workspace is
+  // written one file per step, so a cap stopping that turn really does mean a
+  // part-written app. Everywhere else, a changed board at the cap is a delivered board.
   // A build turn that only provisioned the workspace is neither: the board holds the
   // starter template, so "added to the canvas" would misreport it.
   if (facts.canvasChanged) {
