@@ -123,6 +123,11 @@ export const users = pgTable('users', {
    *  NULL = never. The person-level guard — the trial window itself is on the
    *  workspace's membership row. (1202) */
   spawnTrialAt:           timestamp('spawn_trial_at', { withTimezone: true }),
+  /** The completed advisor session this founder continues (A5, #5236).
+   *  Nullable integer → booking_reservations.id. No foreign key: the reservation
+   *  lives in the advisor's tenant and the user row is global, same shape as
+   *  consultant_consultations.reservation_id. NULL = nothing to continue. (1241) */
+  advisorReservationId:   integer('advisor_reservation_id'),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });
