@@ -76,8 +76,14 @@ function isCancelledTaskStatus(status) {
 }
 
 // ../agent-loop/src/chatTicketHealth.ts
+var UNSUPPORTED_DELIVERY_PROGRESS_CAP = 75;
 function isExcludedFromChatHealth(status) {
   return isCancelledTaskStatus(status);
+}
+function effectiveProgressPct(t) {
+  const raw = Number.isFinite(t.progressPct) ? t.progressPct : 0;
+  if (t.unsupportedDelivery === true && raw >= 100) return UNSUPPORTED_DELIVERY_PROGRESS_CAP;
+  return raw;
 }
 function rollupChatTicketHealth(tickets) {
   let done = 0;
@@ -86,7 +92,7 @@ function rollupChatTicketHealth(tickets) {
   let counted = 0;
   for (const tk of tickets) {
     if (isExcludedFromChatHealth(tk.status)) continue;
-    const pct = Number.isFinite(tk.progressPct) ? tk.progressPct : 0;
+    const pct = effectiveProgressPct(tk);
     const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;
     done += Number.isFinite(tk.done) ? tk.done : 0;
     total += weight;
@@ -1665,11 +1671,12 @@ function formatUsd(usd, locale) {
     const tiny = new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(0.01);
     return `${usd < 0 ? "\u2212" : ""}<${tiny}`;
   }
+  const maxDigits = abs >= 100 ? 0 : 2;
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: abs >= 100 ? 0 : 2
+    minimumFractionDigits: maxDigits,
+    maximumFractionDigits: maxDigits
   }).format(usd);
 }
 function formatTokens(tokens, locale) {

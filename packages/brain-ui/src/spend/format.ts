@@ -10,11 +10,16 @@ export function formatUsd(usd: number, locale?: string): string {
     const tiny = new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(0.01);
     return `${usd < 0 ? '−' : ''}<${tiny}`;
   }
+  // The hundreds rule drops the cents, so the MINIMUM has to drop with them: Intl
+  // rejects `min > max` with "maximumFractionDigits value is out of range", which
+  // is a RangeError thrown from the constructor — it took the whole board down
+  // (the Spent tab reads >= $100) rather than rendering one cell wrong.
+  const maxDigits = abs >= 100 ? 0 : 2;
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: abs >= 100 ? 0 : 2,
+    minimumFractionDigits: maxDigits,
+    maximumFractionDigits: maxDigits,
   }).format(usd);
 }
 
