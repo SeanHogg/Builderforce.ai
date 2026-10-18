@@ -1,6 +1,6 @@
 import { sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { bufferCounter, drainCounters, requeueCounters, type CounterDelta, type CounterKv } from '../../infrastructure/cache/counterBuffer';
+import { ackCounters, bufferCounter, drainCounters, type CounterDelta, type CounterKv, type DrainedCounter } from '../../infrastructure/cache/counterBuffer';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { deferPastResponse } from '../shared/requestScope';
 
@@ -10,7 +10,8 @@ import { deferPastResponse } from '../shared/requestScope';
  * conversions. Each is `<column> = <column> + 1` on a row the request had just read,
  * i.e. a Postgres write per anonymous view. They now accumulate in KV
  * (`infrastructure/cache/counterBuffer`) and the `hit-counters` sweep applies them
- * as ONE statement per kind.
+ * as ONE statement per kind. `landing.convert` is the exception: a conversion is a
+ * campaign result, so it is written directly (`applyHitDeltas`), never buffered.
  *
  * Adding a counter = one entry in {@link HIT_COUNTERS}; the sweep needs no change.
  */
@@ -102,24 +103,43 @@ export function isHitCounterKind(kind: string): kind is HitCounterKind {
   return Object.prototype.hasOwnProperty.call(HIT_COUNTERS, kind);
 }
 
-/** The sweep: drain KV, apply one statement per kind, hand a failed kind back. */
+/**
+ * The sweep: list one page of flushed counters, apply one statement per kind, and delete
+ * a kind's KV keys only after ITS statement succeeded. A failed kind keeps its keys and
+ * is retried next tick, so nothing is lost; a delete that fails after a good apply
+ * re-applies that delta once (a slight over-count, accepted over losing hits). Bounded
+ * at one list + <=100 deletes so it stays far under the invocation's KV-operation budget.
+ */
 export async function flushHitCounters(env: CounterKv, db: Db): Promise<number> {
-  const drained = await drainCounters(env);
-  if (drained.length === 0) return 0;
-  const byKind = new Map<HitCounterKind, CounterDelta[]>();
-  for (const d of drained) {
-    if (!isHitCounterKind(d.kind)) continue; // a kind retired since it was buffered: drop it
+  const { counters, strayNames, complete } = await drainCounters(env);
+  if (!complete) {
+    reportCaughtError(new Error('hit-counter backlog: more than one KV list page pending'), {
+      source: 'application/counters/hitCounters.ts', operation: 'flushHitCounters', level: 'warning',
+    });
+  }
+  if (counters.length === 0) {
+    await ackCounters(env, strayNames);
+    return 0;
+  }
+  const byKind = new Map<HitCounterKind, DrainedCounter[]>();
+  const retired: string[] = [];
+  for (const d of counters) {
+    if (!isHitCounterKind(d.kind)) { retired.push(...d.names); continue; } // a kind retired since it was buffered: drop it
     byKind.set(d.kind, [...(byKind.get(d.kind) ?? []), d]);
   }
+  const kinds = [...byKind.entries()];
+  const results = await Promise.allSettled(kinds.map(([kind, deltas]) => applyHitDeltas(db, kind, deltas)));
+  const toDelete = [...strayNames, ...retired];
   let applied = 0;
-  for (const [kind, deltas] of byKind) {
-    try {
-      await applyHitDeltas(db, kind, deltas);
-      applied += deltas.length;
-    } catch (error) {
-      reportCaughtError(error, { source: 'application/counters/hitCounters.ts', operation: 'flushHitCounters', context: { kind } });
-      await requeueCounters(env, deltas);
+  results.forEach((r, i) => {
+    const [kind, deltas] = kinds[i];
+    if (r.status === 'rejected') {
+      reportCaughtError(r.reason, { source: 'application/counters/hitCounters.ts', operation: 'flushHitCounters', context: { kind } });
+      return;
     }
-  }
+    applied += deltas.length;
+    for (const d of deltas) toDelete.push(...d.names);
+  });
+  await ackCounters(env, toDelete);
   return applied;
 }

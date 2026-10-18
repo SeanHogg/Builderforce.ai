@@ -35,6 +35,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const registryFile = resolve(here, '../src/application/maintenance/sweptTables.ts');
+const boundedFile = resolve(here, '../src/application/maintenance/sweptTablesBounded.ts');
 const schemaDir = resolve(here, '../src/infrastructure/database/schema');
 const primaryTuning = resolve(here, '../migrations/1104_swept_table_autovacuum.sql');
 const operationalTuning = resolve(here, '../transactional-migrations/0009_swept_table_autovacuum.sql');
@@ -54,6 +55,18 @@ for (const match of registry.matchAll(/relation:\s*'([a-z0-9_]+)',\s*\n\s*connec
 }
 if (entries.length === 0) {
   failures.push(`Could not parse any SWEPT_TABLES entries out of ${registryFile} — has the shape changed?`);
+}
+// sweptTablesBounded.ts spreads into SWEPT_TABLES but writes connections as the CORE / BOTH
+// constants (CORE = ['primary'], BOTH = ['transactional', 'primary']), so it needs its own parse.
+const boundedConnections = { CORE: ['primary'], BOTH: ['primary', 'transactional'] };
+const bounded = readFileSync(boundedFile, 'utf8');
+let boundedCount = 0;
+for (const match of bounded.matchAll(/relation:\s*'([a-z0-9_]+)',\s*connections:\s*(CORE|BOTH)/g)) {
+  entries.push({ relation: match[1], connections: boundedConnections[match[2]] });
+  boundedCount += 1;
+}
+if (boundedCount === 0) {
+  failures.push(`Could not parse any entries out of ${boundedFile} — has the shape changed?`);
 }
 
 // --- 2. Every relation is a real pgTable ------------------------------------
@@ -78,7 +91,7 @@ const readTuning = (file, connection) => {
     failures.push(`Missing autovacuum tuning migration: ${file}`);
     return;
   }
-  for (const match of text.matchAll(/ALTER TABLE\s+([a-z0-9_]+)\s+SET\s*\(([^)]*)\)/gi)) {
+  for (const match of text.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z0-9_]+)\s+SET\s*\(([^)]*)\)/gi)) {
     const [, relation, params] = match;
     if (!/autovacuum_vacuum_scale_factor/i.test(params)) continue;
     if (!tunedBy.has(relation)) tunedBy.set(relation, new Set());

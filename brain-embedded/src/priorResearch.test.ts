@@ -51,6 +51,11 @@ describe('priorResearchDigest', () => {
     expect(priorResearchDigest([step('llm', 'llm.complete', { model: 'x' }, 'turn'), step('recall', 'evermind.recall', {}, {})])).toBeNull();
   });
 
+  it('skips a step whose args and result are both absent, but keeps one with args only', () => {
+    expect(priorResearchDigest([step('tool', 'read_file', null, null)])).toBeNull();
+    expect(priorResearchDigest([step('tool', 'read_file', { path: 'a.ts' }, undefined)])).toContain('a.ts');
+  });
+
   it('stays bounded however much the chat read', () => {
     const history = Array.from({ length: 120 }, (_, i) => step('tool', 'read_file', { path: `f${i}.ts` }, 'x'.repeat(4_000)));
     const digest = priorResearchDigest(history)!;

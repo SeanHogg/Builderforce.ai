@@ -62,7 +62,7 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import { bulkUpdateById } from '../../infrastructure/database/bulkUpdate';
-import { recordHit, scopedHitKey } from '../counters/hitCounters';
+import { applyHitDeltas, recordHit, scopedHitKey } from '../counters/hitCounters';
 import type { Env } from '../../env';
 import {
   landingPageBlocks,
@@ -883,7 +883,8 @@ export async function recordLandingPageView(env: Env, db: Db, tenantId: number, 
 /** A conversion against the page's `goal_metric`. Separate from the view counter
  *  because the ratio between them IS the campaign result. */
 export async function recordLandingPageConversion(env: Env, db: Db, tenantId: number, id: number) {
-  await recordHit(env, db, 'landing.convert', scopedHitKey(tenantId, id));
+  // Direct write, NOT the KV buffer: a conversion is a campaign result and must not be lost with an evicted isolate.
+  await applyHitDeltas(db, 'landing.convert', [{ kind: 'landing.convert', key: scopedHitKey(tenantId, id), n: 1, t: Date.now() }]);
 }
 
 /** An SEO page impression, by path, for pages that are still published. */

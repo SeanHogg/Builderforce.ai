@@ -172,8 +172,8 @@ describe('the routes keep the merge honest', () => {
   });
 
   it('keeps capture and approval at member, and assertions about others at MANAGER', () => {
-    expect(routes).toContain("router.post('/action-items', (c)");
-    expect(routes).toContain("router.post('/approvals/:kind/:ref/act', (c)");
+    expect(routes).toContain("router.post('/action-items', async (c)");
+    expect(routes).toContain("router.post('/approvals/:kind/:ref/act', async (c)");
     expect(routes).toContain("router.put('/sprints/:sprintId/cost', manager");
     expect(routes).toContain("router.post('/approvals/:kind/:ref', manager");
   });

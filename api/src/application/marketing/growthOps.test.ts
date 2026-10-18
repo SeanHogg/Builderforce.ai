@@ -280,8 +280,8 @@ describe('routing order keeps literal segments reachable', () => {
   });
 
   it('keeps high-volume surface writes at member and definitions at MANAGER', () => {
-    expect(routes).toContain("router.post('/tests/variants/:variantId/exposure', (c)");
-    expect(routes).toContain("router.post('/waitlist/join', (c)");
+    expect(routes).toContain("router.post('/tests/variants/:variantId/exposure', async (c)");
+    expect(routes).toContain("router.post('/waitlist/join', async (c)");
     expect(routes).toContain("router.put('/tests/:id/variants', manager");
     expect(routes).toContain("router.post('/waitlist/regions/:country/open', manager");
   });
