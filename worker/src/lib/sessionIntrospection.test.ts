@@ -115,4 +115,14 @@ describe('introspectSession', () => {
     await introspectSession(noKv, 'tok', 'j6', fetchImpl as unknown as typeof fetch);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+
+  it('skips L2 when CACHE_L2_KV is false while AUTH_CACHE_KV stays bound', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, ACTIVE));
+    env.CACHE_L2_KV = 'false';
+    await introspectSession(env, 'tok', 'j7', fetchImpl as unknown as typeof fetch);
+    await introspectSession(env, 'tok', 'j7', fetchImpl as unknown as typeof fetch);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(kv.put).not.toHaveBeenCalled();
+    expect(kv.store.size).toBe(0);
+  });
 });

@@ -18,6 +18,8 @@ interface Env {
    *  the worker caches is the key the api's revoke path deletes. See wrangler.toml
    *  and lib/sessionIntrospection.ts. */
   AUTH_CACHE_KV?: KVNamespace;
+  /** Same dial as the api Worker: `"false"` / `"0"` / `"off"` skips cache L2. */
+  CACHE_L2_KV?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();

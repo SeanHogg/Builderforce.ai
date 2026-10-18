@@ -144,3 +144,54 @@ describe('getCacheVersion / bumpCacheVersionSafe', () => {
     expect(del).toHaveBeenCalled();
   });
 });
+
+/**
+ * CACHE_L2_KV=false must skip L2 while leaving AUTH_CACHE_KV bound — unbinding
+ * the namespace would also kill the cron work-gate on the same KV.
+ */
+describe('CACHE_L2_KV off', () => {
+  beforeEach(() => __clearL1CacheForTests());
+
+  function boundKv() {
+    return {
+      get: vi.fn(async () => null),
+      put: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    };
+  }
+
+  it('skips L2 get/put when CACHE_L2_KV is false, keeping AUTH_CACHE_KV bound', async () => {
+    const kv = boundKv();
+    const env = { AUTH_CACHE_KV: kv, CACHE_L2_KV: 'false' } as unknown as Env;
+    const loaded = await getOrSetCached(env, 'l2-off', async () => ({ v: 1 }));
+    expect(loaded).toEqual({ v: 1 });
+    expect(kv.get).not.toHaveBeenCalled();
+    expect(kv.put).not.toHaveBeenCalled();
+    expect(await getOrSetCached(env, 'l2-off', async () => ({ v: 2 }))).toEqual({ v: 1 });
+  });
+
+  it('treats 0 and off the same as false', async () => {
+    for (const flag of ['0', 'OFF', ' False ']) {
+      __clearL1CacheForTests();
+      const kv = boundKv();
+      const env = { AUTH_CACHE_KV: kv, CACHE_L2_KV: flag } as unknown as Env;
+      await getOrSetCached(env, `l2-off-${flag}`, async () => ({ v: 1 }));
+      expect(kv.put).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps L2 when CACHE_L2_KV is unset', async () => {
+    const kv = boundKv();
+    const env = { AUTH_CACHE_KV: kv } as unknown as Env;
+    await getOrSetCached(env, 'l2-on', async () => ({ v: 1 }));
+    expect(kv.get).toHaveBeenCalled();
+    expect(kv.put).toHaveBeenCalled();
+  });
+
+  it('does not delete L2 on invalidate when L2 is off', async () => {
+    const kv = boundKv();
+    const env = { AUTH_CACHE_KV: kv, CACHE_L2_KV: 'false' } as unknown as Env;
+    await invalidateCached(env, 'l2-off-inv');
+    expect(kv.delete).not.toHaveBeenCalled();
+  });
+});

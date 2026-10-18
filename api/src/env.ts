@@ -459,6 +459,19 @@ export interface Env {
   AUTH_CACHE_KV?: KVNamespace;
 
   /**
+   * Dial that stops the read-through cache writing L2 to {@link AUTH_CACHE_KV}
+   * without unbinding the namespace. Unset / any other value keeps today's
+   * L1+L2 default. Set to the string `"false"`, `"0"`, or `"off"` to skip L2
+   * (L1 per-isolate still works). The cron work-gate, cron controls, counter
+   * buffer, and other non-cache KV keys keep using AUTH_CACHE_KV directly —
+   * unbinding the namespace to save Workers KV Free's 1,000 writes/day would
+   * fail-open every frequent tick and keep Neon awake.
+   *
+   * Set via `[vars] CACHE_L2_KV = "false"` or `wrangler secret put CACHE_L2_KV`.
+   */
+  CACHE_L2_KV?: string;
+
+  /**
    * Optional override (milliseconds) for the KV cron work-gate's floor interval —
    * how long an idle platform may go without an unconditional Postgres fan-out.
    * Unset → 30 min (see `application/runtime/cronWorkSignal.ts`). Clamped to

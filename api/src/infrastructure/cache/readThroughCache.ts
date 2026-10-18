@@ -12,7 +12,10 @@ import { deferPastResponse } from '../../application/shared/requestScope';
  *
  * The KV binding (`AUTH_CACHE_KV`) is optional — when unbound, every call falls
  * straight through to the loader, so caching is opt-in via wrangler.toml without
- * touching call sites.
+ * touching call sites. Do NOT unbind it to cut L2 writes: the cron work-gate
+ * (`cron:work-pending` and friends) lives on the same namespace and would
+ * fail-open every frequent tick. Set `CACHE_L2_KV=false` instead — {@link cacheL2Kv}
+ * then passes `undefined` here so L1 still works and L2 is skipped.
  *
  * What is API-specific, and therefore here rather than in the package:
  *   - the binding: every export takes the API `Env` and reads `AUTH_CACHE_KV`;
@@ -32,9 +35,26 @@ import { isKvRateLimit, retryTransient } from '../shared/retryTransient';
 
 const SOURCE = 'infrastructure/cache/readThroughCache.ts';
 
-/** All a cache read or write needs of the environment: the KV binding. Narrower than
- *  `Env`, so a holder of a partial environment (the LLM proxy's `ProxyEnv`) can use it. */
-export type CacheEnv = Pick<Env, 'AUTH_CACHE_KV'> | undefined;
+/** All a cache read or write needs of the environment: the KV binding plus the
+ *  L2-off dial. Narrower than `Env`, so a holder of a partial environment (the
+ *  LLM proxy's `ProxyEnv`) can use it. */
+export type CacheEnv = Pick<Env, 'AUTH_CACHE_KV' | 'CACHE_L2_KV'> | undefined;
+
+/** Values that turn cache L2 off while leaving `AUTH_CACHE_KV` bound for cron. */
+const CACHE_L2_OFF = new Set(['false', '0', 'off']);
+
+/**
+ * L2 KV for the read-through cache. Returns `undefined` (L1-only) when the
+ * namespace is unbound OR when `CACHE_L2_KV` is `false` / `0` / `off`. Cron
+ * controls, the work-gate, and other non-cache KV keys keep using
+ * `env.AUTH_CACHE_KV` directly — this helper is only for cache L2.
+ */
+export function cacheL2Kv(env: CacheEnv): Env['AUTH_CACHE_KV'] {
+  if (!env?.AUTH_CACHE_KV) return undefined;
+  const raw = env.CACHE_L2_KV?.trim().toLowerCase();
+  if (raw && CACHE_L2_OFF.has(raw)) return undefined;
+  return env.AUTH_CACHE_KV;
+}
 
 /** ONE instance = ONE L1 Map for the isolate. */
 const cache = createReadThroughCache({
@@ -80,7 +100,7 @@ export async function getOrSetCached<T>(
   loader: () => Promise<T>,
   opts?: { kvTtlSeconds?: number; l1TtlMs?: number },
 ): Promise<T> {
-  return cache.getOrSet(env?.AUTH_CACHE_KV, key, loader, opts);
+  return cache.getOrSet(cacheL2Kv(env), key, loader, opts);
 }
 
 /**
@@ -91,7 +111,7 @@ export async function getOrSetCached<T>(
  * of double-counting against a loader that already includes the new write).
  */
 export async function peekCached<T>(env: CacheEnv, key: string): Promise<T | null> {
-  return cache.peek<T>(env?.AUTH_CACHE_KV, key);
+  return cache.peek<T>(cacheL2Kv(env), key);
 }
 
 /**
@@ -106,7 +126,7 @@ export async function setCached<T>(
   value: T,
   opts?: { kvTtlSeconds?: number; l1TtlMs?: number },
 ): Promise<void> {
-  return cache.set(env?.AUTH_CACHE_KV, key, value, opts);
+  return cache.set(cacheL2Kv(env), key, value, opts);
 }
 
 /**
@@ -240,5 +260,5 @@ export async function bumpPublicCanvasVersion(env: Env, tenantId: number): Promi
 /** Invalidate both cache layers for `key`. Call from every mutation that
  *  changes the cached data so the next read re-loads. */
 export async function invalidateCached(env: CacheEnv, key: string): Promise<void> {
-  return cache.invalidate(env?.AUTH_CACHE_KV, key);
+  return cache.invalidate(cacheL2Kv(env), key);
 }

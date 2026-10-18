@@ -210,6 +210,11 @@ bucket_name = "builderforce-cdn"
 # Auth-resolution cache. Caches `bfk_*` and `clk_*` lookups for ~60s so every
 # chat-completion call doesn't pay a Neon round-trip just to validate the key.
 # See api/src/infrastructure/auth/keyResolutionCache.ts.
+#
+# Do NOT unbind this namespace to cut KV writes: the cron work-gate
+# (`cron:work-pending`, `cron:last-floor-sweep`, …) and cron controls live here
+# too. To stop cache L2 writes (Workers KV Free = 1,000 writes/day) set
+# CACHE_L2_KV = "false" in [vars] instead — L1 still works; cron KV is untouched.
 [[kv_namespaces]]
 binding = "AUTH_CACHE_KV"
 id = "ce66c3418ad64952b6847227962429d0"

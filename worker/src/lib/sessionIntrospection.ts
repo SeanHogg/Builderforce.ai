@@ -35,6 +35,9 @@ import { getApiBaseUrl, type ApiBaseEnv } from './apiBaseUrl';
 export interface SessionIntrospectionEnv extends ApiBaseEnv {
   /** The api's cache namespace — see wrangler.toml for why it is bound here. */
   AUTH_CACHE_KV?: KvNamespaceLike;
+  /** Same dial as the api: `"false"` / `"0"` / `"off"` skips L2 so this worker
+   *  does not keep writing the shared KV after cache L2 is cut. L1 still works. */
+  CACHE_L2_KV?: string;
 }
 
 /** ONE instance = ONE L1 Map for the isolate. The worker has no error reporter
@@ -44,6 +47,15 @@ const cache = createReadThroughCache({
     console.error('[worker:session-introspection] cache failure', { ...ctx, error: error instanceof Error ? error.message : String(error) });
   },
 });
+
+const CACHE_L2_OFF = new Set(['false', '0', 'off']);
+
+function cacheL2Kv(env: SessionIntrospectionEnv): KvNamespaceLike | undefined {
+  if (!env.AUTH_CACHE_KV) return undefined;
+  const raw = env.CACHE_L2_KV?.trim().toLowerCase();
+  if (raw && CACHE_L2_OFF.has(raw)) return undefined;
+  return env.AUTH_CACHE_KV;
+}
 
 /** Thrown when the api cannot answer — never cached. */
 export class SessionIntrospectionUnavailableError extends Error {
@@ -108,7 +120,7 @@ export async function introspectSession(
   fetchImpl: typeof fetch = fetch,
 ): Promise<SessionIntrospection> {
   return cache.getOrSet(
-    env.AUTH_CACHE_KV,
+    cacheL2Kv(env),
     sessionIntrospectCacheKey(jti),
     () => fetchVerdict(env, token, fetchImpl),
     SESSION_INTROSPECT_CACHE_TTL,
