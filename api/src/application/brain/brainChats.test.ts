@@ -271,10 +271,14 @@ describe('updateChat — un-archive', () => {
 
     const updated = await updateChat(spy.db, 5, 7, 'user-1', { isArchived: false });
     expect(spy.seen.applied[0]).toMatchObject({ isArchived: false });
+    if ('error' in updated) throw new Error(`restore failed: ${JSON.stringify(updated)}`);
+    expect(updated.isArchived).toBe(false);
 
     const rows = await listChats(spy.db, 7, 'user-1');
     expect(archivedBoundValue(spy.seen)).toBe(false);
     expect(rows).toMatchObject([{ id: 5, isArchived: false }]);
+    // The row the write echoed and the row the re-read returns are the same chat, in the
+    // same state — so the host's optimistic `isArchived:false` patch matches the reload.
     expect(rows[0]).toMatchObject({ isArchived: updated.isArchived });
   });
 });
