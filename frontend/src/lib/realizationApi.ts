@@ -18,6 +18,14 @@ import type {
 } from './builderforceApi';
 import { emitMethodEvent } from './methodEvents';
 
+/** `GET /api/realizations/journey-summary` — see `api/.../realization/founderJourneySummary.ts`. */
+export interface FounderJourneySummary {
+  ownsCompany: boolean;
+  signal: ProofJourneySignalDto;
+  activeSessionId: string | null;
+  activeSessionLatestProof: { verdict: string | null } | null;
+}
+
 /** The eight proof forms. Mirrors `REALIZATION_KEYS` on the API. */
 export type RealizationKey =
   | 'demo-video'
@@ -178,9 +186,11 @@ export const realizationApi = {
       expectedErrors: [400, 403, 409],
     }).then((r) => r.realization),
 
-  /** Where the newest proof puts the founder: Make, Measure, or no signal. */
-  journeySignal: (): Promise<ProofJourneySignalDto> =>
-    request<ProofJourneySignalDto>('/api/realizations/journey-signal'),
+  /** The facts `useFounderJourney` places the workspace from — one cached summary read
+   *  (company exists, the newest proof's Make / Measure signal, the active session and
+   *  its newest proof's verdict) instead of three full lists. */
+  journeySummary: (): Promise<FounderJourneySummary> =>
+    request<FounderJourneySummary>('/api/realizations/journey-summary'),
 
   remove: (id: string): Promise<{ ok: boolean }> =>
     request<{ ok: boolean }>(`/api/realizations/${encodeURIComponent(id)}`, { method: 'DELETE' }),

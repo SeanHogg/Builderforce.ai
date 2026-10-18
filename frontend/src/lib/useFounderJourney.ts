@@ -23,8 +23,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { creationSessionsApi } from './builderforceApi';
-import { investorApi } from './investorApi';
+import type { FounderJourneySummary } from './realizationApi';
 import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
 import type { Stage } from './navGroups';
 import type { MethodStep } from './methodology';
@@ -45,8 +44,8 @@ const EMPTY: FounderJourney = { stage: null, act: null, activeSessionId: null, a
 
 /**
  * Shared across mounts. The shell panel, the dashboard and its act rail all call
- * this hook on the same page, and each used to fire the same three or four list
- * reads; they now share ONE in-flight read and its answer for a minute (a founder
+ * this hook on the same page; they share ONE in-flight summary read and its answer
+ * for a minute (a founder
  * does not change arc stage per render). Keyed by workspace so a switch never
  * shows the previous workspace's position.
  */
@@ -58,26 +57,21 @@ export function invalidateFounderJourney(): void {
   invalidateClientCache(JOURNEY_CACHE_PREFIX);
 }
 
+/** The journey policy over the server's facts — precedence as documented above. Pure. */
+export function journeyFromSummary(summary: FounderJourneySummary): FounderJourney {
+  if (summary.ownsCompany) return { ...EMPTY, stage: 'run' };
+  if (summary.signal?.stage) return { ...EMPTY, stage: summary.signal.stage, activeRealizationId: summary.signal.realizationId };
+  if (!summary.activeSessionId) return EMPTY;
+  const latest = summary.activeSessionLatestProof;
+  const act: MethodStep = !latest ? 'read' : latest.verdict === 'met' ? 'build' : 'prove';
+  return { ...EMPTY, stage: 'idea', act, activeSessionId: summary.activeSessionId };
+}
+
 async function readFounderJourney(): Promise<FounderJourney> {
   // Loaded on demand: the journey read is effect work, so the realization client
   // (and the method-event emitter behind it) stays out of the root layout's closure.
   const { realizationApi } = await import('./realizationApi');
-  const [companies, signal, sessions] = await Promise.all([
-    investorApi.companies.list().catch(() => []),
-    realizationApi.journeySignal().catch(() => null),
-    creationSessionsApi.list('active').then((r) => r.sessions).catch(() => []),
-  ]);
-
-  const ownsACompany = companies.some((company) => !company.isPortfolio);
-  if (ownsACompany) return { ...EMPTY, stage: 'run' };
-  if (signal?.stage) return { ...EMPTY, stage: signal.stage, activeRealizationId: signal.realizationId };
-  if (sessions.length === 0) return EMPTY;
-
-  const activeSessionId = sessions[0].id;
-  const realizations = await realizationApi.list(activeSessionId).catch(() => []);
-  const latest = realizations[0];
-  const act: MethodStep = !latest ? 'read' : latest.verdict === 'met' ? 'build' : 'prove';
-  return { ...EMPTY, stage: 'idea', act, activeSessionId };
+  return journeyFromSummary(await realizationApi.journeySummary());
 }
 
 export function useFounderJourney(): FounderJourney {

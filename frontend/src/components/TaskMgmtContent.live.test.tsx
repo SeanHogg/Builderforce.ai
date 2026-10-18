@@ -19,10 +19,6 @@ vi.mock('@/lib/builderforceApi', () => ({
   agentHosts: { list: vi.fn().mockResolvedValue([]) },
   runtimeApi: {
     submitExecution: vi.fn().mockResolvedValue({}),
-    listRecent: vi.fn().mockResolvedValue([
-      { id: 10, taskId: 1, status: 'completed', cloudAgentRef: 'kevin', createdAt: '2026-06-14T10:00:00Z' },
-      { id: 11, taskId: 1, status: 'pending', cloudAgentRef: 'bob', createdAt: '2026-06-14T11:00:00Z' },
-    ]),
   },
   isAwaitingApprovalExecution: vi.fn().mockReturnValue(false),
   boardsApi: {
@@ -52,6 +48,23 @@ vi.mock('@/lib/builderforceApi', () => ({
     // whole Promise.all and no run chips ever render.
     assignable: vi.fn().mockResolvedValue({ agents: [], humans: [], hires: [] }),
   },
+}));
+
+// The board's run chips come from the ONE live-runs read (`taskRuns` projection):
+// the newest run per (task, agent), already folded by the server.
+vi.mock('@/lib/liveRunsApi', () => ({
+  createLiveRunsReader: () => ({
+    read: vi.fn().mockResolvedValue({
+      active: [],
+      runningCloudRefs: [],
+      activity: [],
+      receivedAt: 0,
+      taskRuns: [
+        { id: 11, taskId: 1, status: 'pending', agentHostId: null, agentId: null, cloudAgentRef: 'bob', createdAt: '2026-06-14T11:00:00Z' },
+        { id: 10, taskId: 1, status: 'completed', agentHostId: null, agentId: null, cloudAgentRef: 'kevin', createdAt: '2026-06-14T10:00:00Z' },
+      ],
+    }),
+  }),
 }));
 
 vi.mock('@/lib/api', () => ({ fetchProjects: vi.fn().mockResolvedValue([{ id: 1, name: 'Demo' }]) }));

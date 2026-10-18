@@ -1,5 +1,5 @@
 /** Keeping the session in sync — saving, realtime, polled members and invitations. */
-import { type Dispatch, type RefObject, type SetStateAction, useEffect, useRef } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useEffect, useMemo, useRef } from 'react';
 import { useEffectEvent } from '@/hooks/useEffectEvent';
 import { boardSignature, persistBoard, saveAttemptKey } from '@/domains/canvas/application/PersistCanvas';
 import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSessionGateway';
@@ -14,6 +14,7 @@ import { useBoardOnScreen } from '@/lib/canvas/BoardOnScreenContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { adoptRemoteBoard, type AdoptRemoteBoardDecision, type LocalBoardState } from '@/domains/canvas/application/AdoptRemoteBoard';
 import { BRAIN_RUN_HEARTBEAT_MS } from '@/lib/canvas/livePresence';
+import { createPresenceTracker } from '@/lib/canvas/presenceDelta';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { Edge, ReactFlowInstance } from '@xyflow/react';
 import type { useTranslations } from 'next-intl';
@@ -22,6 +23,8 @@ import { timelineToLocal } from '../localTimeline';
 import type { PresenceRelay } from '@/domains/canvas/application/PresenceRelay';
 import type { CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
+
+type PresenceMember = Awaited<ReturnType<typeof creationSessionsApi.presence>>['members'][number];
 
 export interface UseCanvasSessionSyncDeps {
   commitRevision: (revision: number) => void;
@@ -191,6 +194,10 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
   // not being looked at: it must not announce presence, nor keep the API awake.
   // Coming back on screen restarts the poll with its immediate tick.
   const onScreen = useBoardOnScreen();
+  // The roster between presence ticks: each answer carries only the members whose
+  // drawn presence changed (`lib/canvas/presenceDelta`). One per board.
+  const presenceTracker = useMemo(() => createPresenceTracker<PresenceMember>(), []);
+  useEffect(() => { presenceTracker.reset(); }, [presenceTracker, sessionId]);
 
   // The board-reconcile poll. Its load reads the CURRENT selection, composer state
   // and follow target at call time (the hook holds the latest closure), so a click
@@ -206,8 +213,9 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
         // count as active, so dropping one column out of a write that happens anyway
         // would have bought staleness rather than saved a write.
         const relayed = liveSocketRef.current?.readyState === WebSocket.OPEN;
-        const presence = await creationSessionsApi.presence(sessionId, { revision: revisionRef.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId });
+        const answer = await creationSessionsApi.presence(sessionId, { revision: revisionRef.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId, known: presenceTracker.known() });
         if (signal.aborted) return;
+        const presence = { ...answer, members: presenceTracker.apply(answer) };
         const nextActiveIds = new Set(presence.members.map((member) => member.userId));
         if (activePresenceInitializedRef.current) {
           const joined = presence.members.find((member) => member.userId !== (presence.currentUserId || currentUserId) && !activeMemberIdsRef.current.has(member.userId));

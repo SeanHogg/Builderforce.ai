@@ -61,6 +61,7 @@ import { BrainService } from '../../application/brain/BrainService';
 import { getLimits, type PlanLimits } from '../../domain/tenant/PlanLimits';
 import { resolveTenantEffectivePlan } from '../../application/tenant/tenantPlanSnapshot';
 import { PRESENCE_ACTIVE_WINDOW_MS, presenceWriteDue, resolvePresenceAccess } from '../../application/creation/sessionPresence';
+import { listActivePresenceMembers, parseKnownPresence, presenceDelta } from '../../application/creation/presenceDelta';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { notify } from '../../application/notifications/notify';
@@ -324,6 +325,8 @@ const PresenceBody = z.object({
   selection: z.unknown().optional(),
   typing: z.boolean().optional(),
   followingUserId: z.string().nullable().optional(),
+  /** userId → fingerprint from the last answer; present ⇒ an incremental answer (`presenceDelta.ts`). */
+  known: z.record(z.string(), z.unknown()).optional(),
 });
 
 type CanvasCommand = z.infer<typeof CanvasCommand>;
@@ -2645,7 +2648,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
 
   // Polled every 8 s per open board — the cheap path lives in `sessionPresence.ts`:
   // the same access check over fewer columns, a throttled member write, and the plan
-  // from the cached tenant snapshot.
+  // from the cached tenant snapshot; the answer is a delta (`presenceDelta.ts`).
   router.post('/:id/presence', async (c) => {
     const sessionId = c.req.param('id') ?? '';
     const userId = c.get('userId') as string;
@@ -2671,22 +2674,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     }
     const activeSince = new Date(now.getTime() - PRESENCE_ACTIVE_WINDOW_MS);
     const [members, plan] = await Promise.all([
-      db.select({
-        userId: creationSessionMembers.userId,
-        role: creationSessionMembers.role,
-        displayName: users.displayName,
-        // The picture the room puts on this person's figure (`PeerAvatar`).
-        avatarUrl: users.avatarUrl,
-        lastSeenRevision: creationSessionMembers.lastSeenRevision,
-        lastSeenAt: creationSessionMembers.lastSeenAt,
-        viewport: creationSessionMembers.viewport,
-        cursor: creationSessionMembers.cursor,
-        selection: creationSessionMembers.selection,
-        typing: creationSessionMembers.typing,
-        followingUserId: creationSessionMembers.followingUserId,
-      }).from(creationSessionMembers)
-        .leftJoin(users, eq(users.id, creationSessionMembers.userId))
-        .where(and(eq(creationSessionMembers.sessionId, access.session.id), gte(creationSessionMembers.lastSeenAt, activeSince))),
+      listActivePresenceMembers(db, access.session.id, activeSince),
       resolveTenantEffectivePlan(c.env, access.session.tenantId, db),
     ]);
     const limits = getLimits(plan);
@@ -2695,7 +2683,9 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       await db.update(creationSessionMembers).set({ typing: false, followingUserId: null }).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, userId)));
       return c.json({ error: 'Realtime editor limit reached; reopen as view-only', code: 'CREATION_REALTIME_QUOTA', usage: activeEditors, limit: limits.maxCreationRealtimeEditors }, 429);
     }
-    return c.json({ revision: access.session.canvasRevision, currentUserId: userId, members });
+    // Only the members whose drawn presence changed since the caller's last answer
+    // (when it sent `known`) — see `presenceDelta.ts`.
+    return c.json({ revision: access.session.canvasRevision, currentUserId: userId, ...presenceDelta(members, parseKnownPresence(body.known)) });
   });
 
   /**

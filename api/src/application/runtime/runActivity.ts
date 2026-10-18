@@ -26,7 +26,7 @@ export function fillDailySeries(rows: readonly DayCount[], days: number): number
   for (const row of rows) {
     const daysAgo = Number(row.daysAgo);
     const index = days - 1 - daysAgo;
-    if (Number.isInteger(index) && index >= 0 && index < days) series[index] += Number(row.count) || 0;
+    if (Number.isInteger(index) && index >= 0 && index < days) series[index] = (series[index] ?? 0) + (Number(row.count) || 0);
   }
   return series;
 }

@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-18 — Neon load audit: the eight partly-fixed items closed (api 2026.10.54 · frontend 2026.10.71)
+
+Status per finding: https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q. Code in `cffa66885` (swept from the working tree) and this commit.
+- **Cron, now silent when idle:** the PR reconciler buffers its run in memory and records it only when it changed something or failed (`prReconciliationRunLedger.ts`, `persist: 'on_change'`); repo-delivery no longer stamps `probed_at` every 30 min (moved to `repoDeliverySweep.ts`); repo-activity updates watermarks only for repos that saw events. Per-repo cadence lives in one KV entry per sweep (`infrastructure/cache/sweepStampLedger.ts`) with the old columns as fallback. `GET /pr-reconciliation/runs?repoId=` adds `lastCheckedAt`, answered only for the caller's own repos.
+- **Canvas presence:** each poll returns full rows only for members whose drawn presence changed (fingerprints, `presenceDelta.ts` on both sides); older clients without `known` still get the full list. The tracker resets per board.
+- **Live runs:** one cached, version-keyed read serves the active-runs panel, workforce presence (active runs + a server-side 14-day count instead of 200 full rows) and the board chips (seven columns, project-scoped). A client that sends its version gets `{unchanged}` without a database query.
+- **Founder journey:** one cached `GET /api/realizations/journey-summary` replaces four list reads.
+- **Also fixed:** HEAD `cffa66885` did not compile (`listRecent`/`listActive` removed while two callers remained); nine silent `.catch` fallbacks removed in the frontend (baseline 273 → 264).
+- **Measured live** (2026-10-18 01:30 UTC): core 8.3 txn/min (was ~46), transactional 6.3 (was ~39), no cron writes. Confirming autosuspend needs a quiet window (ROADMAP).
+
 ## ✅ RESOLVED 2026-10-18 — In-browser runtime 2026.10.10: `node:wasi` and single-threaded napi-rs bindings (api 2026.10.53 · frontend 2026.10.70)
 
 - **`node:wasi`** in builderforce-webcontainers: WASI preview1 over the process's file system and stdio. File descriptors are backed by real process-fs fds. Preopens are sandboxed (NOTCAPABLE outside them), unimplemented imports get ENOSYS stubs, bad guest pointers return FAULT instead of trapping, and decoding and random fills are safe on shared memory. emnapi/napi-rs WebAssembly packages now load.

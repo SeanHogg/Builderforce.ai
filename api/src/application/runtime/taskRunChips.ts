@@ -59,13 +59,13 @@ export async function loadTaskRuns(db: Db, tenantId: number, projectId: number |
     cloudAgentRef: executions.cloudAgentRef,
     createdAt: executions.createdAt,
   };
-  const base = and(eq(executions.tenantId, tenantId), liveExecution());
   const rows = projectId == null
-    ? await db.select(columns).from(executions).where(base)
+    ? await db.select(columns).from(executions)
+      .where(and(eq(executions.tenantId, tenantId), liveExecution()))
       .orderBy(desc(executions.createdAt)).limit(TASK_RUNS_WINDOW)
     : await db.select(columns).from(executions)
       .innerJoin(tasks, eq(tasks.id, executions.taskId))
-      .where(and(base, eq(tasks.projectId, projectId)))
+      .where(and(eq(executions.tenantId, tenantId), liveExecution(), eq(tasks.projectId, projectId)))
       .orderBy(desc(executions.createdAt)).limit(TASK_RUNS_WINDOW);
   return latestRunPerTaskAgent(rows);
 }

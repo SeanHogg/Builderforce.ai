@@ -3,10 +3,13 @@ import { useAuth } from '@/lib/AuthContext';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import { membersApi, type TenantMember } from '@/lib/auth/members';
 import {
-  agentHosts, vscodeConnections, runtimeApi, isVscodeConnectionOnline,
-  type AgentHost, type VscodeConnection, type ActiveRun, type Execution,
+  agentHosts, vscodeConnections, isVscodeConnectionOnline,
+  type AgentHost, type VscodeConnection,
 } from '@/lib/builderforceApi';
-import { dailyCounts } from '@/lib/seriesFromTimestamps';
+import { createLiveRunsReader, EMPTY_LIVE_RUNS, type LiveRunsSnapshot } from '@/lib/liveRunsApi';
+
+/** The sparkline window — runs started per day, counted by the server. */
+const ACTIVITY_DAYS = 14;
 
 /**
  * Live "who's online / what's working" presence across the whole workforce —
@@ -15,6 +18,11 @@ import { dailyCounts } from '@/lib/seriesFromTimestamps';
  * fresh liveness signals: online VS Code editors + members with an active
  * session (people), online agent hosts (agents idle), and in-flight executions
  * (agents working). Polls on an interval so the roster stays current.
+ *
+ * The runs side is ONE version-gated read of the live-runs projection
+ * (`lib/liveRunsApi`) carrying the in-flight runs AND the 14-day per-day counts —
+ * it used to be the active list plus the tenant's 200 newest full execution rows,
+ * bucketed here. While no run changes state a tick ships no run payload at all.
  */
 
 export interface PresencePerson {
@@ -62,23 +70,25 @@ export function useWorkforcePresence({ live = true }: WorkforcePresenceOptions =
 
   const [vscodeConns, setVscodeConns] = useState<VscodeConnection[]>([]);
   const [hosts, setHosts] = useState<AgentHost[]>([]);
-  const [active, setActive] = useState<ActiveRun[]>([]);
+  const [runs, setRuns] = useState<LiveRunsSnapshot>(EMPTY_LIVE_RUNS);
   const [members, setMembers] = useState<TenantMember[]>([]);
-  const [recent, setRecent] = useState<Execution[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // One version-gated reader. A tenant switch needs no fresh one: version tokens are
+  // per tenant, so the held token never matches the new tenant's and the body ships.
+  const reader = useMemo(() => createLiveRunsReader({ activityDays: ACTIVITY_DAYS }), []);
 
   const load = useCallback(async () => {
     if (!isAuthenticated || !hasTenant) return;
-    const [conns, hostList, activeRes, recentList] = await Promise.all([
-      vscodeConnections.list().catch(() => [] as VscodeConnection[]),
-      agentHosts.list().catch(() => [] as AgentHost[]),
-      runtimeApi.listActive().catch(() => ({ active: [] as ActiveRun[], runningCloudRefs: [] as string[] })),
-      runtimeApi.listRecent(200).catch(() => [] as Execution[]),
+    const [conns, hostList, liveRuns] = await Promise.allSettled([
+      vscodeConnections.list(),
+      agentHosts.list(),
+      reader.read(),
     ]);
-    setVscodeConns(Array.isArray(conns) ? conns : []);
-    setHosts(Array.isArray(hostList) ? hostList : []);
-    setActive(Array.isArray(activeRes.active) ? activeRes.active : []);
-    setRecent(Array.isArray(recentList) ? recentList : []);
+    // Each feed settles on its own: a failed one keeps its last value.
+    if (conns.status === 'fulfilled') setVscodeConns(Array.isArray(conns.value) ? conns.value : []);
+    if (hostList.status === 'fulfilled') setHosts(Array.isArray(hostList.value) ? hostList.value : []);
+    if (liveRuns.status === 'fulfilled') setRuns(liveRuns.value);
     // Members resolve human names/avatars and add web-session presence; they need
     // the tenant token and change slowly, so a failure just degrades gracefully.
     if (tenant && tenantToken) {
@@ -86,7 +96,7 @@ export function useWorkforcePresence({ live = true }: WorkforcePresenceOptions =
         .then((m) => setMembers(Array.isArray(m) ? m : []))
         .catch(() => { /* keep last */ });
     }
-  }, [isAuthenticated, hasTenant, tenant, tenantToken]);
+  }, [isAuthenticated, hasTenant, tenant, tenantToken, reader]);
 
   // The shared poller, not a bare setInterval: it skips ticks while the tab is
   // hidden (four requests every 30s from every background tab otherwise), backs
@@ -141,7 +151,7 @@ export function useWorkforcePresence({ live = true }: WorkforcePresenceOptions =
     for (const h of hosts) {
       if (h.online) agentByKey.set(`host:${h.id}`, { key: `host:${h.id}`, name: h.name, working: false });
     }
-    for (const run of active) {
+    for (const run of runs.active) {
       const key = run.agentHostId != null ? `host:${run.agentHostId}` : run.cloudAgentRef ? `cloud:${run.cloudAgentRef}` : `run:${run.id}`;
       const name = run.agentHostId != null
         ? (hostById.get(run.agentHostId)?.name ?? `Agent #${run.agentHostId}`)
@@ -151,7 +161,7 @@ export function useWorkforcePresence({ live = true }: WorkforcePresenceOptions =
     const agents = [...agentByKey.values()].sort((a, b) => Number(b.working) - Number(a.working));
     const workingCount = agents.filter((a) => a.working).length;
 
-    const activitySeries = dailyCounts(recent.map((e) => e.createdAt), 14);
+    const activitySeries = runs.activity.length ? runs.activity : new Array<number>(ACTIVITY_DAYS).fill(0);
 
     return {
       people,
@@ -161,5 +171,5 @@ export function useWorkforcePresence({ live = true }: WorkforcePresenceOptions =
       activitySeries,
       loading,
     };
-  }, [members, vscodeConns, hosts, active, recent, loading]);
+  }, [members, vscodeConns, hosts, runs, loading]);
 }

@@ -28,6 +28,10 @@ const { PR_RECONCILIATION_INTERVAL_MS, prReconciliationStampsKey, prReconciliati
 
 const source = readFileSync(fileURLToPath(new URL('./runPrReconciliationSweep.ts', import.meta.url).href), 'utf8');
 const ENV = {} as Env;
+/** The ownership probe: one select…from…where…limit that finds the repo or not. */
+const ownerDb = (owned: boolean) => ({
+  select: () => ({ from: () => ({ where: () => ({ limit: async () => (owned ? [{ id: 'a' }] : []) }) }) }),
+}) as never;
 const repo = (id: string, lastRunAt: Date | null = null) => ({ id, tenantId: 1, credentialId: 'cred-1', lastRunAt });
 
 /** Fake Db: the candidate select resolves to `rows`. No write method exists, so any write throws. */
@@ -72,8 +76,13 @@ describe('scheduled PR reconciliation — idle-silent cadence', () => {
   it('serves "last checked" from the KV stamp when newer than the last recorded run', async () => {
     const stamp = Date.now() - 5 * 60_000;
     mocks.kv.set(prReconciliationStampsKey(), { a: stamp });
-    expect(await prReconciliationLastCheckedAt(ENV, 'a', new Date(stamp - 3_600_000))).toBe(stamp);
-    expect(await prReconciliationLastCheckedAt(ENV, 'b', null)).toBeNull();
+    expect(await prReconciliationLastCheckedAt(ENV, ownerDb(true), 7, 'a', new Date(stamp - 3_600_000))).toBe(stamp);
+    expect(await prReconciliationLastCheckedAt(ENV, ownerDb(true), 7, 'b', null)).toBeNull();
+  });
+
+  it("answers nothing for a repo the tenant does not own, even with a KV stamp", async () => {
+    mocks.kv.set(prReconciliationStampsKey(), { a: Date.now() });
+    expect(await prReconciliationLastCheckedAt(ENV, ownerDb(false), 7, 'a', null)).toBeNull();
   });
 });
 

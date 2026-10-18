@@ -265,7 +265,6 @@
     "lib/guestPromptCapture.ts",
     "lib/guestRoomApi.ts",
     "lib/initials.ts",
-    "lib/investorApi.ts",
     "lib/kernel/kernelApi.ts",
     "lib/legalDocs.ts",
     "lib/live/LiveSessionContext.tsx",

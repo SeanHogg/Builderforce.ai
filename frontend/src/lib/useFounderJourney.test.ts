@@ -1,28 +1,27 @@
 // @vitest-environment jsdom
 /**
  * The founder's journey (PRD 33 §5.3.5): Run when a company exists, else Make /
- * Measure from the realization journey signal, else Idea from the active session.
+ * Measure from the realization journey signal, else Idea from the active session —
+ * all read from ONE cached summary (`GET /api/realizations/journey-summary`).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
+import type { FounderJourneySummary } from './realizationApi';
 
-const api = vi.hoisted(() => ({
-  companies: vi.fn(),
-  journeySignal: vi.fn(),
-  sessions: vi.fn(),
-  realizations: vi.fn(),
-}));
+const api = vi.hoisted(() => ({ journeySummary: vi.fn() }));
 
 vi.mock('./AuthContext', () => ({ useAuth: () => ({ isAuthenticated: true, hasTenant: true }) }));
-vi.mock('./investorApi', () => ({ investorApi: { companies: { list: api.companies } } }));
-vi.mock('./builderforceApi', () => ({
-  creationSessionsApi: { list: api.sessions },
-}));
-vi.mock('./realizationApi', () => ({
-  realizationApi: { journeySignal: api.journeySignal, list: api.realizations },
-}));
+vi.mock('./realizationApi', () => ({ realizationApi: { journeySummary: api.journeySummary } }));
 
-import { invalidateFounderJourney, useFounderJourney } from './useFounderJourney';
+import { invalidateFounderJourney, journeyFromSummary, useFounderJourney } from './useFounderJourney';
+
+const NONE: FounderJourneySummary = {
+  ownsCompany: false,
+  signal: { stage: null, realizationId: null },
+  activeSessionId: null,
+  activeSessionLatestProof: null,
+};
+const summary = (overrides: Partial<FounderJourneySummary>): FounderJourneySummary => ({ ...NONE, ...overrides });
 
 async function settle() {
   const { result } = renderHook(() => useFounderJourney());
@@ -33,53 +32,48 @@ async function settle() {
 beforeEach(() => {
   // The journey is shared across mounts (module cache); each case reads afresh.
   invalidateFounderJourney();
-  api.companies.mockReset().mockResolvedValue([]);
-  api.journeySignal.mockReset().mockResolvedValue({ stage: null, realizationId: null });
-  api.sessions.mockReset().mockResolvedValue({ sessions: [] });
-  api.realizations.mockReset().mockResolvedValue([]);
+  api.journeySummary.mockReset().mockResolvedValue(NONE);
+});
+
+describe('journeyFromSummary', () => {
+  it('Run keeps precedence when the workspace owns a company, whatever the proofs say', () => {
+    expect(journeyFromSummary(summary({ ownsCompany: true, signal: { stage: 'measure', realizationId: 'r1' } }))).toMatchObject({ stage: 'run', act: null });
+  });
+
+  it('Measure / Make from the newest proof signal', () => {
+    expect(journeyFromSummary(summary({ signal: { stage: 'measure', realizationId: 'r1' } }))).toMatchObject({ stage: 'measure', activeRealizationId: 'r1', act: null });
+    expect(journeyFromSummary(summary({ signal: { stage: 'make', realizationId: 'r2' } }))).toMatchObject({ stage: 'make', activeRealizationId: 'r2' });
+  });
+
+  it('falls back to Idea, with the act from the active session proof', () => {
+    expect(journeyFromSummary(summary({ activeSessionId: 's1', activeSessionLatestProof: { verdict: 'met' } }))).toMatchObject({ stage: 'idea', act: 'build', activeSessionId: 's1' });
+    expect(journeyFromSummary(summary({ activeSessionId: 's1', activeSessionLatestProof: { verdict: 'missed' } }))).toMatchObject({ act: 'prove' });
+    expect(journeyFromSummary(summary({ activeSessionId: 's1' }))).toMatchObject({ stage: 'idea', act: 'read' });
+  });
+
+  it('a brand-new tenant has no stage', () => {
+    expect(journeyFromSummary(NONE)).toMatchObject({ stage: null });
+  });
 });
 
 describe('useFounderJourney', () => {
-  it('Run keeps precedence when the workspace owns a company, whatever the proofs say', async () => {
-    api.companies.mockResolvedValue([{ isPortfolio: false }]);
-    api.journeySignal.mockResolvedValue({ stage: 'measure', realizationId: 'r1' });
-    expect(await settle()).toMatchObject({ stage: 'run', act: null });
-  });
-
-  it('Measure when the newest proof has visitors', async () => {
-    api.journeySignal.mockResolvedValue({ stage: 'measure', realizationId: 'r1' });
-    expect(await settle()).toMatchObject({ stage: 'measure', activeRealizationId: 'r1', act: null });
-  });
-
-  it('Make while the newest proof is being made', async () => {
-    api.journeySignal.mockResolvedValue({ stage: 'make', realizationId: 'r2' });
+  it('places the workspace from the summary', async () => {
+    api.journeySummary.mockResolvedValue(summary({ signal: { stage: 'make', realizationId: 'r2' } }));
     expect(await settle()).toMatchObject({ stage: 'make', activeRealizationId: 'r2' });
   });
 
-  it('falls back to Idea, with the act from the active session, when there is no proof signal', async () => {
-    api.sessions.mockResolvedValue({ sessions: [{ id: 's1' }] });
-    api.realizations.mockResolvedValue([{ verdict: 'met' }]);
-    expect(await settle()).toMatchObject({ stage: 'idea', act: 'build', activeSessionId: 's1' });
-  });
-
-  it('a failed signal read never blocks the journey', async () => {
-    api.journeySignal.mockRejectedValue(new Error('offline'));
-    api.sessions.mockResolvedValue({ sessions: [{ id: 's1' }] });
-    expect(await settle()).toMatchObject({ stage: 'idea', act: 'read' });
-  });
-
-  it('a brand-new tenant has no stage', async () => {
-    expect(await settle()).toMatchObject({ stage: null });
+  it('a failed summary read leaves the journey empty rather than loading forever', async () => {
+    api.journeySummary.mockRejectedValue(new Error('offline'));
+    expect(await settle()).toMatchObject({ stage: null, loading: false });
   });
 
   it('mounts on one page share ONE read', async () => {
-    api.journeySignal.mockResolvedValue({ stage: 'make', realizationId: 'r2' });
+    api.journeySummary.mockResolvedValue(summary({ signal: { stage: 'make', realizationId: 'r2' } }));
     const a = renderHook(() => useFounderJourney());
     const b = renderHook(() => useFounderJourney());
     await waitFor(() => expect(a.result.current.loading).toBe(false));
     await waitFor(() => expect(b.result.current.loading).toBe(false));
     expect(b.result.current).toMatchObject({ stage: 'make' });
-    expect(api.journeySignal).toHaveBeenCalledTimes(1);
-    expect(api.companies).toHaveBeenCalledTimes(1);
+    expect(api.journeySummary).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { usePolledResource } from '@/hooks/usePolledResource';
-import { runtimeApi, type ActiveRun } from '@/lib/builderforceApi';
+import { runtimeApi } from '@/lib/builderforceApi';
+import { createLiveRunsReader, elapsedNow, EMPTY_LIVE_RUNS, type ActiveRun, type LiveRunsSnapshot } from '@/lib/liveRunsApi';
 import { RoleGate } from '@/components/RoleGate';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useErrorText } from '@/i18n/useErrorMessage';
@@ -11,11 +12,16 @@ import { useErrorText } from '@/i18n/useErrorMessage';
  * place a cloud agent shows as actively running (cloud agents are stateless
  * server-side, so "running" is derived from in-flight executions).
  *
- * Self-contained: polls on a 4s cadence while anything is running (matching the
- * rest of the observability surfaces), 20s while the fleet is idle (only a new run
- * starting needs noticing then), never while the tab is hidden, and renders
- * nothing when the fleet is idle, so callers can drop it in without gating on
- * entitlement or run state.
+ * Self-contained: checks on a 4s cadence while anything is running, 20s while the
+ * fleet is idle (only a new run starting needs noticing then), never while the tab
+ * is hidden, and renders nothing when the fleet is idle, so callers can drop it in
+ * without gating on entitlement or run state.
+ *
+ * There is no tenant-wide execution push to ride (the realtime rooms are per
+ * project), so a tick is the cheap VERSION check of the ONE live-runs read
+ * (`lib/liveRunsApi`): the server answers `unchanged` — one KV read, no database,
+ * no payload — until some run changes state, and only then ships the list. The
+ * elapsed clocks advance locally from the snapshot's arrival time.
  */
 
 const POLL_MS = 4000;
@@ -39,19 +45,24 @@ const KIND_PILL: Record<ActiveRun['kind'], { label: string; bg: string; fg: stri
 export function ActiveRunsPanel() {
   const errorText = useErrorText();
   const confirm = useConfirm();
-  const [runs, setRuns] = useState<ActiveRun[] | null>(null);
+  const reader = useMemo(() => createLiveRunsReader(), []);
+  const [snapshot, setSnapshot] = useState<LiveRunsSnapshot | null>(null);
+  // Re-rendered every tick (even an `unchanged` one) so the elapsed clocks move.
+  const [now, setNow] = useState(() => Date.now());
+  const runs: ActiveRun[] | null = snapshot ? snapshot.active : null;
   const [cancelling, setCancelling] = useState<Set<number>>(new Set());
   const [stoppingAll, setStoppingAll] = useState(false);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const { active } = await runtimeApi.listActive();
-      setRuns(active);
+      setSnapshot(await reader.read());
     } catch {
-      setRuns((prev) => prev ?? []);
+      setSnapshot((prev) => prev ?? EMPTY_LIVE_RUNS);
+    } finally {
+      setNow(Date.now());
     }
-  }, []);
+  }, [reader]);
 
   usePolledResource(load, { intervalMs: runs && runs.length > 0 ? POLL_MS : IDLE_POLL_MS });
 
@@ -167,7 +178,7 @@ export function ActiveRunsPanel() {
               </span>
               <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{r.status}</span>
               <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
-                {fmtElapsed(r.elapsedMs)}
+                {fmtElapsed(snapshot ? elapsedNow(r, snapshot, now) : r.elapsedMs)}
               </span>
               {/* Watching the fleet is a read; CANCELLING a run is dispatch-tier
                   (requireRole(DEVELOPER) on /api/runtime/executions/:id/cancel). */}

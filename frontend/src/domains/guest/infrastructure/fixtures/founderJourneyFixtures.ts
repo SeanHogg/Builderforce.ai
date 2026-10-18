@@ -1,15 +1,15 @@
 /**
- * Wire adapters for the founder's-journey reads — the Creation Session list and
- * its Realizations, which `useFounderJourney` (the arc position shared by the
- * Journey Strip, the TopBar pill and the canvas chip) and the dashboard's Ideas
- * tab both call.
+ * Wire adapters for the founder's-journey reads — the journey summary
+ * `useFounderJourney` reads (the arc position shared by the Journey Strip, the
+ * TopBar pill and the canvas chip), and the Creation Session list and its
+ * Realizations, which the dashboard's Ideas tab calls.
  *
  * `investorApi.companies.list` deliberately has NO fixture here: an empty list
  * is the honest, correct answer for a visitor who has not raised anything, and
  * it is what puts the journey on Idea rather than Run. Adding a sample company
  * would flip that by accident, so its absence is load-bearing, not a gap.
  *
- * The journey signal (PRD 33 §5.3.5) answers "no signal" for the same reason: the
+ * The summary's proof signal (PRD 33 §5.3.5) answers "no signal" for the same reason: the
  * sample's proofs are a story about reading an idea, and a sample proof "being
  * measured" would put a visitor on Measure with no site behind it.
  */
@@ -19,9 +19,19 @@ import { dayOffsetToIso, exact, type GuestFixture } from '../../domain/guestFixt
 
 export const founderJourneyFixtures: GuestFixture[] = [
   {
-    id: 'realizations.journeySignal',
-    match: exact('/api/realizations/journey-signal'),
-    respond: () => ({ stage: null, realizationId: null }),
+    // The journey's ONE summary read: no company and no proof signal (see above), the
+    // sample Idea session as the active one, and its newest proof's verdict — the
+    // same facts the session and realization fixtures below tell.
+    id: 'realizations.journeySummary',
+    match: exact('/api/realizations/journey-summary'),
+    respond: () => ({
+      ownsCompany: false,
+      signal: { stage: null, realizationId: null },
+      activeSessionId: SAMPLE_IDEA_SESSION.id,
+      activeSessionLatestProof: SAMPLE_IDEA_SESSION.realizations[0]
+        ? { verdict: SAMPLE_IDEA_SESSION.realizations[0].verdict ?? null }
+        : null,
+    }),
   },
   {
     id: 'creationSessions.list',

@@ -16,7 +16,6 @@ vi.mock('@/lib/builderforceApi', () => {
     agentHosts: { list: vi.fn().mockResolvedValue([]) },
     runtimeApi: {
       submitExecution: vi.fn().mockResolvedValue({}),
-      listRecent: vi.fn().mockResolvedValue([]),
     },
     isAwaitingApprovalExecution: vi.fn().mockReturnValue(false),
     boardsApi: {
@@ -45,6 +44,12 @@ vi.mock('@/lib/builderforceApi', () => {
     },
   };
 });
+
+vi.mock('@/lib/liveRunsApi', () => ({
+  createLiveRunsReader: () => ({
+    read: vi.fn().mockResolvedValue({ active: [], runningCloudRefs: [], activity: [], taskRuns: [], receivedAt: 0 }),
+  }),
+}));
 
 vi.mock('@/lib/api', () => ({ fetchProjects: vi.fn().mockResolvedValue([]) }));
 

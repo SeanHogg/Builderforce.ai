@@ -152,7 +152,7 @@ export function createAgentOpsRoutes(db: DbHandle) {
     const limit = numQuery(c.req.query('limit')) ?? 25;
     const runs = await listReconciliationRuns(db, c.get('tenantId'), repoId, limit);
     if (!repoId) return json({ runs });
-    const lastCheckedAt = await prReconciliationLastCheckedAt(c.env, repoId, runs.find((run) => run.mode === 'apply')?.startedAt);
+    const lastCheckedAt = await prReconciliationLastCheckedAt(c.env, db, c.get('tenantId'), repoId, runs.find((run) => run.mode === 'apply')?.startedAt);
     return json({ runs, lastCheckedAt: lastCheckedAt == null ? null : new Date(lastCheckedAt).toISOString() });
   });
 

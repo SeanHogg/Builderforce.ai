@@ -51,7 +51,17 @@ export const prReconciliationStampsKey = (policyVersion: number = PR_RECONCILIAT
 
 /** When the scheduled reconciler last checked `repoId` (epoch ms) — the newer of its KV
  *  stamp and `fallback` (e.g. the latest recorded run) — or null when never. */
-export async function prReconciliationLastCheckedAt(env: CacheEnv, repoId: string, fallback?: StampFallback): Promise<number | null> {
+export async function prReconciliationLastCheckedAt(
+  env: CacheEnv,
+  db: Db,
+  tenantId: number,
+  repoId: string,
+  fallback?: StampFallback,
+): Promise<number | null> {
+  // The KV ledger is platform-wide; answer only for a repo this tenant owns.
+  const [owned] = await db.select({ id: projectRepositories.id }).from(projectRepositories)
+    .where(and(eq(projectRepositories.id, repoId), eq(projectRepositories.tenantId, tenantId))).limit(1);
+  if (!owned) return null;
   const stamps = await loadSweepStamps(env, prReconciliationStampsKey());
   return stamps.lastChecked(repoId, fallback);
 }

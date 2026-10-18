@@ -3,6 +3,7 @@
  * reads that grade a proof and the two verdicts a person sets.
  *
  *   GET   /api/realizations/journey-signal  → ProofJourneySignalDto (make | measure | null)
+ *   GET   /api/realizations/journey-summary → FounderJourneySummaryDto (the facts `useFounderJourney` reads)
  *   GET   /api/realizations/:id/measure     → ProofEvaluationDto (404 when the proof declares no measure)
  *   POST  /api/realizations/:id/call-early  { reason } → { realization } — a manager grades it now
  *   PATCH /api/realizations/:id/verdict     { verdict: 'abandoned', note? } → { realization } — park it
@@ -19,6 +20,7 @@ import { abandonRealization, getRealization, toRealizationView } from '../../app
 import { evaluateProofMeasure } from '../../application/realization/proofMeasure';
 import { cleanReason, EARLY_CALL_REASON_MAX, syncRealizationVerdict } from '../../application/realization/realizationVerdict';
 import { bumpJourneySignal, journeySignal } from '../../application/realization/journeySignal';
+import { founderJourneySummary } from '../../application/realization/founderJourneySummary';
 import { recordProofOutcome } from '../../application/realization/proofOutcomes';
 import { TenantRole } from '../../domain/shared/types';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
@@ -35,6 +37,15 @@ export function createRealizationMeasureRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/journey-signal', authMiddleware, async (c) => {
     return c.json(await journeySignal(c.env as Env, db, c.get('tenantId') as number));
+  });
+
+  // The founder's arc position facts in one cached summary — see `founderJourneySummary.ts`.
+  router.get('/journey-summary', authMiddleware, async (c) => {
+    return c.json(await founderJourneySummary(c.env as Env, db, {
+      tenantId: c.get('tenantId') as number,
+      segmentId: c.get('segmentId') as string,
+      userId: c.get('userId') as string,
+    }));
   });
 
   router.get('/:id/measure', authMiddleware, async (c) => {

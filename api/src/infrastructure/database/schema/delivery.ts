@@ -1389,8 +1389,9 @@ export const projectRepositories = pgTable('project_repositories', {
  *
  * Keyed on the REPO, not on (repo, branch): `openPullRequests` is a repository fact,
  * and keying it by branch would make it depend on part of the key only. `buildBranch`
- * records which branch the verdict came from (the repo's default). Single writer:
- * `runRepoDeliverySweep`.
+ * records which branch the verdict came from (the repo's default). Writers:
+ * `storeRepoDelivery`, called by `runRepoDeliverySweep` (on a verdict change only)
+ * and `refreshRepoDelivery` (on attach).
  */
 export const repoDeliveryStatus = pgTable('repo_delivery_status', {
   id:            uuid('id').primaryKey().defaultRandom(),
@@ -1404,8 +1405,9 @@ export const repoDeliveryStatus = pgTable('repo_delivery_status', {
   buildUrl:      varchar('build_url', { length: 500 }),
   buildBranch:   varchar('build_branch', { length: 255 }),
   buildAt:       timestamp('build_at'),
-  /** Last time the sweep reached the provider — the verdict's age, so a stale row
-   *  can be shown as stale instead of as absent. */
+  /** When this verdict was last WRITTEN (it moves only with a verdict change). The
+   *  sweep's every-probe stamp lives in KV (`REPO_DELIVERY_STAMPS_KEY`); readers take
+   *  the newer of the two as the verdict's age (see `loadRepoDelivery`). */
   probedAt:      timestamp('probed_at').notNull().defaultNow(),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
