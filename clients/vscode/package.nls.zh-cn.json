@@ -88,5 +88,8 @@
   "command.refreshHealth": "刷新健康状况",
   "command.archiveTask": "BuilderForce：归档任务",
   "command.unarchiveTask": "BuilderForce：恢复已归档任务",
-  "command.deleteTask": "BuilderForce：删除任务"
+  "command.deleteTask": "BuilderForce：删除任务",
+  "config.audits.atStartup": "打开此工作区时在后台对话中运行所选审计。",
+  "config.audits.atClose": "关闭工作区时在云端运行所选审计。使用已连接的代码仓库，不上传本地更改。中断的提交将在下次启动时重试。",
+  "config.audits.selected": "启动和关闭时运行的审计类型。"
 }

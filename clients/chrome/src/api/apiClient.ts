@@ -41,33 +41,44 @@ export class ApiError extends Error {
 
 export interface ApiClient {
   request<T>(path: string, init?: ApiRequestInit): Promise<T>;
+  /**
+   * The same authenticated call, answering with the STATUS and parsed body instead of
+   * throwing on a non-2xx — for a caller whose decision turns on which refusal it got
+   * (`@builderforce/provider-connect`: 404 = connect first, 409 = reconnect). Still throws
+   * an `ApiError` without a status when there was no answer at all.
+   */
+  raw(path: string, init?: ApiRequestInit): Promise<{ status: number; body: unknown }>;
 }
 
 export function createApiClient(deps: { session: Session; baseUrl: string; fetch: ApiFetch }): ApiClient {
+  /** The ONE authenticated send both answers share. */
+  const send = async (path: string, init: ApiRequestInit): Promise<Response> => {
+    const { json, asScope, idempotencyKey, headers, ...rest } = init;
+    if (asScope !== undefined && asScope !== deps.session.scope()) {
+      throw new ApiError(undefined, 'parked: queued for another workspace');
+    }
+    const token = await deps.session.jwt();
+    // No status: the outbox keeps it and retries once there is a credential again.
+    if (!token) throw new ApiError(undefined, 'not signed in or unreachable');
+    try {
+      return await deps.fetch(`${deps.baseUrl}${path}`, {
+        ...rest,
+        headers: {
+          ...(headers as Record<string, string> | undefined),
+          authorization: `Bearer ${token}`,
+          ...(json !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+        },
+        ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
+      });
+    } catch (e) {
+      throw new ApiError(undefined, e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return {
     async request<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
-      const { json, asScope, idempotencyKey, headers, ...rest } = init;
-      if (asScope !== undefined && asScope !== deps.session.scope()) {
-        throw new ApiError(undefined, 'parked: queued for another workspace');
-      }
-      const token = await deps.session.jwt();
-      // No status: the outbox keeps it and retries once there is a credential again.
-      if (!token) throw new ApiError(undefined, 'not signed in or unreachable');
-      let res: Response;
-      try {
-        res = await deps.fetch(`${deps.baseUrl}${path}`, {
-          ...rest,
-          headers: {
-            ...(headers as Record<string, string> | undefined),
-            authorization: `Bearer ${token}`,
-            ...(json !== undefined ? { 'content-type': 'application/json' } : {}),
-            ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
-          },
-          ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
-        });
-      } catch (e) {
-        throw new ApiError(undefined, e instanceof Error ? e.message : String(e));
-      }
+      const res = await send(path, init);
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         let message = text.slice(0, 300);
@@ -80,6 +91,17 @@ export function createApiClient(deps: { session: Session; baseUrl: string; fetch
       }
       if (res.status === 204) return undefined as T;
       return (await res.json()) as T;
+    },
+    async raw(path: string, init: ApiRequestInit = {}) {
+      const res = await send(path, init);
+      const text = await res.text().catch(() => '');
+      let body: unknown = undefined;
+      try {
+        body = text ? (JSON.parse(text) as unknown) : undefined;
+      } catch {
+        body = text;
+      }
+      return { status: res.status, body };
     },
   };
 }

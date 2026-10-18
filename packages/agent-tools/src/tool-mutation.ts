@@ -44,6 +44,9 @@ export const TOOL_SIDE_EFFECT = {
   file_outline: "read",
   semantic_search: "read",
   repo_map: "read",
+  // Shells out to the analyzers and writes their artifacts under
+  // .builderforce/code-analysis/, so it is a working-tree write, not a read.
+  analyze_codebase: "mutate",
   write_file: "mutate",
   edit_file: "mutate",
   delete_file: "mutate",

@@ -80,7 +80,7 @@ export interface BrainRunHostPorts {
    * `children` is THIS run's handle on its sub-agents and `signal` its Stop — built here
    * (not by the port) because only the run knows who it is: its key, its chat, its depth.
    */
-  tools(projectId: number | undefined, children: ChildControls, signal: () => AbortSignal | undefined, opts: { memory: boolean }): Promise<readonly ToolDef[]>;
+  tools(projectId: number | undefined, children: ChildControls, signal: () => AbortSignal | undefined, opts: { memory: boolean; audit?: { auditId: string; runId: string } }): Promise<readonly ToolDef[]>;
   /** Workspace root the local tools resolve against; '' when no folder is open. */
   workspaceRoot(): string;
   /** The transport-bound streamer for the CURRENT route (gateway or on-device). */
@@ -285,7 +285,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // A sub-agent is a clone of its owner: the same catalog, built the same way.
     // The chat's Memory switch (`p.evermind`) gates the memory TOOLS as well as the
     // loop's recall: "off" must mean the run neither reads nor writes project memory.
-    const defs = await ports.tools(projectId, children, () => runAbortSignal(key), { memory: p.evermind });
+    const defs = await ports.tools(projectId, children, () => runAbortSignal(key), { memory: p.evermind, ...(p.audit ? { audit: p.audit } : {}) });
     broadcast({ type: "run.tools", chatId: key, count: defs.length });
     const native = createNativeRunTool({
       defs,

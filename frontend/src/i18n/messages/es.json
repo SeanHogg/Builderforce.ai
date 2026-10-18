@@ -1844,7 +1844,10 @@
     "windowDays": "Últimos {n} días",
     "loadFailed": "No se pudo cargar este diagnóstico.",
     "frameworkLabel": "Marco de referencia",
-    "frameworkHint": "La puntuación y el plan son los mismos en todos los marcos: solo cambia cómo se agrupa el cuadro de mando."
+    "frameworkHint": "La puntuación y el plan son los mismos en todos los marcos: solo cambia cómo se agrupa el cuadro de mando.",
+    "auditPreview": "Vista previa. Revisión del código pendiente.",
+    "auditComplete": "Revisión del código completada.",
+    "auditTicket": "Ticket de corrección #{id}"
   },
   "toolReference": {
     "lede": "Un diagnóstico gratuito que puedes ejecutar aquí mismo, sin iniciar sesión.",
@@ -11769,6 +11772,8 @@
     },
     "tickets": {
       "none": "Aún no hay tickets vinculados.",
+      "originalRequestText": "Solicitud original: {text}",
+      "originalRequest": "Solicitud original",
       "ringAria": "{label}: {pct}% completado",
       "inParent": "en {parent}",
       "spawned": "creado aquí",
@@ -15876,6 +15881,8 @@
     "errStartConnect": "No se pudo iniciar la conexión",
     "errConnectSubscription": "No se pudo conectar la suscripción",
     "errCodeExpired": "Ese código ya se ha usado o ha caducado: los códigos son de un solo uso y duran solo unos minutos. Vuelve a iniciar la conexión y pega el nuevo de inmediato.",
+    "errDeviceExpired": "La solicitud de conexión caducó antes de aprobarse. Vuelve a iniciar la conexión y apruébala en la pestaña del proveedor.",
+    "errConnectDeclined": "La solicitud de conexión se rechazó en la página del proveedor.",
     "errRemove": "No se pudo eliminar la credencial",
     "precedence": {
       "title": "Prioridad de proveedores",
@@ -35292,5 +35299,46 @@
       "context_trim": "La compactación dejó los turnos anteriores fuera de cada llamada",
       "recall_overhead": "Lo que los recuerdos recuperados añadieron a cada prompt: el coste del recuerdo"
     }
+  },
+  "codeAudit": {
+    "title": "Visualizador de calidad del código",
+    "graph": "Dependencias",
+    "duplicates": "Código duplicado",
+    "unused": "Candidatos sin uso",
+    "comparison": "Antes y después",
+    "before": "Antes",
+    "after": "Después",
+    "changes": "Cambios",
+    "components": "Componentes / cambiar a archivos",
+    "files": "Archivos / cambiar a componentes",
+    "filter": "Filtrar rutas",
+    "zoomIn": "Acercar",
+    "zoomOut": "Alejar",
+    "openSource": "Abrir código",
+    "dependsOn": "Depende de",
+    "usedBy": "Usado por",
+    "unknown": "Origen desconocido",
+    "localChanges": "Incluye cambios locales",
+    "complete": "Medido",
+    "failed": "No disponible / incompleto",
+    "views": "Vistas de análisis",
+    "firstScan": "Primera medición: establece la base. Todavía no se afirma ninguna mejora.",
+    "incomparable": "La cobertura o las versiones difieren. Los hallazgos ausentes no cuentan como resueltos.",
+    "candidateNotice": "Revise los candidatos: las importaciones dinámicas, entradas del framework y API públicas pueden causar falsos positivos. Duplicación y código sin uso son hallazgos distintos.",
+    "noFindings": "Sin hallazgos en la salida disponible. Revise la cobertura.",
+    "graphCount": "{nodes} archivos · {edges} dependencias · {cycles} enlaces cíclicos",
+    "limited": "Se muestran los primeros 160 de {count} nodos. Filtre rutas o elija componentes.",
+    "legend": "Verde: añadido · rojo discontinuo: eliminado · ámbar: ciclo · gris: sin cambios",
+    "metric": "Métrica",
+    "nodes": "Archivos",
+    "edges": "Dependencias",
+    "issues": "Hallazgos",
+    "duplicate": "Código duplicado",
+    "unused-file": "Archivo posiblemente sin uso",
+    "unused-export": "Exportación posiblemente sin uso",
+    "unused-dependency": "Dependencia posiblemente sin uso",
+    "added": "Hallazgos añadidos",
+    "resolved": "Hallazgos resueltos",
+    "unchanged": "Hallazgos sin cambios"
   }
 }

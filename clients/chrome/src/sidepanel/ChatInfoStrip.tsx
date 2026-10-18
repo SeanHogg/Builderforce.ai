@@ -61,6 +61,9 @@ export function ChatInfoStrip({ serverId, projectId, chats, run, onChanged }: Ch
         spend={chat?.spend ?? null}
         spendLabels={spendLabels}
         locale={locale}
+        // The chat's first prompt, kept verbatim (1245) — the ticket panel shows it
+        // read-only so a linked ticket still carries what the chat was asked for.
+        originalRequest={chat?.originalRequest ?? null}
       />
     </div>
   );

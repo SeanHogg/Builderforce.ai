@@ -88,5 +88,8 @@
   "command.refreshHealth": "Refresh Health",
   "command.archiveTask": "BuilderForce: Archive Task",
   "command.unarchiveTask": "BuilderForce: Restore Archived Task",
-  "command.deleteTask": "BuilderForce: Delete Task"
+  "command.deleteTask": "BuilderForce: Delete Task",
+  "config.audits.atStartup": "Run selected audits in background chats when this workspace opens.",
+  "config.audits.atClose": "Run selected audits in the cloud when this workspace closes. Uses connected repository source; local edits are not uploaded. Interrupted submissions retry on next startup.",
+  "config.audits.selected": "Audit types to run at startup and close."
 }

@@ -88,5 +88,8 @@
   "command.refreshHealth": "Actualiser la santé",
   "command.archiveTask": "BuilderForce : Archiver la tâche",
   "command.unarchiveTask": "BuilderForce : Restaurer la tâche archivée",
-  "command.deleteTask": "BuilderForce : Supprimer la tâche"
+  "command.deleteTask": "BuilderForce : Supprimer la tâche",
+  "config.audits.atStartup": "Exécuter les audits sélectionnés dans des conversations en arrière-plan à l’ouverture de cet espace de travail.",
+  "config.audits.atClose": "Exécuter les audits sélectionnés dans le cloud à la fermeture. Utilise le dépôt connecté ; les modifications locales ne sont pas envoyées. Les envois interrompus reprennent au prochain démarrage.",
+  "config.audits.selected": "Types d’audit à exécuter au démarrage et à la fermeture."
 }

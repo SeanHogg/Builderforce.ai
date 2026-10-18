@@ -33,3 +33,4 @@ export * from "./symbols.js";
 export * from "./symbol-tools.js";
 export * from "./semantic-tools.js";
 export * from "./stableStringify.js";
+export * from './codeAnalysis.js';

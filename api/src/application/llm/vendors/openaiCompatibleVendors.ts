@@ -48,7 +48,7 @@ interface VendorSpec {
   modelCapabilities?: Readonly<Record<string, readonly AiCapability[]>>;
   /** The vendor's flagship catalog ids (BARE — the `direct/<vendor>/` route prefix is
    *  added when the module is built). One declaration feeds every flagship list. */
-  flagships?: { agentic: string; chat: string };
+  flagships?: { agentic: string; chat: string; gatedCoders?: readonly string[] };
   /** Override the OpenAI `max_tokens` field name (rare). */
   maxTokensField?: 'max_tokens' | 'max_completion_tokens';
   /** Extra static headers (rare). */
@@ -63,6 +63,13 @@ interface VendorSpec {
    *  account can list the models it can actually call. See `VendorModule.listModels`. */
   listsModels?: boolean;
 }
+
+/**
+ * Kimi Code's OpenAI-compatible base — the ONE spelling. The gateway dispatches to its
+ * `/chat/completions` (through a tenant's connected runtime), and the local-credential
+ * route hands the same base to a runtime on the person's own machine.
+ */
+export const KIMI_CODE_API_BASE_URL = 'https://api.kimi.com/coding/v1';
 
 const SPECS: ReadonlyArray<VendorSpec> = [
   {
@@ -125,15 +132,17 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     id: 'moonshot', brand: 'Moonshot', apiKeyEnv: 'MOONSHOT_API_KEY',
     baseUrl: 'https://api.moonshot.ai/v1/chat/completions',
     altBaseUrl: 'https://api.moonshot.cn/v1/chat/completions',
-    // Current K2 ids, kept in step with `docs-site/.../providers/moonshot.md`. The
+    // Current ids, kept in step with `docs-site/.../providers/moonshot.md`. The
     // credential health probe uses the FIRST entry, so the flagship leads: the
     // retired `moonshot-v1-*` models it used to probe fail on a perfectly good key.
-    models: ['kimi-k2.5', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview', 'kimi-k2-thinking', 'kimi-k2-thinking-turbo'],
-    flagships: { agentic: 'kimi-k2.5', chat: 'kimi-k2.5' },
+    // Kimi K3 is pay-as-you-go here (any funded key may call it), so unlike Kimi Code
+    // it can lead without a plan check.
+    models: ['PREMIUM:kimi-k3', 'kimi-k2.5', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview', 'kimi-k2-thinking', 'kimi-k2-thinking-turbo'],
+    flagships: { agentic: 'kimi-k3', chat: 'kimi-k3' },
   },
   {
     id: 'kimi-code', brand: 'Kimi Code', apiKeyEnv: 'KIMI_CODE_API_KEY',
-    baseUrl: 'https://api.kimi.com/coding/v1/chat/completions',
+    baseUrl: `${KIMI_CODE_API_BASE_URL}/chat/completions`,
     // Kimi asks third-party coding clients to preserve their real identity. Do
     // not spoof kimi-code-cli/Claude/Codex; identify this gateway truthfully.
     headers: { 'User-Agent': 'Builderforce.ai' },
@@ -151,8 +160,11 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     pseudoStream: true,
     // Keep the all-members model first: credential health probes use the first
     // catalog entry, while K3/high-speed access depends on the subscription tier.
-    models: ['kimi-for-coding', 'k3-256k', 'k3', 'kimi-for-coding-highspeed'],
-    flagships: { agentic: 'kimi-for-coding', chat: 'kimi-for-coding' },
+    // K3 (`k3`, 1M context; `k3-256k`) is Kimi's strongest coder but plan-gated, so it is
+    // a GATED coder rather than the default lead: a tenant on a K3 plan puts it first
+    // through provider model choice, and recognition then counts it as a real coder.
+    models: ['kimi-for-coding', 'PREMIUM:k3', 'PREMIUM:k3-256k', 'kimi-for-coding-highspeed'],
+    flagships: { agentic: 'kimi-for-coding', chat: 'kimi-for-coding', gatedCoders: ['k3', 'k3-256k'] },
   },
   {
     // Alibaba issues Qwen keys from two platforms that do NOT accept each other's
@@ -340,7 +352,15 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
     ...(spec.requiresLocalEgress ? { requiresLocalEgress: spec.requiresLocalEgress } : {}),
     ...(spec.listsModels ? { listsModels: true } : {}),
     ...(spec.flagships
-      ? { flagships: { agentic: `direct/${spec.id}/${spec.flagships.agentic}`, chat: `direct/${spec.id}/${spec.flagships.chat}` } }
+      ? {
+          flagships: {
+            agentic: `direct/${spec.id}/${spec.flagships.agentic}`,
+            chat: `direct/${spec.id}/${spec.flagships.chat}`,
+            ...(spec.flagships.gatedCoders
+              ? { gatedCoders: spec.flagships.gatedCoders.map((id) => `direct/${spec.id}/${id}`) }
+              : {}),
+          },
+        }
       : {}),
   }),
 );

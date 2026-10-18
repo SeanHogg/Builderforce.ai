@@ -250,6 +250,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           spend={activeChat?.spend}
           spendLabels={rail.spendLabels}
           locale={init.locale}
+          // The chat's first prompt, kept verbatim (1245) — rides the chat row like spend.
+          originalRequest={activeChat?.originalRequest}
         />
       )}
       empty={historyOpen ? (

@@ -40,6 +40,7 @@ import { promisify } from 'node:util';
 // below that touches the clone or the shell stays here, because that half genuinely
 // differs between the two images.
 import { execRelayTool, SUPPORTED_TOOL_NAMES } from './agentRelay.mjs';
+import { runCodeAnalysis } from './codeAnalysis.mjs';
 // THE agent loop: the shared kernel (`@builderforce/agent-loop`, compiled into
 // `agentLoop.mjs` by `api/scripts/gen-agent-loop-bundle.mjs`) with the image semantics
 // on its hooks — the same file the GitHub Actions runner inlines.
@@ -297,6 +298,14 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc, loop) {
     const r = await op(spec, { op: 'write', args: { path, content, summary: parsed.summary, isNew } });
     if (r.ok) writtenPaths.add(path);
     return r;
+  }
+  if (name === 'analyze_codebase') {
+    if (!workdir) return { ok: false, error: 'no repository checked out' };
+    return runCodeAnalysis(parsed, {
+      run: async (command) => { const r = await runShell(command, workdir, proc); return { ok: r.exitCode === 0, exitCode: r.exitCode, stdout: r.output }; },
+      read: async (path) => ({ ok: true, content: await readFile(join(workdir, path), 'utf8') }),
+      persist: async (snapshot) => { const r = await op(spec, { op: 'audit_analysis', args: { snapshot } }); if (!r.ok) throw new Error('Could not persist analyzer snapshot'); },
+    });
   }
   if (name === 'run_command') {
     const command = typeof parsed.command === 'string' ? parsed.command : '';

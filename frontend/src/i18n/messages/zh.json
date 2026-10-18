@@ -1844,7 +1844,10 @@
     "windowDays": "最近 {n} 天",
     "loadFailed": "无法加载此诊断。",
     "frameworkLabel": "报告框架",
-    "frameworkHint": "在任何框架下评分与改进计划都相同，改变的只是记分卡的分组方式。"
+    "frameworkHint": "在任何框架下评分与改进计划都相同，改变的只是记分卡的分组方式。",
+    "auditPreview": "审计预览。源代码审查尚未完成。",
+    "auditComplete": "源代码审查已完成。",
+    "auditTicket": "修复工单 #{id}"
   },
   "toolReference": {
     "lede": "可在此直接运行的免费诊断——无需登录。",
@@ -11769,6 +11772,8 @@
     },
     "tickets": {
       "none": "尚未关联任何工单。",
+      "originalRequestText": "原始请求：{text}",
+      "originalRequest": "原始请求",
       "ringAria": "{label}：完成 {pct}%",
       "inParent": "属于 {parent}",
       "spawned": "在此创建",
@@ -15876,6 +15881,8 @@
     "errStartConnect": "启动连接失败",
     "errConnectSubscription": "连接订阅失败",
     "errCodeExpired": "该代码已被使用或已失效——代码仅可使用一次，且仅在几分钟内有效。请重新开始连接，并立即粘贴新代码。",
+    "errDeviceExpired": "连接请求在批准前已过期。请重新发起连接，并在提供商的标签页中批准。",
+    "errConnectDeclined": "连接请求已在提供商页面被拒绝。",
     "errRemove": "移除凭据失败",
     "precedence": {
       "title": "提供商优先级",
@@ -35292,5 +35299,46 @@
       "context_trim": "压缩使较早的轮次不进入每次调用",
       "recall_overhead": "回忆的记忆为每个提示增加的内容 — 回忆的成本"
     }
+  },
+  "codeAudit": {
+    "title": "代码质量可视化",
+    "graph": "依赖关系",
+    "duplicates": "重复代码",
+    "unused": "未使用候选项",
+    "comparison": "前后对比",
+    "before": "之前",
+    "after": "之后",
+    "changes": "变化",
+    "components": "组件 / 切换至文件",
+    "files": "文件 / 切换至组件",
+    "filter": "筛选路径",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "openSource": "打开源代码",
+    "dependsOn": "依赖于",
+    "usedBy": "被引用于",
+    "unknown": "来源未知",
+    "localChanges": "包含本地更改",
+    "complete": "已测量",
+    "failed": "不可用 / 不完整",
+    "views": "分析视图",
+    "firstScan": "首次测量将建立基线，尚不能认定已有改善。",
+    "incomparable": "分析覆盖范围或版本不同。缺失的问题不能视为已解决。",
+    "candidateNotice": "未使用候选项需要复核：动态导入、框架入口和公共 API 可能导致误报。重复代码和无用代码是不同类型的问题。",
+    "noFindings": "可用分析输出中没有发现问题。请检查上方覆盖范围。",
+    "graphCount": "{nodes} 个文件 · {edges} 条依赖 · {cycles} 条循环依赖边",
+    "limited": "显示 {count} 个匹配节点中的前 160 个。请筛选路径或切换至组件。",
+    "legend": "绿色：新增 · 红色虚线：移除 · 黄色：循环 · 灰色：未变",
+    "metric": "指标",
+    "nodes": "文件",
+    "edges": "依赖",
+    "issues": "问题",
+    "duplicate": "重复代码",
+    "unused-file": "可能未使用的文件",
+    "unused-export": "可能未使用的导出",
+    "unused-dependency": "可能未使用的依赖",
+    "added": "新增问题",
+    "resolved": "已解决问题",
+    "unchanged": "未变问题"
   }
 }

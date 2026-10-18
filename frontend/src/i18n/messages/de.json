@@ -1844,7 +1844,10 @@
     "windowDays": "Letzte {n} Tage",
     "loadFailed": "Diese Diagnose konnte nicht geladen werden.",
     "frameworkLabel": "Berichtsrahmenwerk",
-    "frameworkHint": "Bewertung und Plan sind in jedem Rahmenwerk gleich — nur die Gruppierung der Scorecard ändert sich."
+    "frameworkHint": "Bewertung und Plan sind in jedem Rahmenwerk gleich — nur die Gruppierung der Scorecard ändert sich.",
+    "auditPreview": "Audit-Vorschau. Quellcodeprüfung steht aus.",
+    "auditComplete": "Quellcodeprüfung abgeschlossen.",
+    "auditTicket": "Behebungsticket #{id}"
   },
   "toolReference": {
     "lede": "Eine kostenlose Diagnose, die Sie direkt hier ausführen können — ohne Anmeldung.",
@@ -11769,6 +11772,8 @@
     },
     "tickets": {
       "none": "Noch keine Tickets verknüpft.",
+      "originalRequestText": "Ursprüngliche Anfrage: {text}",
+      "originalRequest": "Ursprüngliche Anfrage",
       "ringAria": "{label}: {pct}% erledigt",
       "inParent": "in {parent}",
       "spawned": "hier erstellt",
@@ -15876,6 +15881,8 @@
     "errStartConnect": "Verbindung konnte nicht gestartet werden",
     "errConnectSubscription": "Abo konnte nicht verbunden werden",
     "errCodeExpired": "Dieser Code wurde bereits verwendet oder ist abgelaufen — Codes sind einmalig gültig und nur wenige Minuten lang nutzbar. Starten Sie die Verbindung erneut und fügen Sie den neuen Code sofort ein.",
+    "errDeviceExpired": "Die Verbindungsanfrage ist abgelaufen, bevor sie bestätigt wurde. Starte die Verbindung neu und bestätige sie im Tab des Anbieters.",
+    "errConnectDeclined": "Die Verbindungsanfrage wurde auf der Seite des Anbieters abgelehnt.",
     "errRemove": "Zugangsdaten konnten nicht entfernt werden",
     "precedence": {
       "title": "Anbieter-Priorität",
@@ -35292,5 +35299,46 @@
       "context_trim": "Die Verdichtung hat frühere Runden aus jedem Aufruf herausgehalten",
       "recall_overhead": "Was abgerufene Erinnerungen jedem Prompt hinzugefügt haben — die Kosten des Abrufs"
     }
+  },
+  "codeAudit": {
+    "title": "Codezustand visualisieren",
+    "graph": "Abhängigkeiten",
+    "duplicates": "Doppelter Code",
+    "unused": "Ungenutzte Kandidaten",
+    "comparison": "Vorher und nachher",
+    "before": "Vorher",
+    "after": "Nachher",
+    "changes": "Änderungen",
+    "components": "Komponenten / zu Dateien wechseln",
+    "files": "Dateien / zu Komponenten wechseln",
+    "filter": "Pfade filtern",
+    "zoomIn": "Vergrößern",
+    "zoomOut": "Verkleinern",
+    "openSource": "Quellcode öffnen",
+    "dependsOn": "Abhängig von",
+    "usedBy": "Verwendet von",
+    "unknown": "Unbekannte Quelle",
+    "localChanges": "Mit lokalen Änderungen",
+    "complete": "Gemessen",
+    "failed": "Nicht verfügbar / unvollständig",
+    "views": "Analyseansichten",
+    "firstScan": "Erste Messung: Dies ist der Ausgangswert. Eine Verbesserung wird noch nicht behauptet.",
+    "incomparable": "Analyseabdeckung oder Versionen unterscheiden sich. Fehlende Ergebnisse gelten nicht als behoben.",
+    "candidateNotice": "Ungenutzte Kandidaten prüfen: Dynamische Importe, Framework-Einstiegspunkte und öffentliche APIs können Fehlalarme verursachen. Duplikate und ungenutzter Code sind getrennte Befunde.",
+    "noFindings": "Keine Befunde in der verfügbaren Ausgabe. Abdeckung oben prüfen.",
+    "graphCount": "{nodes} Dateien · {edges} Abhängigkeiten · {cycles} Zykluskanten",
+    "limited": "Die ersten 160 von {count} Knoten werden gezeigt. Pfade filtern oder Komponenten wählen.",
+    "legend": "Grün: hinzugefügt · rot gestrichelt: entfernt · gelb: Zyklus · grau: unverändert",
+    "metric": "Messwert",
+    "nodes": "Dateien",
+    "edges": "Abhängigkeiten",
+    "issues": "Befunde",
+    "duplicate": "Doppelter Code",
+    "unused-file": "Möglicherweise ungenutzte Datei",
+    "unused-export": "Möglicherweise ungenutzter Export",
+    "unused-dependency": "Möglicherweise ungenutzte Abhängigkeit",
+    "added": "Neue Befunde",
+    "resolved": "Behobene Befunde",
+    "unchanged": "Unveränderte Befunde"
   }
 }

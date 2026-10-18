@@ -88,5 +88,8 @@
   "command.refreshHealth": "Actualizar estado",
   "command.archiveTask": "BuilderForce: Archivar tarea",
   "command.unarchiveTask": "BuilderForce: Restaurar tarea archivada",
-  "command.deleteTask": "BuilderForce: Eliminar tarea"
+  "command.deleteTask": "BuilderForce: Eliminar tarea",
+  "config.audits.atStartup": "Ejecutar las auditorías seleccionadas en chats en segundo plano al abrir este espacio de trabajo.",
+  "config.audits.atClose": "Ejecutar las auditorías seleccionadas en la nube al cerrar. Usa el repositorio conectado; no se cargan cambios locales. Los envíos interrumpidos se reintentan al iniciar.",
+  "config.audits.selected": "Tipos de auditoría al iniciar y cerrar."
 }

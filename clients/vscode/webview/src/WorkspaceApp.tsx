@@ -49,6 +49,7 @@ import { Project360Screen } from './Project360Screen';
 import { ProjectPageScreen } from './ProjectPageScreen';
 import { EvermindScreen } from './EvermindScreen';
 import { VisualizationPanel } from './visualization/VisualizationPanel';
+import { CodeAuditVisualizer } from '@/components/tools/CodeAuditVisualizer';
 
 const LOCALES = ['en', 'zh', 'es', 'fr', 'de'] as const;
 type CanvasLocale = (typeof LOCALES)[number];
@@ -135,6 +136,12 @@ export function WorkspaceApp() {
 
   // The destinations that are not a board. Same bundle, same transport, no Brain
   // providers — they fetch their own data, exactly as they did before the merge.
+  if (init.view === 'audit-result' && init.auditResult?.codeAnalysis) {
+    const locale = pickLocale(init.labels['canvas.locale']);
+    return <IntlProvider locale={locale} messages={catalogs[locale] ?? catalogs.en}>
+      <main style={{ padding: 20 }}><CodeAuditVisualizer analysis={init.auditResult.codeAnalysis} openSource={(location, commit) => post('audit.source', { location, commit })} /></main>
+    </IntlProvider>;
+  }
   if (init.view === 'visualization') return <VisualizationScreen init={init} />;
   if (init.view === 'project360') return <Project360Screen init={init} />;
   if (init.view === 'evermind') return <EvermindScreen init={init} />;

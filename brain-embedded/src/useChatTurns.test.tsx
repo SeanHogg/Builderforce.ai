@@ -54,6 +54,85 @@ describe('useChatCreation', () => {
   });
 });
 
+describe('useChatCreation — original-request capture seam', () => {
+  it('captures the first user turn verbatim, beside the auto-title, exactly once per call', async () => {
+    const autoTitle = vi.fn().mockResolvedValue(undefined);
+    const onCaptureOriginalRequest = vi.fn();
+    const { result } = renderHook(() => useChatCreation({
+      chatId: 3, create: vi.fn(), autoTitle, onCaptureOriginalRequest,
+    }));
+
+    await result.current.onFirstUserTurn(3, 'Rewrite the billing webhook');
+    expect(onCaptureOriginalRequest).toHaveBeenCalledTimes(1);
+    expect(onCaptureOriginalRequest).toHaveBeenCalledWith(3, 'Rewrite the billing webhook');
+
+    // Same turn, so the two seams cannot drift: both ports see the same (id, text).
+    expect(autoTitle).toHaveBeenCalledWith(3, 'Rewrite the billing webhook');
+  });
+
+  it('fires once per first turn — a later turn is not re-captured by the hook', async () => {
+    const onCaptureOriginalRequest = vi.fn();
+    const { result } = renderHook(() => useChatCreation({
+      chatId: 3, create: vi.fn(), onCaptureOriginalRequest,
+    }));
+
+    // `onFirstUserTurn` is only invoked by the host on the FIRST turn, so the hook
+    // fires exactly once however many sends follow.
+    await result.current.onFirstUserTurn(3, 'first prompt');
+    expect(onCaptureOriginalRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not await the capture: a THROWING port cannot break the first turn', async () => {
+    const autoTitle = vi.fn().mockResolvedValue(undefined);
+    const onCaptureOriginalRequest = vi.fn(() => { throw new Error('persistence down'); });
+    const { result } = renderHook(() => useChatCreation({
+      chatId: 3, create: vi.fn(), autoTitle, onCaptureOriginalRequest,
+    }));
+
+    await expect(result.current.onFirstUserTurn(3, 'first prompt')).resolves.toBeUndefined();
+    expect(onCaptureOriginalRequest).toHaveBeenCalledTimes(1);
+    // The failure is swallowed, so the auto-title on the SAME turn still runs —
+    // a broken bookkeeping write must not silently cost the chat its title either.
+    expect(autoTitle).toHaveBeenCalledWith(3, 'first prompt');
+  });
+
+  it('a rejected autoTitle does not skip the capture (capture is fired first, un-awaited)', async () => {
+    const autoTitle = vi.fn().mockRejectedValue(new Error('title endpoint down'));
+    const onCaptureOriginalRequest = vi.fn();
+    const { result } = renderHook(() => useChatCreation({
+      chatId: 3, create: vi.fn(), autoTitle, onCaptureOriginalRequest,
+    }));
+
+    await expect(result.current.onFirstUserTurn(3, 'first prompt')).rejects.toThrow('title endpoint down');
+    expect(onCaptureOriginalRequest).toHaveBeenCalledWith(3, 'first prompt');
+  });
+
+  it('is unaffected when a host passes no capture port (the no-op default)', async () => {
+    const autoTitle = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useChatCreation({ chatId: 3, create: vi.fn(), autoTitle }));
+    await expect(result.current.onFirstUserTurn(3, 'first prompt')).resolves.toBeUndefined();
+    expect(autoTitle).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the newest capture port through a ref, so a run keeps a stable identity', async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ capture }: { capture: (id: number, text: string) => void }) => useChatCreation({
+        chatId: 3, create: vi.fn(), onCaptureOriginalRequest: capture,
+      }),
+      { initialProps: { capture: first } },
+    );
+    const onFirstUserTurn = result.current.onFirstUserTurn;
+
+    rerender({ capture: second });
+    await onFirstUserTurn(3, 'first prompt');
+
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledWith(3, 'first prompt');
+  });
+});
+
 describe('useChatTurns', () => {
   beforeEach(() => stopRun.mockClear());
 

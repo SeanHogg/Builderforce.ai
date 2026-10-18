@@ -16,6 +16,9 @@ export function chatTicketsLabels(): Record<string, string> {
   const t = vscode.l10n.t;
   return {
     "ct.none": t("No tickets linked yet."),
+    // The chat's first prompt (migration 1245), shown read-only above the linked tickets.
+    "ct.originalRequest": t("Original request"),
+    "ct.originalRequestText": t("Original request: {text}"),
     "ct.ringAria": t("{label}: {pct}% done"),
     "ct.inParent": t("in {parent}"),
     "ct.spawned": t("spawned here"),

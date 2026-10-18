@@ -20,7 +20,8 @@ import { useCallback, useEffect, useRef } from 'react';
  *
  * How the chat is created and named is the HOST's (ports): the web and editor create
  * through `useArmedNewChat().createArmed` (so the armed mode/memory ride the first
- * send) and title through `useBrainChats.autoTitle`; Rovr creates in its device record.
+ * send), title through `useBrainChats.autoTitle` and record the first prompt through
+ * `useBrainChats.captureOriginalRequest`; Rovr creates in its device record.
  * A host without chats (the Creation Canvas) does not mount this at all.
  *
  * Mount it BEFORE the conversation: `ensureChatId` and `onFirstUserTurn` are what
@@ -37,6 +38,17 @@ export interface ChatCreationOptions {
    * placeholder and re-arms a retry). Omit to leave chats untitled.
    */
   autoTitle?: (chatId: number, firstUserText: string) => Promise<unknown> | void;
+  /**
+   * Optional: keep the user's FIRST prompt verbatim on the chat (migration 1245) so a
+   * chat linked to a ticket still shows the request that produced it — the title is a
+   * ~60-char derivation and loses the origin text.
+   *
+   * Same contract as `autoTitle`, deliberately: it is fired from the same place, in the
+   * same turn, so the two can never drift apart, and it is NOT awaited — the first user
+   * turn must never wait on, or fail because of, a bookkeeping write. A host that does
+   * not pass it is unaffected (the default is a no-op).
+   */
+  onCaptureOriginalRequest?: (chatId: number, text: string) => void;
 }
 
 export interface ChatCreation {
@@ -49,7 +61,7 @@ export interface ChatCreation {
   onFirstUserTurn: (chatId: number, firstUserText: string) => Promise<void>;
 }
 
-export function useChatCreation({ chatId, create, autoTitle }: ChatCreationOptions): ChatCreation {
+export function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }: ChatCreationOptions): ChatCreation {
   const chatIdRef = useRef(chatId);
   // eslint-disable-next-line react-hooks/refs
   chatIdRef.current = chatId;
@@ -59,6 +71,9 @@ export function useChatCreation({ chatId, create, autoTitle }: ChatCreationOptio
   const autoTitleRef = useRef(autoTitle);
   // eslint-disable-next-line react-hooks/refs
   autoTitleRef.current = autoTitle;
+  const captureRef = useRef(onCaptureOriginalRequest);
+  // eslint-disable-next-line react-hooks/refs
+  captureRef.current = onCaptureOriginalRequest;
 
   /** The first message's creation while it is in flight (or resolved but not yet selected). */
   const creating = useRef<Promise<number | null> | null>(null);
@@ -83,6 +98,19 @@ export function useChatCreation({ chatId, create, autoTitle }: ChatCreationOptio
   }, []);
 
   const onFirstUserTurn = useCallback(async (id: number, firstUserText: string) => {
+    // The origin-text capture is fired HERE, beside the auto-title, so it cannot drift
+    // from it: every host that titles a chat from its first turn captures the request
+    // from that same turn. Fire-and-forget and fully guarded — a throwing or rejecting
+    // capture port must not surface into (nor abort) the user's first message, which is
+    // why this is wrapped in its own try/catch rather than sharing `autoTitle`'s await:
+    // `autoTitle` owns its failure and may reject (a host returning a promise it handles
+    // downstream), and awaiting it first would put the capture behind that latency and
+    // behind its rejection.
+    try {
+      captureRef.current?.(id, firstUserText);
+    } catch {
+      /* capture is best-effort bookkeeping — never let it break the first turn */
+    }
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
 

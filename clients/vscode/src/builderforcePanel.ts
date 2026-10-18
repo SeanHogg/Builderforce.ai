@@ -6,7 +6,8 @@ import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { posixShellReport } from "./posixShell";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import type { BrainRunHost, WebviewRunStart } from "./brainRunHost";
-import { authorizeLocalEndpoint, getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
+import { getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
+import { authorizeLocalEndpoint } from "./localEndpointAuth";
 import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { confirmChatDelete } from "./chatDeletion";
 import { getGroundingWithHistory } from "./grounding";
@@ -805,7 +806,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
     // Resolved here, per request, rather than carried in the panel's init payload: a Kimi
     // token read fifteen minutes ago is no longer valid, and a credential the webview was
     // handed once would be exactly that.
-    const authorized = await authorizeLocalEndpoint(match.provider, match.endpoint);
+    const authorized = await authorizeLocalEndpoint(match.provider, match.endpoint, this.ctx.secrets);
     if (!authorized.ok) {
       send("llm.error", { error: authorized.detail });
       return;

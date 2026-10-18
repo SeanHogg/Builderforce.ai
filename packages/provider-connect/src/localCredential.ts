@@ -21,7 +21,7 @@
  * Persisted through an injected string store (the editor's SecretStorage, Rovr's
  * `chrome.storage.local`), so a restart reuses an unexpired token instead of a round trip.
  */
-import { errorDetail, field, stringField, type GatewayRequest } from './port';
+import { errorDetail, field, stringField, type GatewayRequest } from './port.js';
 
 export interface LocalCredentialModel {
   /** The id the provider's API expects on the wire, e.g. `k3`. */

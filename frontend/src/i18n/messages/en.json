@@ -1844,7 +1844,10 @@
     "windowDays": "Last {n} days",
     "loadFailed": "Could not load this diagnostic.",
     "frameworkLabel": "Reporting framework",
-    "frameworkHint": "The score and the plan are the same under every framework — only how the scorecard is grouped changes."
+    "frameworkHint": "The score and the plan are the same under every framework — only how the scorecard is grouped changes.",
+    "auditPreview": "Audit preview. Source review is pending.",
+    "auditComplete": "Audit source review completed.",
+    "auditTicket": "Remediation ticket #{id}"
   },
   "toolReference": {
     "lede": "A free diagnostic you can run right here — no login required.",
@@ -11769,6 +11772,8 @@
     },
     "tickets": {
       "none": "No tickets linked yet.",
+      "originalRequest": "Original request",
+      "originalRequestText": "Original request: {text}",
       "ringAria": "{label}: {pct}% done",
       "inParent": "in {parent}",
       "spawned": "spawned here",
@@ -15876,6 +15881,8 @@
     "errStartConnect": "Failed to start connect",
     "errConnectSubscription": "Failed to connect subscription",
     "errCodeExpired": "That code has already been used or has expired — codes are single-use and last only a few minutes. Start the connect again and paste the new one right away.",
+    "errDeviceExpired": "The connection request expired before it was approved. Start the connect again and approve it in the provider's tab.",
+    "errConnectDeclined": "The connection request was declined on the provider's page.",
     "errRemove": "Failed to remove credential",
     "precedence": {
       "title": "Provider priority",
@@ -35292,5 +35299,46 @@
       "context_trim": "Compaction kept earlier turns out of each call",
       "recall_overhead": "What recalled memories added to each prompt — the cost of recall"
     }
+  },
+  "codeAudit": {
+    "title": "Code health visualizer",
+    "graph": "Dependencies",
+    "duplicates": "Duplicate code",
+    "unused": "Unused candidates",
+    "comparison": "Before and after",
+    "before": "Before",
+    "after": "After",
+    "changes": "Changes",
+    "components": "Components / switch to files",
+    "files": "Files / switch to components",
+    "filter": "Filter paths",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "openSource": "Open source",
+    "dependsOn": "Depends on",
+    "usedBy": "Used by",
+    "unknown": "Unknown source",
+    "localChanges": "Includes local changes",
+    "complete": "Measured",
+    "failed": "Unavailable / incomplete",
+    "views": "Analysis views",
+    "firstScan": "First measured scan: this establishes a baseline. No improvement is claimed yet.",
+    "incomparable": "Analyzer coverage or versions differ. Missing findings cannot be counted as resolved.",
+    "candidateNotice": "Unused candidates need review: dynamic imports, framework entry points and public APIs can produce false positives. Duplication and dead code are separate findings.",
+    "noFindings": "No findings in available analyzer output. Check coverage above.",
+    "graphCount": "{nodes} files · {edges} dependencies · {cycles} cycle edges",
+    "limited": "Showing the first 160 of {count} matching nodes. Filter paths or switch to components.",
+    "legend": "Green: added · dashed red: removed · amber: cycle · gray: unchanged",
+    "metric": "Metric",
+    "nodes": "Files",
+    "edges": "Dependencies",
+    "issues": "Findings",
+    "duplicate": "Duplicate code",
+    "unused-file": "Unused file candidate",
+    "unused-export": "Unused export candidate",
+    "unused-dependency": "Unused dependency candidate",
+    "added": "Added findings",
+    "resolved": "Resolved findings",
+    "unchanged": "Unchanged findings"
   }
 }

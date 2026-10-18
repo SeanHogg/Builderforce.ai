@@ -1,6 +1,8 @@
 import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ToolResult, ToolMetric } from '@/lib/tools';
+import { ticketHref } from '@/lib/ticketHref';
+import { CodeAuditVisualizer } from './CodeAuditVisualizer';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { RadarChart } from '@/components/charts/RadarChart';
 
@@ -93,6 +95,17 @@ export function ToolResultView({ result }: { result: ToolResult }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {result.codeAnalysis && <CodeAuditVisualizer analysis={result.codeAnalysis} />}
+      {result.audit && (
+        <div style={{ ...card, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <span>{result.audit.status === 'preview' ? t('auditPreview') : t('auditComplete')}</span>
+          {result.audit.ticketIds.map((id) => (
+            <a key={id} href={`${ticketHref(id)}&project=${result.audit!.projectId}`}>
+              {t('auditTicket', { id })}
+            </a>
+          ))}
+        </div>
+      )}
       {/* ── Hero: score dial + verdict, or calculator headline ─────────────── */}
       <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
         {score != null ? (

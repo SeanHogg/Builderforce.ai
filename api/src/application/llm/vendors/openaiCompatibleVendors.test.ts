@@ -201,8 +201,18 @@ describe('a factory vendor builds a correct OpenAI-compatible request', () => {
     const ids = getModule('moonshot').catalog.map((entry) => entry.id);
     // The credential health probe dispatches the FIRST catalog entry, so a retired
     // id here reads back as "your key is broken" on a perfectly good account.
-    expect(ids[0]).toBe('kimi-k2.5');
+    expect(ids[0]).toBe('kimi-k3');
     expect(ids.some((id) => id.startsWith('moonshot-v1-'))).toBe(false);
+  });
+
+  it('keeps Kimi Code\'s plan-gated K3 out of the default lead but recognised as a coder', () => {
+    const mod = getModule('kimi-code');
+    // The probe and the default lead stay on the all-members model: a lower-tier account
+    // answers K3 with a refusal the cascade would read as a broken credential.
+    expect(mod.catalog[0]!.id).toBe('kimi-for-coding');
+    expect(mod.flagships?.agentic).toBe('direct/kimi-code/kimi-for-coding');
+    expect(mod.flagships?.gatedCoders).toEqual(['direct/kimi-code/k3', 'direct/kimi-code/k3-256k']);
+    expect(mod.tierFor('k3')).toBe('PREMIUM');
   });
 
   it('every direct/<vendor>/ BYO flagship names a model that vendor actually carries', () => {

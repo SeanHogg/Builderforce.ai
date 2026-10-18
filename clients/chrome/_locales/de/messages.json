@@ -1041,6 +1041,14 @@
     "message": "Keine passenden Tickets",
     "description": "#-ticket picker: nothing matches"
   },
+  "ctOriginalRequest": {
+    "message": "Original request",
+    "description": "Der erste Prompt dieses Chats"
+  },
+  "ctOriginalRequestText": {
+    "message": "Ursprüngliche Anfrage: {text}",
+    "description": "Accessible name for the chat's original request"
+  },
   "ctNone": {
     "message": "Noch keine Tickets verknüpft.",
     "description": "No linked tickets"
@@ -1336,5 +1344,50 @@
   },
   "cancelTitle": {
     "message": "Abbrechen"
+  },
+  "kimiIntro": {
+    "message": "Verbinde dein Kimi-Konto, um Kimi K3 hier zu nutzen. Builderforce verwaltet die Verbindung; Rovr ruft Kimi direkt aus diesem Browser auf."
+  },
+  "kimiConnectedIntro": {
+    "message": "Das Kimi-Konto deines Workspace. Wähle ein Modell, auf dem jeder Schritt läuft – direkt aus diesem Browser aufgerufen."
+  },
+  "kimiConnect": {
+    "message": "Kimi verbinden"
+  },
+  "kimiApprove": {
+    "message": "Bestätige die Verbindung im Kimi-Tab …"
+  },
+  "kimiApproveWithCode": {
+    "message": "Bestätige die Verbindung im Kimi-Tab – dort steht der Code $1."
+  },
+  "kimiCancel": {
+    "message": "Abbrechen"
+  },
+  "kimiDenied": {
+    "message": "Die Kimi-Verbindung wurde abgelehnt."
+  },
+  "kimiExpired": {
+    "message": "Die Kimi-Anfrage ist abgelaufen, bevor sie bestätigt wurde. Versuche es erneut."
+  },
+  "kimiFailed": {
+    "message": "Kimi konnte nicht verbunden werden: $1"
+  },
+  "kimiOriginDenied": {
+    "message": "Rovr braucht die Berechtigung für api.kimi.com, um Kimi aus diesem Browser zu nutzen."
+  },
+  "kimiK3Plan": {
+    "message": "erfordert einen Kimi-Tarif mit K3"
+  },
+  "kimiCardTitle": {
+    "message": "Verbinde Kimi, um diesen Schritt auszuführen"
+  },
+  "kimiCardBody": {
+    "message": "Du hast ein Kimi-Modell gewählt, aber in deinem Workspace ist noch kein Kimi-Konto verbunden (oder Rovr erreicht Kimi nicht). Verbinde es einmal – der nächste Schritt läuft darauf."
+  },
+  "suggestAudit": {
+    "message": "Audit ausführen"
+  },
+  "suggestAuditPrompt": {
+    "message": "Liste verfügbare Audits mit audits.list auf, hilf mir bei der Projekt- und Auditauswahl und starte es mit audits.run. Zeige Status, Ergebnisse und Behebungstickets."
   }
 }

@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.50",
+  "version": "2026.10.51",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -870,6 +870,36 @@
           "type": "boolean",
           "default": false,
           "description": "%config.reportErrors.desc%"
+        },
+        "builderforce.audits.atStartup": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "%config.audits.atStartup%"
+        },
+        "builderforce.audits.atClose": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "%config.audits.atClose%"
+        },
+        "builderforce.audits.selected": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "soc2-audit",
+              "architecture-analysis",
+              "quality-audit",
+              "pm-vision-audit",
+              "privacy-compliance-audit"
+            ]
+          },
+          "default": [
+            "quality-audit"
+          ],
+          "scope": "resource",
+          "description": "%config.audits.selected%"
         }
       }
     }

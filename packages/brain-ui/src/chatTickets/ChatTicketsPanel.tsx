@@ -77,6 +77,15 @@ export interface ChatTicketsPanelProps {
   spendLabels?: Partial<SpendLabels>;
   /** BCP-47 locale for the pill's money and token formatting. */
   locale?: string;
+  /**
+   * The chat's ORIGINAL request — the user's first prompt, kept verbatim on the chat
+   * (migration 1245) so the linked ticket still shows what the chat was asked for once
+   * the ~60-char auto-title has overwritten the obvious. Read-only: it is a historical
+   * record, so the panel never offers an edit affordance. Omit (or pass null/'') to hide
+   * the line entirely — a chat created before 1245, or one whose capture never landed,
+   * simply has nothing to show.
+   */
+  originalRequest?: string | null;
 }
 
 /** The action-row drawers the panel ships with; extension keys must not collide. */
@@ -91,7 +100,7 @@ const COLLAPSE_THRESHOLD = 8;
 
 const NO_SUBAGENTS: readonly ChatSubagentVM[] = [];
 
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels, locale }: ChatTicketsPanelProps) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels, locale, originalRequest }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [members, setMembers] = useState<ChatMemberVM[]>([]);
@@ -193,6 +202,16 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
 
   return (
     <div style={S.root}>
+      {/* The chat's ORIGINAL request, above the linked-ticket grid (migration 1245).
+          Read-only history, not an editable field: it is what the user asked on turn one
+          and the auto-title is only a ~60-char derivation of it. Hidden when absent so
+          a pre-1245 chat renders exactly as before. */}
+      {originalRequest?.trim() && (
+        <div style={S.originalRequest}>
+          <span style={S.originalRequestLabel}>{labels.originalRequest}</span>
+          <span style={S.originalRequestText} title={labels.originalRequestText(originalRequest)}>{originalRequest}</span>
+        </div>
+      )}
       {/* Collapsible header — one row summarising the linked tickets so a chat with
           hundreds of them stays compact. Click to expand/collapse the ring grid. */}
       {(tickets.length > 0 || hasSpendToShow(spend)) && (

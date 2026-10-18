@@ -12,6 +12,7 @@
       "@builderforce/device-auth": ["../../packages/device-auth/src/index.ts"],
       "@builderforce/local-inference": ["../../packages/local-inference/src/index.ts"],
       "@builderforce/model-catalog": ["../../packages/model-catalog/src/index.ts"],
+      "@builderforce/provider-connect": ["../../packages/provider-connect/src/index.ts"],
       "@builderforce/write-outbox": ["../../packages/write-outbox/src/index.ts"]
     },
     "strict": true,

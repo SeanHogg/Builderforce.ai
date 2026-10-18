@@ -10,7 +10,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { BRAIN_ORIGIN } from './chatAccess';
 import { normalizeChatMode, resolveChatMode, NEW_CHAT_MODE } from './chatMode';
 import { normalizeChatTitle } from './chatTitle';
-import { chatColumns, normalizeCapability, type CreateChatDto, type UpdateChatDto } from './brainChatShapes';
+import { chatColumns, normalizeCapability, normalizeOriginalRequest, type CreateChatDto, type UpdateChatDto } from './brainChatShapes';
 import { canAccessChat, syncPendingMemberships, verifyChatOwnership, verifyProjectInTenant } from './brainChatGuards';
 import { answerTextOf, retainChatMemory } from './brainMemory';
 import type { Db } from '../../infrastructure/database/connection';
@@ -163,6 +163,7 @@ export async function createChat(db: Db, dto: CreateChatDto) {
       origin: BRAIN_ORIGIN,
       projectId: dto.projectId ?? null,
       title,
+      originalRequest: normalizeOriginalRequest(dto.originalRequest),
       capability: normalizeCapability(dto.capability),
       mode: normalizeChatMode(dto.mode) ?? NEW_CHAT_MODE,
     })
@@ -177,6 +178,10 @@ export async function getChat(db: Db, chatId: number, tenantId: number, userId: 
     projectId: brainChats.projectId,
     origin: brainChats.origin,
     title: brainChats.title,
+    /** The detail read carries it too (1245), matching `chatColumns`: the ticket rail
+     *  reads the open chat from THIS call, so a projection without it would leave the
+     *  panel's most-used surface unable to show the origin text. */
+    originalRequest: brainChats.originalRequest,
     capability: brainChats.capability,
     memoryEnabled: brainChats.memoryEnabled,
     createdAt: brainChats.createdAt,
@@ -212,6 +217,17 @@ export async function updateChat(
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (dto.title !== undefined) updates.title = normalizeChatTitle(dto.title);
+  // The original request is a WRITE-ONCE record (the first-turn seam is the only writer),
+  // so it moves the column only when it arrives with real text. That makes both failure
+  // shapes safe by construction: a PATCH that omits it (every rename, mode switch, memory
+  // toggle) cannot overwrite a captured request, and one that arrives blank — a re-fired
+  // first-turn hook on an empty composer, a client echoing `null` — cannot ERASE a
+  // captured one either. Losing the origin text is not recoverable, so the write refuses
+  // rather than overwriting; a genuine correction is a rename, which stays the title's job.
+  if (dto.originalRequest !== undefined) {
+    const originalRequest = normalizeOriginalRequest(dto.originalRequest);
+    if (originalRequest !== null) updates.originalRequest = originalRequest;
+  }
   if (dto.projectId !== undefined) updates.projectId = dto.projectId;
   if (dto.visibility === 'shared' || dto.visibility === 'locked') updates.visibility = dto.visibility;
   if (dto.capability !== undefined) updates.capability = normalizeCapability(dto.capability);

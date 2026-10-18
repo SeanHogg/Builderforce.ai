@@ -83,6 +83,8 @@ export function storedResult(stored: unknown): ToolResult {
   if (!stored || typeof stored !== 'object') return EMPTY_RESULT;
   const { v: _v, figures: _figures, ...result } = stored as StoredToolResult;
   return {
+    ...(result.audit ? { audit: result.audit } : {}),
+    ...(result.codeAnalysis ? { codeAnalysis: result.codeAnalysis } : {}),
     headline: typeof result.headline === 'string' ? result.headline : '',
     summary: typeof result.summary === 'string' ? result.summary : undefined,
     score: typeof result.score === 'number' ? result.score : null,

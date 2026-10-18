@@ -1137,7 +1137,7 @@ type ChatRowActionProps = Pick<ChatHistoryRowProps, 'onOpen' | 'actionsOpen' | '
  *   Enter commits once — the input unmounts on Enter and its blur would commit again;
  * - Summarize / Archive / Delete / Assign each mark their row busy while in flight;
  * - Delete asks the host's `confirmDelete` first.
- * - `isArchived(chat)` decides whether a row OFFERS Archive: a chat the host already
+ * - `isArchived(id)` decides whether a row OFFERS Archive: a chat the host already
  *   holds as archived has none to offer, so the menu never offers the state it is in.
  *
  * Hold it ABOVE the list, at surface/panel level: a history list unmounts while the
@@ -2288,6 +2288,13 @@ interface ChatTicketsLabels {
     showTickets: string;
     /** Title on the expanded ticket header — click to collapse the ring grid. */
     hideTickets: string;
+    /** Heading for the chat's ORIGINAL request — the user's first prompt, kept verbatim
+     *  (migration 1245) so a linked ticket shows what the chat was actually asked for. */
+    originalRequest: string;
+    /** The request's accessible name / tooltip; `{text}` is the request itself. Parametric
+     *  because it carries the user's own words, which must not be run through a word order
+     *  the host's catalog cannot express. */
+    originalRequestText: (text: string) => string;
     /** Accessible name of the ticket-grid sort control. */
     sortLabel: string;
     /** Incomplete (progress < 100%) first — the default. */
@@ -2376,8 +2383,17 @@ interface ChatTicketsPanelProps {
     spendLabels?: Partial<SpendLabels>;
     /** BCP-47 locale for the pill's money and token formatting. */
     locale?: string;
+    /**
+     * The chat's ORIGINAL request — the user's first prompt, kept verbatim on the chat
+     * (migration 1245) so the linked ticket still shows what the chat was asked for once
+     * the ~60-char auto-title has overwritten the obvious. Read-only: it is a historical
+     * record, so the panel never offers an edit affordance. Omit (or pass null/'') to hide
+     * the line entirely — a chat created before 1245, or one whose capture never landed,
+     * simply has nothing to show.
+     */
+    originalRequest?: string | null;
 }
-declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents, spend, spendLabels, locale }: ChatTicketsPanelProps): react.JSX.Element;
+declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents, spend, spendLabels, locale, originalRequest }: ChatTicketsPanelProps): react.JSX.Element;
 /**
  * Memoized: this panel sits directly under the composer, so it would otherwise
  * reconcile its whole subtree (health-ring SVGs, selects, link/merge/agents forms)

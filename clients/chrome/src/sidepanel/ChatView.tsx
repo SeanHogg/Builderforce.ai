@@ -35,6 +35,8 @@ import { t, uiCatalogLocale, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
 import { ChatInfoStrip } from './ChatInfoStrip';
 import { ConfirmCard } from './ConfirmCard';
+import { connectRequiredProvider } from '../inference/connectedAccount';
+import { KimiConnectCard } from './KimiConnect';
 import { useLoaded, useRun, useServices } from './hooks';
 import { rovrLookup } from './labels/rovrLookup';
 import { RovrComposer } from './RovrComposer';
@@ -89,6 +91,17 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
       if (current?.title !== t('newChatTitle')) return;
       const title = deriveChatTitle(text);
       if (title) await services.records.updateChat(id, { title });
+      onChatsChanged();
+    },
+    // The prompt itself, on the device — the platform create carries it when the chat
+    // reaches the cloud (migration 1245), which also covers an offline first turn.
+    // Write-once: a chat that already has one keeps it, and the panel reads it from
+    // the platform chat. Never awaited (the seam's contract) so a failed device write
+    // cannot break the first turn.
+    onCaptureOriginalRequest: async (id, text) => {
+      const current = await services.records.getChat(id);
+      if (current?.originalRequest) return;
+      await services.records.updateChat(id, { originalRequest: text });
       onChatsChanged();
     },
   });
@@ -179,7 +192,11 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
           )}
         />
       ) : undefined}
-      notices={run.error ? (
+      notices={run.error && connectRequiredProvider(run.error) === 'kimi' ? (
+        // A Kimi turn whose account is not connected (or not granted to Rovr yet): offer
+        // the connect right here — clearing the failed turn once it lands.
+        <KimiConnectCard onConnected={() => chatId !== null && services.host.clearError(chatId)} />
+      ) : run.error ? (
         <ChatErrorBanner
           className="rovr-chat__error"
           error={t('runFailed', run.error)}

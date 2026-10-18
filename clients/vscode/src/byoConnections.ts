@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
 import * as bfApi from "./bfApi";
+import { connectProviderInteractively } from "./providerConnect";
+import { LOCAL_CREDENTIAL_PROVIDERS, localCredentialStore, type LocalCredentialProvider } from "./localProviderCredentials";
 
 /**
  * Manage BYO (bring-your-own) model provider connections from the editor.
@@ -94,90 +96,26 @@ async function addProviderWithKey(
   return false;
 }
 
-/** Add a new provider connection via OAuth */
+/**
+ * Add a new provider connection via OAuth — the shared connect flow (`providerConnect.ts`),
+ * the same one a turn runs when it needs an account. A provider this editor calls from
+ * the machine (Kimi) also gets its credential persisted locally right away, so the next
+ * turn needs no round trip.
+ */
 async function addProviderWithOAuth(
   secrets: vscode.SecretStorage,
   providerId: string,
 ): Promise<boolean> {
   const info = PROVIDER_INFO[providerId];
   if (!info || !info.supportsOAuth) return false;
-
-  try {
-    const oauth = await bfApi.startByoOAuth(secrets, providerId);
-    if (!oauth) {
-      void vscode.window.showErrorMessage(
-        vscode.l10n.t("BuilderForce: could not start OAuth for {0}.", info.label),
-      );
-      return false;
-    }
-
-    const openAuth = vscode.l10n.t("Open authorization page");
-    const pick = await vscode.window.showInformationMessage(
-      vscode.l10n.t("BuilderForce: connect {0} in your browser.", info.label),
-      openAuth,
-    );
-
-    if (pick === openAuth) {
-      void vscode.env.openExternal(vscode.Uri.parse(oauth.authorizeUrl));
-
-      if (oauth.grant === "device" && oauth.userCode) {
-        // Device flow: show the user code and poll for completion
-        void vscode.window.showInformationMessage(
-          vscode.l10n.t("Enter this code on the authorization page: {0}", oauth.userCode),
-        );
-
-        // Poll for completion
-        const maxAttempts = 90; // 15 minutes with 10s interval
-        for (let i = 0; i < maxAttempts; i++) {
-          await new Promise((resolve) => setTimeout(resolve, (oauth.pollIntervalSeconds ?? 10) * 1000));
-          try {
-            // For device flow, we poll with empty code - the server handles the device flow internally
-            const result = await bfApi.completeByoOAuth(secrets, providerId, "", oauth.state);
-            if (result?.ok) {
-              void vscode.window.showInformationMessage(
-                vscode.l10n.t("BuilderForce: connected {0}.", info.label),
-              );
-              return true;
-            }
-            if (result?.status === "slow_down") {
-              // Continue polling with longer interval
-              await new Promise((resolve) => setTimeout(resolve, 5000));
-            }
-            // If status is "pending", continue polling
-          } catch {
-            // Continue polling on error
-          }
-        }
-        void vscode.window.showWarningMessage(
-          vscode.l10n.t("BuilderForce: OAuth timed out for {0}.", info.label),
-        );
-      } else {
-        // Paste flow: prompt for the authorization code
-        const code = await vscode.window.showInputBox({
-          title: vscode.l10n.t("Complete {0} connection", info.label),
-          prompt: vscode.l10n.t("Paste the authorization code from the browser"),
-          ignoreFocusOut: true,
-          validateInput: (v) => (v.trim() ? undefined : vscode.l10n.t("Authorization code is required")),
-        });
-
-        if (code?.trim()) {
-          const result = await bfApi.completeByoOAuth(secrets, providerId, code.trim(), oauth.state);
-          if (result?.ok) {
-            void vscode.window.showInformationMessage(
-              vscode.l10n.t("BuilderForce: connected {0}.", info.label),
-            );
-            return true;
-          }
-        }
-      }
-    }
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    void vscode.window.showErrorMessage(
-      vscode.l10n.t("BuilderForce: could not connect {0} ({1}).", info.label, message),
-    );
+  const connected = await connectProviderInteractively(secrets, providerId, info.label);
+  if (connected) {
+    const local = (LOCAL_CREDENTIAL_PROVIDERS as readonly string[]).includes(providerId)
+      ? localCredentialStore(providerId as LocalCredentialProvider)
+      : undefined;
+    if (local) await local.resolve();
   }
-  return false;
+  return connected;
 }
 
 /** Test an existing provider connection */

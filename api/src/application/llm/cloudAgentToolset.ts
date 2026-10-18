@@ -33,6 +33,7 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // repository audit. The launch mutates only by recording a report and filing
   // remediation tickets; it does not change source or external systems.
   'compliance.requirements', 'compliance.run_audit',
+  'audits.list', 'audits.get_run', 'audits.report_findings',
   // Session introspection — read-only. Lets a run answer "what model am I on?" and
   // report the model/tier it is actually driving on the timeline.
   'session.current_model',

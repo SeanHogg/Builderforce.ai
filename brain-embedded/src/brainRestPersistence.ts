@@ -85,12 +85,12 @@ export function createBrainRestPersistence(opts: BrainRestOptions) {
 
     getChat: (id: number) => request<BrainChat>(`/api/brain/chats/${id}`),
 
-    createChat: (body: { title?: string; projectId?: number | null; capability?: string | null; mode?: string | null }) =>
+    createChat: (body: { title?: string; originalRequest?: string | null; projectId?: number | null; capability?: string | null; mode?: string | null }) =>
       request<BrainChat>('/api/brain/chats', { method: 'POST', body: JSON.stringify(body) }),
 
     updateChat: (
       id: number,
-      body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null; memoryEnabled?: boolean },
+      body: { title?: string; originalRequest?: string | null; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null; memoryEnabled?: boolean },
     ) => request<BrainChat>(`/api/brain/chats/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
     /** Archives rather than destroys — `archived` is what the server reports. */

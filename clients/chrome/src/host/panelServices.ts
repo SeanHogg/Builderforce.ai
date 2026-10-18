@@ -12,6 +12,7 @@ import { bfiWebLoader } from '@seanhogg/builderforce-brain-embedded/bfi';
 import { createApiClient, type ApiClient } from '../api/apiClient';
 import { createSession, type Session } from '../auth/session';
 import { BFI_WASM_FILE, DEFAULT_BASE_URL, LOCAL_DB, STEP_OUTBOX_DB } from '../config';
+import { KIMI_API_ORIGINS, createConnectedAccount, type ConnectedAccount } from '../inference/connectedAccount';
 import { loopbackEndpoints, resolveLoopbackProbes } from '../inference/localRuntimes';
 import { createRovrStream } from '../inference/route';
 import { createLocalFirstPersistence } from '../persistence/localFirstPersistence';
@@ -55,6 +56,8 @@ export interface PanelServices {
   probeLocal(): Promise<LocalRuntimeProbe[]>;
   /** The side panel's in-page engines and their model store (the picker's downloads). */
   pageEngines: PageEngineSet;
+  /** The workspace's Kimi account, called from this browser (Settings → Model, the Connect card). */
+  kimi: ConnectedAccount;
   sendRuntime(message: RovrRuntimeMessage): Promise<unknown>;
   reportError(error: unknown, operation: string): void;
 }
@@ -141,6 +144,17 @@ export async function createPanelServices(): Promise<PanelServices> {
   // and the WebGPU `bfi`, whose binary `build.mjs` copies into the extension root.
   const pageEngines = createPageEngineSet({ loadBfi: bfiWebLoader(() => chrome.runtime.getURL(BFI_WASM_FILE)) });
   const endpoints = async () => loopbackEndpoints(await settings.synapseUrl());
+  const kimi = createConnectedAccount({
+    api,
+    storage: local,
+    originGranted: () => chrome.permissions.contains({ origins: KIMI_API_ORIGINS }),
+    now: Date.now,
+  });
+  await kimi.store.hydrate();
+  // The token belongs to the signed-in workspace; the next sign-in may be someone else's.
+  session.subscribe(() => {
+    if (!session.isSignedIn()) void kimi.store.clear();
+  });
   const stream = createRovrStream({
     baseUrl,
     fetch: fetchImpl,
@@ -150,6 +164,7 @@ export async function createPanelServices(): Promise<PanelServices> {
     page: { probe: () => pageEngines.probe(), fetch: pageEngines.fetch(fetchImpl) },
     // The side panel's model picker persists its pin here (Settings → Model).
     pinned: () => settings.pinnedModel(),
+    accountPin: (ref) => kimi.pinFor(ref),
     onAttempt: (record: LocalFirstAttemptRecord) => {
       if (record.outcome !== 'served' && record.attempt.kind === 'local') {
         console.warn(`Rovr local-first: ${record.attempt.ref} ${record.outcome}${record.detail ? ` (${record.detail})` : ''}`);
@@ -234,6 +249,7 @@ export async function createPanelServices(): Promise<PanelServices> {
       return [...resolveLoopbackProbes(probes), ...page];
     },
     pageEngines,
+    kimi,
     sendRuntime,
     reportError,
   };

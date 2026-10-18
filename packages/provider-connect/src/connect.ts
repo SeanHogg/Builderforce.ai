@@ -10,7 +10,7 @@
  * had drifted: the editor's swallowed `denied`/`expired` and kept polling a code that
  * could never approve for the full fifteen minutes, and ignored the provider's interval.
  */
-import { errorDetail, field, stringField, type GatewayRequest } from './port';
+import { errorDetail, field, stringField, type GatewayRequest } from './port.js';
 
 /**
  * How long a device approval is waited for. Matched to the server's pending-record TTL

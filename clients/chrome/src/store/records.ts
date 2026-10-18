@@ -38,6 +38,11 @@ export interface LocalChat {
    *  nothing left to archive). Absent ⇒ not archived, the same convention as the
    *  platform's column default and as `BrainChat.isArchived`. */
   isArchived?: boolean;
+  /** The user's FIRST prompt for this chat, kept verbatim on the device and sent with
+   *  the platform create (migration 1245). The title is only a ~60-char derivation of
+   *  it, so a chat synced from here would otherwise lose what it was actually asked.
+   *  Absent ⇒ nothing captured (a chat created before the seam, or an empty first turn). */
+  originalRequest?: string;
 }
 
 export type TaskSyncState = 'queued' | 'synced' | 'local';

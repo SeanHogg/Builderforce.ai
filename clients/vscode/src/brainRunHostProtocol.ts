@@ -19,6 +19,7 @@ import type { ChildView } from "./childRuns";
 /** The serializable half of a `BrainRunRequest`, as the webview posts it. */
 export interface WebviewRunStart {
   chatId: number;
+  audit?: { auditId: string; runId: string };
   systemPrompt: string;
   model?: string;
   modelStrict?: boolean;

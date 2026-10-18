@@ -34,6 +34,11 @@
  */
 import type { Env } from './env';
 import type { CronSweepDef } from './application/runtime/cronSweepRunner';
+import { AuditRunner } from './application/tools/AuditRunner';
+import { ToolService } from './application/tools/ToolService';
+import { TaskService } from './application/task/TaskService';
+import { TaskRepository } from './infrastructure/repositories/TaskRepository';
+import { ProjectRepository } from './infrastructure/repositories/ProjectRepository';
 
 import { runMemoryEmbeddingBackfill } from './application/memory/memoryEmbeddingBackfill';
 import { runAgentBenchmarkSweep } from './application/eval/agentBenchmarkSweep';
@@ -119,6 +124,15 @@ import { describeSourcingSweep, runSourcingSweep } from './application/sourcing/
  * only on failure, and the loud ones only when they actually did something.
  */
 export const CRON_SWEEPS: readonly CronSweepDef[] = [
+  {
+    key: 'audit-remediation', cadence: 'frequent',
+    description: 'Retry saved audit findings until their remediation tickets and report are persisted.',
+    run: async ({ env, db }) => {
+      const runner = new AuditRunner(db, new ToolService(db), new TaskService(new TaskRepository(db), new ProjectRepository(db)));
+      const completed = await runner.retryPending(env);
+      return completed ? `completed=${completed}` : null;
+    },
+  },
   // ---------------------------------------------------------------------------
   // Daily — `0 9 * * *`
   // ---------------------------------------------------------------------------

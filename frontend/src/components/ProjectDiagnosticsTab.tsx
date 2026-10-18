@@ -5,7 +5,6 @@ import { toolsApi } from '@/lib/builderforceApi';
 import {
   fetchLatestArchitectureRun,
   retryArchitectureAnalysis,
-  runArchitectureAnalysis,
   type ArchitectureRunSummary,
 } from '@/lib/architectureApi';
 import { ApiRequestError, faultMessage, faultText } from '@/lib/apiClient';
@@ -108,7 +107,7 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
     setArchState('running');
     setArchMsg('');
     try {
-      await runArchitectureAnalysis(projectId);
+      await toolsApi.runAudit(ARCHITECTURE_DIAGNOSTIC_ID, projectId);
       setArchState('started');
       setArchMsg(t('architectureStarted'));
       await loadArchRun();

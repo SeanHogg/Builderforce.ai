@@ -97,7 +97,8 @@ function canvasMessages(): Plugin {
     load(id) {
       if (id !== RESOLVED) return null;
       const { frontendSrc, entry } = canvasPaths(HERE);
-      const namespaces = collectCanvasNamespaces(entry, frontendSrc);
+      const namespaces = [...new Set([...collectCanvasNamespaces(entry, frontendSrc),
+        ...collectCanvasNamespaces(path.join(frontendSrc, 'components/tools/CodeAuditVisualizer.tsx'), frontendSrc)])];
       const bundle: Record<string, Record<string, unknown>> = {};
       for (const locale of LOCALES) {
         const file = path.join(FRONTEND_SRC, `i18n/messages/${locale}.json`);

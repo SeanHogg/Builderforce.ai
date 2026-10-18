@@ -9,7 +9,7 @@
  * POST   /provider-keys/:provider/test        → one tiny strict-pinned probe
  * PUT    /provider-keys/priority              → set BYO precedence { order: ref[] }
  * PUT    /provider-keys/:provider             → set/replace the API key { apiKey }
- * (subscription OAuth + selected-model routes are mounted from their own modules)
+ * (subscription OAuth, selected-model and local-credential routes are mounted from their own modules)
  * DELETE /provider-keys/:provider             → remove the credential
  */
 import type { Hono } from 'hono';
@@ -32,6 +32,7 @@ import { composeSelfHostedCredential, isLocalRuntimeProvider } from '../../../ap
 import { byoProviderUsage30d, byoUsageByProvider } from '../../../application/llm/gatewayUsageLog';
 import { mountProviderModelRoutes } from '../providerModelRoutes';
 import { mountSubscriptionOAuthRoutes } from '../subscriptionOAuthRoutes';
+import { mountLocalCredentialRoutes } from '../localCredentialRoutes';
 import { requireTenantAccess, respondToAccessError, type TenantAccess } from './access';
 
 export function mountProviderKeyRoutes(router: Hono<HonoEnv>): void {
@@ -214,6 +215,10 @@ export function mountProviderKeyRoutes(router: Hono<HonoEnv>): void {
 
   // Which of a connected provider's models routing uses, in order (1165) — its own module.
   mountProviderModelRoutes(router, { requireTenantAccess, respondToAccessError });
+
+  // A connected subscription's short-lived token for a runtime on the member's own
+  // machine (Kimi refuses our egress; the editor and Rovr call it directly) — its own module.
+  mountLocalCredentialRoutes(router, { requireTenantAccess, respondToAccessError });
 
   router.delete('/provider-keys/:provider', async (c) => {
     let access: TenantAccess;

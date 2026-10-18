@@ -1,10 +1,12 @@
 import * as vscode from "vscode";
+import type { AuditExecution } from "./auditExecution";
+import { appUrl } from './auth';
+import { AuditResultsPanel } from './auditResultsPanel';
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
 import {
   listSystemAudits,
   getProjectDiagnostics,
-  runAudit,
   type BfProjectDiagnostic,
 } from "./bfApi";
 
@@ -14,6 +16,8 @@ import {
  * latest score + report. Runnable against the selected project.
  */
 export interface DiagnosticRow {
+  ticketIds?: number[];
+  projectId?: number;
   auditId: string;
   name: string;
   emoji: string;
@@ -45,7 +49,7 @@ export class DiagnosticsController implements vscode.Disposable {
   private readonly projectSub: vscode.Disposable;
   private disposed = false;
 
-  constructor(private readonly ctx: vscode.ExtensionContext) {
+  constructor(private readonly ctx: vscode.ExtensionContext, private readonly execution: AuditExecution) {
     this.projectSub = onProjectChange(() => void this.refresh());
     void this.refresh();
   }
@@ -107,10 +111,7 @@ export class DiagnosticsController implements vscode.Disposable {
     try {
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t("Running {0}…", row.name) },
-        () => runAudit(this.ctx.secrets, row.auditId, projectId),
-      );
-      vscode.window.showInformationMessage(
-        vscode.l10n.t("{0} started. The report + any remediation ticket will appear shortly.", row.name),
+        () => this.execution.run(row.auditId, projectId),
       );
       // The audit records a report + files an agent ticket; re-fetch to show the
       // fresh deterministic score (the deep pass updates it again when it finishes).
@@ -136,7 +137,9 @@ export class DiagnosticsController implements vscode.Disposable {
       return;
     }
     const r = row.result;
+    if (r.codeAnalysis) { AuditResultsPanel.open(this.ctx, r); return; }
     const lines: string[] = [`# ${row.emoji} ${row.name}`, "", `**${r.headline}**`, ""];
+    if (r.audit) lines.push(r.audit.status === 'preview' ? vscode.l10n.t('Audit preview. Source review is pending.') : vscode.l10n.t('Audit source review completed.'), '');
     if (r.summary) lines.push(r.summary, "");
     if (r.metrics?.length) {
       lines.push("## Breakdown", "", "| Check | Result |", "| --- | --- |");
@@ -146,6 +149,11 @@ export class DiagnosticsController implements vscode.Disposable {
     if (r.recommendations?.length) {
       lines.push("## What to close next", "");
       for (const rec of r.recommendations) lines.push(`### ${rec.title}`, "", rec.detail, "");
+    }
+    const ticketIds = row.ticketIds ?? r.audit?.ticketIds;
+    if (ticketIds?.length) {
+      lines.push(`## ${vscode.l10n.t('Remediation tickets')}`, '');
+      for (const id of ticketIds) lines.push(`- [#${id}](${appUrl()}/projects?tab=tasks&task=${id}&project=${row.projectId ?? r.audit?.projectId})`);
     }
     const doc = await vscode.workspace.openTextDocument({ language: "markdown", content: lines.join("\n") });
     await vscode.window.showTextDocument(doc, { preview: true });

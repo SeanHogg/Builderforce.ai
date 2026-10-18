@@ -26,6 +26,7 @@ import {
   withUsageSurface,
   type BrainStreamFn,
   type BrainTransport,
+  type HostLocalPin,
 } from '@seanhogg/builderforce-brain-embedded';
 import type {
   LocalEndpoints,
@@ -54,6 +55,13 @@ export interface RovrRouteDeps {
    * automatic routing. Read per call, so a pick applies from the next turn.
    */
   pinned?(): Promise<string | null>;
+  /**
+   * Where a pin served by a CONNECTED ACCOUNT runs (a Kimi model, called from this browser
+   * with the workspace's short-lived token), or null for a ref it does not own. Async —
+   * the token may need fetching — so it is resolved in the pin step and handed to the
+   * synchronous `localPin` below. May throw `ProviderConnectRequired`.
+   */
+  accountPin?(ref: string): Promise<HostLocalPin | null>;
   onAttempt?(record: LocalFirstAttemptRecord): void;
 }
 
@@ -72,13 +80,21 @@ export function gatewayStream(baseUrl: string, key: string, fetchImpl: RouteFetc
  * Probing is memoized by the prober, so asking per call costs nothing while nothing moved.
  */
 export function createRovrStream(deps: RovrRouteDeps): BrainStreamFn {
+  // The account pins resolved for the refs in flight, keyed by ref so two concurrent turns
+  // on different pins never read each other's endpoint.
+  const accountPins = new Map<string, HostLocalPin>();
   return createHostModelStream({
     // The picker's pick: a page model (`local/bfi/…`, `local/webllm/…`) runs in this panel
     // through the engines' fetch — a pin is a pin, no probe of anything else; a gateway
     // model goes to the gateway hard-pinned. A page pin this panel cannot serve (no page
     // engines) routes automatically.
-    pinned: async () => (deps.pinned ? await deps.pinned() : null),
-    localPin: (ref) => (deps.page ? pageRuntimePin(ref) : null),
+    pinned: async () => {
+      const ref = deps.pinned ? await deps.pinned() : null;
+      const account = ref && deps.accountPin ? await deps.accountPin(ref) : null;
+      if (ref && account) accountPins.set(ref, account);
+      return ref;
+    },
+    localPin: (ref) => accountPins.get(ref) ?? (deps.page ? pageRuntimePin(ref) : null),
     probes: async () => {
       const [probes, page] = await Promise.all([
         deps.endpoints().then((e) => deps.prober.probe(e)),

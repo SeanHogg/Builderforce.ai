@@ -24,4 +24,21 @@ describe('chatTicketsLabelsFromBundle', () => {
     expect(labels.kind.task).toBe(DEFAULT_CHAT_TICKETS_LABELS.kind.task);
     expect(labels.mergedN(2)).toBe(DEFAULT_CHAT_TICKETS_LABELS.mergedN(2));
   });
+
+  it('binds the original-request label (static) and its template (parametric)', () => {
+    const labels = chatTicketsLabelsFromBundle({
+      'ct.originalRequest': 'Ursprüngliche Anfrage',
+      'ct.originalRequestText': 'Ursprüngliche Anfrage: {text}',
+    });
+    expect(labels.originalRequest).toBe('Ursprüngliche Anfrage');
+    expect(labels.originalRequestText('Rewrite the billing webhook'))
+      .toBe('Ursprüngliche Anfrage: Rewrite the billing webhook');
+  });
+
+  it('falls back to the English default for the original-request pair', () => {
+    const labels = chatTicketsLabelsFromBundle({});
+    expect(labels.originalRequest).toBe(DEFAULT_CHAT_TICKETS_LABELS.originalRequest);
+    expect(labels.originalRequestText('hello'))
+      .toBe(DEFAULT_CHAT_TICKETS_LABELS.originalRequestText('hello'));
+  });
 });

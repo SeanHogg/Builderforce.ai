@@ -11,6 +11,7 @@ import { LocalModelList, useLocalModels } from '@seanhogg/builderforce-brain-ui'
 import { t } from '../i18n/t';
 import { rovrLocalModelLabels } from './labels/localModelLabels';
 import { usePinnedModel, useServices } from './hooks';
+import { KimiAccountSection } from './KimiConnect';
 
 export function ModelPickerSection() {
   const services = useServices();
@@ -47,6 +48,7 @@ export function ModelPickerSection() {
         {...(pinned ? { activeRef: pinned } : {})}
         onSelect={choose}
       />
+      <KimiAccountSection />
     </div>
   );
 }

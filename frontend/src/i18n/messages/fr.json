@@ -1844,7 +1844,10 @@
     "windowDays": "{n} derniers jours",
     "loadFailed": "Impossible de charger ce diagnostic.",
     "frameworkLabel": "Référentiel de restitution",
-    "frameworkHint": "Le score et le plan sont identiques quel que soit le référentiel — seul le regroupement du tableau de bord change."
+    "frameworkHint": "Le score et le plan sont identiques quel que soit le référentiel — seul le regroupement du tableau de bord change.",
+    "auditPreview": "Aperçu de l’audit. Analyse du code en attente.",
+    "auditComplete": "Analyse du code terminée.",
+    "auditTicket": "Ticket de correction nº {id}"
   },
   "toolReference": {
     "lede": "Un diagnostic gratuit, exécutable ici même — sans connexion.",
@@ -11769,6 +11772,8 @@
     },
     "tickets": {
       "none": "Aucun ticket lié pour l’instant.",
+      "originalRequestText": "Demande d’origine : {text}",
+      "originalRequest": "Demande d’origine",
       "ringAria": "{label} : {pct}% terminé",
       "inParent": "dans {parent}",
       "spawned": "créé ici",
@@ -15876,6 +15881,8 @@
     "errStartConnect": "Échec du démarrage de la connexion",
     "errConnectSubscription": "Échec de la connexion de l'abonnement",
     "errCodeExpired": "Ce code a déjà été utilisé ou a expiré — les codes sont à usage unique et ne durent que quelques minutes. Relancez la connexion et collez le nouveau code immédiatement.",
+    "errDeviceExpired": "La demande de connexion a expiré avant d'être approuvée. Relancez la connexion et approuvez-la dans l'onglet du fournisseur.",
+    "errConnectDeclined": "La demande de connexion a été refusée sur la page du fournisseur.",
     "errRemove": "Échec de la suppression de l'identifiant",
     "precedence": {
       "title": "Priorité des fournisseurs",
@@ -35292,5 +35299,46 @@
       "context_trim": "La compaction a tenu les tours précédents hors de chaque appel",
       "recall_overhead": "Ce que les souvenirs rappelés ont ajouté à chaque prompt — le coût du rappel"
     }
+  },
+  "codeAudit": {
+    "title": "Visualisation de la qualité du code",
+    "graph": "Dépendances",
+    "duplicates": "Code dupliqué",
+    "unused": "Candidats inutilisés",
+    "comparison": "Avant et après",
+    "before": "Avant",
+    "after": "Après",
+    "changes": "Modifications",
+    "components": "Composants / afficher les fichiers",
+    "files": "Fichiers / afficher les composants",
+    "filter": "Filtrer les chemins",
+    "zoomIn": "Agrandir",
+    "zoomOut": "Réduire",
+    "openSource": "Ouvrir le code",
+    "dependsOn": "Dépend de",
+    "usedBy": "Utilisé par",
+    "unknown": "Source inconnue",
+    "localChanges": "Inclut des modifications locales",
+    "complete": "Mesuré",
+    "failed": "Indisponible / incomplet",
+    "views": "Vues d’analyse",
+    "firstScan": "Première mesure : elle établit la référence. Aucune amélioration n’est encore annoncée.",
+    "incomparable": "La couverture ou les versions diffèrent. Les résultats absents ne sont pas considérés comme résolus.",
+    "candidateNotice": "Vérifiez les candidats : imports dynamiques, points d’entrée et API publiques peuvent causer des faux positifs. Duplication et code inutilisé sont des résultats distincts.",
+    "noFindings": "Aucun résultat dans la sortie disponible. Vérifiez la couverture.",
+    "graphCount": "{nodes} fichiers · {edges} dépendances · {cycles} liens cycliques",
+    "limited": "Affichage des 160 premiers nœuds sur {count}. Filtrez ou sélectionnez les composants.",
+    "legend": "Vert : ajouté · rouge pointillé : supprimé · ambre : cycle · gris : inchangé",
+    "metric": "Mesure",
+    "nodes": "Fichiers",
+    "edges": "Dépendances",
+    "issues": "Résultats",
+    "duplicate": "Code dupliqué",
+    "unused-file": "Fichier potentiellement inutilisé",
+    "unused-export": "Export potentiellement inutilisé",
+    "unused-dependency": "Dépendance potentiellement inutilisée",
+    "added": "Résultats ajoutés",
+    "resolved": "Résultats résolus",
+    "unchanged": "Résultats inchangés"
   }
 }

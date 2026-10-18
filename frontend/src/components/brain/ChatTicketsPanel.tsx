@@ -52,7 +52,7 @@ const LIVE_SUBAGENT_POLL_MS = 4_000;
  */
 const IDLE_SUBAGENT_POLL_MS = 30_000;
 
-export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, transcript = NO_TRANSCRIPT, spend }: {
+export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, transcript = NO_TRANSCRIPT, spend, originalRequest }: {
   chatId: number;
   projectId: number | null;
   chatList: Array<Pick<BrainChat, 'id' | 'title' | 'ticketCount' | 'ticketProgressPct'>>;
@@ -62,6 +62,10 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
   /** The chat's spend from the host's chat record. Omitted (the canvas Brain dock holds
    *  no chat object) ⇒ the one `getChat` read this panel already makes supplies it. */
   spend?: SpendSavingsSummary | null;
+  /** The chat's ORIGINAL first prompt (verbatim), shown read-only above the ticket
+   *  ring. Omitted ⇒ that same `getChat` read supplies it, so a host holding no chat
+   *  object (the canvas Brain dock) still renders it without threading it through. */
+  originalRequest?: string | null;
 }) {
   const spendLabels = useSpendLabels();
   const locale = useLocale();
@@ -101,14 +105,18 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
   const [visibility, setVisibility] = useState<'shared' | 'locked'>('shared');
   const [isOwner, setIsOwner] = useState(false);
   const [fetchedSpend, setFetchedSpend] = useState<SpendSavingsSummary | null>(null);
+  // Set ONLY from the getChat read below — a host that passed the prop owns the value,
+  // so this never overrides it. See the `originalRequest` prop doc.
+  const [fetchedOriginalRequest, setFetchedOriginalRequest] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     brain.getChat(chatId).then((c) => {
       if (!live) return;
-      const meta = c as unknown as { visibility?: 'shared' | 'locked'; isOwner?: boolean; spend?: SpendSavingsSummary | null };
+      const meta = c as unknown as { visibility?: 'shared' | 'locked'; isOwner?: boolean; spend?: SpendSavingsSummary | null; originalRequest?: string | null };
       setVisibility(meta.visibility ?? 'shared');
       setIsOwner(!!meta.isOwner);
       setFetchedSpend(meta.spend ?? null);
+      setFetchedOriginalRequest(meta.originalRequest ?? null);
     }).catch(() => {});
     return () => { live = false; };
   }, [chatId, refreshSignal]);
@@ -157,6 +165,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged, trans
         onOpenTicket={openTicket}
         subagents={subagents}
         spend={spend !== undefined ? spend : fetchedSpend}
+        originalRequest={originalRequest !== undefined ? originalRequest : fetchedOriginalRequest}
         spendLabels={spendLabels}
         locale={locale}
       />

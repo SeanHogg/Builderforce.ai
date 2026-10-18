@@ -11,6 +11,7 @@ import {
   anthropicModule,
   catalogSupersessions,
   vendorFlagship,
+  vendorGatedCoders,
   autoRoutableModelsByTier,
   vendorForModel,
   type VendorId,
@@ -270,7 +271,12 @@ export function providerFrontierFlagship(vendor: string, agentic: boolean): stri
  * auto-routable {@link CODING_MODEL_POOL}. Folded into {@link RECOGNIZED_CODER_MODELS}.
  */
 export const BYO_FRONTIER_CODERS: readonly string[] = [
-  ...new Set(BYO_FLAGSHIP_VENDORS.flatMap((vendor) => flagshipsOf(vendor, 'agentic', 'chat'))),
+  ...new Set(BYO_FLAGSHIP_VENDORS.flatMap((vendor) => [
+    ...flagshipsOf(vendor, 'agentic', 'chat'),
+    // Plan-gated coders (Kimi K3) never lead by default, but a tenant who selected one
+    // is running a real coder — recognition must not call that run degraded.
+    ...vendorGatedCoders(vendor),
+  ])),
 ];
 
 /**

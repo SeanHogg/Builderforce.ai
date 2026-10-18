@@ -71,7 +71,7 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
     onActiveChatChange: setActiveId,
     placeholderTitles: [newChatLabel],
   });
-  const { chats, select, setMemoryEnabled, rename, autoTitle, reload, summarize, setError } = brainChats;
+  const { chats, select, setMemoryEnabled, rename, autoTitle, captureOriginalRequest, reload, summarize, setError } = brainChats;
   // The armed Chat|Work mode and Memory switch, and the one creation path carrying them.
   const { chatMode, selectMode: selectArmedMode, armMemory, createArmed } = useArmedNewChat(brainChats);
 
@@ -128,11 +128,12 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
 
   // The first send creates the chat — ONE creation even if a second send lands while it
   // is in flight — scoped to the sidebar's active project (the hook's pin), in the armed
-  // mode; its first user turn names it.
+  // mode; its first user turn names it and records the request it was asked (1245).
   const { ensureChatId: ensureCreated, onFirstUserTurn } = useChatCreation({
     chatId,
     create: async () => (await createArmed())?.id ?? null,
     autoTitle,
+    onCaptureOriginalRequest: captureOriginalRequest,
   });
   const ensureChatId = useCallback(async () => {
     const id = await ensureCreated();

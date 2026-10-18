@@ -573,6 +573,24 @@ const CATALOG: BuiltinTool[] = [
     ),
   },
   {
+    tool: 'audits.list', mutates: false,
+    description: 'List the shared BuilderForce audit catalog available from Web, VSIX, and Rovr.',
+    parameters: obj({}),
+    run: async (ctx) => replayRoute(ctx, 'GET', '/api/tools/audits'),
+  },
+  {
+    tool: 'audits.run', mutates: true,
+    description: 'Start a cloud diagnostic audit of a connected project repository. Select auditId from audits.list. Returns the tracked run, report briefing and cloud dispatch status. Remediation tickets are saved from the findings.',
+    parameters: obj({ projectId: N, auditId: S }, ['projectId', 'auditId']),
+    run: async (ctx, a) => replayRoute(ctx, 'POST', `/api/tools/audits/${encodeURIComponent(str(a.auditId))}/run`, { projectId: num(a.projectId), executor: 'cloud' }),
+  },
+  {
+    tool: 'audits.get_run', mutates: false,
+    description: 'Read the status, source context, findings and saved report id of an audit run.',
+    parameters: obj({ projectId: N, auditId: S, runId: S }, ['projectId', 'auditId', 'runId']),
+    run: async (ctx, a) => replayRoute(ctx, 'GET', `/api/tools/audits/${encodeURIComponent(str(a.auditId))}/runs/${encodeURIComponent(str(a.runId))}?projectId=${num(a.projectId)}`),
+  },
+  {
     tool: 'audits.report_findings',
     mutates: true,
     description:
@@ -585,6 +603,8 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({
       projectId: N,
       auditId: S,
+      runId: S,
+      analysis: { type: 'object', description: 'The unmodified snapshot returned by analyze_codebase: version, id, capturedAt, source, tools, nodes, edges and issues.', additionalProperties: true },
       findings: {
         type: 'array',
         items: obj({
@@ -597,34 +617,9 @@ const CATALOG: BuiltinTool[] = [
       },
     }, ['projectId', 'auditId', 'findings']),
     run: async (ctx, a) => {
-      if (!ctx.env) throw new Error('Recording audit findings requires the platform environment.');
-      // Dynamic import for the same reason `session.current_model` uses one: the
-      // tools layer reaches back into this module through the diagnostics routes.
-      const { applyAuditFindings } = await import('../tools/auditDeepPass');
-      const { ToolService } = await import('../tools/ToolService');
-      const raw = Array.isArray(a.findings) ? a.findings : [];
-      const run = await applyAuditFindings(ctx.db, new ToolService(ctx.db), ctx.env, {
-        tenantId: ctx.tenantId,
-        projectId: num(a.projectId),
-        auditId: str(a.auditId),
-        findings: raw.map((f) => {
-          const row = f as Record<string, unknown>;
-          return {
-            title: str(row.title),
-            detail: row.detail != null ? str(row.detail) : null,
-            severity: row.severity != null ? (str(row.severity) as 'critical' | 'high' | 'medium' | 'low' | 'info') : undefined,
-            location: row.location != null ? str(row.location) : null,
-            recommendation: row.recommendation != null ? str(row.recommendation) : null,
-          };
-        }),
-        createdBy: ctx.userId ?? null,
+      return replayRoute(ctx, 'POST', `/api/tools/audits/${encodeURIComponent(str(a.auditId))}/findings`, {
+        projectId: num(a.projectId), ...(a.runId ? { runId: str(a.runId) } : {}), findings: a.findings, ...(a.analysis ? { analysis: a.analysis } : {}),
       });
-      if (!run) {
-        throw new Error(
-          'No first-pass report exists for that audit on that project — run the audit before reporting its findings, and check the auditId matches the ticket.',
-        );
-      }
-      return { recorded: raw.length, headline: run.result.headline, score: run.result.score };
     },
   },
   // ---- Session ----

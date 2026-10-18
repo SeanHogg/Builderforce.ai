@@ -23,7 +23,7 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
 }) {
   const tBrain = useTranslations('brain');
   // The chat hook's methods are individually stable; its result object is not.
-  const { setCapability, activeChatId, activeChat, autoTitle } = chats;
+  const { setCapability, activeChatId, activeChat, autoTitle, captureOriginalRequest } = chats;
   const [input, setInput] = useState('');
   /** Bumped to pull focus into the composer after something seeds it. */
   const [composerFocusToken, setComposerFocusToken] = useState(0);
@@ -48,11 +48,14 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
 
   // "The first message creates the chat" — the shared single-flight creation (a fast
   // second send joins the first's create) through THIS surface's new-chat path, and the
-  // first user turn names the chat. Both are `useBrainConversation` options.
+  // first user turn names the chat. Both are `useBrainConversation` options. The same
+  // turn also records the prompt itself (migration 1245) — passed as a sibling port so
+  // the two can never drift; the chat's original request outlives the ~60-char title.
   const { ensureChatId, onFirstUserTurn } = useChatCreation({
     chatId: activeChatId,
     create: async () => (await startNewChat())?.id ?? null,
     autoTitle,
+    onCaptureOriginalRequest: captureOriginalRequest,
   });
 
   // ---- Capability ("what are we making?") ----------------------------------

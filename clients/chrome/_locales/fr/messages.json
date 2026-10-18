@@ -1041,6 +1041,14 @@
     "message": "Aucun ticket correspondant",
     "description": "#-ticket picker: nothing matches"
   },
+  "ctOriginalRequest": {
+    "message": "Demande d’origine",
+    "description": "La première demande de cette conversation"
+  },
+  "ctOriginalRequestText": {
+    "message": "Demande d’origine : {text}",
+    "description": "Accessible name for the chat's original request"
+  },
   "ctNone": {
     "message": "Aucun ticket lié pour l’instant.",
     "description": "No linked tickets"
@@ -1336,5 +1344,50 @@
   },
   "cancelTitle": {
     "message": "Annuler"
+  },
+  "kimiIntro": {
+    "message": "Connectez votre compte Kimi pour utiliser Kimi K3 ici. Builderforce conserve la connexion ; Rovr appelle Kimi directement depuis ce navigateur."
+  },
+  "kimiConnectedIntro": {
+    "message": "Le compte Kimi de votre espace de travail. Choisissez un modèle pour chaque tour, appelé depuis ce navigateur."
+  },
+  "kimiConnect": {
+    "message": "Connecter Kimi"
+  },
+  "kimiApprove": {
+    "message": "Approuvez la connexion dans l'onglet Kimi…"
+  },
+  "kimiApproveWithCode": {
+    "message": "Approuvez la connexion dans l'onglet Kimi — il affiche le code $1."
+  },
+  "kimiCancel": {
+    "message": "Annuler"
+  },
+  "kimiDenied": {
+    "message": "La connexion Kimi a été refusée."
+  },
+  "kimiExpired": {
+    "message": "La demande Kimi a expiré avant d'être approuvée. Réessayez."
+  },
+  "kimiFailed": {
+    "message": "Impossible de connecter Kimi : $1"
+  },
+  "kimiOriginDenied": {
+    "message": "Rovr a besoin d'accéder à api.kimi.com pour utiliser Kimi depuis ce navigateur."
+  },
+  "kimiK3Plan": {
+    "message": "nécessite une offre Kimi avec K3"
+  },
+  "kimiCardTitle": {
+    "message": "Connectez Kimi pour exécuter ce tour"
+  },
+  "kimiCardBody": {
+    "message": "Vous avez choisi un modèle Kimi, mais aucun compte Kimi n'est encore connecté à votre espace de travail (ou Rovr ne peut pas joindre Kimi). Connectez-le une fois : le prochain tour l'utilisera."
+  },
+  "suggestAudit": {
+    "message": "Lancer un audit"
+  },
+  "suggestAuditPrompt": {
+    "message": "Liste les audits avec audits.list, aide-moi à choisir un projet et un audit, puis lance-le avec audits.run. Affiche le statut, les résultats et les tickets de correction."
   }
 }

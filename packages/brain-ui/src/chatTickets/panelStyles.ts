@@ -18,6 +18,16 @@ const TICKET_GRID_ROWS = 2;
 export const S = {
   root: { margin: '4px 0 0', padding: '8px 10px', border: `1px solid ${V.border}`, borderRadius: 10, background: V.surface, display: 'flex', flexDirection: 'column', gap: 8 } as React.CSSProperties,
   muted: { fontSize: 12, color: V.muted } as React.CSSProperties,
+  // The chat's ORIGINAL request — read-only historical record (the first prompt,
+  // migration 1245), shown as a labelled quote above the linked-ticket grid. Line-
+  // clamped so a pasted paragraph cannot push the transcript off-screen; the full
+  // text is on the element's title/accessible name.
+  originalRequest: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } as React.CSSProperties,
+  originalRequestLabel: { fontSize: 10, color: V.muted, textTransform: 'uppercase', letterSpacing: 0.4 } as React.CSSProperties,
+  originalRequestText: {
+    fontSize: 12, color: V.text, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+    overflow: 'hidden', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' as const, textAlign: 'left' as const,
+  } as React.CSSProperties,
   // Collapsible ticket-summary header — full-width, button-reset, subtle hover-less
   // affordance that carries a caret, an overall health ring and the linked count.
   // The header row: ticket health on the left, the sort control on the right. Wraps

@@ -54,7 +54,16 @@ async function ensureServerChat(deps: ChatSyncDeps, localId: number, scope: stri
   if (chat.serverId) return chat.serverId;
   const created = await deps.api.request<{ id: number }>('/api/brain/chats', {
     method: 'POST',
-    json: { title: chat.title, mode: chat.mode ?? 'chat' },
+    json: {
+      title: chat.title,
+      mode: chat.mode ?? 'chat',
+      // The first prompt, when the seam captured it before the chat reached the platform
+      // (migration 1245). Carried in the CREATE so a create that races the first turn —
+      // or replays from the outbox after the reply was lost — still lands the request;
+      // the server writes it once and ignores it afterwards. Omitted when absent so an
+      // old device row sends exactly what it sent before.
+      ...(chat.originalRequest ? { originalRequest: chat.originalRequest } : {}),
+    },
     idempotencyKey: `rovr-chat:${chat.syncKey}`,
     ...(scope !== undefined ? { asScope: scope } : {}),
   });

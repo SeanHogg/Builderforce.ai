@@ -4359,6 +4359,23 @@ var TICKET_GRID_ROWS = 2;
 var S2 = {
   root: { margin: "4px 0 0", padding: "8px 10px", border: `1px solid ${V.border}`, borderRadius: 10, background: V.surface, display: "flex", flexDirection: "column", gap: 8 },
   muted: { fontSize: 12, color: V.muted },
+  // The chat's ORIGINAL request — read-only historical record (the first prompt,
+  // migration 1245), shown as a labelled quote above the linked-ticket grid. Line-
+  // clamped so a pasted paragraph cannot push the transcript off-screen; the full
+  // text is on the element's title/accessible name.
+  originalRequest: { display: "flex", flexDirection: "column", gap: 2, minWidth: 0 },
+  originalRequestLabel: { fontSize: 10, color: V.muted, textTransform: "uppercase", letterSpacing: 0.4 },
+  originalRequestText: {
+    fontSize: 12,
+    color: V.text,
+    display: "-webkit-box",
+    WebkitLineClamp: 3,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+    textAlign: "left"
+  },
   // Collapsible ticket-summary header — full-width, button-reset, subtle hover-less
   // affordance that carries a caret, an overall health ring and the linked count.
   // The header row: ticket health on the left, the sort control on the right. Wraps
@@ -4630,6 +4647,8 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   mergeNoOthers: "No other chats to merge.",
   showTickets: "Show linked tickets",
   hideTickets: "Hide linked tickets",
+  originalRequest: "Original request",
+  originalRequestText: (text) => `Original request: ${text}`,
   sortLabel: "Sort tickets",
   sortOpen: "Incomplete first",
   sortDone: "Complete first",
@@ -4874,7 +4893,7 @@ var import_jsx_runtime48 = require("react/jsx-runtime");
 var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 var NO_SUBAGENTS = [];
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels: spendLabels2, locale }) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket, extensions, subagents = NO_SUBAGENTS, spend, spendLabels: spendLabels2, locale, originalRequest }) {
   const [tickets, setTickets] = (0, import_react29.useState)([]);
   const [agents, setAgents] = (0, import_react29.useState)([]);
   const [members, setMembers] = (0, import_react29.useState)([]);
@@ -4961,6 +4980,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setCollapsed(!isCollapsed);
   };
   return /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { style: S2.root, children: [
+    originalRequest?.trim() && /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { style: S2.originalRequest, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { style: S2.originalRequestLabel, children: labels.originalRequest }),
+      /* @__PURE__ */ (0, import_jsx_runtime48.jsx)("span", { style: S2.originalRequestText, title: labels.originalRequestText(originalRequest), children: originalRequest })
+    ] }),
     (tickets.length > 0 || hasSpendToShow(spend)) && /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)("div", { style: S2.headerRow, children: [
       tickets.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime48.jsxs)(
         "button",
@@ -5708,6 +5731,10 @@ function chatTicketsLabelsFrom(lookup) {
     inParent: tpl("inParent", d.inParent, (parent) => ({ parent })),
     ticketCount: (n2) => lookup(n2 === 1 ? "ticketCountOne" : "ticketCountMany", { n: n2 }) || d.ticketCount(n2),
     overallAria: tpl("overallAria", d.overallAria, (pct) => ({ pct })),
+    // Parametric like the ones above, so it needs its own `tpl` — `stringsFrom` only
+    // binds the static fields. `{text}` is the user's own prompt: the catalog renders it
+    // into a localized wrapper and the host owns the word order around it.
+    originalRequestText: tpl("originalRequestText", d.originalRequestText, (text) => ({ text })),
     runStarted: tpl("runStarted", d.runStarted, (agent) => ({ agent })),
     mergeAction: tpl("mergeAction", d.mergeAction, (n2) => ({ n: n2 })),
     mergedN: tpl("mergedN", d.mergedN, (n2) => ({ n: n2 }))

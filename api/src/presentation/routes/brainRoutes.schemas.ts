@@ -18,6 +18,8 @@ const isObjectLike = (value: unknown): boolean => typeof value === 'object' && v
 /** POST /chats. `createChat` reads `title?.trim() || 'New chat'`, so trimming and ""/null → absent change nothing. */
 export const CreateChatBody = z.object({
   title: zOptionalString,
+  /** The user's first prompt (1245) — clamp/blank rules live in `normalizeOriginalRequest`. */
+  originalRequest: z.string().nullish(),
   projectId: z.number().nullish(),
   capability: z.string().nullish(),
   mode: z.string().nullish(),
@@ -26,6 +28,8 @@ export const CreateChatBody = z.object({
 /** PATCH /chats/:id — `UpdateChatDto`. `title` is `.trim()`med when present, so it must be a string. */
 export const UpdateChatBody = z.object({
   title: z.string().optional(),
+  /** Write-once (1245): a blank/`null` here is a no-op, never an erasure — see `updateChat`. */
+  originalRequest: z.string().nullish(),
   projectId: z.number().nullish(),
   visibility: z.enum(['shared', 'locked']).optional(),
   capability: z.string().nullish(),

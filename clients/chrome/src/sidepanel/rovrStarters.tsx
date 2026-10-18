@@ -24,6 +24,7 @@ function Glyph({ d }: { d: string }) {
 }
 
 export const ROVR_STARTERS: readonly RovrStarter[] = [
+  { id: 'audit', label: 'suggestAudit', prompt: 'suggestAuditPrompt', icon: <Glyph d="M9 11l3 3 8-8M20 12v7H4V5h11" /> },
   { id: 'summarize', label: 'suggestSummarize', prompt: 'suggestSummarizePrompt', icon: <Glyph d="M4 6h16M4 12h10M4 18h7" /> },
   { id: 'fill', label: 'suggestFill', prompt: 'suggestFillPrompt', icon: <Glyph d="M4 5h16v14H4zM8 10h8M8 14h5" /> },
   { id: 'task', label: 'suggestTask', prompt: 'suggestTaskPrompt', icon: <Glyph d="M9 11l3 3 8-8M20 12v7H4V5h11" /> },

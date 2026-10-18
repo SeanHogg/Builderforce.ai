@@ -22,6 +22,13 @@ export interface BrainChat {
    */
   capability?: string | null;
   /**
+   * The user's FIRST prompt in this chat (migration 1245), kept as asked and shown
+   * on the linked ticket so the origin text survives past the auto-title. Written once
+   * by the first-turn seam. Absent/null on an older server and on any chat whose first
+   * turn predates the capture — absence is a valid state, so hosts render nothing.
+   */
+  originalRequest?: string | null;
+  /**
    * What this chat is FOR — `'chat'` (a conversation: read, reason, answer) or
    * `'work'` (an execution: create, staff and link the ticket, then dispatch an agent
    * to run it). Migration 0409. Absent on a host/server that predates the column;

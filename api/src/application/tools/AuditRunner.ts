@@ -1,35 +1,24 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-/**
- * AuditRunner — runs a system-level audit against a project and produces a
- * tracked diagnostic + a notification.
- *
- * Execution model (agent-primary with a deterministic fallback + backstop):
- *  1. Gather signals — read each connected repo's file tree (server-side, using
- *     the decrypted git token) and the project's governance/planning telemetry.
- *  2. Deterministic scan — run the audit's pure `scan(ctx)` to a `ToolResult`.
- *     This ALWAYS runs so a report lands instantly and the project rating always
- *     updates, even with no cloud runtime or repo credentials.
- *  3. Record + notify — persist via `ToolService.recordExternalRun` (a
- *     project-scoped `tool_runs` row) and fire an in-app `audit_complete`
- *     notification deep-linking to the report.
- *  4. File the agent ticket (best-effort) — create a board task briefing the
- *     security/audit agent to run the deep workflow + open a remediation PR. The
- *     caller (route) fires the existing lane-autorun trigger for it. If the board
- *     or an agent is unavailable this is skipped; the deterministic report stands.
- *
- * All IO lives here; the scanners (`auditScanners.ts`) stay pure/testable.
- */
-import { and, eq, ne, inArray } from 'drizzle-orm';
+/** Shared audit coordinator. Preview scores are provisional; source findings and
+ * remediation tickets must be persisted before a run completes. */
+import { and, eq, lt, or, inArray, ne, desc } from 'drizzle-orm';
+import type { CodeAnalysisSnapshot } from '@builderforce/agent-tools';
+import { codeAnalysisFindings } from './codeAnalysisFindings';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { TaskType, TaskStatus } from '../../domain/shared/types';
-import { projectRepositories, socControls, objectives, keyResults, projects, tasks } from '../../infrastructure/database/schema';
+import { TaskType } from '../../domain/shared/types';
+
+import { projectRepositories, socControls, objectives, keyResults, projects, systemAuditRuns, toolRuns, executions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { listRepoFiles, readRepoFile } from '../repos/readRepoContents';
 import { notify } from '../notifications/notify';
 import type { ToolService, SavedToolRun } from './ToolService';
 import type { TaskService } from '../task/TaskService';
+
+import { applyAuditFindings, type AuditFinding } from './auditDeepPass';
+
+import { ensureRemediationTickets } from './auditRemediation';
 import { getSystemAudit } from './systemAudits';
 import { privacyContentSignals, selectPrivacyProbeFiles, type AuditScanContext, type ScannedRepo } from './auditScanners';
 import { isControlImplemented } from '../governance/controlStatus';
@@ -43,22 +32,28 @@ export interface RunAuditArgs {
   userId: string;
   /** Integration-encryption secret (INTEGRATION_ENCRYPTION_SECRET ?? JWT_SECRET). */
   secret: string;
+
+  requestId?: string;
+  executor?: 'local' | 'cloud';
+
+  source?: Record<string, unknown>;
 }
 
 export interface AuditRunOutcome {
   started: true;
+
+  runId: string;
+
+  executor: 'local' | 'cloud';
+
+  briefing: string;
   auditId: string;
-  /** 'agent' when a remediation ticket was filed (deep pass dispatched), else
-   *  'deterministic' (scan-only). Either way a report is produced. */
+  /** Retained for older clients; executor identifies where the agent will run. */
   mode: 'agent' | 'deterministic';
   run: SavedToolRun;
-  /** The primary remediation ticket filed (the first, for back-compat) — the route
-   *  fires lane autorun for it. */
+  /** Cloud source-review task, distinct from the findings' remediation tickets. */
   agentTask?: { taskId: number; status: string };
-  /** All remediation tickets filed this run. One per gap when the audit is
-   *  `ticketPerFinding` (each independently assignable/resolvable, like the
-   *  Security agent's per-finding tickets); otherwise the single bundled ticket.
-   *  The route fires lane autorun for every entry. */
+  /** Compatibility list containing the cloud source-review task, if any. */
   agentTasks?: Array<{ taskId: number; status: string }>;
 }
 
@@ -139,27 +134,6 @@ export function signalsFromPaths(paths: string[]): Omit<ScannedRepo, 'provider' 
 
 /** Statuses in the governance SOC 2 tracker that count as "implemented". */
 
-
-/**
- * The sentence that closes the loop.
- *
- * Every remediation ticket carries it, because the deep pass reporting back is
- * not optional polish — without the call, the diagnostic keeps showing the
- * path-signal first pass forever and everything the agent read is lost. Stating
- * the audit id and the project id in the brief removes the two things an agent
- * would otherwise have to guess, and `advertisedName` is used rather than a
- * hardcoded string so a rename of the tool cannot leave this instruction naming
- * something the session does not have (see [[prompt-tool-name-contract]]).
- */
-function deepPassBriefing(auditId: string, projectId: number): string {
-  return (
-    `**When you finish, report what you found.** Call \`${advertisedName('audits.report_findings')}\` `
-    + `with \`projectId: ${projectId}\`, \`auditId: "${auditId}"\` and every finding — title, severity `
-    + `(critical|high|medium|low|info), location and recommendation. That is what re-scores this diagnostic `
-    + `from the code you actually read; without it the report stays at the first-pass estimate derived from `
-    + `file paths. Report a clean pass too: it records that somebody looked.`
-  );
-}
 
 export class AuditRunner {
   constructor(
@@ -283,7 +257,8 @@ export class AuditRunner {
     if (!audit) return null;
 
     const ctx = await this.buildContext(args);
-    const result = audit.scan(ctx);
+    const runId = args.requestId ?? crypto.randomUUID();
+    const result = { ...audit.scan(ctx), audit: { runId, projectId: args.projectId, status: 'preview' as const, ticketIds: [] as number[] } };
 
     const run = await this.toolService.recordExternalRun(env, {
       tenantId: args.tenantId,
@@ -293,92 +268,138 @@ export class AuditRunner {
       createdBy: args.userId,
     });
 
-    // In-app notification (+ optional email) deep-linking to the report.
-    await notify(this.db, env, {
-      userId: args.userId,
-      tenantId: args.tenantId,
-      kind: 'audit_complete',
-      title: `${audit.name} ready`,
-      body: `${ctx.projectName}: ${result.headline}`,
-      ref: `/projects?project=${args.projectId}&panel=diagnostics&audit=${encodeURIComponent(audit.id)}`,
-    }).catch((error) => {
-      reportCaughtError(error, { source: "application/tools/AuditRunner.ts", operation: "runAudit" });
-    });
-
-    // Best-effort: file the remediation ticket(s) for the audit agent. Left
-    // unassigned — the board's lane-autorun trigger + owner-agent fallback
-    // dispatches whichever security/audit agent is staffed on the lane; `persona`
-    // carries the workflow hint.
-    const agentTasks: Array<{ taskId: number; status: string }> = [];
-    try {
-      if (audit.ticketPerFinding && result.recommendations.length) {
-        // One independently-resolvable ticket per gap (like the Security agent's
-        // per-finding tickets), so each obligation is assigned + closed on its own.
-        // Dedup: skip any gap that already has an OPEN remediation ticket, so
-        // re-running the audit before a gap is fixed doesn't spam the board with
-        // duplicates. Cheap one-shot lookup of the project's open task titles.
-        const openTitles = await this.openTaskTitles(args.projectId);
-        for (const rec of result.recommendations) {
-          const title = `${audit.name}: ${rec.title}`.slice(0, 500);
-          const titleKey = title.trim().toLowerCase();
-          if (openTitles.has(titleKey)) continue; // an open ticket for this gap already exists
-          const task = await this.taskService.createTask({
-            projectId: args.projectId,
-            title,
-            description:
-              `${rec.detail}\n\n` +
-              `Filed by the ${audit.name} diagnostic against ${ctx.projectName} (${result.headline}). ` +
-              `Fix this gap and open a remediation PR.\n\n` +
-              deepPassBriefing(audit.id, args.projectId),
-            taskType: TaskType.TASK,
-            persona: audit.agentWorkflow,
-          }, args.tenantId);
-          agentTasks.push({ taskId: Number(task.id), status: task.status });
-          openTitles.add(titleKey); // guard against duplicate gaps within one run
-        }
-      } else {
+    const executor = args.executor ?? 'cloud';
+    const [session] = await this.db.insert(systemAuditRuns).values({
+      tenantId: args.tenantId, projectId: args.projectId, auditId: audit.id,
+      id: runId,
+      executor, baseline: result, reportId: run.id, createdBy: args.userId,
+      source: args.source ?? {},
+    }).returning();
+    if (!session) throw new Error('Could not persist audit run');
+    const briefing = `${audit.name}: ${audit.blurb}\n${audit.instructions}\nProject: ${args.projectId}. Audit: ${audit.id}. Run: ${session.id}.\n`
+      + `Inspect the actual source and run the relevant available static checks and tests. Report evidence, source locations, recommendations, and skipped checks. `
+      + `Audit only; do not modify source or open remediation PRs during this run. `
+      + `When finished call ${advertisedName('audits.report_findings')} with projectId ${args.projectId}, auditId "${audit.id}", runId "${session.id}" and every finding. Report an empty array for a clean pass. `
+      + `The platform creates remediation tickets. Do not create duplicate tickets yourself. `
+      + (executor === 'cloud' ? 'Audit the connected repository checkout. Local branch and dirty-state metadata are context only; local edits are not uploaded. Record the actual checkout commit in your report. ' : 'Audit the local workspace on disk, including local changes. Record the inspected files and any source changes during the audit. ')
+      + `Source context: ${JSON.stringify(args.source ?? {})}`;
+    let agentTask: { taskId: number; status: string } | undefined;
+    if (executor === 'cloud') {
+      try {
         const task = await this.taskService.createTask({
-          projectId: args.projectId,
-          title: `${audit.name} — ${ctx.projectName}`,
-          description:
-            `Run the ${audit.agentWorkflow} workflow across the connected repositories and this project, ` +
-            `then open a remediation PR for the highest-priority findings.\n\n` +
-            `First-pass automated report: ${result.headline}.\n` +
-            (result.recommendations.length
-              ? `Top gaps:\n${result.recommendations.slice(0, 5).map((r) => `- ${r.title}: ${r.detail}`).join('\n')}`
-              : 'No automated gaps flagged — verify manually.') +
-            `\n\n${deepPassBriefing(audit.id, args.projectId)}`,
-          taskType: TaskType.TASK,
-          persona: audit.agentWorkflow,
+          projectId: args.projectId, title: `Audit execution: ${audit.name} — ${ctx.projectName}`,
+          description: briefing, taskType: TaskType.TASK, persona: audit.agentWorkflow,
+          createdVia: 'security_audit',
         }, args.tenantId);
-        agentTasks.push({ taskId: Number(task.id), status: task.status });
+        agentTask = { taskId: Number(task.id), status: task.status };
+        await this.db.update(systemAuditRuns).set({ taskId: agentTask.taskId }).where(and(eq(systemAuditRuns.id, session.id), eq(systemAuditRuns.tenantId, args.tenantId)));
+      } catch (error) {
+        await this.setRunStatus(args.tenantId, session.id, 'failed', String(error));
+        throw error;
       }
-    } catch (error) {
-      // No board/agent available — the deterministic report already landed.
-    
-      reportCaughtError(error, { source: "application/tools/AuditRunner.ts", operation: "runAudit" });
     }
-
-    const agentTask = agentTasks[0];
-    return { started: true, auditId: audit.id, mode: agentTasks.length ? 'agent' : 'deterministic', run, agentTask, agentTasks };
+    return { started: true, runId: session.id, executor, briefing, auditId: audit.id,
+      mode: 'agent', run, agentTask, agentTasks: agentTask ? [agentTask] : [] };
+  }
+  async setRunStatus(tenantId: number, runId: string, status: string, error: string | null = null): Promise<void> {
+    await this.db.update(systemAuditRuns).set({ status, error, updatedAt: new Date() })
+      .where(and(eq(systemAuditRuns.tenantId, tenantId), eq(systemAuditRuns.id, runId),
+        status === 'running' ? inArray(systemAuditRuns.status, ['queued', 'blocked', 'failed']) : ne(systemAuditRuns.status, 'completed')));
+  }
+  async getRun(tenantId: number, projectId: number, runId: string) {
+    await loadProjectInTenant(this.db, tenantId, projectId, { id: projects.id });
+    const [run] = await this.db.select().from(systemAuditRuns).where(and(
+      eq(systemAuditRuns.tenantId, tenantId), eq(systemAuditRuns.projectId, projectId), eq(systemAuditRuns.id, runId),
+    )).limit(1);
+    if (!run) return null;
+    if (run.status === 'running' && run.executionId) {
+      const [execution] = await this.db.select({ status: executions.status, error: executions.errorMessage }).from(executions)
+        .where(and(eq(executions.id, run.executionId), eq(executions.tenantId, tenantId))).limit(1);
+      if (execution && ['failed', 'cancelled', 'completed'].includes(execution.status)) {
+        const error = execution.error ?? 'The agent stopped without saving audit findings. Resume the audit conversation or retry the run.';
+        await this.setRunStatus(tenantId, runId, 'failed', error);
+        run.status = 'failed'; run.error = error;
+      }
+    }
+    const [report] = run.reportId ? await this.db.select({ result: toolRuns.result }).from(toolRuns).where(and(
+      eq(toolRuns.id, run.reportId), eq(toolRuns.tenantId, tenantId), eq(toolRuns.projectId, projectId),
+    )).limit(1) : [];
+    return { ...run, result: report?.result };
   }
 
-  /**
-   * Lowercased titles of every OPEN (non-archived, not-Done) task in a project —
-   * the dedup set for per-gap remediation filing. Best-effort: if the read fails
-   * (or no db, as in unit tests) it returns an empty set so filing falls back to
-   * the prior always-file behaviour rather than throwing.
-   */
-  private async openTaskTitles(projectId: number): Promise<Set<string>> {
+  async bindExecution(tenantId: number, runId: string, executionId: number): Promise<void> {
+    await this.db.update(systemAuditRuns).set({ executionId })
+      .where(and(eq(systemAuditRuns.tenantId, tenantId), eq(systemAuditRuns.id, runId)));
+  }
+  async reportFindings(env: Env, args: { tenantId: number; projectId: number; auditId: string; runId: string; findings: AuditFinding[]; analysis?: CodeAnalysisSnapshot; userId: string }) {
+    const session = await this.getRun(args.tenantId, args.projectId, args.runId);
+    if (!session || session.auditId !== args.auditId) return null;
+    // Immutable findings on retries, and the original baseline prevents repeated score penalties.
+    if (session.status === 'completed') return { runId: session.id, completed: true, ticketIds: session.ticketIds };
+    const available = or(
+      inArray(systemAuditRuns.status, ['running', 'queued', 'blocked', 'failed', 'remediation_pending']),
+      and(eq(systemAuditRuns.status, 'reporting'), lt(systemAuditRuns.updatedAt, new Date(Date.now() - 180_000))),
+    );
+    const [claim] = await this.db.update(systemAuditRuns).set({
+      findings: session.findings ?? [...args.findings, ...codeAnalysisFindings((session.analysis ?? args.analysis) as CodeAnalysisSnapshot | undefined)], status: 'reporting', updatedAt: new Date(),
+      analysis: session.analysis ?? args.analysis ?? null,
+    }).where(and(eq(systemAuditRuns.id, session.id), eq(systemAuditRuns.tenantId, args.tenantId), available)).returning();
+    if (!claim) throw new Error('Another report is saving this audit; retry shortly.');
+    const findings = claim.findings as AuditFinding[];
     try {
-      const rows = await this.db
-        .select({ title: tasks.title })
-        .from(tasks)
-        .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), ne(tasks.status, TaskStatus.DONE)));
-      return new Set(rows.map((r) => r.title.trim().toLowerCase()));
-    } catch {
-      return new Set();
+      const current = claim.analysis as CodeAnalysisSnapshot | null;
+      let baseline: CodeAnalysisSnapshot | undefined;
+      if (current) {
+        const previous = await this.db.select({ result: toolRuns.result }).from(toolRuns).where(and(
+          eq(toolRuns.tenantId, args.tenantId), eq(toolRuns.projectId, args.projectId), eq(toolRuns.toolId, args.auditId),
+          lt(toolRuns.createdAt, session.createdAt),
+        )).orderBy(desc(toolRuns.createdAt)).limit(20);
+        baseline = previous.map((row) => (row.result as import('./toolTypes').ToolResult).codeAnalysis?.current)
+          .find((old) => old && old.source.branch === current.source.branch && old.source.scope === current.source.scope && old.source.repository === current.source.repository);
+      }
+      const ticketIds = await ensureRemediationTickets(this.db, this.taskService, {
+        ...args, auditName: getSystemAudit(args.auditId)!.name, findings,
+      });
+      const report = await applyAuditFindings(this.db, this.toolService, env, {
+        ...args, findings, createdBy: args.userId,
+        ...(current ? { codeAnalysis: { current, ...(baseline ? { baseline } : {}) } } : {}),
+        audit: { runId: session.id, projectId: args.projectId, status: 'completed', ticketIds },
+        baseline: { ...(session.baseline as import('./toolTypes').ToolResult), recommendations: [] },
+      });
+      if (!report) throw new Error('Could not save audit report');
+      await this.db.update(systemAuditRuns).set({ status: 'completed', reportId: report.id, ticketIds, error: null, updatedAt: new Date() })
+        .where(and(eq(systemAuditRuns.id, session.id), eq(systemAuditRuns.tenantId, args.tenantId)));
+      await notify(this.db, env, {
+        userId: session.createdBy, tenantId: args.tenantId, kind: 'audit_complete',
+        title: `${getSystemAudit(args.auditId)!.name} ready`, body: report.result.headline,
+        ref: `/projects?project=${args.projectId}&panel=diagnostics&audit=${encodeURIComponent(args.auditId)}`,
+      }).catch((error) => reportCaughtError(error, { source: 'application/tools/AuditRunner.ts', operation: 'notifyAuditComplete' }));
+      return { runId: session.id, completed: true, report, ticketIds };
+    } catch (error) {
+      await this.setRunStatus(args.tenantId, session.id, 'remediation_pending', String(error));
+      throw error;
     }
+  }
+
+  /** Durable retry of reports whose findings landed but ticket/report persistence was interrupted. */
+  async retryPending(env: Env): Promise<number> {
+    const pending = await this.db.select().from(systemAuditRuns).where(and(
+      inArray(systemAuditRuns.status, ['remediation_pending', 'reporting']),
+      lt(systemAuditRuns.updatedAt, new Date(Date.now() - 180_000)),
+    )).limit(10);
+    let completed = 0;
+    for (const run of pending) {
+      try {
+        await this.reportFindings(env, {
+          tenantId: run.tenantId, projectId: run.projectId, auditId: run.auditId,
+          runId: run.id, findings: (run.findings ?? []) as AuditFinding[], userId: run.createdBy,
+        });
+        completed++;
+      } catch (error) {
+        reportCaughtError(error, { source: 'application/tools/AuditRunner.ts', operation: 'retryPending' });
+      }
+    }
+    return completed;
   }
 }
 

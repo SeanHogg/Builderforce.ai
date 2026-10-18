@@ -54,6 +54,8 @@ export interface ToolRecommendation {
 }
 
 export interface ToolResult {
+  codeAnalysis?: import('@builderforce/agent-tools').CodeAnalysisComparison;
+  audit?: { runId: string; projectId: number; status: 'preview' | 'completed'; ticketIds: number[] };
   /** Big headline verdict, e.g. "High performer" or "$4,250 / month". */
   headline: string;
   /** Optional supporting line under the headline. */

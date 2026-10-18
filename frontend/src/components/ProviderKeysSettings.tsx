@@ -27,6 +27,8 @@ import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { REPLAY_BLOCK } from '@/lib/replaySensitive';
 import { LLM_PROVIDER_INFO, isLlmProvider, llmProviderInfo, type LlmProvider, type LlmProviderInfo } from '@builderforce/model-catalog';
+import { ProviderConnectError, awaitDeviceApproval } from '@builderforce/provider-connect';
+import { gatewayRequest } from '@/lib/gatewayRequest';
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
  * frontier-model accounts — Anthropic, OpenAI, and/or Google — and the platform
@@ -59,38 +61,6 @@ const PROVIDERS: readonly ProviderConfig[] = LLM_PROVIDER_INFO.filter((p) => p.c
 
 /** The self-hosted runtimes — each gets the ONE {@link LocalRuntimeConnectionCard} form. */
 const LOCAL_RUNTIMES: readonly ProviderConfig[] = LLM_PROVIDER_INFO.filter((p) => p.credential === 'local_runtime');
-
-/**
- * How long the card waits for a device approval before giving up.
- *
- * Matched to the server's pending-record TTL (`OAUTH_PKCE_TTL_SECONDS`, 15 minutes): once
- * that record expires the poll can only ever answer "start again", so continuing past it
- * would spin against an endpoint that has nothing left to say.
- */
-const OAUTH_DEVICE_WINDOW_MS = 15 * 60 * 1000;
-
-/**
- * Run `attempt` on an interval until it says stop or the window closes.
- *
- * A `slow_down` widens the interval — the provider telling us it is being asked too
- * often; ignoring it is how a poll starts getting rejected outright. Module-level rather
- * than inside the component so the clock reads are plainly event-time, never render-time.
- */
-async function pollWithinWindow(
-  windowMs: number,
-  intervalSeconds: number,
-  attempt: () => Promise<'continue' | 'slow_down' | 'stop'>,
-): Promise<'stopped' | 'expired'> {
-  const deadline = Date.now() + windowMs;
-  let waitMs = Math.max(1, intervalSeconds) * 1000;
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
-    const step = await attempt();
-    if (step === 'stop') return 'stopped';
-    if (step === 'slow_down') waitMs += 2000;
-  }
-  return 'expired';
-}
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
@@ -384,12 +354,12 @@ function ProviderConnectionCard({
   /** Set when the provider uses a DEVICE grant (Kimi): there is nothing to paste, so the
    *  card shows the code the provider's page will display and waits for the approval. */
   const [deviceCode, setDeviceCode] = useState<{ userCode: string; intervalSeconds: number } | null>(null);
-  /** Gates the poll loop. A ref, not state, because the loop reads it BETWEEN awaits —
-   *  a state value captured in the closure would still be `true` after a cancel. */
-  const pollingRef = useRef(false);
+  /** Cancels the device poll. A ref, not state, because the loop reads it BETWEEN awaits —
+   *  a state value captured in the closure would still be live after a cancel. */
+  const pollAbortRef = useRef<AbortController | null>(null);
   // Stop polling if the card unmounts mid-connect, so an abandoned tab does not leave a
   // loop running against the API until the page is closed.
-  useEffect(() => () => { pollingRef.current = false; }, []);
+  useEffect(() => () => { pollAbortRef.current?.abort(); }, []);
   const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ProbeVerdict | null>(null);
@@ -448,8 +418,8 @@ function ProviderConnectionCard({
         // the operator can verify the page they landed on, and wait for the approval.
         const device = { userCode: started.userCode, intervalSeconds: started.pollIntervalSeconds ?? 5 };
         setDeviceCode(device);
-        pollingRef.current = true;
-        void pollForApproval(started.state, device.intervalSeconds);
+        pollAbortRef.current = new AbortController();
+        void pollForApproval(started.state, device.intervalSeconds, pollAbortRef.current.signal);
       }
     } catch (e) {
       setError(faultMessage(e, t('errStartConnect')));
@@ -459,41 +429,32 @@ function ProviderConnectionCard({
   };
 
   /**
-   * Poll until the user approves the device request in the provider's tab.
-   *
-   * Bounded by the same window the server holds the pending record for, so a tab the
-   * operator abandoned stops polling instead of running until the page is closed. A
-   * `slow_down` widens the interval, which is the provider telling us it is being asked
-   * too often — ignoring it is how a poll starts getting rejected outright.
+   * Wait for the approval in the provider's tab — the shared loop
+   * (`@builderforce/provider-connect`) the editor and Rovr run too. It is bounded by the
+   * window the server holds the pending record for, widens on `slow_down`, and stops at
+   * once on a decline or an expiry instead of polling a code that can never approve.
    */
-  const pollForApproval = async (state: string, intervalSeconds: number) => {
-    const outcome = await pollWithinWindow(OAUTH_DEVICE_WINDOW_MS, intervalSeconds, async () => {
-      // The operator cancelled, or the component moved on — stop rather than completing
-      // a connect nobody is waiting for.
-      if (!pollingRef.current) return 'stop';
-      try {
-        const result = await providerKeysApi.oauthComplete(config.id, '', state);
-        if (result.status === 'slow_down') return 'slow_down';
-        if (result.status === 'pending') return 'continue';
-        onChange('oauth');
-        stopDeviceConnect();
-        return 'stop';
-      } catch (e) {
-        setError(faultMessage(e, t('errConnectSubscription')));
-        stopDeviceConnect();
-        return 'stop';
-      }
-    });
-    if (outcome === 'expired') {
-      setError(t('errCodeExpired'));
-      stopDeviceConnect();
+  const pollForApproval = async (state: string, intervalSeconds: number, signal: AbortSignal) => {
+    try {
+      await awaitDeviceApproval(gatewayRequest, config.id, { state, intervalMs: intervalSeconds * 1000 }, {
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        now: () => Date.now(),
+        signal,
+      });
+      onChange('oauth');
+    } catch (e) {
+      const reason = e instanceof ProviderConnectError ? e.reason : 'failed';
+      if (reason === 'cancelled') return;
+      setError(reason === 'expired' ? t('errDeviceExpired') : reason === 'denied' ? t('errConnectDeclined') : t('errConnectSubscription'));
     }
+    stopDeviceConnect();
   };
 
   /** Tear down a device connect — the ONE place that clears it, so a cancel, a success,
    *  a failure and a timeout can never leave different halves of the state behind. */
   const stopDeviceConnect = () => {
-    pollingRef.current = false;
+    pollAbortRef.current?.abort();
+    pollAbortRef.current = null;
     setConnecting(false);
     setDeviceCode(null);
     setOauthState('');

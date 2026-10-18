@@ -300,7 +300,13 @@ export async function resolveXaiOAuthResolution(env: Env, tenantId: number, fres
   }
 }
 
-export interface KimiOAuthResolution { token: string | null; reason?: ByoUnresolvedReason }
+export interface KimiOAuthResolution {
+  token: string | null;
+  reason?: ByoUnresolvedReason;
+  /** The token's absolute expiry (epoch ms) when one resolved — the local-credential
+   *  route hands it to the client so the client knows when to ask again. */
+  expires?: number;
+}
 
 /**
  * Resolve and rotate a tenant's Kimi Code subscription credential.
@@ -324,18 +330,18 @@ export async function resolveKimiOAuthResolution(env: Env, tenantId: number, fre
   try { tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET })) as KimiOAuthTokens; }
   catch { return { token: null, reason: 'undecryptable' }; }
   if (!tokens.access || !tokens.refresh) return { token: null, reason: 'undecryptable' };
-  if (Date.now() < tokens.expires) return { token: tokens.access };
+  if (Date.now() < tokens.expires) return { token: tokens.access, expires: tokens.expires };
   if (!fresh) return resolveKimiOAuthResolution(env, tenantId, true); // see the OpenAI resolver
   try {
     const refreshed = await refreshKimiOAuth(tokens.refresh);
     await setTenantProviderOAuth(env, tenantId, 'kimi', refreshed, null);
-    return { token: refreshed.access };
+    return { token: refreshed.access, expires: refreshed.expires };
   } catch (e) {
     const status = (e as { status?: number }).status;
     if (status === 400 || status === 401 || status === 403) return { token: null, reason: 'revoked' };
     // A refresh that failed for a transient reason must not disconnect a working account:
     // inside the safety margin the existing token is still worth trying.
-    if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access };
+    if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access, expires: tokens.expires };
     return { token: null, reason: 'expired' };
   }
 }

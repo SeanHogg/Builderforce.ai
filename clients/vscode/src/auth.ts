@@ -7,6 +7,7 @@ import {
   type DeviceCodeStart,
 } from "@builderforce/device-auth";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
+import { clearLocalProviderCredentials } from "./localProviderCredentials";
 
 /**
  * The editor's side of the shared device sign-in (`@builderforce/device-auth`, the same
@@ -83,6 +84,9 @@ export class BuilderForceAuthProvider implements vscode.AuthenticationProvider {
   async removeSession(): Promise<void> {
     const key = await this.ctx.secrets.get(SECRET_KEY);
     await this.ctx.secrets.delete(SECRET_KEY);
+    // Connected-subscription tokens belong to this workspace's account; the next sign-in
+    // may be someone else's.
+    await clearLocalProviderCredentials();
     if (key) {
       // Best-effort server-side revoke, so the key dies with the local session instead
       // of being left valid on the gateway. It never throws — a failed revoke must not

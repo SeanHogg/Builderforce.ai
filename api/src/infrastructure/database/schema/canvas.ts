@@ -185,6 +185,14 @@ export const brainChats = pgTable('brain_chats', {
   userId:    varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   origin:     varchar('origin', { length: 32 }).notNull().default('ide'),
   title:      varchar('title', { length: 500 }).notNull().default('New chat'),
+  /** The user's FIRST prompt in this chat (1245) — the request as it was actually
+   *  asked, kept verbatim (whitespace-collapsed, clamped) so a chat linked to a
+   *  ticket still shows the origin text that produced it. Distinct from `title`,
+   *  which is a 60-char summary derived FROM it. Written once, by the first-turn
+   *  seam (`useChatCreation.onFirstUserTurn`); read-only afterwards. NULL on chats
+   *  created before this column existed and on any chat whose first turn was never
+   *  captured (a seeded/imported chat), so absence is a valid state, not an error. */
+  originalRequest: text('original_request'),
   summary:    text('summary'),
   isArchived: boolean('is_archived').notNull().default(false),
   /** LOCK primitive (0288): 'shared' = visible/joinable by any tenant teammate

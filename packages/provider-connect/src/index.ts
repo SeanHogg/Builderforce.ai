@@ -3,7 +3,7 @@
  * the gateway, and use it from the person's own machine. See `connect.ts` (the connect
  * flow) and `localCredential.ts` (the short-lived token a local runtime sends).
  */
-export type { GatewayRequest } from './port';
+export type { GatewayRequest } from './port.js';
 export {
   DEVICE_APPROVAL_WINDOW_MS,
   ProviderConnectError,
@@ -12,7 +12,7 @@ export {
   type DeviceApprovalDeps,
   type ProviderConnectFailure,
   type ProviderConnectStart,
-} from './connect';
+} from './connect.js';
 export {
   LOCAL_CREDENTIAL_REFRESH_MARGIN_MS,
   createLocalCredentialStore,
@@ -23,4 +23,4 @@ export {
   type LocalCredentialModel,
   type LocalCredentialOutcome,
   type LocalCredentialStore,
-} from './localCredential';
+} from './localCredential.js';

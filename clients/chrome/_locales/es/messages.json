@@ -1041,6 +1041,14 @@
     "message": "No hay tickets que coincidan",
     "description": "#-ticket picker: nothing matches"
   },
+  "ctOriginalRequest": {
+    "message": "Solicitud original",
+    "description": "El primer mensaje de este chat"
+  },
+  "ctOriginalRequestText": {
+    "message": "Solicitud original: {text}",
+    "description": "Accessible name for the chat's original request"
+  },
   "ctNone": {
     "message": "Aún no hay tickets vinculados.",
     "description": "No linked tickets"
@@ -1336,5 +1344,50 @@
   },
   "cancelTitle": {
     "message": "Cancelar"
+  },
+  "kimiIntro": {
+    "message": "Conecta tu cuenta de Kimi para usar Kimi K3 aquí. Builderforce guarda la conexión; Rovr llama a Kimi directamente desde este navegador."
+  },
+  "kimiConnectedIntro": {
+    "message": "La cuenta de Kimi de tu espacio de trabajo. Elige un modelo para ejecutar cada turno, llamado desde este navegador."
+  },
+  "kimiConnect": {
+    "message": "Conectar Kimi"
+  },
+  "kimiApprove": {
+    "message": "Aprueba la conexión en la pestaña de Kimi…"
+  },
+  "kimiApproveWithCode": {
+    "message": "Aprueba la conexión en la pestaña de Kimi; muestra el código $1."
+  },
+  "kimiCancel": {
+    "message": "Cancelar"
+  },
+  "kimiDenied": {
+    "message": "Se rechazó la conexión con Kimi."
+  },
+  "kimiExpired": {
+    "message": "La solicitud de Kimi caducó antes de aprobarse. Inténtalo de nuevo."
+  },
+  "kimiFailed": {
+    "message": "No se pudo conectar Kimi: $1"
+  },
+  "kimiOriginDenied": {
+    "message": "Rovr necesita permiso para acceder a api.kimi.com y usar Kimi desde este navegador."
+  },
+  "kimiK3Plan": {
+    "message": "requiere un plan de Kimi con K3"
+  },
+  "kimiCardTitle": {
+    "message": "Conecta Kimi para ejecutar este turno"
+  },
+  "kimiCardBody": {
+    "message": "Elegiste un modelo de Kimi y tu espacio de trabajo aún no tiene una cuenta de Kimi conectada (o Rovr no puede llegar a Kimi). Conéctala una vez y el siguiente turno se ejecutará con ella."
+  },
+  "suggestAudit": {
+    "message": "Ejecutar auditoría"
+  },
+  "suggestAuditPrompt": {
+    "message": "Lista auditorías con audits.list, ayúdame a elegir proyecto y auditoría e iníciala con audits.run. Muestra estado, hallazgos y tickets de corrección."
   }
 }

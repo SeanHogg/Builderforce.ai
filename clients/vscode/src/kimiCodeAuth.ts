@@ -113,7 +113,7 @@ export async function refreshKimiAccessToken(
   return { kind: "unavailable", detail: `Kimi returned an unexpected ${outcome.kind} response to a refresh.` };
 }
 
-/** What the caller gets back/** What the caller gets back: a token it may send, or why it cannot have one. */
+/** What the caller gets back: a token it may send, or why it cannot have one. */
 export type KimiTokenResult =
   | { kind: "token"; accessToken: string }
   | { kind: "signed_out"; detail: string }

@@ -1159,6 +1159,14 @@
     "message": "No matching tickets",
     "description": "#-ticket picker: nothing matches"
   },
+  "ctOriginalRequest": {
+    "message": "Original request",
+    "description": "Original request: {text}"
+  },
+  "ctOriginalRequestText": {
+    "message": "Original request",
+    "description": "Accessible name for the chat's original request"
+  },
   "ctNone": {
     "message": "No tickets linked yet.",
     "description": "No linked tickets"
@@ -1454,5 +1462,52 @@
   },
   "cancelTitle": {
     "message": "Cancel"
+  },
+  "kimiIntro": {
+    "message": "Connect your Kimi account to run Kimi K3 here. Builderforce keeps the connection; Rovr calls Kimi directly from this browser."
+  },
+  "kimiConnectedIntro": {
+    "message": "Your workspace's Kimi account. Pick a model to run every turn on it, called from this browser."
+  },
+  "kimiConnect": {
+    "message": "Connect Kimi"
+  },
+  "kimiApprove": {
+    "message": "Approve the connection in the Kimi tab…"
+  },
+  "kimiApproveWithCode": {
+    "message": "Approve the connection in the Kimi tab — it shows code $1.",
+    "description": "$1 = the short code Kimi's page shows"
+  },
+  "kimiCancel": {
+    "message": "Cancel"
+  },
+  "kimiDenied": {
+    "message": "The Kimi connection was declined."
+  },
+  "kimiExpired": {
+    "message": "The Kimi request expired before it was approved. Try again."
+  },
+  "kimiFailed": {
+    "message": "Could not connect Kimi: $1",
+    "description": "$1 = the reason"
+  },
+  "kimiOriginDenied": {
+    "message": "Rovr needs permission to reach api.kimi.com to run Kimi from this browser."
+  },
+  "kimiK3Plan": {
+    "message": "needs a Kimi plan with K3"
+  },
+  "kimiCardTitle": {
+    "message": "Connect Kimi to run this turn"
+  },
+  "kimiCardBody": {
+    "message": "You picked a Kimi model, and your workspace has no Kimi account connected yet (or Rovr cannot reach Kimi). Connect it once — the next turn runs on it."
+  },
+  "suggestAudit": {
+    "message": "Run an audit"
+  },
+  "suggestAuditPrompt": {
+    "message": "List available audits with audits.list, help me select a project and audit, then start it with audits.run. Show the cloud run status, findings, and remediation tickets."
   }
 }

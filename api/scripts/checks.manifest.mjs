@@ -66,6 +66,7 @@ export default [
   // filesystem to read it from at request time). This fails the build the moment that
   // copy drifts, so the "one dispatch table, every image" rule is enforced, not hoped for.
   ['check:agent-relay', 'gen-agent-relay-source.mjs', '--check'],
+  ['check:code-analysis', 'gen-code-analysis.mjs', '--check'],
   // Both images run the agent-loop KERNEL from a compiled copy (container/agentLoop.mjs,
   // inlined into the Actions runner with agentImageLoop.mjs). This fails the build when
   // the kernel source changes without the copy being regenerated, or the inline drifts.

@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.51] — Kimi K3 from your own Kimi account
+
+- **Pick Kimi K3 without installing the Kimi Code CLI.** The model picker offers "Connect Kimi". Kimi's sign-in opens with the code already filled in, the connection is saved in your workspace's integrations, and this editor keeps a short-lived token and calls Kimi directly. Afterwards you choose which Kimi model new turns use; K3 is marked because it needs a plan that includes it.
+- **A Kimi turn that finds no account asks to connect** instead of quietly running on a different model.
+- **An existing Kimi Code CLI login is still used first.** The workspace connection is the fallback, so a CLI that is signed out no longer leaves Kimi unusable.
+- **Fixed: Model Provider Connections listed every provider as "not connected".** The editor read the provider list in the wrong shape, so it offered to add accounts you had already connected. The device-code wait also stopped polling for up to fifteen minutes after a decline; it now stops at once.
+
 ## [2026.10.50] — Diagnostics name the host and the engine
 
 - **A copied diagnostics report names which install produced it.** The header now says web, VSIX, or Rovr, and that install's version, instead of only the web bundle. A paste from this extension carries `2026.10.50`.

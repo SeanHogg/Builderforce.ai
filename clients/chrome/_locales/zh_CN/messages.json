@@ -1041,6 +1041,14 @@
     "message": "没有匹配的工单",
     "description": "#-ticket picker: nothing matches"
   },
+  "ctOriginalRequest": {
+    "message": "原始请求",
+    "description": "此对话的第一条消息"
+  },
+  "ctOriginalRequestText": {
+    "message": "原始请求：{text}",
+    "description": "Accessible name for the chat's original request"
+  },
   "ctNone": {
     "message": "尚未关联工单。",
     "description": "No linked tickets"
@@ -1336,5 +1344,50 @@
   },
   "cancelTitle": {
     "message": "取消"
+  },
+  "kimiIntro": {
+    "message": "连接你的 Kimi 账户即可在此使用 Kimi K3。连接由 Builderforce 保存，Rovr 会直接从此浏览器调用 Kimi。"
+  },
+  "kimiConnectedIntro": {
+    "message": "你的工作区 Kimi 账户。选择一个模型来运行每一轮对话，由此浏览器直接调用。"
+  },
+  "kimiConnect": {
+    "message": "连接 Kimi"
+  },
+  "kimiApprove": {
+    "message": "请在 Kimi 标签页中批准连接…"
+  },
+  "kimiApproveWithCode": {
+    "message": "请在 Kimi 标签页中批准连接——页面显示的代码为 $1。"
+  },
+  "kimiCancel": {
+    "message": "取消"
+  },
+  "kimiDenied": {
+    "message": "Kimi 连接已被拒绝。"
+  },
+  "kimiExpired": {
+    "message": "Kimi 请求在批准前已过期，请重试。"
+  },
+  "kimiFailed": {
+    "message": "无法连接 Kimi：$1"
+  },
+  "kimiOriginDenied": {
+    "message": "Rovr 需要访问 api.kimi.com 的权限，才能从此浏览器运行 Kimi。"
+  },
+  "kimiK3Plan": {
+    "message": "需要包含 K3 的 Kimi 套餐"
+  },
+  "kimiCardTitle": {
+    "message": "连接 Kimi 以运行这一轮"
+  },
+  "kimiCardBody": {
+    "message": "你选择了 Kimi 模型，但工作区尚未连接 Kimi 账户（或 Rovr 无法访问 Kimi）。连接一次后，下一轮就会使用它。"
+  },
+  "suggestAudit": {
+    "message": "运行审计"
+  },
+  "suggestAuditPrompt": {
+    "message": "使用 audits.list 列出可用审计，帮助我选择项目和审计，然后使用 audits.run 启动。显示云端运行状态、发现的问题和修复工单。"
   }
 }

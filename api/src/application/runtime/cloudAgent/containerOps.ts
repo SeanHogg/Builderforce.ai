@@ -27,7 +27,9 @@
  * which is precisely the boundary this split makes visible.
  */
 import { integrationCredentialSecret } from '../../integrations/integrationCredentialSecret';
-import { and, eq } from 'drizzle-orm';
+import { CodeAnalysisSchema } from '../../tools/codeAnalysisSchema';
+import { systemAuditRuns } from '../../../infrastructure/database/schema';
+import { and, eq, ne } from 'drizzle-orm';
 import { coordinationScopeKey } from '../../../domain/coordination/resourceKey';
 import { isMemoryScope } from '../../../domain/memory/memoryScope';
 import { ExecutionStatus, TenantRole } from '../../../domain/shared/types';
@@ -141,6 +143,14 @@ export type ContainerOpHandler = (deps: ContainerOpDeps) => Promise<ContainerOpR
  * shared function body, and no handler can reach another handler's locals.
  */
 export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
+  audit_analysis: async ({ db, tenantId, executionId, projectId, args }) => {
+    const parsed = CodeAnalysisSchema.safeParse(args.snapshot);
+    if (!parsed.success) return { status: 400, body: { ok: false, error: 'Invalid analyzer snapshot' } };
+    const rows = await db.update(systemAuditRuns).set({ analysis: parsed.data, updatedAt: new Date() }).where(and(
+      eq(systemAuditRuns.tenantId, tenantId), eq(systemAuditRuns.projectId, projectId), eq(systemAuditRuns.executionId, executionId), ne(systemAuditRuns.status, 'completed'),
+    )).returning({ id: systemAuditRuns.id });
+    return { status: rows.length ? 200 : 404, body: { ok: rows.length > 0 } };
+  },
   status: async (deps) => {
     const { db, executionId, surface } = deps;
     return {

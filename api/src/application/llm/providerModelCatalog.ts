@@ -31,10 +31,15 @@ const SOURCE = 'application/llm/providerModelCatalog.ts';
 interface ProviderModelSource {
   /** The gateway vendor that dispatches this provider's api-key models. */
   vendor: VendorId;
-  /** The provider's public model list — what its own marketplace renders. */
-  publicCatalogUrl: string;
+  /**
+   * The provider's public model list — what its own marketplace renders. Absent when the
+   * provider publishes none (Kimi Code documents four ids on a docs page): the vendor's
+   * static catalog then IS the choice list, which is still worth offering because it is
+   * what lets a tenant on a higher plan put the plan-gated model first.
+   */
+  publicCatalogUrl?: string;
   /** Model ids out of the public list's body. */
-  parsePublicCatalog(body: unknown): string[];
+  parsePublicCatalog?(body: unknown): string[];
   /** Keep only models the gateway can drive: it speaks `/chat/completions`, so an image,
    *  video, speech, embedding or realtime model would fail every turn it was given. */
   isChatModel(id: string): boolean;
@@ -56,6 +61,14 @@ const PROVIDER_MODEL_SOURCES: Partial<Record<LlmProvider, ProviderModelSource>> 
     parsePublicCatalog: (body) =>
       body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [],
     isChatModel: (id) => !QWEN_NON_CHAT.test(id),
+  },
+  // Kimi Code: every model is a coding chat model, and its catalog is plan-gated (K3 is
+  // for higher tiers), so the choice is the tenant's to make. No `/models` is reachable
+  // from the Worker either — Kimi's edge refuses our egress — so the account list reads
+  // null and the vendor catalog stands in.
+  kimi: {
+    vendor: 'kimi-code',
+    isChatModel: () => true,
   },
 };
 
@@ -112,10 +125,12 @@ export function mergeProviderModelChoices(
 }
 
 async function loadPublicCatalog(env: Env, provider: LlmProvider, source: ProviderModelSource): Promise<string[]> {
+  const { publicCatalogUrl, parsePublicCatalog } = source;
+  if (!publicCatalogUrl || !parsePublicCatalog) return [];
   return getOrSetCached(env, `provider-model-catalog:${provider}:v1`, async () => {
-    const res = await fetch(source.publicCatalogUrl, { signal: AbortSignal.timeout(PUBLIC_CATALOG_TIMEOUT_MS) });
+    const res = await fetch(publicCatalogUrl, { signal: AbortSignal.timeout(PUBLIC_CATALOG_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`${provider} public model catalog returned HTTP ${res.status}`);
-    const ids = source.parsePublicCatalog(await res.json());
+    const ids = parsePublicCatalog(await res.json());
     // An empty list is a broken fetch, not a provider with no models — never cache it.
     if (ids.length === 0) throw new Error(`${provider} public model catalog was empty`);
     return ids;

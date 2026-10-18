@@ -39,6 +39,7 @@ export interface BrainIntent {
 }
 
 export interface InitData {
+  auditResult?: { codeAnalysis?: import('@builderforce/agent-tools').CodeAnalysisComparison };
   baseUrl: string;
   token: string | null;
   model?: string;
@@ -74,7 +75,7 @@ export interface InitData {
    *  the host decides via `init` which surface this panel is — the Brain chat (default),
    *  Project 360, a list-shaped project page (Backlog / PRDs), the Evermind console, or the
    *  split-view Visualization board — same bundle, same transport, one code path. */
-  view?: 'workspace' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker' | 'evermind' | 'visualization';
+  view?: 'workspace' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker' | 'evermind' | 'visualization' | 'audit-result';
   /**
    * Which SURFACE the workspace opens at — the difference between "open my chat" and
    * "open my canvas", which used to be the difference between two panels.

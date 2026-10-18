@@ -25,6 +25,10 @@
     // target resolves relative to THIS file — which is what these already are.
     "paths": {
       "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"],
+      // The audit view types its code-analysis report off the agent-tools
+      // `CodeAnalysisComparison`, so the webview needs the same specifier the
+      // root tsconfig maps. Enforced by check:source-package-graph.
+      "@builderforce/agent-tools": ["../../../packages/agent-tools/src/index.ts"],
       // The page-engine bridge protocol (`../src/pageEngineBridgeProtocol.ts`) names
       // the local-runtime ids, and the webview reaches it by a relative import.
       "@builderforce/local-inference": ["../../../packages/local-inference/src/index.ts"],

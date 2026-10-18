@@ -24,6 +24,9 @@ function fakeApi(opts: { failMessagesOnce?: boolean } = {}): ApiClient & { calls
       }
       return {} as T;
     },
+    async raw() {
+      return { status: 200, body: {} };
+    },
   };
 }
 

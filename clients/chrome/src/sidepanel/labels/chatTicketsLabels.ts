@@ -77,6 +77,8 @@ const CHAT_TICKETS_KEY: Readonly<Record<string, MessageKey>> = {
   'kind.poker': 'ctKindPoker',
   ringAria: 'ctRingAria',
   inParent: 'ctInParent',
+  originalRequest: 'ctOriginalRequest',
+  originalRequestText: 'ctOriginalRequestText',
   ticketCountOne: 'ctTicketCountOne',
   ticketCountMany: 'ctTicketCountMany',
   overallAria: 'ctOverallAria',

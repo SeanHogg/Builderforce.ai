@@ -23,8 +23,8 @@ import type { BrainStreamFn } from './brainRunStore';
 export interface BrainPersistenceAdapter {
   listChats(params?: { projectId?: string; limit?: number; offset?: number }): Promise<BrainChat[]>;
   getChat(id: number): Promise<BrainChat>;
-  createChat(body: { title?: string; projectId?: number | null; capability?: string | null; mode?: string | null }): Promise<BrainChat>;
-  updateChat(id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null; memoryEnabled?: boolean }): Promise<BrainChat>;
+  createChat(body: { title?: string; originalRequest?: string | null; projectId?: number | null; capability?: string | null; mode?: string | null }): Promise<BrainChat>;
+  updateChat(id: number, body: { title?: string; originalRequest?: string | null; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null; memoryEnabled?: boolean }): Promise<BrainChat>;
   deleteChat(id: number): Promise<unknown>;
   summarizeChat(id: number): Promise<{ summary: string } | { error: string }>;
   getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;

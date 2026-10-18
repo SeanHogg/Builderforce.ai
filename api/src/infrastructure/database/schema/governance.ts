@@ -33,9 +33,42 @@ import {
 import { sql } from 'drizzle-orm';
 import { approvalStatusEnum, privacyRequestStatusEnum, privacyRequestTypeEnum, sourceControlProviderEnum } from './kernel';
 import { segments, tenants, users } from './identity';
-import { agentHosts } from './agents';
+import { agentHosts, toolRuns, executions } from './agents';
 import { boards, initiatives, projects, tasks } from './delivery';
 import type { AnswerMap, DevexSegments, SurveyQuestion } from '../../../domain/devex/surveys';
+
+export const systemAuditRuns = pgTable('system_audit_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  auditId: varchar('audit_id', { length: 64 }).notNull(),
+  executor: varchar('executor', { length: 16 }).notNull(),
+  status: varchar('status', { length: 32 }).notNull().default('queued'),
+  baseline: jsonb('baseline').notNull(),
+  findings: jsonb('findings'),
+  analysis: jsonb('analysis'),
+  reportId: uuid('report_id').references(() => toolRuns.id, { onDelete: 'set null' }),
+  ticketIds: jsonb('ticket_ids').notNull().default([]),
+  executionId: integer('execution_id').references(() => executions.id, { onDelete: 'set null' }),
+  taskId: integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  source: jsonb('source').notNull().default({}),
+  error: text('error'),
+  createdBy: varchar('created_by', { length: 36 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_system_audit_runs_project').on(t.tenantId, t.projectId, t.createdAt),
+  index('idx_system_audit_runs_retry').on(t.status, t.updatedAt),
+]);
+
+export const systemAuditRemediations = pgTable('system_audit_remediations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  fingerprint: varchar('fingerprint', { length: 64 }).notNull(),
+  taskId: integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  leaseUntil: timestamp('lease_until'),
+}, (t) => [unique('system_audit_remediations_tenant_id_project_id_fingerprint_key').on(t.tenantId, t.projectId, t.fingerprint)]);
 
 
 export const privacyRequests = pgTable('privacy_requests', {

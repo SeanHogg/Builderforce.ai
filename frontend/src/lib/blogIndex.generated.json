@@ -14,6 +14,21 @@
     "author": "Sean Hogg"
   },
   {
+    "slug": "kimi-k3-from-your-own-account",
+    "title": "Kimi K3 as your coder or your planner — from your own Kimi account",
+    "date": "2026-10-18",
+    "description": "A Kimi subscription used to be reachable only through a separate runtime relaying for it. Now you pick Kimi K3 in VS Code or Rovr, sign in once when the first turn needs it, and your own machine calls Kimi directly.",
+    "tags": [
+      "models",
+      "kimi",
+      "byo",
+      "vscode",
+      "rovr",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "models-that-run-on-your-machine",
     "title": "Run a model on your own machine, and hand off without losing the thread",
     "date": "2026-10-17",

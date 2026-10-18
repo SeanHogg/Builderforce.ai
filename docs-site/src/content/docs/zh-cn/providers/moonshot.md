@@ -16,11 +16,12 @@ x-i18n:
 
 # Moonshot AI (Kimi)
 
-Moonshot 提供兼容 OpenAI 端点的 Kimi API。配置提供商并将默认模型设置为 `moonshot/kimi-k2.5`，或使用 Kimi Coding 的 `kimi-coding/k2p5`。
+Moonshot 提供兼容 OpenAI 端点的 Kimi API。配置提供商并将默认模型设置为 `moonshot/kimi-k3`，或使用 Kimi Coding 的 `kimi-coding/k2p5`。
 
-当前 Kimi K2 模型 ID：
+当前 Kimi 模型 ID（K3 为旗舰模型；在 Kimi Code 订阅中，同一模型为 `k3` / `k3-256k`，Builderforce 可在“设置 → 模型提供商”、VS Code 扩展或 Rovr 中通过设备登录连接该订阅）：
 {/_ moonshot-kimi-k2-ids:start _/}
 
+- `kimi-k3`
 - `kimi-k2.5`
 - `kimi-k2-0905-preview`
 - `kimi-k2-turbo-preview`

@@ -35,6 +35,7 @@
 
 import { AGENT_RELAY_INLINE } from './generated/agentRelaySource';
 import { AGENT_LOOP_INLINE } from './generated/agentLoopSource';
+import { CODE_ANALYSIS_INLINE } from './generated/codeAnalysisSource';
 
 /**
  * Render the runner script served at `/api/runtime/github-actions/runner.mjs`.
@@ -103,6 +104,7 @@ async function op(name, args) {
 // capability to lag the deployed image. \`check:agent-relay\` fails the build if this
 // copy and the module diverge.
 ${AGENT_RELAY_INLINE}
+${CODE_ANALYSIS_INLINE}
 
 // ── THE agent loop ─────────────────────────────────────────────────────────────
 // Inlined VERBATIM from api/container/agentLoop.mjs (the @builderforce/agent-loop kernel,
@@ -163,7 +165,7 @@ function matchGlob(p, pattern) {
  * keeps a local copy.
  */
 function matchGlobScoped(p, pattern, sub) {
-  const scope = (sub ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
+  const scope = (sub ?? '').split('\\\\').join('/').trim().replace(/^\\.\\/+/, '').replace(/^\\/+|\\/+$/g, '');
   if (!scope) return matchGlob(p, pattern);
   if (p !== scope && !p.startsWith(scope + '/')) return false;
   return matchGlob(p, pattern) || matchGlob(p.slice(scope.length + 1), pattern);
@@ -321,6 +323,13 @@ async function execTool(writtenPaths, name, parsed, proc, headBranch, loop) {
     const r = await op('write', { path, content, summary: parsed.summary, isNew });
     if (r.ok) writtenPaths.add(path);
     return r;
+  }
+  if (name === 'analyze_codebase') {
+    return runCodeAnalysis(parsed, {
+      run: async (command) => { const r = await runShell(command, WORKDIR, proc); return { ok: r.exitCode === 0, exitCode: r.exitCode, stdout: r.output }; },
+      read: async (path) => ({ ok: true, content: await readFile(join(WORKDIR, path), 'utf8') }),
+      persist: async (snapshot) => { const r = await op('audit_analysis', { snapshot }); if (!r.ok) throw new Error('Could not persist analyzer snapshot'); },
+    });
   }
   if (name === 'run_command') {
     const command = typeof parsed.command === 'string' ? parsed.command : '';

@@ -3,6 +3,8 @@
  * `_locales/<locale>/messages.json` catalogs (and the manifest's `__MSG_…__` names against them too).
  */
 export const MESSAGE_KEYS = [
+  'suggestAudit',
+  'suggestAuditPrompt',
   'extName',
   'extDescription',
   'actionTitle',
@@ -302,6 +304,8 @@ export const MESSAGE_KEYS = [
   'mnTicketStatus',
   'mnTicketNoMatches',
   'ctNone',
+  'ctOriginalRequest',
+  'ctOriginalRequestText',
   'ctSpawned',
   'ctRun',
   'ctOpen',
@@ -372,6 +376,20 @@ export const MESSAGE_KEYS = [
   'ctRunStarted',
   'ctMergeAction',
   'ctMergedN',
+  // Kimi — connect the workspace's account and run it from this browser (KimiConnect.tsx).
+  'kimiIntro',
+  'kimiConnectedIntro',
+  'kimiConnect',
+  'kimiApprove',
+  'kimiApproveWithCode',
+  'kimiCancel',
+  'kimiDenied',
+  'kimiExpired',
+  'kimiFailed',
+  'kimiOriginDenied',
+  'kimiK3Plan',
+  'kimiCardTitle',
+  'kimiCardBody',
 ] as const;
 
 export type MessageKey = (typeof MESSAGE_KEYS)[number];

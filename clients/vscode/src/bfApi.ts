@@ -404,7 +404,7 @@ async function fetchAuthed(
   return res;
 }
 
-async function authed<T>(
+export async function authed<T>(
   secrets: vscode.SecretStorage,
   path: string,
   authedInit?: AuthedInit,
@@ -1492,6 +1492,8 @@ export interface BfProjectDiagnostic {
   headline: string;
   createdAt: string;
   result?: {
+    codeAnalysis?: import('@builderforce/agent-tools').CodeAnalysisComparison;
+    audit?: { runId: string; projectId: number; status: 'preview' | 'completed'; ticketIds: number[] };
     headline: string;
     summary?: string;
     metrics?: Array<{ label: string; value: string; hint?: string }>;
@@ -1736,15 +1738,6 @@ export interface ByoProviderTestResult {
   error?: string;
 }
 
-/** OAuth start response */
-export interface ByoOAuthStartResult {
-  authorizeUrl: string;
-  state: string;
-  grant?: "paste" | "device";
-  userCode?: string;
-  pollIntervalSeconds?: number;
-}
-
 /** OAuth complete response */
 export interface ByoOAuthCompleteResult {
   ok: boolean;
@@ -1761,8 +1754,22 @@ export async function listByoProviders(secrets: vscode.SecretStorage): Promise<B
   const ws = await getCurrentWorkspace(secrets);
   if (!ws) return [];
   try {
-    const r = await authed<{ providers?: ByoProvider[] }>(secrets, `/llm/provider-keys`);
-    return r?.providers ?? [];
+    // `providers` is the bare id array kept for older clients; the per-provider facts are
+    // in `details`. Reading `providers` as objects (as this did) made every connection's
+    // id `undefined`, so the editor offered to "add" providers that were already connected
+    // and never showed how a connected one authenticates.
+    const r = await authed<{
+      details?: Array<{ provider: string; authType?: "api_key" | "oauth"; authAlert?: { reason?: string; status?: number } }>;
+    }>(secrets, `/llm/provider-keys`);
+    return (r?.details ?? []).map((d) => ({
+      id: d.provider,
+      label: d.provider,
+      authType: d.authType ?? "api_key",
+      isConnected: !d.authAlert,
+      ...(d.authAlert ? { error: `${d.authAlert.reason ?? "rejected"} (HTTP ${d.authAlert.status ?? 0})` } : {}),
+      hasApiKey: d.authType !== "oauth",
+      hasOauth: d.authType === "oauth",
+    }));
   } catch {
     return [];
   }
@@ -1810,24 +1817,9 @@ export async function testByoProvider(
 }
 
 /**
- * Start OAuth flow for a BYO provider (Anthropic, OpenAI, xAI).
- * Returns the authorize URL to open in a browser.
- */
-export async function startByoOAuth(
-  secrets: vscode.SecretStorage,
-  provider: string,
-): Promise<ByoOAuthStartResult | undefined> {
-  const ws = await getCurrentWorkspace(secrets);
-  if (!ws) return undefined;
-  return authed<ByoOAuthStartResult>(secrets, `/llm/provider-keys/${provider}/oauth/start`, {
-    method: "POST",
-  });
-}
-
-/**
  * Complete OAuth flow for a BYO provider.
- * For 'paste' grant: code is the authorization code from the provider.
- * For 'device' grant: polls until complete.
+ * The paste grant's redeem step; the start and the device poll are
+ * `@builderforce/provider-connect` (`providerConnect.ts`).
  */
 export async function completeByoOAuth(
   secrets: vscode.SecretStorage,

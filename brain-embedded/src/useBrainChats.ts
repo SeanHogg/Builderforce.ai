@@ -80,6 +80,15 @@ export interface UseBrainChats {
    * never clobbers an intentional name. Wired to the conversation's first-turn hook.
    */
   autoTitle(id: number, firstUserText: string): Promise<void>;
+  /**
+   * Persist the user's first prompt on the chat (migration 1245) so the linked ticket can
+   * show the origin request, not just the title derived from it. Write-once per chat and
+   * best-effort: it never rejects (a failed capture retries on the next first turn) and a
+   * chat that already carries a request is left untouched. Pass this straight to
+   * `useChatCreation`'s `onCaptureOriginalRequest` port — the hook guarantees once-per-chat
+   * firing and this one guarantees the write, so neither has to know about the other.
+   */
+  captureOriginalRequest(id: number, text: string): Promise<void>;
   summarize(id: number): Promise<void>;
   /**
    * Archive a chat — put it away rather than remove it.
@@ -116,6 +125,10 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
   // Chats we've already auto-titled this session — a single-flight guard so the
   // first-turn hook firing twice (e.g. StrictMode / rapid re-render) can't double-rename.
   const autoTitledRef = useRef<Set<number>>(new Set());
+  // Same single-flight guard for the original request (1245), keyed by chat id — the
+  // first-turn hook can fire twice (StrictMode / rapid re-render) and the record is
+  // write-once, so a repeat must not re-issue the PATCH.
+  const originalRequestCapturedRef = useRef<Set<number>>(new Set());
 
   // Controlled when the caller passes `activeChatId` (even null); otherwise the
   // hook owns the selection. Either way `setActiveChatId` is the single mutation
@@ -271,6 +284,38 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     }
   }, [persistence]);
 
+  /**
+   * Record the user's FIRST prompt verbatim on the chat (migration 1245) — the origin
+   * text that outlives the auto-title, so a chat linked to a ticket can still show what
+   * it was actually asked for.
+   *
+   * Write-once, mirroring the server: the `autoTitledRef` guard makes it fire at most
+   * once per chat, and a chat that already has a non-blank `originalRequest` is skipped
+   * outright, so a remount, a second host, or a chat whose capture already succeeded
+   * cannot overwrite the record. Failures are best-effort (the guard is released so the
+   * next first-turn can retry) and the write is optimistic in state but authoritative in
+   * what it stores: the server's value is what lands in the row.
+   */
+  const captureOriginalRequest = useCallback(async (id: number, text: string) => {
+    if (originalRequestCapturedRef.current.has(id)) return;
+    const request = text.trim();
+    if (!request) return;
+    const chat = chatsRef.current.find((c) => c.id === id);
+    // Already captured (another host, a remount, or a seeded chat) — leave it be.
+    if (chat?.originalRequest?.trim()) return;
+    originalRequestCapturedRef.current.add(id);
+    try {
+      const updated = await persistence.updateChat(id, { originalRequest: request });
+      setChats((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, originalRequest: updated.originalRequest ?? request } : c)),
+      );
+    } catch {
+      // Best-effort — a failed capture leaves the column NULL and is retried on the
+      // next first turn; the chat itself is unaffected either way.
+      originalRequestCapturedRef.current.delete(id);
+    }
+  }, [persistence]);
+
   const summarize = useCallback(async (id: number) => {
     setError('');
     try {
@@ -349,6 +394,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     setMode,
     setMemoryEnabled,
     autoTitle,
+    captureOriginalRequest,
     summarize,
     archive,
     remove,

@@ -22,6 +22,10 @@ export function chatTicketsLabelsFrom(lookup: LabelLookup): ChatTicketsLabels {
     inParent: tpl('inParent', d.inParent, (parent: string) => ({ parent })),
     ticketCount: (n) => lookup(n === 1 ? 'ticketCountOne' : 'ticketCountMany', { n }) || d.ticketCount(n),
     overallAria: tpl('overallAria', d.overallAria, (pct: number) => ({ pct })),
+    // Parametric like the ones above, so it needs its own `tpl` — `stringsFrom` only
+    // binds the static fields. `{text}` is the user's own prompt: the catalog renders it
+    // into a localized wrapper and the host owns the word order around it.
+    originalRequestText: tpl('originalRequestText', d.originalRequestText, (text: string) => ({ text })),
     runStarted: tpl('runStarted', d.runStarted, (agent: string) => ({ agent })),
     mergeAction: tpl('mergeAction', d.mergeAction, (n: number) => ({ n })),
     mergedN: tpl('mergedN', d.mergedN, (n: number) => ({ n })),

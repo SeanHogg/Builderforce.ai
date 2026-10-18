@@ -334,6 +334,13 @@ export interface ChatTicketsLabels {
   showTickets: string;
   /** Title on the expanded ticket header — click to collapse the ring grid. */
   hideTickets: string;
+  /** Heading for the chat's ORIGINAL request — the user's first prompt, kept verbatim
+   *  (migration 1245) so a linked ticket shows what the chat was actually asked for. */
+  originalRequest: string;
+  /** The request's accessible name / tooltip; `{text}` is the request itself. Parametric
+   *  because it carries the user's own words, which must not be run through a word order
+   *  the host's catalog cannot express. */
+  originalRequestText: (text: string) => string;
   /** Accessible name of the ticket-grid sort control. */
   sortLabel: string;
   /** Incomplete (progress < 100%) first — the default. */
@@ -410,6 +417,8 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   mergeNoOthers: 'No other chats to merge.',
   showTickets: 'Show linked tickets',
   hideTickets: 'Hide linked tickets',
+  originalRequest: 'Original request',
+  originalRequestText: (text) => `Original request: ${text}`,
   sortLabel: 'Sort tickets',
   sortOpen: 'Incomplete first',
   sortDone: 'Complete first',

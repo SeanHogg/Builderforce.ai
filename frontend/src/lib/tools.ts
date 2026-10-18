@@ -122,6 +122,8 @@ export interface ToolRecommendation {
   priority?: 'high' | 'medium' | 'low';
 }
 export interface ToolResult {
+  codeAnalysis?: import('@builderforce/agent-tools').CodeAnalysisComparison;
+  audit?: { runId: string; projectId: number; status: 'preview' | 'completed'; ticketIds: number[] };
   headline: string;
   summary?: string;
   score?: number | null;
@@ -219,6 +221,10 @@ export interface SystemAuditSummary {
 /** Outcome of kicking off an audit run. */
 export interface AuditRunOutcome {
   started: true;
+  runId: string;
+  executor: 'local' | 'cloud';
+  briefing: string;
+  dispatch?: { executionId: number | null; refusal?: { reason: string; message: string } };
   auditId: string;
   mode: 'agent' | 'deterministic';
   run: SavedToolRun;

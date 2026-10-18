@@ -368,6 +368,11 @@ export function vendorFlagship(vendor: string, agentic: boolean): string | null 
   return flagships ? (agentic ? flagships.agentic : flagships.chat) : null;
 }
 
+/** A vendor's plan-gated coders (routed ids) — see `VendorFlagships.gatedCoders`. */
+export function vendorGatedCoders(vendor: string): readonly string[] {
+  return (MODULES_BY_ID as Record<string, VendorModule | undefined>)[vendor]?.flagships?.gatedCoders ?? [];
+}
+
 /** Every vendor that declares flagships → its flagships, in registry order. */
 export function allVendorFlagships(): ReadonlyArray<{ vendor: VendorId } & VendorFlagships> {
   return MODULES.flatMap((mod) => (mod.flagships ? [{ vendor: mod.id, ...mod.flagships }] : []));

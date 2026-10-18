@@ -11,6 +11,7 @@ import { attachEvermindLearn, type BrainMessage, type BrainStreamFn } from "@sea
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, postBrainMessages, projectEvermindHooks } from "./bfApi";
 import { scopeTenantId } from "./outboxStorage";
+import { auditToolCatalog } from "./auditToolCatalog";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { localWindowProbes, resolveModelRoute, routeStream } from "./modelRouting";
 import { refreshPendingChanges } from "./gitChanges";
@@ -45,7 +46,10 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   return createBrainRunHost({
     // The run's sub-agent controls and Stop come from the RUN (only it knows its key, its
     // chat and its depth), so they are passed straight through rather than rebuilt here.
-    tools: (projectId, children, signal, opts) => brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts),
+    tools: async (projectId, children, signal, opts) => {
+      const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts);
+      return opts.audit && projectId != null ? auditToolCatalog(secrets, tools, projectId, opts.audit) : tools;
+    },
     workspaceRoot,
     // Resolved per run, not once: an explicit pick, the project's Evermind pin or an
     // on-device route can all change between turns, and a local credential can expire.

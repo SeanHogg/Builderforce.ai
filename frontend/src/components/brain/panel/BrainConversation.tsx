@@ -128,6 +128,9 @@ export function BrainConversation() {
         onChanged={timeline.onTicketsChanged}
         transcript={conv.messages}
         spend={activeChat.spend}
+        // The chat's first prompt, kept verbatim (1245) — the auto-title is only a
+        // ~60-char derivation of it, and a linked ticket needs the request itself.
+        originalRequest={activeChat.originalRequest ?? null}
       />
       {newProject.showNewProject && (
         <BrainNewProjectForm

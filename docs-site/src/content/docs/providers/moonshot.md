@@ -10,13 +10,16 @@ title: "Moonshot AI"
 # Moonshot AI (Kimi)
 
 Moonshot provides the Kimi API with OpenAI-compatible endpoints. Configure the
-provider and set the default model to `moonshot/kimi-k2.5`, or use
+provider and set the default model to `moonshot/kimi-k3`, or use
 Kimi Coding with `kimi-coding/k2p5`.
 
-Current Kimi K2 model IDs:
+Current Kimi model IDs (K3 is the flagship; on a Kimi Code subscription the same model is
+`k3` / `k3-256k`, and Builderforce can connect that subscription with a device sign-in from
+Settings → Model providers, the VS Code extension or Rovr):
 
 {/_moonshot-kimi-k2-ids:start_/ && null}
 
+- `kimi-k3`
 - `kimi-k2.5`
 - `kimi-k2-0905-preview`
 - `kimi-k2-turbo-preview`

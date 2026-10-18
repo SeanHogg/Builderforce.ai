@@ -10,12 +10,11 @@ import {
   normalizeLocalBaseUrl,
   parseBfiDiscovery,
   type LocalEndpoint,
-  type LocalRuntimeId,
 } from "@builderforce/local-inference";
 import { type LocalModelsConfig } from "./localModels";
 import { readDesktopModelsEndpoint } from "./desktopContext";
 import { isKimiCodeInstall, loadKimiCodeInstall, type KimiCodeInstallResult } from "./kimiCodeInstall";
-import { ensureFreshKimiToken } from "./kimiCodeAuth";
+import { localCredentialSnapshot } from "./localProviderCredentials";
 import { createDurableOutbox, outboxSecrets, trackReachability } from "./outboxStorage";
 
 /** Single source of truth for the SecretStorage key (DRY). */
@@ -58,13 +57,13 @@ export function getApiKey(secrets: vscode.SecretStorage): Thenable<string | unde
  * I/O (config.toml + the credential file), and three readers ask for it per proxied
  * request — the model list, the endpoint authorizer and the picker's unavailable-reason
  * — so an unmemoized read was six file reads per turn. The TOKEN is never taken from
- * this value: `authorizeLocalEndpoint` resolves a fresh one from disk at request time,
+ * this value: `localEndpointAuth.authorizeLocalEndpoint` resolves a fresh one at request time,
  * so the window only ever delays noticing an install/uninstall or a sign-out, and the
  * configuration-change hook drops it early (same pattern as `MODELS_TTL_MS`).
  */
 const KIMI_INSTALL_TTL_MS = 30_000;
 let kimiInstallMemo: { ts: number; value: KimiCodeInstallResult } | undefined;
-function currentKimiInstall(): KimiCodeInstallResult {
+export function currentKimiInstall(): KimiCodeInstallResult {
   const now = Date.now();
   if (kimiInstallMemo && now - kimiInstallMemo.ts < KIMI_INSTALL_TTL_MS) return kimiInstallMemo.value;
   const value = loadKimiCodeInstall(nodeFs, process.env, undefined, now);
@@ -123,11 +122,14 @@ function readBfiDiscovery(): LocalEndpoint | null {
  */
 export function getLocalModelsConfig(): LocalModelsConfig {
   const cfg = vscode.workspace.getConfiguration("builderforce");
-  // Kimi Code is not configured, it is DISCOVERED: the user already signed in with its
-  // own app, which wrote the endpoint, the model table and the credential to disk. Asking
-  // them to re-enter any of that would be asking for something they have already given.
-  // A machine without it simply contributes no endpoint and no rows.
-  const kimi = currentKimiInstall();
+  // Kimi is not configured, it is DISCOVERED — from either of two places, the local CLI
+  // first because it costs no round trip:
+  //   • the Kimi Code CLI's own login, which wrote the endpoint, the model table and the
+  //     credential to disk;
+  //   • the WORKSPACE's Kimi connection, whose last issued credential this editor keeps
+  //     (endpoint + the tenant's chosen model order; the token is resolved per request).
+  // A machine with neither contributes no endpoint and no rows.
+  const kimi = kimiSource();
   const synapse = resolveSynapseEndpoint(cfg.get<string>("localModels.synapseUrl") ?? "");
   return {
     enabled: cfg.get<boolean>("localModels.enabled") === true,
@@ -142,34 +144,19 @@ export function getLocalModelsConfig(): LocalModelsConfig {
       // the time it was sent; it is resolved instead at the moment of the request by
       // {@link authorizeLocalEndpoint}. The happy side effect is that the credential never
       // sits inside a config object that gets passed around and logged.
-      ...(isKimiCodeInstall(kimi) ? { "kimi-code": { baseUrl: kimi.baseUrl } } : {}),
+      ...(kimi ? { "kimi-code": { baseUrl: kimi.baseUrl } } : {}),
       ...(synapse ? { synapse } : {}),
     },
-    ...(isKimiCodeInstall(kimi) ? { kimiCodeModels: kimi.models } : {}),
+    ...(kimi ? { kimiCodeModels: kimi.models } : {}),
   };
 }
 
-/**
- * Attach the credential a local endpoint needs, immediately before the call.
- *
- * The ONE place that decides this, because two surfaces make local requests — the chat
- * route (`modelRouting`) and the panel's host-performed fetch (`builderforcePanel`) — and a
- * second copy of "does this provider need a bearer, and where does a fresh one come
- * from?" is how one of them ends up sending a stale token or none at all.
- *
- * An on-device engine passes straight through unauthenticated, which is what keeps a
- * signed-out editor able to run a local turn.
- */
-export async function authorizeLocalEndpoint(
-  provider: LocalRuntimeId,
-  endpoint: LocalEndpoint,
-): Promise<{ ok: true; endpoint: LocalEndpoint } | { ok: false; detail: string }> {
-  if (provider !== "kimi-code") return { ok: true, endpoint };
+/** Where this machine's Kimi endpoint and models come from right now, or null. */
+function kimiSource(): { baseUrl: string; models: readonly { model: string; displayName: string }[] } | null {
   const install = currentKimiInstall();
-  if (!isKimiCodeInstall(install)) return { ok: false, detail: install.detail };
-  const resolved = await ensureFreshKimiToken(nodeFs, install.home);
-  if (resolved.kind !== "token") return { ok: false, detail: resolved.detail };
-  return { ok: true, endpoint: { ...endpoint, token: resolved.accessToken } };
+  if (isKimiCodeInstall(install)) return install;
+  const account = localCredentialSnapshot("kimi");
+  return account ? { baseUrl: account.baseUrl, models: account.models } : null;
 }
 
 /**
@@ -189,6 +176,9 @@ export async function authorizeLocalEndpoint(
 export function getKimiCodeUnavailableReason(): { reason: string; detail: string } | null {
   const kimi = currentKimiInstall();
   if (isKimiCodeInstall(kimi) || kimi.reason === "no_install") return null;
+  // The workspace's own Kimi connection already serves Kimi here — the CLI's signed-out
+  // login is then nothing the person needs to act on.
+  if (localCredentialSnapshot("kimi")) return null;
   return { reason: kimi.reason, detail: kimi.detail };
 }
 

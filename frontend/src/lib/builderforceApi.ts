@@ -120,10 +120,13 @@ export const toolsApi = {
 
   /** Run a system audit against a project (manager+): scores + records a report,
    *  notifies the user, and files the agent remediation ticket. */
-  runAudit: (auditId: string, projectId: number): Promise<AuditRunOutcome> =>
-    request<AuditRunOutcome>(`/api/tools/audits/${encodeURIComponent(auditId)}/run`, {
-      method: 'POST', body: JSON.stringify({ projectId }),
-    }),
+  runAudit: async (auditId: string, projectId: number): Promise<AuditRunOutcome> => {
+    const result = await request<AuditRunOutcome>(`/api/tools/audits/${encodeURIComponent(auditId)}/run`, {
+      method: 'POST', body: JSON.stringify({ projectId, executor: 'cloud', source: { surface: 'web', trigger: 'manual' } }),
+    });
+    if (result.dispatch?.refusal) throw new Error(result.dispatch.refusal.message);
+    return result;
+  },
 };
 
 // ---------------------------------------------------------------------------

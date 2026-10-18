@@ -17,6 +17,7 @@ COPY server.mjs ./
 # runner inlines this SAME file (via the generated agentRelaySource.ts), so both image
 # surfaces execute one implementation rather than two transcriptions of it.
 COPY agentRelay.mjs ./
+COPY codeAnalysis.mjs ./
 # THE agent loop: the shared kernel (@builderforce/agent-loop, compiled into agentLoop.mjs
 # by api/scripts/gen-agent-loop-bundle.mjs, drift-checked by check:agent-loop) and the
 # image semantics on its hooks. The Actions runner inlines the SAME two files.

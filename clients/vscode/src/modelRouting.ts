@@ -46,13 +46,13 @@ import {
   type LocalRuntimeProbe,
 } from "@builderforce/local-inference";
 import {
-  authorizeLocalEndpoint,
   complete,
   getApiKey,
   getBaseUrl,
   getLocalModelsConfig,
   type ChatMessage,
 } from "./gateway";
+import { authorizeLocalEndpoint } from "./localEndpointAuth";
 import { probeLocalFirstRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeBrainRun";
@@ -94,16 +94,18 @@ export async function resolveModelRoute(secrets: vscode.SecretStorage): Promise<
   // than failing — exactly like a pin whose runtime was removed.
   const page = pageRuntimePin(choice.model);
   if (page) return hostPageEngines.connected() ? { ...choice, local: page } : choice;
-  // A pin can outlive the thing it points at — a Kimi install signed out since the model
-  // was chosen, an on-device runtime removed from settings. No endpoint means no local
-  // route, so the turn falls back to the gateway rather than dispatching at `undefined`.
+  // A pin can outlive the thing it points at — an on-device runtime removed from
+  // settings. No endpoint means no local route, so the turn falls back to the gateway
+  // rather than dispatching at `undefined`. Kimi is the exception: its endpoint comes
+  // WITH its credential, so a Kimi pin with nothing on this machine yet still goes to the
+  // authorizer — which offers to connect the account instead of quietly swapping models.
   const endpoint = config.endpoints[pin.provider];
-  if (!endpoint) return choice;
+  if (!endpoint && pin.provider !== "kimi-code") return choice;
   // Credential resolved HERE, once per turn, because it is the last async moment before
   // the transport is built — `routeStream` is synchronous by design and a fifteen-minute
   // Kimi token cannot be refreshed from inside it. A provider that cannot authorize falls
   // back to the gateway rather than dispatching a request that is certain to 401.
-  const authorized = await authorizeLocalEndpoint(pin.provider, endpoint);
+  const authorized = await authorizeLocalEndpoint(pin.provider, endpoint, secrets);
   if (!authorized.ok) return choice;
   return { ...choice, local: { ...pin, endpoint: authorized.endpoint } };
 }

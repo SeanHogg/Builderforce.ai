@@ -88,5 +88,8 @@
   "command.refreshHealth": "Zustand aktualisieren",
   "command.archiveTask": "BuilderForce: Aufgabe archivieren",
   "command.unarchiveTask": "BuilderForce: Archivierte Aufgabe wiederherstellen",
-  "command.deleteTask": "BuilderForce: Aufgabe löschen"
+  "command.deleteTask": "BuilderForce: Aufgabe löschen",
+  "config.audits.atStartup": "Ausgewählte Audits beim Öffnen dieses Arbeitsbereichs in Hintergrundchats ausführen.",
+  "config.audits.atClose": "Ausgewählte Audits beim Schließen in der Cloud ausführen. Verwendet das verbundene Repository; lokale Änderungen werden nicht hochgeladen. Unterbrochene Anfragen werden beim nächsten Start wiederholt.",
+  "config.audits.selected": "Audittypen für Start und Schließen."
 }

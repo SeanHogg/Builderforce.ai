@@ -381,6 +381,14 @@ export interface VendorModelEntry {
 export interface VendorFlagships {
   agentic: string;
   chat: string;
+  /**
+   * Stronger coders this vendor serves only on SOME plans, as routed ids. They are never
+   * the default lead — a lower-tier account would answer them with a refusal the cascade
+   * reads as a bad credential — but a tenant who selects one (provider model choice) is
+   * running a real coder, and coder recognition must say so rather than reporting the run
+   * as degraded onto a backstop.
+   */
+  gatedCoders?: readonly string[];
 }
 
 export interface VendorModule {

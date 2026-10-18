@@ -33,7 +33,7 @@ export interface GitApiChange {
 }
 
 export interface GitApiRepositoryState {
-  HEAD?: { name?: string; ahead?: number; behind?: number };
+  HEAD?: { name?: string; commit?: string; ahead?: number; behind?: number };
   remotes: { name: string; fetchUrl?: string; pushUrl?: string }[];
   workingTreeChanges: GitApiChange[];
   indexChanges: GitApiChange[];

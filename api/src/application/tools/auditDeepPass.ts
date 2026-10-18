@@ -181,12 +181,15 @@ export async function applyAuditFindings(
     auditId: string;
     findings: readonly AuditFinding[];
     createdBy?: string | null;
+    baseline?: ToolResult;
+    audit?: ToolResult['audit'];
+    codeAnalysis?: ToolResult['codeAnalysis'];
   },
 ): Promise<SavedToolRun | null> {
   const audit = getSystemAudit(args.auditId);
   if (!audit) return null;
 
-  const [previous] = await db
+  const [previous] = args.baseline ? [{ result: args.baseline }] : await db
     .select({ result: toolRuns.result })
     .from(toolRuns)
     .where(and(
@@ -204,11 +207,11 @@ export async function applyAuditFindings(
     tenantId: args.tenantId,
     projectId: args.projectId,
     toolId: audit.id,
-    result: mergeAuditFindings(
+    result: { ...mergeAuditFindings(
       { ...base, metrics: base.metrics ?? [], recommendations: base.recommendations ?? [] },
       args.findings,
       { auditName: audit.name },
-    ),
+    ), ...(args.audit ? { audit: args.audit } : {}), ...(args.codeAnalysis ? { codeAnalysis: args.codeAnalysis } : {}) },
     createdBy: args.createdBy ?? null,
   });
 }

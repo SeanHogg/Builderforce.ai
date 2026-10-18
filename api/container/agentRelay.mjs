@@ -78,6 +78,7 @@ export const IMAGE_LOCAL_TOOL_NAMES = [
   'read_file',
   'write_file',
   'run_command',
+  'analyze_codebase',
   'git_status',
   'git_diff',
   'git_history',

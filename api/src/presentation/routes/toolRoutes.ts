@@ -8,15 +8,33 @@ import type { ToolService } from '../../application/tools/ToolService';
 import type { AuditRunner } from '../../application/tools/AuditRunner';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { listSystemAudits } from '../../application/tools/systemAudits';
+import { CodeAnalysisSchema } from '../../application/tools/codeAnalysisSchema';
 import { isMaturityFrameworkId, listMaturityFrameworks, type MaturityFrameworkId } from '../../application/tools/maturityFrameworks';
 import { toolLocaleFromHeaders, type ToolLocale } from '../../application/tools/toolMessages';
 import { headerHints } from '../../application/email/emailLocaleResolver';
-import { maybeAutoRunOnLaneEntry } from '../../application/swimlane/laneEntryTrigger';
+import { dispatchCloudRunForTask, dispatchError } from '../../application/runtime/dispatchCloudRun';
+import { humanDirected, stampExecutionAuthority } from '../../application/runtime/executionAuthority';
+import { and, desc, eq, inArray } from 'drizzle-orm';
+import { systemAuditRuns, projects } from '../../infrastructure/database/schema';
+import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { daysParam } from './queryParams';
-import { parseBody, parseOptionalBody, z, zNumberLike } from './requestBody';
+import { parseBody, parseOptionalBody, z } from './requestBody';
 
-/** `projectId` is `Number()`d and answered with the handler's own "projectId is required". */
-const RunAuditBody = z.object({ projectId: zNumberLike.nullish() });
+/** Shared execution request; omitted executor selects the cloud path. */
+const RunAuditBody = z.object({
+  projectId: z.coerce.number().int().positive(),
+  executor: z.enum(['local', 'cloud']).default('cloud'),
+  requestId: z.string().uuid().optional(),
+  source: z.object({ surface: z.enum(['web', 'vsix', 'rovr']).optional(), branch: z.string().max(255).optional(), commit: z.string().max(64).optional(), dirty: z.boolean().optional(), trigger: z.enum(['manual', 'startup', 'close']).optional() }).optional(),
+});
+const FindingsBody = z.object({
+  analysis: CodeAnalysisSchema.optional(),
+  projectId: z.coerce.number().int().positive(), runId: z.string().uuid().optional(),
+  findings: z.array(z.object({ title: z.string().min(1).max(500), detail: z.string().max(20000).nullish(),
+    severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).default('medium'),
+    location: z.string().max(2000).nullish(), recommendation: z.string().max(20000).nullish(),
+  })).max(500),
+});
 /** The scored answers: question / field id → the number picked. */
 const zScoreInput = z.record(z.string(), z.number());
 const ComputeBody = z.object({ input: zScoreInput.nullish() });
@@ -95,9 +113,7 @@ export function createToolRoutes(
   // segment wins over the param. Powers the framework toggle on the diagnostic.
   router.get('/maturity-frameworks', (c) => c.json({ frameworks: listMaturityFrameworks() }));
 
-  // Run an audit against a project: scores a report (deterministic), records it
-  // as a project diagnostic, notifies the user, and files the agent remediation
-  // ticket (best-effort). Manager+.
+  // Record the provisional score and tracked run, then dispatch source review. Manager+.
   router.post('/audits/:auditId/run', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
@@ -106,21 +122,41 @@ export function createToolRoutes(
     const projectId = Number(body.projectId);
     if (!Number.isFinite(projectId)) return c.json({ error: 'projectId is required' }, 400);
 
+    const dispatchRun = async (runId: string, taskId: number) => {
+      const dispatch = await dispatchCloudRunForTask(c.env as Env, db, runtimeService,
+        (p) => c.executionCtx.waitUntil(p), {
+          tenantId, taskId, submittedBy: userId,
+          force: body.source?.trigger !== 'startup' && body.source?.trigger !== 'close',
+          payload: stampExecutionAuthority(JSON.stringify({ auditRunId: runId }),
+            humanDirected(userId, `Selected audit (${body.source?.trigger ?? 'manual'})`)),
+        }).catch(dispatchError);
+      await auditRunner.setRunStatus(tenantId, runId, dispatch.executionId ? 'running' : 'blocked', dispatch.refusal?.message ?? null);
+      if (dispatch.executionId) await auditRunner.bindExecution(tenantId, runId, dispatch.executionId);
+      return dispatch;
+    };
+
+    if (body.requestId) {
+      const prior = await auditRunner.getRun(tenantId, projectId, body.requestId);
+      if (prior) {
+        if (prior.auditId !== auditId || prior.executor !== body.executor) return c.json({ error: 'Request id belongs to another audit' }, 409);
+        if (['queued', 'blocked', 'failed'].includes(prior.status) && prior.taskId && prior.executor === 'cloud') {
+          const dispatch = await dispatchRun(prior.id, prior.taskId);
+          return c.json({ started: true, runId: prior.id, executor: prior.executor, briefing: '', dispatch });
+        }
+        if (prior.status === 'failed' || prior.status === 'queued') return c.json({ error: prior.error ?? 'Audit setup is incomplete; start a new audit' }, 409);
+        return c.json({ started: true, runId: prior.id, executor: prior.executor, briefing: '' });
+      }
+    }
+
     const secret = integrationCredentialSecret(c.env);
-    const outcome = await auditRunner.runAudit(c.env as Env, { tenantId, projectId, auditId, userId, secret });
+    const outcome = await auditRunner.runAudit(c.env as Env, { tenantId, projectId, auditId, userId, secret, executor: body.executor, source: body.source, requestId: body.requestId });
     if (!outcome) return c.json({ error: 'Unknown audit' }, 404);
 
-    // Fire the existing lane-autorun trigger for every remediation ticket filed
-    // (one per gap when the audit is ticketPerFinding, else the single bundled
-    // ticket). Kept alive past the response via waitUntil, exactly like taskRoutes.
-    const remediationTasks = outcome.agentTasks ?? (outcome.agentTask ? [outcome.agentTask] : []);
-    for (const task of remediationTasks) {
-      c.executionCtx.waitUntil(
-        maybeAutoRunOnLaneEntry(c.env as Env, db, runtimeService, {
-          tenantId, projectId, taskId: task.taskId, status: task.status, submittedBy: userId,
-        }).catch(() => false),
-      );
+    if (outcome.executor === 'cloud' && outcome.agentTask) {
+      const dispatch = await dispatchRun(outcome.runId, outcome.agentTask.taskId);
+      return c.json({ ...outcome, dispatch }, 201);
     }
+    await auditRunner.setRunStatus(tenantId, outcome.runId, 'running');
     return c.json(outcome, 201);
   });
 
@@ -129,6 +165,33 @@ export function createToolRoutes(
   //    readiness, remediation status) are viewer-safe: every workspace member,
   //    not just managers, sees their project's diagnostics strip. (Running an
   //    audit + the raw finding tickets remain manager/role-gated elsewhere.) ────
+  router.get('/audits/:auditId/runs/:runId', authMiddleware, requireRole(TenantRole.VIEWER), async (c) => {
+    const projectId = Number(c.req.query('projectId'));
+    const runId = z.string().uuid().safeParse(c.req.param('runId'));
+    if (!Number.isSafeInteger(projectId) || projectId < 1 || !runId.success) return c.json({ error: 'Invalid run or project' }, 400);
+    const run = await auditRunner.getRun(c.get('tenantId') as number, projectId, runId.data);
+    return run && run.auditId === c.req.param('auditId') ? c.json({ run }) : c.json({ error: 'Audit run not found' }, 404);
+  });
+
+  router.post('/audits/:auditId/findings', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
+    const body = await parseBody(c, FindingsBody);
+    const tenantId = c.get('tenantId') as number;
+    const auditId = c.req.param('auditId');
+    await loadProjectInTenant(db, tenantId, body.projectId, { id: projects.id });
+    let runId = body.runId;
+    if (!runId) {
+      const active = await db.select({ id: systemAuditRuns.id }).from(systemAuditRuns).where(and(
+        eq(systemAuditRuns.tenantId, tenantId), eq(systemAuditRuns.projectId, body.projectId), eq(systemAuditRuns.auditId, auditId),
+        inArray(systemAuditRuns.status, ['running', 'queued', 'remediation_pending']),
+      )).orderBy(desc(systemAuditRuns.createdAt)).limit(2);
+      if (active.length !== 1) return c.json({ error: 'Supply runId to identify the audit run' }, 409);
+      runId = active[0]!.id;
+    }
+    const outcome = await auditRunner.reportFindings(c.env as Env, {
+      tenantId, projectId: body.projectId, auditId, runId, findings: body.findings, ...(body.analysis ? { analysis: body.analysis } : {}), userId: c.get('userId') as string,
+    });
+    return outcome ? c.json(outcome) : c.json({ error: 'Audit run not found' }, 404);
+  });
   router.get('/rollup', authMiddleware, requireRole(TenantRole.VIEWER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     return c.json(await toolService.getTenantRollup(c.env as Env, tenantId));
