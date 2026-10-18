@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.50] — Diagnostics name the host and the engine
+
+- **A copied diagnostics report names which install produced it.** The header now says web, VSIX, or Rovr, and that install's version, instead of only the web bundle. A paste from this extension carries `2026.10.50`.
+- **The Agent Execution Engine is named.** The report stamps `builderforce-v3` with the API deploy it shipped in, plus the embedded Brain and the in-browser runtime the canvas turn actually ran.
+
 ## [2026.10.49] — A message in one chat stays in that chat
 
 - **Fixed: a message steered into one chat could restart another chat that was running alongside it.** When you switched the panel from one running chat to another, the new chat could pick up the last message you typed in the old one and start a run on it. An "only do analysis" sent in one chat stopped a second chat's sub-agents. Each chat now only ever reads its own messages, and a message already steered into a live run is never sent again as a new turn.
