@@ -72,9 +72,9 @@ export interface InitData {
   pendingChanges?: PendingChangeSet;
   /** Which screen this webview should render. The bundled React app is multi-screen:
    *  the host decides via `init` which surface this panel is — the Brain chat (default),
-   *  Project 360, or a list-shaped project page (Backlog / PRDs) — same bundle, same
-   *  transport, one code path. */
-  view?: 'workspace' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker' | 'evermind';
+   *  Project 360, a list-shaped project page (Backlog / PRDs), the Evermind console, or the
+   *  split-view Visualization board — same bundle, same transport, one code path. */
+  view?: 'workspace' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker' | 'evermind' | 'visualization';
   /**
    * Which SURFACE the workspace opens at — the difference between "open my chat" and
    * "open my canvas", which used to be the difference between two panels.

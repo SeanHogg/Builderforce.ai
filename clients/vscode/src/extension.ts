@@ -40,6 +40,7 @@ import { confirmChatDelete } from "./chatDeletion";
 import { registerTaskActions } from "./taskActions";
 import { ClosedTasksTreeProvider } from "./closedTasksTree";
 import { createVsCodeRunHost } from "./brainRunHostPorts";
+import { AuditExecution } from "./auditExecution";
 import { appUrl } from "./auth";
 import { MeetingsTreeProvider, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
 import { ProjectContextTreeProvider } from "./projectContextTree";
@@ -54,6 +55,7 @@ import { bindOutboxStorage, durableStepHost } from "./outboxStorage";
 // Project 360, the project pages, the Evermind sidebar view) — only its `<title>`
 // differs. Used by the Visualization panel.
 import { renderWebviewHtml } from "./webviewShared";
+import { VisualizationPanel } from "./visualizationPanel";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 /**
@@ -304,29 +306,20 @@ export function activate(context: vscode.ExtensionContext): void {
   // wiring are identical; only the `<title>` differs.
   context.subscriptions.push(
     vscode.commands.registerCommand("builderforce.openVisualization", () => {
-      const panel = vscode.window.createWebviewPanel(
-        "builderforce.visualization",
-        "BuilderForce Visualization",
-        vscode.ViewColumn.Beside,
-        {
-          enableScripts: true,
-          retainContextWhenHidden: true,
-          localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "media")],
-        },
-      );
-      panel.iconPath = vscode.Uri.joinPath(context.extensionUri, "media", "icon.png");
-      panel.webview.html = renderWebviewHtml(panel.webview, context, { title: "BuilderForce Visualization" });
-      // The panel is disposable on its own; registering it keeps it out of the leak
-      // the extension context would otherwise inherit when the host tears down.
-      context.subscriptions.push(panel);
-      return panel;
+      // The class, not an inline `createWebviewPanel`: the webview posts `ready` at
+      // module load, and only a panel that ANSWERS it ever leaves the boot screen.
+      // See `src/visualizationPanel.ts` for what was broken before this existed.
+      VisualizationPanel.open(context, runHost);
     }),
   );
 
   // Security & compliance Diagnostics — SOC 2, Architecture, Quality, and Privacy
   // & Data-Law audits run against the active project's repos, from the sidebar.
-  diagnostics = new DiagnosticsController(context);
+  // Audits run as Brain runs on the ONE run host, so they show in the panel like any chat.
+  auditExecution = new AuditExecution(context, runHost);
+  diagnostics = new DiagnosticsController(context, auditExecution);
   context.subscriptions.push(
+    auditExecution,
     diagnostics,
     vscode.commands.registerCommand("builderforce.refreshDiagnostics", () => diagnostics?.refresh()),
     vscode.commands.registerCommand("builderforce.runDiagnostic", (row) => diagnostics?.run(row)),
@@ -1140,8 +1133,10 @@ async function reviewHumanRequests(
   }
 }
 
-export function deactivate(): void {
-  /* no-op */
+let auditExecution: AuditExecution | undefined;
+
+export async function deactivate(): Promise<void> {
+  await auditExecution?.flushClose();
 }
 
 /** Re-push every auth-gated surface after sign-in/out. Evermind and the Brain

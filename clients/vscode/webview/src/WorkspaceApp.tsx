@@ -48,6 +48,7 @@ import { VsCodeChatSurface } from './chat/VsCodeChatSurface';
 import { Project360Screen } from './Project360Screen';
 import { ProjectPageScreen } from './ProjectPageScreen';
 import { EvermindScreen } from './EvermindScreen';
+import { VisualizationPanel } from './visualization/VisualizationPanel';
 
 const LOCALES = ['en', 'zh', 'es', 'fr', 'de'] as const;
 type CanvasLocale = (typeof LOCALES)[number];
@@ -134,6 +135,7 @@ export function WorkspaceApp() {
 
   // The destinations that are not a board. Same bundle, same transport, no Brain
   // providers — they fetch their own data, exactly as they did before the merge.
+  if (init.view === 'visualization') return <VisualizationScreen init={init} />;
   if (init.view === 'project360') return <Project360Screen init={init} />;
   if (init.view === 'evermind') return <EvermindScreen init={init} />;
   if (init.view === 'backlog' || init.view === 'prd' || init.view === 'roadmap' || init.view === 'retros' || init.view === 'poker') {
@@ -341,4 +343,58 @@ function HostRunBridge() {
     };
   }, []);
   return null;
+}
+
+/**
+ * The VISUALIZATION panel — the right-hand half of the chat split (AC3/AC4/AC5).
+ *
+ * Same bundle, same transport, same init frame as the chat panel; the host only
+ * changes `init.view`. Nothing here re-implements the canvas: the SAME
+ * `CreationCanvas` is mounted with the SAME props `WorkspaceScreen` gives it, and
+ * the panel receives it as `children` so there is exactly one canvas on screen
+ * and no second copy to drift.
+ *
+ * The difference is what surrounds it. `WorkspaceScreen` passes the conversation
+ * as a canvas `hostSurface` — the chat behind the board. This panel passes none:
+ * the conversation stays in the LEFT panel (AC2), and this one is the board plus
+ * the run's changes. That is the whole split.
+ *
+ * The panel itself owns the canvas⇄changes toggle and the run-frame subscription
+ * (`VisualizationPanel` subscribes to `run.tool` / `run.sync` / `run.settled`
+ * itself and reads the pending working tree off the shared bridge), so this
+ * screen has no run state to thread.
+ */
+function VisualizationScreen({ init }: { init: InitData }) {
+  const session = init.session;
+
+  // A board with no account behind it cannot be written to the gateway — every read
+  // would 401 — so it persists in this panel, exactly as the chat surface's does.
+  // Signed out, the panel still mounts: the canvas is where an on-device user works.
+  const canvas = session ? (
+    <HostScopeProviders projectId={init.project?.id ?? null}>
+      <CreationCanvas
+        sessionId={session.id}
+        persistence={session.durable === false ? 'local' : 'server'}
+        initialSurface={sanitizeCanvasSurface(init.surface)}
+        // NO hostSurfaces: the chat is not drawn here. The panel owns the frame.
+        hostSurfaces={{}}
+      />
+    </HostScopeProviders>
+  ) : null;
+
+  // The fallback keeps the panel ALIVE on a failure: no board is drawn, but the
+  // user is still in a working panel rather than a dead frame — and the change
+  // tree (which the panel renders around the canvas) is unaffected by a canvas
+  // crash, which is exactly what the tree is for.
+  return (
+    <CanvasBoundary
+      fallback={<div className="bf-center">{init.labels['canvas.degraded'] ?? 'The board could not be drawn.'}</div>}
+      notice={init.labels['canvas.degraded'] ?? 'The board could not be drawn.'}
+      retryLabel={init.labels['canvas.retry'] ?? 'Try again'}
+    >
+      <VisualizationPanel labels={init.labels} chatId={init.chatId}>
+        {canvas}
+      </VisualizationPanel>
+    </CanvasBoundary>
+  );
 }
