@@ -601,7 +601,7 @@ export async function applyNonInteractiveAuthChoice(params: {
       mode: "api_key",
     });
     const modelId =
-      authChoice === "minimax-api-lightning" ? "MiniMax-M2.5-Lightning" : "MiniMax-M2.5";
+      authChoice === "minimax-api-lightning" ? "MiniMax-M2.7-highspeed" : "MiniMax-M3";
     return isCn
       ? applyMinimaxApiConfigCn(nextConfig, modelId)
       : applyMinimaxApiConfig(nextConfig, modelId);

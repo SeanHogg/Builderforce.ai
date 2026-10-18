@@ -259,7 +259,7 @@ describe("applyMinimaxApiConfig", () => {
     expect(cfg.models?.providers?.minimax?.apiKey).toBe("old-key");
     expect(cfg.models?.providers?.minimax?.models.map((m) => m.id)).toEqual([
       "old-model",
-      "MiniMax-M2.5",
+      "MiniMax-M3",
     ]);
   });
 
@@ -444,7 +444,7 @@ describe("applyXaiProviderConfig", () => {
     expect(cfg.models?.providers?.xai?.baseUrl).toBe("https://api.x.ai/v1");
     expect(cfg.models?.providers?.xai?.api).toBe("openai-completions");
     expect(cfg.models?.providers?.xai?.apiKey).toBe("old-key");
-    expect(cfg.models?.providers?.xai?.models.map((m) => m.id)).toEqual(["custom-model", "grok-4"]);
+    expect(cfg.models?.providers?.xai?.models.map((m) => m.id)).toEqual(["custom-model", "grok-4.7"]);
   });
 });
 

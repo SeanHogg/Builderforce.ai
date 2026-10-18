@@ -104,10 +104,10 @@ const SPECS: ReadonlyArray<VendorSpec> = [
   {
     id: 'xai', brand: 'xAI', apiKeyEnv: 'XAI_API_KEY',
     baseUrl: 'https://api.x.ai/v1/chat/completions',
-    // The same ids the SuperGrok subscription route (xaiOAuth) catalogues ULTRA: grok-4.6
-    // (xAI's current flagship) leads, grok-4.5 stays routable for a pinned choice.
-    models: ['ULTRA:grok-4.6', 'ULTRA:grok-4.5', 'grok-4.3', 'grok-3', 'grok-3-mini'],
-    flagships: { agentic: 'grok-4.6', chat: 'grok-4.6' },
+    // The same ids the SuperGrok subscription route (xaiOAuth) catalogues ULTRA: grok-4.7
+    // (xAI's current flagship) leads, grok-4.6 stays routable for a pinned choice.
+    models: ['ULTRA:grok-4.7', 'ULTRA:grok-4.6', 'ULTRA:grok-4.5', 'grok-4.3', 'grok-3', 'grok-3-mini'],
+    flagships: { agentic: 'grok-4.7', chat: 'grok-4.7' },
   },
   {
     id: 'perplexity', brand: 'Perplexity', apiKeyEnv: 'PERPLEXITY_API_KEY',
@@ -272,13 +272,30 @@ const SPECS: ReadonlyArray<VendorSpec> = [
   {
     id: 'minimax', brand: 'MiniMax', apiKeyEnv: 'MINIMAX_API_KEY',
     baseUrl: 'https://api.minimax.io/v1/chat/completions',
-    models: ['MiniMax-M1', 'MiniMax-Text-01'],
-    // Both are TEXT-only (MiniMax's vision model is the separate `MiniMax-VL-01`):
-    // image parts sent to M1 answer `invalid params, MiniMax-M1 not support img (2013)`
-    // — 31 refusals in 2026-10-03..10. Declaring the set lets the dispatcher skip them
-    // for image-bearing requests instead of spending the attempt.
-    modelCapabilities: { 'MiniMax-M1': ['tools'], 'MiniMax-Text-01': ['tools'] },
-    flagships: { agentic: 'MiniMax-M1', chat: 'MiniMax-Text-01' },
+    models: [
+      'MiniMax-M3.1-Flash-Preview',
+      'MiniMax-M3',
+      'MiniMax-M2.7',
+      'MiniMax-M2.7-highspeed',
+      'MiniMax-M2.5',
+      'MiniMax-M1',
+      'MiniMax-Text-01',
+    ],
+    // M3 / M3.1-Flash-Preview are multimodal. M1 and Text-01 stay TEXT-only
+    // (MiniMax's dedicated vision model is `MiniMax-VL-01`): image parts sent to M1
+    // answer `invalid params, MiniMax-M1 not support img (2013)` — 31 refusals in
+    // 2026-10-03..10. Declaring the set lets the dispatcher skip TEXT-only ids for
+    // image-bearing requests instead of spending the attempt.
+    modelCapabilities: {
+      'MiniMax-M3.1-Flash-Preview': ['tools', 'vision'],
+      'MiniMax-M3': ['tools', 'vision'],
+      'MiniMax-M2.7': ['tools'],
+      'MiniMax-M2.7-highspeed': ['tools'],
+      'MiniMax-M2.5': ['tools'],
+      'MiniMax-M1': ['tools'],
+      'MiniMax-Text-01': ['tools'],
+    },
+    flagships: { agentic: 'MiniMax-M3.1-Flash-Preview', chat: 'MiniMax-M3' },
   },
   {
     // Cohere ships an OpenAI-compatible endpoint (`/compatibility/v1`) alongside

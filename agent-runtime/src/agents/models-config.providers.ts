@@ -35,9 +35,9 @@ type ModelsConfig = NonNullable<BuilderForceAgentsConfig["models"]>;
 export type ProviderConfig = NonNullable<ModelsConfig["providers"]>[string];
 
 const MINIMAX_PORTAL_BASE_URL = "https://api.minimax.io/anthropic";
-const MINIMAX_DEFAULT_MODEL_ID = "MiniMax-M2.1";
+const MINIMAX_DEFAULT_MODEL_ID = "MiniMax-M3";
 const MINIMAX_DEFAULT_VISION_MODEL_ID = "MiniMax-VL-01";
-const MINIMAX_DEFAULT_CONTEXT_WINDOW = 200000;
+const MINIMAX_DEFAULT_CONTEXT_WINDOW = 204800;
 const MINIMAX_DEFAULT_MAX_TOKENS = 8192;
 const MINIMAX_OAUTH_PLACEHOLDER = "minimax-oauth";
 // Pricing: MiniMax doesn't publish public rates. Override in models.json for accurate costs.
@@ -55,6 +55,7 @@ function buildMinimaxModel(params: {
   name: string;
   reasoning: boolean;
   input: ProviderModelConfig["input"];
+  contextWindow?: number;
 }): ProviderModelConfig {
   return {
     id: params.id,
@@ -62,7 +63,7 @@ function buildMinimaxModel(params: {
     reasoning: params.reasoning,
     input: params.input,
     cost: MINIMAX_API_COST,
-    contextWindow: MINIMAX_DEFAULT_CONTEXT_WINDOW,
+    contextWindow: params.contextWindow ?? MINIMAX_DEFAULT_CONTEXT_WINDOW,
     maxTokens: MINIMAX_DEFAULT_MAX_TOKENS,
   };
 }
@@ -71,6 +72,7 @@ function buildMinimaxTextModel(params: {
   id: string;
   name: string;
   reasoning: boolean;
+  contextWindow?: number;
 }): ProviderModelConfig {
   return buildMinimaxModel({ ...params, input: ["text"] });
 }
@@ -442,31 +444,43 @@ function buildMinimaxProvider(): ProviderConfig {
     baseUrl: MINIMAX_PORTAL_BASE_URL,
     api: "anthropic-messages",
     models: [
-      buildMinimaxTextModel({
+      buildMinimaxModel({
+        id: "MiniMax-M3.1-Flash-Preview",
+        name: "MiniMax M3.1 Flash Preview",
+        reasoning: true,
+        input: ["text", "image"],
+        contextWindow: 1_000_000,
+      }),
+      buildMinimaxModel({
         id: MINIMAX_DEFAULT_MODEL_ID,
-        name: "MiniMax M2.1",
-        reasoning: false,
+        name: "MiniMax M3",
+        reasoning: true,
+        input: ["text", "image"],
+        contextWindow: 1_000_000,
       }),
       buildMinimaxTextModel({
-        id: "MiniMax-M2.1-lightning",
-        name: "MiniMax M2.1 Lightning",
-        reasoning: false,
+        id: "MiniMax-M2.7",
+        name: "MiniMax M2.7",
+        reasoning: true,
+        contextWindow: 204_800,
+      }),
+      buildMinimaxTextModel({
+        id: "MiniMax-M2.7-highspeed",
+        name: "MiniMax M2.7 Highspeed",
+        reasoning: true,
+        contextWindow: 204_800,
+      }),
+      buildMinimaxTextModel({
+        id: "MiniMax-M2.5",
+        name: "MiniMax M2.5",
+        reasoning: true,
+        contextWindow: 204_800,
       }),
       buildMinimaxModel({
         id: MINIMAX_DEFAULT_VISION_MODEL_ID,
         name: "MiniMax VL 01",
         reasoning: false,
         input: ["text", "image"],
-      }),
-      buildMinimaxTextModel({
-        id: "MiniMax-M2.5",
-        name: "MiniMax M2.5",
-        reasoning: true,
-      }),
-      buildMinimaxTextModel({
-        id: "MiniMax-M2.5-Lightning",
-        name: "MiniMax M2.5 Lightning",
-        reasoning: true,
       }),
     ],
   };
@@ -477,15 +491,37 @@ function buildMinimaxPortalProvider(): ProviderConfig {
     baseUrl: MINIMAX_PORTAL_BASE_URL,
     api: "anthropic-messages",
     models: [
-      buildMinimaxTextModel({
+      buildMinimaxModel({
+        id: "MiniMax-M3.1-Flash-Preview",
+        name: "MiniMax M3.1 Flash Preview",
+        reasoning: true,
+        input: ["text", "image"],
+        contextWindow: 1_000_000,
+      }),
+      buildMinimaxModel({
         id: MINIMAX_DEFAULT_MODEL_ID,
-        name: "MiniMax M2.1",
-        reasoning: false,
+        name: "MiniMax M3",
+        reasoning: true,
+        input: ["text", "image"],
+        contextWindow: 1_000_000,
+      }),
+      buildMinimaxTextModel({
+        id: "MiniMax-M2.7",
+        name: "MiniMax M2.7",
+        reasoning: true,
+        contextWindow: 204_800,
+      }),
+      buildMinimaxTextModel({
+        id: "MiniMax-M2.7-highspeed",
+        name: "MiniMax M2.7 Highspeed",
+        reasoning: true,
+        contextWindow: 204_800,
       }),
       buildMinimaxTextModel({
         id: "MiniMax-M2.5",
         name: "MiniMax M2.5",
         reasoning: true,
+        contextWindow: 204_800,
       }),
     ],
   };

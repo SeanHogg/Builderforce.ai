@@ -528,7 +528,13 @@
         "minimax/minimax-m2.7": {
           "tools": true
         },
+        "minimax/minimax-m2.7-highspeed": {
+          "tools": true
+        },
         "minimax/minimax-m3": {
+          "tools": true
+        },
+        "minimax/minimax-m3.1-flash-preview": {
           "tools": true
         },
         "mistralai/codestral-2508": {

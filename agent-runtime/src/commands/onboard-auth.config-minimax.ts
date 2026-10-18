@@ -11,6 +11,7 @@ import {
   DEFAULT_MINIMAX_CONTEXT_WINDOW,
   DEFAULT_MINIMAX_MAX_TOKENS,
   MINIMAX_API_BASE_URL,
+  MINIMAX_API_DEFAULT_MODEL_ID,
   MINIMAX_CN_API_BASE_URL,
   MINIMAX_HOSTED_COST,
   MINIMAX_HOSTED_MODEL_ID,
@@ -111,7 +112,7 @@ export function applyMinimaxHostedConfig(
 // MiniMax Anthropic-compatible API (platform.minimax.io/anthropic)
 export function applyMinimaxApiProviderConfig(
   cfg: BuilderForceAgentsConfig,
-  modelId: string = "MiniMax-M2.5",
+  modelId: string = MINIMAX_API_DEFAULT_MODEL_ID,
 ): BuilderForceAgentsConfig {
   return applyMinimaxApiProviderConfigWithBaseUrl(cfg, {
     providerId: "minimax",
@@ -122,7 +123,7 @@ export function applyMinimaxApiProviderConfig(
 
 export function applyMinimaxApiConfig(
   cfg: BuilderForceAgentsConfig,
-  modelId: string = "MiniMax-M2.5",
+  modelId: string = MINIMAX_API_DEFAULT_MODEL_ID,
 ): BuilderForceAgentsConfig {
   return applyMinimaxApiConfigWithBaseUrl(cfg, {
     providerId: "minimax",
@@ -134,7 +135,7 @@ export function applyMinimaxApiConfig(
 // MiniMax China API (api.minimaxi.com)
 export function applyMinimaxApiProviderConfigCn(
   cfg: BuilderForceAgentsConfig,
-  modelId: string = "MiniMax-M2.5",
+  modelId: string = MINIMAX_API_DEFAULT_MODEL_ID,
 ): BuilderForceAgentsConfig {
   return applyMinimaxApiProviderConfigWithBaseUrl(cfg, {
     providerId: "minimax-cn",
@@ -145,7 +146,7 @@ export function applyMinimaxApiProviderConfigCn(
 
 export function applyMinimaxApiConfigCn(
   cfg: BuilderForceAgentsConfig,
-  modelId: string = "MiniMax-M2.5",
+  modelId: string = MINIMAX_API_DEFAULT_MODEL_ID,
 ): BuilderForceAgentsConfig {
   return applyMinimaxApiConfigWithBaseUrl(cfg, {
     providerId: "minimax-cn",

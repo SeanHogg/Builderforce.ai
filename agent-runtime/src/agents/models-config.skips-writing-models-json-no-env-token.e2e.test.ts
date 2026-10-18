@@ -98,7 +98,14 @@ describe("models-config", () => {
         providerKey: "minimax",
         expectedBaseUrl: "https://api.minimax.io/anthropic",
         expectedApiKeyRef: "MINIMAX_API_KEY",
-        expectedModelIds: ["MiniMax-M2.1", "MiniMax-VL-01"],
+        expectedModelIds: [
+          "MiniMax-M3.1-Flash-Preview",
+          "MiniMax-M3",
+          "MiniMax-M2.7",
+          "MiniMax-M2.7-highspeed",
+          "MiniMax-M2.5",
+          "MiniMax-VL-01",
+        ],
       });
     });
   });

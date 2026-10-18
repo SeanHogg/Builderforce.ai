@@ -332,7 +332,7 @@ describe("applyAuthChoice", () => {
       mode: "api_key",
     });
     expect(result.config.agents?.defaults?.model?.primary).toBe("openai/gpt-4o-mini");
-    expect(result.agentModelOverride).toBe("xai/grok-4");
+    expect(result.agentModelOverride).toBe("xai/grok-4.7");
 
     expect((await readAuthProfile("xai:default"))?.key).toBe("sk-xai-test");
   });

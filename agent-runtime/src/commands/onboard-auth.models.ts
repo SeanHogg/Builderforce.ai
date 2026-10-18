@@ -4,9 +4,11 @@ import type { ModelDefinitionConfig } from "../config/types.js";
 export const DEFAULT_MINIMAX_BASE_URL = "https://api.minimax.io/v1";
 export const MINIMAX_API_BASE_URL = "https://api.minimax.io/anthropic";
 export const MINIMAX_CN_API_BASE_URL = "https://api.minimaxi.com/anthropic";
-export const MINIMAX_HOSTED_MODEL_ID = "MiniMax-M2.1";
+export const MINIMAX_HOSTED_MODEL_ID = "MiniMax-M3";
 export const MINIMAX_HOSTED_MODEL_REF = `minimax/${MINIMAX_HOSTED_MODEL_ID}`;
-export const DEFAULT_MINIMAX_CONTEXT_WINDOW = 200000;
+export const MINIMAX_API_DEFAULT_MODEL_ID = "MiniMax-M3";
+export const MINIMAX_API_LIGHTNING_MODEL_ID = "MiniMax-M2.7-highspeed";
+export const DEFAULT_MINIMAX_CONTEXT_WINDOW = 204800;
 export const DEFAULT_MINIMAX_MAX_TOKENS = 8192;
 
 export const MOONSHOT_BASE_URL = "https://api.moonshot.ai/v1";
@@ -76,13 +78,41 @@ export const ZAI_DEFAULT_COST = {
 };
 
 const MINIMAX_MODEL_CATALOG = {
-  "MiniMax-M2.1": { name: "MiniMax M2.1", reasoning: false },
+  "MiniMax-M3.1-Flash-Preview": {
+    name: "MiniMax M3.1 Flash Preview",
+    reasoning: true,
+    contextWindow: 1_000_000,
+    input: ["text", "image"] as const,
+  },
+  "MiniMax-M3": {
+    name: "MiniMax M3",
+    reasoning: true,
+    contextWindow: 1_000_000,
+    input: ["text", "image"] as const,
+  },
+  "MiniMax-M2.7": {
+    name: "MiniMax M2.7",
+    reasoning: true,
+    contextWindow: 204_800,
+  },
+  "MiniMax-M2.7-highspeed": {
+    name: "MiniMax M2.7 Highspeed",
+    reasoning: true,
+    contextWindow: 204_800,
+  },
+  // Older ids stay resolvable so existing configs keep their names/reasoning flags.
+  "MiniMax-M2.5": { name: "MiniMax M2.5", reasoning: true, contextWindow: 204_800 },
+  "MiniMax-M2.5-Lightning": {
+    name: "MiniMax M2.5 Lightning",
+    reasoning: true,
+    contextWindow: 204_800,
+  },
+  "MiniMax-M2.1": { name: "MiniMax M2.1", reasoning: false, contextWindow: 200_000 },
   "MiniMax-M2.1-lightning": {
     name: "MiniMax M2.1 Lightning",
     reasoning: false,
+    contextWindow: 200_000,
   },
-  "MiniMax-M2.5": { name: "MiniMax M2.5", reasoning: true },
-  "MiniMax-M2.5-Lightning": { name: "MiniMax M2.5 Lightning", reasoning: true },
 } as const;
 
 type MinimaxCatalogId = keyof typeof MINIMAX_MODEL_CATALOG;
@@ -109,18 +139,19 @@ export function buildMinimaxModelDefinition(params: {
     id: params.id,
     name: params.name ?? catalog?.name ?? `MiniMax ${params.id}`,
     reasoning: params.reasoning ?? catalog?.reasoning ?? false,
-    input: ["text"],
+    input: catalog && "input" in catalog ? [...catalog.input] : ["text"],
     cost: params.cost,
-    contextWindow: params.contextWindow,
+    contextWindow: catalog?.contextWindow ?? params.contextWindow,
     maxTokens: params.maxTokens,
   };
 }
 
 export function buildMinimaxApiModelDefinition(modelId: string): ModelDefinitionConfig {
+  const catalog = MINIMAX_MODEL_CATALOG[modelId as MinimaxCatalogId];
   return buildMinimaxModelDefinition({
     id: modelId,
     cost: MINIMAX_API_COST,
-    contextWindow: DEFAULT_MINIMAX_CONTEXT_WINDOW,
+    contextWindow: catalog?.contextWindow ?? DEFAULT_MINIMAX_CONTEXT_WINDOW,
     maxTokens: DEFAULT_MINIMAX_MAX_TOKENS,
   });
 }
@@ -158,7 +189,7 @@ export function buildZaiModelDefinition(params: {
 }
 
 export const XAI_BASE_URL = "https://api.x.ai/v1";
-export const XAI_DEFAULT_MODEL_ID = "grok-4";
+export const XAI_DEFAULT_MODEL_ID = "grok-4.7";
 export const XAI_DEFAULT_MODEL_REF = `xai/${XAI_DEFAULT_MODEL_ID}`;
 export const XAI_DEFAULT_CONTEXT_WINDOW = 131072;
 export const XAI_DEFAULT_MAX_TOKENS = 8192;
@@ -172,7 +203,7 @@ export const XAI_DEFAULT_COST = {
 export function buildXaiModelDefinition(): ModelDefinitionConfig {
   return {
     id: XAI_DEFAULT_MODEL_ID,
-    name: "Grok 4",
+    name: "Grok 4.7",
     reasoning: false,
     input: ["text"],
     cost: XAI_DEFAULT_COST,

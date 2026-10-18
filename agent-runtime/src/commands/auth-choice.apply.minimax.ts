@@ -74,7 +74,9 @@ export async function applyAuthChoiceMiniMax(
     params.authChoice === "minimax-api-lightning"
   ) {
     const modelId =
-      params.authChoice === "minimax-api-lightning" ? "MiniMax-M2.5-Lightning" : "MiniMax-M2.5";
+      params.authChoice === "minimax-api-lightning"
+        ? "MiniMax-M2.7-highspeed"
+        : "MiniMax-M3";
     await ensureMinimaxApiKey({
       profileId: "minimax:default",
       promptMessage: "Enter MiniMax API key",
@@ -102,7 +104,7 @@ export async function applyAuthChoiceMiniMax(
   }
 
   if (params.authChoice === "minimax-api-key-cn") {
-    const modelId = "MiniMax-M2.5";
+    const modelId = "MiniMax-M3";
     await ensureMinimaxApiKey({
       profileId: "minimax-cn:default",
       promptMessage: "Enter MiniMax China API key",
