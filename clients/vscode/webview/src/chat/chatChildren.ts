@@ -7,7 +7,7 @@
  */
 
 import { useMemo, useSyncExternalStore } from 'react';
-import { getRunSnapshot, getRunTrace, subscribeRun, type BrainRunActivity, type BrainRunSnapshot, type DirectedRecipient, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
+import { getRunSnapshot, getRunTrace, type BrainRunActivity, type DirectedRecipient, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
 import type { ChatSubagentVM } from '@seanhogg/builderforce-brain-ui';
 import type { ChildView } from '../../../src/childRuns';
 import { post } from '../vscodeBridge';
@@ -71,14 +71,6 @@ export function subagentDiagnosticsOf(chatId: number | null): SubagentDiagnostic
       ...(last ? { lastMessage: last } : {}),
     };
   });
-}
-
-/** One run's live snapshot, by run key — a child's own cell. */
-export function useRunSnapshotOf(runKey: number): BrainRunSnapshot {
-  return useSyncExternalStore(
-    (onChange) => subscribeRun(runKey, onChange),
-    () => getRunSnapshot(runKey),
-  );
 }
 
 /**

@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.49] — A message in one chat stays in that chat
+
+- **Fixed: a message steered into one chat could restart another chat that was running alongside it.** When you switched the panel from one running chat to another, the new chat could pick up the last message you typed in the old one and start a run on it. An "only do analysis" sent in one chat stopped a second chat's sub-agents. Each chat now only ever reads its own messages, and a message already steered into a live run is never sent again as a new turn.
+
 ## [2026.10.31] — Workspace hooks and rules your team commits
 
 - **Tell the agent what to do at the end of every run.** Add `.builderforce/hooks.json` to your repository, for example `{ "hooks": [{ "on": "stop", "prompt": "Update README.md and DONE.md with the work completed." }] }`. Before a run that changed code finishes, the agent does that too, and the result ships in the same commit.

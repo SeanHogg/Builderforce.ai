@@ -984,6 +984,18 @@ var NARRATION_OPENER = new RegExp(
 
 // ../packages/agent-loop/src/turnPhase.ts
 var MID_TURN_META_KEY = "midTurn";
+function isMidTurnMetadata(metadata) {
+  let meta = metadata;
+  if (typeof meta === "string") {
+    if (!meta.includes(MID_TURN_META_KEY)) return false;
+    try {
+      meta = JSON.parse(meta);
+    } catch {
+      return false;
+    }
+  }
+  return typeof meta === "object" && meta !== null && meta[MID_TURN_META_KEY] === true;
+}
 
 // ../packages/agent-loop/src/stepRow.ts
 var STEP_RESULT_CAP = 4e3;
@@ -7450,34 +7462,275 @@ function useArmedNewChat(chats) {
 }
 
 // src/useBrainConversation.ts
+var import_react9 = require("react");
+
+// src/useRunSnapshot.ts
 var import_react8 = require("react");
 
-// src/consolidation.ts
-var CONSOLIDATION_META = { consolidation: true };
-function consolidationMetadata() {
-  return JSON.stringify(CONSOLIDATION_META);
+// src/runDriver.ts
+var installed = null;
+function installRunDriver(driver) {
+  installed = driver;
 }
-function isConsolidationMarker(msg) {
-  if (!msg.metadata) return false;
-  try {
-    return JSON.parse(msg.metadata)?.consolidation === true;
-  } catch {
-    return false;
+function getRunDriver() {
+  return installed;
+}
+
+// src/lastResolvedModel.ts
+var MAX_CHATS = 64;
+var byChat = /* @__PURE__ */ new Map();
+function setLastResolvedModel(chatId, model) {
+  const trimmed = typeof model === "string" ? model.trim() : "";
+  if (!trimmed) return;
+  byChat.delete(chatId);
+  byChat.set(chatId, trimmed);
+  if (byChat.size > MAX_CHATS) {
+    const oldest = byChat.keys().next();
+    if (!oldest.done) byChat.delete(oldest.value);
   }
 }
-function lastConsolidationIndex(messages) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (isConsolidationMarker(messages[i])) return i;
+function getLastResolvedModel(chatId) {
+  return byChat.get(chatId);
+}
+function forgetResolvedModels() {
+  byChat.clear();
+}
+var CURRENT_MODEL_TOOLS = /* @__PURE__ */ new Set(["session.current_model", "builtin_session_current_model"]);
+function withObservedModel(chatId, tool, args) {
+  if (!CURRENT_MODEL_TOOLS.has(tool)) return args;
+  const observed = getLastResolvedModel(chatId);
+  if (!observed) return args;
+  const supplied = args ?? {};
+  if (typeof supplied.model === "string" && supplied.model.trim()) return args;
+  return { ...supplied, model: observed };
+}
+
+// src/runActivity.ts
+var TARGET_KEYS = ["path", "file", "filePath", "command", "cmd", "glob", "query", "q", "search", "url", "name", "title", "id"];
+var MAX_DETAIL = 72;
+function shortenTarget(value, max = MAX_DETAIL) {
+  const v = value.replace(/\s+/g, " ").trim();
+  if (v.length <= max) return v;
+  if (v.includes("/") || v.includes("\\")) return `\u2026${v.slice(v.length - (max - 1))}`;
+  return `${v.slice(0, max - 1)}\u2026`;
+}
+function activityTarget(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
+  const record = args;
+  for (const key of TARGET_KEYS) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return shortenTarget(value);
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
   }
-  return -1;
+  return void 0;
 }
-function scopeToConsolidation(messages) {
-  const idx = lastConsolidationIndex(messages);
-  return idx >= 0 ? messages.slice(idx) : messages;
+var QUESTION_KEYS = ["query", "q", "search", "pattern", "glob", "key"];
+var VISIT_QUESTION_SEPARATOR = " \u220B ";
+function visitTarget(args) {
+  const scope = activityTarget(args);
+  if (!scope) return void 0;
+  const record = args;
+  for (const key of QUESTION_KEYS) {
+    const value = record[key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    const question = shortenTarget(value);
+    return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
+  }
+  return scope;
 }
-var CONSOLIDATION_MARKER_PREFIX = "\u{1F4CC} **Consolidated summary** \u2014 context continues from here.\n\n";
-function consolidationMarkerContent(summary) {
-  return `${CONSOLIDATION_MARKER_PREFIX}${summary.trim()}`;
+function toolActivity(label, args, step, startedAt) {
+  const detail = activityTarget(args);
+  return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
+}
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+function elapsedText(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return "0s";
+  if (ms < 6e4) return `${Math.round(ms / 1e3)}s`;
+  return `${Math.floor(ms / 6e4)}m ${Math.round(ms % 6e4 / 1e3)}s`;
+}
+function describeLiveStep(step, capturedAtMs) {
+  const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
+  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "composing" ? `composing a \`${step.label || "tool"}\` call${step.bytes != null ? ` \u2014 ${formatBytes(step.bytes)} of arguments so far` : ""}` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
+  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ""})`;
+}
+function midRunNotice(activity, capturedAtMs) {
+  const doing = activity ? ` At capture it was ${describeLiveStep(activity, capturedAtMs)}.` : " No in-flight step was recorded at capture.";
+  return `\u26A0 CAPTURED MID-RUN \u2014 the agent was STILL EXECUTING when this report was taken.${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`;
+}
+
+// src/memorySavings.ts
+function callMemoryEffect(trimmedTokens, recallTokens) {
+  const t = Math.max(0, Math.round(trimmedTokens));
+  const r = Math.max(0, Math.round(recallTokens));
+  return t > 0 || r > 0 ? { trimmedTokens: t, recallTokens: r } : void 0;
+}
+function emptyRunUsage() {
+  return { promptTokens: 0, completionTokens: 0, model: null };
+}
+
+// src/runStore/runCell.ts
+var EMPTY_SNAPSHOT = {
+  running: false,
+  streamingText: "",
+  error: "",
+  errorAction: null,
+  pendingConfirm: null,
+  messagesEpoch: 0,
+  appended: [],
+  hasTrace: false,
+  trace: [],
+  activity: null,
+  byoUnresolved: [],
+  providerCap: [],
+  turn: null
+};
+function makeCell() {
+  return {
+    transcript: [],
+    priorResearch: null,
+    trace: [],
+    running: false,
+    streamingText: "",
+    error: "",
+    errorAction: null,
+    pendingConfirm: null,
+    confirmResolver: null,
+    appended: [],
+    messagesEpoch: 0,
+    listeners: /* @__PURE__ */ new Set(),
+    emitTimer: null,
+    abort: null,
+    activity: null,
+    byoUnresolved: [],
+    providerCap: [],
+    turn: null,
+    codeChanged: false,
+    codeModel: null,
+    codePhaseReached: false,
+    runId: "",
+    ticketRecorded: false,
+    touchedFiles: [],
+    deltaTicketId: null,
+    deltaRecordedFiles: [],
+    runTraceFrom: 0,
+    persistStep: null,
+    compactMemo: null,
+    runUsage: emptyRunUsage(),
+    lastServedModel: null,
+    liveTurn: null,
+    stoppedTurn: null,
+    snapshot: EMPTY_SNAPSHOT
+  };
+}
+
+// src/runStore/runCells.ts
+var cells = /* @__PURE__ */ new Map();
+var storeListeners = /* @__PURE__ */ new Set();
+var MAX_CELLS = 50;
+var MAX_TRACE_EVENTS = 500;
+var MAX_APPENDED = 50;
+function getCell(key) {
+  const existing = cells.get(key);
+  if (existing) {
+    cells.delete(key);
+    cells.set(key, existing);
+    return existing;
+  }
+  const c = makeCell();
+  cells.set(key, c);
+  evictIdleCells(key);
+  return c;
+}
+function evictIdleCells(protectId) {
+  if (cells.size <= MAX_CELLS) return;
+  for (const [id, cell] of cells) {
+    if (cells.size <= MAX_CELLS) break;
+    if (id === protectId || cell.running || cell.listeners.size > 0) continue;
+    cells.delete(id);
+  }
+}
+var STREAM_EMIT_MS = 32;
+function emitStreaming(c) {
+  if (c.emitTimer) return;
+  c.emitTimer = setTimeout(() => {
+    c.emitTimer = null;
+    emit(c);
+  }, STREAM_EMIT_MS);
+}
+function emit(c) {
+  if (c.emitTimer) {
+    clearTimeout(c.emitTimer);
+    c.emitTimer = null;
+  }
+  c.snapshot = {
+    running: c.running,
+    streamingText: c.streamingText,
+    error: c.error,
+    errorAction: c.errorAction,
+    pendingConfirm: c.pendingConfirm,
+    messagesEpoch: c.messagesEpoch,
+    appended: c.appended,
+    hasTrace: c.trace.length > 0,
+    trace: c.trace,
+    activity: c.activity,
+    byoUnresolved: c.byoUnresolved,
+    providerCap: c.providerCap,
+    turn: c.turn
+  };
+  for (const l of c.listeners) l();
+  for (const l of storeListeners) l();
+}
+function setActivity(c, activity) {
+  c.activity = activity;
+  emit(c);
+}
+function pushTrace(c, ev) {
+  const dropped = Math.max(0, c.trace.length + 1 - MAX_TRACE_EVENTS);
+  c.trace = [...dropped ? c.trace.slice(dropped) : c.trace, ev];
+  if (dropped) c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
+  c.persistStep?.(ev);
+  emit(c);
+}
+function runTrace(c) {
+  return c.trace.slice(c.runTraceFrom);
+}
+function recordRunFailure(c, label, message) {
+  const last = runTrace(c).at(-1);
+  if (last?.isError && typeof last.result === "string" && last.result.endsWith(message)) return;
+  pushTrace(c, {
+    ts: nowIso(),
+    category: "error",
+    label,
+    result: message,
+    isError: true
+  });
+}
+function recordAppended(c, msg) {
+  const next = [...c.appended, msg];
+  c.appended = next.length > MAX_APPENDED ? next.slice(next.length - MAX_APPENDED) : next;
+  c.messagesEpoch += 1;
+}
+function nowMs2() {
+  return typeof Date !== "undefined" ? Date.now() : 0;
+}
+function nowIso() {
+  return typeof Date !== "undefined" ? (/* @__PURE__ */ new Date()).toISOString() : "";
+}
+function accrueProviders(c, field, raw) {
+  if (!raw) return;
+  const before = c[field].length;
+  const next = new Set(c[field]);
+  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c[field] = [...next];
+}
+function accrueByoUnresolved(c, raw) {
+  accrueProviders(c, "byoUnresolved", raw);
+}
+function accrueProviderCap(c, raw) {
+  accrueProviders(c, "providerCap", raw);
 }
 
 // src/provenance.ts
@@ -7545,6 +7798,703 @@ function isStoppedTurn(msg) {
   }
 }
 
+// src/runStore/turnPersistence.ts
+function provenanceMetadata(result, requested, base) {
+  const model = result.resolvedModel;
+  if (!model) return withProvenanceMetadata(null, base);
+  const account = asProvenanceAccount(result.account);
+  const asked = requested && requested !== "default" && requested !== model ? requested : void 0;
+  return withProvenanceMetadata({
+    model,
+    ...account ? { account } : {},
+    ...asked ? { requestedModel: asked } : {}
+  }, base);
+}
+async function persistMidTurnText(chatId, c, persistence, result, requested) {
+  const text = canonicalTurnText(result.text);
+  if (!text) return;
+  const metadata = provenanceMetadata(result, requested, { [MID_TURN_META_KEY]: true });
+  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...metadata ? { metadata } : {} }]);
+  recordAppended(c, msg);
+}
+function canonicalTurnText(text) {
+  const { content, reasoning } = splitVendorReasoning({ content: text });
+  return canonicalReasoningText(content, reasoning);
+}
+function persistStep(chatId, persistence, ev) {
+  void persistence.sendMessages(chatId, [stepRow(ev)]).catch(() => {
+  });
+}
+function stoppedTurnOf(c) {
+  const live2 = c.liveTurn;
+  const text = live2 ? c.streamingText : "";
+  const model = live2?.model;
+  const result = !live2 ? "Stopped by user." : model ? `Stopped by user while ${model} was streaming (${text.length} chars kept).` : `Stopped by user before the gateway named the model (${text.length} chars kept).`;
+  return {
+    text,
+    source: { ...live2 },
+    event: {
+      ts: nowIso(),
+      category: "message",
+      label: STOPPED_TURN_STEP,
+      ...model ? { args: { model } } : {},
+      ...live2 ? { textChars: text.length } : {},
+      result
+    }
+  };
+}
+async function keepStoppedTurn(chatId, c, persistence) {
+  const stopped = c.stoppedTurn;
+  c.stoppedTurn = null;
+  if (!stopped) return;
+  const text = canonicalTurnText(stopped.text);
+  if (!text) return;
+  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: stoppedTurnMetadata(stopped.source) }]);
+  if (msg) recordAppended(c, msg);
+}
+async function asLiveTurn(c, complete) {
+  c.liveTurn = {};
+  try {
+    return await complete();
+  } finally {
+    c.liveTurn = null;
+  }
+}
+function liveTurnModel(c) {
+  return (model, account) => {
+    if (c.liveTurn) c.liveTurn = { model, account };
+  };
+}
+function connectRetryStep(c, step) {
+  return (attempt, delayMs, reason) => {
+    pushTrace(c, {
+      ts: nowIso(),
+      category: "message",
+      label: "llm.connect_retry",
+      args: { step, attempt },
+      result: `Could not reach BuilderForce (${reason}). Trying again in ${Math.round(delayMs / 1e3)}s \u2014 nothing was sent, so nothing is repeated.`
+    });
+  };
+}
+
+// src/runStore/runControl.ts
+function driverFor(key) {
+  return typeof key === "number" ? getRunDriver() : null;
+}
+function resetBrainRunStore() {
+  cells.clear();
+  forgetResolvedModels();
+}
+function subscribeRunStore(listener) {
+  storeListeners.add(listener);
+  return () => {
+    storeListeners.delete(listener);
+  };
+}
+function getGlobalRunState() {
+  const running = [];
+  const awaiting = [];
+  for (const [id, cell] of cells) {
+    if (typeof id !== "number") continue;
+    if (cell.pendingConfirm) awaiting.push(id);
+    else if (cell.running) running.push(id);
+  }
+  return { running, awaiting };
+}
+function subscribeRun(chatId, listener) {
+  const c = getCell(chatId);
+  c.listeners.add(listener);
+  return () => {
+    c.listeners.delete(listener);
+  };
+}
+function runAbortSignal(chatId) {
+  return cells.get(chatId)?.abort?.signal;
+}
+function appendRunMessage(chatId, msg) {
+  const c = cells.get(chatId);
+  if (!c) return;
+  recordAppended(c, msg);
+  emit(c);
+}
+function getRunSnapshot(chatId) {
+  if (chatId == null) return EMPTY_SNAPSHOT;
+  return cells.get(chatId)?.snapshot ?? EMPTY_SNAPSHOT;
+}
+function isRunning(chatId) {
+  return chatId != null && (cells.get(chatId)?.running ?? false);
+}
+function getRunTrace(chatId) {
+  if (chatId == null) return [];
+  return cells.get(chatId)?.trace ?? [];
+}
+function stopRun(chatId) {
+  const driver = driverFor(chatId);
+  if (driver) return driver.stop(chatId);
+  const c = cells.get(chatId);
+  if (!c || !c.running || c.abort?.signal.aborted) return;
+  const stopped = stoppedTurnOf(c);
+  c.stoppedTurn = stopped;
+  c.abort?.abort();
+  if (c.confirmResolver) {
+    const resolve = c.confirmResolver;
+    c.confirmResolver = null;
+    c.pendingConfirm = null;
+    resolve(false);
+  }
+  c.streamingText = "";
+  c.activity = null;
+  c.turn = null;
+  pushTrace(c, stopped.event);
+}
+function clearRunError(chatId) {
+  if (chatId == null) return;
+  const driver = driverFor(chatId);
+  if (driver) return driver.clearError(chatId);
+  const c = cells.get(chatId);
+  if (!c || !c.error) return;
+  c.error = "";
+  c.errorAction = null;
+  emit(c);
+}
+function requestRunConfirm(chatId, req, opts) {
+  if (driverFor(chatId)) return Promise.resolve(false);
+  const c = getCell(chatId);
+  return new Promise((resolve) => {
+    c.pendingConfirm = { name: req.name, args: req.args };
+    c.confirmResolver = resolve;
+    c.activity = {
+      ...toolActivity(req.name, req.args, opts?.step ?? c.activity?.step ?? 0, Date.now()),
+      phase: "awaiting"
+    };
+    emit(c);
+  });
+}
+function resolveRunConfirm(chatId, ok) {
+  const driver = driverFor(chatId);
+  if (driver) return driver.confirm(chatId, ok);
+  const c = cells.get(chatId);
+  if (!c || !c.confirmResolver) return;
+  const resolve = c.confirmResolver;
+  c.confirmResolver = null;
+  c.pendingConfirm = null;
+  emit(c);
+  resolve(ok);
+}
+function applyRemoteRun(chatId, snapshot) {
+  const c = getCell(chatId);
+  if (c.abort) return;
+  c.running = snapshot.running;
+  c.streamingText = snapshot.streamingText;
+  c.error = snapshot.error;
+  c.errorAction = snapshot.errorAction;
+  c.pendingConfirm = snapshot.pendingConfirm;
+  c.messagesEpoch = snapshot.messagesEpoch;
+  c.appended = snapshot.appended;
+  c.trace = snapshot.trace;
+  c.runTraceFrom = 0;
+  c.activity = snapshot.activity;
+  c.byoUnresolved = snapshot.byoUnresolved;
+  c.providerCap = snapshot.providerCap;
+  c.turn = snapshot.turn ?? null;
+  emit(c);
+}
+
+// ../packages/write-outbox/src/idempotency.ts
+var fallbackCounter = 0;
+function defaultId() {
+  const c = globalThis.crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  fallbackCounter += 1;
+  return `ob-${Date.now().toString(36)}-${fallbackCounter.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+function batchIdempotencyKey(batch) {
+  const head = batch[0];
+  return head ? head.batch ?? head.id : void 0;
+}
+
+// ../packages/write-outbox/src/policy.ts
+var OUTBOX_MAX_ITEMS = 25;
+var OUTBOX_MAX_WAIT_MS = 5e3;
+var OUTBOX_MAX_ENTRIES = 1e3;
+var OUTBOX_RETRY_BASE_MS = 1e3;
+var OUTBOX_RETRY_MAX_MS = 5 * 6e4;
+function isPermanentHttpFailure(error) {
+  const status2 = error?.status;
+  if (typeof status2 !== "number") return false;
+  return status2 >= 400 && status2 < 500 && ![401, 408, 409, 425, 429].includes(status2);
+}
+
+// ../packages/write-outbox/src/sealedBatch.ts
+var bySeq = (a, b) => a.seq - b.seq;
+function sendable(e, scope) {
+  return scope === void 0 || e.scope === void 0 || e.scope === scope;
+}
+function takeBatch(l, scope, upTo, maxItems) {
+  const due = (e) => e.seq <= upTo && sendable(e, scope);
+  const start = l.entries.findIndex(due);
+  if (start < 0) return null;
+  const head = l.entries[start];
+  let n = 0;
+  const at = (i) => l.entries[start + i];
+  if (head.batch) {
+    while (at(n) && at(n).batch === head.batch) n += 1;
+  } else {
+    while (at(n) && n < maxItems && !at(n).batch && due(at(n))) n += 1;
+  }
+  const batch = l.entries.splice(start, n);
+  const sealed = !head.batch;
+  if (sealed) {
+    for (const e of batch) {
+      e.batch = head.id;
+      if (scope !== void 0) e.scope = scope;
+    }
+  }
+  return { batch, sealed };
+}
+function sendContext(batch) {
+  const head = batch[0];
+  return {
+    idempotencyKey: batchIdempotencyKey(batch),
+    ids: batch.map((e) => e.id),
+    ...head.scope !== void 0 ? { scope: head.scope } : {}
+  };
+}
+function drainContext(taken, scope, newId) {
+  return {
+    idempotencyKey: batchIdempotencyKey(taken) ?? newId(),
+    ids: taken.map((e) => e.id),
+    ...scope ? { scope } : {}
+  };
+}
+
+// ../packages/write-outbox/src/outbox.ts
+function createOutbox(opts) {
+  const maxItems = Math.max(1, opts.maxItems ?? OUTBOX_MAX_ITEMS);
+  const maxWaitMs = opts.maxWaitMs ?? OUTBOX_MAX_WAIT_MS;
+  const retry = opts.retry ? {
+    baseMs: opts.retry.baseMs ?? OUTBOX_RETRY_BASE_MS,
+    maxMs: opts.retry.maxMs ?? OUTBOX_RETRY_MAX_MS,
+    isPermanent: opts.retry.isPermanent ?? isPermanentHttpFailure
+  } : null;
+  const store = opts.store ?? null;
+  const maxEntries = Math.max(
+    maxItems,
+    opts.maxEntries ?? (retry || store ? OUTBOX_MAX_ENTRIES : Number.POSITIVE_INFINITY)
+  );
+  const newId = opts.newId ?? defaultId;
+  const lanes = /* @__PURE__ */ new Map();
+  let lastSeq = 0;
+  let dropped = 0;
+  let closed = false;
+  const isOnline = () => opts.online?.isOnline() ?? true;
+  const lane = (key) => {
+    let l = lanes.get(key);
+    if (!l) {
+      l = { entries: [], timer: null, retryTimer: null, attempt: 0, inFlight: 0, tail: Promise.resolve() };
+      lanes.set(key, l);
+    }
+    return l;
+  };
+  const nextSeq = () => {
+    lastSeq = Math.max(lastSeq + 1, Date.now() * 1e3);
+    return lastSeq;
+  };
+  const loaded = store ? Promise.resolve().then(() => store.load()).then(
+    (entries) => {
+      for (const e of entries) {
+        lane(e.key).entries.push(e);
+        lastSeq = Math.max(lastSeq, e.seq);
+      }
+      for (const l of lanes.values()) l.entries.sort(bySeq);
+    },
+    (error) => opts.onStoreError?.(error)
+  ) : Promise.resolve();
+  let writes = loaded;
+  const persist = (op) => {
+    if (!store) return;
+    writes = writes.then(() => op(store)).catch((error) => opts.onStoreError?.(error));
+  };
+  const drop = (key, entries, reason) => {
+    if (entries.length === 0) return;
+    dropped += entries.length;
+    const ids2 = entries.map((e) => e.id);
+    persist((s) => s.remove(ids2));
+    opts.onDrop?.({ key, count: entries.length, reason });
+  };
+  const enforceBound = () => {
+    let total = 0;
+    for (const l of lanes.values()) total += l.entries.length;
+    while (total > maxEntries) {
+      let oldestKey;
+      let oldest;
+      for (const [k, l] of lanes) {
+        const head = l.entries[0];
+        if (head && (!oldest || head.seq < oldest.entries[0].seq)) {
+          oldest = l;
+          oldestKey = k;
+        }
+      }
+      if (!oldest) return;
+      drop(oldestKey, oldest.entries.splice(0, 1), "overflow");
+      total -= 1;
+    }
+  };
+  const currentScope = () => opts.scope ? opts.scope() : void 0;
+  const take = (l, scope, upTo) => {
+    const next = takeBatch(l, scope, upTo, maxItems);
+    if (!next) return null;
+    if (next.sealed) persist((s) => s.put(next.batch));
+    return next.batch;
+  };
+  const clearTimer = (l) => {
+    if (l.timer !== null) clearTimeout(l.timer);
+    l.timer = null;
+  };
+  const clearRetry = (l) => {
+    if (l.retryTimer !== null) clearTimeout(l.retryTimer);
+    l.retryTimer = null;
+  };
+  const scheduleRetry = (key, l) => {
+    if (!retry || closed || l.retryTimer !== null) return;
+    l.attempt += 1;
+    const delay = Math.min(retry.maxMs, retry.baseMs * 2 ** (l.attempt - 1));
+    const jittered = Math.round(delay * (0.8 + Math.random() * 0.4));
+    l.retryTimer = setTimeout(() => {
+      l.retryTimer = null;
+      void flushKey(key, { final: false, probe: true });
+    }, jittered);
+  };
+  const armTimer = (key, l) => {
+    if (l.timer !== null || maxWaitMs <= 0) return;
+    l.timer = setTimeout(() => {
+      l.timer = null;
+      void flushKey(key, { final: false, auto: true });
+    }, maxWaitMs);
+  };
+  const requeue = (l, entries) => {
+    l.entries.unshift(...entries);
+    l.entries.sort(bySeq);
+  };
+  const sendBatch = async (key, l, batch, final) => {
+    const items = batch.map((e) => e.item);
+    const ctx = sendContext(batch);
+    const ids2 = ctx.ids;
+    l.inFlight += batch.length;
+    try {
+      await opts.send(key, opts.coalesce ? opts.coalesce(items) : items, { final, ...ctx });
+      l.inFlight -= batch.length;
+      l.attempt = 0;
+      persist((s) => s.remove(ids2));
+      return true;
+    } catch (error) {
+      l.inFlight -= batch.length;
+      opts.onError?.(error, key);
+      if (retry && !retry.isPermanent(error)) {
+        requeue(l, batch);
+        scheduleRetry(key, l);
+        return false;
+      }
+      drop(key, batch, retry ? "rejected" : "failed");
+      return true;
+    }
+  };
+  const flushKey = (key, mode) => {
+    const l = lanes.get(key);
+    if (!l) return Promise.resolve();
+    const upTo = mode.probe ? Number.POSITIVE_INFINITY : lastSeq;
+    if (mode.final) {
+      const scope = currentScope();
+      if (!isOnline() || scope === null) return Promise.resolve();
+      clearTimer(l);
+      const batches = [];
+      for (let b = take(l, scope, upTo); b; b = take(l, scope, upTo)) batches.push(b);
+      return Promise.all(batches.map((b) => sendBatch(key, l, b, true))).then(() => void 0);
+    }
+    const run = l.tail.then(async () => {
+      await loaded;
+      if (mode.auto && l.retryTimer !== null) return;
+      if (mode.auto && !isOnline()) {
+        scheduleRetry(key, l);
+        return;
+      }
+      if (!mode.auto && l.retryTimer !== null) {
+        clearRetry(l);
+      }
+      const scope = currentScope();
+      if (scope === null) {
+        scheduleRetry(key, l);
+        return;
+      }
+      clearTimer(l);
+      for (let batch = take(l, scope, upTo); batch; batch = take(l, scope, upTo)) {
+        if (!await sendBatch(key, l, batch, false)) return;
+      }
+      if (l.entries.length > 0) armTimer(key, l);
+    });
+    l.tail = run;
+    return run;
+  };
+  const flushAll = (final) => Promise.all([...lanes.keys()].map((k) => flushKey(k, { final }))).then(() => void 0);
+  const unsubscribe = opts.online?.subscribe((online) => {
+    if (!online || closed) return;
+    for (const l of lanes.values()) {
+      clearRetry(l);
+      l.attempt = 0;
+    }
+    void flushAll(false);
+  });
+  if (store) {
+    void loaded.then(() => {
+      enforceBound();
+      for (const [k, l] of lanes) if (l.entries.length > 0) void flushKey(k, { final: false, auto: true });
+    });
+  }
+  return {
+    enqueue(key, item) {
+      const l = lane(key);
+      const scope = currentScope();
+      const entry = { id: newId(), key, item, seq: nextSeq(), ...scope ? { scope } : {} };
+      l.entries.push(entry);
+      persist((s) => s.put([entry]));
+      enforceBound();
+      const unsealed = l.entries.reduce((n, e) => e.batch ? n : n + 1, 0);
+      if (unsealed >= maxItems) {
+        void flushKey(key, { final: false, auto: true });
+      } else {
+        armTimer(key, l);
+      }
+      return entry.id;
+    },
+    async flush(key, flushOpts) {
+      const final = flushOpts?.final ?? false;
+      if (key === void 0) return flushAll(final);
+      return flushKey(key, { final });
+    },
+    drainWith(key, request) {
+      const l = lane(key);
+      const run = l.tail.then(async () => {
+        await loaded;
+        clearTimer(l);
+        const scope = currentScope();
+        const taken = [];
+        if (scope !== null) {
+          const parked = [];
+          for (const e of l.entries) (sendable(e, scope) ? taken : parked).push(e);
+          l.entries = parked;
+        }
+        const items = taken.map((e) => e.item);
+        const ctx = drainContext(taken, scope, newId);
+        const ids2 = ctx.ids;
+        l.inFlight += taken.length;
+        try {
+          const result = await request(opts.coalesce && items.length ? opts.coalesce(items) : items, ctx);
+          l.inFlight -= taken.length;
+          if (taken.length) persist((s) => s.remove(ids2));
+          return result;
+        } catch (error) {
+          l.inFlight -= taken.length;
+          if (retry) requeue(l, taken);
+          else drop(key, taken, "failed");
+          throw error;
+        }
+      });
+      l.tail = run.catch(() => void 0);
+      return run;
+    },
+    size(key) {
+      if (key !== void 0) return lanes.get(key)?.entries.length ?? 0;
+      let n = 0;
+      for (const l of lanes.values()) n += l.entries.length;
+      return n;
+    },
+    stats() {
+      let queued = 0;
+      let inFlight = 0;
+      for (const l of lanes.values()) {
+        queued += l.entries.length;
+        inFlight += l.inFlight;
+      }
+      return { queued, inFlight, dropped };
+    },
+    ready: () => loaded.then(() => writes),
+    close() {
+      closed = true;
+      unsubscribe?.();
+      for (const l of lanes.values()) {
+        clearTimer(l);
+        clearRetry(l);
+      }
+    }
+  };
+}
+
+// ../packages/write-outbox/src/stores.ts
+var isEntry = (v) => typeof v === "object" && v !== null && typeof v.id === "string" && typeof v.seq === "number";
+function idbRunner(opts) {
+  const storeName = opts.storeName ?? "entries";
+  let db = null;
+  const open = () => {
+    db ??= new Promise((resolve, reject) => {
+      const req = opts.indexedDB.open(opts.dbName, 1);
+      req.onupgradeneeded = () => {
+        const created = req.result;
+        if (!created.objectStoreNames.contains(storeName)) created.createObjectStore(storeName, { keyPath: "id" });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    }).catch((error) => {
+      db = null;
+      throw error;
+    });
+    return db;
+  };
+  return async (mode, body) => {
+    const handle = await open();
+    return new Promise((resolve, reject) => {
+      const tx = handle.transaction(storeName, mode);
+      const req = body(tx.objectStore(storeName));
+      tx.oncomplete = () => resolve(req ? req.result : void 0);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  };
+}
+var readAll = async (run) => (await run("readonly", (s) => s.getAll()) ?? []).filter(isEntry);
+function createIndexedDbOutboxStore(opts) {
+  const run = idbRunner(opts);
+  return {
+    async load() {
+      return (await readAll(run)).filter((r) => r.partition === opts.partition).map(({ partition: _p, ...entry }) => entry);
+    },
+    async put(entries) {
+      await run("readwrite", (s) => {
+        for (const e of entries) s.put(opts.partition === void 0 ? e : { ...e, partition: opts.partition });
+      });
+    },
+    async remove(ids2) {
+      await run("readwrite", (s) => {
+        for (const id of ids2) s.delete(id);
+      });
+    }
+  };
+}
+async function listIndexedDbOutboxPartitions(opts) {
+  const partitions = /* @__PURE__ */ new Set();
+  for (const r of await readAll(idbRunner(opts))) if (typeof r.partition === "string") partitions.add(r.partition);
+  return [...partitions];
+}
+
+// src/stepOutbox.ts
+var STEP_BATCH_MAX = 25;
+var STEP_BATCH_WAIT_MS = 5e3;
+var isStepRow = (m) => m.role === "tool";
+var durability = null;
+var stores = /* @__PURE__ */ new Map();
+var runKeys = /* @__PURE__ */ new Set();
+var replays = /* @__PURE__ */ new Map();
+var stopListening = null;
+function installStepDurability(next) {
+  stopListening?.();
+  stopListening = null;
+  durability = next;
+  stores.clear();
+  runKeys.clear();
+  replays.clear();
+  if (!next) return;
+  stopListening = next.online?.subscribe((online) => {
+    if (online) void drainStoredSteps();
+  }) ?? null;
+  void drainStoredSteps();
+}
+var optionsFor = (d, key) => {
+  let store = stores.get(key);
+  if (!store) {
+    store = d.storeFor(key);
+    stores.set(key, store);
+  }
+  return {
+    store,
+    ...d.online ? { online: d.online } : {},
+    ...d.scope ? { scope: d.scope } : {}
+  };
+};
+function stepDurabilityFor(chatId, runKey) {
+  if (!durability) return {};
+  const key = runKey === chatId ? `chat:${chatId}` : `chat:${chatId}:run:${runKey}`;
+  runKeys.add(key);
+  return optionsFor(durability, key);
+}
+async function drainStoredSteps() {
+  const d = durability;
+  if (!d?.sendRows || !d.storedKeys) return;
+  const sendRows = d.sendRows;
+  let keys;
+  try {
+    keys = await d.storedKeys();
+  } catch {
+    return;
+  }
+  await Promise.all(keys.filter((key) => !runKeys.has(key)).map((key) => {
+    let replay = replays.get(key);
+    if (!replay) {
+      replay = batchStepPersistence({
+        async sendMessages(chatId, rows, opts) {
+          await sendRows(chatId, rows, opts?.scope);
+          return [];
+        }
+      }, optionsFor(d, key));
+      replays.set(key, replay);
+    }
+    return replay.flush();
+  }));
+}
+var withEventKeys = (rows, ids2) => rows.map((m, i) => m.eventKey || !ids2[i] ? m : { ...m, eventKey: `step:${ids2[i]}` });
+function batchStepPersistence(base, opts = {}) {
+  const steps = createOutbox({
+    maxItems: opts.maxRows ?? STEP_BATCH_MAX,
+    maxWaitMs: opts.waitMs ?? STEP_BATCH_WAIT_MS,
+    retry: {},
+    ...opts.store ? { store: opts.store } : {},
+    ...opts.online ? { online: opts.online } : {},
+    ...opts.scope ? { scope: opts.scope } : {},
+    send: (chatId, rows, ctx) => base.sendMessages(chatId, withEventKeys(rows, ctx.ids), ctx.scope !== void 0 ? { scope: ctx.scope } : void 0)
+  });
+  const sendMessages = async (chatId, messages) => {
+    if (messages.length > 0 && messages.every(isStepRow)) {
+      for (const m of messages) steps.enqueue(chatId, m);
+      return [];
+    }
+    return steps.drainWith(chatId, async (pending, ctx) => {
+      if (pending.length === 0) return base.sendMessages(chatId, messages);
+      const saved = await base.sendMessages(chatId, [...withEventKeys(pending, ctx.ids), ...messages]);
+      return saved.slice(pending.length);
+    });
+  };
+  return {
+    persistence: { ...base, sendMessages },
+    flush: () => steps.flush()
+  };
+}
+
+// src/runOutcomeReport.ts
+function runOutcomeId(chatId, startedAtMs) {
+  return `ide:${chatId}:${startedAtMs}`;
+}
+function codeRunOutcome(args) {
+  if (args.aborted || !args.codeChanged || !args.codeModel || !args.runId) return null;
+  return {
+    clientRunId: args.runId,
+    model: args.codeModel,
+    role: "code",
+    source: "ide",
+    terminalStatus: args.failed ? "failed" : "completed",
+    merged: args.shipped,
+    steps: args.trace.filter((e) => e.label === "llm.complete" && !e.isError).length,
+    ...args.projectId != null ? { projectId: args.projectId } : {}
+  };
+}
+
 // src/types.ts
 var STEP_MESSAGE_ROLE = "tool";
 function isStepMessage(m) {
@@ -7580,24 +8530,6 @@ function formatEvermindLearnStep(outcome) {
     default:
       return null;
   }
-}
-
-// src/transcriptSeed.ts
-function transcriptSeedFrom(history) {
-  return scopeToConsolidation(history).filter((m) => !isStepMessage(m) && !isStoppedTurn(m)).flatMap((m) => {
-    if (m.role !== "assistant") return [{ role: m.role, content: m.content }];
-    const content = replayTextOf(m.content);
-    return content ? [{ role: "assistant", content }] : [];
-  });
-}
-
-// src/mergeTranscript.ts
-function mergeTranscript(base, extra) {
-  if (extra.length === 0) return base;
-  const have = new Set(base.map((m) => m.id));
-  const fresh = extra.filter((m) => !have.has(m.id));
-  if (fresh.length === 0) return base;
-  return [...base, ...fresh].sort((a, b) => a.seq - b.seq);
 }
 
 // src/persistedSteps.ts
@@ -7661,158 +8593,6 @@ function traceWithPersistedSteps(messages, trace) {
   }
   if (fromMessages.length === 0) return trace;
   return [...trace, ...fromMessages].sort((a, b) => a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0);
-}
-
-// src/priorResearch.ts
-var ENTRY_RESULT_CHARS = 1200;
-var ENTRY_ARGS_CHARS = 200;
-var DIGEST_CHARS = 12e3;
-var MAX_ENTRIES = 40;
-var HEADER = [
-  "## Already done earlier in this chat",
-  "Earlier turns of this conversation already ran the tool calls below (newest first, each result trimmed). Their results are NOT in the transcript above \u2014 this list is the record of them.",
-  "Build on it. Do not repeat a call listed here to rediscover what it already answered; re-run one only when you need a part of its result that is not shown, or when the target may have changed since (for example, a file this chat has edited)."
-].join("\n");
-function clip(text, max) {
-  return text.length > max ? `${text.slice(0, max - 1)}\u2026` : text;
-}
-function resultText(result) {
-  if (typeof result === "string") return result;
-  try {
-    return JSON.stringify(result) ?? "";
-  } catch {
-    return String(result);
-  }
-}
-function priorResearchDigest(history) {
-  const entries = [];
-  const seen = /* @__PURE__ */ new Set();
-  let size = HEADER.length;
-  for (let i = history.length - 1; i >= 0 && entries.length < MAX_ENTRIES; i -= 1) {
-    const message = history[i];
-    if (!isStepMessage(message)) continue;
-    const parsed = parseStepMessage(message.metadata);
-    if (!parsed || parsed.step.category !== "tool") continue;
-    const { label, args, result, isError } = parsed.step;
-    if (args == null && result == null) continue;
-    const fullArgs = args == null ? "" : stableStringify(args);
-    const key = `${label}|${fullArgs}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const entry = `- ${label}(${clip(fullArgs, ENTRY_ARGS_CHARS)})${isError ? " \u2014 FAILED" : ""}
-  \u2192 ${clip(resultText(result), ENTRY_RESULT_CHARS)}`;
-    if (size + entry.length + 1 > DIGEST_CHARS) break;
-    entries.push(entry);
-    size += entry.length + 1;
-  }
-  return entries.length > 0 ? [HEADER, ...entries].join("\n") : null;
-}
-
-// src/directedMessage.ts
-var ADDRESSED_TO_META_KEY = "addressedTo";
-var AUTHORED_BY_META_KEY = "authoredBy";
-function asRecipient(value) {
-  const a = value;
-  if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
-    return { kind: a.kind, ref: a.ref, name: a.name };
-  }
-  return null;
-}
-function parseMessageAuthor(msg) {
-  if (!msg.metadata) return null;
-  try {
-    return asRecipient(JSON.parse(msg.metadata).authoredBy);
-  } catch {
-  }
-  return null;
-}
-function withDirectedMetadata(recipient, base) {
-  const meta = { ...base ?? {} };
-  const list = recipient == null ? [] : "kind" in recipient ? [recipient] : recipient;
-  if (list.length === 1) meta[ADDRESSED_TO_META_KEY] = list[0];
-  else if (list.length > 1) meta[ADDRESSED_TO_META_KEY] = { kind: "group", members: [...list] };
-  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
-}
-function parseDirectedRecipients(msg) {
-  if (!msg.metadata) return [];
-  try {
-    const a = JSON.parse(msg.metadata).addressedTo;
-    if (!a || typeof a !== "object") return [];
-    if (a.kind !== "group") {
-      const one = asRecipient(a);
-      return one ? [one] : [];
-    }
-    if (Array.isArray(a.members)) {
-      return a.members.map(asRecipient).filter((r) => r !== null);
-    }
-    if (Array.isArray(a.refs)) {
-      return a.refs.filter((ref) => typeof ref === "string" && ref.length > 0).map((ref) => ({ kind: "agent", ref, name: ref }));
-    }
-  } catch {
-  }
-  return [];
-}
-function isDirectedToParticipant(msg) {
-  return parseDirectedRecipients(msg).length > 0;
-}
-function directedAgentRecipients(recipient) {
-  if (recipient == null) return [];
-  const one = recipient;
-  const list = Array.isArray(recipient) ? recipient : one.kind === "group" ? one.members ?? [] : [one];
-  const seen = /* @__PURE__ */ new Set();
-  const out = [];
-  for (const r of list) {
-    if (!r || typeof r.ref !== "string" || !r.ref || r.kind === "human") continue;
-    if (seen.has(r.ref)) continue;
-    seen.add(r.ref);
-    out.push({ kind: "agent", ref: r.ref, name: typeof r.name === "string" && r.name ? r.name : r.ref });
-  }
-  return out;
-}
-function activeMentionToken(text, caret) {
-  const at = text.lastIndexOf("@", Math.max(0, caret - 1));
-  if (at < 0 || at >= caret) return null;
-  if (at > 0 && !/\s/.test(text[at - 1])) return null;
-  const query = text.slice(at + 1, caret);
-  if (/[\s@]/.test(query)) return null;
-  return { query, start: at, end: caret };
-}
-function filterMentionCandidates(participants, query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return participants;
-  return participants.map((p) => ({ p, idx: p.name.toLowerCase().indexOf(q) })).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.p.name.localeCompare(b.p.name)).map((s) => s.p);
-}
-function mentionRecipient(text, participants) {
-  const m = /^\s*@([^\s@]+)/.exec(text);
-  if (!m) return null;
-  const tag = m[1].toLowerCase();
-  return participants.find((p) => {
-    const name = p.name.toLowerCase();
-    return name === tag || name.split(/\s+/)[0] === tag || name.startsWith(tag);
-  }) ?? null;
-}
-function resolveRecipient(choice, mention) {
-  if (choice === "brain") return null;
-  return choice ?? mention;
-}
-var activeHashtagToken = activeTicketToken;
-function activeTicketToken(text, caret) {
-  const hash = text.lastIndexOf("#", Math.max(0, caret - 1));
-  if (hash < 0 || hash >= caret) return null;
-  if (hash > 0 && !/\s/.test(text[hash - 1])) return null;
-  const query = text.slice(hash + 1, caret);
-  if (/[\s#]/.test(query)) return null;
-  return { query, start: hash, end: caret };
-}
-function filterTicketCandidates(tickets, query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return tickets;
-  return tickets.map((t) => {
-    const titleIdx = t.title.toLowerCase().indexOf(q);
-    const keyIdx = t.key?.toLowerCase().indexOf(q) ?? -1;
-    const idx = titleIdx >= 0 ? titleIdx : keyIdx;
-    return { t, idx };
-  }).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.t.title.localeCompare(b.t.title)).map((s) => s.t);
 }
 
 // src/localWorkspaceTools.ts
@@ -7957,62 +8737,6 @@ function studioToolsIn(toolNames) {
 }
 function memoryToolsIn(toolNames) {
   return toolNames.filter(isProjectMemoryTool);
-}
-
-// src/runActivity.ts
-var TARGET_KEYS = ["path", "file", "filePath", "command", "cmd", "glob", "query", "q", "search", "url", "name", "title", "id"];
-var MAX_DETAIL = 72;
-function shortenTarget(value, max = MAX_DETAIL) {
-  const v = value.replace(/\s+/g, " ").trim();
-  if (v.length <= max) return v;
-  if (v.includes("/") || v.includes("\\")) return `\u2026${v.slice(v.length - (max - 1))}`;
-  return `${v.slice(0, max - 1)}\u2026`;
-}
-function activityTarget(args) {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
-  const record = args;
-  for (const key of TARGET_KEYS) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) return shortenTarget(value);
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return void 0;
-}
-var QUESTION_KEYS = ["query", "q", "search", "pattern", "glob", "key"];
-var VISIT_QUESTION_SEPARATOR = " \u220B ";
-function visitTarget(args) {
-  const scope = activityTarget(args);
-  if (!scope) return void 0;
-  const record = args;
-  for (const key of QUESTION_KEYS) {
-    const value = record[key];
-    if (typeof value !== "string" || !value.trim()) continue;
-    const question = shortenTarget(value);
-    return question === scope ? scope : `${scope}${VISIT_QUESTION_SEPARATOR}${question}`;
-  }
-  return scope;
-}
-function toolActivity(label, args, step, startedAt) {
-  const detail = activityTarget(args);
-  return { phase: "tool", label, startedAt, step, ...detail ? { detail } : {} };
-}
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  return bytes < 1024 ? `${Math.round(bytes)} B` : `${(bytes / 1024).toFixed(1)} KB`;
-}
-function elapsedText(ms) {
-  if (!Number.isFinite(ms) || ms <= 0) return "0s";
-  if (ms < 6e4) return `${Math.round(ms / 1e3)}s`;
-  return `${Math.floor(ms / 6e4)}m ${Math.round(ms % 6e4 / 1e3)}s`;
-}
-function describeLiveStep(step, capturedAtMs) {
-  const elapsed = elapsedText(Number.isFinite(capturedAtMs) ? capturedAtMs - step.startedAt : 0);
-  const what = step.phase === "tool" ? `running \`${step.label}\`${step.detail ? ` on ${step.detail}` : ""}` : step.phase === "awaiting" ? `PAUSED waiting for the user to approve \`${step.label}\` \u2014 nothing advances until they answer` : step.phase === "composing" ? `composing a \`${step.label || "tool"}\` call${step.bytes != null ? ` \u2014 ${formatBytes(step.bytes)} of arguments so far` : ""}` : step.phase === "thinking" ? "waiting on the model (no token received yet)" : step.phase === "writing" ? "streaming the reply" : step.phase === "finishing" ? "doing post-run work (ticket capture / status reconciliation)" : "starting up";
-  return `${what} (${elapsed} so far${step.step > 0 ? `, loop step ${step.step}` : ""})`;
-}
-function midRunNotice(activity, capturedAtMs) {
-  const doing = activity ? ` At capture it was ${describeLiveStep(activity, capturedAtMs)}.` : " No in-flight step was recorded at capture.";
-  return `\u26A0 CAPTURED MID-RUN \u2014 the agent was STILL EXECUTING when this report was taken.${doing} Anything below that reads as "it never did X" may simply be work it had not reached yet; re-copy once the run settles to get a verdict on a finished run.`;
 }
 
 // src/runProgress.ts
@@ -9256,939 +9980,6 @@ function buildBrainTriageReport(opts) {
   return lines.join("\n");
 }
 
-// src/turnRating.ts
-function ratedTurnTool(messages, messageId) {
-  const index = messages.findIndex((m) => m.id === messageId);
-  if (index < 0) return null;
-  for (let i = index - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (!isStepMessage(message)) return null;
-    const parsed = parseStepMessage(message.metadata ?? null);
-    if (parsed?.step.category === "tool") return parsed.step.label || null;
-  }
-  return null;
-}
-function ratedTurnContext(messages, messageId) {
-  const message = messages.find((m) => m.id === messageId);
-  return {
-    model: message && parseMessageProvenance(message)?.model || "",
-    toolName: ratedTurnTool(messages, messageId)
-  };
-}
-function withRating(ratings, messageId, rating) {
-  const next = { ...ratings };
-  if (rating === 0) delete next[messageId];
-  else next[messageId] = rating;
-  return next;
-}
-
-// src/runDriver.ts
-var installed = null;
-function installRunDriver(driver) {
-  installed = driver;
-}
-function getRunDriver() {
-  return installed;
-}
-
-// src/lastResolvedModel.ts
-var MAX_CHATS = 64;
-var byChat = /* @__PURE__ */ new Map();
-function setLastResolvedModel(chatId, model) {
-  const trimmed = typeof model === "string" ? model.trim() : "";
-  if (!trimmed) return;
-  byChat.delete(chatId);
-  byChat.set(chatId, trimmed);
-  if (byChat.size > MAX_CHATS) {
-    const oldest = byChat.keys().next();
-    if (!oldest.done) byChat.delete(oldest.value);
-  }
-}
-function getLastResolvedModel(chatId) {
-  return byChat.get(chatId);
-}
-function forgetResolvedModels() {
-  byChat.clear();
-}
-var CURRENT_MODEL_TOOLS = /* @__PURE__ */ new Set(["session.current_model", "builtin_session_current_model"]);
-function withObservedModel(chatId, tool, args) {
-  if (!CURRENT_MODEL_TOOLS.has(tool)) return args;
-  const observed = getLastResolvedModel(chatId);
-  if (!observed) return args;
-  const supplied = args ?? {};
-  if (typeof supplied.model === "string" && supplied.model.trim()) return args;
-  return { ...supplied, model: observed };
-}
-
-// src/memorySavings.ts
-function callMemoryEffect(trimmedTokens, recallTokens) {
-  const t = Math.max(0, Math.round(trimmedTokens));
-  const r = Math.max(0, Math.round(recallTokens));
-  return t > 0 || r > 0 ? { trimmedTokens: t, recallTokens: r } : void 0;
-}
-function emptyRunUsage() {
-  return { promptTokens: 0, completionTokens: 0, model: null };
-}
-
-// src/runStore/runCell.ts
-var EMPTY_SNAPSHOT = {
-  running: false,
-  streamingText: "",
-  error: "",
-  errorAction: null,
-  pendingConfirm: null,
-  messagesEpoch: 0,
-  appended: [],
-  hasTrace: false,
-  trace: [],
-  activity: null,
-  byoUnresolved: [],
-  providerCap: [],
-  turn: null
-};
-function makeCell() {
-  return {
-    transcript: [],
-    priorResearch: null,
-    trace: [],
-    running: false,
-    streamingText: "",
-    error: "",
-    errorAction: null,
-    pendingConfirm: null,
-    confirmResolver: null,
-    appended: [],
-    messagesEpoch: 0,
-    listeners: /* @__PURE__ */ new Set(),
-    emitTimer: null,
-    abort: null,
-    activity: null,
-    byoUnresolved: [],
-    providerCap: [],
-    turn: null,
-    codeChanged: false,
-    codeModel: null,
-    codePhaseReached: false,
-    runId: "",
-    ticketRecorded: false,
-    touchedFiles: [],
-    deltaTicketId: null,
-    deltaRecordedFiles: [],
-    runTraceFrom: 0,
-    persistStep: null,
-    compactMemo: null,
-    runUsage: emptyRunUsage(),
-    lastServedModel: null,
-    liveTurn: null,
-    stoppedTurn: null,
-    snapshot: EMPTY_SNAPSHOT
-  };
-}
-
-// src/runStore/runCells.ts
-var cells = /* @__PURE__ */ new Map();
-var storeListeners = /* @__PURE__ */ new Set();
-var MAX_CELLS = 50;
-var MAX_TRACE_EVENTS = 500;
-var MAX_APPENDED = 50;
-function getCell(key) {
-  const existing = cells.get(key);
-  if (existing) {
-    cells.delete(key);
-    cells.set(key, existing);
-    return existing;
-  }
-  const c = makeCell();
-  cells.set(key, c);
-  evictIdleCells(key);
-  return c;
-}
-function evictIdleCells(protectId) {
-  if (cells.size <= MAX_CELLS) return;
-  for (const [id, cell] of cells) {
-    if (cells.size <= MAX_CELLS) break;
-    if (id === protectId || cell.running || cell.listeners.size > 0) continue;
-    cells.delete(id);
-  }
-}
-var STREAM_EMIT_MS = 32;
-function emitStreaming(c) {
-  if (c.emitTimer) return;
-  c.emitTimer = setTimeout(() => {
-    c.emitTimer = null;
-    emit(c);
-  }, STREAM_EMIT_MS);
-}
-function emit(c) {
-  if (c.emitTimer) {
-    clearTimeout(c.emitTimer);
-    c.emitTimer = null;
-  }
-  c.snapshot = {
-    running: c.running,
-    streamingText: c.streamingText,
-    error: c.error,
-    errorAction: c.errorAction,
-    pendingConfirm: c.pendingConfirm,
-    messagesEpoch: c.messagesEpoch,
-    appended: c.appended,
-    hasTrace: c.trace.length > 0,
-    trace: c.trace,
-    activity: c.activity,
-    byoUnresolved: c.byoUnresolved,
-    providerCap: c.providerCap,
-    turn: c.turn
-  };
-  for (const l of c.listeners) l();
-  for (const l of storeListeners) l();
-}
-function setActivity(c, activity) {
-  c.activity = activity;
-  emit(c);
-}
-function pushTrace(c, ev) {
-  const dropped = Math.max(0, c.trace.length + 1 - MAX_TRACE_EVENTS);
-  c.trace = [...dropped ? c.trace.slice(dropped) : c.trace, ev];
-  if (dropped) c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
-  c.persistStep?.(ev);
-  emit(c);
-}
-function runTrace(c) {
-  return c.trace.slice(c.runTraceFrom);
-}
-function recordRunFailure(c, label, message) {
-  const last = runTrace(c).at(-1);
-  if (last?.isError && typeof last.result === "string" && last.result.endsWith(message)) return;
-  pushTrace(c, {
-    ts: nowIso(),
-    category: "error",
-    label,
-    result: message,
-    isError: true
-  });
-}
-function recordAppended(c, msg) {
-  const next = [...c.appended, msg];
-  c.appended = next.length > MAX_APPENDED ? next.slice(next.length - MAX_APPENDED) : next;
-  c.messagesEpoch += 1;
-}
-function nowMs2() {
-  return typeof Date !== "undefined" ? Date.now() : 0;
-}
-function nowIso() {
-  return typeof Date !== "undefined" ? (/* @__PURE__ */ new Date()).toISOString() : "";
-}
-function accrueProviders(c, field, raw) {
-  if (!raw) return;
-  const before = c[field].length;
-  const next = new Set(c[field]);
-  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
-  if (next.size !== before) c[field] = [...next];
-}
-function accrueByoUnresolved(c, raw) {
-  accrueProviders(c, "byoUnresolved", raw);
-}
-function accrueProviderCap(c, raw) {
-  accrueProviders(c, "providerCap", raw);
-}
-
-// src/runStore/turnPersistence.ts
-function provenanceMetadata(result, requested, base) {
-  const model = result.resolvedModel;
-  if (!model) return withProvenanceMetadata(null, base);
-  const account = asProvenanceAccount(result.account);
-  const asked = requested && requested !== "default" && requested !== model ? requested : void 0;
-  return withProvenanceMetadata({
-    model,
-    ...account ? { account } : {},
-    ...asked ? { requestedModel: asked } : {}
-  }, base);
-}
-async function persistMidTurnText(chatId, c, persistence, result, requested) {
-  const text = canonicalTurnText(result.text);
-  if (!text) return;
-  const metadata = provenanceMetadata(result, requested, { [MID_TURN_META_KEY]: true });
-  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, ...metadata ? { metadata } : {} }]);
-  recordAppended(c, msg);
-}
-function canonicalTurnText(text) {
-  const { content, reasoning } = splitVendorReasoning({ content: text });
-  return canonicalReasoningText(content, reasoning);
-}
-function persistStep(chatId, persistence, ev) {
-  void persistence.sendMessages(chatId, [stepRow(ev)]).catch(() => {
-  });
-}
-function stoppedTurnOf(c) {
-  const live2 = c.liveTurn;
-  const text = live2 ? c.streamingText : "";
-  const model = live2?.model;
-  const result = !live2 ? "Stopped by user." : model ? `Stopped by user while ${model} was streaming (${text.length} chars kept).` : `Stopped by user before the gateway named the model (${text.length} chars kept).`;
-  return {
-    text,
-    source: { ...live2 },
-    event: {
-      ts: nowIso(),
-      category: "message",
-      label: STOPPED_TURN_STEP,
-      ...model ? { args: { model } } : {},
-      ...live2 ? { textChars: text.length } : {},
-      result
-    }
-  };
-}
-async function keepStoppedTurn(chatId, c, persistence) {
-  const stopped = c.stoppedTurn;
-  c.stoppedTurn = null;
-  if (!stopped) return;
-  const text = canonicalTurnText(stopped.text);
-  if (!text) return;
-  const [msg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: text, metadata: stoppedTurnMetadata(stopped.source) }]);
-  if (msg) recordAppended(c, msg);
-}
-async function asLiveTurn(c, complete) {
-  c.liveTurn = {};
-  try {
-    return await complete();
-  } finally {
-    c.liveTurn = null;
-  }
-}
-function liveTurnModel(c) {
-  return (model, account) => {
-    if (c.liveTurn) c.liveTurn = { model, account };
-  };
-}
-function connectRetryStep(c, step) {
-  return (attempt, delayMs, reason) => {
-    pushTrace(c, {
-      ts: nowIso(),
-      category: "message",
-      label: "llm.connect_retry",
-      args: { step, attempt },
-      result: `Could not reach BuilderForce (${reason}). Trying again in ${Math.round(delayMs / 1e3)}s \u2014 nothing was sent, so nothing is repeated.`
-    });
-  };
-}
-
-// src/runStore/runControl.ts
-function driverFor(key) {
-  return typeof key === "number" ? getRunDriver() : null;
-}
-function resetBrainRunStore() {
-  cells.clear();
-  forgetResolvedModels();
-}
-function subscribeRunStore(listener) {
-  storeListeners.add(listener);
-  return () => {
-    storeListeners.delete(listener);
-  };
-}
-function getGlobalRunState() {
-  const running = [];
-  const awaiting = [];
-  for (const [id, cell] of cells) {
-    if (typeof id !== "number") continue;
-    if (cell.pendingConfirm) awaiting.push(id);
-    else if (cell.running) running.push(id);
-  }
-  return { running, awaiting };
-}
-function subscribeRun(chatId, listener) {
-  const c = getCell(chatId);
-  c.listeners.add(listener);
-  return () => {
-    c.listeners.delete(listener);
-  };
-}
-function runAbortSignal(chatId) {
-  return cells.get(chatId)?.abort?.signal;
-}
-function appendRunMessage(chatId, msg) {
-  const c = cells.get(chatId);
-  if (!c) return;
-  recordAppended(c, msg);
-  emit(c);
-}
-function getRunSnapshot(chatId) {
-  if (chatId == null) return EMPTY_SNAPSHOT;
-  return cells.get(chatId)?.snapshot ?? EMPTY_SNAPSHOT;
-}
-function isRunning(chatId) {
-  return chatId != null && (cells.get(chatId)?.running ?? false);
-}
-function getRunTrace(chatId) {
-  if (chatId == null) return [];
-  return cells.get(chatId)?.trace ?? [];
-}
-function stopRun(chatId) {
-  const driver = driverFor(chatId);
-  if (driver) return driver.stop(chatId);
-  const c = cells.get(chatId);
-  if (!c || !c.running || c.abort?.signal.aborted) return;
-  const stopped = stoppedTurnOf(c);
-  c.stoppedTurn = stopped;
-  c.abort?.abort();
-  if (c.confirmResolver) {
-    const resolve = c.confirmResolver;
-    c.confirmResolver = null;
-    c.pendingConfirm = null;
-    resolve(false);
-  }
-  c.streamingText = "";
-  c.activity = null;
-  c.turn = null;
-  pushTrace(c, stopped.event);
-}
-function clearRunError(chatId) {
-  if (chatId == null) return;
-  const driver = driverFor(chatId);
-  if (driver) return driver.clearError(chatId);
-  const c = cells.get(chatId);
-  if (!c || !c.error) return;
-  c.error = "";
-  c.errorAction = null;
-  emit(c);
-}
-function requestRunConfirm(chatId, req, opts) {
-  if (driverFor(chatId)) return Promise.resolve(false);
-  const c = getCell(chatId);
-  return new Promise((resolve) => {
-    c.pendingConfirm = { name: req.name, args: req.args };
-    c.confirmResolver = resolve;
-    c.activity = {
-      ...toolActivity(req.name, req.args, opts?.step ?? c.activity?.step ?? 0, Date.now()),
-      phase: "awaiting"
-    };
-    emit(c);
-  });
-}
-function resolveRunConfirm(chatId, ok) {
-  const driver = driverFor(chatId);
-  if (driver) return driver.confirm(chatId, ok);
-  const c = cells.get(chatId);
-  if (!c || !c.confirmResolver) return;
-  const resolve = c.confirmResolver;
-  c.confirmResolver = null;
-  c.pendingConfirm = null;
-  emit(c);
-  resolve(ok);
-}
-function applyRemoteRun(chatId, snapshot) {
-  const c = getCell(chatId);
-  if (c.abort) return;
-  c.running = snapshot.running;
-  c.streamingText = snapshot.streamingText;
-  c.error = snapshot.error;
-  c.errorAction = snapshot.errorAction;
-  c.pendingConfirm = snapshot.pendingConfirm;
-  c.messagesEpoch = snapshot.messagesEpoch;
-  c.appended = snapshot.appended;
-  c.trace = snapshot.trace;
-  c.runTraceFrom = 0;
-  c.activity = snapshot.activity;
-  c.byoUnresolved = snapshot.byoUnresolved;
-  c.providerCap = snapshot.providerCap;
-  c.turn = snapshot.turn ?? null;
-  emit(c);
-}
-
-// ../packages/write-outbox/src/idempotency.ts
-var fallbackCounter = 0;
-function defaultId() {
-  const c = globalThis.crypto;
-  if (c?.randomUUID) return c.randomUUID();
-  fallbackCounter += 1;
-  return `ob-${Date.now().toString(36)}-${fallbackCounter.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-function batchIdempotencyKey(batch) {
-  const head = batch[0];
-  return head ? head.batch ?? head.id : void 0;
-}
-
-// ../packages/write-outbox/src/policy.ts
-var OUTBOX_MAX_ITEMS = 25;
-var OUTBOX_MAX_WAIT_MS = 5e3;
-var OUTBOX_MAX_ENTRIES = 1e3;
-var OUTBOX_RETRY_BASE_MS = 1e3;
-var OUTBOX_RETRY_MAX_MS = 5 * 6e4;
-function isPermanentHttpFailure(error) {
-  const status2 = error?.status;
-  if (typeof status2 !== "number") return false;
-  return status2 >= 400 && status2 < 500 && ![401, 408, 409, 425, 429].includes(status2);
-}
-
-// ../packages/write-outbox/src/sealedBatch.ts
-var bySeq = (a, b) => a.seq - b.seq;
-function sendable(e, scope) {
-  return scope === void 0 || e.scope === void 0 || e.scope === scope;
-}
-function takeBatch(l, scope, upTo, maxItems) {
-  const due = (e) => e.seq <= upTo && sendable(e, scope);
-  const start = l.entries.findIndex(due);
-  if (start < 0) return null;
-  const head = l.entries[start];
-  let n = 0;
-  const at = (i) => l.entries[start + i];
-  if (head.batch) {
-    while (at(n) && at(n).batch === head.batch) n += 1;
-  } else {
-    while (at(n) && n < maxItems && !at(n).batch && due(at(n))) n += 1;
-  }
-  const batch = l.entries.splice(start, n);
-  const sealed = !head.batch;
-  if (sealed) {
-    for (const e of batch) {
-      e.batch = head.id;
-      if (scope !== void 0) e.scope = scope;
-    }
-  }
-  return { batch, sealed };
-}
-function sendContext(batch) {
-  const head = batch[0];
-  return {
-    idempotencyKey: batchIdempotencyKey(batch),
-    ids: batch.map((e) => e.id),
-    ...head.scope !== void 0 ? { scope: head.scope } : {}
-  };
-}
-function drainContext(taken, scope, newId) {
-  return {
-    idempotencyKey: batchIdempotencyKey(taken) ?? newId(),
-    ids: taken.map((e) => e.id),
-    ...scope ? { scope } : {}
-  };
-}
-
-// ../packages/write-outbox/src/outbox.ts
-function createOutbox(opts) {
-  const maxItems = Math.max(1, opts.maxItems ?? OUTBOX_MAX_ITEMS);
-  const maxWaitMs = opts.maxWaitMs ?? OUTBOX_MAX_WAIT_MS;
-  const retry = opts.retry ? {
-    baseMs: opts.retry.baseMs ?? OUTBOX_RETRY_BASE_MS,
-    maxMs: opts.retry.maxMs ?? OUTBOX_RETRY_MAX_MS,
-    isPermanent: opts.retry.isPermanent ?? isPermanentHttpFailure
-  } : null;
-  const store = opts.store ?? null;
-  const maxEntries = Math.max(
-    maxItems,
-    opts.maxEntries ?? (retry || store ? OUTBOX_MAX_ENTRIES : Number.POSITIVE_INFINITY)
-  );
-  const newId = opts.newId ?? defaultId;
-  const lanes = /* @__PURE__ */ new Map();
-  let lastSeq = 0;
-  let dropped = 0;
-  let closed = false;
-  const isOnline = () => opts.online?.isOnline() ?? true;
-  const lane = (key) => {
-    let l = lanes.get(key);
-    if (!l) {
-      l = { entries: [], timer: null, retryTimer: null, attempt: 0, inFlight: 0, tail: Promise.resolve() };
-      lanes.set(key, l);
-    }
-    return l;
-  };
-  const nextSeq = () => {
-    lastSeq = Math.max(lastSeq + 1, Date.now() * 1e3);
-    return lastSeq;
-  };
-  const loaded = store ? Promise.resolve().then(() => store.load()).then(
-    (entries) => {
-      for (const e of entries) {
-        lane(e.key).entries.push(e);
-        lastSeq = Math.max(lastSeq, e.seq);
-      }
-      for (const l of lanes.values()) l.entries.sort(bySeq);
-    },
-    (error) => opts.onStoreError?.(error)
-  ) : Promise.resolve();
-  let writes = loaded;
-  const persist = (op) => {
-    if (!store) return;
-    writes = writes.then(() => op(store)).catch((error) => opts.onStoreError?.(error));
-  };
-  const drop = (key, entries, reason) => {
-    if (entries.length === 0) return;
-    dropped += entries.length;
-    const ids2 = entries.map((e) => e.id);
-    persist((s) => s.remove(ids2));
-    opts.onDrop?.({ key, count: entries.length, reason });
-  };
-  const enforceBound = () => {
-    let total = 0;
-    for (const l of lanes.values()) total += l.entries.length;
-    while (total > maxEntries) {
-      let oldestKey;
-      let oldest;
-      for (const [k, l] of lanes) {
-        const head = l.entries[0];
-        if (head && (!oldest || head.seq < oldest.entries[0].seq)) {
-          oldest = l;
-          oldestKey = k;
-        }
-      }
-      if (!oldest) return;
-      drop(oldestKey, oldest.entries.splice(0, 1), "overflow");
-      total -= 1;
-    }
-  };
-  const currentScope = () => opts.scope ? opts.scope() : void 0;
-  const take = (l, scope, upTo) => {
-    const next = takeBatch(l, scope, upTo, maxItems);
-    if (!next) return null;
-    if (next.sealed) persist((s) => s.put(next.batch));
-    return next.batch;
-  };
-  const clearTimer = (l) => {
-    if (l.timer !== null) clearTimeout(l.timer);
-    l.timer = null;
-  };
-  const clearRetry = (l) => {
-    if (l.retryTimer !== null) clearTimeout(l.retryTimer);
-    l.retryTimer = null;
-  };
-  const scheduleRetry = (key, l) => {
-    if (!retry || closed || l.retryTimer !== null) return;
-    l.attempt += 1;
-    const delay = Math.min(retry.maxMs, retry.baseMs * 2 ** (l.attempt - 1));
-    const jittered = Math.round(delay * (0.8 + Math.random() * 0.4));
-    l.retryTimer = setTimeout(() => {
-      l.retryTimer = null;
-      void flushKey(key, { final: false, probe: true });
-    }, jittered);
-  };
-  const armTimer = (key, l) => {
-    if (l.timer !== null || maxWaitMs <= 0) return;
-    l.timer = setTimeout(() => {
-      l.timer = null;
-      void flushKey(key, { final: false, auto: true });
-    }, maxWaitMs);
-  };
-  const requeue = (l, entries) => {
-    l.entries.unshift(...entries);
-    l.entries.sort(bySeq);
-  };
-  const sendBatch = async (key, l, batch, final) => {
-    const items = batch.map((e) => e.item);
-    const ctx = sendContext(batch);
-    const ids2 = ctx.ids;
-    l.inFlight += batch.length;
-    try {
-      await opts.send(key, opts.coalesce ? opts.coalesce(items) : items, { final, ...ctx });
-      l.inFlight -= batch.length;
-      l.attempt = 0;
-      persist((s) => s.remove(ids2));
-      return true;
-    } catch (error) {
-      l.inFlight -= batch.length;
-      opts.onError?.(error, key);
-      if (retry && !retry.isPermanent(error)) {
-        requeue(l, batch);
-        scheduleRetry(key, l);
-        return false;
-      }
-      drop(key, batch, retry ? "rejected" : "failed");
-      return true;
-    }
-  };
-  const flushKey = (key, mode) => {
-    const l = lanes.get(key);
-    if (!l) return Promise.resolve();
-    const upTo = mode.probe ? Number.POSITIVE_INFINITY : lastSeq;
-    if (mode.final) {
-      const scope = currentScope();
-      if (!isOnline() || scope === null) return Promise.resolve();
-      clearTimer(l);
-      const batches = [];
-      for (let b = take(l, scope, upTo); b; b = take(l, scope, upTo)) batches.push(b);
-      return Promise.all(batches.map((b) => sendBatch(key, l, b, true))).then(() => void 0);
-    }
-    const run = l.tail.then(async () => {
-      await loaded;
-      if (mode.auto && l.retryTimer !== null) return;
-      if (mode.auto && !isOnline()) {
-        scheduleRetry(key, l);
-        return;
-      }
-      if (!mode.auto && l.retryTimer !== null) {
-        clearRetry(l);
-      }
-      const scope = currentScope();
-      if (scope === null) {
-        scheduleRetry(key, l);
-        return;
-      }
-      clearTimer(l);
-      for (let batch = take(l, scope, upTo); batch; batch = take(l, scope, upTo)) {
-        if (!await sendBatch(key, l, batch, false)) return;
-      }
-      if (l.entries.length > 0) armTimer(key, l);
-    });
-    l.tail = run;
-    return run;
-  };
-  const flushAll = (final) => Promise.all([...lanes.keys()].map((k) => flushKey(k, { final }))).then(() => void 0);
-  const unsubscribe = opts.online?.subscribe((online) => {
-    if (!online || closed) return;
-    for (const l of lanes.values()) {
-      clearRetry(l);
-      l.attempt = 0;
-    }
-    void flushAll(false);
-  });
-  if (store) {
-    void loaded.then(() => {
-      enforceBound();
-      for (const [k, l] of lanes) if (l.entries.length > 0) void flushKey(k, { final: false, auto: true });
-    });
-  }
-  return {
-    enqueue(key, item) {
-      const l = lane(key);
-      const scope = currentScope();
-      const entry = { id: newId(), key, item, seq: nextSeq(), ...scope ? { scope } : {} };
-      l.entries.push(entry);
-      persist((s) => s.put([entry]));
-      enforceBound();
-      const unsealed = l.entries.reduce((n, e) => e.batch ? n : n + 1, 0);
-      if (unsealed >= maxItems) {
-        void flushKey(key, { final: false, auto: true });
-      } else {
-        armTimer(key, l);
-      }
-      return entry.id;
-    },
-    async flush(key, flushOpts) {
-      const final = flushOpts?.final ?? false;
-      if (key === void 0) return flushAll(final);
-      return flushKey(key, { final });
-    },
-    drainWith(key, request) {
-      const l = lane(key);
-      const run = l.tail.then(async () => {
-        await loaded;
-        clearTimer(l);
-        const scope = currentScope();
-        const taken = [];
-        if (scope !== null) {
-          const parked = [];
-          for (const e of l.entries) (sendable(e, scope) ? taken : parked).push(e);
-          l.entries = parked;
-        }
-        const items = taken.map((e) => e.item);
-        const ctx = drainContext(taken, scope, newId);
-        const ids2 = ctx.ids;
-        l.inFlight += taken.length;
-        try {
-          const result = await request(opts.coalesce && items.length ? opts.coalesce(items) : items, ctx);
-          l.inFlight -= taken.length;
-          if (taken.length) persist((s) => s.remove(ids2));
-          return result;
-        } catch (error) {
-          l.inFlight -= taken.length;
-          if (retry) requeue(l, taken);
-          else drop(key, taken, "failed");
-          throw error;
-        }
-      });
-      l.tail = run.catch(() => void 0);
-      return run;
-    },
-    size(key) {
-      if (key !== void 0) return lanes.get(key)?.entries.length ?? 0;
-      let n = 0;
-      for (const l of lanes.values()) n += l.entries.length;
-      return n;
-    },
-    stats() {
-      let queued = 0;
-      let inFlight = 0;
-      for (const l of lanes.values()) {
-        queued += l.entries.length;
-        inFlight += l.inFlight;
-      }
-      return { queued, inFlight, dropped };
-    },
-    ready: () => loaded.then(() => writes),
-    close() {
-      closed = true;
-      unsubscribe?.();
-      for (const l of lanes.values()) {
-        clearTimer(l);
-        clearRetry(l);
-      }
-    }
-  };
-}
-
-// ../packages/write-outbox/src/stores.ts
-var isEntry = (v) => typeof v === "object" && v !== null && typeof v.id === "string" && typeof v.seq === "number";
-function idbRunner(opts) {
-  const storeName = opts.storeName ?? "entries";
-  let db = null;
-  const open = () => {
-    db ??= new Promise((resolve, reject) => {
-      const req = opts.indexedDB.open(opts.dbName, 1);
-      req.onupgradeneeded = () => {
-        const created = req.result;
-        if (!created.objectStoreNames.contains(storeName)) created.createObjectStore(storeName, { keyPath: "id" });
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    }).catch((error) => {
-      db = null;
-      throw error;
-    });
-    return db;
-  };
-  return async (mode, body) => {
-    const handle = await open();
-    return new Promise((resolve, reject) => {
-      const tx = handle.transaction(storeName, mode);
-      const req = body(tx.objectStore(storeName));
-      tx.oncomplete = () => resolve(req ? req.result : void 0);
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
-    });
-  };
-}
-var readAll = async (run) => (await run("readonly", (s) => s.getAll()) ?? []).filter(isEntry);
-function createIndexedDbOutboxStore(opts) {
-  const run = idbRunner(opts);
-  return {
-    async load() {
-      return (await readAll(run)).filter((r) => r.partition === opts.partition).map(({ partition: _p, ...entry }) => entry);
-    },
-    async put(entries) {
-      await run("readwrite", (s) => {
-        for (const e of entries) s.put(opts.partition === void 0 ? e : { ...e, partition: opts.partition });
-      });
-    },
-    async remove(ids2) {
-      await run("readwrite", (s) => {
-        for (const id of ids2) s.delete(id);
-      });
-    }
-  };
-}
-async function listIndexedDbOutboxPartitions(opts) {
-  const partitions = /* @__PURE__ */ new Set();
-  for (const r of await readAll(idbRunner(opts))) if (typeof r.partition === "string") partitions.add(r.partition);
-  return [...partitions];
-}
-
-// src/stepOutbox.ts
-var STEP_BATCH_MAX = 25;
-var STEP_BATCH_WAIT_MS = 5e3;
-var isStepRow = (m) => m.role === "tool";
-var durability = null;
-var stores = /* @__PURE__ */ new Map();
-var runKeys = /* @__PURE__ */ new Set();
-var replays = /* @__PURE__ */ new Map();
-var stopListening = null;
-function installStepDurability(next) {
-  stopListening?.();
-  stopListening = null;
-  durability = next;
-  stores.clear();
-  runKeys.clear();
-  replays.clear();
-  if (!next) return;
-  stopListening = next.online?.subscribe((online) => {
-    if (online) void drainStoredSteps();
-  }) ?? null;
-  void drainStoredSteps();
-}
-var optionsFor = (d, key) => {
-  let store = stores.get(key);
-  if (!store) {
-    store = d.storeFor(key);
-    stores.set(key, store);
-  }
-  return {
-    store,
-    ...d.online ? { online: d.online } : {},
-    ...d.scope ? { scope: d.scope } : {}
-  };
-};
-function stepDurabilityFor(chatId, runKey) {
-  if (!durability) return {};
-  const key = runKey === chatId ? `chat:${chatId}` : `chat:${chatId}:run:${runKey}`;
-  runKeys.add(key);
-  return optionsFor(durability, key);
-}
-async function drainStoredSteps() {
-  const d = durability;
-  if (!d?.sendRows || !d.storedKeys) return;
-  const sendRows = d.sendRows;
-  let keys;
-  try {
-    keys = await d.storedKeys();
-  } catch {
-    return;
-  }
-  await Promise.all(keys.filter((key) => !runKeys.has(key)).map((key) => {
-    let replay = replays.get(key);
-    if (!replay) {
-      replay = batchStepPersistence({
-        async sendMessages(chatId, rows, opts) {
-          await sendRows(chatId, rows, opts?.scope);
-          return [];
-        }
-      }, optionsFor(d, key));
-      replays.set(key, replay);
-    }
-    return replay.flush();
-  }));
-}
-var withEventKeys = (rows, ids2) => rows.map((m, i) => m.eventKey || !ids2[i] ? m : { ...m, eventKey: `step:${ids2[i]}` });
-function batchStepPersistence(base, opts = {}) {
-  const steps = createOutbox({
-    maxItems: opts.maxRows ?? STEP_BATCH_MAX,
-    maxWaitMs: opts.waitMs ?? STEP_BATCH_WAIT_MS,
-    retry: {},
-    ...opts.store ? { store: opts.store } : {},
-    ...opts.online ? { online: opts.online } : {},
-    ...opts.scope ? { scope: opts.scope } : {},
-    send: (chatId, rows, ctx) => base.sendMessages(chatId, withEventKeys(rows, ctx.ids), ctx.scope !== void 0 ? { scope: ctx.scope } : void 0)
-  });
-  const sendMessages = async (chatId, messages) => {
-    if (messages.length > 0 && messages.every(isStepRow)) {
-      for (const m of messages) steps.enqueue(chatId, m);
-      return [];
-    }
-    return steps.drainWith(chatId, async (pending, ctx) => {
-      if (pending.length === 0) return base.sendMessages(chatId, messages);
-      const saved = await base.sendMessages(chatId, [...withEventKeys(pending, ctx.ids), ...messages]);
-      return saved.slice(pending.length);
-    });
-  };
-  return {
-    persistence: { ...base, sendMessages },
-    flush: () => steps.flush()
-  };
-}
-
-// src/runOutcomeReport.ts
-function runOutcomeId(chatId, startedAtMs) {
-  return `ide:${chatId}:${startedAtMs}`;
-}
-function codeRunOutcome(args) {
-  if (args.aborted || !args.codeChanged || !args.codeModel || !args.runId) return null;
-  return {
-    clientRunId: args.runId,
-    model: args.codeModel,
-    role: "code",
-    source: "ide",
-    terminalStatus: args.failed ? "failed" : "completed",
-    merged: args.shipped,
-    steps: args.trace.filter((e) => e.label === "llm.complete" && !e.isError).length,
-    ...args.projectId != null ? { projectId: args.projectId } : {}
-  };
-}
-
 // src/shipVerification.ts
 var BASE_BRANCHES = /* @__PURE__ */ new Set(["main", "master"]);
 function parseGitShortStatus(output) {
@@ -10342,6 +10133,113 @@ function leftChangeUnreviewed(input) {
 }
 function unreviewedChangeNudge() {
   return 'You changed the app in this run and ended the turn without reviewing it. In the Studio you are the reviewer \u2014 nobody else can see this preview, so an unreviewed change parks its ticket in review forever. Finish it now: call `canvas_inspect_preview` with the selectors your change targets and the widths the request is about, check the measurements against what was asked (fix and re-inspect if they fail), then record builtin_reviews_record on each ticket the change delivers \u2014 verdict "complete" quoting the measurements, or "gaps" naming what is missing. A complete review after a passing inspection closes the ticket when your turn ends. If you genuinely cannot verify \u2014 the preview is not running, or the change is unfinished \u2014 say so plainly at the TOP of your answer and name exactly what is left.';
+}
+
+// src/directedMessage.ts
+var ADDRESSED_TO_META_KEY = "addressedTo";
+var AUTHORED_BY_META_KEY = "authoredBy";
+function asRecipient(value) {
+  const a = value;
+  if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
+    return { kind: a.kind, ref: a.ref, name: a.name };
+  }
+  return null;
+}
+function parseMessageAuthor(msg) {
+  if (!msg.metadata) return null;
+  try {
+    return asRecipient(JSON.parse(msg.metadata).authoredBy);
+  } catch {
+  }
+  return null;
+}
+function withDirectedMetadata(recipient, base) {
+  const meta = { ...base ?? {} };
+  const list = recipient == null ? [] : "kind" in recipient ? [recipient] : recipient;
+  if (list.length === 1) meta[ADDRESSED_TO_META_KEY] = list[0];
+  else if (list.length > 1) meta[ADDRESSED_TO_META_KEY] = { kind: "group", members: [...list] };
+  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
+}
+function parseDirectedRecipients(msg) {
+  if (!msg.metadata) return [];
+  try {
+    const a = JSON.parse(msg.metadata).addressedTo;
+    if (!a || typeof a !== "object") return [];
+    if (a.kind !== "group") {
+      const one = asRecipient(a);
+      return one ? [one] : [];
+    }
+    if (Array.isArray(a.members)) {
+      return a.members.map(asRecipient).filter((r) => r !== null);
+    }
+    if (Array.isArray(a.refs)) {
+      return a.refs.filter((ref) => typeof ref === "string" && ref.length > 0).map((ref) => ({ kind: "agent", ref, name: ref }));
+    }
+  } catch {
+  }
+  return [];
+}
+function isDirectedToParticipant(msg) {
+  return parseDirectedRecipients(msg).length > 0;
+}
+function directedAgentRecipients(recipient) {
+  if (recipient == null) return [];
+  const one = recipient;
+  const list = Array.isArray(recipient) ? recipient : one.kind === "group" ? one.members ?? [] : [one];
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const r of list) {
+    if (!r || typeof r.ref !== "string" || !r.ref || r.kind === "human") continue;
+    if (seen.has(r.ref)) continue;
+    seen.add(r.ref);
+    out.push({ kind: "agent", ref: r.ref, name: typeof r.name === "string" && r.name ? r.name : r.ref });
+  }
+  return out;
+}
+function activeMentionToken(text, caret) {
+  const at = text.lastIndexOf("@", Math.max(0, caret - 1));
+  if (at < 0 || at >= caret) return null;
+  if (at > 0 && !/\s/.test(text[at - 1])) return null;
+  const query = text.slice(at + 1, caret);
+  if (/[\s@]/.test(query)) return null;
+  return { query, start: at, end: caret };
+}
+function filterMentionCandidates(participants, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return participants;
+  return participants.map((p) => ({ p, idx: p.name.toLowerCase().indexOf(q) })).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.p.name.localeCompare(b.p.name)).map((s) => s.p);
+}
+function mentionRecipient(text, participants) {
+  const m = /^\s*@([^\s@]+)/.exec(text);
+  if (!m) return null;
+  const tag = m[1].toLowerCase();
+  return participants.find((p) => {
+    const name = p.name.toLowerCase();
+    return name === tag || name.split(/\s+/)[0] === tag || name.startsWith(tag);
+  }) ?? null;
+}
+function resolveRecipient(choice, mention) {
+  if (choice === "brain") return null;
+  return choice ?? mention;
+}
+var activeHashtagToken = activeTicketToken;
+function activeTicketToken(text, caret) {
+  const hash = text.lastIndexOf("#", Math.max(0, caret - 1));
+  if (hash < 0 || hash >= caret) return null;
+  if (hash > 0 && !/\s/.test(text[hash - 1])) return null;
+  const query = text.slice(hash + 1, caret);
+  if (/[\s#]/.test(query)) return null;
+  return { query, start: hash, end: caret };
+}
+function filterTicketCandidates(tickets, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return tickets;
+  return tickets.map((t) => {
+    const titleIdx = t.title.toLowerCase().indexOf(q);
+    const keyIdx = t.key?.toLowerCase().indexOf(q) ?? -1;
+    const idx = titleIdx >= 0 ? titleIdx : keyIdx;
+    return { t, idx };
+  }).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.t.title.localeCompare(b.t.title)).map((s) => s.t);
 }
 
 // src/runLineage.ts
@@ -12823,7 +12721,135 @@ async function startEngineRun(key, engine) {
   return true;
 }
 
+// src/useRunSnapshot.ts
+function useRunSnapshot(key) {
+  const subscribe = (0, import_react8.useCallback)(
+    (onChange) => key == null ? () => void 0 : subscribeRun(key, onChange),
+    [key]
+  );
+  const read = () => getRunSnapshot(key);
+  return (0, import_react8.useSyncExternalStore)(subscribe, read, read);
+}
+
+// src/consolidation.ts
+var CONSOLIDATION_META = { consolidation: true };
+function consolidationMetadata() {
+  return JSON.stringify(CONSOLIDATION_META);
+}
+function isConsolidationMarker(msg) {
+  if (!msg.metadata) return false;
+  try {
+    return JSON.parse(msg.metadata)?.consolidation === true;
+  } catch {
+    return false;
+  }
+}
+function lastConsolidationIndex(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (isConsolidationMarker(messages[i])) return i;
+  }
+  return -1;
+}
+function scopeToConsolidation(messages) {
+  const idx = lastConsolidationIndex(messages);
+  return idx >= 0 ? messages.slice(idx) : messages;
+}
+var CONSOLIDATION_MARKER_PREFIX = "\u{1F4CC} **Consolidated summary** \u2014 context continues from here.\n\n";
+function consolidationMarkerContent(summary) {
+  return `${CONSOLIDATION_MARKER_PREFIX}${summary.trim()}`;
+}
+
+// src/transcriptSeed.ts
+function transcriptSeedFrom(history) {
+  return scopeToConsolidation(history).filter((m) => !isStepMessage(m) && !isStoppedTurn(m)).flatMap((m) => {
+    if (m.role !== "assistant") return [{ role: m.role, content: m.content }];
+    const content = replayTextOf(m.content);
+    return content ? [{ role: "assistant", content }] : [];
+  });
+}
+
+// src/mergeTranscript.ts
+function mergeTranscript(base, extra) {
+  if (extra.length === 0) return base;
+  const have = new Set(base.map((m) => m.id));
+  const fresh = extra.filter((m) => !have.has(m.id));
+  if (fresh.length === 0) return base;
+  return [...base, ...fresh].sort((a, b) => a.seq - b.seq);
+}
+
+// src/priorResearch.ts
+var ENTRY_RESULT_CHARS = 1200;
+var ENTRY_ARGS_CHARS = 200;
+var DIGEST_CHARS = 12e3;
+var MAX_ENTRIES = 40;
+var HEADER = [
+  "## Already done earlier in this chat",
+  "Earlier turns of this conversation already ran the tool calls below (newest first, each result trimmed). Their results are NOT in the transcript above \u2014 this list is the record of them.",
+  "Build on it. Do not repeat a call listed here to rediscover what it already answered; re-run one only when you need a part of its result that is not shown, or when the target may have changed since (for example, a file this chat has edited)."
+].join("\n");
+function clip(text, max) {
+  return text.length > max ? `${text.slice(0, max - 1)}\u2026` : text;
+}
+function resultText(result) {
+  if (typeof result === "string") return result;
+  try {
+    return JSON.stringify(result) ?? "";
+  } catch {
+    return String(result);
+  }
+}
+function priorResearchDigest(history) {
+  const entries = [];
+  const seen = /* @__PURE__ */ new Set();
+  let size = HEADER.length;
+  for (let i = history.length - 1; i >= 0 && entries.length < MAX_ENTRIES; i -= 1) {
+    const message = history[i];
+    if (!isStepMessage(message)) continue;
+    const parsed = parseStepMessage(message.metadata);
+    if (!parsed || parsed.step.category !== "tool") continue;
+    const { label, args, result, isError } = parsed.step;
+    if (args == null && result == null) continue;
+    const fullArgs = args == null ? "" : stableStringify(args);
+    const key = `${label}|${fullArgs}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const entry = `- ${label}(${clip(fullArgs, ENTRY_ARGS_CHARS)})${isError ? " \u2014 FAILED" : ""}
+  \u2192 ${clip(resultText(result), ENTRY_RESULT_CHARS)}`;
+    if (size + entry.length + 1 > DIGEST_CHARS) break;
+    entries.push(entry);
+    size += entry.length + 1;
+  }
+  return entries.length > 0 ? [HEADER, ...entries].join("\n") : null;
+}
+
+// src/turnRating.ts
+function ratedTurnTool(messages, messageId) {
+  const index = messages.findIndex((m) => m.id === messageId);
+  if (index < 0) return null;
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (!isStepMessage(message)) return null;
+    const parsed = parseStepMessage(message.metadata ?? null);
+    if (parsed?.step.category === "tool") return parsed.step.label || null;
+  }
+  return null;
+}
+function ratedTurnContext(messages, messageId) {
+  const message = messages.find((m) => m.id === messageId);
+  return {
+    model: message && parseMessageProvenance(message)?.model || "",
+    toolName: ratedTurnTool(messages, messageId)
+  };
+}
+function withRating(ratings, messageId, rating) {
+  const next = { ...ratings };
+  if (rating === 0) delete next[messageId];
+  else next[messageId] = rating;
+  return next;
+}
+
 // src/useBrainConversation.ts
+var NO_MESSAGES = [];
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
   const {
@@ -12850,13 +12876,17 @@ function useBrainConversation(options) {
     chatMode,
     chatRoster
   } = options;
-  const [messages, setMessages] = (0, import_react8.useState)([]);
-  const [loadingMessages, setLoadingMessages] = (0, import_react8.useState)(false);
-  const [reloadNonce, setReloadNonce] = (0, import_react8.useState)(0);
-  const reloadMessages = (0, import_react8.useCallback)(() => setReloadNonce((n) => n + 1), []);
-  const sendingRef = (0, import_react8.useRef)(/* @__PURE__ */ new Set());
-  const [sendingChats, setSendingChats] = (0, import_react8.useState)(sendingRef.current);
-  const markSending = (0, import_react8.useCallback)((key, on) => {
+  const [held, setHeld] = (0, import_react9.useState)({ chatId, list: [] });
+  const messages = held.chatId === chatId ? held.list : NO_MESSAGES;
+  const updateMessages = (0, import_react9.useCallback)((forChat, update) => {
+    setHeld((cur) => cur.chatId === forChat ? { chatId: forChat, list: update(cur.list) } : cur);
+  }, []);
+  const [loadingMessages, setLoadingMessages] = (0, import_react9.useState)(false);
+  const [reloadNonce, setReloadNonce] = (0, import_react9.useState)(0);
+  const reloadMessages = (0, import_react9.useCallback)(() => setReloadNonce((n) => n + 1), []);
+  const sendingRef = (0, import_react9.useRef)(/* @__PURE__ */ new Set());
+  const [sendingChats, setSendingChats] = (0, import_react9.useState)(sendingRef.current);
+  const markSending = (0, import_react9.useCallback)((key, on) => {
     const next = new Set(sendingRef.current);
     if (on) next.add(key);
     else next.delete(key);
@@ -12864,29 +12894,24 @@ function useBrainConversation(options) {
     setSendingChats(next);
   }, []);
   const localSending = sendingChats.has(chatId);
-  const chatIdRef = (0, import_react8.useRef)(chatId);
+  const chatIdRef = (0, import_react9.useRef)(chatId);
   chatIdRef.current = chatId;
-  const [localError, setLocalError] = (0, import_react8.useState)("");
-  const [ratings, setRatings] = (0, import_react8.useState)({});
-  const [pendingAttachments, setPendingAttachments] = (0, import_react8.useState)([]);
-  const [uploading, setUploading] = (0, import_react8.useState)(false);
-  const autoRepliedChatIdRef = (0, import_react8.useRef)(null);
-  const [snapshot, setSnapshot] = (0, import_react8.useState)(() => getRunSnapshot(chatId));
-  (0, import_react8.useEffect)(() => {
-    setSnapshot(getRunSnapshot(chatId));
-    if (chatId == null) return;
-    return subscribeRun(chatId, () => setSnapshot(getRunSnapshot(chatId)));
-  }, [chatId]);
-  (0, import_react8.useEffect)(() => {
+  const [localError, setLocalError] = (0, import_react9.useState)("");
+  const [ratings, setRatings] = (0, import_react9.useState)({});
+  const [pendingAttachments, setPendingAttachments] = (0, import_react9.useState)([]);
+  const [uploading, setUploading] = (0, import_react9.useState)(false);
+  const autoRepliedChatIdRef = (0, import_react9.useRef)(null);
+  const snapshot = useRunSnapshot(chatId);
+  (0, import_react9.useEffect)(() => {
     let cancelled = false;
     if (chatId == null) {
-      setMessages([]);
+      setHeld({ chatId: null, list: [] });
       return;
     }
     setLoadingMessages(true);
     setLocalError("");
     persistence.getMessages(chatId).then((list) => {
-      if (!cancelled) setMessages(mergeTranscript(list, getRunSnapshot(chatId).appended));
+      if (!cancelled) setHeld({ chatId, list: mergeTranscript(list, getRunSnapshot(chatId).appended) });
     }).catch((e) => {
       if (!cancelled) setLocalError(e instanceof Error ? e.message : "Failed to load messages");
     }).finally(() => {
@@ -12896,12 +12921,12 @@ function useBrainConversation(options) {
       cancelled = true;
     };
   }, [persistence, chatId, reloadNonce]);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     if (chatId == null || !persistence.subscribeMessages) return;
     return persistence.subscribeMessages(chatId, reloadMessages);
   }, [persistence, chatId, reloadMessages]);
-  const lastMarkedRef = (0, import_react8.useRef)(null);
-  (0, import_react8.useEffect)(() => {
+  const lastMarkedRef = (0, import_react9.useRef)(null);
+  (0, import_react9.useEffect)(() => {
     if (chatId == null || !persistence.markChatRead || messages.length === 0) return;
     let maxSeq = 0;
     for (const m of messages) if (m.seq > maxSeq) maxSeq = m.seq;
@@ -12913,12 +12938,12 @@ function useBrainConversation(options) {
       if (lastMarkedRef.current?.chatId === chatId) lastMarkedRef.current = prev;
     });
   }, [persistence, chatId, messages]);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
-    setMessages((prev) => mergeTranscript(prev, appended));
-  }, [snapshot.messagesEpoch, snapshot.appended]);
-  (0, import_react8.useEffect)(() => {
+    updateMessages(chatId, (prev) => mergeTranscript(prev, appended));
+  }, [snapshot.messagesEpoch, snapshot.appended, chatId, updateMessages]);
+  (0, import_react9.useEffect)(() => {
     const map = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
@@ -12934,7 +12959,7 @@ function useBrainConversation(options) {
   const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
   const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
 ${extraSystem}` : resolvedSystemPrompt;
-  const buildRequest = (0, import_react8.useCallback)(
+  const buildRequest = (0, import_react9.useCallback)(
     (seed, userTurn, priorResearch) => ({
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
@@ -12961,7 +12986,7 @@ ${extraSystem}` : resolvedSystemPrompt;
     }),
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
-  const send = (0, import_react8.useCallback)(
+  const send = (0, import_react9.useCallback)(
     async (text, opts) => {
       const trimmed = text.trim();
       if (!trimmed || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
@@ -13010,7 +13035,7 @@ ${refs}`;
       }
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
-        if (stillOpen()) setMessages((prev) => [...prev, userMsg]);
+        updateMessages(id, (prev) => [...prev, userMsg]);
         onActivity?.(id);
         if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
         if (addressedTo) {
@@ -13022,8 +13047,8 @@ ${refs}`;
               for (const agent of agents) {
                 try {
                   const reply = await persistence.requestAgentReply(id, { agentRef: agent.ref, agentName: agent.name });
-                  if (reply && stillOpen()) {
-                    setMessages((prev) => reply.id != null && prev.some((m) => m.id === reply.id) ? prev : [...prev, reply]);
+                  if (reply) {
+                    updateMessages(id, (prev) => reply.id != null && prev.some((m) => m.id === reply.id) ? prev : [...prev, reply]);
                     onActivity?.(id);
                   }
                 } catch (e) {
@@ -13046,20 +13071,21 @@ ${refs}`;
         markSending(runChatId, false);
       }
     },
-    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn]
+    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn, updateMessages]
   );
-  (0, import_react8.useEffect)(() => {
+  (0, import_react9.useEffect)(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
     if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];
     if (last.role !== "user") return;
     if (isDirectedToParticipant(last)) return;
+    if (isMidTurnMetadata(last.metadata)) return;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
     void startRun(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
-  const rateMessage = (0, import_react8.useCallback)(async (msg, rating) => {
+  const rateMessage = (0, import_react9.useCallback)(async (msg, rating) => {
     setRatings((prev) => withRating(prev, msg.id, rating));
     const context = ratedTurnContext(messages, msg.id);
     try {
@@ -13071,7 +13097,7 @@ ${refs}`;
     } catch {
     }
   }, [persistence, messages]);
-  const attach = (0, import_react8.useCallback)(async (file) => {
+  const attach = (0, import_react9.useCallback)(async (file) => {
     setUploading(true);
     try {
       const result = await persistence.upload(file);
@@ -13092,20 +13118,20 @@ ${refs}`;
       setUploading(false);
     }
   }, [persistence]);
-  const removeAttachment = (0, import_react8.useCallback)((key) => {
+  const removeAttachment = (0, import_react9.useCallback)((key) => {
     setPendingAttachments((prev) => prev.filter((a) => a.key !== key));
   }, []);
-  const resolveConfirm = (0, import_react8.useCallback)((ok) => {
+  const resolveConfirm = (0, import_react9.useCallback)((ok) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
-  const clearError = (0, import_react8.useCallback)(() => {
+  const clearError = (0, import_react9.useCallback)(() => {
     setLocalError("");
     clearRunError(chatId);
   }, [chatId]);
-  const stop = (0, import_react8.useCallback)(() => {
+  const stop = (0, import_react9.useCallback)(() => {
     if (chatId != null) stopRun(chatId);
   }, [chatId]);
-  const buildTriageReport = (0, import_react8.useCallback)(
+  const buildTriageReport = (0, import_react9.useCallback)(
     (agentLabel, surface) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       events: getRunTrace(chatId),
@@ -13290,18 +13316,6 @@ function createBrainRestPersistence(opts) {
       return `${baseUrl}/api/brain-files/${key}?exp=${exp}&sig=${encodeURIComponent(sig2)}`;
     }
   };
-}
-
-// src/useRunSnapshot.ts
-var import_react9 = require("react");
-function useRunSnapshot(key) {
-  const [snapshot, setSnapshot] = (0, import_react9.useState)(() => getRunSnapshot(key));
-  (0, import_react9.useEffect)(() => {
-    setSnapshot(getRunSnapshot(key));
-    if (key == null) return void 0;
-    return subscribeRun(key, () => setSnapshot(getRunSnapshot(key)));
-  }, [key]);
-  return snapshot;
 }
 
 // src/indexedDbStepDurability.ts

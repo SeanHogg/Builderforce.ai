@@ -9,11 +9,11 @@
  */
 
 import { useState } from 'react';
-import { resolveRunConfirm, stopRun } from '@seanhogg/builderforce-brain-embedded';
+import { resolveRunConfirm, stopRun, useRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
 import { LiveActivity, ToolConfirmBar, type LiveActivityLabels, type ToolConfirmBarLabels } from '@seanhogg/builderforce-brain-ui';
 import type { LabelBundle } from '../vscodeBridge';
 import { makeT, toolConfirmLabels } from './chatLabels';
-import { steerRun, useChatChildren, useRunSnapshotOf, type ChildView } from './chatChildren';
+import { steerRun, useChatChildren, type ChildView } from './chatChildren';
 
 interface Props {
   chatId: number | null;
@@ -75,7 +75,7 @@ function SubagentRow({ child, t, confirmLabels, liveLabels }: {
   confirmLabels: ToolConfirmBarLabels;
   liveLabels?: Partial<LiveActivityLabels>;
 }) {
-  const run = useRunSnapshotOf(child.key);
+  const run = useRunSnapshot(child.key);
   const [draft, setDraft] = useState<string | null>(null);
   const send = () => {
     if (draft?.trim()) steerRun(child.key, draft.trim());

@@ -24,7 +24,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isMidTurnMetadata } from '@builderforce/agent-loop';
 import { useBrainConfig } from './config';
+import { useRunSnapshot } from './useRunSnapshot';
 import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
 import { transcriptSeedFrom } from './transcriptSeed';
 import { mergeTranscript } from './mergeTranscript';
@@ -45,12 +47,15 @@ import {
   startRun,
   stopRun,
   isRunning,
-  subscribeRun,
   getRunSnapshot,
   getRunTrace,
   resolveRunConfirm,
   clearRunError,
 } from './brainRunStore';
+
+/** The list a chat reads before its own has loaded — one identity, so effects keyed on
+ *  `messages` do not re-fire on every render of that window. */
+const NO_MESSAGES: BrainMessage[] = [];
 
 export interface UseBrainConversationOptions {
   chatId: number | null;
@@ -273,7 +278,19 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     chatRoster,
   } = options;
 
-  const [messages, setMessages] = useState<BrainMessage[]>([]);
+  // The transcript is held TOGETHER WITH the chat it was loaded for, and read only for
+  // that chat. One instance serves a panel that walks between chats, and React applies
+  // the switch's new `chatId` a render before the reload's state lands: a bare list let
+  // that render read the PREVIOUS chat's messages under the NEW chat's id. The
+  // auto-reply below then found the old chat's trailing user row (a steer sent into
+  // its live run) and started a run in the chat just switched to — an "only do analysis"
+  // typed in one chat stopped a different chat's work. Every write names its chat and
+  // is dropped when that is no longer the one held.
+  const [held, setHeld] = useState<{ chatId: number | null; list: BrainMessage[] }>({ chatId, list: [] });
+  const messages = held.chatId === chatId ? held.list : NO_MESSAGES;
+  const updateMessages = useCallback((forChat: number | null, update: (prev: BrainMessage[]) => BrainMessage[]) => {
+    setHeld((cur) => (cur.chatId === forChat ? { chatId: forChat, list: update(cur.list) } : cur));
+  }, []);
   const [loadingMessages, setLoadingMessages] = useState(false);
   // Bumped by reloadMessages() to force a transcript refetch without changing the
   // chat id — e.g. after another chat is merged INTO this one server-side.
@@ -306,21 +323,15 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   const [uploading, setUploading] = useState(false);
   const autoRepliedChatIdRef = useRef<number | null>(null);
 
-  // Live view of the chat's run (owned by the module-level store). Re-read the
-  // snapshot on every store emit; the snapshot identity is stable until it
-  // actually changes, so this only re-renders when the run state moves.
-  const [snapshot, setSnapshot] = useState(() => getRunSnapshot(chatId));
-  useEffect(() => {
-    setSnapshot(getRunSnapshot(chatId));
-    if (chatId == null) return;
-    return subscribeRun(chatId, () => setSnapshot(getRunSnapshot(chatId)));
-  }, [chatId]);
+  // Live view of the chat's run (owned by the module-level store) — always THIS chat's
+  // cell, including on the render a switch lands in.
+  const snapshot = useRunSnapshot(chatId);
 
   // Load messages whenever the active chat changes.
   useEffect(() => {
     let cancelled = false;
     if (chatId == null) {
-      setMessages([]);
+      setHeld({ chatId: null, list: [] });
       return;
     }
     setLoadingMessages(true);
@@ -332,7 +343,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // the run store's `appended` buffer, and this fetch can resolve after that
         // splice. Replacing would drop the turn, and the splice effect below will not
         // re-fire to restore it (its epoch has not moved). See `mergeTranscript`.
-        if (!cancelled) setMessages(mergeTranscript(list, getRunSnapshot(chatId).appended));
+        if (!cancelled) setHeld({ chatId, list: mergeTranscript(list, getRunSnapshot(chatId).appended) });
       })
       .catch((e) => {
         if (!cancelled) setLocalError(e instanceof Error ? e.message : 'Failed to load messages');
@@ -382,8 +393,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   useEffect(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
-    setMessages((prev) => mergeTranscript(prev, appended));
-  }, [snapshot.messagesEpoch, snapshot.appended]);
+    updateMessages(chatId, (prev) => mergeTranscript(prev, appended));
+  }, [snapshot.messagesEpoch, snapshot.appended, chatId, updateMessages]);
 
   // Re-hydrate this viewer's thumbs from the persisted message metadata, so a
   // reopened chat shows what they already pressed. (The durable RATING fact lives in
@@ -506,7 +517,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
-        if (stillOpen()) setMessages((prev) => [...prev, userMsg]);
+        updateMessages(id, (prev) => [...prev, userMsg]);
         onActivity?.(id);
         // First user turn of this chat → let the host auto-name it from the topic
         // (so it stops reading "New chat"). Uses the raw typed text, not the
@@ -530,8 +541,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
               for (const agent of agents) {
                 try {
                   const reply = await persistence.requestAgentReply(id, { agentRef: agent.ref, agentName: agent.name });
-                  if (reply && stillOpen()) {
-                    setMessages((prev) => (reply.id != null && prev.some((m) => m.id === reply.id) ? prev : [...prev, reply]));
+                  if (reply) {
+                    updateMessages(id, (prev) => (reply.id != null && prev.some((m) => m.id === reply.id) ? prev : [...prev, reply]));
                     onActivity?.(id);
                   }
                 } catch (e) {
@@ -557,7 +568,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         markSending(runChatId, false);
       }
     },
-    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn],
+    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn, updateMessages],
   );
 
   // Auto-reply when a chat loads with a trailing unanswered user message
@@ -572,6 +583,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     // A trailing message addressed to a participant is NOT a directive for the
     // BRAIN — leave it unanswered (the participant owns the reply).
     if (isDirectedToParticipant(last)) return;
+    // A MID-TURN user row was already delivered — steered into the run that was live
+    // when it was sent (`run.steer`), which hears it before its next turn. It is not
+    // an unanswered request, and replaying it would start a second run on it.
+    if (isMidTurnMetadata(last.metadata)) return;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');

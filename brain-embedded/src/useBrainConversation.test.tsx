@@ -557,6 +557,48 @@ describe('parallel chats on one hook instance (a panel that walks between chats)
     await act(async () => { releaseA?.(); await sendA; });
     expect(hook.current.sending).toBe(false);
   });
+
+  it("switching chats never answers the PREVIOUS chat's trailing user turn in the new one", async () => {
+    // Chat 2 is mid-run on "work on 2" (its stream never returns), so its list ends on
+    // that user row. Chat 1 is idle and its history is still loading. The render the
+    // switch lands in used to read chat 2's list under chat 1's id, and the auto-reply
+    // started a run in chat 1 on chat 2's words (a steer in one chat stopped another).
+    mockStream.mockImplementation(() => new Promise(() => {}));
+    vi.mocked(persistence.getMessages).mockImplementation(async (chatId: number) =>
+      chatId === 1 ? new Promise(() => {}) : [],
+    );
+    const { rerender, result: hook } = renderHook(
+      (props: { chatId: number }) => useBrainConversation({ chatId: props.chatId, toolSpecs: [], runTool: vi.fn() }),
+      { initialProps: { chatId: 2 }, wrapper },
+    );
+    await waitFor(() => expect(persistence.getMessages).toHaveBeenCalledWith(2));
+    act(() => { void hook.current.send('work on 2'); });
+    await waitFor(() => expect(mockStream).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['work on 2']));
+
+    rerender({ chatId: 1 });
+    // Chat 1 shows none of chat 2's turns, and no run starts there.
+    expect(hook.current.messages).toEqual([]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockStream).toHaveBeenCalledTimes(1);
+    expect(persistence.markChatRead).not.toHaveBeenCalledWith(1, expect.anything());
+  });
+
+  it('does not auto-reply to a trailing MID-TURN user row (a steer already delivered to a run)', async () => {
+    vi.mocked(persistence.getMessages).mockResolvedValue([
+      { id: 1, role: 'user', content: 'review the runtime', metadata: null, seq: 1, createdAt: '' },
+      { id: 2, role: 'assistant', content: 'Reading the engine…', metadata: JSON.stringify({ midTurn: true }), seq: 2, createdAt: '' },
+      { id: 3, role: 'user', content: 'only do analysis', metadata: JSON.stringify({ midTurn: true }), seq: 3, createdAt: '' },
+    ]);
+    const { result: hook, unmount } = renderHook(
+      () => useBrainConversation({ chatId: 6, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+    await waitFor(() => expect(hook.current.messages).toHaveLength(3));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mockStream).not.toHaveBeenCalled();
+    unmount();
+  });
 });
 
 describe('useBrainConversation directed agent reply', () => {
