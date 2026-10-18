@@ -113,6 +113,7 @@ export function BrainConversation() {
           projectName={projectName}
           onAssign={rows.onAssign}
           onNewProject={newProject.openNewProject}
+          onRename={(chatId, title) => { void chats.rename(chatId, title); }}
         />
       )}
     </>

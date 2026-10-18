@@ -55,6 +55,10 @@ import {
   startListingCheckout,
 } from '../../application/marketplace/listingCommerce';
 import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
+import {
+  listAcademyCoursesForWorkspace,
+  narrowListingsToStageQuery,
+} from '../../application/marketplace/stageCourses';
 
 /**
  * What is being sold and from where. Shared by publish and stage because the same
@@ -197,6 +201,31 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
   router.get('/mine', async (c) => {
     const listings = await sellerListings(db, c.get('tenantId') as number, c.get('userId') as string);
     return c.json({ listings });
+  });
+
+  /**
+   * Academy courses for the founder's stored company stage.
+   *
+   * The stage is `companies.business_stage` on the named company, or on the
+   * workspace's newest company when `companyId` is omitted. A client-supplied
+   * stage is not accepted — that would let the page show another stage's shelf.
+   */
+  router.get('/academy', async (c) => {
+    const raw = c.req.query('companyId');
+    const companyId = raw ? Number.parseInt(raw, 10) : undefined;
+    if (raw && (!Number.isInteger(companyId) || (companyId ?? 0) <= 0)) {
+      return c.json({
+        ok: false,
+        reason: 'unknown_company',
+        detail: 'companyId must be a positive integer',
+      });
+    }
+    const result = await listAcademyCoursesForWorkspace(
+      db,
+      c.get('tenantId') as number,
+      companyId,
+    );
+    return c.json(result);
   });
 
   /** Withdraw from the public catalogue. Buyers keep their licences. */
@@ -348,14 +377,22 @@ export function createPublicListingRoutes(db: Db): Hono<HonoEnv> {
    * rather than an error, so this cannot be used to probe which user ids exist.
    */
   router.get('/', async (c) => {
+    // `businessStage` is the founder product stage, not the freelancer chip
+    // (`stage` = start|grow|exit). The stored source of truth is
+    // `companies.business_stage`; this query only narrows a shelf the caller
+    // already resolved. An unknown token matches nothing.
+    const businessStage = c.req.query('businessStage') ?? '';
     const result = await browseCreationListings(db, c.env, {
       q: c.req.query('q') ?? '',
       kind: c.req.query('kind') ?? '',
       page: Number.parseInt(c.req.query('page') ?? '1', 10),
       limit: Number.parseInt(c.req.query('limit') ?? '24', 10),
       sellerRef: c.req.query('sellerRef') ?? '',
+      businessStage,
     });
-    return c.json(result);
+    if (!businessStage.trim()) return c.json(result);
+    const listings = narrowListingsToStageQuery(result.listings, businessStage);
+    return c.json({ listings, total: listings.length });
   });
 
   router.get('/:slug', async (c) => {

@@ -48,6 +48,9 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "enabledApiProposals": [
+    "chatSessionsProvider"
+  ],
   "contributes": {
     "jsonValidation": [
       {
@@ -115,6 +118,12 @@
         "title": "Open Creation Session…",
         "category": "BuilderForce",
         "icon": "$(multiple-windows)"
+      },
+      {
+        "command": "builderforce.openVisualization",
+        "title": "%command.openVisualization%",
+        "category": "BuilderForce",
+        "icon": "$(type-hierarchy-sub)"
       },
       {
         "command": "builderforce.scheduleMeeting",
@@ -766,6 +775,26 @@
         "fullName": "BuilderForce",
         "description": "%chatParticipant.description%",
         "isSticky": true
+      }
+    ],
+    "chatSessions": [
+      {
+        "type": "builderforce",
+        "name": "builderforce",
+        "displayName": "BuilderForce",
+        "icon": "$(sparkle)",
+        "description": "%chatSession.description%",
+        "order": 10,
+        "welcomeTitle": "BuilderForce",
+        "welcomeMessage": "Run BuilderForce agents on your codebase",
+        "inputPlaceholder": "Ask BuilderForce to build, fix or investigate",
+        "capabilities": {
+          "supportsFileAttachments": true,
+          "supportsImageAttachments": true,
+          "supportsSymbolAttachments": true,
+          "supportsSearchResultAttachments": true,
+          "supportsPromptAttachments": true
+        }
       }
     ],
     "configuration": {

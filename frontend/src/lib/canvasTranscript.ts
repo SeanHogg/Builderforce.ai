@@ -34,6 +34,8 @@
  * the opening of a real sentence that happens to contain a colon
  * ("Step 1: install the CLI" is content, not a label).
  */
+import { advisoryThreadHistoryAdmitted } from '@builderforce/creation-canvas-contract';
+
 const MAX_SPEAKER_LABEL_CHARS = 40;
 const LEADING_SPEAKER_LABEL = /^[ \t]*([\p{L}\p{N} .'’&-]{1,40}):[ \t]+(?=\S)/u;
 
@@ -84,6 +86,11 @@ export interface CanvasTranscriptMessage {
   metadata?: {
     error?: boolean;
     authoredBy?: { kind: 'agent' | 'brain' | 'human'; ref: string; name: string };
+    /** Advisory-thread marker, copied at import so this loader can ask `boundaryAdmits`. */
+    marker?: string;
+    confidentiality?: string;
+    founderInvitedAdvisor?: boolean;
+    hostRef?: string;
   };
 }
 
@@ -101,6 +108,7 @@ export interface CanvasConversationMessage {
 export function canvasTranscriptForModel(
   timeline: readonly CanvasTranscriptMessage[],
 ): CanvasConversationMessage[] {
+  if (!advisoryThreadHistoryAdmitted(timeline)) return [];
   return timeline.flatMap((message) => {
     // A failure notice the RUNTIME wrote (a rejected turn, a failed agent group).
     // Replaying it as a prior turn is what let one failed turn become the template

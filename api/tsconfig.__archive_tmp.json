@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "types": ["node", "vitest/globals"] },
+  "files": [
+    "src/application/brain/brainChats.ts",
+    "src/application/brain/brainChatShapes.ts",
+    "src/application/brain/brainChats.test.ts",
+    "src/application/brain/brainScopedChats.ts",
+    "src/application/brain/brainChatGuards.ts",
+    "src/presentation/routes/brainRoutes.ts",
+    "src/presentation/routes/brainRoutes.schemas.ts"
+  ]
+}

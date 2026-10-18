@@ -15,7 +15,7 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import { filterByGlob, applyStringEdit, editFacts, normalizeScopeDir } from "@builderforce/agent-tools";
+import { matchGlobInScope, applyStringEdit, editFacts, normalizeScopeDir } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the agent-runtime Node provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
@@ -103,7 +103,7 @@ function summarizeDirs(paths: string[], subdir?: string): string[] {
  * not exist). Output is sorted for stable, scan-able results. Mirrors the on-prem
  * Node provider's walk so the two behave identically.
  */
-async function walkFiles(start: string, root: string): Promise<{ paths: string[]; truncated: boolean }> {
+async function walkFiles(start: string, root: string, glob?: string, scope?: string): Promise<{ paths: string[]; truncated: boolean }> {
   const out: string[] = [];
   const queue: string[] = [start];
   let truncated = false;
@@ -121,8 +121,13 @@ async function walkFiles(start: string, root: string): Promise<{ paths: string[]
         if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
         queue.push(path.join(dir, entry.name));
       } else if (entry.isFile()) {
+        const rel = path.relative(root, path.join(dir, entry.name)).split(path.sep).join("/");
+        // Glob DURING the walk so the budget counts matches, not candidates: capping
+        // first and globbing the survivors made "0 matches" mean "not in the first
+        // 5,000 paths", which the tool's own note then reported as "no such file".
+        if (glob && !matchGlobInScope(rel, glob, scope)) continue;
         if (out.length >= LIST_MAX_FILES) { truncated = true; break; }
-        out.push(path.relative(root, path.join(dir, entry.name)).split(path.sep).join("/"));
+        out.push(rel);
       }
     }
   }
@@ -151,12 +156,16 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
   const repoRead = {
     async listFiles(subdir?: string, glob?: string): Promise<RepoListResult> {
       const start = subdir ? resolveInRoot(rootResolved, subdir) : rootResolved;
-      const { paths, truncated } = await walkFiles(start, rootResolved);
       // A glob is an explicit "find these files" — return the full matches (never the
-      // directory summary), so a named file is always surfaced even in a big repo.
+      // directory summary), so a named file is always surfaced even in a big repo. The
+      // glob is applied DURING the walk so the file budget counts MATCHES, not
+      // candidates, and it resolves against the scope so a glob written for the folder
+      // you asked about matches (see `matchGlobInScope`).
       if (glob) {
-        return { ok: true, paths: filterByGlob(paths, glob), truncated };
+        const found = await walkFiles(start, rootResolved, glob, subdir);
+        return { ok: true, paths: found.paths, truncated: found.truncated };
       }
+      const { paths, truncated } = await walkFiles(start, rootResolved);
       // Too many to hand back verbatim — return the child directories to scope into
       // (with trailing "/") instead of flooding the model with every path. Root files
       // are kept in the summary, so a top-level doc stays discoverable.

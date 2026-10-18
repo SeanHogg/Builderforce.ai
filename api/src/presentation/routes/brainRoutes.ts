@@ -31,6 +31,7 @@ import { headerHints } from '../../application/email/emailLocaleResolver';
 import { handleAssetSign, handleAssetUpload, handleTenantAssetRead } from './assetRoutes';
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
+import type { ArchivedFilter } from '../../application/brain/brainChats';
 import { learnFromPersistedTurns } from '../../application/brain/brainEvermindLearning';
 import { latestChatDiagnostics, saveChatDiagnostics } from '../../application/brain/chatDiagnosticsStore';
 import type { Db } from '../../infrastructure/database/connection';
@@ -70,6 +71,13 @@ function parseId(raw: string): number | null {
  *  so the next GET sees it without a per-chat cache key to purge. */
 const diagnosticsVersionKey = (chatId: number): string => `brain-diagnostics-version:chat:${chatId}`;
 
+/** `?archived=` on GET /chats → the {@link ArchivedFilter}. Anything unrecognised (or
+ *  absent) is `'exclude'`, the mode that list has always run in: a list filter narrows
+ *  to the default rather than rejecting the request. */
+function archivedParam(raw: string | undefined): ArchivedFilter {
+  return raw === 'only' || raw === 'all' ? raw : 'exclude';
+}
+
 // ---------------------------------------------------------------------------
 // Route factory
 // ---------------------------------------------------------------------------
@@ -107,6 +115,10 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
         projectId: c.req.query('projectId'),
         limit: limitParam(c.req.query('limit'), 50, 500),
         offset: offsetParam(c.req.query('offset')),
+        // `?archived=only` is the "Archived" view; `all` returns both. Anything else
+        // (including the absent param every existing client sends) is today's live
+        // list — a typo narrows to it rather than 400-ing a list filter.
+        archived: archivedParam(c.req.query('archived')),
       },
     );
     // Ticket health AND spend & saved ride the list — one grouped query each, so no

@@ -33,6 +33,12 @@ export type { LiveActivityProps, LiveActivityLabels } from './LiveActivity';
 export { Markdown } from './Markdown';
 export type { MarkdownProps, MarkdownLabels } from './Markdown';
 
+// The chat's OWN name, edited in place in the surface header — one component for the
+// web Brain panel, the editor's chat surface and Rovr, so the Enter/Escape/blank rules
+// cannot drift between them.
+export { InlineChatTitle, DEFAULT_INLINE_CHAT_TITLE_LABELS } from './inlineTitle/InlineChatTitle';
+export type { InlineChatTitleProps, InlineChatTitleLabels } from './inlineTitle/InlineChatTitle';
+
 export {
   QuestionCard,
   PendingQuestionBanner,

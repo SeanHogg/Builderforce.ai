@@ -4,7 +4,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations'))
   .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
 vi.mock('next/navigation', () => ({ usePathname: () => '/canvas' }));
-vi.mock('@/lib/AuthContext', () => ({ useAuth: () => ({ hasTenant: true }) }));
+// The strip reads the viewer session, not `useAuth()`: it renders in the canvas
+// command bar, and the canvas also renders in the VS Code webview and the embed
+// where there is no `AuthProvider` — which is what took the board down there.
+vi.mock('@/lib/viewerSession', () => ({ useViewerSession: () => ({ ready: true, hasTenant: true, tenantId: 'tenant-1', user: null }) }));
 
 import type { TeamRosterMember } from '@/lib/kernel/kernelApi';
 import { TeamBar } from './TeamBar';

@@ -111,6 +111,7 @@ const CHAT_HISTORY_KEY: Readonly<Record<string, string>> = {
   rename: 'app.rename',
   summarize: 'app.chatSummarize',
   delete: 'app.chatDelete',
+  archive: 'app.chatArchive',
 };
 const TOOL_CONFIRM_KEY: Readonly<Record<string, string>> = {
   prompt: 'app.confirmRun',

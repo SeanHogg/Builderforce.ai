@@ -13,12 +13,16 @@
  * persisted with, which a model copies as markup instead of calling tools.
  */
 import { replayTextOf } from '@builderforce/agent-loop';
+import { advisoryThreadHistoryAdmitted } from '@builderforce/creation-canvas-contract';
 import { scopeToConsolidation } from './consolidation';
 import { isStoppedTurn } from './stoppedTurn';
 import type { ChatCompletionMessage } from './streamChatCompletion';
 import { isStepMessage, type BrainMessage } from './types';
 
 export function transcriptSeedFrom(history: BrainMessage[]): ChatCompletionMessage[] {
+  // Ask the full history, not the post-consolidation slice: the marker sits on
+  // the opening system message, which a later consolidation marker would drop.
+  if (!advisoryThreadHistoryAdmitted(history)) return [];
   return scopeToConsolidation(history)
     .filter((m) => !isStepMessage(m) && !isStoppedTurn(m))
     .flatMap((m): ChatCompletionMessage[] => {

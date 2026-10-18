@@ -81,6 +81,17 @@ export interface UseBrainChats {
    */
   autoTitle(id: number, firstUserText: string): Promise<void>;
   summarize(id: number): Promise<void>;
+  /**
+   * Archive a chat — put it away rather than remove it.
+   *
+   * The server's archive IS its delete (`DELETE /api/brain/chats/:id` sets
+   * `isArchived`, and `listChats` filters those out), so this keeps the local list
+   * honest the same way: the row leaves the list and an open chat is left. It is
+   * NOT {@link remove}'s twin — they are the same server write reached from two
+   * menu items, because "archive" is the honest word for what the server does and
+   * "delete" reads as a destroy that would lose the conversation's summary.
+   */
+  archive(id: number): Promise<void>;
   remove(id: number): Promise<void>;
   assignToProject(id: number, projectId: number | null): Promise<void>;
   reload(): Promise<void>;
@@ -268,14 +279,26 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
         setError(result.error);
         return;
       }
-      if (result.summary) {
-        const updated = await persistence.updateChat(id, { title: result.summary });
-        setChats((prev) => prev.map((c) => (c.id === id ? { ...c, title: updated.title } : c)));
-      }
+      // Summarize must NEVER rewrite the title. The summary is a long, generated
+      // block of prose (and can still carry a stray <think> prefix), so folding it
+      // into `title` replaced a user's own chat name with a paragraph — and put the
+      // model's reasoning where the title is rendered. The summary lives on the
+      // server (`brain_chats.summary`); the row only needs the chat re-read.
+      await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Summarize failed');
     }
-  }, [persistence]);
+  }, [persistence, reload]);
+
+  const archive = useCallback(async (id: number) => {
+    try {
+      await persistence.deleteChat(id);
+      setChats((prev) => prev.filter((c) => c.id !== id));
+      if (activeIdRef.current === id) setActiveChatId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Archive failed');
+    }
+  }, [persistence, setActiveChatId]);
 
   const remove = useCallback(async (id: number) => {
     try {
@@ -327,6 +350,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     setMemoryEnabled,
     autoTitle,
     summarize,
+    archive,
     remove,
     assignToProject,
     reload,

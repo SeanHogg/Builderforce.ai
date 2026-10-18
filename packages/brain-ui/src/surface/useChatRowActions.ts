@@ -17,6 +17,13 @@ export interface UseChatRowActionsOptions {
   rename: (id: number, title: string) => Promise<unknown> | void;
   /** Rows offer Summarize only when the host supplies it. */
   summarize?: (id: number) => Promise<unknown> | void;
+  /**
+   * Archive a chat — put it away rather than remove it. Rows offer Archive only when
+   * the host supplies it, and never for a chat already archived.
+   */
+  archive?: (chat: ChatRowRef) => Promise<unknown> | void;
+  /** Is this chat already archived? A row in that state does not offer Archive. */
+  isArchived?: (id: number) => boolean;
   /** Rows offer Delete only when the host supplies it. */
   remove?: (chat: ChatRowRef) => Promise<unknown> | void;
   /** Asked before `remove`; false cancels. Hosts word and render their own confirm. */
@@ -29,19 +36,22 @@ export interface UseChatRowActionsOptions {
 export type ChatRowActionProps = Pick<
   ChatHistoryRowProps,
   | 'onOpen' | 'actionsOpen' | 'onToggleActions' | 'renaming' | 'renameValue' | 'onStartRename' | 'onRenameChange'
-  | 'onSubmitRename' | 'onCancelRename' | 'onSummarize' | 'summarizing' | 'onDelete' | 'deleting'
+  | 'onSubmitRename' | 'onCancelRename' | 'onSummarize' | 'summarizing' | 'onArchive' | 'archiving' | 'archived'
+  | 'onDelete' | 'deleting'
 >;
 
 /**
  * THE chat-history row state and its per-row actions (open, reveal actions, rename,
- * summarize, delete, assign) — every host's `ChatHistoryRow`s bind through it (web
- * Brain panel, the editor's chat surface, Rovr), so the rules live once:
+ * summarize, archive, delete, assign) — every host's `ChatHistoryRow`s bind through it
+ * (web Brain panel, the editor's chat surface, Rovr), so the rules live once:
  *
  * - one row's actions are revealed at a time, toggled from its "more" button;
  * - Rename is inline; a blank or unchanged title just cancels (no needless write), and
  *   Enter commits once — the input unmounts on Enter and its blur would commit again;
- * - Summarize / Delete / Assign each mark their row busy while in flight;
+ * - Summarize / Archive / Delete / Assign each mark their row busy while in flight;
  * - Delete asks the host's `confirmDelete` first.
+ * - `isArchived(id)` decides whether a row OFFERS Archive: a chat the host already
+ *   holds as archived has none to offer, so the menu never offers the state it is in.
  *
  * Hold it ABOVE the list, at surface/panel level: a history list unmounts while the
  * conversation is shown (a docked tab, the editor's History lever), and a row's open
@@ -59,6 +69,7 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [summarizingId, setSummarizingId] = useState<number | null>(null);
+  const [archivingId, setArchivingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   /** The title the open rename started from (the unchanged check). */
@@ -107,6 +118,19 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
     try { await opts.current.summarize?.(id); } finally { setSummarizingId((cur) => (cur === id ? null : cur)); }
   }, []);
 
+  const onArchive = useCallback(async (chat: ChatRowRef) => {
+    const { archive, isArchived } = opts.current;
+    if (!archive || isArchived?.(chat.id)) return;
+    setArchivingId(chat.id);
+    try {
+      await archive({ id: chat.id, title: chat.title });
+      // Archiving takes the row out of the list, so the revealed menu goes with it.
+      setActionsChatId((cur) => (cur === chat.id ? null : cur));
+    } finally {
+      setArchivingId((cur) => (cur === chat.id ? null : cur));
+    }
+  }, []);
+
   const onDelete = useCallback(async (chat: ChatRowRef) => {
     const { confirmDelete, remove } = opts.current;
     if (!remove) return;
@@ -126,10 +150,12 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
   }, []);
 
   const hasSummarize = Boolean(options.summarize);
+  const hasArchive = Boolean(options.archive);
   const hasRemove = Boolean(options.remove);
   /** Every action prop of one `ChatHistoryRow` — spread it onto the row. */
   const rowProps = (id: number): ChatRowActionProps => {
     const renaming = renamingId === id;
+    const archived = options.isArchived?.(id) ?? false;
     return {
       onOpen: openChat,
       actionsOpen: actionsChatId === id,
@@ -142,6 +168,9 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
       onCancelRename: cancelRename,
       onSummarize: hasSummarize ? onSummarize : undefined,
       summarizing: summarizingId === id,
+      onArchive: hasArchive && !archived ? onArchive : undefined,
+      archiving: archivingId === id,
+      archived,
       onDelete: hasRemove ? onDelete : undefined,
       deleting: deletingId === id,
     };
@@ -153,6 +182,7 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
     renameValue,
     setRenameValue,
     summarizingId,
+    archivingId,
     deletingId,
     busyId,
     openChat,
@@ -161,6 +191,7 @@ export function useChatRowActions(options: UseChatRowActionsOptions) {
     cancelRename,
     submitRename,
     onSummarize,
+    onArchive,
     onDelete,
     onAssign,
     rowProps,

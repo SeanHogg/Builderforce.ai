@@ -31,6 +31,9 @@ export const UpdateChatBody = z.object({
   capability: z.string().nullish(),
   mode: z.string().nullish(),
   memoryEnabled: z.boolean().optional(),
+  /** Un-archive a chat (`false`) — the reverse of DELETE /chats/:id. Only a boolean
+   *  moves the column; see `updateChat`. */
+  isArchived: z.boolean().optional(),
 });
 
 /** POST /chats/:id/read — a non-number `seq` has always meant "mark everything read". */

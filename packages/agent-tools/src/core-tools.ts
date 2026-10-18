@@ -46,6 +46,25 @@ import { SYMBOL_TOOLS } from "./symbol-tools.js";
 import { SEMANTIC_TOOLS } from "./semantic-tools.js";
 import { probeFromRepoRead, refuseWriteOverwrite } from "./writeOverwriteGuard.js";
 
+/**
+ * What to tell the model when a glob matched nothing.
+ *
+ * A zero-match glob is only proof of absence when the walk actually COVERED the
+ * tree. Every provider bounds its walk (LIST_MAX_FILES), and the bound is applied
+ * to the raw listing BEFORE the glob filter — so in a big repo the walk is cut
+ * short, the glob filters the surviving 5,000 paths, and "0 matches" means "not in
+ * the first 5,000 paths", not "does not exist". Claiming the file is missing here
+ * is what sent the agent into hand-rolled finders and directory re-scans. When the
+ * walk was cut short, say so and say how to be sure.
+ */
+function noMatchNote(glob: string, sub: string | undefined, truncated: boolean): string {
+  const base = `No file matches glob "${glob}"${sub ? ` under "${sub}"` : ""}.`;
+  if (truncated) {
+    return `${base} This is NOT proof the file does not exist: the file listing was cut off at its size budget BEFORE the glob was applied, so this only means "not among the paths scanned so far". Narrow \`path\` to a smaller folder and re-run, or use \`search_code\`/\`find_symbol\` for a specific name, before concluding anything is missing.`;
+  }
+  return `${base} Try a broader pattern (e.g. "*${glob.replace(/[*?/]/g, "")}*"), or list_files without a glob to see the tree. 0 matches means no such file exists in the paths scanned — do not claim one is missing without trying a broader glob first.`;
+}
+
 export const listFilesTool: ToolDefinition = defineTool({
   name: "list_files",
   description:
@@ -66,7 +85,7 @@ export const listFilesTool: ToolDefinition = defineTool({
       return {
         data: {
           ...r,
-          note: `No file matches glob "${glob}". Try a broader pattern (e.g. "*${glob.replace(/[*?/]/g, "")}*"), or list_files without a glob to see the tree. 0 matches means no such file exists — do not claim one is missing without trying a broader glob first.`,
+          note: noMatchNote(glob, sub, r.truncated === true),
         } as unknown as Record<string, unknown>,
       };
     }

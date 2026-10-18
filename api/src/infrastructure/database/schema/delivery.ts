@@ -808,6 +808,24 @@ export const projectFacts = pgTable('project_facts', {
   originPromptTokens:     integer('origin_prompt_tokens'),
   originCompletionTokens: integer('origin_completion_tokens'),
   expiresAt:  timestamp('expires_at'),
+  /** RETIREMENT (1242) — the three columns that let a fact the codebase later
+   *  contradicted stop being replayed. `update == replace` only covers the SAME key,
+   *  so without these a second belief about the same subject under a different key
+   *  simply accumulated and both stayed live forever.
+   *
+   *  `supersededBy` is an ORDINAL, not a row pointer: 0 = retired by the 1242 data
+   *  fix (no superseding belief exists in the database), non-zero = the ordinal of
+   *  the row that replaced this fact. Deliberately not a foreign key — a fact's
+   *  lineage must outlive whatever corrected it. NULL is the live state, and every
+   *  recall path filters on it. */
+  supersededBy:  bigint('superseded_by', { mode: 'number' }),
+  /** sha256 over the normalized content, written on every save. A changed hash under
+   *  the same anchor means the belief was corrected. NULL on pre-1242 rows, which
+   *  acquire one on their next write. */
+  contentHash:   text('content_hash'),
+  /** Files this fact was read out of, as `{path,line}` objects. A fact whose anchor
+   *  no longer holds the claim it makes is the signal to retire it. */
+  fileAnchors:   jsonb('file_anchors').$type<Array<{ path: string; line?: number }>>(),
   /** SEMANTIC RECALL (1134) — the same three columns `agent_memory` carries, because
    *  governed recall unions both stores and a half-embedded union ranks half by
    *  meaning and half by keyword. */

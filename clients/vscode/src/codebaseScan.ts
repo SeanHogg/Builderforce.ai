@@ -96,12 +96,25 @@ async function scanTree(root: string): Promise<ScanData> {
   return { dirs, manifests, rootFiles, extCounts, fileCount, truncated };
 }
 
-/** Version token from the directory structure + manifest set (changes on structural edits). */
+/**
+ * Version token for the workspace-map cache.
+ *
+ * A NAME-ONLY token went stale the moment anyone edited a file's contents: the
+ * structure was identical, so the cached overview survived an edit that
+ * invalidated it and the agent was grounded on a map of a repo that no longer
+ * existed. Folder names cannot detect content, so the token folds in the
+ * observable content signals the walk already collects - the file count, the
+ * per-extension counts and the truncation flag. Still cheap: it reuses the scan
+ * already in hand rather than re-hashing every file.
+ */
 function computeToken(data: ScanData): string {
   const h = crypto.createHash("sha256");
   for (const d of [...data.dirs].sort()) h.update(`d:${d}\n`);
   for (const m of [...data.manifests].sort()) h.update(`m:${m}\n`);
   for (const f of [...data.rootFiles].sort()) h.update(`f:${f}\n`);
+  h.update(`n:${data.fileCount}\n`);
+  for (const [ext, count] of [...data.extCounts.entries()].sort()) h.update(`e:${ext}:${count}\n`);
+  h.update(`t:${data.truncated}\n`);
   return h.digest("hex").slice(0, 32);
 }
 

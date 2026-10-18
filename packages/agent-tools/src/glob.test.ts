@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterByGlob, isUnderScopeDir, matchGlob, normalizeScopeDir } from "./glob.js";
+import { filterByGlob, filterByGlobInScope, isUnderScopeDir, matchGlob, matchGlobInScope, normalizeScopeDir } from "./glob.js";
 
 const TREE = [
   "README.md",
@@ -97,5 +97,48 @@ describe("isUnderScopeDir", () => {
 
   it("an empty scope matches everything", () => {
     expect(isUnderScopeDir("anything/at/all.ts", "")).toBe(true);
+  });
+});
+
+describe("matchGlobInScope / filterByGlobInScope", () => {
+  // Regression lock: list_files walks from the `path` scope but every provider filtered
+  // the REPO-ROOT-relative path. A glob written the natural way for the folder you asked
+  // about -- {path: "frontend/src/lib", glob: "**/*.test.ts"} -- then matched nothing, and
+  // the tool's own zero-match note told the model those 223 files did not exist.
+  it("resolves a scope-relative glob against the scoped folder", () => {
+    const paths = ["frontend/src/lib/a.test.ts", "frontend/src/lib/nested/b.test.ts", "frontend/src/other/c.ts"];
+    expect(filterByGlobInScope(paths, "**/*.test.ts", "frontend/src/lib")).toEqual([
+      "frontend/src/lib/a.test.ts",
+      "frontend/src/lib/nested/b.test.ts",
+    ]);
+    // Same glob, unscoped, is the root-relative reading.
+    expect(filterByGlobInScope(paths, "**/*.test.ts", undefined)).toEqual([
+      "frontend/src/lib/a.test.ts",
+      "frontend/src/lib/nested/b.test.ts",
+    ]);
+  });
+
+  it("still accepts a repo-root-relative glob when a scope is set", () => {
+    // The pattern names the repo-root path even though the walk started deeper; it must
+    // still match, so a caller who knows the full path is never punished for scoping.
+    expect(filterByGlobInScope(TREE, "src/**/*.ts", "src")).toEqual([
+      "src/index.ts",
+      "src/board/Card.test.ts",
+      "src/boardroom/Table.ts",
+    ]);
+  });
+
+  it("normalizes the scope before matching", () => {
+    expect(matchGlobInScope("src/board/Card.tsx", "*.tsx", "./src/board/")).toBe(true);
+    expect(matchGlobInScope("src/board/Card.tsx", "*.tsx", " /src/board ")).toBe(true);
+  });
+
+  it("never matches a path outside the scope (a sibling sharing a prefix is not inside)", () => {
+    expect(matchGlobInScope("src/boardroom/Table.ts", "**/*.ts", "src/board")).toBe(false);
+    expect(matchGlobInScope("docs/ROADMAP.md", "ROADMAP.md", "src")).toBe(false);
+  });
+
+  it("keeps the case-insensitive basename-anywhere rule inside a scope", () => {
+    expect(filterByGlobInScope(TREE, "ROADMAP.md", "docs")).toEqual(["docs/ROADMAP.md"]);
   });
 });

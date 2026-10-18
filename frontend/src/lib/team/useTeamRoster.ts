@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getTeamRoster, type TeamRosterMember } from '@/lib/kernel/kernelApi';
-import { useAuth } from '@/lib/AuthContext';
+import { useViewerSession } from '@/lib/viewerSession';
 import { getOrSetClientCached, invalidateClientCache, readClientCached } from '@/infrastructure/http/readThrough';
 
 /**
@@ -41,7 +41,11 @@ export function invalidateTeamRoster(): void {
 }
 
 export function useTeamRoster(): { members: TeamRosterMember[]; loading: boolean } {
-  const { hasTenant } = useAuth();
+  // NOT `useAuth()`: the canvas renders this through `TeamBar` in its command
+  // bar, and there is no `AuthProvider` above that tree in the VS Code webview
+  // or an embed. The viewer session answers the same question there, and for a
+  // signed-in editor viewer the right answer is the WORKSPACE, not "guest".
+  const { hasTenant } = useViewerSession();
   const audience: Audience = hasTenant ? 'tenant' : 'guest';
   const cached = readClientCached<TeamRosterMember[]>(`${CACHE_PREFIX}${audience}`);
   const fresh = cached != null;

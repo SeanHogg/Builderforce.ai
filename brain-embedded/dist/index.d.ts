@@ -118,6 +118,14 @@ interface BrainChat {
      */
     memoryEnabled?: boolean;
     /**
+     * Whether the conversation is ARCHIVED — hidden from the default chat list
+     * (`GET /api/brain/chats` filters `is_archived = false`) and offered no Archive
+     * action by the row menu, since there is nothing left to archive. Absent on an older
+     * server ⇒ not archived (the column default), the same convention as
+     * {@link BrainChat.memoryEnabled}. Set it back to `false` to restore the chat.
+     */
+    isArchived?: boolean;
+    /**
      * What this conversation cost and what memory saved it — attached by the api to
      * every chat payload beside the ticket rollup. Null/absent until it has usage.
      */
@@ -4552,6 +4560,17 @@ interface UseBrainChats {
      */
     autoTitle(id: number, firstUserText: string): Promise<void>;
     summarize(id: number): Promise<void>;
+    /**
+     * Archive a chat — put it away rather than remove it.
+     *
+     * The server's archive IS its delete (`DELETE /api/brain/chats/:id` sets
+     * `isArchived`, and `listChats` filters those out), so this keeps the local list
+     * honest the same way: the row leaves the list and an open chat is left. It is
+     * NOT {@link remove}'s twin — they are the same server write reached from two
+     * menu items, because "archive" is the honest word for what the server does and
+     * "delete" reads as a destroy that would lose the conversation's summary.
+     */
+    archive(id: number): Promise<void>;
     remove(id: number): Promise<void>;
     assignToProject(id: number, projectId: number | null): Promise<void>;
     reload(): Promise<void>;

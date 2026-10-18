@@ -25,7 +25,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useAuth } from '@/lib/AuthContext';
+import { useViewerSession } from '@/lib/viewerSession';
 import { signInHref } from '@/lib/auth';
 import type { TeamRosterMember } from '@/lib/kernel/kernelApi';
 import { isTeammateOnBoard, type BoardAgent } from '@/lib/canvas/boardAgents';
@@ -136,7 +136,11 @@ const NO_BOARD_AGENTS: readonly BoardAgent[] = [];
 
 export function TeamBar({ variant = 'band', onBoard = NO_BOARD_AGENTS }: TeamBarProps) {
   const t = useTranslations('team');
-  const { hasTenant } = useAuth();
+  // NOT `useAuth()`: the canvas draws this component in its own command bar, and
+  // there is no `AuthProvider` above that tree in the VS Code webview or an
+  // embed — which threw and took the whole board down. The viewer session also
+  // answers the workspace question correctly for an embedded, signed-in viewer.
+  const { hasTenant } = useViewerSession();
   const { members, loading } = useTeamRoster();
   const seated = (member: TeamRosterMember) => isTeammateOnBoard(member, onBoard);
   const pathname = usePathname() || '';

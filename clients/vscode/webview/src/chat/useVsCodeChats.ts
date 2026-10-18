@@ -47,6 +47,10 @@ export interface VsCodeChats {
   summarize: (id: number) => Promise<void>;
   /** Ask the host's modal whether to delete (it refuses while the chat's run is live). */
   confirmDelete: (chat: { id: number; title: string }) => Promise<boolean>;
+  /** Archive a chat through the panel's own store — the gateway signed in, this
+   *  webview signed out — so the archived row leaves the list and an open archived
+   *  chat is closed. */
+  archive: (chat: { id: number; title: string }) => Promise<void>;
   /** Delete a chat through the panel's own store — the gateway signed in, this webview
    *  signed out — so the open chat is left only when it IS the deleted one. */
   remove: (chat: { id: number; title: string }) => Promise<void>;
@@ -96,8 +100,9 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
       request<boolean>('chat.confirmDelete', { chatId: chat.id, title: chat.title }).then((ok) => ok === true, () => false),
     [],
   );
-  const { remove: removeChat } = brainChats;
+  const { remove: removeChat, archive: archiveChat } = brainChats;
   const remove = useCallback((chat: { id: number; title: string }) => removeChat(chat.id), [removeChat]);
+  const archive = useCallback((chat: { id: number; title: string }) => archiveChat(chat.id), [archiveChat]);
   const clearError = useCallback(() => setError(''), [setError]);
 
   const setChatId = useCallback((id: number | null) => { void select(id); }, [select]);
@@ -146,7 +151,7 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
 
   return {
     chatId, setChatId, chats, chatOptions, activeChat, reloadChats, onFirstUserTurn, ensureChatId,
-    runStatus, titleOf, chatMode, selectMode, setMemoryEnabled, armMemory, rename, summarize, confirmDelete, remove,
+    runStatus, titleOf, chatMode, selectMode, setMemoryEnabled, armMemory, rename, summarize, confirmDelete, archive, remove,
     loading: brainChats.loading, error: brainChats.error, clearError,
   };
 }

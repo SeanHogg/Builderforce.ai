@@ -97,6 +97,8 @@ describe('stage toolkit cards', () => {
         objectKind: null,
         objects: [card],
         priceCents: 0,
+        trial: 'full',
+        strippedFields: [],
         delivery: 'copy',
       });
       expect(isPublishable(checks), spec.stage).toBe(true);
@@ -170,7 +172,7 @@ describe('installStagePack', () => {
       return call.kind === 'insert' && Array.isArray(payload) && payload[0]?.content?.stage === 'mvp';
     });
     expect(copied, 'install must copy the snapshot card onto a new board').toBeTruthy();
-    const content = (copied!.payload as Array<{ content: { instructions: string; stage: string } }>)[0].content;
+    const content = (copied!.payload as Array<{ content: { instructions: string; stage: string } }>)[0]!.content;
     expect(content.stage).toBe('mvp');
     expect(content.instructions.length).toBeGreaterThan(20);
     expect(db.remaining()).toBe(0);
@@ -192,6 +194,7 @@ describe('ensureStageToolkits', () => {
     const queue: unknown[][] = [[], [{ total: 0 }]];
     for (let i = 0; i < specs.length; i++) {
       const spec = specs[i];
+      if (!spec) continue;
       const card = stageToolkitCard(spec);
       queue.push(
         [{ id: `sess-${i}` }],

@@ -14,6 +14,9 @@ export * from './dependencyGraph';
 export * from './academic';
 export * from './qa';
 export * from './people';
+// Advisory Brain-thread admission. Asked of `boundaryAdmits` — a founder invite
+// opens only aiContext, and the stored level stays restricted. See advisoryThread.ts.
+export * from './advisoryThread';
 // The SEAM between the hiring funnel and the employment relationship — an accepted
 // `offer` becoming an `employee` and an onboarding `employeeLifecycle`. Declared beside
 // both vocabularies and owned by neither; see handover.ts.

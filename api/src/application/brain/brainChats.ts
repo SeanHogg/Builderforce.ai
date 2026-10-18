@@ -12,14 +12,18 @@ import { normalizeChatMode, resolveChatMode, NEW_CHAT_MODE } from './chatMode';
 import { normalizeChatTitle } from './chatTitle';
 import { chatColumns, normalizeCapability, type CreateChatDto, type UpdateChatDto } from './brainChatShapes';
 import { canAccessChat, syncPendingMemberships, verifyChatOwnership, verifyProjectInTenant } from './brainChatGuards';
+import { answerTextOf, retainChatMemory } from './brainMemory';
 import type { Db } from '../../infrastructure/database/connection';
 import { bumpChatStructure, bumpTeamChats } from './chatCacheVersions';
+
+/** Which archive states a chat list may return. See {@link listChats}. */
+export type ArchivedFilter = 'exclude' | 'only' | 'all';
 
 export async function listChats(
   db: Db,
   tenantId: number,
   userId: string,
-  opts?: { projectId?: string; limit?: number; offset?: number },
+  opts?: { projectId?: string; limit?: number; offset?: number; archived?: ArchivedFilter },
 ) {
   // Activate any pending email-invites for this user, then list chats they OWN
   // or are an active MEMBER of (shared access, migration 0288).
@@ -39,12 +43,18 @@ export async function listChats(
   // SHARED chat in this tenant (chats are global to project+tenant). Locked chats
   // only surface to their owner/members.
   const visible = or(eq(brainChats.userId, userId), eq(brainChats.visibility, 'shared'), inArray(brainChats.id, memberChatIds))!;
+  // ARCHIVE STATE is a filter on WHICH chats, never on WHO may see them: the tenant,
+  // owner-or-member-or-shared and origin conditions below are identical for every
+  // mode, so `archived: 'only'` is an "Archived" tab and not a wider audience. Only
+  // the archive predicate itself changes, and the default is the single condition
+  // this list has always had — every chat surface calls it with no options.
+  const archived = opts?.archived ?? 'exclude';
   const conditions = [
     eq(brainChats.tenantId, tenantId),
     visible,
     eq(brainChats.origin, BRAIN_ORIGIN),
-    eq(brainChats.isArchived, false),
   ];
+  if (archived !== 'all') conditions.push(eq(brainChats.isArchived, archived === 'only'));
 
   if (opts?.projectId === 'none') {
     conditions.push(isNull(brainChats.projectId));
@@ -206,6 +216,11 @@ export async function updateChat(
   if (dto.visibility === 'shared' || dto.visibility === 'locked') updates.visibility = dto.visibility;
   if (dto.capability !== undefined) updates.capability = normalizeCapability(dto.capability);
   if (typeof dto.memoryEnabled === 'boolean') updates.memoryEnabled = dto.memoryEnabled;
+  // Archive is ONE-WAY only through `archiveChat` (which also retains the summary as
+  // a memory); restoring is just this write. Only an actual boolean moves the column,
+  // so a PATCH that omits `isArchived` — every rename, every mode switch — cannot
+  // silently re-archive a chat, and cannot un-archive one either.
+  if (typeof dto.isArchived === 'boolean') updates.isArchived = dto.isArchived;
   // An unrecognised mode is IGNORED rather than coerced: coercing would quietly
   // demote a running execution back to a conversation (and strip its dispatch
   // authority) because a stale client sent a value this build does not know.
@@ -228,13 +243,37 @@ export async function updateChat(
 }
 
 export async function archiveChat(db: Db, chatId: number, tenantId: number, userId: string, options: { isWorkspaceAdmin?: boolean } = {}) {
-  const existing = await verifyChatOwnership(db, chatId, tenantId, userId, undefined, options);
+  // `summary` + `projectId` are selected for the memory write below; the ownership
+  // gate's own return type is narrowed to `{ id, origin }`, so the extra columns are
+  // re-stated here — the same `as` cast `summarizeChat` uses on `canAccessChat`.
+  const existing = await verifyChatOwnership(
+    db,
+    chatId,
+    tenantId,
+    userId,
+    { summary: brainChats.summary, projectId: brainChats.projectId },
+    options,
+  ) as { id: number; origin: string; summary: string | null; projectId: number | null } | null;
   if (!existing) return { error: 'Chat not found' as const };
 
   await db
     .update(brainChats)
     .set({ isArchived: true, updatedAt: new Date() })
     .where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, chatId)));
+
+  // Archiving used to be a flag and nothing else: the conversation left every chat
+  // list (`listChats` filters `isArchived`), and the summary it had already earned went
+  // with it. With no `chat_memories` row for the chat, "consolidate project memory" and
+  // the memory-sync push to agent hosts never saw any of it. Retaining the memory HERE
+  // is what makes an archive a change of view rather than a deletion. It reuses the
+  // summary already on the chat, so archiving costs no LLM call and invents nothing —
+  // and it runs the same `answerTextOf` clean the summariser did, so a chat whose
+  // summary was written before that fix cannot smuggle its reasoning into memory here.
+  const summary = answerTextOf(existing.summary);
+  if (summary) {
+    await retainChatMemory(db, { tenantId, chatId, projectId: existing.projectId, summary });
+  }
+
   await Promise.all([bumpChatStructure(chatId), bumpTeamChats(tenantId)]);
 
   return { ok: true };

@@ -58,12 +58,28 @@ describe('useChatRowActions', () => {
     expect(remove).toHaveBeenCalledWith(chat);
   });
 
-  it('offers Summarize / Delete only when the host supplies them', () => {
+  it('offers Summarize / Archive / Delete only when the host supplies them', () => {
     expect(setup().rows().rowProps(1).onDelete).toBeUndefined();
     expect(setup().rows().rowProps(1).onSummarize).toBeUndefined();
-    const { rows } = setup({ summarize: vi.fn(), remove: vi.fn() });
+    expect(setup().rows().rowProps(1).onArchive).toBeUndefined();
+    const { rows } = setup({ summarize: vi.fn(), archive: vi.fn(), remove: vi.fn() });
     expect(rows().rowProps(1).onDelete).toBeTypeOf('function');
     expect(rows().rowProps(1).onSummarize).toBeTypeOf('function');
+    expect(rows().rowProps(1).onArchive).toBeTypeOf('function');
+  });
+
+  // Archive takes NO confirm: it is a change of view, not a destroy. It is also the
+  // one action that must not double up on itself — archiving an archived row is a
+  // no-op the menu cannot even reach.
+  it('archives without a confirm and never re-offers Archive on an archived row', async () => {
+    const archive = vi.fn(async () => {});
+    const isArchived = (id: number) => id === 9;
+    const { rows } = setup({ archive, isArchived });
+    await act(async () => { await rows().onArchive(chat); });
+    expect(archive).toHaveBeenCalledWith(chat);
+    expect(rows().rowProps(9).archived).toBe(true);
+    expect(rows().rowProps(9).onArchive).toBeUndefined();
+    expect(rows().rowProps(7).archived).toBe(false);
   });
 
   it('reveals the opened row only for a host that keeps the list beside the thread', () => {

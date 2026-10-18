@@ -1442,5 +1442,17 @@
   "ctMergedN": {
     "message": "Merged $1 chat(s).",
     "description": "Merged N chats; $1 = count"
+  },
+  "editTitle": {
+    "message": "Edit chat title"
+  },
+  "titleLabel": {
+    "message": "Chat title"
+  },
+  "saveTitle": {
+    "message": "Save chat title"
+  },
+  "cancelTitle": {
+    "message": "Cancel"
   }
 }

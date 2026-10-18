@@ -155,9 +155,30 @@ function matchGlob(p, pattern) {
 }
 
 /**
+ * Scope-aware glob: \`sub\` is where the walk started, so a glob written against THAT
+ * folder must resolve against the scope-relative path too. Filtering only the
+ * repo-root-relative path silently dropped every match (and the tool's zero-match
+ * note then reported real files as missing). Mirrors \`matchGlobInScope\` in
+ * \`@builderforce/agent-tools\` — this runner generates its own script text, so it
+ * keeps a local copy.
+ */
+function matchGlobScoped(p, pattern, sub) {
+  const scope = (sub ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
+  if (!scope) return matchGlob(p, pattern);
+  if (p !== scope && !p.startsWith(scope + '/')) return false;
+  return matchGlob(p, pattern) || matchGlob(p.slice(scope.length + 1), pattern);
+}
+
+/**
  * List repo files under \`dir\` (skipping .git/node_modules), capped. BREADTH-FIRST so
  * shallow files (root docs like ROADMAP.md) are collected before the cap is hit deep
  * in a large subtree; sorted for stable output.
+ *
+ * A GLOB IS APPLIED DURING THE WALK, not after it. Capping first and globbing only
+ * the surviving 5,000 paths makes "0 matches" mean "not among the first 5,000", which
+ * the agent read as "the file does not exist" — it then went hunting for hand-rolled
+ * finders. With a glob the cap counts MATCHES, so a huge repo returns all 223
+ * \`*.test.ts\` files instead of zero.
  */
 async function listFiles(dir, sub, glob) {
   const root = sub ? join(dir, sub) : dir;
@@ -174,14 +195,15 @@ async function listFiles(dir, sub, glob) {
       const full = join(d, e.name);
       if (e.isDirectory()) { queue.push(full); }
       else {
+        const rel = relative(dir, full).split(sep).join('/');
+        if (glob && !matchGlobScoped(rel, glob, sub)) continue;
         if (acc.length >= MAX_LIST_ENTRIES) { truncated = true; break; }
-        acc.push(relative(dir, full).split(sep).join('/'));
+        acc.push(rel);
       }
     }
   }
   acc.sort((a, b) => a.localeCompare(b));
-  const paths = glob ? acc.filter((p) => matchGlob(p, glob)) : acc;
-  return { ok: true, paths, truncated };
+  return { ok: true, paths: acc, truncated };
 }
 
 /**

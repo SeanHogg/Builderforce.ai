@@ -38,6 +38,7 @@ import { MANAGER_ORIGIN } from './chatAccess';
 import { resolveChatMode } from './chatMode';
 import { messageColumns } from './brainChatShapes';
 import { canAccessChat } from './brainChatGuards';
+import { ADVISORY_THREAD_AI_CONTEXT_ERROR, advisoryChatAdmittedToAiContext } from '../commerce/advisoryReservation';
 import { appendRaw } from './brainMessageStore';
 import type { BrainCallContext } from './brainLlmCall';
 import { agentReplySystemPrompt, agentReplyToolset } from './agentReplyPrompt';
@@ -86,6 +87,9 @@ export async function agentReply(
     mode: brainChats.mode,
   });
   if (!chat) return { error: 'Chat not found' as const };
+  if (!await advisoryChatAdmittedToAiContext(db, chatId)) {
+    return { error: ADVISORY_THREAD_AI_CONTEXT_ERROR };
+  }
   const apiKey = env.OPENROUTER_API_KEY;
   if (!apiKey) return { error: 'LLM not configured' as const };
 

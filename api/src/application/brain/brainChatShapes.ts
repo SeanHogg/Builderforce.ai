@@ -36,6 +36,10 @@ export interface UpdateChatDto {
    *  unrecognised value is IGNORED (the column is left as-is) rather than silently
    *  resetting a running execution back to a conversation. */
   mode?: string | null;
+  /** Archive / UN-archive the conversation. Written only when a boolean actually
+   *  arrives, so a PATCH that never mentions it leaves the state as it is — which is
+   *  what makes archive reversible: the one way back is `false`. */
+  isArchived?: boolean;
 }
 
 /**
@@ -87,14 +91,24 @@ export const chatColumns = {
   capability: brainChats.capability,
   mode: brainChats.mode,
   memoryEnabled: brainChats.memoryEnabled,
+  /** The archive state travels with EVERY chat read. A projection without it made the
+   *  list unable to tell a host that a chat is already archived, so the UI's
+   *  "don't offer Archive on an archived row" guard had nothing to test and read as
+   *  covered while protecting nothing. */
+  isArchived: brainChats.isArchived,
   createdAt: brainChats.createdAt,
   updatedAt: brainChats.updatedAt,
 } as const;
 
-export const chatDetailColumns = {
-  ...chatColumns,
-  isArchived: brainChats.isArchived,
-} as const;
+/**
+ * The DETAIL read's projection — the SAME columns as {@link chatColumns}, under the
+ * name the singleton/detail call sites already import. An alias, not a second
+ * definition: when the two were separate objects the only difference was
+ * `isArchived`, so the list and the detail could disagree about one fact. Both names
+ * are kept because `brainScopedChats.ts` (and any future detail reader) reads better
+ * against them.
+ */
+export const chatDetailColumns = chatColumns;
 
 
 export const messageColumns = {

@@ -955,6 +955,43 @@ export async function listBrainChats(
   }
 }
 
+/** One persisted transcript row (GET /api/brain/chats/:id/messages). The SAME rows the
+ *  webview/web app render, so a session restored from them reads identically in the
+ *  editor. `createdAt` arrives ISO-encoded over the wire. */
+export interface BfBrainChatMessage {
+  id: number;
+  role: string;
+  content: string;
+  /** JSON string, or null. The chat handler reads `brainChatId` out of it. */
+  metadata: string | null;
+  seq: number;
+  createdAt: string;
+}
+
+/**
+ * Read a Brain conversation's transcript (GET /api/brain/chats/:id/messages) — the SAME
+ * persistence the chat handler writes through ({@link appendBrainMessages}), read back so
+ * a REOPENED session shows its turns instead of an empty editor. The server returns the
+ * TAIL (most recent `limit`, oldest-first), which is what makes a reopened chat still
+ * show its last reply. Degrades to [] when signed out / unreachable, so the tab opens
+ * rather than errors.
+ */
+export async function getBrainChatMessages(
+  secrets: vscode.SecretStorage,
+  chatId: number,
+  limit = 100,
+): Promise<BfBrainChatMessage[]> {
+  try {
+    const r = await authed<{ messages?: BfBrainChatMessage[] }>(
+      secrets,
+      `/api/brain/chats/${chatId}/messages?limit=${limit}`,
+    );
+    return r?.messages ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Create a Brain conversation (POST /api/brain/chats) and return its id — the SAME
  * unified store the webview + web app use. The native `@builderforce` chat handler

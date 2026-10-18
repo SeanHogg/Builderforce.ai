@@ -120,7 +120,16 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     this.repaint();
   }
 
-  /** Archive one session by key. Archive state is local — a repaint, not a refetch. */
+  /**
+   * Archive one session by key — SERVER-side, not a local flag.
+   *
+   * This used to be local-only ("a repaint, not a refetch"), which left the tree
+   * claiming a chat was put away while the server still listed it, and made this a
+   * second, disagreeing Delete next to the one that already archives server-side.
+   * The HTTP write lives in the `builderforce.archiveSession` command, which owns
+   * the signed-in context and the error surface; this records the local view so the
+   * row repaints immediately and stays consistent if the command cannot run.
+   */
   archiveSession(key: string): void {
     this._archiveState = archiveRows(this._archiveState, [key], Date.now(), true);
     this.persistArchive();

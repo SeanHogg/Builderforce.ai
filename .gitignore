@@ -69,7 +69,9 @@ worker/secrets.json
 docs/private/
 
 # Runtime workspace/session data (transient)
+.builderforce/
 .builderforce/sessions/
+agent-runtime/.builderforce/
 agent-runtime/.builderforce/sessions/
 
 # npm lockfiles in pnpm-resolved packages.

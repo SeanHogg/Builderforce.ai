@@ -19,6 +19,11 @@ import { rollupChatTicketHealth, TASK_CLOSED_STATUSES, UNSUPPORTED_DELIVERY_PROG
 import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { readTimelineTail } from '../../domain/shared/timelineTail';
 import {
+  ADVISORY_THREAD_AI_CONTEXT_ERROR,
+  advisoryChatAdmittedToAiContext,
+  advisoryThreadHistoryAdmitted,
+} from '../commerce/advisoryReservation';
+import {
   brainChats,
   brainChatMessages,
   chatTicketLinks,
@@ -787,6 +792,9 @@ export class ChatTicketService {
   ): Promise<{ error: string } | Array<{ role: string; content: string; seq: number; createdAt: Date }>> {
     const chat = await this.ownedChat(chatId, tenantId, userId);
     if (!chat) return { error: 'Chat not found' };
+    if (!await advisoryChatAdmittedToAiContext(this.db, chatId)) {
+      return { error: ADVISORY_THREAD_AI_CONTEXT_ERROR };
+    }
     return readTimelineTail(
       (rows) => this.db
         .select({ role: brainChatMessages.role, content: brainChatMessages.content, seq: brainChatMessages.seq, createdAt: brainChatMessages.createdAt })
@@ -993,10 +1001,22 @@ export class ChatTicketService {
 
     // Gather source messages, ordered chronologically across all sources.
     const srcMsgs = await this.db
-      .select({ role: brainChatMessages.role, content: brainChatMessages.content, metadata: brainChatMessages.metadata, eventKey: brainChatMessages.eventKey, createdAt: brainChatMessages.createdAt, seq: brainChatMessages.seq })
+      .select({ chatId: brainChatMessages.chatId, role: brainChatMessages.role, content: brainChatMessages.content, metadata: brainChatMessages.metadata, eventKey: brainChatMessages.eventKey, createdAt: brainChatMessages.createdAt, seq: brainChatMessages.seq })
       .from(brainChatMessages)
       .where(inArray(brainChatMessages.chatId, sources))
       .orderBy(brainChatMessages.createdAt, brainChatMessages.seq);
+
+    // A sealed advisory thread must not be copied into another chat — that chat
+    // would then quote it into aiContext. Refuse before any write.
+    const byChat = new Map<number, typeof srcMsgs>();
+    for (const row of srcMsgs) {
+      const list = byChat.get(row.chatId) ?? [];
+      list.push(row);
+      byChat.set(row.chatId, list);
+    }
+    for (const rows of byChat.values()) {
+      if (!advisoryThreadHistoryAdmitted(rows)) return { error: ADVISORY_THREAD_AI_CONTEXT_ERROR };
+    }
 
     // One multi-row insert for every message. seq BECOMES the generated id inside the
     // INSERT (migration 1233's trigger). The VALUES keep chronological order, so the

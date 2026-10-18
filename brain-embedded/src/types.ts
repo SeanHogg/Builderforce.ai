@@ -45,6 +45,14 @@ export interface BrainChat {
    */
   memoryEnabled?: boolean;
   /**
+   * Whether the conversation is ARCHIVED — hidden from the default chat list
+   * (`GET /api/brain/chats` filters `is_archived = false`) and offered no Archive
+   * action by the row menu, since there is nothing left to archive. Absent on an older
+   * server ⇒ not archived (the column default), the same convention as
+   * {@link BrainChat.memoryEnabled}. Set it back to `false` to restore the chat.
+   */
+  isArchived?: boolean;
+  /**
    * What this conversation cost and what memory saved it — attached by the api to
    * every chat payload beside the ticket rollup. Null/absent until it has usage.
    */

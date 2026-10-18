@@ -1,0 +1,12 @@
+diff --git a/clients/vscode/package.nls.es.json b/clients/vscode/package.nls.es.json
+index 945b39ea8..03d049bf0 100644
+--- a/clients/vscode/package.nls.es.json
++++ b/clients/vscode/package.nls.es.json
+@@ -5,6 +5,7 @@
+   "view.evermind": "Evermind",
+   "command.openChat": "BuilderForce: Abrir chat",
+   "command.openCreateCanvas": "BuilderForce: Crear en Canvas",
++  "command.openVisualization": "BuilderForce: Abrir visualización",
+   "command.refreshInsights": "BuilderForce: Actualizar análisis",
+   "command.refreshEvermind": "BuilderForce: Actualizar Evermind",
+   "command.signIn": "BuilderForce: Iniciar sesión",

@@ -8,11 +8,91 @@ import { eq, and, desc, isNotNull } from 'drizzle-orm';
 import { brainChats, brainChatMessages, chatMemories, chatSessions, chatMessages, projectMemories } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { readTimelineTail } from '../../domain/shared/timelineTail';
+// The reasoning channel's LEARNING policy (see `reasoning.ts`): it excises `<think>…`
+// blocks IN PLACE and — unlike the display policy `answerTextOf` — never promotes a
+// swallowed thought back into the answer, so nothing the model thought can reach a
+// summary a user reads or a memory we consolidate.
+import { stripReasoningScratchpad } from '@builderforce/agent-loop';
 import { readProxyChoice } from '../llm/LlmProxyService';
 import { canAccessChat, verifyProjectInTenant } from './brainChatGuards';
+import { ADVISORY_THREAD_AI_CONTEXT_ERROR, advisoryChatAdmittedToAiContext } from '../commerce/advisoryReservation';
 import { buildTenantLlmService, completeTraced } from './brainLlmCall';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+
+// -----------------------------------------------------------------------
+// Reading an LLM answer out of a raw model response
+// -----------------------------------------------------------------------
+
+/**
+ * The ANSWER in a raw model response — the text without the model's `<think>…</think>`
+ * reasoning, trimmed. The one place memory decides what an LLM actually said.
+ *
+ * `readProxyChoice` hands back `message.content` VERBATIM, and on every model that
+ * reasons inline that content is the scratchpad followed by the answer. Both
+ * summarisers in this file materialised it as the chat's summary, so the reasoning
+ * was stored on `brain_chats.summary`, shown to the user, and handed to project-memory
+ * consolidation as though the model had said it. The closing tag is often missing —
+ * the transport caps the completion mid-thought — so a plain `<think>…</think>` regex
+ * misses exactly the case that matters most.
+ *
+ * This is the LEARNING policy rather than the display policy on purpose: a thought
+ * block is never promoted back into the answer. A summary that quoted deliberation
+ * would teach the next consolidation to quote it too, and would show a user the model
+ * arguing with itself about a chat that is already over.
+ *
+ * Exported so every memory writer uses the SAME reading of a model turn, and so the
+ * stripping is unit-testable without a database.
+ */
+export function answerTextOf(raw: string | null | undefined): string {
+  return stripReasoningScratchpad(raw ?? '');
+}
+
+// -----------------------------------------------------------------------
+// Writing a chat memory
+// -----------------------------------------------------------------------
+
+/**
+ * Retain `summary` as the memory for a BRAIN chat, keyed on `chatId`.
+ *
+ * A summary that lives only on `brain_chats.summary` is invisible to everything that
+ * reads MEMORY: `listMemories`, `consolidateProjectMemory` (which selects
+ * `chat_memories` by tenant + project), and the memory-sync push to agent hosts. The
+ * chat row kept the text and the memory table stayed empty, so consolidation had
+ * nothing to consolidate however many chats had been summarized.
+ *
+ * Columns, per `chatMemories` (schema/canvas.ts):
+ *   • `tenantId`   — the scoping column every memory read filters on.
+ *   • `chatId`     — PROVENANCE, and the conflict target: `.unique()` in the database,
+ *                    so one memory per chat and re-summarizing updates rather than
+ *                    duplicates. The chat id is the only handle a reader has back to
+ *                    the conversation.
+ *   • `projectId`  — how consolidation scopes its read; taken from the chat row.
+ *   • `summary`    — the CLEANED answer text (never the raw model output).
+ *   • `agentHostSessionId` is deliberately NOT set: it is the OTHER kind of memory
+ *                    (an agentHost coding session, `summarizeAgentHostSession`), and
+ *                    writing it here would claim a session id that does not exist.
+ *
+ * An upsert, keyed on the chat id, because summarizing a chat twice must leave one
+ * memory behind rather than two.
+ */
+export async function retainChatMemory(
+  db: Db,
+  args: { tenantId: number; chatId: number; projectId: number | null; summary: string },
+): Promise<void> {
+  await db
+    .insert(chatMemories)
+    .values({
+      tenantId: args.tenantId,
+      chatId: args.chatId,
+      projectId: args.projectId,
+      summary: args.summary,
+    })
+    .onConflictDoUpdate({
+      target: chatMemories.chatId,
+      set: { summary: args.summary, projectId: args.projectId, updatedAt: new Date() },
+    });
+}
 
 /** `opts.executionCtx` is the request context the trace write rides on. Optional:
  *  a caller without one (cron/internal) still traces, best-effort. */
@@ -22,6 +102,9 @@ export async function summarizeChat(db: Db, chatId: number, tenantId: number, us
     projectId: brainChats.projectId,
   }) as { id: number; projectId: number | null } | null;
   if (!chat) return { error: 'Chat not found' as const };
+  if (!await advisoryChatAdmittedToAiContext(db, chatId)) {
+    return { error: ADVISORY_THREAD_AI_CONTEXT_ERROR };
+  }
 
   const msgs = await readTimelineTail(
     (rows) => db
@@ -61,7 +144,12 @@ export async function summarizeChat(db: Db, chatId: number, tenantId: number, us
     chatId, projectId: chat.projectId,
   });
 
-  const { content: summary } = await readProxyChoice(result);
+  const { content: rawSummary } = await readProxyChoice(result);
+
+  // The model's raw content can carry its `<think>` reasoning — see `answerTextOf`.
+  // It is stripped ONCE here and every materialisation below uses that one text, so
+  // the chat row, the returned summary and the stored memory cannot disagree.
+  const summary = answerTextOf(rawSummary);
 
   if (!summary) {
     return { summary: null, reason: 'LLM returned empty response' };
@@ -72,6 +160,11 @@ export async function summarizeChat(db: Db, chatId: number, tenantId: number, us
     .update(brainChats)
     .set({ summary, updatedAt: new Date() })
     .where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, chatId)));
+
+  // …AND as a memory, which is what consolidation, `listMemories` and the memory-sync
+  // push to agent hosts read. Without this the summary only existed on the chat row
+  // and no chat content ever reached `chat_memories` at all.
+  await retainChatMemory(db, { tenantId, chatId, projectId: chat.projectId, summary });
 
   return { summary };
 }
@@ -171,7 +264,12 @@ export async function consolidateProjectMemory(db: Db, tenantId: number, project
     apiKey, tenantId, useCase: 'brain_project_memory', projectId,
   });
 
-  const { content: consolidatedSummary } = await readProxyChoice(result);
+  const { content: rawConsolidated } = await readProxyChoice(result);
+
+  // Cleaned for the same reason as a chat summary (see `answerTextOf`): consolidation
+  // runs on a reasoning model too, and its reasoning would otherwise be stored as the
+  // project's consolidated memory and pushed to every agent host on the next sync.
+  const consolidatedSummary = answerTextOf(rawConsolidated);
 
   if (!consolidatedSummary) {
     return { consolidatedSummary: null, reason: 'LLM returned empty response' };
@@ -242,7 +340,10 @@ export async function summarizeAgentHostSession(db: Db, sessionId: number, tenan
     apiKey, tenantId, useCase: 'brain_summary', projectId: session.projectId,
   });
 
-  const { content: summary } = await readProxyChoice(result);
+  const { content: rawSummary } = await readProxyChoice(result);
+
+  // The model's raw content can carry its `<think>` reasoning — see `answerTextOf`.
+  const summary = answerTextOf(rawSummary);
 
   if (!summary) {
     return { summary: null, reason: 'LLM returned empty response' };

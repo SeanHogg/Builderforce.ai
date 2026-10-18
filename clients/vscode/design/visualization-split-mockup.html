@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BuilderForce — Visualization split (review mockup)</title>
+<style>
+  :root {
+    --title: #3c3c3c;
+    --activity: #333333;
+    --side: #252526;
+    --editor: #1e1e1e;
+    --tab: #2d2d2d;
+    --line: #3c3c3c;
+    --ink: #cccccc;
+    --muted: #858585;
+    --faint: #6a6a6a;
+    --blue: #007acc;
+    --blue-2: #3794ff;
+    --focus: #007fd4;
+    --green: #89d185;
+    --red: #f14c4c;
+    --add-bg: #203424;
+    --del-bg: #3e2426;
+    --board: #09111f;
+    --panel: #111d2f;
+    --panel-2: #0d1828;
+    --hover: #192a40;
+    --canvas-ink: #edf4ff;
+    --canvas-muted: #9eafc6;
+    --canvas-line: rgba(148,163,184,.24);
+    --accent: #3978f6;
+    --accent-ink: #72a1ff;
+    --positive: #74d8a2;
+    --font: "Segoe UI", system-ui, sans-serif;
+    --mono: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #141414; color: var(--ink); font-family: var(--font); }
+  body { display: flex; flex-direction: column; min-height: 100vh; }
+  .review {
+    display: flex; gap: 16px; align-items: flex-start; justify-content: space-between;
+    padding: 14px 18px 12px; background: #111; border-bottom: 1px solid #2a2a2a;
+  }
+  .review h1 { margin: 0 0 4px; font-size: 14px; font-weight: 650; letter-spacing: .01em; }
+  .review p { margin: 0; max-width: 720px; color: #bdbdbd; font-size: 12.5px; line-height: 1.45; }
+  .states { display: flex; gap: 6px; flex-shrink: 0; }
+  .states button, .seg button {
+    font: inherit; font-size: 12px; color: var(--ink); background: #2a2a2a;
+    border: 1px solid #454545; border-radius: 4px; padding: 6px 10px; cursor: pointer;
+  }
+  .states button[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .frame {
+    flex: 1; margin: 16px; min-height: 640px;
+    display: grid; grid-template-rows: 30px 1fr 22px;
+    background: var(--editor); border: 1px solid #000; border-radius: 8px; overflow: hidden;
+    box-shadow: 0 18px 50px rgba(0,0,0,.45);
+  }
+  .titlebar {
+    display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    background: var(--title); color: #d4d4d4; font-size: 12px;
+  }
+  .dots { display: flex; gap: 6px; }
+  .dots i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+  .dots i:nth-child(1) { background: #ff5f57; }
+  .dots i:nth-child(2) { background: #febc2e; }
+  .dots i:nth-child(3) { background: #28c840; }
+  .titlebar b { font-weight: 500; }
+  .work { display: grid; grid-template-columns: 48px 220px 1fr; min-height: 0; }
+  .activity { background: var(--activity); display: flex; flex-direction: column; align-items: center; padding-top: 8px; gap: 4px; }
+  .activity span {
+    width: 48px; height: 48px; display: grid; place-items: center; color: #858585; font-size: 16px;
+  }
+  .activity span.on { color: #fff; border-left: 2px solid #fff; }
+  .sidebar { background: var(--side); border-right: 1px solid #1b1b1b; display: flex; flex-direction: column; min-width: 0; }
+  .side-h { height: 35px; display: flex; align-items: center; padding: 0 12px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #bbb; }
+  .tree { padding: 4px 0 12px; font-size: 13px; }
+  .tree .sec { padding: 6px 12px 2px; color: #bbb; font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+  .tree .row { padding: 3px 12px 3px 22px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tree .row.on { background: #094771; color: #fff; }
+  .editors { display: grid; grid-template-columns: minmax(340px, 46fr) 6px minmax(420px, 54fr); min-width: 0; min-height: 0; }
+  .sash { background: #3c3c3c; cursor: col-resize; }
+  .group { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--editor); }
+  .tabs { height: 35px; display: flex; background: var(--side); border-bottom: 1px solid var(--line); }
+  .tab {
+    display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 13px; color: #969696;
+    border-right: 1px solid #252526; background: #2d2d2d;
+  }
+  .tab.on { background: var(--editor); color: #fff; border-top: 1px solid var(--blue-2); }
+  .pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .chat { flex: 1; overflow: auto; padding: 18px 18px 8px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 92%; }
+  .msg.user { align-self: flex-end; background: #2b2b2b; border: 1px solid #3a3a3a; border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.45; }
+  .msg.agent { font-size: 13px; line-height: 1.5; color: #d4d4d4; }
+  .msg .who { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .tool {
+    margin-top: 8px; display: flex; align-items: center; gap: 8px;
+    background: #252526; border: 1px solid #3c3c3c; border-radius: 6px; padding: 7px 10px; font-size: 12px;
+  }
+  .tool code { font-family: var(--mono); color: #9cdcfe; }
+  .tool .path { color: #ce9178; font-family: var(--mono); font-size: 11px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue-2); box-shadow: 0 0 0 0 rgba(55,148,255,.6); }
+  .live .dot { animation: pulse 1.2s infinite; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 6px rgba(55,148,255,0); } }
+  .composer { margin: 8px 12px 12px; border: 1px solid #3c3c3c; border-radius: 8px; background: #252526; }
+  .composer .box { min-height: 44px; padding: 10px 12px; color: #6a6a6a; font-size: 13px; }
+  .composer .bar { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-top: 1px solid #333; font-size: 11px; color: var(--muted); }
+  .chip { border: 1px solid #454545; border-radius: 99px; padding: 2px 8px; }
+  .viz-bar {
+    height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 10px;
+    border-bottom: 1px solid var(--line); background: #1e1e1e;
+  }
+  .seg { display: flex; background: #2a2a2a; border-radius: 5px; padding: 2px; }
+  .seg button { border: 0; background: transparent; border-radius: 4px; padding: 4px 10px; }
+  .seg button[aria-pressed="true"] { background: #094771; color: #fff; }
+  .pill { margin-left: auto; font-size: 11px; color: var(--canvas-muted); display: flex; align-items: center; gap: 6px; }
+  .pill strong { color: var(--positive); font-weight: 650; }
+  .stage { flex: 1; min-height: 0; position: relative; }
+  .canvas, .changes { position: absolute; inset: 0; }
+  .canvas {
+    background:
+      radial-gradient(circle at 1px 1px, rgba(148,163,184,.22) 1px, transparent 0) 0 0 / 22px 22px,
+      var(--board);
+    overflow: hidden;
+  }
+  .node {
+    position: absolute; width: 168px; background: var(--panel); color: var(--canvas-ink);
+    border: 1px solid var(--canvas-line); border-radius: 10px; padding: 10px 12px;
+    box-shadow: 0 10px 24px rgba(0,0,0,.35);
+  }
+  .node small { display: block; color: var(--canvas-muted); font-size: 11px; margin-bottom: 2px; }
+  .node b { font-size: 13px; font-weight: 650; }
+  .node .tag { margin-top: 8px; display: inline-block; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--accent-ink); border: 1px solid rgba(57,120,246,.45); border-radius: 99px; padding: 1px 6px; }
+  .edge { position: absolute; height: 1px; background: rgba(114,161,255,.55); transform-origin: left center; }
+  .minimap {
+    position: absolute; right: 12px; bottom: 12px; width: 112px; height: 72px;
+    background: var(--panel-2); border: 1px solid var(--canvas-line); border-radius: 6px;
+  }
+  .minimap i { position: absolute; background: var(--accent); opacity: .7; }
+  .changes { display: grid; grid-template-rows: 92px 1fr; background: #161616; }
+  .seq { display: flex; align-items: center; gap: 0; padding: 12px 14px; border-bottom: 1px solid #2a2a2a; overflow: auto; }
+  .step {
+    display: flex; flex-direction: column; gap: 3px; min-width: 132px; padding: 8px 10px;
+    background: #252526; border: 1px solid #3c3c3c; border-radius: 8px; font-size: 11px;
+  }
+  .step b { font-size: 12px; font-weight: 650; color: #ddd; }
+  .step span { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+  .step.now { border-color: var(--blue-2); box-shadow: inset 0 0 0 1px var(--blue-2); }
+  .step.done { border-color: #2f6b45; }
+  .arrow { width: 22px; height: 1px; background: #555; position: relative; flex: 0 0 22px; }
+  .arrow::after { content: ""; position: absolute; right: -1px; top: -3px; border: 4px solid transparent; border-left-color: #777; }
+  .body { display: grid; grid-template-columns: 1.15fr .85fr; min-height: 0; }
+  .graph { position: relative; border-right: 1px solid #2a2a2a; background:
+    linear-gradient(#222 1px, transparent 1px) 0 0 / 100% 28px,
+    linear-gradient(90deg, #222 1px, transparent 1px) 0 0 / 28px 28px, #181818; }
+  .gnode {
+    position: absolute; width: 148px; background: #1f1f1f; border: 1px solid #3c3c3c; border-radius: 8px;
+    padding: 8px 10px; cursor: pointer; font-size: 12px;
+  }
+  .gnode.on { border-color: var(--blue-2); background: #0e2a3a; }
+  .gnode .k { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .gnode .nm { font-family: var(--mono); font-size: 11px; color: #d7ba7d; margin-top: 2px; }
+  .gnode .stat { margin-top: 6px; font-family: var(--mono); font-size: 11px; }
+  .gnode .stat .a { color: var(--green); }
+  .gnode .stat .d { color: var(--red); }
+  svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .diff { display: flex; flex-direction: column; min-width: 0; background: #1e1e1e; }
+  .diff h2 { margin: 0; padding: 8px 12px; font-size: 12px; font-weight: 650; border-bottom: 1px solid #2a2a2a; display: flex; justify-content: space-between; }
+  .diff h2 span { color: var(--muted); font-weight: 450; font-family: var(--mono); }
+  .cols { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+  .col { overflow: auto; font-family: var(--mono); font-size: 11.5px; line-height: 1.55; }
+  .col + .col { border-left: 1px solid #2a2a2a; }
+  .col header { position: sticky; top: 0; background: #252526; color: var(--muted); padding: 4px 8px; font-family: var(--font); font-size: 11px; }
+  .ln { display: grid; grid-template-columns: 28px 1fr; }
+  .ln em { font-style: normal; color: #6a6a6a; text-align: right; padding-right: 8px; }
+  .ln.add { background: var(--add-bg); }
+  .ln.del { background: var(--del-bg); }
+  .ln.add b, .ln.del b { font-weight: 450; }
+  .status { background: var(--blue); color: #fff; display: flex; align-items: center; gap: 14px; padding: 0 10px; font-size: 12px; }
+  .status .sp { margin-left: auto; }
+  .notes { margin: 0 16px 18px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .notes article { background: #1b1b1b; border: 1px solid #2c2c2c; border-radius: 8px; padding: 10px 12px; }
+  .notes h3 { margin: 0 0 4px; font-size: 12px; }
+  .notes p { margin: 0; color: #b5b5b5; font-size: 12px; line-height: 1.4; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="review">
+    <div>
+      <h1>Review mockup — chat left, Visualization right</h1>
+      <p>This is the proposed VSIX layout, not the product. Chat no longer draws the board behind the conversation. Visualization opens in the editor group beside it: the Creation Canvas while idle, and a live change view the moment a run edits files. Flip the states, then the Canvas / Changes control, and click a file node to change the before/after.</p>
+    </div>
+    <div class="states" role="group" aria-label="Review states">
+      <button type="button" data-state="idle" aria-pressed="true">Idle</button>
+      <button type="button" data-state="running" aria-pressed="false">Agent editing</button>
+      <button type="button" data-state="settled" aria-pressed="false">After the run</button>
+    </div>
+  </div>
+
+  <div class="frame" id="app">
+    <div class="titlebar">
+      <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      <b>agentic</b> — Visual Studio Code
+      <span style="margin-left:auto;color:#9a9a9a">BuilderForce · BuilderForce Visualization</span>
+    </div>
+    <div class="work">
+      <div class="activity" aria-hidden="true">
+        <span class="on">☰</span><span>⌕</span><span>⎇</span><span>▶</span>
+      </div>
+      <aside class="sidebar">
+        <div class="side-h">BuilderForce</div>
+        <div class="tree">
+          <div class="sec">Sessions</div>
+          <div class="row on">VSIX split layout</div>
+          <div class="row">Canvas parity</div>
+          <div class="sec">Changes · 3</div>
+          <div class="row">M visualizationPanel.ts</div>
+          <div class="row">A diffModel.ts</div>
+          <div class="row">M WorkspaceApp.tsx</div>
+        </div>
+      </aside>
+      <div class="editors">
+        <section class="group" aria-label="Chat">
+          <div class="tabs"><div class="tab on">BuilderForce</div></div>
+          <div class="pane">
+            <div class="chat">
+              <div class="msg user">Move the canvas into its own window on the right. Call it Visualization. Keep the canvas as the default, and once a chat starts editing, show the code changes as a graph with before and after.</div>
+              <div class="msg agent">
+                <div class="who">BuilderForce</div>
+                Splitting the workspace into two editor groups. Chat stays here. Visualization opens beside it and will follow this run.
+                <div class="tool" id="toolRow">
+                  <i class="dot"></i>
+                  <code>edit_file</code>
+                  <span class="path">src/visualizationPanel.ts</span>
+                  <span id="toolState" style="margin-left:auto;color:#858585">waiting</span>
+                </div>
+              </div>
+            </div>
+            <div class="composer">
+              <div class="box">Message BuilderForce…</div>
+              <div class="bar"><span class="chip">Auto</span><span class="chip">Claude</span><span>Changes (3)</span></div>
+            </div>
+          </div>
+        </section>
+        <div class="sash" aria-hidden="true"></div>
+        <section class="group" aria-label="Visualization">
+          <div class="tabs"><div class="tab on">BuilderForce Visualization</div></div>
+          <div class="pane">
+            <div class="viz-bar">
+              <div class="seg" role="group" aria-label="Visualization mode">
+                <button type="button" id="showCanvas" aria-pressed="true">Canvas</button>
+                <button type="button" id="showChanges" aria-pressed="false">Changes</button>
+              </div>
+              <div class="pill" id="livePill"><i class="dot"></i> <span id="liveText">Canvas · no run</span> <strong id="meter"></strong></div>
+            </div>
+            <div class="stage">
+              <div class="canvas" id="canvasView">
+                <div class="edge" style="left:196px;top:118px;width:150px;transform:rotate(18deg)"></div>
+                <div class="edge" style="left:196px;top:250px;width:168px;transform:rotate(-8deg)"></div>
+                <div class="node" style="left:28px;top:86px"><small>Session</small><b>VSIX split layout</b><span class="tag">board</span></div>
+                <div class="node" style="left:250px;top:48px"><small>Note</small><b>Chat stays chat</b><div style="margin-top:6px;color:#9eafc6;font-size:12px">No board behind the conversation.</div></div>
+                <div class="node" style="left:268px;top:210px"><small>Task</small><b>Live change tree</b><div style="margin-top:6px;color:#9eafc6;font-size:12px">Swaps in when a run writes files.</div></div>
+                <div class="minimap" aria-hidden="true"><i style="left:12px;top:18px;width:18px;height:12px"></i><i style="left:48px;top:10px;width:16px;height:10px"></i><i style="left:52px;top:36px;width:20px;height:12px"></i></div>
+              </div>
+              <div class="changes" id="changesView" hidden>
+                <div class="seq" id="seq"></div>
+                <div class="body">
+                  <div class="graph" id="graph"></div>
+                  <div class="diff">
+                    <h2>Before / after <span id="diffPath">visualizationPanel.ts</span></h2>
+                    <div class="cols">
+                      <div class="col" id="before"><header>Before</header></div>
+                      <div class="col" id="after"><header>After</header></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div class="status">
+      <span>BuilderForce</span>
+      <span id="statusText">Visualization · canvas</span>
+      <span class="sp">main</span>
+    </div>
+  </div>
+
+  <div class="notes">
+    <article><h3>1. Two editor groups</h3><p>Not a sidebar and not a mode inside the chat tab. Chat keeps its tab. Visualization is the tab to its right.</p></article>
+    <article><h3>2. Canvas is the default</h3><p>Idle shows the same Creation Canvas. Nothing about the board moves except which window it lives in.</p></article>
+    <article><h3>3. Changes take over on edit</h3><p>The first mutating tool swaps the view. Sequence is the run. Graph is the files. The pane is before/after for the file you select.</p></article>
+    <article><h3>4. It stays after the run</h3><p>When the run ends, Changes remains so you can review. Canvas is one click away, and the next idle open starts on Canvas again.</p></article>
+  </div>
+
+<script>
+const files = {
+  visualizationPanel: {
+    name: "visualizationPanel.ts",
+    dir: "src",
+    add: 38, del: 4,
+    before: [
+      ["ctx", "super(ctx, { viewType, title });"],
+      ["del", "this.panel = createWebviewPanel(Active);"],
+      ["ctx", "this.attachRuns();"],
+    ],
+    after: [
+      ["ctx", "super(ctx, { viewType, title,"],
+      ["add", "  column: ViewColumn.Beside });"],
+      ["ctx", "this.attachRuns();"],
+    ],
+  },
+  diffModel: {
+    name: "diffModel.ts",
+    dir: "webview/src/visualization",
+    add: 120, del: 0,
+    before: [["ctx", ""], ["ctx", ""], ["ctx", ""]],
+    after: [
+      ["add", "export function parseUnifiedDiff(text) {"],
+      ["add", "  return filesFrom(text);"],
+      ["add", "}"],
+    ],
+  },
+  workspace: {
+    name: "WorkspaceApp.tsx",
+    dir: "webview/src",
+    add: 22, del: 11,
+    before: [
+      ["del", "<CreationCanvas hostSurfaces={{ chat }} />"],
+      ["ctx", "return <CanvasBoundary>;"],
+    ],
+    after: [
+      ["add", "return <VsCodeChatSurface />;"],
+      ["ctx", "/* canvas lives in Visualization */"],
+    ],
+  },
+};
+
+const steps = [
+  { tool: "read_file", path: "builderforcePanel.ts", state: "done" },
+  { tool: "edit_file", path: "visualizationPanel.ts", state: "now" },
+  { tool: "write_file", path: "diffModel.ts", state: "wait" },
+  { tool: "edit_file", path: "WorkspaceApp.tsx", state: "wait" },
+];
+
+const positions = {
+  visualizationPanel: { x: 36, y: 36 },
+  diffModel: { x: 230, y: 28 },
+  workspace: { x: 128, y: 150 },
+};
+
+let mode = "canvas";
+let state = "idle";
+let selected = "visualizationPanel";
+
+const canvasView = document.getElementById("canvasView");
+const changesView = document.getElementById("changesView");
+const showCanvas = document.getElementById("showCanvas");
+const showChanges = document.getElementById("showChanges");
+const liveText = document.getElementById("liveText");
+const meter = document.getElementById("meter");
+const statusText = document.getElementById("statusText");
+const toolState = document.getElementById("toolState");
+const toolRow = document.getElementById("toolRow");
+
+function renderSeq() {
+  const seq = document.getElementById("seq");
+  seq.replaceChildren();
+  steps.forEach((step, i) => {
+    if (i) {
+      const a = document.createElement("div");
+      a.className = "arrow";
+      seq.appendChild(a);
+    }
+    const el = document.createElement("div");
+    const shown = state === "idle" ? "wait" : state === "settled" ? "done" : step.state;
+    el.className = "step" + (shown === "now" ? " now" : shown === "done" ? " done" : "");
+    el.innerHTML = "<b>" + step.tool + "</b><span>" + step.path + "</span>";
+    seq.appendChild(el);
+  });
+}
+
+function renderGraph() {
+  const graph = document.getElementById("graph");
+  graph.replaceChildren();
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "wires");
+  svg.innerHTML = '<path d="M184 62 C 210 62, 210 54, 230 54" fill="none" stroke="#5a8fd6" stroke-width="1.4"/>' +
+    '<path d="M110 92 C 140 120, 150 150, 160 166" fill="none" stroke="#5a8fd6" stroke-width="1.4"/>';
+  graph.appendChild(svg);
+  for (const id of Object.keys(files)) {
+    const f = files[id];
+    const p = positions[id];
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = "gnode" + (id === selected ? " on" : "");
+    el.style.left = p.x + "px";
+    el.style.top = p.y + "px";
+    el.innerHTML = '<div class="k">' + f.dir + '</div><div class="nm">' + f.name + '</div><div class="stat"><span class="a">+' + f.add + '</span> <span class="d">−' + f.del + '</span></div>';
+    el.addEventListener("click", () => { selected = id; renderGraph(); renderDiff(); });
+    graph.appendChild(el);
+  }
+}
+
+function line(kind, text, n) {
+  const row = document.createElement("div");
+  row.className = "ln" + (kind === "add" ? " add" : kind === "del" ? " del" : "");
+  const mark = kind === "add" ? "+" : kind === "del" ? "−" : " ";
+  row.innerHTML = "<em>" + (n || "") + "</em><b>" + mark + " " + (text || " ") + "</b>";
+  return row;
+}
+
+function renderDiff() {
+  const f = files[selected];
+  document.getElementById("diffPath").textContent = f.dir + "/" + f.name;
+  const before = document.getElementById("before");
+  const after = document.getElementById("after");
+  before.replaceChildren(before.querySelector("header"));
+  after.replaceChildren(after.querySelector("header"));
+  f.before.forEach((row, i) => before.appendChild(line(row[0] === "del" ? "del" : "ctx", row[1], i + 40)));
+  f.after.forEach((row, i) => after.appendChild(line(row[0] === "add" ? "add" : "ctx", row[1], i + 40)));
+}
+
+function apply() {
+  const showChange = mode === "changes";
+  canvasView.hidden = showChange;
+  changesView.hidden = !showChange;
+  showCanvas.setAttribute("aria-pressed", String(!showChange));
+  showChanges.setAttribute("aria-pressed", String(showChange));
+  const running = state === "running";
+  toolRow.classList.toggle("live", running);
+  toolState.textContent = state === "idle" ? "waiting" : running ? "editing" : "done";
+  liveText.textContent = state === "idle"
+    ? "Canvas · no run"
+    : running ? "Agent editing · 3 files" : "Run finished · review";
+  meter.textContent = showChange ? "+180 −15" : "";
+  statusText.textContent = showChange ? "Visualization · changes" : "Visualization · canvas";
+  renderSeq();
+}
+
+document.querySelectorAll(".states button").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state = btn.dataset.state;
+    document.querySelectorAll(".states button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    mode = state === "idle" ? "canvas" : "changes";
+    apply();
+  });
+});
+showCanvas.addEventListener("click", () => { mode = "canvas"; apply(); });
+showChanges.addEventListener("click", () => { mode = "changes"; apply(); });
+renderGraph();
+renderDiff();
+apply();
+</script>
+</body>
+</html>

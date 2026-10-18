@@ -29,6 +29,12 @@ export const MESSAGE_KEYS = [
   'chatActions',
   'chatActionsFor',
   'chatRename',
+  // THE inline-editable header title: the button's accessible name, the field's label,
+  // and the two outcomes (which are also Enter and Escape).
+  'editTitle',
+  'titleLabel',
+  'saveTitle',
+  'cancelTitle',
   'contextLabel',
   'contextNoPage',
   'needModelOrSignIn',

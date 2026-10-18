@@ -6,7 +6,7 @@
  */
 
 import { useMemo } from 'react';
-import { HeaderIcon, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
+import { HeaderIcon, InlineChatTitle, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
 import { post, type LabelBundle } from '../vscodeBridge';
 import { makeT, surfaceHeaderLabels } from './chatLabels';
 import type { CopyState } from './useCopyDiagnostics';
@@ -22,6 +22,10 @@ export interface VsCodeChatHeaderProps {
   projectName: string | null;
   /** The open chat's title (or "New chat"). */
   chatTitle: string;
+  /** The open chat's id — null while there is no chat yet, so nothing offers to rename. */
+  chatId: number | null;
+  /** Persist an inline edit of the title (the shared `useBrainChats.rename`). */
+  onRename: (id: number, title: string) => Promise<unknown> | void;
   running: boolean;
   copy: { state: CopyState; enabled: boolean; onCopy: () => void };
   history: { open: boolean; onToggle: () => void; controls: string };
@@ -30,7 +34,7 @@ export interface VsCodeChatHeaderProps {
   bundle: LabelBundle;
 }
 
-export function VsCodeChatHeader({ projectName, chatTitle, running, copy, history, onNewChat, bundle }: VsCodeChatHeaderProps) {
+export function VsCodeChatHeader({ projectName, chatTitle, chatId, onRename, running, copy, history, onNewChat, bundle }: VsCodeChatHeaderProps) {
   const t = makeT(bundle);
   const headerLabels = useMemo(() => surfaceHeaderLabels(bundle), [bundle]);
   const title = projectName ?? 'BuilderForce';
@@ -42,7 +46,21 @@ export function VsCodeChatHeader({ projectName, chatTitle, running, copy, histor
     <SurfaceHeader
       title={<span title={title}>{title}</span>}
       running={running}
-      context={<span className="bf-chat-context" title={chatTitle}>{chatTitle}</span>}
+      context={(
+        // The CHAT's own name, editable in place — not the brand row above it.
+        <InlineChatTitle
+          title={chatTitle}
+          chatId={chatId}
+          onRename={onRename}
+          titleClassName="bf-chat-context"
+          labels={{
+            edit: t('app.editTitle', 'Edit chat title'),
+            label: t('app.titleLabel', 'Chat title'),
+            save: t('app.saveTitle', 'Save chat title'),
+            cancel: t('app.cancelTitle', 'Cancel'),
+          }}
+        />
+      )}
       actions={(
         <>
           <button

@@ -91,6 +91,40 @@ export function coursesForFounderStage<T extends {
   return listings.filter((listing) => courseVisibleAtStage(listing, founderStage));
 }
 
+/**
+ * Narrow a stage query to the existing course filter.
+ *
+ * An empty query is not a stage query and is returned unchanged. Any other
+ * value goes through {@link coursesForFounderStage}, so a freelancer token
+ * (`start | grow | exit`) or an unknown token matches nothing instead of the
+ * whole shelf. `published` is taken from the view when the caller only has
+ * `publishedAtISO`.
+ */
+export function narrowListingsToStageQuery<T extends {
+  id: string;
+  kind: string;
+  tags: unknown;
+  visibility?: string;
+  published?: boolean;
+  publishedAtISO?: string | null;
+}>(listings: readonly T[], stageQuery: string): T[] {
+  const stage = stageQuery.trim();
+  if (!stage) return [...listings];
+  const keep = new Set(
+    coursesForFounderStage(
+      listings.map((listing) => ({
+        id: listing.id,
+        kind: listing.kind,
+        tags: listing.tags,
+        visibility: listing.visibility,
+        published: listing.published ?? listing.publishedAtISO != null,
+      })),
+      stage,
+    ).map((row) => row.id),
+  );
+  return listings.filter((listing) => keep.has(listing.id));
+}
+
 function courseVisibleAtStage(
   listing: { kind: string; tags: unknown; visibility?: string; published?: boolean },
   founderStage: BusinessStage,
@@ -218,6 +252,36 @@ export async function listAcademyCoursesForFounder(
 
   const courses = coursesForFounderStage(rows.map(toCard), founder.stage);
   return { ok: true, stage: founder.stage, courses };
+}
+
+/**
+ * The same shelf when the caller has a workspace but not a company id.
+ *
+ * The stage is still `companies.business_stage` — the named company, or the
+ * workspace's newest company (`updatedAt` desc) when `companyId` is omitted.
+ * A client-supplied stage is never read. Newest-company is the same rule the
+ * toolkit path uses, so a founder with one company does not have to name it.
+ */
+export async function listAcademyCoursesForWorkspace(
+  db: Db,
+  tenantId: number,
+  companyId?: number | null,
+): Promise<{ ok: true; stage: BusinessStage; courses: StageCourseCard[] } | StageCourseRefusal> {
+  const id = companyId ?? await newestCompanyId(db, tenantId);
+  if (id === null) {
+    return { ok: false, reason: 'unknown_company', detail: 'this workspace has no company' };
+  }
+  return listAcademyCoursesForFounder(db, tenantId, id);
+}
+
+async function newestCompanyId(db: Db, tenantId: number): Promise<number | null> {
+  const [row] = await db
+    .select({ id: companies.id })
+    .from(companies)
+    .where(scopedToTenant(companies, tenantId))
+    .orderBy(desc(companies.updatedAt))
+    .limit(1);
+  return row?.id ?? null;
 }
 
 async function resolveCourseId(

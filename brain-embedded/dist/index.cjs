@@ -4035,6 +4035,13 @@ function refuseWriteOverwrite(probe, incoming) {
 }
 
 // ../packages/agent-tools/src/core-tools.ts
+function noMatchNote(glob, sub, truncated) {
+  const base = `No file matches glob "${glob}"${sub ? ` under "${sub}"` : ""}.`;
+  if (truncated) {
+    return `${base} This is NOT proof the file does not exist: the file listing was cut off at its size budget BEFORE the glob was applied, so this only means "not among the paths scanned so far". Narrow \`path\` to a smaller folder and re-run, or use \`search_code\`/\`find_symbol\` for a specific name, before concluding anything is missing.`;
+  }
+  return `${base} Try a broader pattern (e.g. "*${glob.replace(/[*?/]/g, "")}*"), or list_files without a glob to see the tree. 0 matches means no such file exists in the paths scanned \u2014 do not claim one is missing without trying a broader glob first.`;
+}
 var listFilesTool = defineTool({
   name: "list_files",
   description: "List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass `path` to scope to a subdirectory. To FIND A FILE BY NAME, pass `glob` \u2014 e.g. `ROADMAP.md` (matches that filename at any depth, case-insensitive) or `src/**/*.test.ts`. Use `glob` instead of concluding a file is missing: a large repo's unfiltered listing is summarized to directories, but a `glob` always returns the matching files in full.",
@@ -4054,7 +4061,7 @@ var listFilesTool = defineTool({
       return {
         data: {
           ...r,
-          note: `No file matches glob "${glob}". Try a broader pattern (e.g. "*${glob.replace(/[*?/]/g, "")}*"), or list_files without a glob to see the tree. 0 matches means no such file exists \u2014 do not claim one is missing without trying a broader glob first.`
+          note: noMatchNote(glob, sub, r.truncated === true)
         }
       };
     }
@@ -7419,14 +7426,20 @@ function useBrainChats(options = {}) {
         setError(result.error);
         return;
       }
-      if (result.summary) {
-        const updated = await persistence.updateChat(id, { title: result.summary });
-        setChats((prev) => prev.map((c) => c.id === id ? { ...c, title: updated.title } : c));
-      }
+      await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Summarize failed");
     }
-  }, [persistence]);
+  }, [persistence, reload]);
+  const archive = (0, import_react6.useCallback)(async (id) => {
+    try {
+      await persistence.deleteChat(id);
+      setChats((prev) => prev.filter((c) => c.id !== id));
+      if (activeIdRef.current === id) setActiveChatId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Archive failed");
+    }
+  }, [persistence, setActiveChatId]);
   const remove = (0, import_react6.useCallback)(async (id) => {
     try {
       await persistence.deleteChat(id);
@@ -7472,6 +7485,7 @@ function useBrainChats(options = {}) {
     setMemoryEnabled,
     autoTitle,
     summarize,
+    archive,
     remove,
     assignToProject,
     reload,
@@ -12842,6 +12856,1874 @@ function useRunSnapshot(key) {
   return (0, import_react8.useSyncExternalStore)(subscribe, read, read);
 }
 
+// ../packages/creation-canvas-contract/src/canvasTools.ts
+var GUEST_SAFE_CANVAS_TOOLS = [
+  // Reads over the guest's own in-browser document.
+  "canvas_read_snapshot",
+  // Named by the system prompt as the check to run before saying an object is missing.
+  // Its absence from the guest vocabulary meant the prompt was instructing the model to
+  // call a tool the model had not been given.
+  "canvas_read_object",
+  "canvas_read_document",
+  // Pure client-side computation over rows already loaded in the guest's own browser.
+  // Without it a guest can only be told placeholder numbers.
+  "canvas_query_dataset",
+  // Authoring + layout over the local document. The API never executes these; they are
+  // descriptions of operations the browser applies to the visitor's own canvas.
+  "canvas_add_object",
+  // Theater seating is a local-document layout (chairs facing a screen on the
+  // visitor's own board). Same class as `canvas_add_object`; leaving it unclassified
+  // made the model plan around a tool the gateway stripped, then land an empty room.
+  "canvas_create_room",
+  "canvas_update_object",
+  "canvas_delete_object",
+  "canvas_arrange_objects",
+  "canvas_set_object_layout",
+  "canvas_invoke_object_action",
+  "canvas_connect_objects",
+  "canvas_update_connection",
+  "canvas_delete_connection",
+  "canvas_convert_diagram",
+  // Lifts one post out of a social feed tile that is ALREADY on this board, in the
+  // browser, over the posts that tile is holding — no request, no tenant. Its sibling
+  // tools, which do reach `/api/social/*`, are in the gated set below.
+  "canvas_pin_social_post",
+  // Ranks the résumé objects ALREADY ON THIS BOARD against a posting on this board, in
+  // the browser, with no network call — the same deterministic analyzer the résumé
+  // builder uses, composed N:1. Guest-safe because it reads nothing but the canvas: a
+  // visitor evaluating the product can drop in five CVs and a job ad and watch a real
+  // ranking come back with its evidence and its gaps, which is the strongest thing this
+  // vocabulary can show without an account.
+  "canvas_screen_resumes",
+  // Re-renders a résumé that is ALREADY on the board through the built-in template
+  // engine — pure function, no network, no tenant — so it is guest-safe on exactly the
+  // reasoning `canvas_screen_resumes` is, and for the same person: the visitor most
+  // likely to arrive logged out and ask for their CV in five styles is the one out of
+  // work. Gating it would leave `canvas_add_object` as the only route, which is the
+  // path that spent four minutes retyping the document and produced nothing.
+  "canvas_render_resume_variants",
+  // The step BEFORE both of those, and guest-safe for the same reason: it reads text
+  // the visitor's own browser already extracted from the file they dropped, and runs
+  // the deterministic JSON Resume reader over it — no network, no tenant, no model.
+  // Gating it would leave a logged-out visitor with their CV on the board and no way
+  // to make it a résumé, which is the exact dead end that had the model asking people
+  // to paste a document the canvas was already holding.
+  "canvas_import_resume",
+  // ── Academic imports ─────────────────────────────────────────────────────────
+  // Same reasoning as `canvas_import_resume`, for the two document formats the
+  // academic set documents but never wired: a deterministic CSV/`.bib`/`.ris` reader
+  // over text the visitor's own browser already extracted, writing only to a `cohort`
+  // or `bibliography` object already on their own board. No network, no tenant.
+  "canvas_import_roster",
+  "canvas_import_references",
+  // The free diagnostics and calculators. `GET /api/tools`, `GET /api/tools/:id` and
+  // `POST /api/tools/:id/compute` are unauthenticated by design (they power the
+  // marketing surface), so a visitor asking "how mature is our delivery?" gets a real
+  // scored object on the board instead of an apology.
+  "canvas_list_diagnostics",
+  "canvas_add_diagnostic",
+  // The 8-target "Idea → Real" catalog (`GET /api/realizations/targets`) — static
+  // copy, no tenant. Guest-safe for the same reason `canvas_list_diagnostics` is:
+  // a visitor can browse what a phone line, a pilot or a smoke test actually
+  // build before `canvas_realize` ever asks for an account.
+  "canvas_list_realization_targets",
+  // Returns a STATIC executive use-case contract; its tenant-evidence branch already
+  // degrades to `saved_session_required` without a session, so it is safe unauthenticated.
+  "canvas_prepare_executive_use_case",
+  // ── Founder objects ──────────────────────────────────────────────────────────
+  // Pure client-side computation over `competitor` objects ALREADY on the visitor's own
+  // board: it reads their `locations`, projects them, and authors a `map` object plus
+  // the coverage gaps. No tenant data and no network — the research that PUT the
+  // competitors there is `builtin_web_search`, which a guest already has, so a logged-out
+  // founder can complete a geographic market analysis end to end.
+  "canvas_map_competitors",
+  // Evaluates `trigger` objects against the `liveMetric` objects on the same board. The
+  // reading of a live metric may need an account; comparing two numbers that are already
+  // in front of the visitor does not, and a guest who authors a threshold by hand should
+  // see it fire.
+  "canvas_evaluate_triggers",
+  // ── Data architecture ────────────────────────────────────────────────────────
+  // Every one of these is pure computation over the visitor's OWN board: a model
+  // authored in the browser, a join between two datasets already loaded there, a
+  // PII scan of rows the visitor uploaded themselves, a contract evaluated against
+  // them, a check suite run over them, a metric defined on them, and the lineage
+  // graph of the objects in front of them. No tenant, no network.
+  //
+  // `canvas_create_data_model` is the reason this matters: "create me an ERD" must
+  // work for someone evaluating the product, and it ends in real DDL. Gating it
+  // would make the model improvise a limitation the product does not have — the
+  // exact failure the `canvas_add_image` note above records.
+  "canvas_create_data_model",
+  "canvas_export_data_model",
+  "canvas_join_datasets",
+  "canvas_classify_dataset",
+  "canvas_set_data_contract",
+  "canvas_run_data_quality",
+  "canvas_define_metric",
+  "canvas_trace_lineage",
+  // ── Data science: analysis, model comparison, evaluation, governance ─────────
+  // Every one is pure computation over the visitor's OWN board, which is what makes
+  // them guest-safe on the same reasoning as the data-architecture set above.
+  //
+  // `canvas_run_notebook` deserves its own note: it EXECUTES code, which sounds like
+  // the least guest-safe thing here and is the opposite. The kernel is a Web Worker
+  // with `fetch`, `XMLHttpRequest`, `importScripts` and `WebSocket` deleted from its
+  // global scope before any cell compiles, the rows are structured-cloned in, and it
+  // is terminated on a hard timeout. A cell can compute and cannot reach the network,
+  // the DOM or the session — so it is strictly more contained than a tool that calls
+  // an API. Gating it would make "analyse this CSV" require an account, which is the
+  // single most common thing a visitor arrives wanting to do.
+  "canvas_run_notebook",
+  "canvas_compare_runs",
+  "canvas_sample_for_labels",
+  "canvas_forecast_series",
+  // Governance is authored locally and enforced locally. A guest who declares that a
+  // dataset may not be used for training should see that refusal honoured.
+  "canvas_set_data_use",
+  // ── QA ───────────────────────────────────────────────────────────────────────
+  // "Create automation tests for my website" is answered ENTIRELY in the visitor's own
+  // browser: route discovery is a regex over HTML the model already fetched with
+  // `builtin_web_fetch` (guest research), and the Playwright lowering is the pure
+  // function in `qa.ts`. Gating these would make the most common QA request in the
+  // product reachable only after signing up, and — worse, per the note above — would
+  // have the model improvise a limitation instead of writing the tests.
+  //
+  // The page audit is the same shape as `canvas_add_diagnostic`: scored findings over
+  // content the visitor supplied, no tenant and no network of its own.
+  "canvas_create_test_plan",
+  "canvas_test_coverage",
+  "canvas_record_defect",
+  "canvas_audit_page",
+  "canvas_generate_test_data",
+  // ── The build vocabulary (`lib/canvasBuildTools.ts`) ─────────────────────────
+  // Creating, listing, reading, searching and editing the CODE behind a Builder
+  // object. Guest-safe because a board with no account runs its app over files held
+  // in the BROWSER (`lib/workspace/localFileStore.ts`) and the tools run there too:
+  // nothing reaches a tenant. "Keep your work" uploads those files into a real
+  // project. Only the history pair below stays account-required.
+  "canvas_create_build",
+  "canvas_list_build_files",
+  "canvas_read_build_file",
+  "canvas_search_build_files",
+  "canvas_write_build_file",
+  "canvas_edit_build_file",
+  "canvas_read_build_diagnostics",
+  // What the visitor's own preview printed to its console — read from this browser's
+  // memory (`lib/previewConsole.ts`), so nothing reaches a tenant.
+  "canvas_read_preview_console",
+  // Runs one command (install, build, type-check, test) in the visitor's OWN browser
+  // runtime over the same browser-held files (`lib/browserRuntime/workspaceShell.ts`) —
+  // the runtime the preview already runs on, so nothing reaches a tenant.
+  "canvas_run_build_command",
+  // Measures the RUNNING preview in a hidden frame of the visitor's own browser
+  // (`lib/previewProbe`). Reads nothing but the app the visitor is already looking at.
+  "canvas_inspect_preview"
+];
+var GUEST_GATED_CANVAS_TOOLS = [
+  // Server-side stock search / image generation. The ONLY route to real pixels, so its
+  // absence rewrote every "draw me…" turn into a drawing-tool failure.
+  "canvas_add_image",
+  // The ONLY route to pixels of a page that ALREADY EXISTS, and the same classification
+  // for the same measured reason. Without it, "upgrade my website — show me a before and
+  // after" produced an after and an apology: "as a large language model, I don't have the
+  // ability to browse the web visually or take screenshots of live websites" (2026-08-19,
+  // ui 2026.8.60). That is a fact about a model presented as a fact about the product,
+  // which is exactly what an absent tool buys. Gated rather than absent so a visitor
+  // hears the true, one-click reason instead.
+  "canvas_capture_screenshot",
+  // The ONLY route to the text of a SCANNED page, and classified by the failure its
+  // absence causes rather than by what it touches. Without it a visitor who drops a
+  // photographed contract hears "I can't read scanned documents" — a fact about a model
+  // presented as a fact about the product, on a board where the true answer is one
+  // click away. It self-gates on a saved session and returns the account gate.
+  "canvas_read_attachment",
+  // The ONLY route to a playable game. Deliberately here rather than in the safe set
+  // even though HALF of it is guest-safe: a web game is authored in the visitor's own
+  // browser and needs no account, while a Roblox place is written on the server. The
+  // tool self-gates on that split. It is classified by the failure its ABSENCE causes,
+  // which is the reason this set exists — without it a guest asking for a game gets
+  // `canvas_add_object`, and that produces a design document nobody can play.
+  "canvas_add_game",
+  // The ONLY routes to moving pictures (`canvasVideoTools.ts`). Gated rather than
+  // absent for the reason this set exists: with no video tool a model tells the user
+  // "I can't make videos", which is false here. Clips are generated on the server, so
+  // the gate is on credentials, exactly like `canvas_add_image`.
+  "canvas_add_video",
+  "canvas_create_scene",
+  // Writes the board's cases into the tenant's QA library (`/api/qa/flows` +
+  // `/api/qa/generate`) and reads its runs back. Gated rather than absent for the
+  // reason the whole set exists: a visitor who has just watched the canvas write their
+  // tests will ask to make them run, and "that needs a free account" is a true,
+  // one-click answer, where an absent tool produces an invented one. It is also the
+  // only tool a guest-visible description may name — `canvas_create_test_plan`'s
+  // description does not, precisely so this classification stays free to change.
+  "canvas_publish_tests",
+  // Files a board dataset as a fine-tune training corpus under a project. Classified
+  // here for the same reason as `canvas_publish_tests`, and by the same test: what does
+  // its ABSENCE make the model say? Every step before it is guest-safe — a visitor can
+  // import a CSV, profile it, chart it and classify its columns entirely in their own
+  // browser — so "now train a model on this" is the natural next sentence on a guest
+  // board. With the tool absent the model has no way to know the product fine-tunes at
+  // all, and the improvisation it reaches for ("I can't train models") is false about a
+  // product that ships adapters. The corpus itself is a tenant row, so the WORK needs an
+  // account; the gate is on credentials, not on a saved board, exactly like the social
+  // tools. Its description names only `canvas_set_data_use`, which is guest-safe — rule 2
+  // holds.
+  "canvas_promote_dataset_to_corpus",
+  // Turns an idea into one of the 8 tested "Idea → Real" proofs — a phone line, a
+  // pilot, a smoke test, a live system — through the exact pipeline `/realize`
+  // uses (`planRealization` + `realize()`), never an improvisation. Gated rather
+  // than absent for the reason this whole set exists, and on direct evidence:
+  // measured 2026-08-29, a signed-in board asked to "stand up a phone line" with
+  // no bridge into this pipeline got a legacy `workflow` object with zero
+  // authored steps (unrunnable) and a hand-typed Twilio guide with the wrong
+  // webhook URLs and no WEBHOOK_SHARED_SECRET — worse than absent, because it
+  // looked done. A guest asking the same thing must hear the true reason a LIVE
+  // proof needs an account, not be left to the same improvisation.
+  //
+  // What is real either way is the generated PLAN — the actual routes, runbook
+  // and required connectors/secrets `target.build()` produces — which carries no
+  // tenant credential and is guest-safe to author onto the board with
+  // `canvas_add_object`; only PERSISTING it as a live, running project
+  // (`POST /api/realizations` writes a tenant row) needs the account.
+  "canvas_realize",
+  // ── Connected social accounts (`/api/social/*`) ──────────────────────────────
+  // Gated rather than absent, for the reason this whole set exists, and on the
+  // strongest evidence yet that the reason is real.
+  //
+  // Measured 2026-08-15 (ui 2026.8.17 / api 2026.8.11), a board opened with "I want to
+  // create a social media campaign. First I want to connect all my social media
+  // accounts and then create a post that goes to all the social media." All five social
+  // tools were account-required and therefore absent, while the SOCIAL block of the
+  // canvas system prompt — which is unconditional — was busy naming every one of them.
+  // The model, holding instructions for tools it had not been given, improvised: "I
+  // can't directly perform those actions. You would need to connect your existing
+  // accounts to a social media management platform." That is false twice over. The
+  // product connects X, LinkedIn, Facebook, Instagram and TikTok through the connector
+  // platform, publishes to all of them from one campaign, and the panel that does it is
+  // on the same canvas. It then fell back to `canvas_add_object` kind `socialCampaign`,
+  // was refused for carrying no authored ledger, and the session ended with nothing on
+  // the board and a recommendation to go and buy a competitor's product.
+  //
+  // Every one of these is a stateless request carrying the tenant token, exactly like
+  // `canvas_add_image` — so the gate is on CREDENTIALS, not on whether the board has
+  // been saved, and a signed-in user on an unsaved board publishes for real.
+  //
+  // `canvas_pin_social_post` is NOT here: it lifts one post out of a feed tile already
+  // on the board, in the browser, with no request of its own — so it belongs with the
+  // local-document tools above. A guest can never hold a feed tile to pin from, and the
+  // answer it gives them ("there is no social feed on this canvas yet") is true.
+  "canvas_connect_social_account",
+  "canvas_add_social_feed",
+  "canvas_refresh_social_feed",
+  "canvas_create_social_campaign",
+  "canvas_publish_social_campaign"
+];
+var ACCOUNT_REQUIRED_CANVAS_TOOLS = [
+  // Connected Microsoft 365 / Gmail mailboxes (`/api/mailboxes/*`).
+  "canvas_add_inbox",
+  "canvas_refresh_inbox",
+  "canvas_pin_email",
+  // The social tools used to be here. They are guest-GATED now — see the note above
+  // them in GUEST_GATED_CANVAS_TOOLS for the session that moved them, and why absence
+  // was the worse of the two answers.
+  // Tenant-scoped Builderforce domain data and canonical project PRDs.
+  "canvas_read_domain",
+  "canvas_read_project_prds",
+  "canvas_create_project_prd",
+  // ── Founder objects, tenant half ─────────────────────────────────────────────
+  // Writes the investor seat's `companies` row onto a canvas `company` object. It is a
+  // WRITE-TO-BOARD action layered on the same kernel read `canvas_read_domain` performs
+  // — the same relationship `canvas_add_diagnostic` has to `GET /api/tools` — not a
+  // second way to read a tenant's company.
+  "canvas_sync_company_profile",
+  // ── Founder operations (0469) ────────────────────────────────────────────────
+  // Every one reads or writes a TENANT record, which is what makes them
+  // account-required rather than guest-gated: a counterparty register, a CRM's
+  // deals, and a stage change that moves a real deal. A guest has none of the
+  // three, and unlike an image or a test run there is no true one-sentence answer
+  // that turns into a capability on sign-up — an empty workspace has no
+  // counterparties either. Advertising them to a guest would spend the model's
+  // attention on three routes it cannot take, on the surface where first
+  // impressions are formed.
+  //
+  // `canvas_move_deal` is the one that matters structurally: it writes the deal
+  // AND rewrites the board from the same response, which is what replaces the
+  // mirroring instruction in the canvas system prompt with a mechanism.
+  "canvas_sync_account",
+  "canvas_sync_sales_pipeline",
+  "canvas_move_deal",
+  // The legal seat's own records, for the same reason one line up: `legal_entities`,
+  // `intellectual_property` and `legal_matters` are tenant rows, and a guest board has
+  // no entity to be incorporated, no mark to renew and nobody to argue with. Every field
+  // on the three kinds it authors is a projection, so advertising it to a guest would
+  // offer a card that can only ever come back empty.
+  "canvas_sync_legal",
+  // The RAISE is the same board through a different family (FO-E1): `deals.kind =
+  // 'investment'`, `party_roles role='investor'`, and `pipeline_touchpoints` as the
+  // thread. `canvas_open_deal` is the one that makes a firm an OBJECT rather than a
+  // string in a cell, which is what `fundingRound.investors` never was.
+  "canvas_sync_funding_round",
+  // The round's PLAN, as a record. `funding_rounds` had no writer at all until
+  // 0937, so a target and a valuation were board JSON beside an empty table.
+  "canvas_plan_funding_round",
+  "canvas_open_deal",
+  "canvas_log_deal_touch",
+  // ── The data room, actually sent (FO-E2) ─────────────────────────────────────
+  // Account-required for the sharpest version of the reason: sharing one sends
+  // diligence material to a named party outside the workspace, behind an NDA, with
+  // every open logged. A guest board has no room, no recipient and no NDA.
+  "canvas_sync_data_room",
+  "canvas_share_data_room",
+  "canvas_revoke_data_room_share",
+  // A room holds TWO shapes: a diligence obligation and an encrypted legal file
+  // filed into it (0937). This is how the second one gets there — and how it leaves.
+  "canvas_file_document_in_data_room",
+  // The founders' agreement and its siblings, drafted from the one template registry
+  // (FO-D5). Account-required because it renders a real workspace's formation
+  // paperwork and lands it on a `contract` card that is then SENT for signature.
+  "canvas_draft_legal_document",
+  // Reads the pay runs a connected payroll provider actually ran, onto a `payRun`
+  // card. Account-required for the plainest possible reason: it makes an
+  // authenticated call to the tenant's own Gusto, Rippling, ADP or Deel account. A
+  // guest board has no payroll — and unlike an image, there is no true
+  // one-sentence answer that becomes a capability on sign-up either, because an
+  // empty workspace has no payroll provider connected.
+  "canvas_sync_pay_run",
+  // ── Ownership (0927) ─────────────────────────────────────────────────────────
+  // Account-required for the same reason, with one addition that is specific to
+  // this family: three of the five WRITE the ledger that says who owns the
+  // company. There is no guest-safe reading of "issue shares", and a board with no
+  // workspace has no ledger to fold, so advertising them to a visitor would spend
+  // the model's attention on five routes it cannot take.
+  //
+  // `canvas_sync_cap_table` is the one that matters structurally: it replaces a
+  // hand-typed `holders` array with a FOLD, which is what makes the percentages
+  // total 100 by construction rather than by instruction.
+  "canvas_sync_cap_table",
+  "canvas_record_equity_grant",
+  "canvas_record_convertible",
+  "canvas_record_equity_event",
+  "canvas_model_round",
+  // Re-reads the domain metric series a `liveMetric` object was bound to. This is the
+  // LIVE half the finance and investor answers never had: without it every runway, burn
+  // and pipeline number on a board is a snapshot with an as-of date and no way to ask
+  // again. Named for `liveMetric` rather than the semantic-layer `metric` it must not be
+  // confused with — see the kind's note in index.ts.
+  "canvas_refresh_live_metric",
+  // ── The secure legal FILE (`/api/legal-documents/*`) ─────────────────────────
+  //
+  // These four and `canvas_request_signature` below were declared by the canvas and named
+  // NOWHERE in this contract, because `check-canvas-tool-contract.mjs` scanned three
+  // source files and their two modules were not among them — the guard's own "a new family
+  // adds one line here" instruction, unfollowed twice. Nothing broke, and that is the
+  // point: an unlisted `canvas_*` tool is dropped from a guest turn by
+  // `restrictGuestTools`, which is the RIGHT outcome for these, arrived at by accident
+  // rather than by decision. They are account-required for the ordinary reason: each one
+  // reads or writes an encrypted tenant document, mints an external link to it, or emails
+  // a counterparty for a signature. A guest has no document to share.
+  "canvas_legal_document_sync",
+  "canvas_legal_document_share",
+  "canvas_legal_document_revoke_share",
+  "canvas_legal_document_request_signature",
+  // The generic e-signature request for an AUTHORED object (a contract, an offer) rather
+  // than an uploaded file. Same reason: it emails a real counterparty.
+  "canvas_request_signature",
+  // The RETURN LEG. `canvas_request_signature` wrote "sent" and nothing ever wrote
+  // what happened next, so `policy.roster` and `acknowledgementRate` — both declared
+  // as "written by the signature subsystem" — had no writer at all. Account-required
+  // for the same reason as its sibling: it reads a real tenant record.
+  "canvas_sync_signature",
+  // ── The sell motion ──────────────────────────────────────────────────────────
+  //
+  // The commercial half of "idea to real". Every one is account-required, and for a
+  // sharper reason than "it reaches a tenant": each acts on a real relationship with a
+  // real person outside the workspace. A prospect share mints a credential; an engagement
+  // read projects `activity_log`; pricing reads the published contract and writes a figure
+  // a buyer will be held to; a trial and a handoff create durable boards; a cadence sends
+  // messages to named people. A guest board has no prospect, no cadence and no evidence to
+  // assemble, so advertising these to one would spend the model's attention on ten routes
+  // it cannot take — the failure this contract's own header measures.
+  //
+  // There is deliberately no `canvas_accept_quote`. Acceptance exists ONLY on the buyer's
+  // own tokenised route, so no seller, agent or model can close a deal on the buyer's
+  // behalf — see `canvasSellMotionTools.ts`.
+  "canvas_share_with_prospect",
+  "canvas_list_prospect_shares",
+  "canvas_revoke_prospect_share",
+  "canvas_refresh_prospect_engagement",
+  "canvas_price_quote",
+  "canvas_read_call",
+  "canvas_assemble_trust_packet",
+  "canvas_provision_trial",
+  "canvas_handoff_plan",
+  "canvas_enrol_in_sequence",
+  "canvas_set_sequence_state",
+  // ── Connected data sources (`/api/data-sources/*`) ───────────────────────────
+  // The tenant's own connected warehouses — Postgres/Neon, ClickHouse, BigQuery.
+  // Account-required for exactly the reason the mailbox tools are: the credential
+  // is a tenant credential, and a guest has no warehouse to read. The GUEST path
+  // to the same capability is a file upload, which is already complete.
+  "canvas_list_data_sources",
+  "canvas_add_data_source",
+  "canvas_query_data_source",
+  // Reads this workspace's fine-tuning runs (`/api/ide/training/*`) — a tenant
+  // resource with a tenant credential, so a guest has no runs to read. This is the
+  // tool that closes the loop a `build` object of modality "finetune" opens: without
+  // it the board launches a training run and can never see the loss curve or the
+  // scorecard it produced.
+  "canvas_read_training_run",
+  // The prompt library (`/api/prompts/*`, `prompt_library_entries` +
+  // `prompt_library_versions`) — the other half of the same loop for prompt
+  // engineering. Account-required for the same reason as the training run one line up:
+  // a library entry is a tenant row behind a tenant JWT, and saving a version appends to
+  // it. A guest board can still author a `prompt` card with `canvas_add_object`; what it
+  // cannot have is the history, and there is no true one-sentence answer that turns an
+  // empty workspace's library into one. See `lib/canvasPromptLibraryTools.ts`.
+  "canvas_read_prompt",
+  "canvas_save_prompt_version",
+  // ── The recruiter's funnel (`/api/hiring/*`) ─────────────────────────────────
+  // Account-required for the same reason `canvas_read_domain` is: every one reads or
+  // writes tenant hiring data. The Recruiter built-in agent ships a good bio and, until
+  // these existed, no domain tools at all — so it improvised limitations, which is the
+  // failure mode `canvas_add_image` documents at length.
+  //
+  // `canvas_measure_funnel` is a WRITE-TO-BOARD over the same computation the seat
+  // reads, not a second way to count a pipeline. `canvas_offer_interview_slots` mints
+  // the candidate's self-schedule link over the availability solver that already
+  // existed — the recruiter's largest time sink was never built OUT, only never wired
+  // to anyone without an account.
+  "canvas_measure_funnel",
+  "canvas_offer_interview_slots",
+  // The REQUISITION, bound to its real `job_postings` row (FO-B3). Account-required for
+  // the sharpest version of the reason: one of its two paths CREATES a job posting in
+  // the workspace, and the other counts the applications recorded against one. A guest
+  // board has no requisition and nobody has applied to it — and unlike an image, there
+  // is no true one-sentence answer that becomes a capability on sign-up either, because
+  // an empty workspace has no postings to count.
+  //
+  // This is the tool that makes `jobPosting.applicantCount` a COUNT rather than a typed
+  // number, which is what `canvas_sync_account` did for the counterparty half of the
+  // board: the card carries `postingId`, and every application read joins on it instead
+  // of on a title two requisitions can share.
+  "canvas_sync_job_posting",
+  // FO-B4: publish that requisition to the workspace's CONNECTED job boards. Account-
+  // required twice over — it needs the real posting and a connector credential, and it
+  // puts the workspace's name on a public board.
+  "canvas_distribute_job_posting",
+  // ── The build vocabulary's undo (`lib/canvasBuildTools.ts`) ──────────────────
+  // File history is kept by a durable project's storage (`ide/projects/<id>/` in R2,
+  // behind a tenant JWT). A guest's app is held in the browser and keeps none, so
+  // these two stay account-required while the rest of the build vocabulary is
+  // guest-safe (see GUEST_SAFE_CANVAS_TOOLS).
+  "canvas_list_build_file_history",
+  "canvas_restore_build_file"
+];
+var GUEST_RESEARCH_TOOL_NAMES = [
+  "builtin_web_search",
+  "builtin_web_fetch",
+  "builtin_geo_geocode"
+];
+var GUEST_CAREER_TOOL_NAMES = [
+  // Résumé readings — the whole point of the guest surface for this visitor.
+  "builtin_recruiter_score_resume",
+  "builtin_recruiter_optimize_resume",
+  "builtin_recruiter_tailor_resume",
+  "builtin_recruiter_match_job",
+  "builtin_recruiter_summarize_resume",
+  "builtin_recruiter_resume_sentiment",
+  "builtin_recruiter_roast_resume",
+  "builtin_recruiter_extract_skills",
+  "builtin_recruiter_parse_resume",
+  "builtin_recruiter_consolidate_resumes",
+  // The hiring side of the same pure comparison. A logged-out visitor evaluating the
+  // product by pasting a candidate's résumé and their own posting reaches no tenant and
+  // no network — it is the identical overlap measurement the seeker half runs, reported
+  // to the other party. Withholding it would only mean the model improvises a screening
+  // verdict instead of computing one against stated criteria.
+  "builtin_recruiter_screen_candidate",
+  "builtin_recruiter_build_packet",
+  // Preparation and positioning.
+  "builtin_recruiter_interview_questions",
+  "builtin_hr_coach",
+  "builtin_hr_value_proposition",
+  "builtin_hr_employer_research",
+  // Direction.
+  "builtin_hr_career360_suggest_targets",
+  "builtin_hr_career360_select_target",
+  // Money. `hr_runway` is the number that paces every other decision, and it is pure
+  // arithmetic over figures the visitor typed — there is nothing to gate.
+  "builtin_hr_salary_analyze",
+  "builtin_hr_comp_analyze",
+  "builtin_hr_runway",
+  "builtin_hr_compare_work_options",
+  // Drafting a listing they do not have an account to save yet. Deliberately included:
+  // seeing the listing their own résumé produces is the strongest reason to make one.
+  "builtin_listing_draft_from_resume",
+  "builtin_listing_readiness",
+  "builtin_listing_profile_blocks"
+];
+var CREATION_CANVAS_TOOLS = [
+  ...GUEST_SAFE_CANVAS_TOOLS,
+  ...GUEST_GATED_CANVAS_TOOLS,
+  ...ACCOUNT_REQUIRED_CANVAS_TOOLS
+];
+var GUEST_CANVAS_TOOL_NAMES = /* @__PURE__ */ new Set([
+  ...GUEST_SAFE_CANVAS_TOOLS,
+  ...GUEST_GATED_CANVAS_TOOLS,
+  ...GUEST_RESEARCH_TOOL_NAMES,
+  ...GUEST_CAREER_TOOL_NAMES
+]);
+var ACCOUNT_REQUIRED_SET = new Set(ACCOUNT_REQUIRED_CANVAS_TOOLS);
+var GUEST_GATED_SET = new Set(GUEST_GATED_CANVAS_TOOLS);
+var CANVAS_IMAGE_TOOL = "canvas_add_image";
+var CANVAS_GAME_TOOL = "canvas_add_game";
+var CANVAS_GAME_ACCOUNT_GATE = `Authoring a Roblox place needs a free Builderforce account: the Luau and the .rbxlx are written on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the Roblox build needs a free account, and then offer to build a playable WEB game right now with ${CANVAS_GAME_TOOL} at platform "web" \u2014 that works on this board with no account, plays immediately, and installs on a phone. Do NOT say that you cannot make games, and do NOT describe this as a technical limitation: it is the account, and it is one click away.`;
+var CANVAS_SCREENSHOT_TOOL = "canvas_capture_screenshot";
+var CANVAS_SCREENSHOT_ACCOUNT_GATE = `${CANVAS_SCREENSHOT_TOOL} needs a free Builderforce account: the page is rendered by a real browser on the server, not in this tab. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the "before" screenshot needs a free account, and then build the comparison this board CAN hold right now \u2014 read the live page with builtin_web_fetch and set out its current headline, structure and calls to action beside the new design, so the user can see what changed. Do NOT say that you are unable to browse the web visually, that you cannot see or screenshot a website, or that this is a technical limitation of the product: the only reason is the account, and it is one click away.`;
+var CANVAS_IMAGE_ACCOUNT_GATE = `${CANVAS_IMAGE_TOOL} needs a free Builderforce account: image search and generation run on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the picture needs a free account, and then build what this canvas CAN hold right now \u2014 the authored plan, the labelled layout, the planting list \u2014 with canvas_add_object. Do NOT say that you are unable to generate images, that you cannot see or look things up, or that a tool is technically limited: the only reason is the account, and it is one click away.`;
+
+// ../packages/creation-canvas-contract/src/canvasVideoTools.ts
+var CANVAS_VIDEO_TOOL = "canvas_add_video";
+var CANVAS_SCENE_TOOL = "canvas_create_scene";
+var CANVAS_VIDEO_ACCOUNT_GATE = `${CANVAS_VIDEO_TOOL} and ${CANVAS_SCENE_TOOL} need a free Builderforce account: video is generated on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the video needs a free account, and then build what this canvas CAN hold right now \u2014 the shot list, the script, the storyboard as authored objects \u2014 with canvas_add_object. Do NOT say that you are unable to make videos or that this is a technical limitation of the product: the only reason is the account, and it is one click away.`;
+
+// ../packages/creation-canvas-contract/src/marketplaceListings.ts
+var MARKETPLACE_LISTING_KINDS = [
+  {
+    // The reason this whole seam was built: a generated game is playable the moment
+    // it exists, and until now only its author could play it.
+    id: "game",
+    launch: "play",
+    from: ["game"],
+    family: "asset",
+    harness: "runtime",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "full",
+    icon: "\u{1F3AE}"
+  },
+  {
+    // A published site already has a real URL (`publishStaticSite`). Selling it is
+    // selling the source, and the URL is the demo.
+    id: "app",
+    launch: "open",
+    from: ["website", "prototype", "build", "project", "service"],
+    family: "asset",
+    harness: "runtime",
+    // The only kind that IS a running system on an address somebody keeps
+    // operating — so the only kind there is anything to give ACCESS to.
+    deliveries: ["hosted", "copy"],
+    pricing: "either",
+    trial: "full",
+    icon: "\u{1F680}"
+  },
+  {
+    id: "automation",
+    launch: "install",
+    from: ["workflow"],
+    family: "asset",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u2699\uFE0F"
+  },
+  {
+    // Agents already have a registry of their own; a canvas-authored agent joins it
+    // through the same listing row rather than through a second publish path.
+    id: "agent",
+    launch: "install",
+    from: ["agent", "staff"],
+    family: "agent",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F916}"
+  },
+  {
+    id: "template",
+    launch: "install",
+    from: ["template", "frame"],
+    family: "asset",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F9E9}"
+  },
+  {
+    // The board itself. `from: []` — a pack is published from a session, and the
+    // publish panel offers it only when the whole canvas is the product.
+    id: "pack",
+    launch: "install",
+    from: [],
+    family: "asset",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F4E6}"
+  },
+  {
+    id: "dashboard",
+    launch: "preview",
+    from: ["dashboard", "chart", "kpi", "report", "metric", "liveMetric"],
+    family: "asset",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F4CA}"
+  },
+  {
+    id: "playbook",
+    launch: "preview",
+    from: ["document", "knowledge", "prd", "slides", "diagram", "roadmap", "pitch", "testPlan"],
+    family: "asset",
+    harness: "paged",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F4D8}"
+  },
+  {
+    id: "course",
+    launch: "run",
+    from: ["course", "practice", "guidedTour"],
+    family: "asset",
+    harness: "instrument",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F393}"
+  },
+  {
+    id: "dataset",
+    launch: "preview",
+    from: ["dataset", "table", "spreadsheet", "datasource"],
+    family: "asset",
+    harness: "system",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F5C2}\uFE0F"
+  },
+  {
+    id: "tool",
+    launch: "run",
+    from: ["diagnostics", "mcp", "code", "evaluation"],
+    family: "asset",
+    harness: "instrument",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F6E0}\uFE0F"
+  },
+  {
+    id: "creative",
+    launch: "preview",
+    from: ["image", "video", "animation", "podcast", "comic", "model3d", "cad", "mockup", "mockupSet", "drawing"],
+    family: "asset",
+    // The kind that proved `harness` cannot be one value per listing kind: a video is
+    // time-based, a comic is paged and a 3D model is dimensioned, and all three are
+    // legitimately `creative`. `resolveListingHarness` reads the source object first.
+    harness: "media",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "full",
+    icon: "\u{1F3A8}"
+  },
+  {
+    // An INSTRUMENT, not its answers. What is sold is the questions and the scoring;
+    // the responses belong to whoever runs it and are the one thing the seller must
+    // never be able to read — which is why the buyer gets an empty response store and
+    // the publish path strips the seller's own.
+    id: "survey",
+    launch: "run",
+    from: ["form"],
+    family: "asset",
+    harness: "instrument",
+    deliveries: ["copy"],
+    pricing: "either",
+    // `preview` even when free: an instrument someone can read in full is one they can
+    // copy, and the sample is the sales pitch.
+    trial: "preview",
+    icon: "\u{1F4CB}"
+  },
+  {
+    // Cover, pages and figures as one product with three outputs (reader, EPUB/PDF,
+    // print). Separate from `playbook` because the harness differs: a playbook is read
+    // on a screen and a book has to hold at print resolution as well.
+    id: "book",
+    launch: "preview",
+    from: ["book"],
+    family: "asset",
+    harness: "paged",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F4D6}"
+  },
+  {
+    // A designed room — boardroom, office kitchen, an open floor of cubicles — that
+    // another session installs as the place it meets in. The buyer gets the design
+    // itself (`copy`): a `room` object lands on their board and their room surface
+    // draws it. Previewable before paying, since a room is judged by walking it.
+    id: "room",
+    launch: "install",
+    from: ["room"],
+    family: "asset",
+    harness: "space",
+    deliveries: ["copy"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F3E2}"
+  },
+  {
+    // A CAPABILITY of the platform, sold through the same shop window as everything
+    // else (PRD 33 D17: every workspace installs Insights through the Marketplace,
+    // Builderforce's own included). Published by the platform (a migration row), never
+    // from a canvas — `from` is empty and `sessionListingKinds` excludes it, because a
+    // board cannot BE a capability. The buyer gets no copy: holding the licence grants
+    // the capability (`deliveries: ['entitlement']`). `instrument` because what a buyer
+    // does with it is take measurements and read their own results.
+    id: "capability",
+    launch: "run",
+    from: [],
+    family: "asset",
+    harness: "instrument",
+    deliveries: ["entitlement"],
+    pricing: "either",
+    trial: "preview",
+    icon: "\u{1F3A5}"
+  }
+];
+var LISTING_KIND_IDS = MARKETPLACE_LISTING_KINDS.map((spec) => spec.id);
+var DAY_MS = 24 * 60 * 60 * 1e3;
+
+// ../packages/creation-canvas-contract/src/academic.ts
+var ACADEMIC_OBJECT_KINDS = [
+  // ── Teaching: the assessment loop ──────────────────────────────────────────────
+  // The class itself. A roster is the axis the canvas never had: without it, "hand
+  // this out" and "who is behind?" have no subject.
+  "cohort",
+  // The task, its rubric, and one answer per learner. See the block comment above for
+  // why the last of these is a kind rather than an array.
+  "assignment",
+  "rubric",
+  "submission",
+  // Marks, aggregated and moderated. Deliberately separate from `rubric`: a rubric is
+  // the instrument, a gradebook is the record, and they have different lifetimes —
+  // the instrument is reused for years, the record belongs to one cohort.
+  "gradebook",
+  // The lawful and reusable parts of running a class.
+  "accommodation",
+  "feedbackBank",
+  // Delivering it: the session plan and the bookable hours after it.
+  //
+  // The live question asked DURING it is not here. `poll` was declared twice — once as a
+  // teaching kind and once, the same week, as the facilitation primitive in
+  // `SHARED_OBJECT_KINDS` — and two declarations of one word is not a duplicate the way
+  // two similar tables are: `CREATION_OBJECT_KINDS` concatenates both lists, so the
+  // registry indexed one kind twice and whichever spec loaded last silently won. A
+  // lecture check-for-understanding is the shared `poll` with `pollFormat: 'quiz'`,
+  // which is exactly the argument `SHARED_OBJECT_KINDS` makes for it.
+  "lecture",
+  "officeHours",
+  // Programme outcomes mapped to what actually evidences them. This is the
+  // accreditation artifact every department rebuilds in a spreadsheet every cycle.
+  "curriculumMap",
+  // ── Research: the scholarly lifecycle, in gate order ──────────────────────────
+  "grantProposal",
+  "ethicsApproval",
+  "preRegistration",
+  "protocol",
+  "consentForm",
+  "participantPool",
+  "dataManagementPlan",
+  "literatureReview",
+  "hypothesis",
+  "manuscript",
+  "peerReview",
+  // ── Scholarly primitives ──────────────────────────────────────────────────────
+  // One reference, the formatted list of them, and mathematics.
+  "citation",
+  "bibliography",
+  "equation"
+];
+var ACADEMIC_KIND_SET = new Set(ACADEMIC_OBJECT_KINDS);
+
+// ../packages/creation-canvas-contract/src/people.ts
+var PEOPLE_OBJECT_KINDS = [
+  // ── THE PERSON, AND THE SHAPE OF THE ORGANISATION ─────────────────────────────
+  // `staff` stays what it always was — a card for somebody on this board. `employee` is
+  // the employment RELATIONSHIP: department, manager, employment basis, status, dates.
+  // `people_employees.managerRef` has always carried the edge an org chart is drawn from
+  // and nothing on the canvas could hold it, so the board could not draw an org even from
+  // data it could already read.
+  "employee",
+  // Derived from those manager references and editable as a SCENARIO — which is the half
+  // a read-only directory cannot do and the half a reorg is entirely made of. Span of
+  // control and the layers under a manager are computed, never typed, because a typed
+  // span is wrong the first time somebody moves.
+  "orgChart",
+  // Approved vs actual vs budget, per team. The object a requisition is approved against
+  // and the one that makes "can we afford this hire" answerable on the board rather than
+  // in a thread nobody can find in March.
+  "headcountPlan",
+  // Range, midpoint, comparatio. The object that makes an offer checkable and pay equity
+  // answerable — the highest-value question in the whole set, and the one the data model
+  // could already answer while the canvas could not ask it.
+  "compBand",
+  // ── THE PAPER AND THE PROCESS ─────────────────────────────────────────────────
+  // A policy with a LIFECYCLE: effective date, jurisdiction, owner, review cadence and an
+  // acknowledgement roster. Drafting one was always possible with `document`; publishing
+  // it, collecting acknowledgements and chasing the people who have not signed were the
+  // three steps with no home — which is four-fifths of the actual job.
+  "policy",
+  // Onboarding and offboarding as ONE kind with a `direction`, because they are the same
+  // shape — dated steps against an anchor date, an owner per step, evidence per step —
+  // and their compliance-critical halves (right-to-work checked; access revoked) are
+  // mirror images. Two kinds would be one shape maintained twice, and the leaver half is
+  // the one that carries real risk.
+  "employeeLifecycle",
+  // Who is away, and whether the rota survives it. Every delivery forecast on this board
+  // models capacity as though headcount were always available; this is the subtrahend.
+  "absencePlan",
+  // ── PERFORMANCE, CAPABILITY AND RELATIONS ─────────────────────────────────────
+  // One review cycle for one person, at whatever cadence `reviewType` names.
+  "performanceReview",
+  // competencies × people, with the gap named. The one HR artifact the rest of the
+  // company acts on, because it is what answers build-vs-buy for a capability — which is
+  // the sentence that turns a skills gap into either a `course` or a `jobPosting`.
+  "skillsMatrix",
+  // Employee-relations casework: grievance, investigation, accommodation, disciplinary,
+  // performance plan. RESTRICTED by construction — see `RESTRICTED_BY_DEFAULT_KINDS`.
+  // This kind is why confidentiality is a declared part of the contract rather than
+  // something the export seam remembers to check.
+  "case",
+  // A STATUTORY commitment, as against `contract.obligations`, which are commitments to a
+  // counterparty. "We just hired in California and Ontario — what changes?" had no object
+  // at all.
+  //
+  // NOT YET WATCHABLE. This comment used to claim `trigger` binds to this object's `dueAt`
+  // and warns before the deadline. It does not: `canvasTriggers.ts` parses a NUMBER out of
+  // a `liveMetric` on the same board and compares it with below/above/equals/changes-by,
+  // so there is no date comparator and no binding to a non-metric object — and
+  // `canvas_evaluate_triggers` is a frontend tool with no server sweep, so nothing
+  // evaluates while the board is closed. A statutory deadline is therefore recorded here
+  // and noticed by a person. See the Gap Register entry "date-bearing triggers".
+  "obligation",
+  // ── THE COLLECTION PRIMITIVE ──────────────────────────────────────────────────
+  // A structured question set that a REAL HUMAN answers, and the responses that come back.
+  //
+  // It is declared in this vocabulary because HR is the domain that exposed its absence —
+  // applications, acknowledgements, 360s, exit interviews, pulses and accommodation
+  // requests are all one shape — but every field it declares is deliberately domain
+  // NEUTRAL. Support intake, a research screener and a satisfaction round are the same
+  // object, and handing the domain that asked first a private copy is how a product ends
+  // up with three response stores. `pulse_surveys` becomes its first binding rather than
+  // its competitor.
+  //
+  // This is the single largest "idea to REAL" break the canvas had: it could author
+  // anything and collect nothing, so every flow that needed an answer from a person
+  // terminated in a document and finished its real work somewhere else.
+  "form"
+];
+var PEOPLE_KIND_SET = new Set(PEOPLE_OBJECT_KINDS);
+var CONFIDENTIALITY_LEVELS = ["public", "internal", "restricted"];
+function isConfidentialityLevel(value) {
+  return typeof value === "string" && CONFIDENTIALITY_LEVELS.includes(value);
+}
+function confidentialityAtMost(level, ceiling) {
+  return CONFIDENTIALITY_LEVELS.indexOf(level) <= CONFIDENTIALITY_LEVELS.indexOf(ceiling);
+}
+var BOUNDARY_CEILING = {
+  export: "internal",
+  share: "internal",
+  guest: "public",
+  publicMedia: "internal",
+  aiContext: "internal"
+};
+function boundaryAdmits(level, boundary) {
+  return confidentialityAtMost(level, BOUNDARY_CEILING[boundary]);
+}
+
+// ../packages/creation-canvas-contract/src/advisoryThread.ts
+var ADVISORY_THREAD_MARKER = "advisory-thread";
+var ADVISORY_THREAD_CONFIDENTIALITY = "restricted";
+function advisoryThreadConfidentiality(declared) {
+  if (isConfidentialityLevel(declared) && declared === ADVISORY_THREAD_CONFIDENTIALITY) return declared;
+  return ADVISORY_THREAD_CONFIDENTIALITY;
+}
+function advisoryThreadAdmitted(state, boundary) {
+  const level = advisoryThreadConfidentiality(state.confidentiality);
+  if (boundary === "aiContext" && state.founderInvitedAdvisor) {
+    return boundaryAdmits("internal", "aiContext");
+  }
+  return boundaryAdmits(level, boundary);
+}
+function readAdvisoryThreadState(metadata) {
+  if (metadata == null || metadata === "") return null;
+  let raw = metadata;
+  if (typeof metadata === "string") {
+    try {
+      raw = JSON.parse(metadata);
+    } catch {
+      return null;
+    }
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw;
+  if (record.marker !== ADVISORY_THREAD_MARKER) return null;
+  return {
+    confidentiality: advisoryThreadConfidentiality(record.confidentiality),
+    founderInvitedAdvisor: record.founderInvitedAdvisor === true,
+    hostRef: typeof record.hostRef === "string" && record.hostRef ? record.hostRef : void 0
+  };
+}
+function advisoryThreadHistoryAdmitted(messages, boundary = "aiContext") {
+  for (const message of messages) {
+    const state = readAdvisoryThreadState(message.metadata);
+    if (!state) continue;
+    return advisoryThreadAdmitted(state, boundary);
+  }
+  return true;
+}
+
+// ../packages/creation-canvas-contract/src/facilitation.ts
+var GRID_QUADRANTS = [
+  { key: "lowLow", x: 0, y: 0 },
+  { key: "highLow", x: 1, y: 0 },
+  { key: "lowHigh", x: 0, y: 1 },
+  { key: "highHigh", x: 1, y: 1 }
+];
+var POLL_GRID_QUADRANTS = GRID_QUADRANTS.map((q) => q.key);
+
+// ../packages/creation-canvas-contract/src/dataScience.ts
+var DATA_SCIENCE_OBJECT_KINDS = [
+  // ── ANALYSIS ────────────────────────────────────────────────────────────────
+  // The cell. Its outputs are first-class canvas artifacts rather than a scrollback
+  // buffer, which is what makes an analysis something the next turn can reason over
+  // instead of something a person has to re-read.
+  "notebook",
+  // ── MODEL ───────────────────────────────────────────────────────────────────
+  // What was trained, and one run that trained it. Two kinds rather than one, and it
+  // is the same split `metric`/`liveMetric` and `inbox`/`email` already draw: a
+  // `model` is the ARTIFACT that persists and gets promoted, a `trainingRun` is one
+  // EXECUTION that produced a loss curve and a scorecard and then stopped changing.
+  // Collapsing them would mean a model could only ever remember its most recent run.
+  "model",
+  "trainingRun",
+  // N runs side by side with their hyperparameters and their metrics. Its own kind
+  // rather than a view because the CHOICE is an artifact: "we picked this config, at
+  // this cost, over that one" is exactly the reasoning a `decision` object cites.
+  "runComparison",
+  // ── EVALUATION ──────────────────────────────────────────────────────────────
+  // Where an eval set legitimately comes from: sampled rows, a question, the humans
+  // who answered it, and their agreement. `labels` is derived for the same reason
+  // `practice.attempts` and an academic `marks` field are — it is the record of what a
+  // person actually chose, and a model that could write it could manufacture consensus.
+  "labelSet",
+  // ── SHIP ────────────────────────────────────────────────────────────────────
+  // The prompt as a VERSIONED artifact with an evaluation attached, backed by the
+  // prompt library the platform already stores. `llm.instructions` was a bare string
+  // with no history and nothing to diff against.
+  "prompt"
+];
+var DATA_SCIENCE_KIND_SET = new Set(DATA_SCIENCE_OBJECT_KINDS);
+
+// ../packages/creation-canvas-contract/src/operations.ts
+var OPERATIONS_OBJECT_KINDS = [
+  // ── THE THING BEING SERVED ────────────────────────────────────────────────────
+  // The physical or managed item work is done TO: a boiler, a rental unit, a vehicle, a
+  // production line, a treatment room. It is first because it is the only object here
+  // with a life longer than any single job, and it is what makes the operation's most
+  // valuable question answerable at all — "what does this asset cost us a year, and is it
+  // cheaper to replace it" — which no amount of per-job record keeping answers.
+  "serviceAsset",
+  // ── THE WORK ──────────────────────────────────────────────────────────────────
+  // One unit of committed work: reactive repair, planned maintenance, installation,
+  // warranty, callback. `orderType` carries which, because they are the same object with
+  // the same lifecycle and the same costing, and splitting them would split the backlog.
+  "workOrder",
+  // WHEN AND BY WHOM, on the ground. A work order can need none, one or six visits — a
+  // return trip for a part is the commonest event in field service and the one a
+  // single-appointment model cannot represent without lying about first-time fix.
+  "visit",
+  // THE DAY, ACROSS EVERYBODY. Capacity, assignment and the unassigned pile: the view a
+  // service business runs its morning from, and the one that makes "we are full" a fact
+  // rather than a feeling.
+  "dispatchBoard",
+  // ── THE COMMERCIAL FRAME ──────────────────────────────────────────────────────
+  // The recurring commitment: a maintenance plan, a retainer, an SLA, a managed-service
+  // agreement. It is what turns a service business from a queue of jobs into a book of
+  // revenue, and it is what a planned `workOrder` is generated FROM rather than
+  // remembered into existence.
+  "serviceAgreement",
+  // The priced quote that precedes the work — the missing predecessor of `invoice`.
+  "estimate",
+  // ── THE EVIDENCE AND THE PERMISSION ───────────────────────────────────────────
+  // A completed procedure against an asset: lines, results, evidence, an outcome and a
+  // next-due date. Safety checks, statutory certificates, condition surveys, QA passes on
+  // a line, a vehicle walkaround — one shape, `inspectionType` says which.
+  "inspection",
+  // The credential the work is only lawful WITH: a trade registration, a practising
+  // certificate, an insurance policy, a calibration, a licence to operate. It carries an
+  // expiry, which is the whole point: an expired certificate does not announce itself,
+  // and dispatching against one is how a company loses its own licence.
+  "certification",
+  // ── WHAT THE WORK CONSUMES ────────────────────────────────────────────────────
+  // Stock with a reorder point and a lead time: the parts on the van and in the store.
+  "inventoryItem",
+  // Who it is bought from, and how long they take. Lead time is the field that makes a
+  // reorder point calculable rather than guessed.
+  "supplier",
+  // The replenishment itself, from raised to received.
+  "purchaseOrder",
+  // The movement, with tracking and proof of delivery. Distinct from the purchase order
+  // for the same reason `testRun` is distinct from `testPlan`: one order can ship three
+  // times, and a part that is late is a job that cannot be booked.
+  "shipment",
+  // ── WHEN IT GOES WRONG ────────────────────────────────────────────────────────
+  // A safety, environmental or service-failure event: injury, near miss, spill, outage,
+  // damage, complaint. Its own kind rather than a `defect` because a defect is
+  // REPRODUCED and VERIFIED against a build, and an incident is REPORTED, investigated
+  // and — in most of these verticals — reportable to a regulator on a clock. It is
+  // `restricted` by default: an injury record carries health data about a named person.
+  "incident"
+];
+var OPERATIONS_KIND_SET = new Set(OPERATIONS_OBJECT_KINDS);
+
+// ../packages/creation-canvas-contract/src/resumeLexicon.ts
+var SKILL_GROUPS = {
+  Languages: ["javascript", "typescript", "python", "java", "csharp", "cpp", "go", "rust", "ruby", "php", "swift", "kotlin", "scala", "r", "sql", "objectivec", "dart", "elixir", "perl", "bash"],
+  "Frameworks & libraries": ["react", "nextjs", "vue", "angular", "svelte", "nodejs", "django", "flask", "fastapi", "rails", "spring", "laravel", "express", "dotnet", "pytorch", "tensorflow", "pandas", "numpy", "tailwind"],
+  "Cloud & infrastructure": ["aws", "azure", "googlecloud", "cloudflare", "kubernetes", "docker", "terraform", "ansible", "serverless", "linux", "nginx", "cicd", "jenkins", "githubactions"],
+  "Data & storage": ["postgresql", "mysql", "mongodb", "redis", "elasticsearch", "snowflake", "bigquery", "databricks", "kafka", "spark", "airflow", "dbt", "nosql", "etl"],
+  "Practices & methods": ["agile", "scrum", "kanban", "devops", "tdd", "qualityassurance", "microservices", "rest", "graphql", "api", "accessibility", "observability", "sre", "incidentresponse"],
+  // `machinelearning`, `nlp` and `computervision` are canonical PHRASE tokens — the
+  // tokenizer collapses "machine learning" into one of them. They must also be listed
+  // here or `isSkillToken` returns false for every one, which silently made machine
+  // learning invisible to the scorer, the matcher and the role catalogue alike.
+  // Both spellings of the two phrases that do not collapse to their acronym: the
+  // tokenizer produces the run-together PHRASE form ("naturallanguageprocessing") while
+  // a résumé that writes the acronym produces "nlp". Listing one and not the other is
+  // how the same skill counts on one document and not on another.
+  "AI & data science": ["machinelearning", "deeplearning", "nlp", "naturallanguageprocessing", "computervision", "datascience", "dataengineering"],
+  "Product & design": ["productmanagement", "userexperience", "userinterface", "figma", "wireframing", "prototyping", "userresearch", "roadmapping", "analytics", "experimentation"],
+  "Business & commercial": ["saas", "b2b", "b2c", "crm", "erp", "salesforce", "hubspot", "forecasting", "budgeting", "pricing", "negotiation", "procurement", "compliance"],
+  "Marketing & growth": ["seo", "searchengineoptimization", "contentmarketing", "socialmedia", "customersuccess", "businessdevelopment", "accountmanagement"],
+  "Leadership & communication": ["mentoring", "coaching", "hiring", "stakeholdermanagement", "facilitation", "publicspeaking", "technicalwriting", "peoplemanagement", "changemanagement"]
+};
+var SKILL_INDEX = new Map(
+  Object.entries(SKILL_GROUPS).flatMap(([group2, tokens2]) => tokens2.map((t) => [t, group2]))
+);
+var STRONG_VERBS = [
+  "led",
+  "built",
+  "shipped",
+  "launched",
+  "designed",
+  "architected",
+  "delivered",
+  "owned",
+  "drove",
+  "grew",
+  "reduced",
+  "increased",
+  "cut",
+  "saved",
+  "scaled",
+  "automated",
+  "migrated",
+  "rebuilt",
+  "negotiated",
+  "closed",
+  "hired",
+  "mentored",
+  "founded",
+  "created",
+  "introduced",
+  "streamlined",
+  "recovered",
+  "won"
+];
+var POSITIVE_TONE = [
+  ...STRONG_VERBS,
+  "improved",
+  "exceeded",
+  "achieved",
+  "award",
+  "awarded",
+  "promoted",
+  "recognised",
+  "recognized",
+  "successful",
+  "record",
+  "best",
+  "first",
+  "expert",
+  "certified",
+  "accelerated"
+];
+
+// ../packages/creation-canvas-contract/src/parties.ts
+var PARTY_ROLES = [
+  /** An account you have WON — the thing every commercial reference points at. */
+  "customer",
+  /** Somebody you buy from. The counterparty on a `bill`. */
+  "vendor",
+  /** A firm or angel in the raise. Not yet, and possibly never, a shareholder. */
+  "investor",
+  /** Owns shares today. The cap table's own row — see the note above. */
+  "equity_holder",
+  "partner",
+  "candidate",
+  "employee",
+  "freelancer",
+  "recruiter",
+  "seller",
+  /** Known to us and not yet any of the above. The honest default. */
+  "contact"
+];
+var PARTY_ROLE_SET = new Set(PARTY_ROLES);
+
+// ../packages/creation-canvas-contract/src/website.ts
+var WEBSITE_SECTION_KINDS = ["hero", "features", "content", "stats", "testimonial", "cta"];
+var WEBSITE_ADDABLE_SECTION_KINDS = WEBSITE_SECTION_KINDS.filter((kind) => kind !== "hero");
+var WEBSITE_THEME_STYLES = ["editorial", "bold", "minimal", "soft", "technical"];
+var SECTION_KINDS = new Set(WEBSITE_SECTION_KINDS);
+var THEME_STYLES = new Set(WEBSITE_THEME_STYLES);
+
+// ../packages/creation-canvas-contract/src/sellMotion.ts
+var SELL_MOTION_OBJECT_KINDS = [
+  // WHAT IT COSTS THEM. Seats × plan × term × discount × expiry, that a buyer can accept
+  // without an account. The object where a negotiated price stops dying on the way to
+  // checkout.
+  "quote",
+  // WHAT THEY ACTUALLY SAID. Recording, transcript, objections, commitment, next step —
+  // the highest-signal artifact in selling, and the one the board could not hold.
+  "call",
+  // LET THEM TRY IT. A time-boxed prospect workspace provisioned FROM the board built
+  // with them, so the demo artifact becomes the trial and the trial becomes onboarding.
+  "trial",
+  // THE PROCUREMENT DELIVERABLE. Controls, subprocessors, the DPA, the diagnostics, and
+  // the questionnaire answered row by row with the evidence each answer rests on.
+  "trustPacket",
+  // THE PLAN BOTH SIDES OWN. Dated milestones with a named owner on EACH side, and the
+  // handoff that carries what was built during the sale into the customer's workspace.
+  "mutualActionPlan"
+];
+var SELL_MOTION_KIND_SET = new Set(SELL_MOTION_OBJECT_KINDS);
+
+// ../packages/creation-canvas-contract/src/career.ts
+var CAREER_OBJECT_KINDS = [
+  // A POSTING SOMEONE ELSE OPENED. The research object: what the role is, what it pays
+  // as ADVERTISED (never as guessed), the requirements as stated, and the honest read
+  // on fit. Bound to `recruiter.match_job` and `jobs.get`.
+  "job",
+  // ONE APPLICATION, WITH ITS LIFECYCLE. A projection of a `job_proposals` row, not a
+  // second copy of it — see the header. This is the object that makes a follow-up date
+  // a thing the board can warn about rather than a thing somebody remembers.
+  "jobApplication",
+  // ALL OF THEM AT ONCE. The transpose of a `shortlist`: one person's applications with
+  // their stages, their ages and the one that has gone quiet longest. Bound to
+  // `proposals.mine`.
+  "applicationPipeline",
+  // THE LETTER. Its own kind rather than a `document` because it is written AGAINST a
+  // posting and re-written per application, and because the openings a person reuses are
+  // the part worth keeping — a `document` cannot say which posting it answered.
+  "coverLetter",
+  // THE REHEARSAL, PERSISTED. Questions with the rubric each is scored against, the
+  // gaps the posting exposes, and the answers the person has actually drafted. Bound to
+  // `recruiter.interview_questions` and `hr.interview_coaching`.
+  "interviewPrep",
+  // THE CLOCK EVERY OTHER DECISION IS PACED AGAINST. Bound to `hr.runway` and
+  // `hr.compare_work_options`.
+  "runway",
+  // THE HOURS, AND WHAT THEY ARE WORTH. A projection of a `timecards` row, which has had
+  // routes, a lifecycle (draft → submitted → approved → rejected → paid) and a
+  // freelancer dashboard the whole time and no canvas surface at all — so the one seat
+  // where "idea → REAL" ends in money arriving could draft the agreement on the board
+  // and had to leave it to bill for the work.
+  //
+  // IN THIS VOCABULARY AND NOT THE FOUNDER ONE, though it is unambiguously money: an
+  // `invoice` is what a COMPANY sends and it already exists over `freelancer_invoices`.
+  // A timecard is the hours ONE PERSON worked, submitted for somebody else's approval —
+  // the same side of the transaction as `jobApplication`, and the same relationship to
+  // its row: the lifecycle lives in the table, and the card projects it.
+  "timecard"
+];
+var CAREER_KIND_SET = new Set(CAREER_OBJECT_KINDS);
+
+// ../packages/creation-canvas-contract/src/marketing.ts
+var MARKETING_OBJECT_KINDS = [
+  // THE BRAND, AS A BINDABLE THING. Palette, typography, logo, voice, and the claims
+  // that may never be made. Projects `brand_kits`; the claim list is the board's own,
+  // because `battlecard.doNotSay` is where the product already records a forbidden
+  // claim and a second store for the same sentence is how the two come to disagree.
+  "brandKit",
+  // WHO A SEND REACHES, AND WHO IT MUST NOT. Rules, size, and the suppression count —
+  // the last of which is the whole reason the kind exists: an audience card that showed
+  // a size and not a suppression count would make the surface's own legal exposure
+  // invisible in exactly the place a person decides to press send.
+  "audience"
+];
+var MARKETING_KIND_SET = new Set(MARKETING_OBJECT_KINDS);
+var BRAND_BOUND_KINDS = [
+  // The `creative.*` capabilities — every one of them reaches `builtin_creative_compose`.
+  "image",
+  "video",
+  "animation",
+  "comic",
+  "podcast",
+  "drawing",
+  "model3d",
+  "cad",
+  // The authored surfaces, which do not go through the creative route but carry the same
+  // identity: a site and an email that ignore the palette are as off-brand as a poster.
+  "website",
+  "prototype",
+  "emailTemplate",
+  "emailCampaign",
+  "socialCampaign",
+  "socialPost",
+  // Slides and mockups are shown to customers more often than any image on this list.
+  "slides",
+  "mockup",
+  "mockupSet"
+];
+var BRAND_BOUND_SET = new Set(BRAND_BOUND_KINDS);
+
+// ../packages/creation-canvas-contract/src/objectKinds.ts
+var FOUNDER_OBJECT_KINDS = [
+  // WHO WE ARE. The anchor every other founder object is authored against, and the
+  // reason "use my existing business details" can be a real instruction rather than a
+  // request for the user to paste their own company into the prompt. Hydrates from the
+  // investor seat's `companies` entity when there is a tenant, and is authored directly
+  // when there is not — a guest evaluating the product still has a company.
+  "company",
+  // WHO WE ARE AGAINST. One rival, with the geography that makes a market analysis
+  // spatial rather than a list: `locations` carry lat/lng, so the same competitors that
+  // answer "who is in Florida" also answer "where are they NOT".
+  "competitor",
+  // WHO WE SELL TO, and the plan that reaches them. A segment is sized and sourced;
+  // a GTM plan names the motion, the channels and the economics that make the segment
+  // reachable — which is what turns "potential customers" into a list with a route.
+  "customerSegment",
+  "gtmPlan",
+  // HOW WE WIN A NAMED RIVAL'S CUSTOMER. Deliberately its own kind rather than a field
+  // on `competitor`: the analysis of a rival and the plan to take their customers have
+  // different authors, different review cycles, and different lifetimes.
+  "battlecard",
+  // THE IDEA, BEFORE ANY OF IT. The thing a founder has in the shower, jots on a
+  // scratchpad, and — on every other tool — loses. The board could hold a researched
+  // segment, a battlecard and a run experiment, and not the half-formed thought that
+  // started them. An `idea` is written in seconds (a line is enough), carries a `stage`
+  // from `IDEA_STAGES` so a pile of them can be TRACKED rather than merely kept, and
+  // names the `customerInterview` / `experiment` objects that tested it, so "have we
+  // talked to anybody about this?" is a fact on the card rather than a feeling. Ported
+  // from BurnRateOS's Ideas Scratch Pad as a KIND, not a second document editor: the
+  // canvas already has pages, and what it lacked was the idea as a thing you can count.
+  "idea",
+  // THE EVIDENCE UNDER ALL OF IT. A customer conversation and a run experiment are the
+  // two things that turn an assumption into a fact, and the canvas had neither.
+  //
+  // Named `customerInterview` and not `interview` because the hiring domain registers a
+  // JOB interview under `kind: 'interview'` in the kernel `objects` table
+  // (`api/src/application/domains/hiring/entities.ts`). Two different things under one
+  // word in the ubiquitous language is how `canvas_read_domain('hiring')` comes to hand
+  // the model rows it maps onto a discovery card with `painsHeard` and `segment` — the
+  // same collision class the FinOps `soc_controls` rename exists to record. The founder
+  // kind carries the qualifier because it is the one with an adjective available; the
+  // hiring kind keeps the bare noun a recruiter actually says.
+  "customerInterview",
+  "experiment",
+  // WHAT WE CHOSE AND WHY. The canvas recorded what HAPPENED in five places (timeline,
+  // activity, checkpoints, branches, the action journal) and why we CHOSE in none.
+  "decision",
+  // WHAT COULD GO WRONG, TRACKED RATHER THAN BURIED IN A NOTE. `decision`'s sibling
+  // durable artifact: a decision is chosen and reasoned about once, a risk is watched
+  // and re-scored over the life of a project. Before this it degraded to a free-text
+  // `note`, which meant it could not roll up (how many open risks, what is the highest
+  // exposure) or be reported on — the same gap `decision` closed for the choices.
+  "risk",
+  // WHAT WE ARE AIMING AT, on the board rather than only in the PMO spine.
+  "objective",
+  // THE LIVE HALF. See the block comment above.
+  "liveMetric",
+  "trigger",
+  // THE MONEY. A canvas that can design and market a product but cannot price it,
+  // raise against it, or say who owns it is a canvas for a project, not a company.
+  "pricing",
+  "capTable",
+  "fundingRound",
+  "investorUpdate",
+  "dataRoom",
+  // ── OWNERSHIP, AS EVENTS RATHER THAN A TYPED TABLE ──────────────────────────────
+  // `capTable` above is now a PROJECTION — it computes its own totals from the real
+  // ledger and nothing writes a percentage onto it. These two are what the ledger is
+  // made of, and each is its own kind for a reason the other cannot carry:
+  //
+  //  • `equityGrant` is an award with a VESTING SCHEDULE, which is a set of terms with
+  //    a date attached — so it is the only ownership object a `trigger` can watch, and
+  //    `cliffAt` is a declared deadline for exactly that. Folding it into `capTable`
+  //    would mean one card per company holding N schedules with N cliff dates, of which
+  //    a deadline binding could watch precisely one.
+  //  • `convertible` is a SAFE or a note: money that is NOT yet equity and converts on
+  //    terms (cap, discount, pre/post-money) that decide what everybody else ends up
+  //    owning. `fundingRound.roundType: 'safe'` was a label over nothing, and a priced
+  //    round modelled without the stack in front of it is modelled against a fiction.
+  "equityGrant",
+  "convertible",
+  // ── THE MONEY, OPERATED ─────────────────────────────────────────────────────────
+  // The five kinds above hold the money a company RAISES and CHARGES. These five hold
+  // the money it PLANS, COLLECTS, OWES and SPENDS ON PEOPLE — the difference between a
+  // board that can run a fundraise and one that can run a month.
+  //
+  // WHY EACH IS ITS OWN KIND, and not a status on one `finance` object:
+  //  • `budget` is the PLAN. It is authored once a year, approved, and then compared
+  //    against — so it must stop changing while actuals move. Budget-vs-actual is the
+  //    single most-performed operation in the role and had nowhere to live.
+  //  • `forecast` is the MODEL. It re-computes from drivers and scenarios and is
+  //    expected to change weekly, which is the exact opposite lifetime to a budget's.
+  //    Collapsing the two would make "what we committed to" and "what we now expect"
+  //    the same object, and the variance between them is the entire report.
+  //  • `invoice` / `bill` are RECEIVABLE and PAYABLE. Two kinds rather than one signed
+  //    number because they have different counterparties, different owners, different
+  //    ageing rules, and because "who owes us" and "who we owe" are asked separately.
+  //
+  // All four carry structured money (`canvasMoney.ts`) rather than the prose the five
+  // above were designed around, which is what makes them summable.
+  //
+  // NOT HERE, DELIBERATELY: `headcountPlan`. The largest line in any budget is people,
+  // and the canvas could draw them as an org (`team`/`role`/`staff`) and never as a
+  // cost — so the CFO review asked for a cost-bearing headcount object. `PEOPLE_OBJECT_
+  // KINDS` already declares one, from the HR seat, holding approved-vs-actual headcount
+  // per team. Declaring a second would be two specs for one noun and two answers to
+  // "how many people are we planning", which is the collision `customerInterview` is
+  // renamed to avoid. The single spec in `peopleObjects.ts` carries BOTH halves instead:
+  // HR owns the establishment, finance owns what it costs, and a role's loaded cost is
+  // one fact in one place.
+  "budget",
+  "forecast",
+  "invoice",
+  "bill",
+  // ── WHAT PAYROLL ACTUALLY COST ──────────────────────────────────────────────────
+  // The fifth of the operated-money kinds, and the one that makes the largest line on
+  // a forecast a FACT rather than a figure somebody typed.
+  //
+  // WHY IT IS ITS OWN KIND AND NOT A `bill`. A pay run has no counterparty to approve,
+  // dispute or schedule: the money has already left, through a provider that calculated
+  // it. Modelling it as a payable would put a vendor's demand and a completed
+  // disbursement under one lifecycle, and `bill.approve` — the one act on this platform
+  // that can cause real financial harm — would become available on a row nobody can
+  // authorise because it is already done.
+  //
+  // WHY IT IS READ-ONLY IN PRACTICE. Every figure on it is one a payroll provider
+  // returned, hydrated by `canvas_sync_pay_run`. The platform must never CALCULATE a
+  // salary or a tax — see `connectors/defaults/payroll.ts` for the full argument — so
+  // this card reports and never computes.
+  "payRun",
+  // THE PAPER. Formation, customer and vendor agreements — the first ninety days of a
+  // company, which the governance vocabulary (SOC 2 controls, vendor registers) covers
+  // for an enterprise and not at all for a new one.
+  "contract",
+  // ── THE COUNTERPARTY ────────────────────────────────────────────────────────────
+  // An account you have WON, or a vendor you buy from — the ONE object every
+  // commercial reference on this board points at.
+  //
+  // WHY IT WAS MISSING, AND WHY THAT COST SOMETHING. `company` is US. `competitor` is
+  // THEM. `salesContact` is a person and `customerSegment` is a cohort; none of the
+  // four is an account. So `invoice.customer`, `bill.vendor`, `contract.counterparty`
+  // and `placement.client` were each told to "match it to a company, salesContact or
+  // contract on the board where one exists" — four fields matching four different
+  // typed strings, which means joining a contract to its invoices, its tickets and its
+  // renewal was a string comparison that a trailing "Ltd" broke.
+  //
+  // WHY IT IS NOT A NEW TABLE. `party_roles` in the kernel already holds exactly one
+  // row per (tenant, party kind, party ref, role) with a unique index proving it — the
+  // counterparty EXISTS and the canvas simply could not see it. A second customer store
+  // is the collision `finance_soc_controls` exists to record. So the kind carries a
+  // `partyRef`, and `parties.ts` declares the ref format and the role vocabulary that
+  // both sides resolve through.
+  "account"
+];
+var FOUNDER_KIND_SET = new Set(FOUNDER_OBJECT_KINDS);
+var IDEA_STAGES = ["captured", "exploring", "validating", "validated", "parked", "dropped", "promoted"];
+var IDEA_STAGE_SET = new Set(IDEA_STAGES);
+var HIRING_OBJECT_KINDS = [
+  // WHO WE ARE HIRING. One person in one search, with the stage they are at and the
+  // consent under which we hold them. The `salesContact` of this funnel.
+  "candidate",
+  // WHERE THEY CAME FROM. A reproducible sourcing search plus the people it found —
+  // the object that makes silver-medallist re-engagement possible at all, because the
+  // list survives the search that produced it.
+  "talentPool",
+  // WHAT WE ARE HIRING FOR, and WHERE IT WAS ADVERTISED. Requisition and distribution
+  // are one object because a posting nobody can see is not a posting: the board list is
+  // the field that makes "post this role" end in something real.
+  "jobPosting",
+  // WHO MADE THE CUT. N résumés ranked against ONE posting, with the reason each rank
+  // was given. The screening half the ATS scorer could not express when it took one
+  // résumé and one job description.
+  "shortlist",
+  // WHAT THEY WILL BE PUT THROUGH, and the link that lets them book it themselves.
+  "interviewLoop",
+  // WHAT ONE INTERVIEWER THOUGHT, per attribute, submitted independently. Its own kind
+  // rather than a field on the loop because independence is the whole point: a
+  // scorecard that can be read before it is submitted is a scorecard that anchors.
+  "scorecard",
+  // WHAT WE OFFERED, what it is worth, who approved it, and whether it is signed.
+  "offer",
+  // THE FEE. For an agency or embedded recruiter this is the revenue event, and the
+  // split is the business — `placement_splits` is registered read-only in the domain
+  // precisely because it is money.
+  "placement"
+];
+var HIRING_KIND_SET = new Set(HIRING_OBJECT_KINDS);
+var LEGAL_OBJECT_KINDS = [
+  "legalDocument",
+  // THE COMPANY ITSELF, and every subsidiary. `renewsAt` is the agent appointment or the
+  // entity's own standing lapsing — the first date on this board a founder is penalised
+  // for missing rather than merely embarrassed by.
+  "legalEntity",
+  // WHAT WE OWN THAT IS NOT A THING. A mark, a patent, a design, a domain — one shape,
+  // because each is "a right, in a jurisdiction, in a class, with a filing date and a
+  // renewal date", and `assignedFrom` is the founder-IP question a raise discovers.
+  "ipAsset",
+  // WHAT IS BEING ARGUED, with a cost and an adverse party. `nextActionAt` is a filing
+  // deadline or a hearing — a date somebody is judged against, not a date noted.
+  "legalMatter"
+];
+var LEGAL_KIND_SET = new Set(LEGAL_OBJECT_KINDS);
+var SHARED_OBJECT_KINDS = [
+  "funnel",
+  "book",
+  "sequence",
+  /**
+   * A question put to a ROOM — the facilitation primitive.
+   *
+   * Cross-domain in the strongest sense on this list: a retro, a planning estimate, a
+   * class check-for-understanding, a customer workshop and an all-hands Q&A are one
+   * object put to five different rooms. Which INSTRUMENT it is — a ballot, a word
+   * cloud, a ranking, a 1-to-5, a 2×2, a quiz — is a value (`pollFormat`), for the
+   * same reason `funnelDomain` and `direction` are values one entry up.
+   *
+   * Its answers live in `question_sets` + `responses` with `kind = 'poll'`, which is
+   * the store the collection primitive already collapsed twelve survey tables into.
+   * A poll is NOT a `form`: a form is answered on somebody's own time and read later,
+   * a poll is answered by a room at once and read WHILE it is being answered. Same
+   * store, different object, and the difference is the whole feature — see
+   * `facilitation.ts`.
+   */
+  "poll",
+  /**
+   * A DATE WITH A SUBJECT, and any number of them — the calendar primitive.
+   *
+   * Cross-domain by construction, and it is the kind that ended a MODALITY. The month
+   * used to be a board-scoped surface in the canvas rail: one grid, one hardcoded
+   * reading (this board's dated cards), no way to have two, and no way to point it at
+   * the deployments, meetings, holidays or connected accounts whose dates already
+   * existed elsewhere. A release calendar, a send calendar, a leave calendar and an
+   * on-call rotation are one object bound to four SOURCES — which is a value on the
+   * card, exactly as `funnelDomain` and `pollFormat` are values one entry up.
+   *
+   * It owns no dates it did not author. A bound calendar PROJECTS its source and writes
+   * an edit back through it, because a second copy of a send's date is how a card and a
+   * calendar come to disagree about when something ships. See `calendar.ts`.
+   */
+  "calendar"
+];
+var CREATION_OBJECT_KINDS = [
+  /**
+   * ONE EXECUTABLE STEP, ON THE BOARD.
+   *
+   * `workflow` is the old shape: a card standing in for a graph that lived somewhere
+   * else, edited in a modal that opened a second canvas on top of the first. A
+   * `flowStep` is that graph said once — one step is one object, connected with the
+   * board's own connections, grouped with the board's own frames, and compiled from
+   * what is actually drawn (`compileBoardFlow.ts`). The canvas IS the workflow.
+   *
+   * There is exactly ONE kind for ~60 step kinds: which step it is, is a VALUE
+   * (`stepKind`, from the step catalog), not a kind — the same rule that makes a new
+   * industry a `discipline` value rather than a new vocabulary. `workflow` remains for
+   * boards authored before this and for a card that points at a saved definition.
+   */
+  "flowStep",
+  "workflow",
+  "project",
+  "website",
+  "build",
+  "dashboard",
+  "chat",
+  "agent",
+  "staff",
+  "evaluation",
+  "dataset",
+  "table",
+  "spreadsheet",
+  "chart",
+  "map",
+  "report",
+  "kpi",
+  "prototype",
+  "code",
+  "browser",
+  "llm",
+  "voice",
+  "video",
+  "image",
+  "animation",
+  "podcast",
+  "comic",
+  "game",
+  "cad",
+  "model3d",
+  "resume",
+  "template",
+  // A place, not a picture: a walkable 3D scene with placed props and a real camera.
+  // Distinct from `model3d` (one generated mesh, previewed on a card) and from the
+  // room's session (a temporary reading of the flat board) — `world` is authored
+  // object state of its own, opened full-size the same way `game`/`website` are.
+  "world",
+  // THE ROOM'S DESIGN. A place the SESSION meets in — its floor, walls and furniture —
+  // rather than a place a walker explores (`world`). The room surface reads the
+  // board's active `room` object to know what to draw; a session with none meets in
+  // the standup room. See `roomDesign.ts`.
+  "room",
+  // AI VIDEO/3D GENERATION, as a canvas object. Opens into the `scene3d` SURFACE
+  // (`creationObjectSurfaces.ts`) bound to itself — the product decision that AI
+  // video/3D generation lives under the 3D surface rather than under `timeline`
+  // (which stays the real multi-track editor for imported/screen/camera clips,
+  // untouched by this kind) or under a bolted-on legacy project modality (retired).
+  // Distinct from `world`: a `world` is hand-authored prop-by-prop; a `scene` is one
+  // prompt handed to the studio engine. See `scene.ts`.
+  "scene",
+  "document",
+  "slides",
+  "diagram",
+  "knowledge",
+  "file",
+  "url",
+  "note",
+  "drawing",
+  "frame",
+  "comment",
+  "timer",
+  /**
+   * COUNTING UP, which a countdown cannot do.
+   *
+   * `timer` runs a clock DOWN from a length somebody chose — a timebox. A stopwatch has
+   * no length: it answers "how long did that actually take", which is the question a
+   * facilitator asks about a demo, a discussion or a round nobody boxed. The two share
+   * a shape (`startedAt` + `baseElapsedMs`, so every viewer derives the same elapsed
+   * value from the shared model rather than a private local clock) and answer opposite
+   * questions, which is why one kind with a `countsDown` flag would need a branch at
+   * every place either is read.
+   *
+   * It came from the knowledge board, which had it while the canvas that is actually
+   * the front door did not — the seam that entry was logged against.
+   */
+  "stopwatch",
+  /**
+   * ANOTHER OBJECT, SHOWN HERE — the transclusion.
+   *
+   * Not a copy and not a link: the card renders the referenced object's own current
+   * content, so a board can put the same document in two contexts without either of
+   * them going stale. `url` points AWAY from the workspace and `knowledge` IS a
+   * knowledge item; neither says "show me that one, live, over there".
+   *
+   * The other half of the knowledge board's fold: its `embed` block transcluded a
+   * knowledge document by id, and the Creation Canvas had no equivalent.
+   */
+  "transclusion",
+  /**
+   * A PLATFORM COMPONENT, MOUNTED ON THE BOARD.
+   *
+   * Not a picture of one and not a link to one: the card renders the same live,
+   * tenant-scoped surface the app renders — the kanban, the roadmap, the vendor
+   * register, the workforce directory — from the one component registry
+   * (`lib/components/registry.ts`), addressed by `componentId`.
+   *
+   * This is the kind that makes the board a place a business is RUN rather than
+   * only described. A CRM or a marketing pipeline is not a new object type here;
+   * it is a board somebody composed out of these, which is why there is one kind
+   * and not one per surface. `transclusion` shows another CANVAS object; this
+   * shows a domain the platform owns.
+   *
+   * The same id addresses the same component at `/embed/<id>` inside the app a
+   * customer publishes, so a card on the board and the surface in their product
+   * are one declaration rather than two implementations.
+   */
+  "component",
+  // The UNTYPED escape hatch, and the only one on this list.
+  //
+  // Every other kind here is a claim about what a thing IS, which is the whole
+  // argument for a typed canvas: a `task` has an assignee, a `testRun` has a verdict,
+  // and the board can compute over both. A sticky claims nothing. It is a coloured
+  // rectangle with words on it.
+  //
+  // It exists for two reasons that are really one reason. First, a workshop starts
+  // before anyone knows what the objects are — forcing a person to pick from 180 kinds
+  // to write down "customers hate the onboarding" is asking them to model a problem
+  // they are still discovering. Second, it is what a Miro board is MADE of, and an
+  // import that has nowhere to put a sticky note cannot claim to have imported the
+  // board. `miroImport` maps `sticky_note`, `text` and `shape` here.
+  //
+  // The knowledge board (`components/canvas/canvasModel.ts`) has had stickies since it
+  // shipped; this is the same object arriving on the canvas that is actually the front
+  // door, and it deliberately shares that board's pigment palette rather than choosing
+  // a second one.
+  "sticky",
+  "roadmap",
+  "prd",
+  "release",
+  "task",
+  "mockup",
+  "mockupSet",
+  "featureSummary",
+  "team",
+  "role",
+  "mcp",
+  "evermind",
+  "projectComparison",
+  "standup",
+  "pitch",
+  "pitchScorecard",
+  "pitchQa",
+  "pitchApplication",
+  "repository",
+  "selection",
+  "diagnostics",
+  "terminal",
+  "service",
+  // THE DELIVERY LIFECYCLE. `repository`/`terminal`/`diagnostics`/`service`/`release`
+  // covered the workspace and the plan; nothing covered what actually SHIPS — a pull
+  // request, the CI run that gated it, the deployment it produced, an incident against
+  // that deployment, or the environment it landed in. `deployment_events` already feeds
+  // DORA without a canvas object to show for it, and the PR loop is a core runtime with
+  // no board presence at all.
+  //
+  // Named `productionIncident`, not `incident`: the Operations vocabulary already owns
+  // `incident` for a field-service/safety report (injury, near-miss, property damage —
+  // `operationsObjects.ts`), a different noun that happens to share the English word,
+  // exactly the collision `customerInterview` above was renamed to avoid. A botched
+  // deployment rollback and a warehouse near-miss are not the same shape of thing.
+  "pullRequest",
+  "ciRun",
+  "deployment",
+  "productionIncident",
+  "environment",
+  // THE PMO ROLLUP, AS A BOARD OBJECT. `pmoApi.rollup()`/`pmoApi.valueStream()` already
+  // compute delivery/DORA/spend/OKR for a portfolio, initiative, project or the whole
+  // workspace — nothing on the canvas read them, so a board could plan work and never
+  // see its own measurement. Named `deliveryRollup`, not `delivery`: a connection already
+  // uses `delivery` as an EDGE kind (`CREATION_CONNECTION_KINDS` above) and an object
+  // named identically to an edge in the same vocabulary reads as one thing having two
+  // meanings at a glance, the exact ambiguity `productionIncident` was renamed to avoid.
+  "deliveryRollup",
+  "salesPipeline",
+  "salesContact",
+  "salesCampaign",
+  "targetMarket",
+  "salesGoal",
+  "salesMeeting",
+  // A connected mailbox and one message out of it. Two kinds rather than one
+  // because they answer different questions: an `inbox` is a LIVE, filtered view
+  // that re-reads, while an `email` is a single message pinned to the board so it
+  // can be annotated, connected to a task, and still be there tomorrow after it
+  // has scrolled out of the live view.
+  "inbox",
+  "email",
+  // A marketing campaign and the template it renders — the canvas half of
+  // "draft this, then send it to that list".
+  "emailCampaign",
+  "emailTemplate",
+  // The social half of the same story, and the same two-kind split as inbox/email
+  // for the same reason: a `socialFeed` is a LIVE merged view across every connected
+  // network that re-reads, while a `socialPost` is one post pinned to the board so it
+  // can be annotated and connected to work and is still there tomorrow. A
+  // `socialCampaign` is one announcement published to every connected account.
+  "socialFeed",
+  "socialPost",
+  "socialCampaign",
+  // ── The data-architecture objects ────────────────────────────────────────
+  // A `dataset` is a SNAPSHOT (rows uploaded once); a `datasource` is a LIVE
+  // connection to a warehouse the workspace has connected — the same two-kind
+  // split as inbox/email, for the same reason: one re-reads, one does not.
+  "datasource",
+  // The model itself: entities, attributes, keys, relationships. Not a picture —
+  // it validates, generates DDL, and diffs against a live schema, which is what
+  // makes "create me an ERD" end in something real.
+  "erd",
+  // What a dataset is ALLOWED to be (declared schema + governance tags), what it
+  // is CHECKED against (a quality suite), how a number is DEFINED (the semantic
+  // layer), and where a value CAME FROM (lineage + impact).
+  //
+  // `metric` here is the DEFINITION — formula, grain, dimensions, unit, target:
+  // the answer to "how is ARR calculated here". `liveMetric` below is one bound
+  // READING of such a definition. See the split argued in the founder block.
+  "dataContract",
+  "dataQuality",
+  "metric",
+  "lineage",
+  // A standards-based learning experience authored and completed on the canvas,
+  // and the practice set that makes studying it a loop rather than a read: a
+  // `practice` object holds the questions AND the record of every attempt, so
+  // the board can say what is still weak instead of only what was opened.
+  "course",
+  "practice",
+  // A reusable, target-aware product onboarding design. It stays provider-neutral:
+  // the Canvas authors the contract and each delivery surface supplies its anchors.
+  "guidedTour",
+  // ── The QA objects ───────────────────────────────────────────────────────
+  // The canvas could MAKE a website, a game, a campaign and a data model, and had
+  // no object for the one question asked of every one of them: does it work?
+  //
+  // Four kinds rather than one, and the split is the same one `inbox`/`email` and
+  // `metric`/`liveMetric` already draw — an INTENT that persists, an ARTIFACT that
+  // runs, an EVENT that happened, and a DEFECT that outlives all three:
+  //
+  //  • `testPlan`  — what we intend to prove, against which target, with which exit
+  //    criteria. It is the object a release gate is read off, which is why the
+  //    criteria live here and not in a hand-edited evidence file.
+  //  • `testCase`  — one runnable scenario: ordered `QaStep`s AND the generated
+  //    Playwright source. Both, deliberately: the steps are what a person edits and
+  //    what the heatmap planner speaks, the spec is what CI executes. `qa.ts` lowers
+  //    one to the other so they cannot drift.
+  //  • `testRun`   — one execution, with per-case outcomes. Pinned, not live: it is
+  //    evidence, and evidence that re-reads is not evidence.
+  //  • `defect`    — what broke, with the repro, the expected/actual, the severity
+  //    and the journal of what the person was doing. Its own kind rather than a
+  //    `task` because a defect is REPRODUCED and VERIFIED, and a task is only done.
+  //
+  // A `testPlan` is also the suite: a "test suite" is a plan whose cases are the
+  // suite's members, so it is a connection, not a fifth kind.
+  "testPlan",
+  "testCase",
+  "testRun",
+  "defect",
+  // Cross-domain kinds — `funnel` today. See SHARED_OBJECT_KINDS for why conversion
+  // through stages is one object with a domain VALUE rather than one kind per funnel.
+  ...SHARED_OBJECT_KINDS,
+  ...HIRING_OBJECT_KINDS,
+  // HR operations, plus `form` — the collection primitive declared alongside the domain
+  // that exposed its absence. See `people.ts` for why hiring and people operations are
+  // two vocabularies with two owning agents rather than one set called "HR".
+  ...PEOPLE_OBJECT_KINDS,
+  ...FOUNDER_OBJECT_KINDS,
+  // The teaching and research vocabulary: the assessment loop (a cohort, an assignment,
+  // a rubric, ONE SUBMISSION PER LEARNER, a gradebook), the research lifecycle in the
+  // order it is gated (grant → ethics → pre-registration → protocol → consent →
+  // participants → manuscript → peer review), and the three scholarly primitives no
+  // business object covers — a citation, a bibliography and an equation. `academic.ts`
+  // argues each one, including why a submission is a kind and not an array.
+  ...ACADEMIC_OBJECT_KINDS,
+  // The stages after the data: analysis that computes, a model, the run that trained
+  // it, the comparison that chose between runs, the labelled set an evaluation is
+  // legitimately built from, and the versioned prompt. See `dataScience.ts`.
+  ...DATA_SCIENCE_OBJECT_KINDS,
+  // The work a vertical company SELLS: an asset, the order against it, the visit that
+  // executes it, the evidence, the certificate that permits it, the parts it consumes,
+  // and the incident when it goes wrong. Every other vocabulary on this list models how
+  // a company runs ITSELF; this is the first that models what it does for a customer.
+  // See `operations.ts` for why it is one vocabulary and not one pack per industry.
+  ...OPERATIONS_OBJECT_KINDS,
+  // The secure legal FILE — an uploaded, encrypted document with a checksum, a
+  // signature history and a share history, distinct from the AUTHORED `contract` in
+  // `FOUNDER_OBJECT_KINDS` — and the three RECORD kinds it is held against: the entity,
+  // the IP asset and the matter. See the kind's own comment above for why they are two
+  // shapes in one vocabulary, and why the matter carries a qualifier.
+  ...LEGAL_OBJECT_KINDS,
+  // The commercial half of the motion: a priced `quote` a buyer accepts, the `sequence`
+  // that follows up across channels and stops on reply, the `call` that carries what they
+  // actually said, the `trial` the demo board becomes, the `trustPacket` procurement asks
+  // for, and the `mutualActionPlan` both sides own. Every other vocabulary on this list
+  // models how the company BUILDS; this is the first that models how it SELLS. See
+  // `sellMotion.ts` for why each of the six is not one of the six sales kinds above.
+  ...SELL_MOTION_OBJECT_KINDS,
+  // The job search, as objects. Every other vocabulary on this list is authored by a
+  // company; this is the first authored by ONE PERSON about their own working life —
+  // which is why `job` is research rather than a requisition, `applicationPipeline` is a
+  // `shortlist` transposed, and `runway` is a personal clock rather than a budget. See
+  // `career.ts` for why none of the six folds into `HIRING_OBJECT_KINDS`.
+  ...CAREER_OBJECT_KINDS,
+  // The brand a generative board composes against, and the audience a send is allowed
+  // to reach. Two kinds over tables (`brand_kits`, `marketing_audiences`,
+  // `marketing_suppressions`) that had existed since the growth domain landed with
+  // nothing on the board able to read them — which is why every creative object composed
+  // unbranded and a campaign could be fired with no visible consent state. See
+  // `marketing.ts` for why the brand is a bindable OBJECT rather than a canvas setting,
+  // and why there is no `campaignCalendar` kind to go with the calendar surface.
+  ...MARKETING_OBJECT_KINDS
+];
+
+// ../packages/creation-canvas-contract/src/startupListing.ts
+var FUNDING_STAGES = [
+  "bootstrapped",
+  "pre_seed",
+  "seed",
+  "series_a",
+  "series_b",
+  "series_c",
+  "series_d_plus",
+  "ipo_ready"
+];
+var BUSINESS_STAGES = ["idea", "mvp", "early_revenue", "growth", "scale"];
+var STARTUP_SECTORS = [
+  "ai_ml",
+  "saas",
+  "fintech",
+  "healthtech",
+  "medtech",
+  "biotech",
+  "climate_energy",
+  "hardware_robotics",
+  "cybersecurity",
+  "marketplace",
+  "ecommerce",
+  "consumer_apps",
+  "enterprise_software",
+  "edtech",
+  "blockchain",
+  "gaming",
+  "media_entertainment",
+  "real_estate",
+  "logistics",
+  "other"
+];
+var SEEKING_TYPES = ["funding", "cofounders", "advisors", "customers", "partners", "hiring", "mentorship"];
+var INVESTMENT_TYPES = ["equity", "convertible_note", "safe", "revenue_share", "debt"];
+var INQUIRY_TIMEFRAMES = ["immediate", "short_term", "medium_term", "long_term"];
+var EXPERTISE_AREAS = [
+  "product",
+  "marketing",
+  "operations",
+  "finance",
+  "legal",
+  "people",
+  "technology",
+  "business_development",
+  "fundraising",
+  "international"
+];
+var DIRECTORY_SORTS = ["newest", "funding", "alphabetical", "runway"];
+var INQUIRY_STATUSES = ["new", "qualifying", "converted", "rejected"];
+var inList = (list) => (v) => typeof v === "string" && list.includes(v);
+var isFundingStage = inList(FUNDING_STAGES);
+var isBusinessStage = inList(BUSINESS_STAGES);
+var isStartupSector = inList(STARTUP_SECTORS);
+var isSeekingType = inList(SEEKING_TYPES);
+var isInvestmentType = inList(INVESTMENT_TYPES);
+var isInquiryTimeframe = inList(INQUIRY_TIMEFRAMES);
+var isExpertiseArea = inList(EXPERTISE_AREAS);
+var isDirectorySort = inList(DIRECTORY_SORTS);
+var isInquiryStatus = inList(INQUIRY_STATUSES);
+
 // src/consolidation.ts
 var CONSOLIDATION_META = { consolidation: true };
 function consolidationMetadata() {
@@ -12872,6 +14754,7 @@ function consolidationMarkerContent(summary) {
 
 // src/transcriptSeed.ts
 function transcriptSeedFrom(history) {
+  if (!advisoryThreadHistoryAdmitted(history)) return [];
   return scopeToConsolidation(history).filter((m) => !isStepMessage(m) && !isStoppedTurn(m)).flatMap((m) => {
     if (m.role !== "assistant") return [{ role: m.role, content: m.content }];
     const content = replayTextOf(m.content);

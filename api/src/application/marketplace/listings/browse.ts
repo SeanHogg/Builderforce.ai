@@ -4,14 +4,24 @@
  * re-exports the public names.
  */
 import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
-import { LISTING_KIND_IDS, isListingKind } from '@builderforce/creation-canvas-contract';
+import {
+  LISTING_KIND_IDS,
+  isBusinessStage,
+  isListingKind,
+  listingKindSpec,
+  type BusinessStage,
+} from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import { catalogItems } from '../../../infrastructure/database/schema';
 import { getCacheVersion, getOrSetCached } from '../../../infrastructure/cache/readThroughCache';
 import { acrossTenants } from '../../../infrastructure/database/tenantScope';
+import { coursesForFounderStage } from '../stageCourses';
 import { LISTINGS_TTL_SECONDS, LISTINGS_VERSION_KEY, listingCacheKey } from './cache';
 import { toView, type CreationListingView, type ListingBody } from './model';
+
+/** Registry id of the existing course listing. A stage query only returns these. */
+const COURSE_LISTING_KIND = listingKindSpec('course')?.id ?? 'course';
 
 export interface BrowseQuery {
   q?: string;
@@ -31,6 +41,17 @@ export interface BrowseQuery {
    * precisely why it cannot serve this.
    */
   sellerRef?: string;
+  /**
+   * Founder product stage (`idea | mvp | early_revenue | growth | scale`).
+   *
+   * Not the freelancer chip set and not the query key `stage` (`start | grow | exit`,
+   * #2586 / #2637). A non-empty value outside {@link BusinessStage} matches nothing
+   * rather than being ignored — a stage query must not fall through to the
+   * unfiltered feed. The stored source of truth is `companies.business_stage`;
+   * this param is how a caller who already read that column narrows the public
+   * shelf. It does not invent a stage.
+   */
+  businessStage?: string;
 }
 
 /** Bound on an untrusted ref. `publisher_ref` holds a user id; anything longer is
@@ -44,6 +65,31 @@ export function normalizeSellerRef(raw: string | undefined | null): string {
   return (raw ?? '').trim().slice(0, MAX_SELLER_REF);
 }
 
+/**
+ * Apply the existing stage-course filter to public views.
+ *
+ * `published` is derived from `publishedAtISO` because the view does not carry
+ * the boolean the filter reads. Rows the filter drops are not returned.
+ */
+function viewsForFounderStage(
+  views: readonly CreationListingView[],
+  stage: BusinessStage,
+): CreationListingView[] {
+  const keep = new Set(
+    coursesForFounderStage(
+      views.map((view) => ({
+        id: view.id,
+        kind: view.kind,
+        tags: view.tags,
+        visibility: view.visibility,
+        published: view.publishedAtISO != null,
+      })),
+      stage,
+    ).map((row) => row.id),
+  );
+  return views.filter((view) => keep.has(view.id));
+}
+
 /** The public feed. Cached behind the version token; every publish bumps it. */
 export async function browseCreationListings(
   db: Db,
@@ -53,7 +99,15 @@ export async function browseCreationListings(
   const limit = Math.min(48, Math.max(1, Math.round(query.limit ?? 24)));
   const page = Math.max(1, Math.round(query.page ?? 1));
   const q = (query.q ?? '').trim().slice(0, 80);
-  const kind = isListingKind(query.kind) ? query.kind : '';
+  const requestedStage = (query.businessStage ?? '').trim();
+  // A stage token that is not a business stage matches nothing. Falling through
+  // to the unfiltered feed would show every published listing under a query that
+  // asked for a stage.
+  if (requestedStage && !isBusinessStage(requestedStage)) return { listings: [], total: 0 };
+  const businessStage: BusinessStage | '' = isBusinessStage(requestedStage) ? requestedStage : '';
+  // A stage query is a course query. Forcing the kind keeps a pack that happens
+  // to carry the same tag from filling the page the filter would then drop.
+  const kind = businessStage ? COURSE_LISTING_KIND : (isListingKind(query.kind) ? query.kind : '');
   const sellerRef = normalizeSellerRef(query.sellerRef);
   const version = await getCacheVersion(env, LISTINGS_VERSION_KEY);
   // `sellerRef` is part of the KEY, not just the predicate. Leaving it out is how a
@@ -61,8 +115,11 @@ export async function browseCreationListings(
   // the other's rows — the scoped read is a different question, so it is a
   // different key. It goes last so every previously-cached unscoped key keeps its
   // shape, and it is the normalised value rather than the raw query so two spellings
-  // of the same ref cannot occupy two entries.
-  const key = `${LISTINGS_VERSION_KEY}:${version}:${kind}:${q}:${page}:${limit}:${sellerRef}`;
+  // of the same ref cannot occupy two entries. The stage is appended only when
+  // present, so an unscoped browse keeps the key other callers already depend on.
+  const key = businessStage
+    ? `${LISTINGS_VERSION_KEY}:${version}:${kind}:${q}:${page}:${limit}:${sellerRef}:${businessStage}`
+    : `${LISTINGS_VERSION_KEY}:${version}:${kind}:${q}:${page}:${limit}:${sellerRef}`;
 
   return getOrSetCached(env, key, async () => {
     const where = [eq(catalogItems.visibility, 'public'), isNotNull(catalogItems.publishedAt)];
@@ -72,6 +129,9 @@ export async function browseCreationListings(
     // need a second edit here to become visible.
     if (kind) where.push(eq(catalogItems.kind, kind));
     else where.push(inArray(catalogItems.kind, [...LISTING_KIND_IDS]));
+    if (businessStage) {
+      where.push(sql`${catalogItems.tags} @> ${JSON.stringify([businessStage])}::jsonb`);
+    }
     if (q) {
       where.push(sql`(${catalogItems.name} ILIKE ${`%${q}%`} OR ${catalogItems.summary} ILIKE ${`%${q}%`})`);
     }
@@ -98,8 +158,12 @@ export async function browseCreationListings(
       .select({ total: sql<string>`count(*)` })
       .from(catalogItems)
       .where(acrossTenants(catalogItems, 'public_catalogue', ...where));
+    const views = rows.map((row) => toView(row, row.body as ListingBody | null, false));
+    // The SQL predicate is the page bound. The existing filter is the second
+    // pass, so a tag that is not a business-stage token cannot leak through.
+    const listings = businessStage ? viewsForFounderStage(views, businessStage) : views;
     return {
-      listings: rows.map((row) => toView(row, row.body as ListingBody | null, false)),
+      listings,
       total: Number(count?.total ?? 0),
     };
   }, { kvTtlSeconds: LISTINGS_TTL_SECONDS });

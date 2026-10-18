@@ -27,8 +27,12 @@ export {
 export type { CloudRouting, LearnedRoutingInputs } from './cloudAgent/routing';
 import {
   cloudRunRole, cloudStallStep, completeUnderRunPolicy, recordModelCascade,
-  recordStallStep, resumeCloudRunModelState, turnRequestFields, type CloudRunModelState,
+  recordStallStep, resumeCloudRunModelState, turnRequestFields,
+  type CloudRunModelState,
 } from './cloudAgent/cloudRunModelPolicy';
+import {
+  applyVerifyPhase, commitRunMemory, describeVerifyOutcome, recordRunVerifyEvents, runVerifyPhase,
+} from './cloudAgent/runEndMemory';
 import { codingFallbackSurface } from '../llm/codingFallbackSurface';
 import { pricesForCall } from '../llm/catalogView';
 /**
@@ -495,7 +499,7 @@ function buildCloudProvider(args: {
         if (!ls.ok) return { ok: false, error: ls.reason };
         // A glob is an explicit "find these files" — filter to matches (case-insensitive,
         // bare name matches basename at any depth) so a named file is always surfaced.
-        const paths = glob ? filterByGlob(ls.paths, glob) : ls.paths;
+        const paths = glob ? filterByGlobInScope(ls.paths, glob, sub) : ls.paths;
         return { ok: true, ref, paths, truncated: ls.truncated };
       },
       async readFile(path) {
@@ -1579,11 +1583,79 @@ async function runCloudToolLoop(
   // the real ticket. Hand the transcript back and stop.
   if (opts?.suppressFinalize) return { ok: true, output: finalOutput, cancelled, finished: true };
 
+  // ── VERIFY, then REMEMBER ───────────────────────────────────────────────────
+  // The tail this run used to skip. It enters the run policy's `verify` phase around
+  // the surface's own verification action (`verifyWrittenFiles` + `pollBranchCi` both
+  // already ran in `onFinish`), then commits what the run learned. Both steps are
+  // best-effort — neither may delay or undo the finalize below, which IS this run's
+  // result.
+  await runVerifyThenRemember({ env, db, tenantId, projectId, executionId, taskRow, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths, finalOutput, ciVerified, modelState });
+
   const fin = await finalizeCloudRun(env, db, {
     tenantId, cloudAgentRef, executionId, taskRow, agentLabel,
     repoCtx, repoMiss, writtenPaths, finalOutput, cancelled, ciVerified,
   });
   return { ok: fin.ok, output: fin.output, cancelled, finished: true };
+}
+
+/**
+ * The shared verify-then-remember tail, run from this file so it can move the run's
+ * OWN policy state (only a host holding `modelState` can reduce it). Everything it
+ * touches is best-effort by contract, so it is one call that cannot fail the run:
+ *
+ *  1. `runVerifyPhase` selects the verification verdict from what `onFinish` already
+ *     ran (`ciVerified`), and `recordRunVerifyEvents` writes BOTH halves onto the
+ *     timeline while returning the `verify_started` event for the reducer.
+ *  2. `applyVerifyPhase(modelState.policy)` applies the `verify_started` event through
+ *     the run policy's reducer — what actually moves the run into the `verify` phase.
+ *     Until a loop emits it, the policy never sees a verify step at all.
+ *  3. `commitRunMemory` writes the outcome into the governed memory the run already
+ *     had as a capability. A failed write is reported and the run still finishes.
+ */
+async function runVerifyThenRemember(args: {
+  env: Env;
+  db: Db;
+  tenantId: number;
+  projectId: number;
+  executionId: number;
+  taskRow: { id: number; title: string };
+  agentLabel: string;
+  cloudAgentRef?: string;
+  writtenPaths: Set<string>;
+  finalOutput: string;
+  ciVerified: boolean;
+  modelState: CloudRunModelState;
+}): Promise<void> {
+  const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, writtenPaths, finalOutput, ciVerified, modelState } = args;
+  try {
+    // The durable surface has no shell, so its verification is the branch CI /
+    // static check `onFinish` already ran — recorded honestly, never as a local
+    // typecheck/test that did not happen.
+    const outcome = runVerifyPhase({
+      surface: 'durable',
+      writtenPaths,
+      results: ciVerified ? [{ command: 'branch-ci', exitCode: 0 }] : null,
+    });
+    recordRunVerifyEvents({ db, tenantId, executionId, ...(cloudAgentRef ? { cloudAgentRef } : {}) }, outcome);
+    // The policy event is applied HERE, by the module that owns the transition for every
+    // run loop — until a loop emits it, the run never enters the verify phase.
+    applyVerifyPhase(modelState.policy);
+    await commitRunMemory({
+      db, env, tenantId, projectId, ticketId: taskRow.id, executionId,
+      ...(cloudAgentRef ? { cloudAgentRef } : {}),
+      summary: finalOutput?.trim() || `${agentLabel} finished ${taskRow.title}`,
+      verifyNote: describeVerifyOutcome(outcome),
+      writtenPaths: [...writtenPaths],
+    });
+  } catch (error) {
+    // Belt-and-braces: `commitRunMemory` swallows its own failures, but a defect in
+    // the tail must still never cost this run its result.
+    reportCaughtError(error, {
+      source: 'application/runtime/cloudAgentEngine.ts',
+      operation: 'runVerifyThenRemember',
+      context: { logMessage: '[cloud-run] verify/remember tail failed; finishing without it', details: { tenantId, executionId, error } },
+    });
+  }
 }
 
 /** Capture the exact tree a run starts from. Best-effort on the provider read, but

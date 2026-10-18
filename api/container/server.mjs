@@ -152,6 +152,19 @@ function matchGlob(p, pattern) {
   const re = globToRegExp(pattern);
   return pattern.includes('/') ? re.test(p) : re.test(p.slice(p.lastIndexOf('/') + 1));
 }
+/**
+ * Scope-aware glob: `sub` is where the walk started, so a glob written against THAT
+ * folder must resolve against the scope-relative path too. Filtering only the
+ * repo-root-relative path silently dropped every match (and the tool's zero-match
+ * note then reported real files as missing). Mirrors `matchGlobInScope` in
+ * `@builderforce/agent-tools` — this server is standalone, so it keeps a local copy.
+ */
+function matchGlobScoped(p, pattern, sub) {
+  const scope = (sub ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
+  if (!scope) return matchGlob(p, pattern);
+  if (p !== scope && !p.startsWith(scope + '/')) return false;
+  return matchGlob(p, pattern) || matchGlob(p.slice(scope.length + 1), pattern);
+}
 
 /**
  * List repo files under `dir` (skipping .git/node_modules), capped. BREADTH-FIRST so
@@ -159,6 +172,9 @@ function matchGlob(p, pattern) {
  * in a large subtree; sorted for stable output. `glob` filters by name (case-
  * insensitive; a bare name matches the basename at any depth) so a file can be found
  * without dumping the tree.
+ *
+ * The glob is applied DURING the walk, so the cap counts MATCHES: a globbed listing is
+ * never starved by unrelated files ahead of the match in the queue.
  */
 async function listFiles(dir, sub, glob) {
   const root = sub ? join(dir, sub) : dir;
@@ -175,14 +191,15 @@ async function listFiles(dir, sub, glob) {
       const full = join(d, e.name);
       if (e.isDirectory()) { queue.push(full); }
       else {
+        const rel = relative(dir, full).split(sep).join('/');
+        if (glob && !matchGlobScoped(rel, glob, sub)) continue;
         if (acc.length >= MAX_LIST_ENTRIES) { truncated = true; break; }
-        acc.push(relative(dir, full).split(sep).join('/'));
+        acc.push(rel);
       }
     }
   }
   acc.sort((a, b) => a.localeCompare(b));
-  const paths = glob ? acc.filter((p) => matchGlob(p, glob)) : acc;
-  return { ok: true, paths, truncated };
+  return { ok: true, paths: acc, truncated };
 }
 
 /** Execute one tool call. Repo reads/writes hit local disk (the clone); write also
@@ -193,6 +210,63 @@ async function listFiles(dir, sub, glob) {
  *  (`loop.messages`) to the Worker, which parks the run, and returns `paused: true`
  *  so runLoop stops without posting a terminal op. See the `ask_human` container-op
  *  for why the pause is exit-and-redispatch rather than block-and-poll. */
+/** The repo's declared package.json scripts, for the verify planner. A missing,
+ *  unreadable or malformed manifest yields `null` — the planner then reports that it
+ *  had nothing to run, which is honest, where guessing a command would not be. */
+async function readPackageScripts(workdir) {
+  try {
+    const manifest = JSON.parse(await readFile(join(workdir, 'package.json'), 'utf8'));
+    const scripts = manifest?.scripts;
+    if (!scripts || typeof scripts !== 'object' || Array.isArray(scripts)) return null;
+    return Object.fromEntries(Object.entries(scripts).filter(([, v]) => typeof v === 'string'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The verify → remember tail (findings 11 & 12), for the terminal branch of a run.
+ *
+ * Verification is a REAL action here — this image has the checkout and a shell, so it
+ * runs the project's own declared checks over the files the run wrote. The plan comes
+ * from the Worker's `verify` op, which is the one place that decides which scripts
+ * apply; the image only executes it and reports the honest exit codes back.
+ *
+ * The memory commit is NOT done here: this process holds no DB and no memory API. It
+ * rides the same `verify` op, which commits it server-side. That is deliberate — one
+ * governed path writes memory, so a run cannot end up with two competing writes.
+ */
+async function verifyThenRemember(spec, workdir, writtenPaths, finalOutput, proc) {
+  // Nothing written ⇒ nothing to check. Reporting a synthetic pass would be a lie.
+  if (!workdir || writtenPaths.size === 0) {
+    await op(spec, { op: 'verify', args: { writtenPaths: [...writtenPaths], results: null, summary: finalOutput } }).catch(() => {});
+    return;
+  }
+  // The Worker cannot see this repo's package.json (it holds no checkout), so the
+  // image sends the declared scripts along with the plan request — that is what lets
+  // the shared planner decide which checks actually apply to what changed.
+  const packageScripts = await readPackageScripts(workdir);
+  const plan = await op(spec, { op: 'verify', args: { plan: true, writtenPaths: [...writtenPaths], packageScripts } }).catch(() => null);
+  const commands = Array.isArray(plan?.commands) ? plan.commands.filter((c) => typeof c === 'string' && c.trim()) : [];
+  if (commands.length === 0) {
+    // No declared script applies to what changed (or the Worker had no plan to give):
+    // record that honestly — the run still verified, it simply had nothing to run.
+    await op(spec, { op: 'verify', args: { writtenPaths: [...writtenPaths], results: [], summary: finalOutput } }).catch(() => {});
+    return;
+  }
+  const results = [];
+  for (const command of commands.slice(0, 3)) {
+    try {
+      const { exitCode } = await runShell(command, workdir, proc);
+      results.push({ command, exitCode });
+    } catch (e) {
+      // A command that could not even launch is a failure, not a pass.
+      results.push({ command, exitCode: 1, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  await op(spec, { op: 'verify', args: { writtenPaths: [...writtenPaths], results, summary: finalOutput } }).catch(() => {});
+}
+
 async function execTool(spec, workdir, writtenPaths, name, parsed, proc, loop) {
   if (name === 'list_files') {
     if (!workdir) return { ok: false, error: 'no repository bound to this task' };
@@ -627,6 +701,17 @@ async function runLoop(spec) {
       } else if (crashed) {
         await op(spec, { op: 'fail', args: { error: crashed } }).catch(() => {});
       } else {
+        // ── Verify, then remember (findings 11 & 12) ──
+        // Runs the project's own checks over what this run wrote, and reports the
+        // verdict to the Worker BEFORE the terminal op. Two reasons for this order:
+        // the Worker owns the run's policy state, so only it can apply the
+        // `verify_started` transition the run policy declares; and a verify that
+        // blocks should be visible to `finalize` rather than arriving after it.
+        //
+        // Every failure here is swallowed — a verify that could not run, and a memory
+        // write that could not land, must never cost this run its result.
+        await verifyThenRemember(spec, workdir, writtenPaths, finalOutput, proc)
+          .catch((e) => op(spec, { op: 'event', args: { toolName: 'runtime.verify_skipped', category: 'error', result: `verify/remember step failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300) } }).catch(() => {}));
         await op(spec, { op: 'finalize', args: { writtenPaths: [...writtenPaths], finalOutput, cancelled } }).catch(() => {});
       }
     } finally {

@@ -33,6 +33,11 @@ export interface LocalChat {
   effort?: Effort;
   thinking?: boolean;
   memoryEnabled?: boolean;
+  /** Archive flag, mirroring the platform chat's `is_archived` — a chat the device
+   *  knows is archived is offered no Archive action by the history row menu (there is
+   *  nothing left to archive). Absent ⇒ not archived, the same convention as the
+   *  platform's column default and as `BrainChat.isArchived`. */
+  isArchived?: boolean;
 }
 
 export type TaskSyncState = 'queued' | 'synced' | 'local';

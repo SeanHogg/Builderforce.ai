@@ -20,7 +20,7 @@ export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
 }) {
   const tBrain = useTranslations('brain');
   const confirm = useConfirm();
-  const { select, rename, summarize, remove, assignToProject } = chats;
+  const { select, rename, summarize, remove, assignToProject, chats: chatList } = chats;
 
   /**
    * Docked, history is a tab beside the conversation, so opening a chat switches back
@@ -37,6 +37,13 @@ export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
     [confirm, tBrain],
   );
 
+  /** The list the rows are drawn from — the same chats the API read, so a chat already
+   *  archived is not offered Archive again. */
+  const isArchived = useCallback(
+    (id: number) => Boolean(chatList.find((c) => c.id === id)?.isArchived),
+    [chatList],
+  );
+
   return useChatRowActions({
     onOpen,
     revealActionsOnOpen: isPage,
@@ -45,5 +52,6 @@ export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
     remove: (chat) => remove(chat.id),
     confirmDelete,
     assign: assignToProject,
+    isArchived,
   });
 }

@@ -17,7 +17,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useAuth } from '@/lib/AuthContext';
+import { useViewerSession } from '@/lib/viewerSession';
 import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 import { templatesApi, type TemplateSummary } from './api';
 import { mergeTemplates, orderTemplates, packEntries, promptEntries, workspaceEntries } from './catalog';
@@ -50,8 +50,13 @@ export function useTemplateCatalog(options: TemplateCatalogOptions = {}): Templa
   const t = useTranslations('promptUseCases');
   const tCanvas = useTranslations('creationCanvas');
   const tTemplates = useTranslations('templates');
-  const { tenant } = useAuth();
-  const tenantKey = tenant?.id ?? 'none';
+  // NOT `useAuth()`: the canvas mounts this hook through
+  // `useCanvasTemplateBrowser` on EVERY canvas render — the `open` guard is in
+  // the MENU component, not here — so inside the VS Code webview, where there
+  // is no `AuthProvider`, this threw and took the board down with it. The
+  // workspace comes from the viewer session, which resolves the embed token too.
+  const { tenantId } = useViewerSession();
+  const tenantKey = tenantId ?? 'none';
   const [workspace, setWorkspace] = useState<TemplateSummary[]>([]);
 
   useEffect(() => {

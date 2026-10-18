@@ -8,7 +8,7 @@
  * deliverable in its summary. Scratch-repo-at-create is rejected (Brain tenants
  * have no git provider). This module is the R2 working-tree substitute.
  */
-import { filterByGlob, applyStringEdit, editFacts } from '@builderforce/agent-tools';
+import { filterByGlobInScope, applyStringEdit, editFacts } from '@builderforce/agent-tools';
 import type {
   RepoListResult, RepoReadResult, RepoSearchResult, RepoWriteResult, RepoDeleteResult, RepoEditResult,
 } from '@builderforce/agent-tools';
@@ -136,7 +136,7 @@ export async function listIdeWorkspaceFiles(
     const prefix = sub.endsWith('/') ? sub : `${sub}/`;
     paths = paths.filter((p) => p === sub || p.startsWith(prefix));
   }
-  if (glob) paths = filterByGlob(paths, glob);
+  if (glob) paths = filterByGlobInScope(paths, glob, sub);
   return { ok: true, ref: 'workspace', paths, truncated: false };
 }
 

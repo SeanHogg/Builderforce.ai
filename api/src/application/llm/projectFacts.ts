@@ -15,8 +15,10 @@
  * read-through cache, keyed by a per-(tenant,project) VERSION token bumped on every
  * write, so a recall never serves a stale fact set.
  */
-import { and, desc, eq, gt, ilike, isNull, ne, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { embedMemoryText, memoryEmbeddingText, toVectorLiteral, MEMORY_EMBEDDING_MODEL } from '../memory/memoryEmbedding';
+import { annRecallProject } from '../memory/memorySemanticRecall';
+import { fuseHybridArms } from '@seanhogg/builderforce-memory/retrieval';
 import { projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
@@ -24,9 +26,19 @@ import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { isExpired } from '../../domain/memory/memoryScope';
 import { queryTerms } from '../../domain/shared/queryTerms';
+import { sha256Hex } from '../../domain/shared/hash';
+import { clamp01 } from '../../domain/shared/numbers';
 
 const RECALL_DEFAULT = 6;
 const RECALL_MAX = 20;
+/**
+ * Candidates pulled per arm before fusion, as a multiple of the caller's limit — the
+ * same widening `memoryService` applies, and for the same reason: fusion can only
+ * choose between candidates it was given, so a narrow pull makes the semantic arm
+ * re-order the rows the lexical arm already picked rather than reach a relevant fact
+ * outside that window.
+ */
+const RECALL_CANDIDATE_MULTIPLIER = 4;
 
 /**
  * `source` marking a row as a memory-first Q&A CACHE entry (a question→answer pair
@@ -72,6 +84,66 @@ export interface FactOriginCost {
   completionTokens: number;
 }
 
+/**
+ * How much a fact is worth to recall, in the same `0..1` band `agent_memory` uses.
+ *
+ * Until this existed every project fact carried the column default 0.5, so the
+ * recall ordering (`importance DESC, updated_at DESC`) was plain newest-first — the
+ * ranking said nothing at all. An explicit weight restores it, and it is derived
+ * from WHAT THE FACT SAYS rather than from who wrote it, so the same claim scores
+ * the same however it reached the store.
+ */
+export type FactImportance = 'invariant' | 'convention' | 'decision' | 'default';
+
+/**
+ * The four weights, and what earns each.
+ *
+ * Ordered by how badly a stale instance misleads. An invariant ("auth is enforced in
+ * the gateway, never in the client") is worse to replay wrong than a decision that
+ * was reversed, which is worse than trivia — because a wrong invariant produces
+ * confidently wrong CODE, and the caller acts on it.
+ */
+const IMPORTANCE_BY_KIND: Record<FactImportance, number> = {
+  invariant: 0.85,
+  convention: 0.7,
+  decision: 0.6,
+  // The defensible default, and the same 0.5 the column default used to pin every
+  // row to — an unrecognised fact keeps its value rather than being invented one.
+  default: 0.5,
+};
+
+/**
+ * Score a fact by its content. Keyword-based on purpose: this runs on EVERY write, so
+ * an embedding-based score would cost a model call per fact and, worse, would rank
+ * by similarity to nothing in particular. The patterns are the same ones the 1242
+ * backfill uses to rank the historical rows, so a row scored there and a row scored
+ * here sit on one scale instead of two.
+ *
+ * Order matters — the strongest pattern that matches wins, so an invariant that also
+ * says "we use" is scored as an invariant.
+ */
+export function factImportance(content: string, kind?: FactImportance): number {
+  if (kind) return IMPORTANCE_BY_KIND[kind];
+  const c = (content ?? '').toLowerCase();
+  if (/(invariant|must always|by design|architecture|never )/.test(c)) return IMPORTANCE_BY_KIND.invariant;
+  if (/(convention|we use|always |deploy|lint|lives? in|located|version)/.test(c)) return IMPORTANCE_BY_KIND.convention;
+  if (/(decision|decided|chose|agreed|rationale|because)/.test(c)) return IMPORTANCE_BY_KIND.decision;
+  return IMPORTANCE_BY_KIND.default;
+}
+
+/**
+ * The digest that decides whether a re-write CORRECTED a fact or merely re-asserted
+ * it.
+ *
+ * Normalised before hashing so a whitespace or case change is not mistaken for a
+ * changed belief — the comparison is about whether the CLAIM moved, not how it was
+ * typed. Key is mixed in so the same sentence stored under two keys is not treated as
+ * the same belief.
+ */
+export function factContentHash(key: string, content: string): Promise<string> {
+  return sha256Hex(`${key}\n${(content ?? '').toLowerCase().replace(/\s+/g, ' ').trim()}`);
+}
+
 /** A fact's content plus its production cost, when known. */
 export interface ProjectFactRecord {
   content: string;
@@ -106,8 +178,21 @@ export async function upsertProjectFact(
   source = 'agent',
   /** Governance metadata (0371): which run formed the belief, and when it lapses.
    *  Optional so the six existing callers are unchanged; supplied by
-   *  application/memory/memoryService, which is the governed write path. */
-  opts?: { expiresAt?: Date | null; originExecutionId?: number | null; origin?: FactOriginCost | null },
+   *  application/memory/memoryService, which is the governed write path.
+   *
+   *  1242 adds the retirement half: `importance` (real weight, not the 0.5 every row
+   *  used to carry), the `contentHash` this call computes to decide whether the write
+   *  CORRECTED a belief, and `fileAnchors` naming the files it was read out of. */
+  opts?: {
+    expiresAt?: Date | null;
+    originExecutionId?: number | null;
+    origin?: FactOriginCost | null;
+    /** Explicit weight; scored from the content when omitted. */
+    importance?: number;
+    kind?: FactImportance;
+    /** Files the fact was read out of — the anchor a later write checks. */
+    fileAnchors?: Array<{ path: string; line?: number }>;
+  },
 ): Promise<boolean> {
   const k = (key ?? '').trim().slice(0, 255);
   const c = (content ?? '').trim();
@@ -117,17 +202,65 @@ export async function upsertProjectFact(
   // What producing the fact cost (1228). Replaced with the content, like the rest of the
   // provenance: a re-write by a different turn is a different production cost.
   const originCost = originCostColumns(opts?.origin);
+  // A REAL weight (1242). Until this, no caller ever set `importance`, so all 591 rows
+  // sat on the column default and the recall ordering was plain newest-first — the
+  // ranking carried no information at all.
+  const importance = clamp01(opts?.importance ?? factImportance(c, opts?.kind));
+  // Stamped on every write, on BOTH branches below. This digest is what tells a
+  // corrected belief from a re-assertion of the same one.
+  const contentHash = await factContentHash(k, c);
+  const fileAnchors = opts?.fileAnchors ?? null;
   // Embed on write so the fact is semantically reachable on the next recall (1134).
-  // Best-effort: a failed embed leaves the columns null, the lexical arm still finds
-  // the fact, and the backfill sweep vectorises it later.
+  // Best-effort, and now actually so: the `catch` used to be MISSING, so a provider
+  // error propagated out of this function and the belief was never written at all —
+  // the exact opposite of what the comment below it claimed. Losing a write to an
+  // embedding outage is the worse failure of the two; the vector is a cache.
   const now = new Date();
-  const vector = toVectorLiteral((await embedMemoryText(env, memoryEmbeddingText(k, c))) ?? []);
+  const vector = toVectorLiteral(
+    await embedMemoryText(env, memoryEmbeddingText(k, c)).catch(() => null) ?? [],
+  );
   const embeddingFields = vector
     ? { embedding: vector, embeddingModel: MEMORY_EMBEDDING_MODEL, embeddedAt: now }
     : { embedding: null, embeddingModel: null, embeddedAt: null };
+
+  // Retire what this write CONTRADICTS, and do it BEFORE the new row lands — otherwise
+  // both beliefs are live for the window between the two writes, which is the exact
+  // replay this fixes. A fact whose content moved under the same anchor is the codebase
+  // correcting itself, and the old row must stop being served. It is RETIRED, never
+  // deleted, so "why did the agent believe this last month" stays answerable.
+  //
+  // Scoped to the ANCHOR, not the key, and that is the load-bearing choice: the whole
+  // failure is two beliefs about one subject arriving under DIFFERENT keys, so matching
+  // on the key would find nothing and leave both live forever. Same key + changed hash
+  // is the other half, handled by the ON CONFLICT branch below, which replaces in
+  // place rather than leaving a duplicate to retire.
+  //
+  // Best-effort, like everything else here: if the UPDATE fails the new belief still
+  // gets written, and the worst case is the old one lingering — which is the state
+  // this code ran in for months — rather than the write being lost.
+  if (opts?.fileAnchors?.length) {
+    const anchors = opts.fileAnchors.map((a) => a.path.trim().toLowerCase()).filter(Boolean);
+    if (anchors.length) {
+      await db
+        .update(projectFacts)
+        .set({ supersededBy: 0 })
+        .where(and(
+          scopedToTenant(projectFacts, tenantId),
+          eq(projectFacts.projectId, projectId),
+          isNull(projectFacts.supersededBy),
+          ne(projectFacts.contentHash, contentHash),
+          // `->0` is the FIRST anchor: one fact asserts one thing about one place, so
+          // the first anchor identifies it without an array-containment operator that
+          // cannot use an index.
+          sql`lower(${projectFacts.fileAnchors}->0->>'path') IN (${sql.join(anchors.map((p) => sql`${p}`), sql`, `)})`,
+        ))
+        .catch(() => undefined);
+    }
+  }
+
   await db
     .insert(projectFacts)
-    .values({ tenantId, projectId, key: k, content: c, source: source.slice(0, 64), expiresAt, originExecutionId, ...originCost, ...embeddingFields })
+    .values({ tenantId, projectId, key: k, content: c, source: source.slice(0, 64), expiresAt, originExecutionId, importance, contentHash, fileAnchors, ...originCost, ...embeddingFields })
     .onConflictDoUpdate({
       target: [projectFacts.tenantId, projectFacts.projectId, projectFacts.key],
       // A re-write REPLACES the governance metadata too: re-remembering a fact without
@@ -135,7 +268,11 @@ export async function upsertProjectFact(
       // that does not leave a stale expiry silently attached to fresh content. The
       // vector goes with it — an embedding of superseded content ranks the fact by
       // what it used to say.
-      set: { content: c, source: source.slice(0, 64), expiresAt, originExecutionId, ...originCost, ...embeddingFields, updatedAt: now },
+      //
+      // `supersededBy: null` REVIVES a retired row when someone re-asserts the belief:
+      // a retirement is "this was contradicted", not "this is forbidden", and a fresh
+      // assertion is exactly the evidence that it is live again.
+      set: { content: c, source: source.slice(0, 64), expiresAt, originExecutionId, importance, contentHash, fileAnchors, supersededBy: null, ...originCost, ...embeddingFields, updatedAt: now },
     });
   await bumpCacheVersion(env, versionKey(tenantId, projectId));
   return true;
@@ -193,9 +330,20 @@ export async function purgeProjectQaCache(
 }
 
 /**
- * Recall project facts (read-through cached). With a `query`, ranks by lexical
- * overlap (ILIKE, with a graceful no-match fallback); without one, returns the
- * most important/recent. Degrades to [] on any error (e.g. pre-migration table).
+ * Recall project facts (read-through cached).
+ *
+ * A `query` runs TWO arms and fuses them — this used to be a single `ILIKE` substring
+ * match, which could only ever find a fact that literally contained the query's words,
+ * so "how do we prevent duplicate invoices?" missed every fact that said "an invoice
+ * may be raised once per order" and the run simply started without it.
+ *   1. LEXICAL (the original `ILIKE` arm) — kept, because an exact identifier ("QA_CACHE_SOURCE",
+ *      "project_facts") is a lookup, not a similarity, and embeddings are worse at it.
+ *   2. SEMANTIC — the same `annRecallProject` + `memoryEmbeddingText` path `memoryService`
+ *      uses for `agent_memory`: same model, same 1536 dims, same cosine distance, same
+ *      `fuseHybridArms` weighting. Not reinvention — the one implementation.
+ *
+ * Without a `query`, returns the most important/recent. Degrades to [] on any error
+ * (e.g. pre-migration table).
  */
 export async function recallProjectFacts(
   env: Env,
@@ -218,21 +366,74 @@ export async function recallProjectFacts(
         // An EXPIRED fact is already gone as far as recall is concerned (0371) — the
         // read is the authority, the retention sweep is only housekeeping. Without
         // this a lapsed belief keeps riding the prompt until a cron happens to run.
+        // And a RETIRED fact is gone the same way (1242): a belief the codebase has
+        // contradicted must stop reaching the prompt, or the fix that retired it is
+        // undone by the next recall.
         const base = and(
           eq(projectFacts.tenantId, tenantId),
           eq(projectFacts.projectId, projectId),
           ne(projectFacts.source, QA_CACHE_SOURCE),
+          isNull(projectFacts.supersededBy),
           or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
         );
+        // No lexical hit is not a dead end any more — the semantic arm runs regardless,
+        // and the caller's query is what gets embedded.
         const words = queryTerms(query);
-        const where: SQL | undefined = words.length > 0 ? and(base, or(...words.map((w) => ilike(projectFacts.content, `%${w}%`)))) : base;
-        const rows = await db
-          .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt })
-          .from(projectFacts)
-          .where(scopedToTenant(projectFacts, tenantId, where))
-          .orderBy(desc(projectFacts.importance), desc(projectFacts.updatedAt))
-          .limit(limit);
-        return rows.map((row) => ({
+        const lexicalWhere: SQL | undefined = words.length > 0
+          ? and(base, or(...words.map((w) => ilike(projectFacts.content, `%${w}%`))))
+          : base;
+        const pull = Math.min(limit * RECALL_CANDIDATE_MULTIPLIER, 100);
+
+        const lexicalRows: SemanticFactRow[] = (
+          await db
+            .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt, importance: projectFacts.importance })
+            .from(projectFacts)
+            .where(scopedToTenant(projectFacts, tenantId, lexicalWhere))
+            .orderBy(desc(projectFacts.importance), desc(projectFacts.updatedAt))
+            .limit(pull)
+        ).map((row) => ({
+          // The KEY is the fusion id, matching the semantic arm's — so a fact found by
+          // both is scored on both rather than counted twice.
+          id: row.key,
+          key: row.key,
+          content: row.content,
+          expiresAt: row.expiresAt ? new Date(row.expiresAt) : null,
+          // `?? 0.5` is the column default, restated so a caller (or a test double)
+          // that omits the field still ranks at neutral instead of poisoning the fused
+          // score with NaN.
+          importance: Number.isFinite(Number(row.importance)) ? Number(row.importance) : 0.5,
+          score: 1, // a lexical match is a full-text hit, so it scores 1 by construction
+        }));
+
+        const semanticRows = await recallProjectFactsSemantically(
+          env,
+          db,
+          tenantId,
+          projectId,
+          query,
+          pull,
+        ).catch(() => [] as SemanticFactRow[]);
+
+        // Fused ranking, identical weights to `memoryService`'s union recall (0.7
+        // semantic / 0.3 lexical) so a fact means the same score wherever it is read.
+        //
+        // `importance` enters as a MULTIPLIER on both arms rather than as a third
+        // weighted term, because it is not another way of matching the query — it is a
+        // property of the fact itself. As a term it would double-count against the
+        // lexical score (which is 1 for every row in the arm, so it would be a constant
+        // shift); as a multiplier it does what "this fact matters more" means, and it
+        // keeps a retired-and-replaced belief from outranking a live one that merely
+        // reads more fluently. Rows at the neutral 0.5 are untouched.
+        const ranked = fuseHybridArms<SemanticFactRow, SemanticFactRow, SemanticFactRow>({
+          vector: semanticRows,
+          text: lexicalRows,
+          vectorScoreOf: (r) => r.score * (0.5 + r.importance),
+          textScoreOf: (r) => (0.5 + r.importance),
+          merge: (row) => row,
+        });
+        // With no query the semantic arm is empty, and a stable sort of a
+        // constant-per-arm score preserves the SQL's importance-then-recency order.
+        return ranked.slice(0, limit).map((row) => ({
           key: row.key,
           content: row.content,
           expiresAt: row.expiresAt ? new Date(row.expiresAt).toISOString() : null,
@@ -245,6 +446,79 @@ export async function recallProjectFacts(
   } catch {
     return [];
   }
+}
+
+/** One recalled fact plus the semantic similarity that found it. */
+interface SemanticFactRow {
+  /** The fact's key — the unique identity within (tenant, project), and therefore the
+   *  fusion id. Both arms return the same row for the same belief, so they agree. */
+  id: string;
+  key: string;
+  content: string;
+  expiresAt: Date | null;
+  importance: number;
+  /** Cosine SIMILARITY in [0,1] (already floored at 0 by `memorySemanticRecall`), so it
+   *  is directly comparable with the lexical arm's 1. Higher is better, both arms. */
+  score: number;
+}
+
+/**
+ * The semantic arm of {@link recallProjectFacts}, by way of the SHARED ANN path.
+ *
+ * `annRecallProject` is the same read `memoryService` uses for project-scoped recall:
+ * same `pgvector` cosine operator, same `MEMORY_EMBEDDING_MODEL` pin, same 1536-dim
+ * column, same nearest-N ordering by distance. Reused as-is rather than reimplemented —
+ * that is the whole point of it living in its own module.
+ *
+ * Its result is then re-joined against `project_facts` BY KEY, and that join is not
+ * redundant. `annRecallProject` filters the qa-cache source and expiry but predates
+ * the 1242 retirement columns, so it will happily return a row that has since been
+ * superseded. Hydrating re-applies every live predicate in SQL — `superseded_by IS
+ * NULL` included — against the table that actually owns those columns, so the
+ * semantic arm can never widen what recall may return. It is also what turns the
+ * composite `project:<key>` identity back into a full row.
+ *
+ * Returns [] when there is nothing to compare (no query, or no query embedding because
+ * no provider), which is the caller's signal to fall back to lexical alone.
+ */
+async function recallProjectFactsSemantically(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  query: string,
+  limit: number,
+): Promise<SemanticFactRow[]> {
+  if (!query) return [];
+  // The RAW query is what gets embedded, not `memoryEmbeddingText(key, …)` — that one
+  // is for WRITE-side text. Identical to memoryService.ts:243.
+  const vector = toVectorLiteral((await embedMemoryText(env, query)) ?? []);
+  if (!vector) return [];
+  const hits = await annRecallProject(db, tenantId, projectId, vector, limit, QA_CACHE_SOURCE);
+  if (!hits.length) return [];
+
+  const keys = hits.map((h) => h.key).filter(Boolean);
+  if (!keys.length) return [];
+  const rows = await db
+    .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt, importance: projectFacts.importance })
+    .from(projectFacts)
+    .where(and(
+      scopedToTenant(projectFacts, tenantId),
+      eq(projectFacts.projectId, projectId),
+      inArray(projectFacts.key, keys),
+      ne(projectFacts.source, QA_CACHE_SOURCE),
+      isNull(projectFacts.supersededBy),
+      or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
+    ));
+  const scoreByKey = new Map(hits.map((h) => [h.key, h.vectorScore]));
+  return rows.map((row) => ({
+    id: row.key,
+    key: row.key,
+    content: row.content,
+    expiresAt: row.expiresAt ? new Date(row.expiresAt) : null,
+    importance: Number.isFinite(Number(row.importance)) ? Number(row.importance) : 0.5,
+    score: scoreByKey.get(row.key) ?? 0,
+  }));
 }
 
 /**
@@ -285,6 +559,13 @@ export async function getProjectFactRecordByKey(
             eq(projectFacts.tenantId, tenantId),
             eq(projectFacts.projectId, projectId),
             eq(projectFacts.key, k),
+            // A RETIRED fact is a miss here exactly as it is in ambient recall (1242).
+            // This is the read that re-serves a cached answer verbatim, so a row
+            // retired because it was contradicted must return null — otherwise the
+            // retirement column would gate ambient recall while leaving the exact-key
+            // replay, which is the path the "8/16 step cap" answer actually came from,
+            // still serving it.
+            isNull(projectFacts.supersededBy),
             or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
           ))
           .limit(1);

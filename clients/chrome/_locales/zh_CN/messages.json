@@ -1324,5 +1324,17 @@
   "ctMergedN": {
     "message": "已合并 $1 个对话。",
     "description": "Merged N chats; $1 = count"
+  },
+  "editTitle": {
+    "message": "编辑对话标题"
+  },
+  "titleLabel": {
+    "message": "对话标题"
+  },
+  "saveTitle": {
+    "message": "保存对话标题"
+  },
+  "cancelTitle": {
+    "message": "取消"
   }
 }

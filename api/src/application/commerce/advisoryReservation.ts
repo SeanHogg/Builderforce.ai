@@ -18,12 +18,31 @@
  * The Brain thread stays in the service tenant (`visibility: 'locked'`,
  * `memoryEnabled: false`). Nothing is copied into the booker's tenant.
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import {
-  boundaryAdmits,
-  isConfidentialityLevel,
-  type CanvasBoundary,
+  ADVISORY_THREAD_CONFIDENTIALITY,
+  ADVISORY_THREAD_MARKER,
+  advisoryThreadHistoryAdmitted,
+  encodeAdvisoryThreadMarker,
+  readAdvisoryThreadState,
+  sealedAdvisoryThread,
+  type AdvisoryThreadState,
   type ConfidentialityLevel,
+} from '@builderforce/creation-canvas-contract';
+
+export {
+  ADVISORY_THREAD_AI_CONTEXT_ERROR,
+  ADVISORY_THREAD_CONFIDENTIALITY,
+  ADVISORY_THREAD_MARKER,
+  advisoryThreadAdmitted,
+  advisoryThreadConfidentiality,
+  advisoryThreadHistoryAdmitted,
+  advisoryThreadInAiContext,
+  advisoryThreadMarkerFields,
+  encodeAdvisoryThreadMarker,
+  readAdvisoryThreadState,
+  sealedAdvisoryThread,
+  type AdvisoryThreadState,
 } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -45,24 +64,6 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 export const ADVISORY_MEETING_KIND = 'advisory' as const;
 
-/** Marker on the opening system message. Brain chats have no confidentiality column. */
-export const ADVISORY_THREAD_MARKER = 'advisory-thread';
-
-/**
- * Product contract, not the kind default. `defaultConfidentialityForKind('advisory')`
- * is `internal`, which admits aiContext. A missing or illegal label resolves here
- * too — a caller cannot smuggle the thread across a boundary by writing `public`.
- */
-export const ADVISORY_THREAD_CONFIDENTIALITY: ConfidentialityLevel = 'restricted';
-
-export interface AdvisoryThreadState {
-  confidentiality: ConfidentialityLevel;
-  /** True only after the founder explicitly invites the advisor. */
-  founderInvitedAdvisor: boolean;
-  /** The bound advisor. An invite for anyone else is refused. */
-  hostRef?: string;
-}
-
 export interface AdvisorySession {
   tenantId: number;
   reservationId: number;
@@ -76,7 +77,8 @@ export interface AdvisorySession {
 export interface ConfirmedReservation {
   id: number;
   tenantId: number;
-  serviceId: number;
+  /** Nullable: `booking_services` is `onDelete: set null`, so a confirmed row can outlive its service. */
+  serviceId: number | null;
   hostRef: string | null;
   bookerRef: string | null;
   bookerEmail: string | null;
@@ -122,40 +124,6 @@ export function advisoryReservationKey(reservationId: number): string {
   return `advisory-reservation:${reservationId}`;
 }
 
-export function advisoryThreadConfidentiality(declared?: unknown): ConfidentialityLevel {
-  if (isConfidentialityLevel(declared) && declared === ADVISORY_THREAD_CONFIDENTIALITY) return declared;
-  return ADVISORY_THREAD_CONFIDENTIALITY;
-}
-
-export function sealedAdvisoryThread(hostRef?: string): AdvisoryThreadState {
-  return {
-    confidentiality: ADVISORY_THREAD_CONFIDENTIALITY,
-    founderInvitedAdvisor: false,
-    hostRef,
-  };
-}
-
-/**
- * Does this thread cross `boundary`?
- *
- * Stored confidentiality is always asked of `boundaryAdmits`. Restricted crosses
- * nothing. `aiContext` is the one boundary a founder invite can open, and only
- * by asking the contract's own ceiling (`internal`) — the stored level stays
- * restricted, so share, guest, publicMedia and export stay closed. An invite is
- * not a bypass and not a new level.
- */
-export function advisoryThreadAdmitted(state: AdvisoryThreadState, boundary: CanvasBoundary): boolean {
-  const level = advisoryThreadConfidentiality(state.confidentiality);
-  if (boundary === 'aiContext' && state.founderInvitedAdvisor) {
-    return boundaryAdmits('internal', 'aiContext');
-  }
-  return boundaryAdmits(level, boundary);
-}
-
-export function advisoryThreadInAiContext(state: AdvisoryThreadState): boolean {
-  return advisoryThreadAdmitted(state, 'aiContext');
-}
-
 export function calendarAttendeeEmails(
   hostEmail: string | null | undefined,
   bookerEmail: string | null | undefined,
@@ -171,34 +139,6 @@ export function calendarAttendeeEmails(
     out.push(trimmed.slice(0, 255));
   }
   return out;
-}
-
-export function encodeAdvisoryThreadMarker(
-  state: AdvisoryThreadState,
-  extra?: Record<string, unknown>,
-): string {
-  return JSON.stringify({
-    marker: ADVISORY_THREAD_MARKER,
-    confidentiality: advisoryThreadConfidentiality(state.confidentiality),
-    founderInvitedAdvisor: state.founderInvitedAdvisor === true,
-    hostRef: state.hostRef ?? null,
-    ...extra,
-  });
-}
-
-export function readAdvisoryThreadState(metadata: string | null | undefined): AdvisoryThreadState | null {
-  if (!metadata) return null;
-  try {
-    const raw = JSON.parse(metadata) as Record<string, unknown>;
-    if (raw.marker !== ADVISORY_THREAD_MARKER) return null;
-    return {
-      confidentiality: advisoryThreadConfidentiality(raw.confidentiality),
-      founderInvitedAdvisor: raw.founderInvitedAdvisor === true,
-      hostRef: typeof raw.hostRef === 'string' && raw.hostRef ? raw.hostRef : undefined,
-    };
-  } catch {
-    return null;
-  }
 }
 
 export function planAdvisorySession(input: {
@@ -532,7 +472,7 @@ export async function provisionConfirmedAdvisory(
   env: Env,
   reservation: ConfirmedReservation,
 ): Promise<AdvisorySession | null> {
-  if (reservation.status !== 'confirmed' || !reservation.hostRef) return null;
+  if (reservation.status !== 'confirmed' || !reservation.hostRef || reservation.serviceId == null) return null;
   try {
     const [service] = await db
       .select({ mode: bookingServices.mode, name: bookingServices.name })
@@ -635,4 +575,21 @@ export async function inviteAdvisorToAdvisoryThread(
     metadata: encodeAdvisoryThreadMarker(next, markerExtra(marker.metadata)),
   }).where(eq(brainChatMessages.id, marker.id));
   return next;
+}
+
+/**
+ * May this chat's transcript cross aiContext?
+ *
+ * Reads the opening system-message marker directly, not the tail window a
+ * transcript loader returns — a long chat must not age the marker out of the
+ * window and then quote the thread. No marker → unchanged.
+ */
+export async function advisoryChatAdmittedToAiContext(db: Db, chatId: number): Promise<boolean> {
+  const rows = await db
+    .select({ metadata: brainChatMessages.metadata })
+    .from(brainChatMessages)
+    .where(and(eq(brainChatMessages.chatId, chatId), eq(brainChatMessages.role, 'system')))
+    .orderBy(asc(brainChatMessages.seq))
+    .limit(8);
+  return advisoryThreadHistoryAdmitted(rows);
 }

@@ -13,6 +13,10 @@ import { readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
 import { callBuiltinTool } from '../llm/builtinMcpService';
 import { codingFallbackSurface } from '../llm/codingFallbackSurface';
 import { initialRunPolicy, resolveStallStep, type RunPolicyState } from '@builderforce/run-policy';
+import {
+  applyVerifyPhase, commitRunMemory, describeVerifyOutcome, recordRunVerifyEvents, runVerifyPhase,
+} from '../runtime/cloudAgent/runEndMemory';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, trimRepetitionLoop, ASK_USER_TOOL, askUserBlock, liftProseAskUser, type StepRowInput } from '@builderforce/agent-loop';
 import { completeTraced, type BrainCallContext } from './brainLlmCall';
 import type { AgentReplyToolset } from './agentReplyPrompt';
@@ -373,6 +377,39 @@ export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<Rep
         toolNames: [],
         replyChars: finalChoice.content.length,
       },
+    });
+  }
+  // ── VERIFY, then REMEMBER ───────────────────────────────────────────────────
+  // The tail a reply loop never had. It enters the run policy's `verify` phase around
+  // the only real verification a chat reply HAS — the tools it just ran, whose failures
+  // this loop already recorded — then commits what the reply learned.
+  //
+  // Both steps are best-effort: a chat reply is already written by this point, and
+  // nothing here may turn a failure to verify or remember into a lost answer.
+  try {
+    const outcome = runVerifyPhase({
+      surface: 'brain-reply',
+      writtenPaths: [],
+      // The tools this loop actually ran, as the verification evidence they are: a
+      // reply that asked the agent to change code and only READ that code did not verify.
+      results: s.trace
+        .filter((row) => row.category === 'tool' || row.category === 'repetition_loop')
+        .map((row) => ({ command: `brain_tool:${row.label}`, exitCode: row.isError ? 1 : 0 })),
+    });
+    recordRunVerifyEvents({ db, tenantId, executionId: null }, outcome);
+    // The declared `verify_started` event, applied through the run policy's reducer —
+    // the reason the policy meant to gate runs on a verify step never saw one.
+    s.policy = applyVerifyPhase(s.policy);
+    await commitRunMemory({
+      db, env, tenantId,
+      summary: s.text?.trim() || userRequest.trim().slice(0, 500),
+      verifyNote: describeVerifyOutcome(outcome),
+    });
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/brain/agentReplyLoop.ts',
+      operation: 'runAgentReplyVerifyThenRemember',
+      context: { logMessage: '[brain-reply] verify/remember tail failed; answer kept', details: { tenantId, error } },
     });
   }
   return s;

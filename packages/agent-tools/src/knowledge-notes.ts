@@ -53,6 +53,36 @@ export interface RunActivity {
 }
 
 /**
+ * Aliases from historical/other-surface tool names to the names the shared tools
+ * actually register under (see `core-tools.ts`, `git-tools.ts`, `symbol-tools.ts`).
+ *
+ * The first run of this heuristic matched `grep` / `glob` / `view` / `test` /
+ * `bash` / `code_analysis` / `project_knowledge` / `orchestrate` /
+ * `workflow_status` — NONE of which is a registered tool in this package. Every
+ * one of those branches was dead code: no run could ever satisfy it, so the
+ * note degraded to the generic "Code modifications: N file(s) changed" and the
+ * analysis/review/workflow labels were unreachable. Map the old names onto the
+ * real ones so the branches are reachable from either spelling.
+ */
+const TOOL_ALIASES: Readonly<Record<string, string>> = {
+  grep: "search_code",
+  glob: "list_files",
+  view: "read_file",
+  bash: "run_command",
+  shell: "run_command",
+  test: "run_checks",
+  code_analysis: "file_outline",
+  project_knowledge: "semantic_search",
+  orchestrate: "spawn_agent",
+  workflow_status: "repo_map",
+};
+
+/** Canonicalise one tool name through {@link TOOL_ALIASES}; unknown names pass through. */
+function canonicalTool(name: string): string {
+  return TOOL_ALIASES[name] ?? name;
+}
+
+/**
  * A short English label for what a run did, from the files it touched and the tools it
  * used. Rules are checked in priority order — the FIRST match wins, most specific first —
  * so a test-file edit reads as "Tests updated" rather than the generic edit count.
@@ -63,32 +93,53 @@ export interface RunActivity {
 export function deriveActivitySummary(activity: RunActivity): string {
   const created = [...new Set(activity.created ?? [])];
   const edited = [...new Set(activity.edited ?? [])];
-  const tools = [...new Set(activity.tools ?? [])];
+  const tools = [...new Set((activity.tools ?? []).map(canonicalTool))];
   const hasCreate = created.length > 0;
   const hasEdit = edited.length > 0;
   const toolSet = new Set(tools);
 
+  // A run that actually ran the project's checks is not merely "exploration" —
+  // verify that first so `run_checks` never falls through to the read-only label.
+  const ranChecks = toolSet.has("run_checks");
+
   const isTest =
     [...created, ...edited].some(
       (f) => f.includes(".test.") || f.includes(".spec.") || f.includes("__tests__"),
-    ) || toolSet.has("test");
+    ) || ranChecks;
 
+  // Read-only exploration: the agent only LOOKED. A run that also ran checks or
+  // commands did more than read, so it must not be labelled as pure analysis.
   const isAnalysis =
     !hasCreate &&
     !hasEdit &&
-    (toolSet.has("grep") || toolSet.has("glob") || toolSet.has("view")) &&
-    !toolSet.has("bash");
+    !ranChecks &&
+    (toolSet.has("search_code") ||
+      toolSet.has("list_files") ||
+      toolSet.has("read_file") ||
+      toolSet.has("find_symbol") ||
+      toolSet.has("file_outline")) &&
+    !toolSet.has("run_command");
 
   const isReview =
-    toolSet.has("git_history") || toolSet.has("code_analysis") || toolSet.has("project_knowledge");
+    toolSet.has("git_history") ||
+    toolSet.has("git_diff") ||
+    toolSet.has("file_outline") ||
+    toolSet.has("semantic_search");
 
-  const isOrchestration = toolSet.has("orchestrate") || toolSet.has("workflow_status");
+  const isOrchestration =
+    toolSet.has("spawn_agent") ||
+    toolSet.has("spawn_agents") ||
+    toolSet.has("task_matches");
+
+  const isShip =
+    toolSet.has("git_commit") || toolSet.has("git_push") || toolSet.has("open_pull_request");
 
   if (isOrchestration) return "Multi-agent workflow execution";
   if (isReview) return "Code review / analysis";
   if (isTest && hasCreate) return "Test suite created";
   if (isTest && hasEdit) return "Tests updated";
   if (isAnalysis) return "Codebase exploration / read-only analysis";
+  if (isShip) return "Change shipped (commit/push)";
   if (hasCreate && hasEdit) return "Feature implementation: new files + edits";
   if (hasCreate) return `New file(s) created: ${created.length}`;
   if (hasEdit) return `Code modifications: ${edited.length} file(s) changed`;

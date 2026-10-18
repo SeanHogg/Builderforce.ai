@@ -1324,5 +1324,17 @@
   "ctMergedN": {
     "message": "$1 discussion(s) fusionnée(s).",
     "description": "Merged N chats; $1 = count"
+  },
+  "editTitle": {
+    "message": "Modifier le titre du chat"
+  },
+  "titleLabel": {
+    "message": "Titre du chat"
+  },
+  "saveTitle": {
+    "message": "Enregistrer le titre du chat"
+  },
+  "cancelTitle": {
+    "message": "Annuler"
   }
 }

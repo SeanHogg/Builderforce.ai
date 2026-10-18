@@ -29,7 +29,7 @@ import {
   writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { join, relative, resolve as resolvePath, sep } from "node:path";
-import { applyStringEdit, editFacts, filterByGlob, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
+import { applyStringEdit, editFacts, matchGlobInScope, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the VS Code local provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
@@ -84,6 +84,8 @@ export const NODE_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
 async function walkFiles(
   root: string,
   scope: string,
+  glob?: string,
+  scopeArg?: string,
 ): Promise<{ paths: string[]; truncated: boolean }> {
   const out: string[] = [];
   const queue: string[] = [scope];
@@ -107,11 +109,18 @@ async function walkFiles(
         }
         queue.push(join(dir, entry.name));
       } else if (entry.isFile()) {
+        const rel = relative(root, join(dir, entry.name)).split(sep).join("/");
+        // Glob DURING the walk so the budget counts MATCHES, not candidates. Capping
+        // first and globbing the survivors turned "0 matches" into "the first 5,000
+        // paths have none", which the tool's note reported as "no such file".
+        if (glob && !matchGlobInScope(rel, glob, scopeArg)) {
+          continue;
+        }
         if (out.length >= LIST_MAX_FILES) {
           truncated = true;
           break;
         }
-        out.push(relative(root, join(dir, entry.name)).split(sep).join("/"));
+        out.push(rel);
       }
     }
   }
@@ -238,8 +247,11 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         if (!scope) {
           return { ok: false, error: escaped(sub ?? "") };
         }
-        const { paths, truncated } = await walkFiles(root, scope);
-        return { ok: true, paths: glob ? filterByGlob(paths, glob) : paths, truncated };
+        // The glob is applied DURING the walk (so the file budget counts matches) and
+        // resolved against the scope, because a glob is naturally written relative to
+        // the folder you asked about ("path": "src", "glob": "**\/*.ts").
+        const { paths, truncated } = await walkFiles(root, scope, glob, sub);
+        return { ok: true, paths, truncated };
       },
       async readFile(path): Promise<RepoReadResult> {
         const abs = resolveFile(path);

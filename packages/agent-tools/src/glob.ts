@@ -71,6 +71,41 @@ export function filterByGlob(paths: readonly string[], pattern: string): string[
 }
 
 /**
+ * Does a repo-relative POSIX path match the glob RELATIVE TO the scope dir
+ * `list_files` was given?
+ *
+ * A glob is naturally written relative to the folder you asked about — scope
+ * `frontend/src/lib` and ask for `**\/*.test.ts` — but every provider filtered the
+ * repo-root-relative path instead, so that glob silently matched nothing and the
+ * tool's own zero-match note then told the model the files did not exist (223
+ * `frontend/src/lib/**\/*.test.ts` files, reported as 0). This resolves the pattern
+ * against the path both ways:
+ *
+ *   - as written (repo-root anchored) — so a root-relative pattern still works, and
+ *   - relative to the scope dir — so a scope-relative pattern works.
+ *
+ * A slash-free pattern keeps the basename-anywhere rule (it matches inside the
+ * scope at any depth), and a path outside the scope never matches.
+ */
+export function matchGlobInScope(pathPosix: string, pattern: string, scopeDir: string | null | undefined): boolean {
+  const p = pathPosix.split("\\").join("/");
+  const scope = normalizeScopeDir(scopeDir);
+  if (!scope) return matchGlob(p, pattern);
+  if (!isUnderScopeDir(p, scope)) return false;
+  if (matchGlob(p, pattern)) return true; // pattern already written repo-root relative
+  return matchGlob(p.slice(scope.length + 1), pattern); // pattern written relative to the scope
+}
+
+/** `filterByGlob`, scoped: see {@link matchGlobInScope}. */
+export function filterByGlobInScope(
+  paths: readonly string[],
+  pattern: string,
+  scopeDir: string | null | undefined,
+): string[] {
+  return paths.filter((p) => matchGlobInScope(p, pattern, scopeDir));
+}
+
+/**
  * Normalize a `path` scope argument (the `search_code` / `list_files` subdirectory
  * filter) to a clean repo-relative POSIX dir: back-slashes → forward, strip a leading
  * `./` and any surrounding slashes. `"./src/board/"` and `"src\\board"` both become

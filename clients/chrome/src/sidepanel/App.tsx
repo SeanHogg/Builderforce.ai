@@ -6,7 +6,7 @@
  * keyboard-first (the view switcher is a real tablist with arrow-key movement).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SurfaceHeader, SurfaceTabs, useChatRowActions, type SurfaceHeaderHistory } from '@seanhogg/builderforce-brain-ui';
+import { InlineChatTitle, SurfaceHeader, SurfaceTabs, useChatRowActions, type SurfaceHeaderHistory } from '@seanhogg/builderforce-brain-ui';
 import { createPanelServices, type PanelServices } from '../host/panelServices';
 import { t, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
@@ -83,11 +83,20 @@ function Shell() {
     setChatId(id);
     setHistoryOpen(false);
   }, []);
+  // THE rename port, shared: the history rows and the header's inline title are the
+  // same edit, so they persist through the one path (and reload through the one call).
+  const renameChat = useCallback(
+    (id: number, title: string) => services.records.updateChat(id, { title }).then(reloadChats, (e: unknown) => services.reportError(e, 'chat.rename')),
+    [services, reloadChats],
+  );
   // THE shared row state, held here: the history list unmounts whenever it closes.
   const rows = useChatRowActions({
     onOpen: openChat,
     // The device record has no delete or summarize, so the rows offer only Rename.
-    rename: (id, title) => services.records.updateChat(id, { title }).then(reloadChats, (e: unknown) => services.reportError(e, 'chat.rename')),
+    rename: renameChat,
+    // Read from the SAME `chats` the history list renders (`<RovrChatHistory chats={chats}>`),
+    // so the gate follows real archive state instead of being an inert guard.
+    isArchived: (id) => Boolean(chats.find((c) => c.id === id)?.isArchived),
   });
 
   // History belongs to the Chat view: from another view the lever opens it there.
@@ -99,7 +108,13 @@ function Shell() {
 
   return (
     <div className="rovr-shell">
-      <Header history={{ open: showingHistory, onToggle: toggleHistory, controls: HISTORY_ID }} onNewChat={startNewChat} />
+      <Header
+        history={{ open: showingHistory, onToggle: toggleHistory, controls: HISTORY_ID }}
+        onNewChat={startNewChat}
+        chatId={chatId}
+        title={(chats.find((c) => c.id === chatId) ?? {}).title || t('newChatTitle')}
+        onRename={renameChat}
+      />
       {/* THE shared tab strip (roving focus, automatic activation) — one per product. */}
       <SurfaceTabs
         className="rovr-views"
@@ -139,14 +154,21 @@ function Shell() {
   );
 }
 
-function Header({ history, onNewChat }: { history: SurfaceHeaderHistory; onNewChat(): void }) {
+function Header({ history, onNewChat, chatId, title, onRename }: {
+  history: SurfaceHeaderHistory;
+  onNewChat(): void;
+  /** THE open chat's id — `null` while a turn has not created the chat yet, so the title is not editable. */
+  chatId: number | null;
+  title: string;
+  onRename: (id: number, title: string) => Promise<unknown> | void;
+}) {
   const online = useOnline();
   const signedIn = useSignedIn();
   const stats = useSyncStats();
   const waiting = stats ? stats.queued + stats.inFlight : 0;
   const mode: MessageKey = !online ? 'statusOffline' : signedIn ? 'statusConnected' : 'statusDeviceOnly';
   // THE shared surface header; Rovr's own facts (where the next turn runs, what is
-  // waiting to sync) ride in its context slot.
+  // waiting to sync) ride in its context slot, behind the open chat's own title.
   return (
     <SurfaceHeader
       title="Rovr"
@@ -154,9 +176,22 @@ function Header({ history, onNewChat }: { history: SurfaceHeaderHistory; onNewCh
       onNewChat={onNewChat}
       labels={{ historyShow: t('historyShow'), historyHide: t('historyHide'), newChat: t('newChat') }}
       context={(
-        <div className="rovr-status" aria-live="polite">
-          <span className={`bf-chip bf-chip--${online ? (signedIn ? 'ok' : 'local') : 'off'}`}>{t(mode)}</span>
-          {waiting > 0 && <span className="bf-chip bf-chip--pending">{t('statusWaiting', waiting)}</span>}
+        <div className="rovr-status">
+          <InlineChatTitle
+            title={title}
+            chatId={chatId}
+            onRename={onRename}
+            labels={{
+              edit: t('editTitle'),
+              label: t('titleLabel'),
+              save: t('saveTitle'),
+              cancel: t('cancelTitle'),
+            }}
+          />
+          <div aria-live="polite">
+            <span className={`bf-chip bf-chip--${online ? (signedIn ? 'ok' : 'local') : 'off'}`}>{t(mode)}</span>
+            {waiting > 0 && <span className="bf-chip bf-chip--pending">{t('statusWaiting', waiting)}</span>}
+          </div>
         </div>
       )}
     />

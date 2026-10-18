@@ -77,6 +77,9 @@ import {
   planInRunVerify,
   type PackageScriptRunner,
 } from './inRunVerify';
+import {
+  applyVerifyPhase, commitRunMemory, describeVerifyOutcome, recordRunVerifyEvents,
+} from './runEndMemory';
 
 /** What one op answers with — an HTTP status and a JSON body for the image. */
 export interface ContainerOpResult {
@@ -167,7 +170,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
    * execs them — it records the honest outcome so finish can see `mayFinish`.
    */
   verify: async (deps) => {
-    const { db, executionId, args, tenantId, cloudAgentRef, surface } = deps;
+    const { db, env, executionId, args, tenantId, projectId, taskId, cloudAgentRef, surface } = deps;
     const packageScripts = args.packageScripts && typeof args.packageScripts === 'object' && !Array.isArray(args.packageScripts)
       ? Object.fromEntries(
         Object.entries(args.packageScripts as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string'),
@@ -185,7 +188,42 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       })
       : null;
     const runner: PackageScriptRunner = args.runner === 'pnpm' || args.runner === 'yarn' ? args.runner : 'npm';
+    // ASK-FOR-PLAN mode: the image has a shell but not the repo's package.json read
+    // for us, so it asks WHICH declared checks apply to what it wrote, runs them, and
+    // comes back with `results`. This is a pure read — no events, no policy, no
+    // memory — because the plan alone is not a verification.
+    if (args.plan === true || args.plan === 'true') {
+      return { status: 200, body: { ok: true, ...planInRunVerify({ surface, packageScripts, runner }) } };
+    }
     const outcome = inRunVerifyOutcome({ surface, writtenPaths, packageScripts, runner, results });
+    // ── Finding 11: the run policy's `verify` phase, observed from the image ──
+    // `in_run_verify` recorded the VERDICT but never emitted the declared
+    // `verify_started` event, so the policy meant to gate runs on a verify step
+    // never saw one. The image holds no policy state of its own — the Worker does,
+    // in its persisted run model state — so the transition is applied HERE, where
+    // the run's own policy lives, and the event is recorded on its timeline.
+    const modelState = await loadContainerRunModelState(deps.env, executionId);
+    if (modelState) {
+      await saveContainerRunModelState(
+        deps.env, executionId, { ...modelState, policy: applyVerifyPhase(modelState.policy) },
+      ).catch((error) => reportCaughtError(error, {
+        source: 'application/runtime/cloudAgent/containerOps.ts', operation: 'applyVerifyPhase',
+      }));
+    }
+    await recordRunVerifyEvents({ db: deps.db, tenantId, executionId, ...(cloudAgentRef ? { cloudAgentRef } : {}) }, outcome);
+    // ── Finding 12: commit what the run learned, after it verified ──
+    // Best-effort and AFTER the verdict: a memory write that fails must never
+    // change `mayFinish`, because losing the run's result is far worse than
+    // losing the note of what it learned.
+    await commitRunMemory({
+      db: deps.db, env: deps.env, tenantId, projectId, ticketId: taskId, executionId,
+      ...(cloudAgentRef ? { cloudAgentRef } : {}),
+      summary: typeof args.summary === 'string' && args.summary.trim() ? args.summary : '',
+      verifyNote: describeVerifyOutcome(outcome),
+      writtenPaths,
+    }).catch((error) => reportCaughtError(error, {
+      source: 'application/runtime/cloudAgent/containerOps.ts', operation: 'commitRunMemory',
+    }));
     await recordCloudToolEvent(db, {
       tenantId, cloudAgentRef, executionId,
       toolName: 'in_run_verify', category: 'tool',

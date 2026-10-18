@@ -27,6 +27,7 @@ export interface ChatHistoryLabels {
   rename: string;
   summarize: string;
   delete: string;
+  archive: string;
 }
 
 export const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels = {
@@ -38,6 +39,7 @@ export const DEFAULT_CHAT_HISTORY_LABELS: ChatHistoryLabels = {
   rename: 'Rename',
   summarize: 'Summarize',
   delete: 'Delete',
+  archive: 'Archive',
 };
 
 /** THE chat-history copy from a host catalog (canonical keys = the field names). */
@@ -95,6 +97,10 @@ export interface ChatHistoryRowProps {
   onCancelRename?: () => void;
   onSummarize?: (id: number) => void;
   summarizing?: boolean;
+  onArchive?: (chat: ChatHistoryChat) => void;
+  archiving?: boolean;
+  /** The chat is already archived, so its row does not offer Archive again. */
+  archived?: boolean;
   onDelete?: (chat: ChatHistoryChat) => void;
   deleting?: boolean;
   /** Host actions after the standard ones (the web's "Add to project"). */
@@ -107,11 +113,15 @@ export interface ChatHistoryRowProps {
 export const ChatHistoryRow = memo(function ChatHistoryRow({
   chat, active, onOpen, meta, marker, actionsOpen = false, onToggleActions, renaming = false, renameValue = '',
   onStartRename, onRenameChange, onSubmitRename, onCancelRename, onSummarize, summarizing = false,
-  onDelete, deleting = false, extraActions, labels: overrides, className,
+  onArchive, archiving = false, archived = false, onDelete, deleting = false, extraActions, labels: overrides, className,
 }: ChatHistoryRowProps) {
   const labels = { ...DEFAULT_CHAT_HISTORY_LABELS, ...overrides };
   const submitRename = () => onSubmitRename?.(chat.id, renameValue);
-  const hasActions = Boolean(onStartRename || onSummarize || onDelete || extraActions);
+  // An archived chat has no Archive to offer — the row would be offering the state it
+  // is already in. `hasActions` ignores it for the same reason, so the "more" menu
+  // still opens for a host that offers nothing else on that row.
+  const canArchive = Boolean(onArchive) && !archived;
+  const hasActions = Boolean(onStartRename || onSummarize || canArchive || onDelete || extraActions);
   return (
     <div
       className={['bf-chatrow', className].filter(Boolean).join(' ')}
@@ -172,6 +182,11 @@ export const ChatHistoryRow = memo(function ChatHistoryRow({
           {onSummarize && (
             <button type="button" className="bf-chatrow__action" onClick={() => onSummarize(chat.id)} disabled={summarizing} aria-busy={summarizing || undefined}>
               {labels.summarize}{summarizing && <span aria-hidden>…</span>}
+            </button>
+          )}
+          {canArchive && (
+            <button type="button" className="bf-chatrow__action" onClick={() => onArchive?.(chat)} disabled={archiving} aria-busy={archiving || undefined}>
+              {labels.archive}{archiving && <span aria-hidden>…</span>}
             </button>
           )}
           {onDelete && (
