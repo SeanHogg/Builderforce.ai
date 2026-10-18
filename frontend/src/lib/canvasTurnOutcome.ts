@@ -56,6 +56,82 @@ export function isWebsiteRedesignRequest(prompt: string): boolean {
 }
 
 /**
+ * "Show me what this looks like", "what would this look like as a real page",
+ * "visualise the onboarding". There is no design noun here at all — the request is
+ * carried entirely by the SENSES verb plus the thing it is pointed at — so it has to
+ * be matched on its own shape rather than falling out of the noun list.
+ *
+ * Only verbs that imply putting PIXELS in front of the user belong here. `tell` and
+ * `describe` are deliberately absent: asking for a description is the failure this
+ * whole classifier exists to intercept, so it must not be a route to the build.
+ */
+const VISUAL_DESIGN_SHOW_ME = '(?:show|visuali[sz]e|render|draw|paint|sketch)'
+  + '\\s+(?:me\\s+)?(?:what|how)\\s+(?:this|it|the|that|these|they)'
+  + '|what\\s+would\\s+(?:this|it|the|that)\\s+(?:look|feel|be)\\s+like'
+  + '|how\\s+would\\s+(?:this|it|the|that)\\s+look'
+  + '|i\\s*(?:’|\'|&#39;)?d?\\s*(?:like|love)\\s+to\\s+see'
+  + '|let\\s+me\\s+see|can\\s+i\\s+see\\s+(?:what|how|it|the)';
+
+/**
+ * A VISUAL DESIGN REQUEST — the phrasing that asks for something to be SEEN rather
+ * than described.
+ *
+ * ── WHY THIS EXISTS ────────────────────────────────────────────────────────────
+ * "Show me a mock up", "design visual", "high fidelity design", "sample UI/UX",
+ * "what would this look like" — a person asking for one of these is not asking for a
+ * `website` CARD, a `document` explaining a design, or a wireframe description in
+ * prose. They are asking for pixels they can look at. Nothing in the prompt classified
+ * that shape, so the model resolved it the only way it could: it described the design
+ * in words and left nothing on the board.
+ *
+ * The wording is deliberately BROAD on purpose. Every phrase here is a real way a
+ * person asks for a visual, and the cost of a false positive is low (the Studio builds
+ * a runnable thing the user can delete) while the cost of a false negative is the
+ * capability appearing not to exist — which is exactly the complaint this closes.
+ *
+ * Kept separate from {@link isWebsiteRedesignRequest} because that one is about
+ * BEFORE/AFTER evidence on a site that already exists, and needs a named site to
+ * capture; this one only needs the request for pixels.
+ */
+/** The nouns a person says when they mean "show me, don't tell me". */
+const VISUAL_DESIGN_NOUNS = '(?:mock\\s?-?\\s?up|mockup|design\\s+visual|visual(?:s|isation|ization|\\s+design)?'
+  + '|hi\\s?-?\\s?fi|high\\s?-?\\s?fidelity|ui\\s*/\\s*ux|ux\\s*/\\s*ui|wireframe|screen\\s?mock|comp\\s+mock'
+  + '|layout|look\\s+and\\s+feel|prototype|concept|landing\\s?page|dashboard|screen)';
+/** The phrases that ask for it to be MADE, seen or refined rather than described. */
+const VISUAL_DESIGN_VERBS = '(?:mock\\s?-?\\s?up|mockup|design|draw|sketch|render|paint|illustrate|visuali[sz]e'
+  + '|prototype|build|create|make|show|give|produce|generate|sample|demo|try|explore)';
+/** Negation, so "describe the mock up" or "how do I mock up…" is not a build order. */
+const VISUAL_DESIGN_NEGATION = '\\b(?:describe|explain|summari[sz]e|critique|review|feedback\\s+on|write\\s+up|'
+  + 'how\\s+(?:do|would|should|can)\\s+i|what\\s+is)\\b';
+
+export function isVisualDesignRequest(prompt: string): boolean {
+  const text = prompt.trim();
+  if (!text) return false;
+
+  // "Don't mock this up" / "explain the design visual" is a question about a design,
+  // not an order to produce one. Checked before anything else so a negation always
+  // wins over a noun it contains.
+  if (new RegExp(`${VISUAL_DESIGN_NEGATION}[^.?]{0,40}${VISUAL_DESIGN_NOUNS}`, 'i').test(text)) return false;
+
+  // The canonical phrasings, in any order, anywhere in the turn: "a high fidelity
+  // design", "design visual", "mock up", "sample UI/UX". A noun ALONE is enough here
+  // because these words have no other meaning in a conversation about building.
+  if (new RegExp(`\\b${VISUAL_DESIGN_NOUNS}\\b`, 'i').test(text)
+    || new RegExp(`\\bhi\\s?-?\\s?fi(?:\\s|-)?(?:design|mock|ui)?\\b`, 'i').test(text)) return true;
+
+  // "Show me what this looks like", "what would this look like" — no design noun in
+  // the sentence, so this has to be matched by its own shape.
+  if (new RegExp(`\\b${VISUAL_DESIGN_SHOW_ME}\\b`, 'i').test(text)) return true;
+
+  // "visualise the onboarding", "I want to see the landing page" — a verb carrying a
+  // visual sense, or a want-clause naming one.
+  const wants = new RegExp(`(?:\\b${VISUAL_DESIGN_VERBS}\\b|\\b(?:show|see|look|wanna)\\s+(?:me\\s+)?(?:what|how|it|the)\\b`
+    + `|\\bi(?:'d| would)?\\s*(?:like|want|need)\\s+(?:to\\s+)?(?:see|visuali[sz]e|have)\\b)`, 'i');
+  const carriesVisual = new RegExp(`(?:\\b${VISUAL_DESIGN_NOUNS}\\b|\\b(?:screen|page|layout|flow|interface|app|dashboard|landing\\s?page)\\b)`, 'i');
+  return wants.test(text) && carriesVisual.test(text);
+}
+
+/**
  * The landing canvas exposes C-suite agents as clickable teammates. A model can
  * otherwise read "bring the CTO in" as a request to invite a real person, then
  * ask what "this" means on a brand-new board. Keep this narrow so ordinary
