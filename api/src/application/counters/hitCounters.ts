@@ -132,7 +132,7 @@ export async function flushHitCounters(env: CounterKv, db: Db): Promise<number> 
   const toDelete = [...strayNames, ...retired];
   let applied = 0;
   results.forEach((r, i) => {
-    const [kind, deltas] = kinds[i];
+    const [kind, deltas] = kinds[i]!;
     if (r.status === 'rejected') {
       reportCaughtError(r.reason, { source: 'application/counters/hitCounters.ts', operation: 'flushHitCounters', context: { kind } });
       return;

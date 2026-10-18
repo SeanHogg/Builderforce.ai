@@ -27,13 +27,17 @@ function makeDb(rules: ReturnType<typeof rule>[]) {
 }
 
 describe('runAlertSweep write batching', () => {
-  it('stamps every evaluated rule, records every event and stamps every trigger in three statements total', async () => {
+  it('stamps the cooldown of each fired rule first, then batches the evaluated stamp and the events', async () => {
     const { db, writes } = makeDb([rule(1), rule(2), rule(3, 7)]);
     await runAlertSweep({} as Env, db);
 
     // rule 3 is uncomputable (null) → evaluated but never fires.
-    expect(writes.map((w) => w.op)).toEqual(['update', 'insert', 'update']);
-    expect(writes[1]!.payload).toHaveLength(2);
+    // Cooldown stamp per fired rule BEFORE notifying (2 rules fired), then one batched
+    // lastEvaluatedAt update and one batched event insert.
+    expect(writes.map((w) => w.op)).toEqual(['update', 'update', 'update', 'insert']);
+    expect(writes[0]!.payload).toHaveProperty('lastTriggeredAt');
+    expect(writes[2]!.payload).toHaveProperty('lastEvaluatedAt');
+    expect(writes[3]!.payload).toHaveLength(2);
   });
 
   it('writes nothing when there are no rules', async () => {

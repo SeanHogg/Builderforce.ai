@@ -27,8 +27,9 @@ export class ExecutionRepository implements IExecutionRepository {
     return row ? toDomain(row) : null;
   }
 
-  /** Every non-terminal run plus the newest {@link TASK_EXECUTION_HISTORY_LIMIT} others,
-   *  newest first. `slim` leaves the `result` blob unread (it comes back null). */
+  /** CAPPED: every non-terminal run plus the ticket's newest {@link TASK_EXECUTION_HISTORY_LIMIT}
+   *  (500) runs, newest first — older history of a pathological ticket is not returned (callers
+   *  that gate on run counts stay far below the cap). `slim` leaves the `result` blob unread (it comes back null). */
   async findByTask(taskId: TaskId, opts: ExecutionReadOptions = {}): Promise<Execution[]> {
     const rows = await this.select(opts.slim)
       .where(and(

@@ -129,7 +129,9 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
         .from(schema.users)
         .where(eq(schema.users.username, username))
         .limit(1);
-      if (!user) return null;
+      // A sentinel, not null: a miss is cached too, so a scraped/typo'd username costs one
+      // lookup per TTL instead of two statements per request.
+      if (!user) return { missing: true as const };
 
       const skills = await db
         .select({
@@ -152,7 +154,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
         .orderBy(desc(schema.marketplaceSkills.downloads)).limit(LIST_ROW_CAP);
       return { user, skills };
     }, { kvTtlSeconds: 60, l1TtlMs: 30_000 });
-    if (!profile) return c.json({ error: 'User not found' }, 404);
+    if ('missing' in profile) return c.json({ error: 'User not found' }, 404);
     return c.json(profile);
   });
 

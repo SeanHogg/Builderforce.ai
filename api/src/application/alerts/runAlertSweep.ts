@@ -14,10 +14,9 @@ import { escapeHtml } from '@builderforce/creation-canvas-contract';
  * and a notification failure never blocks the event row being written.
  */
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { alerts, alertEvents, type AlertMetric } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { evaluateMetric } from './metricEvaluators';
 import {
   sendSlackNotification,
@@ -120,8 +119,7 @@ export async function runAlertSweep(env: Env, db: Db = buildDatabase(env)): Prom
 
   // Stamps and fired-event rows are collected and written set-based after the loop
   // (was 2-3 statements per rule); evaluation itself stays per rule.
-  const evaluatedIds: number[] = [];
-  const triggeredIds: number[] = [];
+  const evaluatedIds: string[] = [];
   const events: Array<typeof alertEvents.$inferInsert> = [];
 
   for (const rule of rules) {
@@ -143,6 +141,12 @@ export async function runAlertSweep(env: Env, db: Db = buildDatabase(env)): Prom
       if (!cooldownElapsed(rule.lastTriggeredAt, rule.cooldownHours, now)) continue;
 
       const message = buildAlertMessage(rule.name, rule.metric as AlertMetric, rule.comparator, value, rule.threshold);
+
+      // Stamp the cooldown BEFORE notifying: if the notify (or the batched event write
+      // below) fails, the next run must not re-notify past the cooldown. A failed stamp
+      // throws to the per-rule catch, so no notification goes out un-stamped. One UPDATE
+      // per FIRED rule is fine — fired rules are rare.
+      await db.update(alerts).set({ lastTriggeredAt: new Date(now) }).where(eq(alerts.id, rule.id));
 
       let notified = { slack: false, email: false };
       try {
@@ -167,20 +171,23 @@ export async function runAlertSweep(env: Env, db: Db = buildDatabase(env)): Prom
         notifiedSlack: notified.slack,
         notifiedEmail: notified.email,
       });
-      triggeredIds.push(rule.id);
     } catch (err) {
       reportCaughtError(err, { source: "application/alerts/runAlertSweep.ts", operation: "runAlertSweep", context: { logMessage: `[cron:alerts] alert=${rule.id} tenant=${rule.tenantId} failed`, details: err } });
     }
   }
-  try {
-    if (evaluatedIds.length > 0) {
+  // Each batched write in its own try, so a failed stamp does not drop the event rows.
+  if (evaluatedIds.length > 0) {
+    try {
       await db.update(alerts).set({ lastEvaluatedAt: new Date(now) }).where(inArray(alerts.id, evaluatedIds));
+    } catch (err) {
+      reportCaughtError(err, { source: "application/alerts/runAlertSweep.ts", operation: "runAlertSweep", context: { logMessage: '[cron:alerts] lastEvaluatedAt stamp failed', details: err } });
     }
-    if (events.length > 0) await db.insert(alertEvents).values(events);
-    if (triggeredIds.length > 0) {
-      await db.update(alerts).set({ lastTriggeredAt: new Date(now) }).where(inArray(alerts.id, triggeredIds));
+  }
+  if (events.length > 0) {
+    try {
+      await db.insert(alertEvents).values(events);
+    } catch (err) {
+      reportCaughtError(err, { source: "application/alerts/runAlertSweep.ts", operation: "runAlertSweep", context: { logMessage: '[cron:alerts] alert_events insert failed', details: err } });
     }
-  } catch (err) {
-    reportCaughtError(err, { source: "application/alerts/runAlertSweep.ts", operation: "runAlertSweep", context: { logMessage: '[cron:alerts] batched stamp/event write failed', details: err } });
   }
 }

@@ -26,7 +26,7 @@
  * the honest one: routing genuinely cannot work without a certificate.
  */
 
-import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -516,7 +516,19 @@ export async function runCustomDomainSweep(
       status: projectSites.customDomainStatus,
     })
     .from(projectSites)
-    .where(inArray(projectSites.customDomainStatus, ['pending_dns', 'pending_certificate']))
+    .where(and(
+      inArray(projectSites.customDomainStatus, ['pending_dns', 'pending_certificate']),
+      // An unchanged re-check no longer bumps `updated_at` (see `unchangedRecently`), so a
+      // plain "oldest 10 pending" would pick the same rows forever. Only rows not touched in
+      // the last hour (due their hourly re-check, which then rotates them), plus the
+      // prompt-attention set: a domain nobody has checked yet (pending_dns, no error
+      // recorded) and a certificate still being issued.
+      or(
+        sql`${projectSites.updatedAt} < NOW() - interval '1 hour'`,
+        and(eq(projectSites.customDomainStatus, 'pending_dns'), isNull(projectSites.customDomainError)),
+        eq(projectSites.customDomainStatus, 'pending_certificate'),
+      ),
+    ))
     .orderBy(asc(projectSites.updatedAt))
     .limit(opts.maxDomains ?? 10);
 

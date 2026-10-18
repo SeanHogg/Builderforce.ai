@@ -202,7 +202,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
       content: body.content,
       ...(num(body.position) !== undefined ? { position: num(body.position) as number } : {}),
       ...(typeof body.isVisible === 'boolean' ? { isVisible: body.isVisible } : {}),
-    });
+    }, c.env as Env);
     return Response.json(block, { status: 201 });
   }));
 
@@ -215,7 +215,7 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
       throw new WebSurfaceError('order must be an array of block ids', 400);
     }
     return Response.json({
-      blocks: await reorderBlocks(db, tenant(c), pageId(c.req.param('id')), order as number[]),
+      blocks: await reorderBlocks(db, tenant(c), pageId(c.req.param('id')), order as number[], c.env as Env),
     });
   }));
 
@@ -226,13 +226,13 @@ export function createWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
     if (body.content !== undefined) patch.content = body.content;
     if (typeof body.isVisible === 'boolean') patch.isVisible = body.isVisible;
     return Response.json(await updateBlock(
-      db, tenant(c), pageId(c.req.param('id')), pageId(c.req.param('blockId')), patch,
+      db, tenant(c), pageId(c.req.param('id')), pageId(c.req.param('blockId')), patch, c.env as Env,
     ));
   }));
 
   router.delete('/landing-pages/:id/blocks/:blockId', manager, (c) => handle(async () =>
     Response.json(await deleteBlock(
-      db, tenant(c), pageId(c.req.param('id')), pageId(c.req.param('blockId')),
+      db, tenant(c), pageId(c.req.param('id')), pageId(c.req.param('blockId')), c.env as Env,
     ))));
 
   // ── Website ───────────────────────────────────────────────────────────────

@@ -440,11 +440,12 @@ async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const outputs = new Map<string, string>(tasks.filter((t) => t.status === 'completed').map((t) => [t.id, t.output ?? '']));
 
-  // Writes that need no ordering against execution (cascade/prune stamps, iterator
-  // rewires) are collected and flushed as set-based statements after the loop, instead
-  // of one UPDATE per task. The loop reads the in-memory `tasks`, never these rows.
+  // Cascade/prune stamps need no ordering against execution, so they are collected and
+  // flushed as one set-based statement after the loop, instead of one UPDATE per task.
+  // The loop reads the in-memory `tasks`, never these rows. Iterator rewires are NOT
+  // deferred: they flush with their expansion (below) so a Worker kill mid-loop cannot
+  // leave inserted children whose downstream tasks still point at the old dependency.
   const skips: BulkUpdateRow<string>[] = [];
-  const rewires: BulkUpdateRow<string>[] = [];
 
   let processed = 0;
   let madeProgress = true;
@@ -554,7 +555,14 @@ async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget
                   createdAt: mutatedAt, updatedAt: mutatedAt,
                 })));
               }
-              for (const [id, dependsOn] of Object.entries(plan.rewire)) rewires.push({ id, set: { depends_on: dependsOn } });
+              // One statement per expansion. `plan.rewire` is keyed by id, so an id appears
+              // once per statement (a duplicate id inside one UPDATE…FROM VALUES is unpredictable).
+              await bulkUpdateById(db, {
+                table: 'workflow_tasks',
+                idColumn: { name: 'id', sqlType: 'uuid' },
+                columns: [{ name: 'depends_on', sqlType: 'text' }, { name: 'updated_at', sqlType: 'timestamp' }],
+                rows: Object.entries(plan.rewire).map(([id, dependsOn]) => ({ id, set: { depends_on: dependsOn, updated_at: mutatedAt } })),
+              });
               // Reflect the mutation in THIS tick's in-memory view so the loop
               // below sees the new/rewired tasks without a fresh SELECT.
               for (const nt of plan.newTasks) {
@@ -609,12 +617,6 @@ async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget
       { name: 'updated_at', sqlType: 'timestamp' },
     ],
     rows: skips.map((r) => ({ id: r.id, set: { ...r.set, completed_at: stampedAt, updated_at: stampedAt } })),
-  });
-  await bulkUpdateById(db, {
-    table: 'workflow_tasks',
-    idColumn: { name: 'id', sqlType: 'uuid' },
-    columns: [{ name: 'depends_on', sqlType: 'text' }, { name: 'updated_at', sqlType: 'timestamp' }],
-    rows: rewires.map((r) => ({ id: r.id, set: { ...r.set, updated_at: stampedAt } })),
   });
 
   // Recompute the workflow status from its tasks — and WRITE it only when it changed or

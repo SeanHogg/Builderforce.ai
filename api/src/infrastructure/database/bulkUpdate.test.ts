@@ -23,10 +23,10 @@ describe('bulkUpdateById', () => {
       ],
     }));
     expect(seen).toHaveLength(1);
-    expect(seen[0].sql).toContain('UPDATE "workflow_tasks" AS t');
-    expect(seen[0].sql).toContain('CASE WHEN v."output__set" THEN v."output" ELSE t."output" END');
+    expect(seen[0]!.sql).toContain('UPDATE "workflow_tasks" AS t');
+    expect(seen[0]!.sql).toContain('CASE WHEN v."output__set" THEN v."output" ELSE t."output" END');
     // row b leaves `output` alone: its flag is false and the value NULL
-    expect(seen[0].params).toEqual(['a', true, 'completed', true, 'x', 'b', true, 'failed', false, null]);
+    expect(seen[0]!.params).toEqual(['a', true, 'completed', true, 'x', 'b', true, 'failed', false, null]);
   });
 
   it('is a no-op for an empty row set', async () => {
@@ -42,6 +42,6 @@ describe('bulkUpdateById', () => {
       table: 't', idColumn: { name: 'id', sqlType: 'int' }, columns: [{ name: 'at', sqlType: 'timestamp' }],
       rows: [{ id: 1, set: { at: d } }],
     }));
-    expect(seen[0].params).toContain('2026-01-02T03:04:05.000Z');
+    expect(seen[0]!.params).toContain('2026-01-02T03:04:05.000Z');
   });
 });

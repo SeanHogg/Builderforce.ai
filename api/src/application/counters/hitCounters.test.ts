@@ -60,7 +60,7 @@ describe('hit counters', () => {
     expect(store.size).toBe(0);
   });
 
-  it('keeps a kind's keys when its statement fails, and deletes them once applied', async () => {
+  it('keeps the keys of a failed kind when its statement fails, and deletes them once applied', async () => {
     const { env, store } = kvStub();
     await recordHit(env, { execute: async () => ({}) } as unknown as Db, 'skill.download', 'a');
     await flushCounterBuffer(env);

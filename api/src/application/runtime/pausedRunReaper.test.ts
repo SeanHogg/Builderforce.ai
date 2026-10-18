@@ -51,7 +51,10 @@ function newScript(): ReaperFakeDbScript {
     },
     // Telemetry mirror.
     onInsert: (v) => {
-      captured.events.push({ executionId: Number(v.executionId), toolName: String(v.toolName) });
+      // The reaper now writes one multi-row insert per chunk.
+      for (const r of (Array.isArray(v) ? v : [v]) as Array<Record<string, unknown>>) {
+        captured.events.push({ executionId: Number(r.executionId), toolName: String(r.toolName) });
+      }
     },
   });
 }

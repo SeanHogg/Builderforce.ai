@@ -79,7 +79,7 @@ function parseKvName(name: string): { kind: string; key: string } | null {
   const parts = name.slice(PREFIX.length).split('|');
   if (parts.length !== 4) return null;
   try {
-    return { kind: parts[0], key: decodeURIComponent(parts[1]) };
+    return { kind: parts[0]!, key: decodeURIComponent(parts[1]!) };
   } catch {
     return null;
   }
@@ -102,7 +102,7 @@ export async function flushCounterBuffer(env: CounterKv): Promise<void> {
     kv.put(kvName(d.kind, d.key, seq), String(d.n), { expirationTtl: STATE_TTL_SECONDS, metadata: { n: d.n, t: d.t } })));
   results.forEach((r, i) => {
     if (r.status === 'fulfilled') return;
-    const d = batch[i];
+    const d = batch[i]!;
     const cur = pending.get(mapKey(d.kind, d.key));
     pending.set(mapKey(d.kind, d.key), { ...d, n: d.n + (cur?.n ?? 0), t: Math.max(d.t, cur?.t ?? 0) });
     reportCaughtError(r.reason, { source: 'infrastructure/cache/counterBuffer.ts', operation: 'flushCounterBuffer', level: 'warning' });

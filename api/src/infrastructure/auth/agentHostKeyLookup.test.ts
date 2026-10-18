@@ -77,13 +77,13 @@ describe('verifyAgentHostKey', () => {
     const kv = fakeKv();
     const env = { AUTH_CACHE_KV: kv } as unknown as Env;
     await verifyAgentHostKey(env, fakeDb([]).db, 5, KEY);
-    const ttls = kv.put.mock.calls.map((c) => (c[2] as { expirationTtl?: number } | undefined)?.expirationTtl);
+    const ttls = (kv.put.mock.calls as unknown as Array<[string, string, { expirationTtl?: number }?]>).map((c) => c[2]?.expirationTtl);
     expect(ttls.length).toBeGreaterThan(0);
     for (const ttl of ttls) expect(ttl).toBeLessThanOrEqual(60);
 
     const ok = fakeKv();
     await verifyAgentHostKey({ AUTH_CACHE_KV: ok } as unknown as Env,
       fakeDb([{ id: 5, tenantId: 9, status: 'active', tokenDailyLimit: null }]).db, 5, `${KEY}x`);
-    expect((ok.put.mock.calls[0]![2] as { expirationTtl?: number }).expirationTtl).toBeGreaterThan(86_400);
+    expect(((ok.put.mock.calls as unknown as Array<[string, string, { expirationTtl?: number }?]>)[0]![2])?.expirationTtl).toBeGreaterThan(86_400);
   });
 });

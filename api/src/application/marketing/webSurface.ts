@@ -211,6 +211,11 @@ export async function landingPageDetail(db: Db, tenantId: number, id: number) {
   return { ...page, blocks };
 }
 
+/** Every landing write ends here: the public landing read is cached under the tenant's
+ *  website-pages version token, so an edit/publish/unpublish/delete must retire it. */
+const bumpLandingVersion = (env: Env | undefined, tenantId: number) =>
+  env ? bumpCacheVersion(env, websitePagesVersionKey(tenantId)) : Promise.resolve();
+
 export async function createLandingPage(
   db: Db,
   env: Env,
@@ -269,6 +274,7 @@ export async function createLandingPage(
     targetId: String(row.id),
     metadata: { slug, title },
   });
+  await bumpLandingVersion(env, tenantId);
   return row;
 }
 
@@ -303,6 +309,7 @@ export async function updateLandingPage(
     targetId: String(id),
     metadata: { fields: Object.keys(values).filter((k) => k !== 'updatedAt') },
   });
+  await bumpLandingVersion(env, tenantId);
   return row;
 }
 
@@ -330,6 +337,7 @@ export async function publishLandingPage(
     targetId: String(id),
     metadata: { slug: row.slug },
   });
+  await bumpLandingVersion(env, tenantId);
   return row;
 }
 
@@ -359,6 +367,7 @@ export async function unpublishLandingPage(
     targetId: String(id),
     metadata: { slug: row.slug, to },
   });
+  await bumpLandingVersion(env, tenantId);
   return row;
 }
 
@@ -385,6 +394,7 @@ export async function deleteLandingPage(
     targetId: String(id),
     metadata: { slug: row.slug },
   });
+  await bumpLandingVersion(env, tenantId);
   return row;
 }
 
@@ -399,6 +409,7 @@ export async function addBlock(
   tenantId: number,
   pageId: number,
   input: BlockInput,
+  env?: Env,
 ) {
   const [page] = await db
     .select({ id: landingPages.id })
@@ -436,6 +447,7 @@ export async function addBlock(
       isVisible: input.isVisible ?? true,
     })
     .returning();
+  await bumpLandingVersion(env, tenantId);
   return row;
 }
 
@@ -445,6 +457,7 @@ export async function updateBlock(
   pageId: number,
   blockId: number,
   patch: Partial<Omit<BlockInput, 'position'>>,
+  env?: Env,
 ) {
   const values: Record<string, unknown> = { updatedAt: new Date() };
   if (patch.kind !== undefined) values.kind = patch.kind;
@@ -461,6 +474,7 @@ export async function updateBlock(
     ))
     .returning();
   if (!row) throw new WebSurfaceError('block not found', 404);
+  await bumpLandingVersion(env, tenantId);
   return row;
 }
 
@@ -478,6 +492,7 @@ export async function reorderBlocks(
   tenantId: number,
   pageId: number,
   order: number[],
+  env?: Env,
 ) {
   const current = await db
     .select({ id: landingPageBlocks.id })
@@ -506,6 +521,7 @@ export async function reorderBlocks(
     });
   });
 
+  await bumpLandingVersion(env, tenantId);
   return db
     .select()
     .from(landingPageBlocks)
@@ -520,6 +536,7 @@ export async function deleteBlock(
   tenantId: number,
   pageId: number,
   blockId: number,
+  env?: Env,
 ) {
   const [row] = await db
     .delete(landingPageBlocks)
@@ -539,6 +556,7 @@ export async function deleteBlock(
       tenantId,
       and(eq(landingPageBlocks.pageId, pageId), sql`${landingPageBlocks.position} > ${row.position}`),
     ));
+  await bumpLandingVersion(env, tenantId);
   return { deleted: blockId };
 }
 
@@ -858,18 +876,21 @@ export async function publicWebsitePageCached(db: Db, env: Env, tenantId: number
 /**
  * The public landing read, through the shared cache under the owner's version token
  * (the same token and layers as {@link publicWebsitePageCached}). Anonymous traffic to
- * a campaign page no longer reaches Postgres per visit. The landing writers hold no
- * `env` and do not bump the token, so freshness after an edit/unpublish/`ends_at`
- * rests on the SHORT TTL (KV 120s, L1 30s) rather than invalidation.
+ * a campaign page no longer reaches Postgres per visit. Every landing writer bumps it
+ * (`bumpLandingVersion`). `ends_at` expiry has no
+ * write to hang a bump on, so it rests on the SHORT TTL (KV 120s, L1 30s).
  */
 export async function publicLandingPageCached(db: Db, env: Env, tenantId: number, slug: string) {
   const version = await getCacheVersion(env, websitePagesVersionKey(tenantId));
-  return getOrSetCached(
+  // A sentinel, not null, so an unknown/unpublished slug is cached as a miss too (null
+  // would re-query Postgres on every probe). Mapped back to null for callers.
+  const hit = await getOrSetCached(
     env,
     `web:landing:v:${version}:${tenantId}:${slug.toLowerCase()}`,
-    () => publicLandingPage(db, tenantId, slug),
+    async () => (await publicLandingPage(db, tenantId, slug)) ?? ({ missing: true } as const),
     { kvTtlSeconds: 120, l1TtlMs: 30_000 },
   );
+  return 'missing' in hit ? null : hit;
 }
 
 /** A landing page view. Counter-only and deliberately not an `activity_log` row:
