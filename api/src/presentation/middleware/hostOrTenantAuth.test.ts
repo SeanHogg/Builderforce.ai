@@ -28,20 +28,17 @@ vi.mock('../../infrastructure/auth/segmentResolver', () => ({
 
 import { hostOrTenantAuth, requestAgentHostId } from './hostOrTenantAuth';
 
-/** A db stub whose agent_hosts row is host 7 / tenant 42 with key 'good'. */
-const db = {
-  select: () => ({
-    from: () => ({
-      where: (..._a: unknown[]) => Promise.resolve([
-        { id: 7, tenantId: 42, apiKeyHash: 'HASH:good', status: 'active' },
-      ]),
-    }),
-  }),
-} as never;
-
-vi.mock('../../infrastructure/auth/HashService', () => ({
-  verifySecret: async (value: string, stored: string) => stored === `HASH:${value}`,
+/**
+ * Host 7 / tenant 42 owns key 'good'. The key lookup (hash → cached resolve → id
+ * match) has its own tests in agentHostKeyLookup.test.ts; this file pins only the
+ * three conventions that reach it and the identity they publish.
+ */
+vi.mock('../../infrastructure/auth/agentHostKeyLookup', () => ({
+  verifyAgentHostKey: async (_env: unknown, _db: unknown, id: number, rawKey?: string | null) =>
+    id === 7 && rawKey === 'good' ? { id: 7, tenantId: 42 } : null,
 }));
+
+const db = {} as never;
 
 interface Probe {
   tenantId?: number;

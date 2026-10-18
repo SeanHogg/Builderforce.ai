@@ -200,7 +200,12 @@ describe('AI operations are measured honestly', () => {
   });
 
   it('counts the hit on the read path so savings cannot be understated', () => {
-    expect(fn(aiOps, 'cacheLookup')).toContain('hitCount: sql`${enrichmentCache.hitCount} + 1`');
+    // Buffered through the hit-counter sweep (no UPDATE per hit), and the returned
+    // count already includes this hit.
+    const body = fn(aiOps, 'cacheLookup');
+    expect(body).toContain("recordHit(");
+    expect(body).toContain("'enrichment.hit'");
+    expect(body).toContain('hitCount: row.hitCount + 1');
   });
 
   it('computes savings over hits rather than entries', () => {

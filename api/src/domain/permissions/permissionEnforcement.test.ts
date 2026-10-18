@@ -24,21 +24,39 @@ const CONSTANT_BY_VALUE = new Map(
   Object.entries(PERMISSIONS).map(([constant, value]) => [value as string, constant]),
 );
 
-function routeSources(): string {
-  return readdirSync(ROUTES_DIR)
+/** Gates that depend on the request body AND the row live in the use case, not the
+ *  route — e.g. application/approval/decideApproval.ts (approve vs answer). */
+const APPLICATION_DIR = resolve(__dirname, '../../application');
+
+function sourcesIn(dir: string, recursive: boolean): string[] {
+  return (readdirSync(dir, { recursive }) as string[])
     .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
-    .map((f) => readFileSync(resolve(ROUTES_DIR, f), 'utf8'))
-    .join('\n');
+    .map((f) => readFileSync(resolve(dir, f), 'utf8'));
+}
+
+/** One source per file, so a local gate alias resolves within the file that defines it. */
+function gateSources(): string[] {
+  return [...sourcesIn(ROUTES_DIR, false), ...sourcesIn(APPLICATION_DIR, true)];
 }
 
 /**
- * Permissions that appear in an actual gate — either the `requirePermission(...)`
- * middleware or the inline `memberHasPermission(...)` check used where the branch
- * depends on the request body (see approvalRoutes' approve-vs-answer split).
+ * A file-local alias over `requirePermission` is a gate where it is called — e.g.
+ * tenantApiKeyRoutes' `const may = (permission) => (admin ? passThrough :
+ * requirePermission(permission))`, which only the superadmin mount bypasses.
+ */
+function gateNames(source: string): string[] {
+  const alias = /const\s+(\w+)\s*=\s*\([^)]*\)\s*=>[^;\n]*\brequirePermission\s*\(/g;
+  return ['requirePermission', 'memberHasPermission', ...[...source.matchAll(alias)].map((m) => m[1]!)];
+}
+
+/**
+ * Permissions that appear in an actual gate — the `requirePermission(...)`
+ * middleware (or a local alias of it) or the inline `memberHasPermission(...)`
+ * check used where the branch depends on the request body.
  */
 function gatedPermissions(source: string): Set<string> {
   const gated = new Set<string>();
-  const head = /(?:requirePermission|memberHasPermission)\s*\(/g;
+  const head = new RegExp(String.raw`\b(?:${gateNames(source).join('|')})\s*\(`, 'g');
   let m: RegExpExecArray | null;
   while ((m = head.exec(source)) !== null) {
     // Scan the argument list by balancing parens — an inline check passes
@@ -60,8 +78,7 @@ function gatedPermissions(source: string): Set<string> {
 }
 
 describe('permission enforcement registry', () => {
-  const source = routeSources();
-  const gated = gatedPermissions(source);
+  const gated = new Set(gateSources().flatMap((source) => [...gatedPermissions(source)]));
 
   it('every permission declared enforced has a gate in the routes', () => {
     const declaredButUngated = [...ENFORCED_PERMISSIONS].filter((p) => !gated.has(p));
