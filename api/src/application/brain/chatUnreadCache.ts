@@ -4,9 +4,10 @@
  * Unread is per-user live state, so it cannot share the tenant's cache entry (which is why
  * the combined snapshot used to miss on almost every poll). It is keyed on two tokens:
  *
- *   • the USER token — bumped when that user marks a chat read (`markChatRead`);
- *   • the TENANT token — bumped when any message lands in one of the tenant's chats
- *     (`appendRaw`, system posts), since that can raise anyone's count.
+ *   • the USER token — bumped when that user marks a chat read (`markChatRead`) or when
+ *     a message lands in a chat they have a read-state row for (`bumpUnreadForChatAudience`);
+ *   • the TENANT token — emergency/rare invalidation (`bumpUnreadForTenant`). Hot-path
+ *     appends do NOT bump this, so a busy tenant's unrelated unread maps stay warm.
  *
  * Either bump orphans the entry; the KV TTL is only the backstop for a writer that does
  * neither (e.g. a meeting caption posted outside a request).
@@ -31,7 +32,7 @@ async function loadUnreadStrict(db: Db, tenantId: number, userId: string): Promi
   return { chatUnread, total: Object.values(chatUnread).reduce((a, b) => a + b, 0) };
 }
 
-/** The uncached read (no-env path): a Neon error degrades to "nothing unread" � nothing is cached. */
+/** The uncached read (no-env path): a Neon error degrades to "nothing unread" � nothing is cached. */
 export async function loadUnread(db: Db, tenantId: number, userId: string): Promise<UnreadSnapshot> {
   return loadUnreadStrict(db, tenantId, userId).catch(() => ({ chatUnread: {}, total: 0 }));
 }

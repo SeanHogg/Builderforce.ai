@@ -1,6 +1,5 @@
 import type { Env } from '../../env';
-import { bumpCacheVersion, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { bumpCacheVersionSafe, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
 
 /**
  * ONE version token per tenant for "which executions are live, and in what state".
@@ -26,9 +25,5 @@ export function executionStateVersion(env: Env, tenantId: number): Promise<strin
 /** Orphan every cached reading of `tenantId`'s execution state. Best-effort — the TTL is the backstop. */
 export async function bumpExecutionState(env: Env | undefined, tenantId: number): Promise<void> {
   if (!env) return;
-  try {
-    await bumpCacheVersion(env, executionStateVersionKey(tenantId));
-  } catch (error) {
-    reportCaughtError(error, { source: 'application/runtime/executionStateVersion.ts', operation: 'bumpExecutionState', context: { details: { tenantId } } });
-  }
+  await bumpCacheVersionSafe(env, executionStateVersionKey(tenantId), 'bumpExecutionState', { details: { tenantId } });
 }

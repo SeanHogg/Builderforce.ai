@@ -114,10 +114,18 @@ export async function setCached<T>(
  * into data-cache keys (`...:v:${token}`) when the keyspace is unbounded or one
  * write fans out to many dependent keys (e.g. every epic-tree in a project) —
  * bumping the token orphans them all at once instead of enumerating each key.
+ *
+ * Pass `l1TtlMs` for the short-lived L1 used by chat/unread/board tokens (2 s);
+ * omit it to keep the default 30 s isolate cache.
  */
-export async function getCacheVersion(env: Env, versionKey: string): Promise<string> {
+export async function getCacheVersion(
+  env: Env,
+  versionKey: string,
+  opts?: { l1TtlMs?: number },
+): Promise<string> {
   return getOrSetCached(env, `ver:${versionKey}`, async () => crypto.randomUUID(), {
     kvTtlSeconds: 86_400,
+    l1TtlMs: opts?.l1TtlMs,
   });
 }
 
@@ -125,6 +133,18 @@ export async function getCacheVersion(env: Env, versionKey: string): Promise<str
  *  every data key that embedded the previous token (they age out via TTL). */
 export async function bumpCacheVersion(env: CacheEnv, versionKey: string): Promise<void> {
   await invalidateCached(env, `ver:${versionKey}`);
+}
+
+/** Same as {@link bumpCacheVersion} but never throws — fire-and-forget on a write path. */
+export async function bumpCacheVersionSafe(
+  env: CacheEnv,
+  versionKey: string,
+  operation: string,
+  context?: Record<string, unknown>,
+): Promise<void> {
+  await bumpCacheVersion(env, versionKey).catch((error) => {
+    reportCaughtError(error, { source: SOURCE, operation, context });
+  });
 }
 
 /**
@@ -171,9 +191,7 @@ export function ticketSearchVersionKey(tenantId: number): string {
 /** Orphan every cached ticket-search page for a tenant. Call from ticket writes.
  *  Best-effort (never throws) so it can be fire-and-forget on a write path. */
 export async function bumpTicketSearchVersion(env: Env, tenantId: number): Promise<void> {
-  await bumpCacheVersion(env, ticketSearchVersionKey(tenantId)).catch((error) => {
-    reportCaughtError(error, { source: SOURCE, operation: 'bumpTicketSearchVersion' });
-  });
+  await bumpCacheVersionSafe(env, ticketSearchVersionKey(tenantId), 'bumpTicketSearchVersion');
 }
 
 /** Version key for tenant-scoped derivations of the run-outcome ledger
@@ -190,9 +208,7 @@ export function outcomesVersionKey(tenantId: number): string {
 /** Orphan every cached dataset/variant-eval view for a tenant. Call from the run
  *  scorer alongside the learned-routing fold. Best-effort (never throws). */
 export async function bumpOutcomesVersion(env: Env, tenantId: number): Promise<void> {
-  await bumpCacheVersion(env, outcomesVersionKey(tenantId)).catch((error) => {
-    reportCaughtError(error, { source: SOURCE, operation: 'bumpOutcomesVersion' });
-  });
+  await bumpCacheVersionSafe(env, outcomesVersionKey(tenantId), 'bumpOutcomesVersion');
 }
 
 /**
@@ -218,9 +234,7 @@ export function publicCanvasVersionKey(tenantId: number): string {
 /** Orphan every cached public board listing for a tenant. Call from every canvas
  *  write. Best-effort (never throws) so it can be fire-and-forget. */
 export async function bumpPublicCanvasVersion(env: Env, tenantId: number): Promise<void> {
-  await bumpCacheVersion(env, publicCanvasVersionKey(tenantId)).catch((error) => {
-    reportCaughtError(error, { source: SOURCE, operation: 'bumpPublicCanvasVersion' });
-  });
+  await bumpCacheVersionSafe(env, publicCanvasVersionKey(tenantId), 'bumpPublicCanvasVersion');
 }
 
 /** Invalidate both cache layers for `key`. Call from every mutation that

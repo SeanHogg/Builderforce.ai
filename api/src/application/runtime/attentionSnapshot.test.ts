@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readAttention } from './attentionSnapshot';
 import { bumpExecutionState } from './executionStateVersion';
 import { FRESH_MIN_INTERVAL_MS } from './freshReadThrough';
+import { __clearL1CacheForTests } from '../../infrastructure/cache/readThroughCache';
 import { approvals, chatReadState, executions, projectManagerConfigs } from '../../infrastructure/database/schema';
 import { bumpUnreadForTenant, bumpUnreadForUser } from '../brain/chatCacheVersions';
 import type { Db } from '../../infrastructure/database/connection';
@@ -70,6 +71,8 @@ const EMPTY_ROWS = new Map<unknown, unknown[]>([
 ]);
 
 describe('readAttention', () => {
+  beforeEach(() => __clearL1CacheForTests());
+
   it('serves a second read from cache without re-loading', async () => {
     const { env } = fakeEnv();
     const { db, callsFor } = fakeDb(EMPTY_ROWS);
@@ -128,7 +131,7 @@ describe('readAttention', () => {
     expect(callsFor(chatReadState)).toBe(2); // idle polls cost nothing
   });
 
-  it('a chat read re-reads only that user unread; a new message re-reads the tenant unread', async () => {
+  it('a chat read re-reads only that user unread; a tenant bump re-reads every user unread', async () => {
     const { env } = fakeEnv();
     const rows = new Map<unknown, unknown[]>([...EMPTY_ROWS, [chatReadState, []]]);
     const { db, callsFor } = fakeDb(rows);

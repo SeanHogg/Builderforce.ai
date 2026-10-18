@@ -20,9 +20,13 @@
  * write modules that hold only a `Db` do not need an `Env` threaded through them.
  */
 
+import { eq } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { ambientEnv, bumpVersion, versionToken } from '../../infrastructure/cache/versionToken';
+import type { Db } from '../../infrastructure/database/connection';
+import { chatReadState } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 /** KV TTL for chat reads: the version token is what keeps them fresh, this bounds orphans. */
 export const CHAT_READ_CACHE = { kvTtlSeconds: 120, l1TtlMs: 5_000 };
@@ -132,12 +136,31 @@ export async function cachedTeamChat<T>(
 export const unreadTenantKey = (tenantId: number): string => `unread-version:tenant:${tenantId}`;
 export const unreadUserKey = (tenantId: number, userId: string): string => `unread-version:user:${tenantId}:${userId}`;
 
-/** A message landed somewhere in this tenant — it can raise anyone's unread count. */
+/** Rare/emergency: orphan every user's unread map in the tenant. Hot-path appends
+ *  must use {@link bumpUnreadForChatAudience} so a busy tenant's other chats stay warm. */
 export function bumpUnreadForTenant(tenantId: number, env: Env | undefined = ambientEnv()): Promise<void> {
   return bumpVersion(unreadTenantKey(tenantId), 'bumpUnreadForTenant', env);
 }
 
-/** This user's read pointer moved. */
+/** This user's read pointer moved — or a message landed in a chat they have read. */
 export function bumpUnreadForUser(tenantId: number, userId: string, env: Env | undefined = ambientEnv()): Promise<void> {
   return bumpVersion(unreadUserKey(tenantId, userId), 'bumpUnreadForUser', env);
+}
+
+/**
+ * A message landed in `chatId`. Unread only accrues for users who already have a
+ * `chat_read_state` row (see `unreadCountsForUser`), so bump those users — not the
+ * whole tenant. Idle polls of unrelated chats stay cached.
+ */
+export async function bumpUnreadForChatAudience(
+  db: Db,
+  tenantId: number,
+  chatId: number,
+  env: Env | undefined = ambientEnv(),
+): Promise<void> {
+  const audience = await db
+    .select({ userId: chatReadState.userId })
+    .from(chatReadState)
+    .where(scopedToTenant(chatReadState, tenantId, eq(chatReadState.chatId, chatId)));
+  await Promise.all(audience.map((row) => bumpUnreadForUser(tenantId, row.userId, env)));
 }

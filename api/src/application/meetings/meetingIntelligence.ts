@@ -35,7 +35,7 @@ import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agen
 import { broadcastRoom } from '../../infrastructure/relay/broadcastRoom';
 import { syncMinutesForMeeting } from '../ceremony/ceremonyMinutesToCanvas';
 import { condenseTranscript } from '../llm/condense';
-import { bumpChatMessages, bumpUnreadForTenant } from '../brain/chatCacheVersions';
+import { bumpChatMessages, bumpUnreadForChatAudience } from '../brain/chatCacheVersions';
 
 type Meeting = typeof meetings.$inferSelect;
 export type TranscriptSegment = typeof meetingTranscriptSegments.$inferSelect;
@@ -100,7 +100,10 @@ export async function postMeetingChatLine(
       metadata: JSON.stringify({ authoredBy }),
     });
     const [touched] = await db.update(brainChats).set({ updatedAt: new Date() }).where(eq(brainChats.id, chatId)).returning({ tenantId: brainChats.tenantId });
-    await Promise.all([bumpChatMessages(chatId), touched ? bumpUnreadForTenant(touched.tenantId) : undefined]);
+    await Promise.all([
+      bumpChatMessages(chatId),
+      touched ? bumpUnreadForChatAudience(db, touched.tenantId, chatId) : undefined,
+    ]);
   } catch (error) { /* the meeting chat is a nice-to-have; never fail the turn on it */ 
     reportCaughtError(error, { source: "application/meetings/meetingIntelligence.ts", operation: "postMeetingChatLine" });
   }

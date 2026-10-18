@@ -48,7 +48,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { broadcastBrainChatChanged } from '../../infrastructure/relay/broadcastRoom';
 import { bumpExecutionState } from '../runtime/executionStateVersion';
-import { bumpChatMessages, bumpChatStructure, bumpUnreadForTenant } from './chatCacheVersions';
+import { bumpChatMessages, bumpChatStructure, bumpUnreadForChatAudience } from './chatCacheVersions';
 
 const CHAT_SCOPE = 'chat';
 
@@ -956,7 +956,8 @@ export class ChatTicketService {
 
     await Promise.all([
       bumpChatMessages(input.targetChatId, this.env),
-      bumpUnreadForTenant(tenantId, this.env),
+      bumpUnreadForChatAudience(this.db, tenantId, input.targetChatId, this.env),
+      ...sources.map((id) => bumpUnreadForChatAudience(this.db, tenantId, id, this.env)),
       bumpExecutionState(this.env, tenantId),
       ...[input.targetChatId, ...sources].map((id) => bumpChatStructure(id, this.env)),
     ]);
@@ -1053,7 +1054,7 @@ export class ChatTicketService {
       eventKey: eventKey ?? null,
     }).onConflictDoNothing().returning({ id: brainChatMessages.id });
     if (!inserted) return;
-    await Promise.all([bumpChatMessages(chatId, this.env), bumpUnreadForTenant(tenantId, this.env)]);
+    await Promise.all([bumpChatMessages(chatId, this.env), bumpUnreadForChatAudience(this.db, tenantId, chatId, this.env)]);
     await broadcastBrainChatChanged(this.env.SESSION_ROOM, tenantId, chatId);
   }
 

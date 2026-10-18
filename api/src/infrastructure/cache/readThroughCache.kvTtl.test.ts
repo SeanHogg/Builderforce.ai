@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { __clearL1CacheForTests, getOrSetCached, invalidateCached, setCached } from './readThroughCache';
+import {
+  __clearL1CacheForTests,
+  bumpCacheVersionSafe,
+  getCacheVersion,
+  getOrSetCached,
+  invalidateCached,
+  setCached,
+} from './readThroughCache';
 import type { Env } from '../../env';
 
 /**
@@ -115,5 +122,25 @@ describe('readThroughCache KV key bounds', () => {
     expect(writeKey).toBe(readKey);
     expect(deleteKey).toBe(readKey);
     expect(readKey).not.toContain('é');
+  });
+});
+
+describe('getCacheVersion / bumpCacheVersionSafe', () => {
+  beforeEach(() => __clearL1CacheForTests());
+
+  it('mints a token under the ver: prefix', async () => {
+    const put = vi.fn(async (_key: string, _value: string, _options?: unknown) => undefined);
+    const env = { AUTH_CACHE_KV: { get: vi.fn(async () => null), put, delete: vi.fn() } } as unknown as Env;
+    const token = await getCacheVersion(env, 'tok-a', { l1TtlMs: 2_000 });
+    expect(typeof token).toBe('string');
+    expect(token.length).toBeGreaterThan(0);
+    expect(put.mock.calls[0]?.[0]).toBe('cache:ver:tok-a');
+  });
+
+  it('bumpCacheVersionSafe swallows KV failures', async () => {
+    const del = vi.fn(async () => { throw new Error('KV DELETE failed: 500 Internal Error'); });
+    const env = { AUTH_CACHE_KV: { get: vi.fn(), put: vi.fn(), delete: del } } as unknown as Env;
+    await expect(bumpCacheVersionSafe(env, 'tok-b', 'testBump')).resolves.toBeUndefined();
+    expect(del).toHaveBeenCalled();
   });
 });
