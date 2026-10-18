@@ -5,6 +5,7 @@ import { vendorFlagship } from './vendors';
 /** The CURRENT Anthropic flagships, read from the catalog — never a version literal, so a
  *  model release is a catalog edit and these tests follow it. */
 const OPUS_FLAGSHIP = vendorFlagship('anthropic', true)!;
+const XAI_OAUTH_FLAGSHIP = vendorFlagship('xai-oauth', true)!;
 
 // ---------------------------------------------------------------------------
 // Connected-account (BYO subscription) dispatch — the REAL proxy path.
@@ -233,7 +234,7 @@ describe('MULTIPLE connected accounts fail over to each other', () => {
 
     expect(result.response.status).toBe(200);
     expect(result.resolvedVendor).toBe('xai-oauth');
-    expect(result.resolvedModel).toBe('xai-oauth/grok-4.7');
+    expect(result.resolvedModel).toBe(XAI_OAUTH_FLAGSHIP);
     // The pin still LED — failover, not reordering.
     expect(seen[0]).toBe(ANTHROPIC_ENDPOINT);
     expect(seen).toContain(XAI_OAUTH_ENDPOINT);

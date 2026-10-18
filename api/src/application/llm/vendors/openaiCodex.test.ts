@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { codexRequestBody, openAiCodexModule } from './openaiCodex';
 import { byoAutoSeedModels } from '../LlmProxyService';
+import { vendorFlagship } from './registry';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -13,7 +14,7 @@ describe('OpenAI Codex subscription vendor', () => {
   });
 
   it('allows an xAI subscription credential to lead the same BYO seed', () => {
-    expect(byoAutoSeedModels(new Set(['xai-oauth', 'anthropic']), { agentic: true, vendorPriority: ['xai-oauth', 'anthropic'] })[0]).toBe('xai-oauth/grok-4.7');
+    expect(byoAutoSeedModels(new Set(['xai-oauth', 'anthropic']), { agentic: true, vendorPriority: ['xai-oauth', 'anthropic'] })[0]).toBe(vendorFlagship('xai-oauth', true));
   });
   /** The Codex backend answers SSE; `response.completed` carries the terminal object. */
   function codexStream(payload: unknown): Response {
