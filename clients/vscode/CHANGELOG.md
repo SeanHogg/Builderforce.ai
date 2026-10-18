@@ -6,6 +6,8 @@ All notable changes to the BuilderForce VS Code extension are documented here.
 
 - **A copied diagnostics report names which install produced it.** The header now says web, VSIX, or Rovr, and that install's version, instead of only the web bundle. A paste from this extension carries `2026.10.50`.
 - **The Agent Execution Engine is named.** The report stamps `builderforce-v3` with the API deploy it shipped in, plus the embedded Brain and the in-browser runtime the canvas turn actually ran.
+- **This chat can now answer from your own machine before it asks the server.** A near-identical question you have already been answered in the panel is replayed on-device, so it costs no round trip. The panel's browser can run the small model; the editor's extension host cannot, so the on-device tier applies to the chat you are typing in, not to background runs.
+- **Fixed: one project's answer could be replayed in another project.** The on-device memory was a single shared cache, so asking the same question on a second board would answer it from the first. Each project now keeps its own memory.
 
 ## [2026.10.49] — A message in one chat stays in that chat
 
