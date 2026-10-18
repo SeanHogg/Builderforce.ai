@@ -286,6 +286,8 @@ interface FakeDb {
   seed: (table: unknown, row: Row) => Row;
   updates: UpdateCall[];
   inserts: InsertCall[];
+  /** Would this WHERE clause select this row? Row keys are COLUMN names. */
+  matchesRow: (row: Row, predicate: unknown) => boolean;
   failOn: (table: unknown, op: 'insert' | 'update' | 'select') => void;
 }
 

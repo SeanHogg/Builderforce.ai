@@ -85,13 +85,16 @@ describe('the verify plan the image asks for', () => {
 
 describe('the container verify op: events, then memory (findings 11 & 12)', () => {
   /**
-   * A DB stub that records what a run wrote onto its timeline. `recordCloudToolEvent`
-   * inserts through Drizzle (`insert(table).values(row).returning(...)`) and stores the
-   * event's detail as a JSON string in the row's `args` column — so the stub intercepts
-   * that chain and parses `args` back out, which is how the real rows read.
+   * A DB stub that records what a run wrote. Two different writes land here:
+   *  - the run's timeline, via `recordCloudToolEvent` — `insert().values(row).returning()`,
+   *    with the event's detail JSON-stringified into the row's `args` column;
+   *  - the run's learning, via the existing memory API — `insert().values(fact)`
+   *    terminated by `.onConflictDoUpdate()`, on the project-facts table.
+   * Both go through Drizzle, so the stub intercepts that chain and keeps the rows.
    */
   function stubDb() {
     const events: Array<{ toolName: string; category: string; detail?: unknown }> = [];
+    const facts: Array<Record<string, unknown>> = [];
     const values = (row: Record<string, unknown>) => ({
       returning: async () => {
         events.push({
@@ -101,17 +104,22 @@ describe('the container verify op: events, then memory (findings 11 & 12)', () =
         });
         return [{ id: events.length }];
       },
+      onConflictDoUpdate: async () => {
+        // A remembered fact: no toolName, but a key and a content body.
+        if (!('toolName' in row)) facts.push(row);
+        return undefined;
+      },
     });
     const db = {
       insert: () => ({ values }),
       update: () => ({ set: () => ({ where: async () => undefined }) }),
       prepare: () => ({ bind: () => ({ first: async () => null, run: async () => undefined, all: async () => ({ results: [] }) }) }),
     } as never;
-    return { events, db };
+    return { events, facts, db };
   }
 
   it('emits verify_started and the paired completion, then commits memory', async () => {
-    const { db, events } = stubDb();
+    const { db, events, facts } = stubDb();
     const result = await OP_HANDLERS.verify!({
       db,
       env: { KV: { get: async () => null, put: async () => undefined } } as never,
@@ -141,8 +149,17 @@ describe('the container verify op: events, then memory (findings 11 & 12)', () =
     expect(startedAt).toBeGreaterThanOrEqual(0);
     expect(completedAt).toBeGreaterThan(startedAt);
 
-    // And the run actually wrote something down, through the existing memory API.
-    expect(events.some((e) => e.toolName.includes('memory'))).toBe(true);
+    // And the run committed what it learned, through the EXISTING memory API —
+    // one project fact, keyed per run, carrying the summary, the verify note and
+    // the files it touched.
+    expect(facts).toHaveLength(1);
+    const fact = facts[0]!;
+    expect(String(fact.key)).toMatch(/^run-outcome:/);
+    expect(String(fact.content)).toContain('Added the parser to the canvas loader.');
+    expect(String(fact.content)).toContain('src/a.ts');
+    expect(String(fact.source)).toBe('cloud-run');
+    expect(fact.projectId).toBe(2);
+    expect(fact.ticketId).toBe(3);
   });
 
   it('keeps the run result when the memory write fails', async () => {
