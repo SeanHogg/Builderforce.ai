@@ -25,6 +25,7 @@ import { appendKnowledgeMemory } from "../builderforce/project-context.js";
 import { contributeProjectEvermindFromText, type ProjectEvermindSyncConfig } from "./project-evermind-sync.js";
 import { contributeProjectEvermindFromDelta } from "./project-evermind-delta.js";
 import { pushProjectFact, recallSharedProjectFacts } from "./project-facts-sync.js";
+import { commitRunOutcomeMemory } from "./run-outcome-memory.js";
 import { logDebug } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import { getAgentRunContext, onAgentEvent } from "./agent-events.js";
@@ -221,6 +222,22 @@ export class KnowledgeLoopService {
     } catch (err) {
       logDebug(`[knowledge-loop] failed to write memory entry: ${String(err)}`);
     }
+
+    // The on-prem mirror of the cloud run's memory commit: write this run's
+    // OUTCOME into the SAME governed store a cloud run commits to, under the
+    // same `run-outcome:<scope>:<id>` key, so the next run on this project — here
+    // or in the cloud — can recall what this one did. Deliberately NOT inside the
+    // SSM block below: the semantic layer being unavailable must not decide
+    // whether a run's outcome is durable. Fire-and-forget, like every other
+    // write here, so it can neither fail nor delay the finished run. The body is
+    // `summary` (the cloud twin's own default) rather than the local `entry`
+    // block — a run-outcome fact states what happened, and the structured
+    // markdown is already durable in the workspace memory file.
+    void commitRunOutcomeMemory(this.projectEvermindConfig(), {
+      summary,
+      writtenPaths: [...created, ...edited],
+      runId,
+    });
 
     // Feed the SSM hippocampus layer — non-fatal.
     // remember() stores the concise summary for fast semantic recall; learn()
