@@ -45,6 +45,13 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +1 file (2026-10-18, panel-bridge DRY pass) — `components/insights/makePanelBrainBridge.ts`
+ *     (~66 lines, imports only `react` and `@/lib/brain`, both already here). Not new
+ *     first-paint work: the AI, delivery, DevEx and finance `*PanelBrainBridge` modules
+ *     (all already here, mounted by ConditionalAppShell) each carried the same ~40-line
+ *     `show_*_insight` action. That body moved INTO this factory, so the closure lost
+ *     ~160 duplicated lines and gained one module. Lazy-loading it would delay the
+ *     Brain's panel tools behind a chunk fetch for no saving.
  *   +2 files (2026-10-17, Neon load review, second pass) — `lib/polling/reconnectPolicy.ts`
  *     and `lib/polling/coalescedRefresh.ts`, both import-free beyond `pollPolicy`. They are
  *     not new first-paint work: the shell's realtime and broadcast sockets (already here)

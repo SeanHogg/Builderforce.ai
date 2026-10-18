@@ -13,7 +13,11 @@ const { createPageEngineSet, loadBfiWeb } = vi.hoisted(() => ({
   loadBfiWeb: vi.fn(async (_url: string) => ({ BfiEngine: {} })),
 }));
 
-vi.mock('@seanhogg/builderforce-brain-embedded', () => ({ createPageEngineSet }));
+// `deferredLocalModelStore` runs at module load (it only captures the thunk), so the mock must supply it.
+vi.mock('@seanhogg/builderforce-brain-embedded', () => ({
+  createPageEngineSet,
+  deferredLocalModelStore: (_get: () => unknown) => ({}),
+}));
 vi.mock('@seanhogg/builderforce-brain-embedded/bfi', () => ({
   bfiWebLoader: (url: () => string | URL) => async () => loadBfiWeb(String(url())),
 }));

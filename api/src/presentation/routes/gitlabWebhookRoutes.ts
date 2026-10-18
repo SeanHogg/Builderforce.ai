@@ -19,7 +19,7 @@ import { handleCiEventOutcome } from '../../application/ci/handleCiEventOutcome'
 import { ciOutcomeDeps } from './ciOutcomeDeps';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { parseBody, z } from './requestBody';
-import { timingSafeEqual } from '../../infrastructure/crypto/constantTime';
+import { timingSafeEqual } from '../../application/backend/webhookVerification';
 
 /**
  * A GitLab hook payload is large and vendor-shaped; only the project identity the

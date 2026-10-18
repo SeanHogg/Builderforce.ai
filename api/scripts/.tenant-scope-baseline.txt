@@ -1,7 +1,6 @@
 # Unscoped Drizzle statements against tenant-owned tables, as path:count.
 # Counts may only go DOWN — see scripts/check-tenant-scope.mjs.
 # Regenerate with: node scripts/check-tenant-scope.mjs --update
-application/alerts/runAlertSweep.ts:1
 application/approvals/runApprovalExpirySweep.ts:2
 application/artifact/capabilityContext.ts:1
 application/audit/ticketAuditService.ts:2
@@ -9,7 +8,6 @@ application/auth/DeviceAuthService.ts:6
 application/backend/index.ts:2
 application/boardsync/drizzleStore.ts:9
 application/boardsync/runBoardSyncSweep.ts:1
-application/brain/brainMessageStore.ts:1
 application/ceremony/ceremonyMeeting.ts:4
 application/ceremony/ceremonyNotifier.ts:2
 application/ceremony/dispatchCeremonyCompletion.ts:1
@@ -37,7 +35,7 @@ application/manager/stallCensus.ts:1
 application/manager/stallWatch.ts:1
 application/manager/triageStage.ts:1
 application/marketing/templateLibrary.ts:1
-application/meetings/meetingIntelligence.ts:3
+application/meetings/meetingIntelligence.ts:2
 application/migration/migrationStore.ts:9
 application/monitoring/runMonitorSweep.ts:1
 application/prd/taskPrd.ts:1
@@ -55,11 +53,11 @@ application/seams/workItemWebhook.ts:1
 application/security/findingMarkers.ts:1
 application/security/sessionCounts.ts:1
 application/studio/voiceCloneService.ts:3
-application/swimlane/DrizzleCoordinatorStore.ts:4
+application/swimlane/DrizzleCoordinatorStore.ts:3
 application/swimlane/evaluateAutoRun.ts:2
 application/swimlane/findOrCreateBoard.ts:1
 application/swimlane/laneEntryTrigger.ts:2
-application/swimlane/laneOrdinals.ts:2
+application/swimlane/laneOrdinals.ts:1
 application/swimlane/laneRequirementGate.ts:4
 application/swimlane/resumeParkedWorkflows.ts:1
 application/task/taskDependencies.ts:1
@@ -76,9 +74,9 @@ application/workflow/triggerSync.ts:2
 application/workforce/liveMemberNames.ts:2
 infrastructure/relay/AnalysisRunnerDO.ts:1
 infrastructure/relay/CloudRunnerDO.ts:1
-infrastructure/repositories/AgentHostRepository.ts:4
+infrastructure/repositories/AgentHostRepository.ts:3
 presentation/routes/activityRoutes.ts:9
-presentation/routes/adminRoutes.ts:9
+presentation/routes/adminRoutes.ts:8
 presentation/routes/boardWebhookRoutes.ts:1
 presentation/routes/ceremonyRoutes.ts:2
 presentation/routes/freelancerMessagingRoutes.ts:3

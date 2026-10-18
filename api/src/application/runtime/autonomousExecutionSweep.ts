@@ -34,7 +34,7 @@ import { buildRuntimeService } from '../../buildRuntimeService';
 import { createTickDispatchBudget, MAX_TENANT_DISPATCHES_PER_TICK, tenantDispatchReserver, type TickDispatchBudget } from './tickDispatchBudget';
 import { executions, tasks, projects, boards, pullRequests, swimlanes } from '../../infrastructure/database/schema';
 import { laneAgentAssignments, laneJoinOn } from '../swimlane/laneAgentAssignments';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { RuntimeService } from './RuntimeService';
 import { TaskStatus } from '../../domain/shared/types';
 import { tenantMayRunAutonomously } from '../llm/tenantTokenAvailability';
@@ -240,7 +240,7 @@ export async function hasAutonomousCandidates(db: Db): Promise<boolean> {
     .select({ one: sql<number>`1` })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
-    .where(autonomousCandidateWhere(db))
+    .where(acrossTenants(tasks, 'scheduled_sweep', autonomousCandidateWhere(db)))
     .limit(1);
   return !!row;
 }

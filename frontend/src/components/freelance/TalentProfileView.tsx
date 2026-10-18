@@ -7,7 +7,6 @@ import { ResumeDocumentView } from '@/components/resume/ResumeDocumentView';
 import type { FreelancerProfile, FreelancerStats } from '@/lib/freelance/talentProfile';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import { useFormat } from "@/i18n/useFormat";
-import { useMoneyFormat } from '@/lib/useMoneyFormat';
 
 /**
  * Presentational render of a for-hire profile — the SINGLE source of truth for how a

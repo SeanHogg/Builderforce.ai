@@ -17,6 +17,7 @@ import { escapeHtml } from '@builderforce/creation-canvas-contract';
 import { eq, inArray } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { alerts, alertEvents, type AlertMetric } from '../../infrastructure/database/schema';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { evaluateMetric } from './metricEvaluators';
 import {
   sendSlackNotification,
@@ -115,7 +116,7 @@ export async function notifyAlert(
 export async function runAlertSweep(env: Env, db: Db = buildDatabase(env)): Promise<void> {
   const now = Date.now();
 
-  const rules = await db.select().from(alerts).where(eq(alerts.enabled, true));
+  const rules = await db.select().from(alerts).where(acrossTenants(alerts, 'scheduled_sweep', eq(alerts.enabled, true)));
 
   // Stamps and fired-event rows are collected and written set-based after the loop
   // (was 2-3 statements per rule); evaluation itself stays per rule.
@@ -146,7 +147,7 @@ export async function runAlertSweep(env: Env, db: Db = buildDatabase(env)): Prom
       // below) fails, the next run must not re-notify past the cooldown. A failed stamp
       // throws to the per-rule catch, so no notification goes out un-stamped. One UPDATE
       // per FIRED rule is fine — fired rules are rare.
-      await db.update(alerts).set({ lastTriggeredAt: new Date(now) }).where(eq(alerts.id, rule.id));
+      await db.update(alerts).set({ lastTriggeredAt: new Date(now) }).where(scopedToTenant(alerts, rule.tenantId, eq(alerts.id, rule.id)));
 
       let notified = { slack: false, email: false };
       try {
@@ -178,7 +179,7 @@ export async function runAlertSweep(env: Env, db: Db = buildDatabase(env)): Prom
   // Each batched write in its own try, so a failed stamp does not drop the event rows.
   if (evaluatedIds.length > 0) {
     try {
-      await db.update(alerts).set({ lastEvaluatedAt: new Date(now) }).where(inArray(alerts.id, evaluatedIds));
+      await db.update(alerts).set({ lastEvaluatedAt: new Date(now) }).where(acrossTenants(alerts, 'scheduled_sweep', inArray(alerts.id, evaluatedIds)));
     } catch (err) {
       reportCaughtError(err, { source: "application/alerts/runAlertSweep.ts", operation: "runAlertSweep", context: { logMessage: '[cron:alerts] lastEvaluatedAt stamp failed', details: err } });
     }
