@@ -28,8 +28,8 @@ importers:
         specifier: ^2026.7.5
         version: 2026.7.5
       '@seanhogg/builderforce-webcontainers':
-        specifier: ^2026.10.11
-        version: 2026.10.11(typescript@6.0.3)
+        specifier: ^2026.10.12
+        version: 2026.10.12(typescript@6.0.3)
       drizzle-orm:
         specifier: ^0.36.4
         version: 0.36.4(@cloudflare/workers-types@4.20260313.1)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)
@@ -633,8 +633,8 @@ packages:
     resolution: {integrity: sha512-TPI+SVch4YxgaYuIGSupP3RlvdB2N1kYbxFH5e1cdGsrYJZunR5wN2PYcj4WtanThy28kLSWXVsU+I9XQ9iiiA==}
     engines: {node: '>=18'}
 
-  '@seanhogg/builderforce-webcontainers-core@2026.10.11':
-    resolution: {integrity: sha512-Pg0XR4qf0bJAxmQ2SAGNUZjF2m0cnjPhcZ1STctfsNBqRcE/829lSRlTkuHjMy3iJz1ltEkPps8BVKSUHPNPew==}
+  '@seanhogg/builderforce-webcontainers-core@2026.10.12':
+    resolution: {integrity: sha512-o8l+9C6RQYk2n8ilBpNkAY4M0AD5QO9+wG8bhhqINv1EXg9/sYWv+nWvLPghO3aI/xpsnLAOi6RUtKvkGrIN7A==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       typescript: '>=5.0.0'
@@ -642,8 +642,8 @@ packages:
       typescript:
         optional: true
 
-  '@seanhogg/builderforce-webcontainers@2026.10.11':
-    resolution: {integrity: sha512-qQnfv1z1FNikYKPTnocKpB3qgeBW9QZZ83Ftt0y65rKyOWSc/EH42GehH+lHQ0LvBRUZG8g5iLjulqupDrTW4w==}
+  '@seanhogg/builderforce-webcontainers@2026.10.12':
+    resolution: {integrity: sha512-UPr533dKIMJz1MQWltAdGIf8LMxtnc7aM5iTUBfpd4LZP2riVin2kq34rzYe9dK4f4cvX2lf+hycFmPKPxpP4w==}
     engines: {node: '>=18.0.0'}
 
   '@sindresorhus/is@7.2.0':
@@ -1761,16 +1761,16 @@ snapshots:
 
   '@seanhogg/builderforce-quality@2026.7.5': {}
 
-  '@seanhogg/builderforce-webcontainers-core@2026.10.11(typescript@6.0.3)':
+  '@seanhogg/builderforce-webcontainers-core@2026.10.12(typescript@6.0.3)':
     dependencies:
       es-module-lexer: 1.7.0
       fflate: 0.8.3
     optionalDependencies:
       typescript: 6.0.3
 
-  '@seanhogg/builderforce-webcontainers@2026.10.11(typescript@6.0.3)':
+  '@seanhogg/builderforce-webcontainers@2026.10.12(typescript@6.0.3)':
     dependencies:
-      '@seanhogg/builderforce-webcontainers-core': 2026.10.11(typescript@6.0.3)
+      '@seanhogg/builderforce-webcontainers-core': 2026.10.12(typescript@6.0.3)
       esbuild-wasm: 0.24.2
     transitivePeerDependencies:
       - typescript
