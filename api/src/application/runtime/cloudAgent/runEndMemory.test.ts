@@ -150,16 +150,21 @@ describe('the container verify op: events, then memory (findings 11 & 12)', () =
     expect(completedAt).toBeGreaterThan(startedAt);
 
     // And the run committed what it learned, through the EXISTING memory API —
-    // one project fact, keyed per run, carrying the summary, the verify note and
-    // the files it touched.
+    // ONE fact, keyed per run, carrying the summary, the verify note and the files
+    // it touched, stamped with the execution that produced it.
     expect(facts).toHaveLength(1);
     const fact = facts[0]!;
-    expect(String(fact.key)).toMatch(/^run-outcome:/);
+    expect(fact.key).toBe('run-outcome:ticket-3:7');
     expect(String(fact.content)).toContain('Added the parser to the canvas loader.');
-    expect(String(fact.content)).toContain('src/a.ts');
-    expect(String(fact.source)).toBe('cloud-run');
-    expect(fact.projectId).toBe(2);
-    expect(fact.ticketId).toBe(3);
+    expect(String(fact.content)).toContain('verify ran: npm run typecheck');
+    expect(String(fact.content)).toContain('changed: src/a.ts');
+    expect(fact.origin).toBe('cloud-run');
+    expect(fact.originExecutionId).toBe(7);
+    expect(fact.tenantId).toBe(1);
+    // The scope OWNER is resolved from the run context, so the write can only ever
+    // land on the run's OWN ticket — never somewhere the agent picked.
+    expect(fact.scopeKind).toBe('ticket');
+    expect(fact.scopeId).toBe(3);
   });
 
   it('keeps the run result when the memory write fails', async () => {
