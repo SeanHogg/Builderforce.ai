@@ -25,16 +25,19 @@
  * near-identity, making this a restatement cache rather than a similarity cache.
  *
  * Pure and transport-agnostic, like the rest of this package: the STORE is injected, so
- * the SSM runtime, WebGPU detection and any shared L2 stay in the host that has them,
- * and this module is safe in every bundle including ones with no GPU story at all.
+ * this module is safe in every bundle including ones with no GPU story at all. The
+ * binding that turns the port into a real SSM runtime lives next door, in
+ * `onDeviceStore.ts` — that is the one host-facing loader, and it is what keeps two
+ * projects from sharing an answer.
  */
 
 import type { AnswerOriginCost, EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
 
 /**
  * The on-device answer store, as a port. Structurally satisfied by the
- * `SemanticCache` in `@seanhogg/builderforce-memory`, which is what the web host
- * injects — declared here as a shape so this package takes no dependency on it.
+ * `SemanticCache` in `@seanhogg/builderforce-memory`, which `onDeviceStore.ts` builds
+ * and the hosts inject — declared here as a shape so the hooks take no dependency on
+ * the runtime.
  */
 export interface OnDeviceAnswerStore {
   /** Best stored answer for a semantically-similar prior question, or undefined. */
