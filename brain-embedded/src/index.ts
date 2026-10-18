@@ -703,6 +703,7 @@ export { USAGE_SURFACE_HEADER, USAGE_SURFACES, isUsageSurface, withUsageSurface,
 // the chat" (single in-flight create + first-turn auto-title port).
 export { useChatTurns } from './useChatTurns';
 export type { ChatTurns, ChatTurnsOptions } from './useChatTurns';
+export { useRunRefreshTick, RUN_REFRESH_MS } from './useRunRefreshTick';
 export { useQueuedTurns } from './useQueuedTurns';
 export type { QueuedItem, QueuedTurns, QueuedTurnsOptions } from './useQueuedTurns';
 export { useChatCreation } from './useChatCreation';

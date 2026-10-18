@@ -3,6 +3,7 @@ import { useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import {
   effortProfile,
   reasoningForRun,
+  useRunRefreshTick,
   useToolConfirmationGate,
 } from '@seanhogg/builderforce-brain-embedded';
 import {
@@ -212,6 +213,11 @@ export function useBrainPanelController({
     // exactly the agents the run is told it may dispatch to.
     chatRoster: chatRosterFromParticipants(participants),
   });
+  // The chat row's spend follows the shared run beat — re-read as a long run goes, not
+  // only when it settles (`onActivity` above covers the settle).
+  const refreshTick = useRunRefreshTick(conv.sending);
+  const { reload: reloadChats } = chats;
+  useEffect(() => { if (refreshTick > 0) void reloadChats(); }, [refreshTick, reloadChats]);
 
   // "Approve all": auto-approve the rest of the run/session. The approval bar
   // (`RunConfirmBar`) lets the pending call through itself.

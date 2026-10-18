@@ -26,6 +26,24 @@ import { tierForModel, vendorForModel, vendorRequiresLocalEgress } from './vendo
 
 export interface PriceBook {
   priceOf(model: string): ModelPrice | undefined;
+  /**
+   * The LIST price used to value a call someone else paid for (a BYO key's spend, the
+   * tokens memory kept off a call): `priceOf`, then a direct-vendor id
+   * (`direct/minimax/MiniMax-M1`) matched to the catalog's `minimax/minimax-m1`.
+   * Never used for billing — what the platform charges stays on `priceOf`.
+   */
+  listPriceOf?(model: string): ModelPrice | undefined;
+}
+
+/** The catalog id a direct-vendor route names (`direct/<vendor>/<model>` → `<vendor>/<model>`,
+ *  lower-cased as the catalog stores it), or `undefined` for any other id. */
+export function directCatalogId(model: string): string | undefined {
+  return model.startsWith('direct/') ? model.slice('direct/'.length).toLowerCase() : undefined;
+}
+
+/** A book's list price for `model` (see `PriceBook.listPriceOf`). */
+export function listPriceOf(book: PriceBook, model: string): ModelPrice | undefined {
+  return book.listPriceOf ? book.listPriceOf(model) : book.priceOf(model);
 }
 
 /** A book that knows no prices — routing degrades to tier order. */
@@ -49,8 +67,20 @@ export function priceBookFrom(catalog: readonly CatalogModel[]): PriceBook {
   const cached = BOOKS.get(catalog);
   if (cached) return cached;
   const byId = new Map<string, ModelPrice>();
-  for (const m of catalog) byId.set(m.id, { input: m.pricing.prompt, output: m.pricing.completion });
-  const book: PriceBook = { priceOf: (model) => byId.get(catalogPriceId(model)) };
+  const byLowerId = new Map<string, ModelPrice>();
+  for (const m of catalog) {
+    const price = { input: m.pricing.prompt, output: m.pricing.completion };
+    byId.set(m.id, price);
+    byLowerId.set(m.id.toLowerCase(), price);
+  }
+  const priceOf = (model: string) => byId.get(catalogPriceId(model));
+  const book: PriceBook = {
+    priceOf,
+    listPriceOf: (model) => {
+      const direct = directCatalogId(model);
+      return priceOf(model) ?? (direct ? byLowerId.get(direct) : undefined);
+    },
+  };
   BOOKS.set(catalog, book);
   return book;
 }

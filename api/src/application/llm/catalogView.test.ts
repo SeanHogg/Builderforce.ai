@@ -4,7 +4,7 @@ import type { CatalogModel } from './modelCatalog';
 const catalogMock = vi.fn<() => Promise<CatalogModel[]>>();
 vi.mock('./modelCatalog', () => ({ getCatalogCached: () => catalogMock() }));
 
-import { EMPTY_PRICE_BOOK, catalogPriceId, priceBookFrom, pricesForCall, registryCatalogView } from './catalogView';
+import { EMPTY_PRICE_BOOK, catalogPriceId, listPriceOf, priceBookFrom, pricesForCall, registryCatalogView } from './catalogView';
 
 function model(id: string, prompt: number, completion: number): CatalogModel {
   return {
@@ -27,6 +27,15 @@ describe('price book', () => {
     expect(priceBookFrom(snapshot)).toBe(book);
     expect(book.priceOf('openrouter/openai/gpt-4.1')).toEqual({ input: 2e-6, output: 8e-6 });
     expect(book.priceOf('unknown/model')).toBeUndefined();
+  });
+
+  it('values a direct-vendor id at its catalog LIST price, but never bills it', () => {
+    const book = priceBookFrom([model('minimax/minimax-m1', 4e-7, 2.2e-6)]);
+    // Billing (`priceOf`) is unchanged: a direct route is not a catalog id.
+    expect(book.priceOf('direct/minimax/MiniMax-M1')).toBeUndefined();
+    // The list price a BYO call / a saving is valued at resolves it.
+    expect(listPriceOf(book, 'direct/minimax/MiniMax-M1')).toEqual({ input: 4e-7, output: 2.2e-6 });
+    expect(listPriceOf(book, 'direct/minimax/unknown')).toBeUndefined();
   });
 
   it('an unpriced view answers routing questions but never a price', () => {

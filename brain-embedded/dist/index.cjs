@@ -90,6 +90,7 @@ __export(src_exports, {
   RESTING_CHAT_MODE: () => RESTING_CHAT_MODE,
   REVISIT_HARD_AT: () => REVISIT_HARD_AT,
   REVISIT_NUDGE_AT: () => REVISIT_NUDGE_AT,
+  RUN_REFRESH_MS: () => RUN_REFRESH_MS,
   ReadCoverage: () => ReadCoverage,
   RepetitionLoopError: () => RepetitionLoopError,
   STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
@@ -414,6 +415,7 @@ __export(src_exports, {
   useOptionalBrainContext: () => useOptionalBrainContext,
   useQueuedTurns: () => useQueuedTurns,
   useRegisterBrainActions: () => useRegisterBrainActions,
+  useRunRefreshTick: () => useRunRefreshTick,
   useRunSnapshot: () => useRunSnapshot,
   useToolConfirmationGate: () => useToolConfirmationGate,
   utf8ByteLength: () => utf8ByteLength2,
@@ -7692,6 +7694,7 @@ function priorResearchDigest(history) {
     const parsed = parseStepMessage(message.metadata);
     if (!parsed || parsed.step.category !== "tool") continue;
     const { label, args, result, isError } = parsed.step;
+    if (args == null && result == null) continue;
     const fullArgs = args == null ? "" : stableStringify(args);
     const key = `${label}|${fullArgs}`;
     if (seen.has(key)) continue;
@@ -14707,20 +14710,36 @@ function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
   return { queued, submit, stop: stopTurns };
 }
 
-// src/useChatCreation.ts
+// src/useRunRefreshTick.ts
 var import_react13 = require("react");
-function useChatCreation({ chatId, create, autoTitle }) {
-  const chatIdRef = (0, import_react13.useRef)(chatId);
-  chatIdRef.current = chatId;
-  const createRef = (0, import_react13.useRef)(create);
-  createRef.current = create;
-  const autoTitleRef = (0, import_react13.useRef)(autoTitle);
-  autoTitleRef.current = autoTitle;
-  const creating = (0, import_react13.useRef)(null);
+var RUN_REFRESH_MS = 3e4;
+function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
+  const [tick, setTick] = (0, import_react13.useState)(0);
+  const wasRunning = (0, import_react13.useRef)(running);
   (0, import_react13.useEffect)(() => {
+    if (wasRunning.current && !running) setTick((n) => n + 1);
+    wasRunning.current = running;
+    if (!running) return;
+    const timer = setInterval(() => setTick((n) => n + 1), intervalMs);
+    return () => clearInterval(timer);
+  }, [running, intervalMs]);
+  return tick;
+}
+
+// src/useChatCreation.ts
+var import_react14 = require("react");
+function useChatCreation({ chatId, create, autoTitle }) {
+  const chatIdRef = (0, import_react14.useRef)(chatId);
+  chatIdRef.current = chatId;
+  const createRef = (0, import_react14.useRef)(create);
+  createRef.current = create;
+  const autoTitleRef = (0, import_react14.useRef)(autoTitle);
+  autoTitleRef.current = autoTitle;
+  const creating = (0, import_react14.useRef)(null);
+  (0, import_react14.useEffect)(() => {
     if (chatId != null) creating.current = null;
   }, [chatId]);
-  const ensureChatId = (0, import_react13.useCallback)(() => {
+  const ensureChatId = (0, import_react14.useCallback)(() => {
     const open = chatIdRef.current;
     if (open != null) return Promise.resolve(open);
     creating.current ??= createRef.current().then(
@@ -14735,7 +14754,7 @@ function useChatCreation({ chatId, create, autoTitle }) {
     );
     return creating.current;
   }, []);
-  const onFirstUserTurn = (0, import_react13.useCallback)(async (id, firstUserText) => {
+  const onFirstUserTurn = (0, import_react14.useCallback)(async (id, firstUserText) => {
     await autoTitleRef.current?.(id, firstUserText);
   }, []);
   return { ensureChatId, onFirstUserTurn };
@@ -14802,6 +14821,7 @@ function useChatCreation({ chatId, create, autoTitle }) {
   RESTING_CHAT_MODE,
   REVISIT_HARD_AT,
   REVISIT_NUDGE_AT,
+  RUN_REFRESH_MS,
   ReadCoverage,
   RepetitionLoopError,
   STEP_MESSAGE_ROLE,
@@ -15126,6 +15146,7 @@ function useChatCreation({ chatId, create, autoTitle }) {
   useOptionalBrainContext,
   useQueuedTurns,
   useRegisterBrainActions,
+  useRunRefreshTick,
   useRunSnapshot,
   useToolConfirmationGate,
   utf8ByteLength,

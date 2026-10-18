@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-10-18 — BuilderForce logo on every surface, a Spent tab, and the session spend that stayed at $0 (brain-embedded 2026.10.34 · brain-ui 2026.10.17 · api 2026.10.57 · frontend 2026.10.74 · VSIX 2026.10.46 · Rovr 2026.10.11)
+
+- **Logo.** The shared mark (`BrainMark`: surface header, launcher, empty state, canvas Brain Object) drew a generic Brain glyph and, in the editor header, read as a blank tinted square. It now draws the BuilderForce bolt "B" (`brain-ui/src/surface/brandLogo.ts`, trimmed from `clients/vscode/media/icon.png`), keeping the running pulse; the header's tinted tile is gone.
+- **Spent tab.** The `/` menu's 30-day spend & savings moved out of Status into its own tab (`WorkSpendPanel`), named by the breakdown's existing "Spent" heading so every host's translation already covers it. Status keeps plan, meters and Evermind.
+- **Session spend stuck at $0.00.** BYO direct-vendor calls are recorded as `direct/<vendor>/<model>` while the price catalog keys `<vendor>/<model>` (lower-case), so they counted as unpriced. `catalogView.listPriceOf` resolves them for valuing at LIST (your-key spend, memory savings); platform billing stays on `priceOf`, unchanged. And the chat row was re-read only when a run settled: one shared beat (`useRunRefreshTick`, brain-embedded) re-reads it every 30 s during a run and once at its end, on web, VS Code and Rovr.
+- Test typing fix in `readThroughCache.kvTtl.test.ts` (TS2493 under tsc).
+
 ## ✅ RESOLVED 2026-10-18 — `@seanhogg/builderforce-webcontainers` 2026.10.11 published and adopted
 
 - `456ee8be7` bumped `api` and `frontend` to `^2026.10.11` before that version was on npm: no `v2026.10.11` tag had been pushed, and the release workflow runs only on `v*` tags. That broke every frozen install and, through `ensure-linked-deps`, the VSIX webview build (unresolved `@seanhogg/builderforce-brain-embedded` from `frontend/src`). Rolled back to `^2026.10.10` (`934a6098c`), tagged and published `v2026.10.11`, then bumped both manifests again and regenerated both lockfiles in one commit (only the webcontainers and webcontainers-core entries changed).

@@ -18,6 +18,9 @@ import type { PromptOptionsLabels } from '../promptOptions/types';
 import { useMentionAutocomplete, type UseMentionAutocompleteOptions } from '../mention/MentionAutocomplete';
 import { useTicketAutocomplete, type UseTicketAutocompleteOptions } from '../mention/TicketAutocomplete';
 import { WorkStatusPanel } from '../workStatus/WorkStatusPanel';
+import { WorkSpendPanel } from '../workStatus/WorkSpendPanel';
+import { spendLabels } from '../spend/labels';
+import { workStatusLabels } from '../workStatus/labels';
 import type { JsonRequest } from '../workStatus/consumptionSnapshot';
 import type { UpgradeTarget } from '../workStatus/AccountStatus';
 import type { WorkStatusLabels } from '../workStatus/labels';
@@ -157,11 +160,24 @@ export function BrainComposer(props: BrainComposerProps) {
         request={account.request}
         projectId={account.projectId}
         labels={labelBundle?.status}
-        spendLabels={labelBundle?.spend}
         locale={account.locale}
         onUpgrade={account.onUpgrade}
       />
     )
+    : undefined;
+  // The Spend tab is named by the breakdown's own "Spent" heading, so no host needs a new string.
+  const spendTab = account
+    ? {
+      label: spendLabels(labelBundle?.spend).spendHeading,
+      content: (
+        <WorkSpendPanel
+          request={account.request}
+          labels={labelBundle?.spend}
+          loadingLabel={workStatusLabels(labelBundle?.status).loading}
+          locale={account.locale}
+        />
+      ),
+    }
     : undefined;
 
   const chips = attachments ? <AttachmentChips items={attachments.items} onRemove={attachments.onRemove} labels={labels} /> : null;
@@ -222,6 +238,7 @@ export function BrainComposer(props: BrainComposerProps) {
               disabled={disabled}
               {...groups}
               status={statusNode}
+              spend={spendTab}
               onAccountSettings={onAccountSettings}
             />
           </>

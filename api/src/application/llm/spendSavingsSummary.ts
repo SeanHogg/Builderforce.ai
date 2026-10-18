@@ -28,7 +28,7 @@ import type { Env } from '../../env';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { millicentsToUsd } from '../../domain/shared/money';
-import { EMPTY_PRICE_BOOK, loadPriceBook, type PriceBook } from './catalogView';
+import { EMPTY_PRICE_BOOK, listPriceOf, loadPriceBook, type PriceBook } from './catalogView';
 import {
   CACHE_CREATION_MULTIPLIER,
   CACHE_READ_MULTIPLIER,
@@ -99,7 +99,9 @@ export function foldSpendSavings(slices: readonly UsageSlice[], book: PriceBook)
   };
 
   for (const g of slices) {
-    const price = book.priceOf(g.model);
+    // List price: a BYO direct-vendor call (`direct/minimax/…`) is valued at the catalog's
+    // price for that model, not left unpriced at $0.
+    const price = listPriceOf(book, g.model);
     const pricing = price ? { prompt: price.input, completion: price.output } : undefined;
     // An AVOIDED call: nothing spent, the whole call saved (value stamped at write).
     if (g.savingsSource && AVOIDED_SOURCES.has(g.savingsSource)) {

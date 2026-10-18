@@ -2206,6 +2206,7 @@
  * ------------------------------------------------------------------------- */
 .bf-mark { position: relative; display: inline-grid; place-items: center; line-height: 1; color: inherit; }
 .bf-mark__glyph { position: relative; z-index: 1; display: grid; place-items: center; line-height: 1; }
+.bf-mark__img { display: block; width: 1em; height: 1em; object-fit: contain; }
 .bf-mark[data-state='running'] .bf-mark__glyph { animation: bfMarkBreathe 1.5s ease-in-out infinite; }
 .bf-mark__pulse {
   position: absolute; inset: -30%; z-index: 0;
@@ -2235,9 +2236,9 @@
 .bf-shead__brand { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; margin-right: 4px; font-weight: 600; }
 .bf-shead__mark {
   display: inline-grid; place-items: center;
-  width: 26px; height: 26px; border-radius: 8px;
+  width: 26px; height: 26px;
+  font-size: 22px;
   color: var(--bf-accent);
-  background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14));
 }
 .bf-shead__title { white-space: nowrap; }
 .bf-shead__context { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }

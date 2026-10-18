@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { useChatTurns, type BrainMessage, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
+import { useChatTurns, useRunRefreshTick, type BrainMessage, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { childTarget, isWaitingOnSubagents, steerRun, type useChatChildren } from './chatChildren';
 import type { QueuedTurn } from './VsCodeComposer';
@@ -97,13 +97,13 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
   });
   const { submit: submitTurn } = turns;
 
-  // A settled run moved what the chat row reports (its spend & savings, ticket counts),
-  // and the host drives the run, so the in-page loop's `onActivity` never sees the end.
-  const wasSending = useRef(false);
+  // A run moves what the chat row reports (its spend & savings, ticket counts), and the
+  // host drives the run, so the in-page loop's `onActivity` never sees it: re-read the row
+  // on the shared beat — as the run goes, and once when it settles.
+  const refreshTick = useRunRefreshTick(conv.sending);
   useEffect(() => {
-    if (wasSending.current && !conv.sending) reloadChats();
-    wasSending.current = conv.sending;
-  }, [conv.sending, reloadChats]);
+    if (refreshTick > 0) reloadChats();
+  }, [refreshTick, reloadChats]);
 
   const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null) => {
     void submitTurn({ text, recipient: to });

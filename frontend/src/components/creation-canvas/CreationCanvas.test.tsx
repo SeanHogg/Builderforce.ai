@@ -1242,9 +1242,9 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     // and its state — nothing else. The regression is a board card repeating the same
     // exchange the dock is already showing a few hundred pixels away.
     // The mark is THE shared Brain mark (brain-ui `BrainMark`) every AI surface wears —
-    // an SVG glyph, so it renders identically on every OS and carries no text.
+    // the BuilderForce logo image, so it renders identically on every OS and carries no text.
     const marker = screen.getByRole('button', { name: 'Open Brain chat' });
-    expect(marker.querySelector('.bf-mark svg')).not.toBeNull();
+    expect(marker.querySelector('.bf-mark img.bf-mark__img')).not.toBeNull();
     expect(marker.textContent).toBe('');
     expect(marker).toHaveAttribute('data-state', 'idle');
 

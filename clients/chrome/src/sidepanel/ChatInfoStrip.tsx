@@ -9,7 +9,7 @@
  */
 import { useMemo, useRef } from 'react';
 import { ChatTicketsPanel, createChatTicketsRestAdapter, type ChatOptionVM } from '@seanhogg/builderforce-brain-ui';
-import type { BrainChat, BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
+import { useRunRefreshTick, type BrainChat, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
 import { portRequest } from '../api/requestPorts';
 import type { LocalChat } from '../store/records';
 import { useLoaded, useServices } from './hooks';
@@ -35,14 +35,17 @@ export function ChatInfoStrip({ serverId, projectId, chats, run, onChanged }: Ch
     [chats, serverId],
   );
   // The epoch of the last SETTLED run: unchanged while a run streams, bumped once when
-  // it ends — so the chat is re-read on open and after each run, and never mid-run.
+  // it ends — the ticket rail re-reads on open and after each run.
   const settledEpoch = useRef(run.messagesEpoch);
   if (!run.running) settledEpoch.current = run.messagesEpoch;
   const settled = settledEpoch.current;
+  // The chat row (its spend) follows the shared run beat: re-read as a run goes and once
+  // when it settles, so the spend pill climbs during a long run.
+  const refreshTick = useRunRefreshTick(run.running);
   const [chat] = useLoaded<BrainChat | null>(
     () => services.api.request<BrainChat>(`/api/brain/chats/${serverId}`).catch(() => null),
     null,
-    [serverId, settled],
+    [serverId, refreshTick],
   );
 
   return (

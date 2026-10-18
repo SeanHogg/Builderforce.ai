@@ -1895,6 +1895,9 @@ var ToolConfirmBar = memo(function ToolConfirmBar2({
   ] });
 });
 
+// src/surface/brandLogo.ts
+var BRAND_LOGO_SRC = "data:image/png;base64,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";
+
 // src/surface/BrainMark.tsx
 import { Fragment as Fragment5, jsx as jsx16, jsxs as jsxs15 } from "react/jsx-runtime";
 function BrainMark({ running = false, size = "1em" }) {
@@ -1910,7 +1913,7 @@ function BrainMark({ running = false, size = "1em" }) {
           /* @__PURE__ */ jsx16("span", { className: "bf-mark__pulse" }),
           /* @__PURE__ */ jsx16("span", { className: "bf-mark__pulse bf-mark__pulse--trail" })
         ] }),
-        /* @__PURE__ */ jsx16("span", { className: "bf-mark__glyph", children: /* @__PURE__ */ jsx16("svg", { width: "1em", height: "1em", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", children: /* @__PURE__ */ jsx16("path", { d: "M12 5.5A4 4 0 0 0 5.5 9a4 4 0 0 0 2 7.5A4 4 0 0 0 12 19M12 5.5A4 4 0 0 1 18.5 9a4 4 0 0 1-2 7.5A4 4 0 0 1 12 19M12 5.5V19M8 9.5h4M12 14.5h4" }) }) })
+        /* @__PURE__ */ jsx16("span", { className: "bf-mark__glyph", children: /* @__PURE__ */ jsx16("img", { className: "bf-mark__img", src: BRAND_LOGO_SRC, width: 24, height: 24, alt: "", draggable: false }) })
       ]
     }
   );
@@ -3370,6 +3373,7 @@ function PromptOptionsMenu({
   describeThinking,
   model,
   status,
+  spend,
   onAccountSettings,
   className
 }) {
@@ -3386,7 +3390,8 @@ function PromptOptionsMenu({
   const hasEffortTab = !!(onEffortChange || onThinkingChange);
   const hasModelTab = !!model;
   const hasStatusTab = !!(status || onAccountSettings);
-  if (!hasModeTab && !hasEffortTab && !hasModelTab && !hasStatusTab) return null;
+  const hasSpendTab = !!spend;
+  if (!hasModeTab && !hasEffortTab && !hasModelTab && !hasStatusTab && !hasSpendTab) return null;
   const activeMode = mode?.choices.find((choice) => choice.value === mode.value);
   const title = [
     labels.options,
@@ -3398,6 +3403,7 @@ function PromptOptionsMenu({
   if (hasEffortTab) tabs.push({ id: "effort", label: labels.effort });
   if (hasModelTab) tabs.push({ id: "model", label: labels.model });
   if (hasStatusTab) tabs.push({ id: "status", label: labels.status ?? "Status" });
+  if (spend) tabs.push({ id: "spend", label: spend.label });
   const activeTab = tabs.some((entry) => entry.id === tab) ? tab : tabs[0].id;
   return /* @__PURE__ */ jsxs31("div", { ref: rootRef, className: ["bf-pmenu", className].filter(Boolean).join(" "), children: [
     /* @__PURE__ */ jsxs31(
@@ -3506,7 +3512,8 @@ function PromptOptionsMenu({
                   ]
                 }
               )
-            ] })
+            ] }),
+            activeTab === "spend" && spend && /* @__PURE__ */ jsx33("div", { className: "bf-pmenu__status", children: spend.content })
           ]
         }
       )
@@ -7979,10 +7986,8 @@ function EvermindStatus({ request, projectId, labels }) {
 
 // src/workStatus/WorkStatusPanel.tsx
 import { Fragment as Fragment18, jsx as jsx61, jsxs as jsxs58 } from "react/jsx-runtime";
-var SPEND_PERIOD_DAYS = 30;
-function WorkStatusPanel({ request, projectId, labels: overrides, spendLabels: spendOverrides, locale, onUpgrade }) {
+function WorkStatusPanel({ request, projectId, labels: overrides, locale, onUpgrade }) {
   const labels = workStatusLabels(overrides);
-  const sLabels = spendLabels(spendOverrides);
   const snapshot = useConsumptionSnapshot(request);
   if (!snapshot) return /* @__PURE__ */ jsx61("div", { className: "bf-pmenu__desc", children: labels.loading });
   const upgrade = onUpgrade ? (target) => {
@@ -7991,11 +7996,20 @@ function WorkStatusPanel({ request, projectId, labels: overrides, spendLabels: s
   } : void 0;
   return /* @__PURE__ */ jsxs58(Fragment18, { children: [
     /* @__PURE__ */ jsx61(AccountStatus, { snapshot, labels, locale, onUpgrade: upgrade }),
-    snapshot.spendSavings && /* @__PURE__ */ jsxs58(Fragment18, { children: [
-      /* @__PURE__ */ jsx61("div", { className: "bf-pmenu__group", children: fill(sLabels.periodHeading, { days: String(SPEND_PERIOD_DAYS) }) }),
-      /* @__PURE__ */ jsx61(SpendBreakdown, { summary: snapshot.spendSavings, labels: sLabels, locale })
-    ] }),
     /* @__PURE__ */ jsx61(EvermindStatus, { request, projectId, labels })
+  ] });
+}
+
+// src/workStatus/WorkSpendPanel.tsx
+import { Fragment as Fragment19, jsx as jsx62, jsxs as jsxs59 } from "react/jsx-runtime";
+var SPEND_PERIOD_DAYS = 30;
+function WorkSpendPanel({ request, labels: overrides, loadingLabel, locale }) {
+  const labels = spendLabels(overrides);
+  const snapshot = useConsumptionSnapshot(request);
+  if (!snapshot) return /* @__PURE__ */ jsx62("div", { className: "bf-pmenu__desc", children: loadingLabel });
+  return /* @__PURE__ */ jsxs59(Fragment19, { children: [
+    /* @__PURE__ */ jsx62("div", { className: "bf-pmenu__group", children: fill(labels.periodHeading, { days: String(SPEND_PERIOD_DAYS) }) }),
+    snapshot.spendSavings ? /* @__PURE__ */ jsx62(SpendBreakdown, { summary: snapshot.spendSavings, labels, locale }) : /* @__PURE__ */ jsx62("div", { className: "bf-pmenu__desc", children: fill(labels.spent, { amount: formatUsd(0, locale) }) })
   ] });
 }
 
@@ -8003,17 +8017,17 @@ function WorkStatusPanel({ request, projectId, labels: overrides, spendLabels: s
 import { useRef as useRef12 } from "react";
 
 // src/composer/ComposerIcons.tsx
-import { jsx as jsx62, jsxs as jsxs59 } from "react/jsx-runtime";
-var IconPlus = () => /* @__PURE__ */ jsx62("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx62("path", { d: "M8 3.25v9.5M3.25 8h9.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }) });
-var IconMic = () => /* @__PURE__ */ jsxs59("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
-  /* @__PURE__ */ jsx62("rect", { x: "6", y: "2", width: "4", height: "7.5", rx: "2", fill: "currentColor" }),
-  /* @__PURE__ */ jsx62("path", { d: "M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round" })
+import { jsx as jsx63, jsxs as jsxs60 } from "react/jsx-runtime";
+var IconPlus = () => /* @__PURE__ */ jsx63("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx63("path", { d: "M8 3.25v9.5M3.25 8h9.5", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round" }) });
+var IconMic = () => /* @__PURE__ */ jsxs60("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: [
+  /* @__PURE__ */ jsx63("rect", { x: "6", y: "2", width: "4", height: "7.5", rx: "2", fill: "currentColor" }),
+  /* @__PURE__ */ jsx63("path", { d: "M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14", stroke: "currentColor", strokeWidth: "1.3", strokeLinecap: "round" })
 ] });
-var IconSend = () => /* @__PURE__ */ jsx62("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx62("path", { d: "M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" }) });
-var IconStop = () => /* @__PURE__ */ jsx62("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsx62("rect", { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5" }) });
+var IconSend = () => /* @__PURE__ */ jsx63("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: "none", "aria-hidden": "true", children: /* @__PURE__ */ jsx63("path", { d: "M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round" }) });
+var IconStop = () => /* @__PURE__ */ jsx63("svg", { width: "12", height: "12", viewBox: "0 0 16 16", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsx63("rect", { x: "3.5", y: "3.5", width: "9", height: "9", rx: "1.5" }) });
 
 // src/composer/ComposerAddMenu.tsx
-import { jsx as jsx63, jsxs as jsxs60 } from "react/jsx-runtime";
+import { jsx as jsx64, jsxs as jsxs61 } from "react/jsx-runtime";
 function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = false, accept, onAddContext, webBrowsing, items }) {
   const { open, toggle, close, rootRef } = usePopover();
   const fileRef = useRef12(null);
@@ -8023,14 +8037,14 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
     if (files.length && onAttachFiles) onAttachFiles(files);
     e.target.value = "";
   };
-  const row = (key, icon, label, onClick, hint, active) => /* @__PURE__ */ jsxs60("button", { type: "button", role: "menuitem", className: `bf-pmenu__item${active ? " is-active" : ""}`, onClick, children: [
-    /* @__PURE__ */ jsx63("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
-    /* @__PURE__ */ jsx63("span", { className: "bf-pmenu__lbl", children: label }),
-    hint != null && /* @__PURE__ */ jsx63("span", { className: "bf-pmenu__hint", children: hint })
+  const row = (key, icon, label, onClick, hint, active) => /* @__PURE__ */ jsxs61("button", { type: "button", role: "menuitem", className: `bf-pmenu__item${active ? " is-active" : ""}`, onClick, children: [
+    /* @__PURE__ */ jsx64("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: icon }),
+    /* @__PURE__ */ jsx64("span", { className: "bf-pmenu__lbl", children: label }),
+    hint != null && /* @__PURE__ */ jsx64("span", { className: "bf-pmenu__hint", children: hint })
   ] }, key);
-  return /* @__PURE__ */ jsxs60("div", { className: "bf-pmenu", ref: rootRef, children: [
-    onAttachFiles && /* @__PURE__ */ jsx63("input", { ref: fileRef, type: "file", multiple: true, hidden: true, accept, onChange: onFiles }),
-    /* @__PURE__ */ jsx63(
+  return /* @__PURE__ */ jsxs61("div", { className: "bf-pmenu", ref: rootRef, children: [
+    onAttachFiles && /* @__PURE__ */ jsx64("input", { ref: fileRef, type: "file", multiple: true, hidden: true, accept, onChange: onFiles }),
+    /* @__PURE__ */ jsx64(
       "button",
       {
         type: "button",
@@ -8041,10 +8055,10 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
         "aria-label": labels.add,
         disabled,
         onClick: toggle,
-        children: /* @__PURE__ */ jsx63(IconPlus, {})
+        children: /* @__PURE__ */ jsx64(IconPlus, {})
       }
     ),
-    open && /* @__PURE__ */ jsxs60("div", { className: "bf-pmenu__pop", role: "menu", children: [
+    open && /* @__PURE__ */ jsxs61("div", { className: "bf-pmenu__pop", role: "menu", children: [
       onAttachFiles && row("upload", "\u{1F4BB}", uploading ? labels.uploading : labels.upload, () => {
         close();
         if (!uploading) fileRef.current?.click();
@@ -8063,7 +8077,7 @@ function ComposerAddMenu({ labels, disabled = false, onAttachFiles, uploading = 
 }
 
 // src/composer/ComposerTrailingButton.tsx
-import { jsx as jsx64 } from "react/jsx-runtime";
+import { jsx as jsx65 } from "react/jsx-runtime";
 var noopGet = () => "";
 var noopSet = () => void 0;
 function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, onSend, onStop, voice }) {
@@ -8077,7 +8091,7 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
   });
   if (action === "voice") {
     const label2 = dictation.recording ? labels.stopDictation : labels.dictate;
-    return /* @__PURE__ */ jsx64(
+    return /* @__PURE__ */ jsx65(
       "button",
       {
         type: "button",
@@ -8087,28 +8101,28 @@ function ComposerTrailingButton({ labels, canSubmit, running, disabled = false, 
         "aria-pressed": dictation.recording,
         disabled,
         onClick: dictation.recording ? dictation.stopVoice : dictation.startVoice,
-        children: /* @__PURE__ */ jsx64(IconMic, {})
+        children: /* @__PURE__ */ jsx65(IconMic, {})
       }
     );
   }
   if (action === "stop") {
-    return /* @__PURE__ */ jsx64("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ jsx64(IconStop, {}) });
+    return /* @__PURE__ */ jsx65("button", { type: "button", className: "bf-cmp-iconbtn bf-cmp-iconbtn--stop", onClick: onStop, title: labels.stop, "aria-label": labels.stop, children: /* @__PURE__ */ jsx65(IconStop, {}) });
   }
   const label = running ? labels.queueSend : labels.send;
-  return /* @__PURE__ */ jsx64("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
+  return /* @__PURE__ */ jsx65("button", { type: "submit", className: "bf-cmp-iconbtn bf-cmp-iconbtn--send", onClick: (e) => {
     e.preventDefault();
     onSend();
-  }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ jsx64(IconSend, {}) });
+  }, disabled: !canSubmit || disabled, title: label, "aria-label": label, children: /* @__PURE__ */ jsx65(IconSend, {}) });
 }
 
 // src/composer/AttachmentChips.tsx
-import { jsx as jsx65, jsxs as jsxs61 } from "react/jsx-runtime";
+import { jsx as jsx66, jsxs as jsxs62 } from "react/jsx-runtime";
 function AttachmentChips({ items, onRemove, labels }) {
   if (items.length === 0) return null;
-  return /* @__PURE__ */ jsx65("div", { className: "bf-cmp-attachments", children: items.map((a) => /* @__PURE__ */ jsxs61("span", { className: "bf-cmp-chip", children: [
-    a.imageUrl && /* @__PURE__ */ jsx65("img", { src: a.imageUrl, alt: "", className: "bf-cmp-chip__thumb" }),
-    /* @__PURE__ */ jsx65("span", { className: "bf-cmp-chip__name", children: a.name }),
-    /* @__PURE__ */ jsx65("button", { type: "button", className: "bf-cmp-chip__x", onClick: () => onRemove(a.key), "aria-label": `${labels.remove} ${a.name}`, children: "\xD7" })
+  return /* @__PURE__ */ jsx66("div", { className: "bf-cmp-attachments", children: items.map((a) => /* @__PURE__ */ jsxs62("span", { className: "bf-cmp-chip", children: [
+    a.imageUrl && /* @__PURE__ */ jsx66("img", { src: a.imageUrl, alt: "", className: "bf-cmp-chip__thumb" }),
+    /* @__PURE__ */ jsx66("span", { className: "bf-cmp-chip__name", children: a.name }),
+    /* @__PURE__ */ jsx66("button", { type: "button", className: "bf-cmp-chip__x", onClick: () => onRemove(a.key), "aria-label": `${labels.remove} ${a.name}`, children: "\xD7" })
   ] }, a.key)) });
 }
 
@@ -8203,7 +8217,7 @@ function composerLabelsFrom(lookup, overrides) {
 }
 
 // src/composer/BrainComposer.tsx
-import { Fragment as Fragment19, jsx as jsx66, jsxs as jsxs62 } from "react/jsx-runtime";
+import { Fragment as Fragment20, jsx as jsx67, jsxs as jsxs63 } from "react/jsx-runtime";
 var NO_PARTICIPANTS = [];
 var NO_TICKETS = [];
 var noop = () => void 0;
@@ -8293,27 +8307,38 @@ function BrainComposer(props) {
     }
   };
   const groups = composerOptionGroups(options, labels);
-  const statusNode = account ? /* @__PURE__ */ jsx66(
+  const statusNode = account ? /* @__PURE__ */ jsx67(
     WorkStatusPanel,
     {
       request: account.request,
       projectId: account.projectId,
       labels: labelBundle?.status,
-      spendLabels: labelBundle?.spend,
       locale: account.locale,
       onUpgrade: account.onUpgrade
     }
   ) : void 0;
-  const chips = attachments ? /* @__PURE__ */ jsx66(AttachmentChips, { items: attachments.items, onRemove: attachments.onRemove, labels }) : null;
+  const spendTab = account ? {
+    label: spendLabels(labelBundle?.spend).spendHeading,
+    content: /* @__PURE__ */ jsx67(
+      WorkSpendPanel,
+      {
+        request: account.request,
+        labels: labelBundle?.spend,
+        loadingLabel: workStatusLabels(labelBundle?.status).loading,
+        locale: account.locale
+      }
+    )
+  } : void 0;
+  const chips = attachments ? /* @__PURE__ */ jsx67(AttachmentChips, { items: attachments.items, onRemove: attachments.onRemove, labels }) : null;
   const showSuggestions = !!suggestions?.items.length && !value.trim() && !running;
-  const aboveBox = above || showSuggestions || attachments && attachments.items.length > 0 ? /* @__PURE__ */ jsxs62(Fragment19, { children: [
+  const aboveBox = above || showSuggestions || attachments && attachments.items.length > 0 ? /* @__PURE__ */ jsxs63(Fragment20, { children: [
     above,
-    showSuggestions && /* @__PURE__ */ jsx66(SuggestionRow, { items: suggestions.items, ariaLabel: suggestions.label }),
+    showSuggestions && /* @__PURE__ */ jsx67(SuggestionRow, { items: suggestions.items, ariaLabel: suggestions.label }),
     chips
   ] }) : void 0;
-  return /* @__PURE__ */ jsxs62("div", { className: ["bf-cmp", className].filter(Boolean).join(" "), children: [
+  return /* @__PURE__ */ jsxs63("div", { className: ["bf-cmp", className].filter(Boolean).join(" "), children: [
     blockedNotice,
-    /* @__PURE__ */ jsx66(
+    /* @__PURE__ */ jsx67(
       PromptPanel,
       {
         active: focused || value.trim().length > 0,
@@ -8326,7 +8351,7 @@ function BrainComposer(props) {
         onDrop: attachments ? onDrop : void 0,
         overlay: ticket.open ? ticket.popup : mention.popup,
         status: aboveBox,
-        input: /* @__PURE__ */ jsx66(
+        input: /* @__PURE__ */ jsx67(
           "textarea",
           {
             ref: textareaRef,
@@ -8354,8 +8379,8 @@ function BrainComposer(props) {
             }
           }
         ),
-        actions: /* @__PURE__ */ jsxs62(Fragment19, { children: [
-          /* @__PURE__ */ jsx66(
+        actions: /* @__PURE__ */ jsxs63(Fragment20, { children: [
+          /* @__PURE__ */ jsx67(
             ComposerAddMenu,
             {
               labels,
@@ -8368,19 +8393,20 @@ function BrainComposer(props) {
               items: addMenuItems
             }
           ),
-          /* @__PURE__ */ jsx66(
+          /* @__PURE__ */ jsx67(
             PromptOptionsMenu,
             {
               labels: labelBundle?.options,
               disabled,
               ...groups,
               status: statusNode,
+              spend: spendTab,
               onAccountSettings
             }
           )
         ] }),
-        context: context ? /* @__PURE__ */ jsx66(Fragment19, { children: context }) : void 0,
-        primaryAction: /* @__PURE__ */ jsx66(
+        context: context ? /* @__PURE__ */ jsx67(Fragment20, { children: context }) : void 0,
+        primaryAction: /* @__PURE__ */ jsx67(
           ComposerTrailingButton,
           {
             labels,
@@ -8533,6 +8559,7 @@ export {
   TICKET_KINDS,
   ToolConfirmBar,
   ToolStep,
+  WorkSpendPanel,
   WorkStatusPanel,
   activeModelKey2 as activeModelKey,
   askUserAnchorId,

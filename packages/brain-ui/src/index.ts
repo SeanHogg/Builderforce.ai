@@ -328,6 +328,8 @@ export type { QueuedTurns, QueuedItem, QueuedTurnsOptions } from './composer/use
 // The `/` menu's Status tab — plan, meters, 30-day spend & savings, Evermind.
 export { WorkStatusPanel } from './workStatus/WorkStatusPanel';
 export type { WorkStatusPanelProps } from './workStatus/WorkStatusPanel';
+export { WorkSpendPanel } from './workStatus/WorkSpendPanel';
+export type { WorkSpendPanelProps } from './workStatus/WorkSpendPanel';
 export type { UpgradeTarget } from './workStatus/AccountStatus';
 export { DEFAULT_WORK_STATUS_LABELS, workStatusLabels } from './workStatus/labels';
 export type { WorkStatusLabels } from './workStatus/labels';

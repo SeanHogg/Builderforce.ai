@@ -17,7 +17,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { LlmUsage } from './LlmProxyService';
-import { loadPriceBook } from './catalogView';
+import { listPriceOf, loadPriceBook } from './catalogView';
 import { buildTransactionalDatabase, hasSiblingDatabase, siblingDatabaseOf } from '../../infrastructure/database/connection';
 import { clearProviderAuthAlertAfterByoSuccess } from './providerAuthAlerts';
 import { providerForVendor } from './llmProviderCatalog';
@@ -541,7 +541,10 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
         // The SAME price book the router orders cost-first calls by (`catalogView.ts`),
         // so what a call was expected to cost and what it is recorded as costing come
         // from one lookup — including its `openrouter/` prefix normalization.
-        const price = (await loadPriceBook(env)).priceOf(row.model);
+        // A BYO row is valued at LIST (`listPriceOf`, which also resolves a direct-vendor
+        // id); a platform row bills on `priceOf` alone, unchanged.
+        const book = await loadPriceBook(env);
+        const price = row.byo ? listPriceOf(book, row.model) : book.priceOf(row.model);
         pricing = price ? { prompt: price.input, completion: price.output } : undefined;
       } catch (error) { /* pricing unavailable — record tokens with cost 0 */ 
         reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "recordUsageRow" });

@@ -7211,6 +7211,7 @@ function priorResearchDigest(history) {
     const parsed = parseStepMessage(message.metadata);
     if (!parsed || parsed.step.category !== "tool") continue;
     const { label, args, result, isError } = parsed.step;
+    if (args == null && result == null) continue;
     const fullArgs = args == null ? "" : stableStringify(args);
     const key = `${label}|${fullArgs}`;
     if (seen.has(key)) continue;
@@ -14226,17 +14227,33 @@ function useChatTurns({ running, runKey, send, steer, stop, textOf: textOf2 }) {
   return { queued, submit, stop: stopTurns };
 }
 
-// src/useChatCreation.ts
-import { useCallback as useCallback9, useEffect as useEffect9, useRef as useRef9 } from "react";
-function useChatCreation({ chatId, create, autoTitle }) {
-  const chatIdRef = useRef9(chatId);
-  chatIdRef.current = chatId;
-  const createRef = useRef9(create);
-  createRef.current = create;
-  const autoTitleRef = useRef9(autoTitle);
-  autoTitleRef.current = autoTitle;
-  const creating = useRef9(null);
+// src/useRunRefreshTick.ts
+import { useEffect as useEffect9, useRef as useRef9, useState as useState11 } from "react";
+var RUN_REFRESH_MS = 3e4;
+function useRunRefreshTick(running, intervalMs = RUN_REFRESH_MS) {
+  const [tick, setTick] = useState11(0);
+  const wasRunning = useRef9(running);
   useEffect9(() => {
+    if (wasRunning.current && !running) setTick((n) => n + 1);
+    wasRunning.current = running;
+    if (!running) return;
+    const timer = setInterval(() => setTick((n) => n + 1), intervalMs);
+    return () => clearInterval(timer);
+  }, [running, intervalMs]);
+  return tick;
+}
+
+// src/useChatCreation.ts
+import { useCallback as useCallback9, useEffect as useEffect10, useRef as useRef10 } from "react";
+function useChatCreation({ chatId, create, autoTitle }) {
+  const chatIdRef = useRef10(chatId);
+  chatIdRef.current = chatId;
+  const createRef = useRef10(create);
+  createRef.current = create;
+  const autoTitleRef = useRef10(autoTitle);
+  autoTitleRef.current = autoTitle;
+  const creating = useRef10(null);
+  useEffect10(() => {
     if (chatId != null) creating.current = null;
   }, [chatId]);
   const ensureChatId = useCallback9(() => {
@@ -14320,6 +14337,7 @@ export {
   RESTING_CHAT_MODE,
   REVISIT_HARD_AT,
   REVISIT_NUDGE_AT,
+  RUN_REFRESH_MS,
   ReadCoverage,
   RepetitionLoopError,
   STEP_MESSAGE_ROLE,
@@ -14644,6 +14662,7 @@ export {
   useOptionalBrainContext,
   useQueuedTurns,
   useRegisterBrainActions,
+  useRunRefreshTick,
   useRunSnapshot,
   useToolConfirmationGate,
   utf8ByteLength2 as utf8ByteLength,

@@ -134,7 +134,7 @@ describe('getCacheVersion / bumpCacheVersionSafe', () => {
     const token = await getCacheVersion(env, 'tok-a', { l1TtlMs: 2_000 });
     expect(typeof token).toBe('string');
     expect(token.length).toBeGreaterThan(0);
-    expect(put.mock.calls[0]?.[0]).toBe('cache:ver:tok-a');
+    expect((put.mock.calls[0] as unknown[] | undefined)?.[0]).toBe('cache:ver:tok-a');
   });
 
   it('bumpCacheVersionSafe swallows KV failures', async () => {
