@@ -156,6 +156,10 @@ export type { EvermindRecallResult, EvermindRecallItem } from '@seanhogg/builder
 // The ON-DEVICE memory tier + the layering that puts it in front of the server one.
 export { onDeviceMemoryHooks, composeEvermindHooks, ON_DEVICE_ANSWER_THRESHOLD } from './onDeviceMemory';
 export type { OnDeviceAnswerStore } from './onDeviceMemory';
+// The store loader that binds the port above to a real SSM runtime, partitioned by
+// scope so two projects never share an answer. Hosts call this; they do not build one.
+export { loadOnDeviceAnswerStore, resetOnDeviceStoresForTests } from './onDeviceStore';
+export type { OnDeviceStoreScope } from './onDeviceStore';
 
 // MCP-style client action registry (the extension contract)
 export {

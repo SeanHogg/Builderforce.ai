@@ -278,6 +278,7 @@ __export(src_exports, {
   loadAgentPoolVia: () => loadAgentPoolVia,
   loadBrainPersonaAgentsVia: () => loadBrainPersonaAgentsVia,
   loadGatewayModelOptions: () => loadGatewayModelOptions,
+  loadOnDeviceAnswerStore: () => loadOnDeviceAnswerStore,
   localFallbackTrace: () => localFallbackTrace,
   localFirstApplies: () => localFirstApplies,
   localFirstWorkload: () => localFirstWorkload,
@@ -347,6 +348,7 @@ __export(src_exports, {
   repeatedFailureAdvisory: () => repeatedFailureAdvisory,
   resetApiVersionCache: () => resetApiVersionCache,
   resetBrainRunStore: () => resetBrainRunStore,
+  resetOnDeviceStoresForTests: () => resetOnDeviceStoresForTests,
   resolveBrainStream: () => resolveBrainStream,
   resolveContextWindow: () => resolveContextWindow,
   resolveRecipient: () => resolveRecipient,
@@ -6702,6 +6704,52 @@ function composeEvermindHooks(...layers) {
   };
 }
 
+// src/onDeviceStore.ts
+var embedder = null;
+function sharedEmbedder() {
+  if (embedder) return embedder;
+  const attempt = (async () => {
+    if (!hasWebGPU()) return null;
+    const mod = await import("@seanhogg/builderforce-memory");
+    const runtime = await mod.SSM.create({ session: { modelSize: "small" } });
+    return (text) => runtime.embed(text);
+  })().catch((err) => {
+    if (embedder === attempt) embedder = null;
+    console.warn("[on-device-store] unavailable \u2014 on-device memory off:", err);
+    return null;
+  });
+  embedder = attempt;
+  return attempt;
+}
+var stores = /* @__PURE__ */ new Map();
+function loadOnDeviceAnswerStore(scope) {
+  if (!hasWebGPU()) return Promise.resolve(null);
+  const existing = stores.get(scope);
+  if (existing) return existing;
+  const built = (async () => {
+    const embed = await sharedEmbedder();
+    if (!embed) return null;
+    const mod = await import("@seanhogg/builderforce-memory");
+    return new mod.SemanticCache({
+      embed,
+      threshold: ON_DEVICE_ANSWER_THRESHOLD,
+      ttlMs: 24 * 60 * 60 * 1e3
+    });
+  })().catch((err) => {
+    console.warn("[on-device-store] unavailable \u2014 on-device memory off:", err);
+    return null;
+  });
+  stores.set(scope, built);
+  void built.then((store) => {
+    if (store == null) stores.delete(scope);
+  });
+  return built;
+}
+function resetOnDeviceStoresForTests() {
+  stores.clear();
+  embedder = null;
+}
+
 // src/BrainActionsContext.tsx
 var import_react3 = require("react");
 
@@ -8390,7 +8438,7 @@ var STEP_BATCH_MAX = 25;
 var STEP_BATCH_WAIT_MS = 5e3;
 var isStepRow = (m) => m.role === "tool";
 var durability = null;
-var stores = /* @__PURE__ */ new Map();
+var stores2 = /* @__PURE__ */ new Map();
 var runKeys = /* @__PURE__ */ new Set();
 var replays = /* @__PURE__ */ new Map();
 var stopListening = null;
@@ -8398,7 +8446,7 @@ function installStepDurability(next) {
   stopListening?.();
   stopListening = null;
   durability = next;
-  stores.clear();
+  stores2.clear();
   runKeys.clear();
   replays.clear();
   if (!next) return;
@@ -8408,10 +8456,10 @@ function installStepDurability(next) {
   void drainStoredSteps();
 }
 var optionsFor = (d, key) => {
-  let store = stores.get(key);
+  let store = stores2.get(key);
   if (!store) {
     store = d.storeFor(key);
-    stores.set(key, store);
+    stores2.set(key, store);
   }
   return {
     store,
@@ -9125,10 +9173,12 @@ function workFiledNotStaffedVerdict(s) {
   const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
   return `Likely WORK FILED BUT NOT STAFFED \u2014 ${s.ticketsCreated} ticket(s) created, ${s.dispatched} dispatched${refused}. Nobody is running the work.`;
 }
-function formatStaffingSummary(s) {
+function formatStaffingSummary(s, opts) {
   if (s.verdict === "no-work-filed" && s.dispatchAttempts === 0 && s.personaSubagents.length === 0) return [];
   const refused = s.dispatchRefusals.length ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})` : "";
-  const tail = s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
+  const shipped = opts?.sessionShipped ?? 0;
+  const sessionDidIt = shipped > 0 && (s.verdict === "filed-not-staffed" || s.verdict === "staffing-refused");
+  const tail = sessionDidIt ? ` \u2014 the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required` : s.verdict === "filed-not-staffed" ? " \u2014 the work was filed but nobody is running it" : s.verdict === "staffing-refused" ? " \u2014 every attempt to staff the work was refused, so nobody is running it" : "";
   const lines = [
     `Staffing: ${s.ticketsCreated} ticket(s) filed \xB7 ${s.dispatched} dispatched${refused} \xB7 ${s.personaSubagents.length} persona sub-agent(s)${tail}`
   ];
@@ -9731,6 +9781,55 @@ function byteLen(v) {
   const s = typeof v === "string" ? v : JSON.stringify(v ?? "");
   return s.length;
 }
+var MEMORY_READ_TOOLS = /* @__PURE__ */ new Set(["recall_facts", "builtin_recall_facts"]);
+var MEMORY_WRITE_TOOLS = /* @__PURE__ */ new Set(["remember_fact", "builtin_remember_fact"]);
+function memoryUsageInTrace(events) {
+  const out = {
+    evermindRecalls: 0,
+    evermindItems: 0,
+    evermindPromptTokens: 0,
+    learnSteps: 0,
+    reconcileSteps: 0,
+    factsRead: 0,
+    factsWritten: 0
+  };
+  for (const ev of events) {
+    if (ev.category === "recall" && ev.label === "evermind.recall") {
+      out.evermindRecalls += 1;
+      const result = ev.result;
+      if (result && typeof result === "object") {
+        const count = result.count;
+        if (typeof count === "number") out.evermindItems += count;
+        const tokens2 = result.blockTokens;
+        if (typeof tokens2 === "number") out.evermindPromptTokens += tokens2;
+      }
+    } else if (ev.category === "learn") {
+      out.learnSteps += 1;
+    } else if (ev.category === "reconcile") {
+      out.reconcileSteps += 1;
+    } else if (ev.category === "tool" && !ev.isError && !isFailedToolResult(ev.result)) {
+      if (MEMORY_READ_TOOLS.has(ev.label)) out.factsRead += 1;
+      if (MEMORY_WRITE_TOOLS.has(ev.label)) out.factsWritten += 1;
+    }
+  }
+  return out;
+}
+function formatMemoryUsage(m) {
+  const used = m.evermindRecalls + m.learnSteps + m.reconcileSteps + m.factsRead + m.factsWritten;
+  if (used === 0) {
+    return "BuilderForce memory: none recorded in this run \u2014 no Evermind recall step, no learn/reconcile, no recall_facts/remember_fact. A recall the loop did not trace is indistinguishable from one that never ran.";
+  }
+  const tok = m.evermindPromptTokens > 0 ? `, ~${m.evermindPromptTokens.toLocaleString("en-US")} prompt tok` : "";
+  return `BuilderForce memory: Evermind recalls ${m.evermindRecalls} (${m.evermindItems} item(s)${tok}) \xB7 learn steps ${m.learnSteps} \xB7 reconcile ${m.reconcileSteps} \xB7 project-fact reads ${m.factsRead} \xB7 project-fact writes ${m.factsWritten}`;
+}
+function sessionShippedInTrace(events) {
+  let n = 0;
+  for (const ev of events) {
+    if (ev.category !== "tool" || ev.isError || isFailedToolResult(ev.result)) continue;
+    if (isCodeChangeTool(ev.label) || ev.label === "git_commit" || ev.label === "git_push") n += 1;
+  }
+  return n;
+}
 function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}) {
   const llm = events.filter((e) => e.category === "llm");
   const toolEvents2 = events.filter((e) => e.category === "tool");
@@ -9809,7 +9908,9 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   const progress = computeRunProgress(events, messages);
   const noProgress = progress.spinning || progress.noEffect && !ctx.running;
   const staffing = staffingSummaryInTrace(events);
-  const workFiledNotStaffed = staffing.verdict === "filed-not-staffed" || staffing.verdict === "staffing-refused";
+  const sessionShipped = sessionShippedInTrace(events);
+  const memoryUsage = memoryUsageInTrace(events);
+  const workFiledNotStaffed = sessionShipped === 0 && (staffing.verdict === "filed-not-staffed" || staffing.verdict === "staffing-refused");
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
   const healthy = errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal && !announcedUnmadeToolCall && !noProgress && unresolvedAppFailures === 0 && didWork;
   const likelyCause = memoryOnlyRun ? "memory-answered" : noToolsAdvertised ? "no-tools-advertised" : narratedUnadvertisedTools.length > 0 ? "tool-not-advertised" : announcedUnmadeToolCall ? "tool-calls-not-emitted" : noProgress ? "no-progress" : contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : unresolvedAppFailures > 0 ? "app-errors-unresolved" : workFiledNotStaffed ? "work-filed-not-staffed" : healthy ? "healthy" : "inconclusive";
@@ -9848,6 +9949,8 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
     progress,
     contextPressureOnly,
     staffing,
+    sessionShipped,
+    memoryUsage,
     unresolvedAppFailures,
     likelyCause
   };
@@ -9896,7 +9999,8 @@ function formatBrainDiagnostics(d) {
   const pressure = contextPressureLine(d);
   if (pressure) lines.push(pressure);
   lines.push(...d.progress ? formatRunProgress(d.progress) : []);
-  lines.push(...d.staffing ? formatStaffingSummary(d.staffing) : []);
+  if (d.memoryUsage) lines.push(formatMemoryUsage(d.memoryUsage));
+  lines.push(...d.staffing ? formatStaffingSummary(d.staffing, { sessionShipped: d.sessionShipped }) : []);
   if (d.errorSteps?.length) {
     for (const e of d.errorSteps) lines.push(`Failed step: ${e.label}${e.model ? ` on ${e.model}` : ""} \u2014 ${e.message}`);
     if (d.errors > d.errorSteps.length) lines.push(`(+${d.errors - d.errorSteps.length} earlier failure(s) not listed)`);
@@ -10434,14 +10538,21 @@ async function recallForRun(c, convo, evermind) {
   if (recalled?.seeded && recalled.items.length > 0) {
     const block = (0, import_evermind2.formatEvermindMemoryBlock)(recalled.items);
     if (block) {
+      const blockTokens = transcriptTokens([{ role: "system", content: block }]);
       pushTrace(c, {
         ts: nowIso(),
         category: "recall",
         label: "evermind.recall",
         args: { query, version: recalled.version },
-        result: { count: recalled.items.length, version: recalled.version, mode: recalled.mode, items: recalled.items }
+        result: {
+          count: recalled.items.length,
+          version: recalled.version,
+          mode: recalled.mode,
+          blockTokens,
+          items: recalled.items
+        }
       });
-      return { recalled, block, blockTokens: transcriptTokens([{ role: "system", content: block }]) };
+      return { recalled, block, blockTokens };
     }
   }
   return { recalled, block: null, blockTokens: 0 };
@@ -14145,6 +14256,17 @@ function fmtAdvertised(tools) {
   }
   return "";
 }
+function usd(n) {
+  return String.fromCharCode(36) + n.toFixed(n >= 1 ? 2 : 4);
+}
+function formatChatSpend(spend) {
+  if (!spend?.spend) return null;
+  const s = spend.spend;
+  const saved = spend.saved;
+  const savedBit = saved && (saved.measuredUsd > 0 || saved.estimatedUsd > 0) ? ` \xB7 saved ${usd(saved.measuredUsd)} measured / ${usd(saved.estimatedUsd)} estimated (${saved.tokensSaved.toLocaleString("en-US")} tok)` : "";
+  const unpriced = s.unpricedTokens > 0 ? ` \xB7 ${s.unpricedTokens.toLocaleString("en-US")} tok unpriced` : "";
+  return `- This chat's cost: platform ${usd(s.platformUsd)} \xB7 your key ${usd(s.yourKeyUsd)} \xB7 total ${usd(s.totalUsd)} \xB7 ${s.promptTokens.toLocaleString("en-US")} prompt + ${s.completionTokens.toLocaleString("en-US")} completion tok \xB7 ${s.requests} request(s)${unpriced}${savedBit}`;
+}
 function formatChatDiagnostics(d) {
   const lines = ["## Chat diagnostics"];
   if (d.surface) lines.push(`- Surface: ${d.surface} (where this CONVERSATION runs; where each dispatched RUN ran is under Execution history)`);
@@ -14201,6 +14323,8 @@ function formatChatDiagnostics(d) {
   } else {
     lines.push("- Plan / usage: not gathered (account snapshot unavailable \u2014 signed out, or the consumption endpoint failed)");
   }
+  const spendLine = formatChatSpend(d.spend);
+  lines.push(spendLine ?? "- This chat's cost: not on this chat row (no spend rollup \u2014 dollars are not the plan meters above)");
   const tools = d.tools;
   if (tools) {
     lines.push(
@@ -14380,6 +14504,7 @@ async function gatherChatDiagnostics(src) {
     runs,
     tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
     account,
+    spend: src.spend ?? null,
     tools: src.tools ? {
       count: src.tools.count,
       error: src.tools.error ?? null,
@@ -15023,6 +15148,7 @@ function useChatCreation({ chatId, create, autoTitle }) {
   loadAgentPoolVia,
   loadBrainPersonaAgentsVia,
   loadGatewayModelOptions,
+  loadOnDeviceAnswerStore,
   localFallbackTrace,
   localFirstApplies,
   localFirstWorkload,
@@ -15092,6 +15218,7 @@ function useChatCreation({ chatId, create, autoTitle }) {
   repeatedFailureAdvisory,
   resetApiVersionCache,
   resetBrainRunStore,
+  resetOnDeviceStoresForTests,
   resolveBrainStream,
   resolveContextWindow,
   resolveRecipient,
