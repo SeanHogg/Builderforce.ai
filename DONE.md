@@ -8,7 +8,7 @@
   - Nuxt 4 installs but stalls after "Starting Nuxt...".
 - Opus reviewed the work twice and Sonnet applied every finding; 68 targeted runtime tests pass.
 
-## ✅ RESOLVED 2026-10-18 — AI surface reuse: the duplicate logic removed across Web, VS Code and Rovr (brain-embedded 2026.10.32 · brain-ui 2026.10.16 · rides frontend 2026.10.71 · VSIX 2026.10.44 · Rovr 2026.10.10)
+## ✅ RESOLVED 2026-10-18 — AI surface reuse: the duplicate logic removed across Web, VS Code and Rovr (brain-embedded 2026.10.32 · brain-ui 2026.10.16 · rides frontend 2026.10.71 · VSIX 2026.10.45 · Rovr 2026.10.10)
 
 Closes the AI Surface Reuse Audit. Each duplicate was folded into the best existing copy and every caller migrated; an Opus review of the pass found one regression and five leftovers, all fixed.
 
