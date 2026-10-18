@@ -1,4 +1,4 @@
-## ✅ RESOLVED 2026-10-18 — Architecture review: Neon calls cut across 11 batches, every Neon batch Opus-reviewed and fixed (api 2026.10.55 · frontend 2026.10.72 · agent-runtime 2026.10.11 · brain-embedded 2026.10.33)
+## ✅ RESOLVED 2026-10-18 — Architecture review: Neon calls cut across 11 batches, every Neon batch Opus-reviewed and fixed (api 2026.10.55 → 2026.10.56 · frontend 2026.10.72 → 2026.10.73 · agent-runtime 2026.10.11 · brain-embedded 2026.10.33)
 
 Review and per-batch ledger: https://claude.ai/artifact/Kzm2Pp136DUx3E5oCUWgEe. Part of the code rode `33944e338` / `ac2e0eb6a` (swept from the working tree), the rest is this commit.
 - **Gateway (S1 + review):** tenant provider rows cached; usage totals cached with a 60 s reload, and increments stay in memory only (no KV write per call); `llm_usage_log.metadata` / `llm_traces.caller_metadata` go through a denylist (drops `guest*`, caps size) that keeps `agentRef` / `cloudAgentRef` / `step`; `bfk_` last-used stamp throttled through `touchTenantApiKey`.
