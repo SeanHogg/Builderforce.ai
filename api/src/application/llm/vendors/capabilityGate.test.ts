@@ -3,9 +3,10 @@ import { ModelInputUnsupportedError, entryRefusesImages, requestCarriesImages } 
 import { CascadeExhaustedError, catalogEntry, dispatchVendor, getModule } from './registry';
 
 // ---------------------------------------------------------------------------
-// Vision gate — production 2026-10-03..10: `direct/minimax/MiniMax-M1` refused 31
-// of 61 calls with `invalid params, MiniMax-M1 not support img (2013)`. Image input
-// must never be dispatched to a model the catalog declares text-only.
+// Vision gate — production 2026-10-03..10: MiniMax-M1 (since dropped; floor is now
+// MiniMax-M2.7, which is also text-only) refused 31 of 61 calls with
+// `invalid params, MiniMax-M1 not support img (2013)`. Image input must never be
+// dispatched to a model the catalog declares text-only.
 // ---------------------------------------------------------------------------
 
 const originalFetch = globalThis.fetch;
@@ -55,26 +56,32 @@ describe('entryRefusesImages', () => {
     expect(entryRefusesImages(undefined)).toBe(false);
   });
 
-  it('MiniMax M1 / Text-01 are declared text-only in the catalog', () => {
+  it('MiniMax M2.7 is the catalog floor and is declared text-only', () => {
     const minimax = getModule('minimax').catalog;
-    expect(minimax.find((e) => e.id === 'MiniMax-M1')?.capabilities).toEqual(['tools']);
-    expect(minimax.find((e) => e.id === 'MiniMax-Text-01')?.capabilities).toEqual(['tools']);
+    expect(minimax.map((e) => e.id)).toEqual([
+      'MiniMax-M3.1-Flash-Preview',
+      'MiniMax-M3',
+      'MiniMax-M2.7',
+      'MiniMax-M2.7-highspeed',
+    ]);
+    expect(minimax.find((e) => e.id === 'MiniMax-M2.7')?.capabilities).toEqual(['tools']);
+    expect(minimax.find((e) => e.id === 'MiniMax-M2.7-highspeed')?.capabilities).toEqual(['tools']);
     expect(entryRefusesImages(catalogEntry('claude-opus-5-5') ?? undefined)).toBe(false);
   });
 });
 
 describe('dispatchVendor vision gate', () => {
-  it('refuses a strict MiniMax-M1 pin carrying an image with a typed 400 — no upstream call', async () => {
+  it('refuses a strict MiniMax-M2.7 pin carrying an image with a typed 400 — no upstream call', async () => {
     const fetchFn = okFetch();
     const err = await dispatchVendor({
       env: { MINIMAX_API_KEY: 'mm' },
-      modelChain: ['direct/minimax/MiniMax-M1'],
+      modelChain: ['direct/minimax/MiniMax-M2.7'],
       messages: IMAGE_MESSAGES,
     }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ModelInputUnsupportedError);
     expect((err as ModelInputUnsupportedError).status).toBe(400);
     expect((err as ModelInputUnsupportedError).capability).toBe('vision');
-    expect((err as Error).message).toContain('direct/minimax/MiniMax-M1');
+    expect((err as Error).message).toContain('direct/minimax/MiniMax-M2.7');
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
@@ -82,7 +89,7 @@ describe('dispatchVendor vision gate', () => {
     const fetchFn = okFetch();
     const result = await dispatchVendor({
       env: { MINIMAX_API_KEY: 'mm', GOOGLE_API_KEY: 'g' },
-      modelChain: ['direct/minimax/MiniMax-M1', 'googleai/gemini-2.5-flash'],
+      modelChain: ['direct/minimax/MiniMax-M2.7', 'googleai/gemini-2.5-flash'],
       messages: IMAGE_MESSAGES,
     });
     expect(result.vendorUsed).toBe('googleai');
@@ -95,11 +102,11 @@ describe('dispatchVendor vision gate', () => {
     (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async () => new Response('busy', { status: 503 })) as unknown as typeof fetch;
     const err = await dispatchVendor({
       env: { MINIMAX_API_KEY: 'mm', GOOGLE_API_KEY: 'g' },
-      modelChain: ['direct/minimax/MiniMax-M1', 'googleai/gemini-2.5-flash'],
+      modelChain: ['direct/minimax/MiniMax-M2.7', 'googleai/gemini-2.5-flash'],
       messages: IMAGE_MESSAGES,
     }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(CascadeExhaustedError);
-    expect((err as CascadeExhaustedError).skippedNoVision).toEqual(['minimax:direct/minimax/MiniMax-M1']);
+    expect((err as CascadeExhaustedError).skippedNoVision).toEqual(['minimax:direct/minimax/MiniMax-M2.7']);
     expect((err as Error).message).toContain('skipped no-vision');
   });
 
@@ -107,7 +114,7 @@ describe('dispatchVendor vision gate', () => {
     const fetchFn = okFetch();
     const result = await dispatchVendor({
       env: { MINIMAX_API_KEY: 'mm' },
-      modelChain: ['direct/minimax/MiniMax-M1'],
+      modelChain: ['direct/minimax/MiniMax-M2.7'],
       messages: TEXT_MESSAGES,
     });
     expect(result.vendorUsed).toBe('minimax');

@@ -470,12 +470,6 @@ function buildMinimaxProvider(): ProviderConfig {
         reasoning: true,
         contextWindow: 204_800,
       }),
-      buildMinimaxTextModel({
-        id: "MiniMax-M2.5",
-        name: "MiniMax M2.5",
-        reasoning: true,
-        contextWindow: 204_800,
-      }),
       buildMinimaxModel({
         id: MINIMAX_DEFAULT_VISION_MODEL_ID,
         name: "MiniMax VL 01",
@@ -514,12 +508,6 @@ function buildMinimaxPortalProvider(): ProviderConfig {
       buildMinimaxTextModel({
         id: "MiniMax-M2.7-highspeed",
         name: "MiniMax M2.7 Highspeed",
-        reasoning: true,
-        contextWindow: 204_800,
-      }),
-      buildMinimaxTextModel({
-        id: "MiniMax-M2.5",
-        name: "MiniMax M2.5",
         reasoning: true,
         contextWindow: 204_800,
       }),

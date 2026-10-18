@@ -30,11 +30,11 @@ describe('price book', () => {
   });
 
   it('values a direct-vendor id at its catalog LIST price, but never bills it', () => {
-    const book = priceBookFrom([model('minimax/minimax-m1', 4e-7, 2.2e-6)]);
+    const book = priceBookFrom([model('minimax/minimax-m2.7', 4e-7, 2.2e-6)]);
     // Billing (`priceOf`) is unchanged: a direct route is not a catalog id.
-    expect(book.priceOf('direct/minimax/MiniMax-M1')).toBeUndefined();
+    expect(book.priceOf('direct/minimax/MiniMax-M2.7')).toBeUndefined();
     // The list price a BYO call / a saving is valued at resolves it.
-    expect(listPriceOf(book, 'direct/minimax/MiniMax-M1')).toEqual({ input: 4e-7, output: 2.2e-6 });
+    expect(listPriceOf(book, 'direct/minimax/MiniMax-M2.7')).toEqual({ input: 4e-7, output: 2.2e-6 });
     expect(listPriceOf(book, 'direct/minimax/unknown')).toBeUndefined();
   });
 

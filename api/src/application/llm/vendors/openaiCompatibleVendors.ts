@@ -277,23 +277,17 @@ const SPECS: ReadonlyArray<VendorSpec> = [
       'MiniMax-M3',
       'MiniMax-M2.7',
       'MiniMax-M2.7-highspeed',
-      'MiniMax-M2.5',
-      'MiniMax-M1',
-      'MiniMax-Text-01',
     ],
-    // M3 / M3.1-Flash-Preview are multimodal. M1 and Text-01 stay TEXT-only
-    // (MiniMax's dedicated vision model is `MiniMax-VL-01`): image parts sent to M1
-    // answer `invalid params, MiniMax-M1 not support img (2013)` — 31 refusals in
-    // 2026-10-03..10. Declaring the set lets the dispatcher skip TEXT-only ids for
+    // M2.7 is the floor — M1, Text-01 and M2.5 are not offered (auto-select led with
+    // MiniMax-M1 before they were dropped). M3 / M3.1-Flash-Preview are multimodal;
+    // the M2.7 pair stays TEXT-only (MiniMax's dedicated vision model is
+    // `MiniMax-VL-01`). Declaring the set lets the dispatcher skip TEXT-only ids for
     // image-bearing requests instead of spending the attempt.
     modelCapabilities: {
       'MiniMax-M3.1-Flash-Preview': ['tools', 'vision'],
       'MiniMax-M3': ['tools', 'vision'],
       'MiniMax-M2.7': ['tools'],
       'MiniMax-M2.7-highspeed': ['tools'],
-      'MiniMax-M2.5': ['tools'],
-      'MiniMax-M1': ['tools'],
-      'MiniMax-Text-01': ['tools'],
     },
     flagships: { agentic: 'MiniMax-M3.1-Flash-Preview', chat: 'MiniMax-M3' },
   },

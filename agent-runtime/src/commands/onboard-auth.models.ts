@@ -100,19 +100,6 @@ const MINIMAX_MODEL_CATALOG = {
     reasoning: true,
     contextWindow: 204_800,
   },
-  // Older ids stay resolvable so existing configs keep their names/reasoning flags.
-  "MiniMax-M2.5": { name: "MiniMax M2.5", reasoning: true, contextWindow: 204_800 },
-  "MiniMax-M2.5-Lightning": {
-    name: "MiniMax M2.5 Lightning",
-    reasoning: true,
-    contextWindow: 204_800,
-  },
-  "MiniMax-M2.1": { name: "MiniMax M2.1", reasoning: false, contextWindow: 200_000 },
-  "MiniMax-M2.1-lightning": {
-    name: "MiniMax M2.1 Lightning",
-    reasoning: false,
-    contextWindow: 200_000,
-  },
 } as const;
 
 type MinimaxCatalogId = keyof typeof MINIMAX_MODEL_CATALOG;

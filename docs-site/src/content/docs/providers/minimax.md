@@ -21,7 +21,6 @@ depth) and **MiniMax-M3** (frontier multimodal coding, ~100+ tps, 1M context).
 | **MiniMax-M3** | 1,000,000 | Frontier multimodal coding (~100+ tps). Default chat / API-key model. |
 | **MiniMax-M2.7** | 204,800 | Recursive self-improvement (~60 tps). |
 | **MiniMax-M2.7-highspeed** | 204,800 | Same quality as M2.7, faster (~100 tps). |
-| **MiniMax-M2.5** | 204,800 | Previous generation; still live on the API. |
 
 ## MiniMax-M2.7 vs MiniMax-M2.7-highspeed
 
@@ -204,7 +203,6 @@ Make sure the model id is **case‑sensitive**:
 - `minimax/MiniMax-M3`
 - `minimax/MiniMax-M2.7`
 - `minimax/MiniMax-M2.7-highspeed`
-- `minimax/MiniMax-M2.5`
 
 Then recheck with:
 

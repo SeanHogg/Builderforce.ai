@@ -18,7 +18,7 @@ const OPUS_FLAGSHIP = vendorFlagship('anthropic', true)!;
 const QWEN_MAX = 'direct/qwen/qwen3.8-max';
 const QWEN_FLASH = 'direct/qwen/qwen3.8-flash';
 const OPUS = OPUS_FLAGSHIP;
-const MINIMAX = 'direct/minimax/MiniMax-M1';
+const MINIMAX = 'direct/minimax/MiniMax-M2.7';
 
 describe('resolveRoleObjective', () => {
   it('code pulls to the strongest model, analysis keeps the tenant order, cheap roles pull down', () => {

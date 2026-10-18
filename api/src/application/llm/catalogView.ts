@@ -29,7 +29,7 @@ export interface PriceBook {
   /**
    * The LIST price used to value a call someone else paid for (a BYO key's spend, the
    * tokens memory kept off a call): `priceOf`, then a direct-vendor id
-   * (`direct/minimax/MiniMax-M1`) matched to the catalog's `minimax/minimax-m1`.
+   * (`direct/minimax/MiniMax-M2.7`) matched to the catalog's `minimax/minimax-m2.7`.
    * Never used for billing — what the platform charges stays on `priceOf`.
    */
   listPriceOf?(model: string): ModelPrice | undefined;

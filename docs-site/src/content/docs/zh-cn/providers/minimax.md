@@ -25,7 +25,6 @@ MiniMax 是一家构建 **M2/M3** 模型系列的 AI 公司。当前面向编程
 | **MiniMax-M3** | 1,000,000 | 前沿多模态编程（约 100+ tps）。默认对话 / API Key 模型。 |
 | **MiniMax-M2.7** | 204,800 | 递归自我改进（约 60 tps）。 |
 | **MiniMax-M2.7-highspeed** | 204,800 | 与 M2.7 同等质量，更快（约 100 tps）。 |
-| **MiniMax-M2.5** | 204,800 | 上一代；API 上仍可用。 |
 
 ## MiniMax-M2.7 vs MiniMax-M2.7-highspeed
 
@@ -205,7 +204,6 @@ builderforce onboard --auth-choice minimax-portal
 - `minimax/MiniMax-M3`
 - `minimax/MiniMax-M2.7`
 - `minimax/MiniMax-M2.7-highspeed`
-- `minimax/MiniMax-M2.5`
 
 然后重新检查：
 

@@ -103,7 +103,6 @@ describe("models-config", () => {
           "MiniMax-M3",
           "MiniMax-M2.7",
           "MiniMax-M2.7-highspeed",
-          "MiniMax-M2.5",
           "MiniMax-VL-01",
         ],
       });
