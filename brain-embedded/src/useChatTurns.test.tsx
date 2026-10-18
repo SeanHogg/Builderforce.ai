@@ -46,8 +46,8 @@ describe('useChatCreation', () => {
     expect(create).toHaveBeenCalledTimes(2);
   });
 
-  it('auto-titles through the port and swallows its failure', async () => {
-    const autoTitle = vi.fn().mockRejectedValue(new Error('no title'));
+  it('auto-titles through the port, which owns its own failure', async () => {
+    const autoTitle = vi.fn().mockResolvedValue(undefined);
     const { result } = renderHook(() => useChatCreation({ chatId: 3, create: vi.fn(), autoTitle }));
     await expect(result.current.onFirstUserTurn(3, 'Plan the launch')).resolves.toBeUndefined();
     expect(autoTitle).toHaveBeenCalledWith(3, 'Plan the launch');

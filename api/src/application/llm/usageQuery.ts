@@ -270,7 +270,7 @@ export async function readUsageBreakdown<D extends UsageDimension>(
   return rows.map((r) => {
     const keys: Record<string, unknown> = {};
     for (const k of Object.keys(dim.keys)) keys[k] = r[k];
-    return { ...keys, ...totalsOf(r as Partial<RawTotals>), modelCount: Number(r.modelCount ?? 0) } as UsageGroup<D>;
+    return { ...keys, ...totalsOf(r as Partial<RawTotals>), modelCount: Number(r.modelCount ?? 0) } as unknown as UsageGroup<D>;
   });
 }
 

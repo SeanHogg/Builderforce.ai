@@ -9,6 +9,7 @@ vi.mock('./membershipChanged', () => ({ membershipChanged: m.membershipChanged }
 vi.mock('../../infrastructure/audit/adminAudit', () => ({ writeAdminAudit: m.writeAdminAudit }));
 vi.mock('../task/taskAssigneeCache', () => ({ invalidateTaskAssignees: m.invalidateTaskAssignees }));
 
+import { TenantRole } from '../../domain/shared/types';
 import { changeMemberRole } from './memberRoleChange';
 
 const env = {} as never;
@@ -26,7 +27,7 @@ function makeDb(memberRows: unknown[]) {
   };
 }
 
-const input = { tenantId: 7, actorUserId: 'actor', targetUserId: 'u9', role: 'manager' as const };
+const input = { tenantId: 7, actorUserId: 'actor', targetUserId: 'u9', role: TenantRole.MANAGER };
 
 describe('changeMemberRole — one use case, manager and platform-admin scopes', () => {
   beforeEach(() => { for (const fn of Object.values(m)) fn.mockReset().mockResolvedValue(undefined); });

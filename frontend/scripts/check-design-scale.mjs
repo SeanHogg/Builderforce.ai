@@ -357,7 +357,9 @@ const COLOUR_EXEMPT = [
   // cards and its panels collapsed into one flat sheet. Exempt on the same
   // grounds as `globals.css`: a token has to be declared somewhere, and this is
   // where the canvas's are.
-  /^components\/creation-canvas\/CreationCanvas\.module\.css$/,
+  // ...and the per-surface sheets it was split into (`styles/*.module.css`): the
+  // same palette, moved, not new literals.
+  /^components\/creation-canvas\/(CreationCanvas\.module\.css|styles\/[^/]+\.module\.css)$/,
   // The landing hero is a LIT SCENE in both themes, so it overrides the shell's
   // ink inside itself. Same grounds as the board: a scope that declares its own
   // palette has to state values, and an override written as `var()` of the thing
@@ -579,7 +581,9 @@ const FONT_SIZE_KEYWORDS = new Set(['inherit', 'unset', 'initial', 'revert', 'sm
 const FONT_SIZE_EXEMPT = [
   /^app\/globals\.css$/,
   /\.test\.(tsx?|css)$/,
-  /^components\/creation-canvas\/CreationCanvas\.module\.css$/,
+  // ...and the per-surface sheets it was split into (`styles/*.module.css`): the
+  // same palette, moved, not new literals.
+  /^components\/creation-canvas\/(CreationCanvas\.module\.css|styles\/[^/]+\.module\.css)$/,
   /^lib\/printDocument\.ts$/,
   /^lib\/creationDeliverables\.ts$/,
   /^lib\/courseLms\.ts$/,
@@ -628,7 +632,9 @@ const RADIUS_EXEMPT = [
   // `[data-sticky-shape]` DRAWS eight geometries, so 22px is what makes a `round`
   // sticky round and 2px is what makes a `square` one square. Snapping them to the
   // chrome's radius scale would change the shape the author picked.
-  /^components\/creation-canvas\/CreationCanvas\.module\.css$/,
+  // ...and the per-surface sheets it was split into (`styles/*.module.css`): the
+  // same palette, moved, not new literals.
+  /^components\/creation-canvas\/(CreationCanvas\.module\.css|styles\/[^/]+\.module\.css)$/,
 ];
 
 function collect(dir, out = []) {

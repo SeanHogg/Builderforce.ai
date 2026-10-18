@@ -32,8 +32,9 @@ export interface ChatCreationOptions {
   /** Create (and select) the chat; resolves its id, or null when it could not. May throw. */
   create: () => Promise<number | null>;
   /**
-   * Optional: name a still-untitled chat from its first user turn (best-effort — a
-   * rejection is swallowed). Omit to leave chats untitled.
+   * Optional: name a still-untitled chat from its first user turn. Best-effort, and the
+   * port owns its failure: it must not reject (`useBrainChats().autoTitle` keeps the
+   * placeholder and re-arms a retry). Omit to leave chats untitled.
    */
   autoTitle?: (chatId: number, firstUserText: string) => Promise<unknown> | void;
 }
@@ -82,11 +83,7 @@ export function useChatCreation({ chatId, create, autoTitle }: ChatCreationOptio
   }, []);
 
   const onFirstUserTurn = useCallback(async (id: number, firstUserText: string) => {
-    try {
-      await autoTitleRef.current?.(id, firstUserText);
-    } catch {
-      // Best-effort: an untitled chat is still a working chat.
-    }
+    await autoTitleRef.current?.(id, firstUserText);
   }, []);
 
   return { ensureChatId, onFirstUserTurn };
