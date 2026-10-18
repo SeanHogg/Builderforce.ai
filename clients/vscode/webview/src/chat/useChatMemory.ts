@@ -7,11 +7,12 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
-import { projectMemoryHooks, type BrainChat, type BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
+import { type BrainChat, type BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
 import { useChatMemorySwitch } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from '../authedFetch';
 import { adoptChatProject } from '../adoptChatProject';
 import { getToken, refreshToken, type InitData } from '../vscodeBridge';
+import { vsixWebviewMemoryHooks } from './vsixWebviewMemoryHooks';
 
 export function useChatMemory({ init, chatId, activeChat, projectId, persistence, reloadChats, persistMemory, armMemory }: {
   init: InitData;
@@ -49,14 +50,15 @@ export function useChatMemory({ init, chatId, activeChat, projectId, persistence
     });
   }, [chatId, init.project?.id, persistence, reloadChats]);
 
-  // The project's server memory (recall → memory-first answer → write-through), built
-  // by the SHARED factory the web Brain uses so the two hosts cannot drift apart on what
-  // the Brain remembers. `chatId` makes recall CHAT-TIERED: this conversation's own
-  // memories first, then the wider project's.
+  // On-device first, then the project's server memory — the same order the web and Rovr
+  // use. This chat runs in the Chromium webview, so the on-device tier is real here
+  // (null without WebGPU, partitioned by project). The extension-host run is a different
+  // path and stays server-only: Node has no WebGPU, and a loader there would always be
+  // null. `chatId` makes recall CHAT-TIERED: this conversation's own memories first.
   const evermind = useMemo(() => {
     if (projectId == null) return undefined;
     const req = authedFetch(init.baseUrl, getToken, () => void refreshToken());
-    return projectMemoryHooks(projectId, req, chatId, 'vsix');
+    return vsixWebviewMemoryHooks(projectId, req, chatId);
   }, [projectId, init.baseUrl, chatId]);
 
   // Per-chat memory switch: a property of the CONVERSATION (`brain_chats.memory_enabled`)

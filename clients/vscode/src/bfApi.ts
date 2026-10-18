@@ -627,6 +627,12 @@ export function bfApiRequest(secrets: vscode.SecretStorage): ProjectMemoryReques
  * The project-Evermind memory hooks for a run loop, bound to one project — the host half
  * of "recall → memory-first answer → cache the answer", built by the shared factory.
  * `chatId` tiers recall on the conversation when it is a server chat.
+ *
+ * Server tier only, on purpose. This runs in the extension host (Node), which has no
+ * WebGPU, so composing `loadOnDeviceAnswerStore` here would be a store that is always
+ * null — wiring it would look like on-device memory and never answer. The interactive
+ * chat composes that tier in the webview (`vsixWebviewMemoryHooks`). A Node WebGPU
+ * store is what would unblock this path; do not fake it.
  */
 export function projectEvermindHooks(
   secrets: vscode.SecretStorage,
