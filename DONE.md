@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-10-18 — `@seanhogg/builderforce-webcontainers` 2026.10.11 published and adopted
+
+- `456ee8be7` bumped `api` and `frontend` to `^2026.10.11` before that version was on npm: no `v2026.10.11` tag had been pushed, and the release workflow runs only on `v*` tags. That broke every frozen install and, through `ensure-linked-deps`, the VSIX webview build (unresolved `@seanhogg/builderforce-brain-embedded` from `frontend/src`). Rolled back to `^2026.10.10` (`934a6098c`), tagged and published `v2026.10.11`, then bumped both manifests again and regenerated both lockfiles in one commit (only the webcontainers and webcontainers-core entries changed).
+
 ## ✅ RESOLVED 2026-10-18 — Architecture review: Neon calls cut across 11 batches, every Neon batch Opus-reviewed and fixed (api 2026.10.55 → 2026.10.56 · frontend 2026.10.72 → 2026.10.73 · agent-runtime 2026.10.11 · brain-embedded 2026.10.33)
 
 Review and per-batch ledger: https://claude.ai/artifact/Kzm2Pp136DUx3E5oCUWgEe. Part of the code rode `33944e338` / `ac2e0eb6a` (swept from the working tree), the rest is this commit.
