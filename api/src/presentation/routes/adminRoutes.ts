@@ -71,11 +71,10 @@ import {
  * POST /api/admin/cron/:target         — force-run a sweep / cadence group / all
  */
 import { Hono } from 'hono';
-import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, isNull, or, sql } from 'drizzle-orm';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { invalidateTenantPlan } from '../../application/tenant/tenantPlanCache';
 import { invalidateSessionVersion, revokeSessionTokens } from '../../application/auth/sessionRevocation';
-import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
 import {
   PublisherError,
@@ -111,8 +110,6 @@ import {
   type ErrorLogFilters,
 } from '../../application/observability/errorLogQuery';
 import {
-  authTokens,
-  authUserSessions,
   newsletterEvents,
   newsletterSubscribers,
   newsletterTemplates,
@@ -121,7 +118,6 @@ import {
   tenantMembers,
   agentHosts,
   llmUsageLog,
-  userMfaRecoveryCodes,
   projects,
   discountCodes,
   emailDeliveryFailures,
@@ -162,7 +158,7 @@ import {
   platformPersonaView,
   updatePlatformPersona,
 } from '../../application/persona/platformPersonaCatalog';
-import { tenantRoleOf } from '../../application/tenant/tenantRoles';
+import { isActiveTenantMember } from '../../application/tenant/tenantRoles';
 import { listPrivacyRequests, updatePrivacyRequest } from '../../application/legal/privacyRequests';
 import { createPlatformTenantApiKeyRoutes } from './tenantApiKeyRoutes';
 import { registerMemberCredentialRevocation } from './memberCredentialRevocationRoutes';
@@ -182,15 +178,12 @@ import {
   publishLegalDoc,
 } from '../../application/legal/legalDocsService';
 import {
-  buildOtpAuthUrl,
-  decryptSecretFromStorage,
-  encryptSecretForStorage,
-  generateRecoveryCodes,
-  generateTotpSecret,
-  hashRecoveryCode,
-  normalizeRecoveryCode,
-  verifyTotpCode,
-} from '../../infrastructure/auth/MfaService';
+  beginMfaSetup,
+  confirmMfaEnable,
+  disableMfa,
+  regenerateRecoveryCodes,
+} from '../../application/auth/mfaChallenge';
+import { loadMemberSecurityDetail } from '../../application/auth/sessionDirectory';
 import { magicLinkTokens } from '../../infrastructure/database/schema';
 import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
@@ -217,7 +210,7 @@ import { adminAuditFilterFrom, listAdminAuditLog } from '../../application/audit
 import { loadPermissionMatrix } from '../../application/admin/permissionMatrix';
 import { adminAuditLogExportSource, permissionMatrixExportSource } from '../../application/admin/adminExportSources';
 import { exportSourceHandler } from './exportSourceRoute';
-import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { LIST_ROW_CAP, boundedIntParam, limitParam, offsetParam } from '../../domain/shared/boundedInt';
 import { randomHex } from '../../domain/shared/bytes';
 import { excluded } from '../../infrastructure/database/upsert';
 import { platformUsageReport } from '../../application/llm/usageReports';
@@ -226,76 +219,6 @@ function parseTenantId(raw: string | undefined): number | null {
   if (!raw) return null;
   const value = Number(raw);
   return Number.isFinite(value) && value > 0 ? value : null;
-}
-
-function parsePositiveInt(raw: string | undefined, fallback: number): number {
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) return fallback;
-  return Math.floor(value);
-}
-
-function slugifyName(input: string): string {
-  return slugify(input, { maxLength: 180 });
-}
-
-/** Active member of the workspace? Delegates to the ONE membership read. */
-async function assertTenantMember(db: Db, tenantId: number, userId: string): Promise<boolean> {
-  return (await tenantRoleOf(db, tenantId, userId)) !== null;
-}
-
-async function assertMfa(
-  db: Db,
-  env: Env,
-  user: typeof users.$inferSelect,
-  code?: string,
-  recoveryCode?: string,
-): Promise<boolean> {
-  if (!user.mfaEnabled || !user.mfaSecretEnc) return false;
-
-  if (code) {
-    // M2: read under the dedicated credential secret, with JWT_SECRET as the legacy
-    // fallback so MFA rows sealed before the migration still decrypt (versioned dual-read).
-    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, credentialSecret(env), { legacySecret: env.JWT_SECRET });
-    const validTotp = await verifyTotpCode(secret, code);
-    if (validTotp) return true;
-  }
-
-  if (recoveryCode) {
-    const normalized = normalizeRecoveryCode(recoveryCode);
-    const hash = await hashRecoveryCode(normalized);
-    const [stored] = await db
-      .select({ id: userMfaRecoveryCodes.id })
-      .from(userMfaRecoveryCodes)
-      .where(
-        and(
-          eq(userMfaRecoveryCodes.userId, user.id),
-          eq(userMfaRecoveryCodes.codeHash, hash),
-          isNull(userMfaRecoveryCodes.usedAt),
-        ),
-      )
-      .limit(1);
-
-    if (stored) {
-      await db
-        .update(userMfaRecoveryCodes)
-        .set({ usedAt: sql`now()` })
-        .where(eq(userMfaRecoveryCodes.id, stored.id));
-      return true;
-    }
-  }
-
-  return false;
-}
-
-async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
-  await db.delete(userMfaRecoveryCodes).where(eq(userMfaRecoveryCodes.userId, userId));
-  const hashed = await Promise.all(
-    codes.map(async (code) => ({
-      userId,
-      codeHash: await hashRecoveryCode(code),
-    })),
-  );
-  await db.insert(userMfaRecoveryCodes).values(hashed);
 }
 
 /**
@@ -465,7 +388,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const db = requestDb(c);
     const status = c.req.query('status')?.trim();
     const q = c.req.query('q')?.trim();
-    const limit = Math.min(parsePositiveInt(c.req.query('limit'), 200), 1000);
+    const limit = limitParam(c.req.query('limit'), 200, 1000);
 
     const filters = [
       status ? eq(newsletterSubscribers.status, status as 'subscribed' | 'unsubscribed' | 'suppressed') : null,
@@ -557,7 +480,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const name = body.name?.trim() ?? '';
     const subject = body.subject?.trim() ?? '';
     const bodyMarkdown = body.bodyMarkdown?.trim() ?? '';
-    const slug = (body.slug?.trim() || slugifyName(name));
+    const slug = (body.slug?.trim() || slugify(name, { maxLength: 180 }));
     const preheader = body.preheader?.trim() || null;
     const isActive = body.isActive ?? true;
 
@@ -646,7 +569,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.get('/newsletter/events', async (c) => {
     const db = requestDb(c);
-    const limit = Math.min(parsePositiveInt(c.req.query('limit'), 300), 1000);
+    const limit = limitParam(c.req.query('limit'), 300, 1000);
 
     const rows = await db
       .select({
@@ -692,7 +615,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       status: c.req.query('status')?.trim(),
       type: c.req.query('type')?.trim(),
       q: c.req.query('q'),
-      limit: parsePositiveInt(c.req.query('limit'), 200),
+      limit: limitParam(c.req.query('limit'), 200, 1000),
     });
     return c.json({ requests });
   });
@@ -796,103 +719,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
     if (!userId) return c.json({ error: 'userId is required' }, 400);
 
-    const isMember = await assertTenantMember(db, tenantId, userId);
+    const isMember = await isActiveTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    const [user] = await db
-      .select({
-        id: users.id,
-        email: users.email,
-        username: users.username,
-        displayName: users.displayName,
-        mfaEnabled: users.mfaEnabled,
-        mfaTempExpiresAt: users.mfaTempExpiresAt,
-        mfaEnabledAt: users.mfaEnabledAt,
-        mfaRecoveryGeneratedAt: users.mfaRecoveryGeneratedAt,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user) return c.json({ error: 'User not found' }, 404);
-
-    const sessions = await db
-      .select()
-      .from(authUserSessions)
-      .where(eq(authUserSessions.userId, userId))
-      .orderBy(desc(authUserSessions.lastSeenAt));
-
-    const sessionIds = sessions.map((session) => session.id);
-    const tokenRows = sessionIds.length
-      ? await db
-        .select({
-          sessionId: authTokens.sessionId,
-          activeCount: sql<number>`COUNT(*)`,
-        })
-        .from(authTokens)
-        .where(
-          and(
-            eq(authTokens.userId, userId),
-            inArray(authTokens.sessionId, sessionIds),
-            isNull(authTokens.revokedAt),
-            gt(authTokens.expiresAt, new Date()),
-          ),
-        )
-        .groupBy(authTokens.sessionId)
-      : [];
-
-    const activeBySession = new Map<string, number>();
-    for (const row of tokenRows) {
-      if (!row.sessionId) continue;
-      activeBySession.set(row.sessionId, Number(row.activeCount));
-    }
-
-    const tokenDetails = await db
-      .select({
-        jti: authTokens.jti,
-        tokenType: authTokens.tokenType,
-        tenantId: authTokens.tenantId,
-        sessionId: authTokens.sessionId,
-        issuedAt: authTokens.issuedAt,
-        expiresAt: authTokens.expiresAt,
-        revokedAt: authTokens.revokedAt,
-        userAgent: authTokens.userAgent,
-        ipAddress: authTokens.ipAddress,
-        lastSeenAt: authTokens.lastSeenAt,
-      })
-      .from(authTokens)
-      .where(eq(authTokens.userId, userId))
-      .orderBy(desc(authTokens.lastSeenAt)).limit(LIST_ROW_CAP);
-
-    return c.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        displayName: user.displayName,
-      },
-      mfa: {
-        enabled: user.mfaEnabled,
-        setupPending: Boolean(user.mfaTempExpiresAt && user.mfaTempExpiresAt > new Date()),
-        enabledAt: user.mfaEnabledAt,
-        recoveryGeneratedAt: user.mfaRecoveryGeneratedAt,
-      },
-      sessions: sessions.map((session) => ({
-        id: session.id,
-        sessionName: session.sessionName,
-        userAgent: session.userAgent,
-        ipAddress: session.ipAddress,
-        isActive: session.isActive,
-        revokedAt: session.revokedAt,
-        createdAt: session.createdAt,
-        lastSeenAt: session.lastSeenAt,
-        activeTokens: activeBySession.get(session.id) ?? 0,
-      })),
-      tokens: tokenDetails.map((row) => ({
-        ...row,
-        isActive: !row.revokedAt && row.expiresAt > new Date(),
-      })),
-    });
+    const detail = await loadMemberSecurityDetail(db, userId);
+    if (!detail) return c.json({ error: 'User not found' }, 404);
+    return c.json(detail);
   });
 
   // -------------------------------------------------------------------------
@@ -905,42 +737,13 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
     if (!userId) return c.json({ error: 'userId is required' }, 400);
 
-    const isMember = await assertTenantMember(db, tenantId, userId);
+    const isMember = await isActiveTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    const [user] = await db
-      .select({ id: users.id, email: users.email, mfaEnabled: users.mfaEnabled })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user) return c.json({ error: 'User not found' }, 404);
-    if (user.mfaEnabled) return c.json({ error: 'MFA is already enabled' }, 409);
-
-    const secret = generateTotpSecret();
-    const encrypted = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    await db
-      .update(users)
-      .set({
-        mfaTempSecretEnc: encrypted,
-        mfaTempExpiresAt: expiresAt,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(users.id, user.id));
-
-    const otpauthUrl = buildOtpAuthUrl({
-      accountName: user.email,
-      secret,
-      issuer: 'Builderforce',
-    });
-
-    return c.json({
-      otpauthUrl,
-      manualEntryKey: secret,
-      expiresIn: 600,
-    });
+    const result = await beginMfaSetup(db, c.env, userId, 'Builderforce');
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    const { ok: _ok, ...setup } = result;
+    return c.json(setup);
   });
 
   // -------------------------------------------------------------------------
@@ -955,50 +758,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!userId) return c.json({ error: 'userId is required' }, 400);
     if (!body.code) return c.json({ error: 'code is required' }, 400);
 
-    const isMember = await assertTenantMember(db, tenantId, userId);
+    const isMember = await isActiveTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    const [user] = await db
-      .select({
-        id: users.id,
-        mfaEnabled: users.mfaEnabled,
-        mfaTempSecretEnc: users.mfaTempSecretEnc,
-        mfaTempExpiresAt: users.mfaTempExpiresAt,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user) return c.json({ error: 'User not found' }, 404);
-    if (user.mfaEnabled) return c.json({ error: 'MFA is already enabled' }, 409);
-    if (!user.mfaTempSecretEnc || !user.mfaTempExpiresAt || user.mfaTempExpiresAt <= new Date()) {
-      return c.json({ error: 'MFA setup session expired. Start setup again.' }, 400);
-    }
-
-    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, credentialSecret(c.env), { legacySecret: c.env.JWT_SECRET });
-    const valid = await verifyTotpCode(secret, body.code);
-    if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
-
-    const encryptedSecret = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
-    const recoveryCodes = generateRecoveryCodes(10);
-
-    await replaceRecoveryCodes(db, user.id, recoveryCodes);
-
-    await db
-      .update(users)
-      .set({
-        mfaEnabled: true,
-        mfaSecretEnc: encryptedSecret,
-        mfaEnabledAt: sql`now()`,
-        mfaTempSecretEnc: null,
-        mfaTempExpiresAt: null,
-        mfaRecoveryGeneratedAt: sql`now()`,
-        mfaLastVerifiedAt: sql`now()`,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(users.id, user.id));
-
-    return c.json({ enabled: true, recoveryCodes });
+    const result = await confirmMfaEnable(db, c.env, userId, body.code);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ enabled: true, recoveryCodes: result.recoveryCodes });
   });
 
   // -------------------------------------------------------------------------
@@ -1015,31 +780,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'A TOTP code or recovery code is required' }, 400);
     }
 
-    const isMember = await assertTenantMember(db, tenantId, userId);
+    const isMember = await isActiveTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    if (!user) return c.json({ error: 'User not found' }, 404);
-    if (!user.mfaEnabled) return c.json({ enabled: false });
-
-    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
-    if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
-
-    await db.delete(userMfaRecoveryCodes).where(eq(userMfaRecoveryCodes.userId, user.id));
-    await db
-      .update(users)
-      .set({
-        mfaEnabled: false,
-        mfaSecretEnc: null,
-        mfaTempSecretEnc: null,
-        mfaTempExpiresAt: null,
-        mfaEnabledAt: null,
-        mfaRecoveryGeneratedAt: null,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(users.id, user.id));
-
-    return c.json({ enabled: false });
+    const result = await disableMfa(db, c.env, userId, body.code, body.recoveryCode);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json(result.value);
   });
 
   // -------------------------------------------------------------------------
@@ -1056,24 +802,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'A TOTP code or recovery code is required' }, 400);
     }
 
-    const isMember = await assertTenantMember(db, tenantId, userId);
+    const isMember = await isActiveTenantMember(db, tenantId, userId);
     if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
 
-    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    if (!user) return c.json({ error: 'User not found' }, 404);
-    if (!user.mfaEnabled) return c.json({ error: 'MFA is not enabled' }, 400);
-
-    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
-    if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
-
-    const recoveryCodes = generateRecoveryCodes(10);
-    await replaceRecoveryCodes(db, user.id, recoveryCodes);
-    await db
-      .update(users)
-      .set({ mfaRecoveryGeneratedAt: sql`now()`, updatedAt: sql`now()` })
-      .where(eq(users.id, user.id));
-
-    return c.json({ recoveryCodes });
+    const result = await regenerateRecoveryCodes(db, c.env, userId, body.code, body.recoveryCode);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json(result.value);
   });
 
   // -------------------------------------------------------------------------
@@ -2203,9 +1937,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const model    = c.req.query('model')?.trim() || null;
     const successQ = c.req.query('success');
     const outcome  = c.req.query('outcome')?.trim() || null;
-    const days     = Math.min(parsePositiveInt(c.req.query('days'), 7), 90);
-    const limit    = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
-    const page     = Math.max(parsePositiveInt(c.req.query('page'), 1), 1);
+    const days     = daysParam(c.req.query('days'), 7, 90);
+    const limit    = limitParam(c.req.query('limit'), 50, 200);
+    const page     = boundedIntParam(c.req.query('page'), { def: 1, min: 1 });
     const offset   = (page - 1) * limit;
     const successFilter = successQ === 'true' ? true : successQ === 'false' ? false : null;
 
@@ -2608,8 +2342,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.get('/impersonation', async (c) => {
     const db = requestDb(c);
-    const limit  = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
-    const offset = parsePositiveInt(c.req.query('offset'), 0);
+    const limit  = limitParam(c.req.query('limit'), 50, 200);
+    const offset = offsetParam(c.req.query('offset'));
 
     const rows = await db
       .select({
@@ -2692,8 +2426,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.get('/audit-log', async (c) => {
     // The ONE operator-audit read, shared with the CSV download below.
     const entries = await listAdminAuditLog(requestDb(c), adminAuditFilterFrom((name) => c.req.query(name)), {
-      limit: Math.min(parsePositiveInt(c.req.query('limit'), 50), 200),
-      offset: parsePositiveInt(c.req.query('offset'), 0),
+      limit: limitParam(c.req.query('limit'), 50, 200),
+      offset: offsetParam(c.req.query('offset')),
     });
     return c.json({ entries });
   });

@@ -66,13 +66,14 @@ import { recordActivity } from '../activity/activityLog';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { accountHistoryCacheKey, documentLineTotal, setDocumentLines, type BilledLine } from './payables';
 import { chargeableMerchantId } from './merchantAccount';
+import { StatusError } from '../../domain/shared/errors';
 
 /** The `purchaseKind` a tenant-invoice payment link stamps; the purchase registry settles it by this name. */
 export const TENANT_INVOICE_KIND = 'tenant_invoice';
 
-export class ReceivableError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class ReceivableError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'ReceivableError';
   }
 }

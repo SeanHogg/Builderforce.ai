@@ -19,11 +19,7 @@
  * document shell. Sharing the palette would couple every proof page to the
  * layout of a webhook table.
  */
-
-/** HTML-escape a value going into generated markup. `&` first, or the escapes
- *  of the later replacements would themselves be escaped. */
-export const esc = (v: string): string =>
-  v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 
 export interface ProofShellOptions {
   title: string;
@@ -122,15 +118,15 @@ export function renderProofShell(options: ProofShellOptions): string {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${esc(options.title)}</title>
+<title>${escapeHtml(options.title)}</title>
 <style>${PROOF_STYLES}${options.styles ?? ''}
   .wrap { max-width: ${options.maxWidth ?? 960}px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-${options.eyebrow ? `  <p class="eyebrow">${esc(options.eyebrow)}</p>\n` : ''}  <h1>${esc(options.title)}</h1>
-  <p class="sub">${esc(options.subtitle)}</p>
+${options.eyebrow ? `  <p class="eyebrow">${escapeHtml(options.eyebrow)}</p>\n` : ''}  <h1>${escapeHtml(options.title)}</h1>
+  <p class="sub">${escapeHtml(options.subtitle)}</p>
 ${options.body}
 </div>
 ${options.script ? `<script>\n${options.script}\n</script>\n` : ''}</body>

@@ -18,7 +18,8 @@
  * enough on its own.
  */
 
-import { esc, renderProofShell } from '../proofShell';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
+import { renderProofShell } from '../proofShell';
 import { audienceOf, goalHeadline, headlineCapabilities } from './shared';
 import type { RealizationTarget, RealizeContext, RealizationOutput } from '../realizationTarget';
 
@@ -172,7 +173,7 @@ function renderReel(spec: { title: string; goal: string }, scenes: readonly Scen
     </div>
   </section>
 
-  <footer>${esc(spec.goal)}</footer>`;
+  <footer>${escapeHtml(spec.goal)}</footer>`;
 
   const script = `  var SCENES = ${JSON.stringify(scenes)};
   var index = 0, elapsed = 0, timer = null;

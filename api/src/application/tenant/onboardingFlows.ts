@@ -41,6 +41,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToNullableTenant, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `onboarding_flows.audience` — which arrival this flow serves. */
 export const AUDIENCES = ['signup', 'invite', 'hire', 'employee', 'freelancer'] as const;
@@ -55,9 +56,9 @@ export const isAudience = (v: unknown): v is Audience =>
 export const isProgressStatus = (v: unknown): v is ProgressStatus =>
   typeof v === 'string' && (PROGRESS_STATUSES as readonly string[]).includes(v);
 
-export class OnboardingError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class OnboardingError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'OnboardingError';
   }
 }

@@ -22,19 +22,19 @@
  * self-heal path read it to resume or repair a live run, and the approval gate reads it
  * while a submission is pending. None of them can reach a run 30 days old.
  *
- * `result` and `error_message` are deliberately LEFT INTACT even though they are another
- * 21 MB. They are what a person reads when they open a past run, and `scoreRunOutcome`
- * grades against them — losing them would degrade a surface a human actually uses, which
- * is a different trade from dropping a payload nothing can reach.
+ * `result` and `error_message` are NOT blanked, only capped at ~1 KB on a terminal run past
+ * 30 days (they were 8 + 7 MB of a database at its 512 MB ceiling). A person opening a month-old
+ * run still sees how it ended; the full body is what no reader of a run that old reaches.
  *
  * The run itself is never deleted, so DORA, the ticket lifecycle ledger and usage
  * attribution — all of which read status, timestamps, `produced` and `task_id` — are
  * unaffected.
  */
-import { and, isNotNull, lt } from 'drizzle-orm';
+import { and, isNotNull, lt, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { executions } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { PURGE_BATCH_ROWS } from '../maintenance/boundedPurge';
 
 /** Days a run keeps its dispatch payload. Shorter than any window a live run can span. */
 export const EXECUTION_PAYLOAD_RETENTION_DAYS = 30;
@@ -45,11 +45,40 @@ export const EXECUTION_PAYLOAD_RETENTION_DAYS = 30;
  * its page — on every nightly tick.
  */
 export async function redactStaleExecutionPayloads(db: Db, cutoff: Date): Promise<unknown> {
-  return db.update(executions)
+  await db.update(executions)
     .set({ payload: null })
     .where(acrossTenants(
       executions,
       'scheduled_sweep',
       and(lt(executions.createdAt, cutoff), isNotNull(executions.payload)),
     ));
+  return db.execute(truncateTerminalOutputStatement(cutoff));
 }
+
+/** Kept head of `result` / `error_message` on a terminal run past the window. */
+export const EXECUTION_OUTPUT_KEEP_CHARS = 1024;
+/** Appended so a reader (and the idempotency predicate) can tell a truncated value. */
+export const EXECUTION_OUTPUT_TRUNCATION_MARKER = ' …[truncated by retention]';
+
+/**
+ * Cap `result` and `error_message` at ~1 KB on terminal runs (completed / failed /
+ * cancelled — never a live or paused one) older than `cutoff`. Bounded per run like the
+ * registry purges. Idempotent: a truncated value is exactly KEEP + marker long, and the
+ * predicate only matches values longer than that.
+ */
+export const truncateTerminalOutputStatement = (cutoff: Date) => {
+  const keep = EXECUTION_OUTPUT_KEEP_CHARS;
+  const marker = EXECUTION_OUTPUT_TRUNCATION_MARKER;
+  const limit = keep + marker.length;
+  return sql`
+    UPDATE executions
+    SET result = CASE WHEN char_length(result) > ${limit} THEN left(result, ${keep}) || ${marker} ELSE result END,
+        error_message = CASE WHEN char_length(error_message) > ${limit} THEN left(error_message, ${keep}) || ${marker} ELSE error_message END
+    WHERE ctid = ANY(ARRAY(
+      SELECT ctid FROM executions
+      WHERE status IN ('completed', 'failed', 'cancelled')
+        AND created_at < ${cutoff.toISOString()}::timestamp
+        AND (char_length(result) > ${limit} OR char_length(error_message) > ${limit})
+      LIMIT ${PURGE_BATCH_ROWS}
+    ))`;
+};

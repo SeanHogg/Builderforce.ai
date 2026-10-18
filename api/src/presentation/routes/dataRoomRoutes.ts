@@ -33,9 +33,6 @@ import {
   revokeDataRoomShare,
   shareDataRoom,
 } from '../../application/investor/dataRoomSharing';
-import { SignatureError } from '../../application/signature/signatureEngine';
-import { TemplateError } from '../../application/legal/documentTemplates';
-import { WatermarkError } from '../../application/security/documentWatermark';
 import { parseBody, z } from './requestBody';
 
 /** `POST /:id/share` — `shareDataRoom` owns the required-recipient rules. */
@@ -49,17 +46,6 @@ const ShareDataRoomBody = z.object({
   purpose: z.string().nullish(),
 });
 
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof DataRoomError || error instanceof SignatureError || error instanceof TemplateError || error instanceof WatermarkError) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-    throw error;
-  }
-};
-
 const roomId = (raw: string): number => {
   const id = Number(raw);
   if (!Number.isFinite(id) || id <= 0) throw new DataRoomError('That is not a data-room id.', 400);
@@ -72,8 +58,8 @@ export function createDataRoomRoutes(db: Db): Hono<HonoEnv> {
 
   /** Every room, with its documents, its live links and how much of it has been
    *  read — one call, because a card needs all of it at once. */
-  router.get('/', (c) => handle(async () =>
-    Response.json({ rooms: await listDataRooms(db, c.get('tenantId') as number) })));
+  router.get('/', async (c) =>
+    Response.json({ rooms: await listDataRooms(db, c.get('tenantId') as number) }));
 
   /**
    * Share a room with one firm.
@@ -82,7 +68,7 @@ export function createDataRoomRoutes(db: Db): Hono<HonoEnv> {
    * party outside the workspace, which is the same authority bar `dataRoom.share`
    * is gated at on the canvas.
    */
-  router.post('/:id/share', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/:id/share', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseBody(c, ShareDataRoomBody);
     const result = await shareDataRoom(db, c.env as Env, c.get('tenantId') as number, {
       dataRoomId: roomId(c.req.param('id')),
@@ -97,12 +83,12 @@ export function createDataRoomRoutes(db: Db): Hono<HonoEnv> {
       createdBy: (c.get('userId') as string | undefined) ?? null,
     });
     return Response.json(result);
-  }));
+  });
 
-  router.get('/:id/shares', (c) => handle(async () =>
-    Response.json({ shares: await listDataRoomShares(db, c.get('tenantId') as number, roomId(c.req.param('id'))) })));
+  router.get('/:id/shares', async (c) =>
+    Response.json({ shares: await listDataRoomShares(db, c.get('tenantId') as number, roomId(c.req.param('id'))) }));
 
-  router.post('/shares/:shareId/revoke', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/shares/:shareId/revoke', requireRole(TenantRole.MANAGER), async (c) => {
     await revokeDataRoomShare(
       db,
       c.env as Env,
@@ -111,12 +97,12 @@ export function createDataRoomRoutes(db: Db): Hono<HonoEnv> {
       await resolveActorFromContext(c.env as Env, db, c),
     );
     return Response.json({ ok: true });
-  }));
+  });
 
   /** What the firm actually read — the half of "sending a data room" that made
    *  the columns worth enforcing in the first place. */
-  router.get('/:id/analytics', (c) => handle(async () =>
-    Response.json({ analytics: await dataRoomAnalytics(db, c.get('tenantId') as number, roomId(c.req.param('id'))) })));
+  router.get('/:id/analytics', async (c) =>
+    Response.json({ analytics: await dataRoomAnalytics(db, c.get('tenantId') as number, roomId(c.req.param('id'))) }));
 
   return router;
 }
@@ -132,7 +118,7 @@ export function createPublicDataRoomRoutes(db: Db): Hono<HonoEnv> {
    * to do, and the page needs to say which. Every other failure collapses to 404,
    * so an unauthenticated caller cannot distinguish "never existed" from "revoked".
    */
-  router.get('/:token', (c) => handle(async () => {
+  router.get('/:token', async (c) => {
     const resolution = await resolveDataRoomShare(db, c.env as Env, c.req.param('token'));
     if (resolution.outcome === 'invalid') return Response.json({ error: 'This link is no longer valid.' }, { status: 404 });
     if (resolution.outcome === 'nda-pending') {
@@ -140,9 +126,9 @@ export function createPublicDataRoomRoutes(db: Db): Hono<HonoEnv> {
     }
     const { tenantId: _tenantId, ...share } = resolution.share;
     return Response.json({ outcome: 'ok', share });
-  }));
+  });
 
-  router.get('/:token/documents/:documentId', (c) => handle(async () => {
+  router.get('/:token/documents/:documentId', async (c) => {
     // The id is PREFIXED (`dd:12` / `legal:<uuid>`) because a room holds two
     // shapes and a recipient does not care which table a document came from.
     const file = await readDataRoomDocument(db, c.env as Env, c.req.param('token'), c.req.param('documentId'));
@@ -155,7 +141,7 @@ export function createPublicDataRoomRoutes(db: Db): Hono<HonoEnv> {
       disposition: file.disposition,
       headers: { 'x-data-room-watermark': file.stamped ? 'stamped' : 'view-only' },
     });
-  }));
+  });
 
   return router;
 }

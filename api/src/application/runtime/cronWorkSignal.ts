@@ -373,8 +373,7 @@ const SCHEDULE_SOURCES = [
  * an active tick the endpoint is already awake and the sweeps have just re-armed their
  * `next_run_at` values, so this reads the freshest possible answer for free.
  *
- * One statement, four indexed `MIN()` scans, no rows returned beyond a single
- * timestamp. Best-effort throughout: a failure leaves the previous stamp (or none) in
+ * One statement carrying a scalar `MIN()` subquery per schedule table, one row back. Best-effort throughout: a failure leaves the previous stamp (or none) in
  * place and the floor sweep still backstops every schedule, so this can never strand
  * work — it can only fail to make it prompt.
  *
@@ -400,15 +399,19 @@ export async function publishNextDue(env: Env, nowMs: number): Promise<NextDuePu
   if (!store) return empty;
   try {
     const db = buildDatabase(env);
-    // Each arm is `SELECT MIN(next_run_at) FROM <t> WHERE enabled AND next_run_at IS NOT NULL`.
-    // MIN over a partial/ordinary index on next_run_at is a cheap top-of-index probe,
-    // not a scan of the schedule set.
-    const mins = await Promise.all(SCHEDULE_SOURCES.map(async (source) => {
-      const [row] = await db
-        .select({ min: sql<Date | string | null>`MIN(${source.nextRunAt})` })
-        .from(source.table)
-        .where(and(eq(source.enabled, true), isNotNull(source.nextRunAt)));
-      return { table: source.name as string, nextDueMs: toEpochMs(row?.min ?? null) };
+    // ONE statement: a scalar `MIN(next_run_at)` subquery per schedule table, each a
+    // cheap top-of-index probe. The per-table minimums stay separate columns because
+    // the stall check needs to name WHICH table is jammed; the overall earliest is
+    // taken below (LEAST in JS — the same NULL-ignoring semantics).
+    const probes = SCHEDULE_SOURCES.map((source, i) => sql`(
+      SELECT MIN(${source.nextRunAt}) FROM ${source.table}
+      WHERE ${source.enabled} = true AND ${source.nextRunAt} IS NOT NULL
+    ) AS ${sql.raw(`m${i}`)}`);
+    const result = await db.execute(sql`SELECT ${sql.join(probes, sql`, `)}`);
+    const row = (result.rows[0] ?? {}) as Record<string, Date | string | null>;
+    const mins = SCHEDULE_SOURCES.map((source, i) => ({
+      table: source.name as string,
+      nextDueMs: toEpochMs(row[`m${i}`] ?? null),
     }));
 
     const perTable = mins.flatMap((m) => (m.nextDueMs == null ? [] : [{ table: m.table, nextDueMs: m.nextDueMs }]));

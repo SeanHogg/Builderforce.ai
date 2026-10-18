@@ -45,10 +45,11 @@ import type { Db } from '../../infrastructure/database/connection';
 import { signatureParties, signatureRequests } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hashShareToken, mintShareToken } from '../security/shareToken';
+import { StatusError } from '../../domain/shared/errors';
 
-export class SignatureError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class SignatureError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'SignatureError';
   }
 }

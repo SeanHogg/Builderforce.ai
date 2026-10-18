@@ -16,6 +16,7 @@
  */
 
 import { zipSync, strToU8 } from 'fflate';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 
 /** Excel's own ceilings are 1,048,576 × 16,384; these are the canvas's, chosen so
  * one object cannot turn into an unbounded render inside a Worker. */
@@ -25,10 +26,9 @@ export const MAX_XLSX_COLUMNS = 256;
 export type XlsxCell = string | number | boolean | null;
 
 function esc(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-    // Control characters are not representable in XML 1.0 and make Excel refuse
-    // the file outright rather than skip the cell.
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+  // Control characters are not representable in XML 1.0 and make Excel refuse
+  // the file outright rather than skip the cell.
+  return escapeHtml(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
 }
 
 /** Spreadsheet column name for a zero-based index: 0 → A, 26 → AA. */

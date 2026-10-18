@@ -464,6 +464,17 @@ export async function apiRequest<T = unknown>(
   return res.json() as Promise<T>;
 }
 
+/**
+ * Superadmin endpoints run on the WEB token (a platform operator is not acting
+ * inside any one workspace), so this is `apiRequest` in `web` auth mode — not a
+ * separate transport. The only extra behaviour is the friendlier "sign in with a
+ * superadmin account" message when no token is stored at all.
+ */
+export async function adminRequest<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
+  if (!getStoredWebToken()) throw new Error('Not authenticated. Sign in with a superadmin account.');
+  return apiRequest<T>(path, { ...opts, auth: 'web' });
+}
+
 /** Request that returns response text (e.g. dataset download). On 401, redirects to login. */
 export async function apiRequestText(path: string, opts: RequestOptions = {}): Promise<string> {
   const { res, url, method, hadToken } = await sendRequest(path, opts);

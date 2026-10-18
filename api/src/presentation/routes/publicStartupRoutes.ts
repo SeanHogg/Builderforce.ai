@@ -19,8 +19,6 @@ import { Hono } from 'hono';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { optionalWebUserId } from '../middleware/webAuthMiddleware';
-import { CompanyError } from '../../application/investor/companyWorkspace';
-import { RevenueIntelError } from '../../application/sales/revenueIntelligence';
 import {
   browseStartups,
   parseDirectoryFilters,
@@ -28,17 +26,6 @@ import {
   submitInvestorInquiry,
 } from '../../application/investor/startupDirectory';
 import { parseBody, z } from './requestBody';
-
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof CompanyError || error instanceof RevenueIntelError) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-    throw error;
-  }
-};
 
 const zInquiry = z.object({
   investorName: z.string().trim().min(1).max(160),
@@ -58,23 +45,23 @@ const zInquiry = z.object({
 export function createPublicStartupRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  router.get('/', (c) => handle(async () => {
+  router.get('/', async (c) => {
     const filters = parseDirectoryFilters(new URL(c.req.url).searchParams);
     return Response.json(await browseStartups(db, c.env as Env, filters));
-  }));
+  });
 
-  router.get('/:slug', (c) => handle(async () => {
+  router.get('/:slug', async (c) => {
     const viewer = (await optionalWebUserId(c)) ? 'member' : 'public';
     const profile = await startupBySlug(db, c.env as Env, c.req.param('slug'), viewer);
     if (!profile) return Response.json({ error: 'That company is not listed.' }, { status: 404 });
     return Response.json({ startup: profile });
-  }));
+  });
 
-  router.post('/:slug/inquiries', (c) => handle(async () => {
+  router.post('/:slug/inquiries', async (c) => {
     const body = await parseBody(c, zInquiry);
     const receipt = await submitInvestorInquiry(db, c.env as Env, c.req.param('slug'), body);
     return Response.json({ inquiry: receipt }, { status: 201 });
-  }));
+  });
 
   return router;
 }

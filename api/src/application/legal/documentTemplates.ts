@@ -30,9 +30,11 @@
  * own terms.
  */
 
-export class TemplateError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+import { StatusError } from '../../domain/shared/errors';
+
+export class TemplateError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'TemplateError';
   }
 }

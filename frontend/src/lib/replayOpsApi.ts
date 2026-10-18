@@ -18,32 +18,26 @@ import {
   type ReplayOpsSummaryDto,
   type ReplayTenantSettings,
 } from '@builderforce/interaction-contract';
-import { apiRequest } from './apiClient';
-import { getStoredWebToken } from './auth';
+import { adminRequest } from './apiClient';
 import { fill } from './replayHttp';
-
-async function opsRequest<T>(path: string, init: { method?: string; body?: string } = {}): Promise<T> {
-  if (!getStoredWebToken()) throw new Error('Not authenticated. Sign in with a superadmin account.');
-  return apiRequest<T>(path, { ...init, auth: 'web' });
-}
 
 const tenantSettingsPath = (tenantId: number) => fill(REPLAY_PATHS.opsTenantSettings, { tenantId });
 
 export const replayOpsApi = {
   summary(): Promise<ReplayOpsSummaryDto> {
-    return opsRequest(REPLAY_PATHS.opsSummary);
+    return adminRequest(REPLAY_PATHS.opsSummary);
   },
   tenantSettings(tenantId: number): Promise<ReplayTenantSettings> {
-    return opsRequest(tenantSettingsPath(tenantId));
+    return adminRequest(tenantSettingsPath(tenantId));
   },
   updateTenantSettings(tenantId: number, patch: Partial<ReplayTenantSettings>): Promise<ReplayTenantSettings> {
-    return opsRequest(tenantSettingsPath(tenantId), { method: 'PATCH', body: JSON.stringify(patch) });
+    return adminRequest(tenantSettingsPath(tenantId), { method: 'PATCH', body: JSON.stringify(patch) });
   },
   grantCredits(input: ReplayCreditGrantInput): Promise<ReplayCreditGrantResult> {
-    return opsRequest(REPLAY_PATHS.opsGrants, { method: 'POST', body: JSON.stringify(input) });
+    return adminRequest(REPLAY_PATHS.opsGrants, { method: 'POST', body: JSON.stringify(input) });
   },
   /** Seed "The method" funnel + its four smart events on one site (PRD 33 §5.3.6). Idempotent. */
   seedMethodFunnel(siteId: string): Promise<ReplayMethodFunnelSeedDto> {
-    return opsRequest(fill(REPLAY_PATHS.opsSeedMethodFunnel, { siteId }), { method: 'POST' });
+    return adminRequest(fill(REPLAY_PATHS.opsSeedMethodFunnel, { siteId }), { method: 'POST' });
   },
 };

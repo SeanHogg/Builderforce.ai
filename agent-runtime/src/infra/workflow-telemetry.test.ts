@@ -146,13 +146,22 @@ describe("WorkflowTelemetryService — Builderforce HTTP sync", () => {
     svc.emitTaskStart("wf-1", "t-1", "coder", "do it");
     svc.emitTaskEnd("wf-1", "t-1", "coder", new Date(), undefined, { model: "m", inputTokens: 1, outputTokens: 2 });
     await spansSettle(3);
+    svc.flushOtelSpans();
 
     const urls = urlsFetched();
-    // workflow upsert, task create, task patch — plus an OTel span POST per span.
+    // workflow upsert, task create, task patch — plus ONE batched OTel span POST.
     expect(urls).toContain("https://bf.test/api/workflows");
     expect(urls).toContain("https://bf.test/api/workflows/wf-1/tasks");
     expect(urls).toContain("https://bf.test/api/workflows/wf-1/tasks/t-1");
-    expect(urls.filter((u) => u.startsWith("https://bf.test/api/telemetry/spans?agentNodeId=7"))).toHaveLength(3);
+    expect(urls.filter((u) => u === "https://bf.test/api/telemetry/spans")).toHaveLength(1);
+
+    // The batch is one array of every span, authed with the host id header (a bare
+    // bearer key names no host, so the server answered 401).
+    const batch = fetchMock.mock.calls.find((c) => String(c[0]) === "https://bf.test/api/telemetry/spans")!;
+    expect(JSON.parse((batch[1] as RequestInit).body as string)).toHaveLength(3);
+    const batchHeaders = (batch[1] as RequestInit).headers as Record<string, string>;
+    expect(batchHeaders["X-AgentHost-Id"]).toBe("7");
+    expect(batchHeaders.Authorization).toBe("Bearer secret");
 
     // The task.complete sync is a PATCH carrying the terminal status.
     const patch = fetchMock.mock.calls.find(
@@ -166,6 +175,16 @@ describe("WorkflowTelemetryService — Builderforce HTTP sync", () => {
     expect(headers.Authorization).toBe("Bearer secret");
     expect(headers["X-AgentHost-Id"]).toBe("7");
     expect(headers["X-Trace-Id"]).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it("flushes the OTel batch on its own once 25 spans are queued", async () => {
+    const svc = new WorkflowTelemetryService();
+    svc.init({ projectRoot, agentNodeId: "7", linkApiUrl: "https://bf.test", linkApiKey: "secret" });
+    for (let i = 0; i < 25; i++) svc.emitTaskStart("wf-1", `t-${i}`, "coder", "x");
+    await spansSettle(25);
+    const posts = fetchMock.mock.calls.filter((c) => String(c[0]) === "https://bf.test/api/telemetry/spans");
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse((posts[0]![1] as RequestInit).body as string)).toHaveLength(25);
   });
 
   it("does not sync when no API link is configured (local-only host)", async () => {

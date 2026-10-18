@@ -22,7 +22,7 @@ import { and, eq, gte, sql as dsql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { llmUsageLog, tenantMembers, tenants, users } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 import { getLimits } from '../../domain/tenant/PlanLimits';
 import { TenantPlan } from '../../domain/shared/types';
@@ -178,6 +178,8 @@ export async function getMemberSpendAvailability(
   return { seatControlsEnabled: true, hasBudget: spent < cap, capMillicents: cap, spentMillicents: spent, percentUsed };
 }
 
+const SPEND_NOTIFY_CACHE = { kvTtlSeconds: 86_400 } as const;
+
 /**
  * Fire the budget/spend notification when a seat first crosses a 50/80/100%
  * threshold this month. Deduped via `tenant_members.spend_notify_period/level` so
@@ -199,6 +201,11 @@ export async function maybeEmitSpendNotification(
     if (level === 0) return;
 
     const monthKey = monthKeyOf(utcMonthStart());
+    // The last level notified this month, cached: once a seat is past 50% EVERY request lands
+    // here, and the members⋈users read below was a statement per request to learn "already told".
+    const notifiedKey = `spend-notify:${tenantId}:${userId}:${monthKey}`;
+    const cachedLevel = await peekCached<number>(env, notifiedKey);
+    if (cachedLevel != null && level <= cachedLevel) return;
     const [state] = await db
       .select({ period: tenantMembers.spendNotifyPeriod, notified: tenantMembers.spendNotifyLevel, name: users.displayName })
       .from(tenantMembers)
@@ -206,12 +213,16 @@ export async function maybeEmitSpendNotification(
       .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId)))
       .limit(1);
     const prevLevel = state?.period === monthKey ? (state?.notified ?? 0) : 0;
-    if (level <= prevLevel) return; // already pinged at/above this threshold this month
+    if (level <= prevLevel) { // already pinged at/above this threshold this month
+      await setCached(env, notifiedKey, prevLevel, SPEND_NOTIFY_CACHE);
+      return;
+    }
 
     // Advance the dedupe state first, so a concurrent request can't double-send.
     await db.update(tenantMembers)
       .set({ spendNotifyPeriod: monthKey, spendNotifyLevel: level })
       .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId)));
+    await setCached(env, notifiedKey, level, SPEND_NOTIFY_CACHE);
 
     const capUsd = millicentsToUsd(availability.capMillicents).toFixed(2);
     const spentUsd = millicentsToUsd(availability.spentMillicents).toFixed(2);

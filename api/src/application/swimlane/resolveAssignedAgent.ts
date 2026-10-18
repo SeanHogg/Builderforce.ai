@@ -8,7 +8,9 @@
  * chosen agent already carries its own runtime/host/model defaults — the user
  * only optionally overrides the model.
  *
- *   registered → `agents` row (endpoint-based; dispatched as a cloud runtime)
+ *   registered → `agent_registrations` row (endpoint-based; dispatched as a cloud
+ *                runtime). agentRef is its uuid, or a legacy numeric `agents.id`
+ *                (the dead `agents` table was folded in via `legacy_agent_id`)
  *   workforce  → `ide_agents` row: runtime_support/preferred_runtime → runtime,
  *                base_model → model (unless overridden)
  *
@@ -23,7 +25,7 @@
  * assignments already compiled keep the fields they resolved to.
  */
 import { and, eq, sql } from 'drizzle-orm';
-import { agents } from '../../infrastructure/database/schema';
+import { agentRegistrations } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { LaneAgentRuntime } from './laneAutoRun';
 
@@ -49,6 +51,8 @@ export class AssignedAgentNotFoundError extends Error {
   }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** The base_model sentinel that means "no explicit model — use tenant default". */
 const DEFAULT_MODEL_SENTINEL = 'builderforce-default';
 
@@ -70,9 +74,13 @@ export async function resolveAssignedAgent(
   const override = opts.modelOverride?.trim() || null;
 
   if (opts.agentKind === 'registered') {
-    const id = Number(opts.agentRef);
-    const [row] = Number.isFinite(id)
-      ? await db.select().from(agents).where(and(eq(agents.id, id), eq(agents.tenantId, tenantId)))
+    const ref = opts.agentRef;
+    const key = UUID_RE.test(ref)
+      ? eq(agentRegistrations.id, ref)
+      : /^\d+$/.test(ref) ? eq(agentRegistrations.legacyAgentId, Number(ref)) : null;
+    const [row] = key
+      ? await db.select({ name: agentRegistrations.name }).from(agentRegistrations)
+          .where(and(key, eq(agentRegistrations.tenantId, tenantId))).limit(1)
       : [];
     if (!row) throw new AssignedAgentNotFoundError('registered', opts.agentRef);
     return { role: row.name, name: row.name, runtime: 'cloud', target: null, model: override };

@@ -1,14 +1,7 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
 import CatalogArtifactActions from '@/components/CatalogArtifactActions';
-import JsonLd from '@/components/JsonLd';
-import PublicDetailLayout, {
-  PublicDetailFact,
-  PublicDetailFacts,
-  PublicDetailSection,
-} from '@/components/PublicDetailLayout';
+import { PublicDetailFact, PublicDetailFacts, PublicDetailSection } from '@/components/PublicDetailLayout';
+import { makePublicDetailPage } from '@/components/publicDetailPage';
 import { pageMetadata } from '@/lib/seo';
 import { marketplaceSkillSchema, skillCatalogSchema } from '@/lib/structured-data';
 import { loadSkillDetail } from './skillDetail';
@@ -36,21 +29,13 @@ import { loadSkillDetail } from './skillDetail';
  */
 export const runtime = 'edge';
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
-  const { slug } = await params;
-  const skill = await loadSkillDetail(decodeURIComponent(slug));
-  const t = await getTranslations('skillDetail');
-  if (!skill) return { title: t('notFoundTitle'), robots: { index: false, follow: false } };
-
-  const description = skill.description?.slice(0, 200) || t('metaFallback', { name: skill.name });
-  return {
+const page = makePublicDetailPage({
+  namespace: 'skillDetail',
+  load: loadSkillDetail,
+  metadata: (skill, t) => ({
     ...pageMetadata({
       title: t('metaTitle', { name: skill.name }),
-      description,
+      description: skill.description?.slice(0, 200) || t('metaFallback', { name: skill.name }),
       // A published skill canonicalises to its marketplace page; only a built-in
       // is canonical here. See `SkillDetailView.canonicalPath`.
       path: skill.canonicalPath,
@@ -58,20 +43,8 @@ export async function generateMetadata({
     }),
     ...(skill.tags.length ? { keywords: skill.tags } : {}),
     ...(skill.author ? { authors: [{ name: skill.author }] } : {}),
-  };
-}
-
-export default async function SkillDetailPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params;
-  const skill = await loadSkillDetail(decodeURIComponent(slug));
-  if (!skill) notFound();
-  const t = await getTranslations('skillDetail');
-
-  const schema = skill.builtin
+  }),
+  schema: (skill) => skill.builtin
     ? skillCatalogSchema({
         name: skill.name,
         slug: skill.slug,
@@ -88,62 +61,50 @@ export default async function SkillDetailPage({
         category: skill.category,
         author_display_name: skill.author,
         tags: skill.tags,
-      });
-
-  return (
+      }),
+  backHref: '/skills',
+  layout: (skill, t) => ({
+    title: skill.name,
+    icon: skill.emoji,
+    lede: skill.description,
+    tags: skill.tags,
+    meta: [
+      skill.author ? t('byAuthor', { author: skill.author }) : null,
+      skill.category,
+      skill.version ? t('versionShort', { version: skill.version }) : null,
+      skill.builtin ? t('builtinBadge') : null,
+    ],
+    actions: (
+      <>
+        <CatalogArtifactActions artifactType="skill" slug={skill.slug} name={skill.name} />
+        {skill.builtin ? null : (
+          <Link className="pdl-btn pdl-btn-ghost" href={`/marketplace/${skill.slug}`}>
+            {t('viewOnMarketplace')}
+          </Link>
+        )}
+      </>
+    ),
+  }),
+  body: (skill, t) => (
     <>
-      <JsonLd data={schema} />
-      <PublicDetailLayout
-        eyebrow={t('eyebrow')}
-        title={skill.name}
-        icon={skill.emoji}
-        lede={skill.description}
-        tags={skill.tags}
-        meta={[
-          skill.author ? t('byAuthor', { author: skill.author }) : null,
-          skill.category,
-          skill.version ? t('versionShort', { version: skill.version }) : null,
-          skill.builtin ? t('builtinBadge') : null,
-        ]}
-        actions={
-          <>
-            <CatalogArtifactActions artifactType="skill" slug={skill.slug} name={skill.name} />
-            {skill.builtin ? null : (
-              <Link className="pdl-btn pdl-btn-ghost" href={`/marketplace/${skill.slug}`}>
-                {t('viewOnMarketplace')}
-              </Link>
-            )}
-          </>
-        }
-      >
-        <PublicDetailSection heading={t('detailsHeading')}>
-          <PublicDetailFacts>
-            <PublicDetailFact label={t('slugLabel')}>
-              <code className="pdl-code">{skill.slug}</code>
-            </PublicDetailFact>
-            {skill.category ? (
-              <PublicDetailFact label={t('categoryLabel')}>{skill.category}</PublicDetailFact>
-            ) : null}
-            {skill.version ? (
-              <PublicDetailFact label={t('versionLabel')}>{skill.version}</PublicDetailFact>
-            ) : null}
-            {skill.author ? (
-              <PublicDetailFact label={t('authorLabel')}>{skill.author}</PublicDetailFact>
-            ) : null}
-            {skill.tags.length ? (
-              <PublicDetailFact label={t('tagsLabel')}>{skill.tags.join(', ')}</PublicDetailFact>
-            ) : null}
-          </PublicDetailFacts>
-        </PublicDetailSection>
+      <PublicDetailSection heading={t('detailsHeading')}>
+        <PublicDetailFacts>
+          <PublicDetailFact label={t('slugLabel')}>
+            <code className="pdl-code">{skill.slug}</code>
+          </PublicDetailFact>
+          {skill.category ? <PublicDetailFact label={t('categoryLabel')}>{skill.category}</PublicDetailFact> : null}
+          {skill.version ? <PublicDetailFact label={t('versionLabel')}>{skill.version}</PublicDetailFact> : null}
+          {skill.author ? <PublicDetailFact label={t('authorLabel')}>{skill.author}</PublicDetailFact> : null}
+          {skill.tags.length ? <PublicDetailFact label={t('tagsLabel')}>{skill.tags.join(', ')}</PublicDetailFact> : null}
+        </PublicDetailFacts>
+      </PublicDetailSection>
 
-        {skill.readme ? (
-          <PublicDetailSection heading={t('aboutHeading')} prose>{skill.readme}</PublicDetailSection>
-        ) : null}
-
-        <p style={{ marginTop: 28 }}>
-          <Link className="pdl-back" href="/skills">{t('back')}</Link>
-        </p>
-      </PublicDetailLayout>
+      {skill.readme ? (
+        <PublicDetailSection heading={t('aboutHeading')} prose>{skill.readme}</PublicDetailSection>
+      ) : null}
     </>
-  );
-}
+  ),
+});
+
+export const generateMetadata = page.generateMetadata;
+export default page.DetailPage;

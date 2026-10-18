@@ -41,6 +41,7 @@ import {
   setOrderedMembers,
   type RelationRefusal,
 } from '../kernel/ObjectRelations';
+import { slugify } from '@builderforce/creation-canvas-contract';
 
 /** The two things a `courses` row can be. */
 export const COURSE_KINDS = ['course', 'path'] as const;
@@ -288,8 +289,5 @@ function toSummary(row: typeof courses.$inferSelect): CourseSummary {
 /** Lowercase, hyphenated, url-safe. A slug is part of a URL, so it is normalised
  *  at the door rather than trusted and escaped at every render. */
 export function normaliseSlug(raw: string): string {
-  return raw.trim().toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 160);
+  return slugify(raw, { maxLength: 160 });
 }

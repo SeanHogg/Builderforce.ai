@@ -24,10 +24,6 @@ export class AgentHostService {
     return agentHosts;
   }
 
-  async verifyApiKey(agentHostId: number, apiKey: string): Promise<AgentHost | null> {
-    return this.agentHostRepo.verifyApiKey(asAgentHostId(agentHostId), apiKey);
-  }
-
   /**
    * Transition an agentHost's lifecycle status. `env` is threaded through to the
    * repository so the `clk_*` auth cache invalidation lives WITH the mutation —

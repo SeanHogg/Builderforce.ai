@@ -18,6 +18,7 @@ import { tenantSkills } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
+import { slugify } from '@builderforce/creation-canvas-contract';
 
 export type TenantSkillStatus = 'draft' | 'approved' | 'rejected';
 
@@ -56,9 +57,6 @@ export interface ProposeSkillInput {
 const BODY_MAX = 8_000;
 const approvedKey = (tenantId: number, projectId: number | null): string =>
   `tenant-skills:approved:${tenantId}:${projectId ?? 'all'}`;
-
-const slugify = (raw: string): string =>
-  raw.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 255);
 
 function toSkill(row: typeof tenantSkills.$inferSelect): TenantSkill {
   return {
@@ -99,7 +97,7 @@ export async function proposeSkill(
   tenantId: number,
   input: ProposeSkillInput,
 ): Promise<{ ok: boolean; slug?: string; outcome?: 'created' | 'revised'; error?: string }> {
-  const slug = slugify(input.slug);
+  const slug = slugify(input.slug, { maxLength: 255 });
   const name = input.name.trim().slice(0, 255);
   const description = input.description.trim().slice(0, 1_000);
   const body = input.body.trim().slice(0, BODY_MAX);

@@ -58,7 +58,7 @@ export function createExecutionReadMemo(runtimeService: RuntimeService): Executi
     listByTask(taskId: number): Promise<PlainExecution[]> {
       const existing = inFlight.get(taskId);
       if (existing) return existing;
-      const p = runtimeService.listByTask(taskId)
+      const p = runtimeService.listByTask(taskId, { slim: true })
         .then((rows) => rows.map((e) => e.toPlain()) as PlainExecution[])
         // A failed read must not poison the memo: the next caller re-queries
         // rather than inheriting a rejected promise for the rest of the request.

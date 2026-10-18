@@ -9,7 +9,7 @@
  * after a rename. Idempotent: a NOT-EXISTS check per kind, so re-running (or racing a
  * migration backfill) is a no-op.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { ideAgents } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -236,26 +236,28 @@ export const BUILTIN_AGENT_CATALOGUE: readonly BuiltinAgentCatalogueEntry[] = BU
 
 /** Insert any missing built-in agents for a tenant. Best-effort, idempotent. */
 export async function provisionBuiltinAgents(db: Db, tenantId: number): Promise<void> {
-  for (const seed of BUILTIN_AGENTS) {
-    const [existing] = await db
-      .select({ id: ideAgents.id })
-      .from(ideAgents)
-      .where(and(eq(ideAgents.tenantId, tenantId), eq(ideAgents.builtinKind, seed.kind)))
-      .limit(1);
-    if (existing) continue;
-    await db.insert(ideAgents).values({
-      id: `${seed.idPrefix}${tenantId}`,
-      tenantId,
-      name: seed.name,
-      title: seed.title,
-      bio: seed.bio,
-      skills: JSON.stringify(seed.skills),
-      baseModel: 'builderforce-default',
-      status: 'active',
-      runtimeSupport: 'cloud',
-      published: false,
-      priceCents: 0,
-      builtinKind: seed.kind,
-    }).onConflictDoNothing();
-  }
+  // ONE read of the kinds this tenant already holds (a legacy seat can carry a
+  // non-canonical id, so existence is by kind, not by the generated id), then ONE
+  // multi-row insert of the missing seats — was a SELECT + INSERT per seed.
+  const existing = await db
+    .select({ kind: ideAgents.builtinKind })
+    .from(ideAgents)
+    .where(and(eq(ideAgents.tenantId, tenantId), inArray(ideAgents.builtinKind, BUILTIN_AGENTS.map((s) => s.kind))));
+  const have = new Set(existing.map((r) => r.kind));
+  const missing = BUILTIN_AGENTS.filter((seed) => !have.has(seed.kind));
+  if (missing.length === 0) return;
+  await db.insert(ideAgents).values(missing.map((seed) => ({
+    id: `${seed.idPrefix}${tenantId}`,
+    tenantId,
+    name: seed.name,
+    title: seed.title,
+    bio: seed.bio,
+    skills: JSON.stringify(seed.skills),
+    baseModel: 'builderforce-default',
+    status: 'active',
+    runtimeSupport: 'cloud',
+    published: false,
+    priceCents: 0,
+    builtinKind: seed.kind,
+  }))).onConflictDoNothing();
 }

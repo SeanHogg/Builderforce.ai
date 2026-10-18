@@ -33,6 +33,7 @@ import { and, desc, eq, ne, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { cofounderIntroductions, cofounderProfiles } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { StatusError } from '../../domain/shared/errors';
 
 /**
  * The halves of a company somebody can cover.
@@ -221,9 +222,9 @@ export function mutualScore(a: ScorableProfile, b: ScorableProfile): { score: nu
 // The store
 // ---------------------------------------------------------------------------
 
-export class CofounderError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class CofounderError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'CofounderError';
   }
 }

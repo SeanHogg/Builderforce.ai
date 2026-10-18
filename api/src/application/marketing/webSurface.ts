@@ -61,6 +61,7 @@
 
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { inTransaction, type Db } from '../../infrastructure/database/connection';
+import { bulkUpdateById } from '../../infrastructure/database/bulkUpdate';
 import type { Env } from '../../env';
 import {
   landingPageBlocks,
@@ -488,19 +489,20 @@ export async function reorderBlocks(
   }
   if (order.length === 0) return [];
 
+  // Two set-based statements (park negative, then settle), not 2N. Two phases stay
+  // because the unique (page_id, position) index is checked row by row inside one UPDATE.
+  const reorderColumns = [{ name: 'position', sqlType: 'integer' }, { name: 'updated_at', sqlType: 'timestamp' }];
+  const guard = sql`t.tenant_id = ${tenantId} AND t.page_id = ${pageId}`;
+  const stamp = new Date();
   await inTransaction(db, async (tx) => {
-    for (const [i, id] of order.entries()) {
-      await tx
-        .update(landingPageBlocks)
-        .set({ position: -(i + 1) })
-        .where(scopedToTenant(landingPageBlocks, tenantId, eq(landingPageBlocks.id, id)));
-    }
-    for (const [i, id] of order.entries()) {
-      await tx
-        .update(landingPageBlocks)
-        .set({ position: i, updatedAt: new Date() })
-        .where(scopedToTenant(landingPageBlocks, tenantId, eq(landingPageBlocks.id, id)));
-    }
+    await bulkUpdateById(tx, {
+      table: 'landing_page_blocks', idColumn: { name: 'id', sqlType: 'integer' }, columns: reorderColumns, where: guard,
+      rows: order.map((id, i) => ({ id, set: { position: -(i + 1) } })),
+    });
+    await bulkUpdateById(tx, {
+      table: 'landing_page_blocks', idColumn: { name: 'id', sqlType: 'integer' }, columns: reorderColumns, where: guard,
+      rows: order.map((id, i) => ({ id, set: { position: i, updated_at: stamp } })),
+    });
   });
 
   return db

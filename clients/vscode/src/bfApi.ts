@@ -374,11 +374,17 @@ export async function canManageActiveWorkspace(secrets: vscode.SecretStorage): P
   }
 }
 
-async function authed<T>(
+/**
+ * The one authenticated fetch: JWT exchange, act-as assertion, and the 401
+ * refresh-and-retry. Resolves `undefined` when there is no credential (signed
+ * out, or the forced refresh yielded none) so `authed` can degrade quietly while
+ * `authedRaw` turns it into NOT_SIGNED_IN.
+ */
+async function fetchAuthed(
   secrets: vscode.SecretStorage,
   path: string,
   authedInit?: AuthedInit,
-): Promise<T | undefined> {
+): Promise<Response | undefined> {
   const { asTenant, ...init } = authedInit ?? {};
   let token = await exchangeJwt(secrets);
   if (!token) return undefined;
@@ -395,6 +401,16 @@ async function authed<T>(
     if (!token) return undefined;
     res = await call(token);
   }
+  return res;
+}
+
+async function authed<T>(
+  secrets: vscode.SecretStorage,
+  path: string,
+  authedInit?: AuthedInit,
+): Promise<T | undefined> {
+  const res = await fetchAuthed(secrets, path, authedInit);
+  if (!res) return undefined;
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     // Status rides ALONGSIDE the message (unchanged, so message-matching callers are
@@ -1268,22 +1284,8 @@ export async function authedRaw<T>(
   path: string,
   authedInit?: AuthedInit,
 ): Promise<{ status: number; body: T | undefined; text: string }> {
-  const { asTenant, ...init } = authedInit ?? {};
-  let token = await exchangeJwt(secrets);
-  if (!token) throw new Error(NOT_SIGNED_IN);
-  const call = (t: string) => {
-    assertActsAs(t, asTenant);
-    return trackReachability(fetch(`${getBaseUrl()}${path}`, {
-      ...init,
-      headers: { ...(init.headers ?? {}), authorization: `Bearer ${t}`, "content-type": "application/json" },
-    }));
-  };
-  let res = await call(token);
-  if (res.status === 401) {
-    token = await exchangeJwt(secrets, true);
-    if (!token) throw new Error(NOT_SIGNED_IN);
-    res = await call(token);
-  }
+  const res = await fetchAuthed(secrets, path, authedInit);
+  if (!res) throw new Error(NOT_SIGNED_IN);
   const text = await res.text().catch(() => "");
   let body: T | undefined;
   try {

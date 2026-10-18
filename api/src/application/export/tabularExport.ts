@@ -27,6 +27,7 @@
  * caller that held record rows (the EMP-20 dataset export, now a positional
  * export source).
  */
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 
 /** Render a cell value to a flat string (null/undefined → empty; dates → ISO;
  *  other objects → JSON). A Date must not reach `JSON.stringify`, which would
@@ -52,12 +53,8 @@ export function csvMatrix(header: readonly unknown[], rows: ReadonlyArray<readon
   return [header, ...rows].map((row) => row.map(esc).join(',')).join('\n');
 }
 
-/** Escape a value for safe HTML text content. */
-function htmlEscape(v: unknown): string {
-  return cell(v)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+/** Escape a cell value for safe HTML text content. */
+const htmlEscape = (v: unknown): string => escapeHtml(cell(v));
 
 /**
  * Serialise a header and a value matrix to a complete, self-contained HTML

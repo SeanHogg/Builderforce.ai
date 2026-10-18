@@ -10,7 +10,7 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { utcDayStart } from './tokenUsage';
+import { getTenantUsageTotalsForEnv } from './tokenUsage';
 import { recordUsageRow, resolvePaidOverflowCapMillicents, usageRequestCountSql, type RecordUsageRow } from './usageLedger';
 import { raiseProviderAuthAlertsFromFailovers } from './byoCredentialAlerting';
 import { USAGE_WINDOW_DAYS } from './openRouterConnectionService';
@@ -127,16 +127,9 @@ export async function isPaidOverflowExhausted(
   const cap = resolvePaidOverflowCapMillicents(access.paidOverflowDailyCap, access.effectivePlan);
   if (cap < 0) return false; // unlimited
   try {
-    const db = buildTransactionalDatabase(env);
-    const [row] = await db
-      .select({ spent: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
-      .from(llmUsageLog)
-      .where(and(
-        eq(llmUsageLog.tenantId, access.tenantId),
-        eq(llmUsageLog.paidOverflow, true),
-        gte(llmUsageLog.createdAt, utcDayStart()),
-      ));
-    return Math.max(0, Number(row?.spent ?? 0)) >= cap;
+    // Shared per-tenant cached totals (see tokenUsage) — not a SUM per request.
+    const totals = await getTenantUsageTotalsForEnv(env, access.tenantId);
+    return Math.max(0, totals.paidOverflowMillicents) >= cap;
   } catch {
     return false; // fail open — never let the cap query break a request
   }

@@ -49,6 +49,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `ri_prospects.status`. */
 export const PROSPECT_STATUSES = ['new', 'enriched', 'sequenced', 'engaged', 'converted', 'disqualified'] as const;
@@ -72,9 +73,9 @@ export const isDealFlowStatus = (v: unknown): v is DealFlowStatus =>
 export const isEntityKind = (v: unknown): v is EntityKind =>
   typeof v === 'string' && (ENTITY_KINDS as readonly string[]).includes(v);
 
-export class RevenueIntelError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class RevenueIntelError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'RevenueIntelError';
   }
 }

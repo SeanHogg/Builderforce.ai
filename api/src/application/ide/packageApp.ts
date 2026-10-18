@@ -33,6 +33,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { materializeGameTarget, type MaterializeGameResult } from '../game';
 import { isGameTarget, type GameBuild, type GameTargetKey } from '../game/gameTarget';
+import { slugify } from '@builderforce/creation-canvas-contract';
 
 /**
  * Targets an APP may be packaged for.
@@ -56,13 +57,7 @@ export interface AppBundle {
 
 /** Lowercase alphanumeric + hyphen, non-empty — the same shape a slug must have. */
 export function appSlug(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48);
-  return slug || 'app';
+  return slugify(name, { maxLength: 48, fallback: 'app' });
 }
 
 /**

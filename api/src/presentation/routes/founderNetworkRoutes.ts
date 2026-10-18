@@ -16,20 +16,18 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
-  CofounderError,
   discoverCofounders,
   myCofounderProfile,
   requestIntroduction,
   respondToIntroduction,
   upsertCofounderProfile,
 } from '../../application/legal/cofounderMatching';
-import { PipelineError, dealThread, logDealTouch, moveDeal, openDeal, project } from '../../application/revenue/pipelineProjection';
+import { dealThread, logDealTouch, moveDeal, openDeal, project } from '../../application/revenue/pipelineProjection';
 import {
-  FundingRoundError,
   listFundingRounds,
   upsertFundingRound,
 } from '../../application/finance/fundingRounds';
-import { InvestorUpdateError, sendInvestorUpdate } from '../../application/investor/investorUpdateDelivery';
+import { sendInvestorUpdate } from '../../application/investor/investorUpdateDelivery';
 import { parseBody, z, zJsonObject, zNumberLike } from './requestBody';
 
 // Most bodies here are read field by field with `typeof` guards and handed to an
@@ -44,19 +42,6 @@ const IntroductionBody = z.object({
 const IntroductionResponseBody = z.object({ decision: z.unknown().optional() });
 const MoveDealBody = z.object({ stage: z.string().nullish() });
 
-/** One translation for all three, keyed on the error type each service throws —
- *  so a new endpoint cannot invent a different code for the same rejection. */
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof CofounderError || error instanceof PipelineError || error instanceof InvestorUpdateError || error instanceof FundingRoundError) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-    throw error;
-  }
-};
-
 const tenant = (c: Context<HonoEnv>) => c.get('tenantId') as number;
 const actor = (c: Context<HonoEnv>) => String(c.get('userId') ?? '');
 
@@ -68,10 +53,10 @@ export function createCofounderRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  router.get('/profile', (c) => handle(async () =>
-    Response.json({ profile: await myCofounderProfile(db, tenant(c), actor(c)) })));
+  router.get('/profile', async (c) =>
+    Response.json({ profile: await myCofounderProfile(db, tenant(c), actor(c)) }));
 
-  router.put('/profile', (c) => handle(async () => {
+  router.put('/profile', async (c) => {
     const body = await parseBody(c, zJsonObject);
     const result = await upsertCofounderProfile(db, tenant(c), actor(c), {
       headline: String(body.headline ?? ''),
@@ -90,20 +75,20 @@ export function createCofounderRoutes(db: Db): Hono<HonoEnv> {
       ...(typeof body.status === 'string' ? { status: body.status } : {}),
     });
     return Response.json(result);
-  }));
+  });
 
   /** The ranking, with its reasons. Never a "match" — see the engine's note on
    *  why the scorer ranks, a human asks, and the other human answers. */
-  router.get('/matches', (c) => handle(async () =>
-    Response.json(await discoverCofounders(db, tenant(c), actor(c)))));
+  router.get('/matches', async (c) =>
+    Response.json(await discoverCofounders(db, tenant(c), actor(c))));
 
-  router.post('/introductions', (c) => handle(async () => {
+  router.post('/introductions', async (c) => {
     const body = await parseBody(c, IntroductionBody);
     const result = await requestIntroduction(db, tenant(c), actor(c), Number(body.toProfileId), String(body.message ?? ''));
     return Response.json(result);
-  }));
+  });
 
-  router.post('/introductions/:id/respond', (c) => handle(async () => {
+  router.post('/introductions/:id/respond', async (c) => {
     const body = await parseBody(c, IntroductionResponseBody);
     const decision = body.decision === 'accepted' ? 'accepted' : 'declined';
     // Only the RECIPIENT may answer, enforced inside the service by matching the
@@ -111,7 +96,7 @@ export function createCofounderRoutes(db: Db): Hono<HonoEnv> {
     // body field.
     await respondToIntroduction(db, tenant(c), actor(c), Number(c.req.param('id')), decision);
     return Response.json({ ok: true, status: decision });
-  }));
+  });
 
   return router;
 }
@@ -142,8 +127,8 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
   /** The board, read from the deals. The canvas object is overwritten from this,
    *  which is what makes it a projection rather than a second copy. `?family=raise`
    *  is the SAME board over `deals.kind='investment'` — see `pipelineFamilies.ts`. */
-  router.get('/', (c) => handle(async () =>
-    Response.json({ pipeline: await project(db, tenant(c), options(c)) })));
+  router.get('/', async (c) =>
+    Response.json({ pipeline: await project(db, tenant(c), options(c)) }));
 
   /**
    * Open a deal against a counterparty, creating the counterparty when it is new.
@@ -152,7 +137,7 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
    * spreadsheet cell into an object every other board can join to — FO-E1's actual
    * complaint, and the reason this is not just an insert into `deals`.
    */
-  router.post('/deals', (c) => handle(async () => {
+  router.post('/deals', async (c) => {
     const body = await parseBody(c, zJsonObject);
     const result = await openDeal(db, tenant(c), {
       family: c.req.query('family') ?? body.family,
@@ -168,7 +153,7 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
       expectedCloseAt: typeof body.expectedCloseAt === 'string' ? body.expectedCloseAt : null,
     });
     return Response.json(result);
-  }));
+  });
 
   /**
    * Move a deal, and get the board back in the same response.
@@ -178,17 +163,17 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
    * comes back is read off the DEAL's own kind — a caller that could name the
    * family is a caller that could name the wrong one.
    */
-  router.post('/deals/:id/stage', (c) => handle(async () => {
+  router.post('/deals/:id/stage', async (c) => {
     const body = await parseBody(c, MoveDealBody);
     const { family: _family, pipelineRef: _pipelineRef, ...moveOptions } = options(c);
     const pipeline = await moveDeal(db, tenant(c), Number(c.req.param('id')), String(body.stage ?? ''), moveOptions);
     return Response.json({ pipeline });
-  }));
+  });
 
   /** One deal's conversation — the per-investor thread FO-E1 says a rows table
    *  could never hold. Newest first. */
-  router.get('/deals/:id/touchpoints', (c) => handle(async () =>
-    Response.json({ thread: await dealThread(db, tenant(c), Number(c.req.param('id'))) })));
+  router.get('/deals/:id/touchpoints', async (c) =>
+    Response.json({ thread: await dealThread(db, tenant(c), Number(c.req.param('id'))) }));
 
   /**
    * The rounds a founder has PLANNED — the header half of the raise.
@@ -198,12 +183,12 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
    * allocations, and `funding_rounds.amount_raised` was dropped in 0937 precisely
    * so the two can never be the same column.
    */
-  router.get('/rounds', (c) => handle(async () =>
-    Response.json({ rounds: await listFundingRounds(db, tenant(c)) })));
+  router.get('/rounds', async (c) =>
+    Response.json({ rounds: await listFundingRounds(db, tenant(c)) }));
 
   /** Plan a round, or change the plan. Idempotent on the NAME, because the name is
    *  what every allocation joins to through `deals.pipeline_ref`. */
-  router.post('/rounds', (c) => handle(async () => {
+  router.post('/rounds', async (c) => {
     const body = await parseBody(c, zJsonObject);
     const num = (value: unknown): number | null | undefined =>
       value === undefined ? undefined : value === null || value === '' ? null : Number(value);
@@ -225,11 +210,11 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
     // returns the board.
     const pipeline = await project(db, tenant(c), { family: 'raise', pipelineRef: round.name });
     return Response.json({ round, pipeline });
-  }));
+  });
 
   /** Log a touch, and get the thread back. Same one-call shape as the move, so a
    *  surface renders what it just wrote rather than what it wrote a moment ago. */
-  router.post('/deals/:id/touchpoints', (c) => handle(async () => {
+  router.post('/deals/:id/touchpoints', async (c) => {
     const body = await parseBody(c, zJsonObject);
     const thread = await logDealTouch(db, tenant(c), Number(c.req.param('id')), {
       summary: String(body.summary ?? ''),
@@ -239,7 +224,7 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
       occurredAt: typeof body.occurredAt === 'string' ? body.occurredAt : null,
     });
     return Response.json({ thread });
-  }));
+  });
 
   return router;
 }
@@ -260,7 +245,7 @@ export function createInvestorUpdateRoutes(db: Db): Hono<HonoEnv> {
    * knows which failures are worth retrying. This endpoint adds an audience and a
    * renderer, not a second sender.
    */
-  router.post('/send', (c) => handle(async () => {
+  router.post('/send', async (c) => {
     const body = await parseBody(c, zJsonObject);
     const content = body.content as Record<string, unknown> | undefined;
     if (!content || typeof content.title !== 'string') {
@@ -280,7 +265,7 @@ export function createInvestorUpdateRoutes(db: Db): Hono<HonoEnv> {
       objectId: typeof body.objectId === 'string' ? body.objectId : null,
     });
     return Response.json(result);
-  }));
+  });
 
   return router;
 }

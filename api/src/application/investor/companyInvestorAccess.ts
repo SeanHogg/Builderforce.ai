@@ -86,10 +86,11 @@ import {
   type DataRoomResolution,
 } from './dataRoomSharing';
 import { CompanyError, companyObjectId } from './companyWorkspace';
+import { StatusError } from '../../domain/shared/errors';
 
-export class InvestorAccessError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class InvestorAccessError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'InvestorAccessError';
   }
 }

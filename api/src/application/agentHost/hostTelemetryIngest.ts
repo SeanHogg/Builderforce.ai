@@ -13,7 +13,6 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { executions, taskFileChanges, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
-import { taskInTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 
 /** Most events one batch may carry (mirrors the route schema). */
@@ -115,7 +114,7 @@ export async function insertUsageSnapshotRows(db: Db, rows: ReturnType<typeof us
   return rows.length;
 }
 
-export type FileChangeRejection = 'invalid' | 'task' | 'execution';
+export type FileChangeRejection = 'invalid' | 'execution';
 
 /** One file change, shape-checked, or why it cannot be one. */
 export function parseFileChange(e: FileChangeInput):
@@ -134,9 +133,9 @@ export function parseFileChange(e: FileChangeInput):
 
 /**
  * Admit and insert a batch of file changes. `taskId` and `executionId` arrive in the
- * BODY, so each is checked against the host's own tenant (tasks inherit tenancy
- * through their project) and the execution against this host — once per distinct
- * value, not once per event. Returns how many were written and, per event, why one
+ * BODY, so each is checked in ONE query: the execution must belong to this host and
+ * tenant AND be the execution OF that task. That proves the task is in the host's
+ * tenant too (an execution carries its task), so there is no per-task lookup. Returns how many were written and, per event, why one
  * was refused (`null` = written).
  */
 export async function ingestFileChanges(
@@ -146,10 +145,6 @@ export async function ingestFileChanges(
 ): Promise<{ inserted: number; rejected: Array<FileChangeRejection | null> }> {
   const parsed = events.map(parseFileChange);
   const valid = parsed.flatMap((p) => (p.ok ? [p] : []));
-
-  const taskIds = [...new Set(valid.map((p) => p.taskId))];
-  const tasksOk = new Map<number, boolean>();
-  for (const taskId of taskIds) tasksOk.set(taskId, await taskInTenant(db, taskId, host.tenantId));
 
   const executionIds = [...new Set(valid.map((p) => p.executionId))];
   const owned = executionIds.length === 0 ? [] : await db.select({ id: executions.id, taskId: executions.taskId })
@@ -165,7 +160,6 @@ export async function ingestFileChanges(
   const rows: Array<typeof taskFileChanges.$inferInsert> = [];
   for (const p of parsed) {
     if (!p.ok) { rejected.push('invalid'); continue; }
-    if (!tasksOk.get(p.taskId)) { rejected.push('task'); continue; }
     if (executionTask.get(p.executionId) !== p.taskId) { rejected.push('execution'); continue; }
     rejected.push(null);
     rows.push({ tenantId: host.tenantId, taskId: p.taskId, executionId: p.executionId, path: p.path, change: p.change, agent: p.agent });

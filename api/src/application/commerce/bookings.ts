@@ -46,6 +46,7 @@ import {
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `booking_services.mode`. */
 export const BOOKING_MODES = ['one_to_one', 'one_to_many', 'round_robin'] as const;
@@ -60,9 +61,9 @@ export const isBookingMode = (v: unknown): v is BookingMode =>
 export const isReservationStatus = (v: unknown): v is ReservationStatus =>
   typeof v === 'string' && (RESERVATION_STATUSES as readonly string[]).includes(v);
 
-export class BookingError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class BookingError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'BookingError';
   }
 }

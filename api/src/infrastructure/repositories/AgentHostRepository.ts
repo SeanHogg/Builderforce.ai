@@ -6,7 +6,6 @@ import { agentHosts } from '../database/schema';
 import { scopedToTenant } from '../database/tenantScope';
 import type { Db } from '../database/connection';
 import type { Env } from '../../env';
-import { verifySecret } from '../auth/HashService';
 import { invalidateAgentHostKeyCache } from '../auth/keyResolutionCache';
 
 export class AgentHostRepository implements IAgentHostRepository {
@@ -36,22 +35,6 @@ export class AgentHostRepository implements IAgentHostRepository {
       .from(agentHosts) as any)
       .where(scopedToTenant(agentHosts, tenantId, eq(agentHosts.tenantId, tenantId)));
     return rows.map((r: unknown) => this.toDomain(r));
-  }
-
-  async verifyApiKey(id: AgentHostId, apiKey: string): Promise<AgentHost | null> {
-    const [row] = await this.db
-      .select()
-      .from(agentHosts)
-      .where(eq(agentHosts.id, id))
-      .limit(1);
-    if (!row) return null;
-    // A deactivated/suspended host must not authenticate — the same gate the
-    // JWT-exchange door and `agentHostAuth.verifyAgentHostApiKey` apply. Without
-    // it `updateStatus`'s cache invalidation only bought a fresh lookup of a key
-    // that then still passed.
-    if (row.status !== 'active') return null;
-    const valid = await verifySecret(apiKey, row.apiKeyHash ?? '');
-    return valid ? this.toDomain(row) : null;
   }
 
   async updateStatus(id: AgentHostId, tenantId: TenantId, status: AgentHostStatus, env: Env): Promise<AgentHost | null> {

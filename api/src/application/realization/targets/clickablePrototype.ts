@@ -14,7 +14,8 @@
  * on a laptop that has never seen this project.
  */
 
-import { esc, renderProofShell } from '../proofShell';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
+import { renderProofShell } from '../proofShell';
 import { audienceOf, goalHeadline, headlineCapabilities } from './shared';
 import type { RealizationTarget, RealizeContext, RealizationOutput } from '../realizationTarget';
 
@@ -58,7 +59,7 @@ function renderPrototype(ctx: RealizeContext, screens: readonly Screen[]): strin
 
   const body = `  <div class="card" style="border-left:4px solid var(--accent)">
     <p class="label">Your task</p>
-    <p style="margin:0;font-size:17px">${esc(task)}</p>
+    <p style="margin:0;font-size:17px">${escapeHtml(task)}</p>
     <p class="muted" style="margin:8px 0 0;font-size:14px">
       Work through it on your own. Say out loud what you are thinking. There are no wrong turns —
       anywhere you get stuck is the finding.
@@ -96,7 +97,7 @@ function renderPrototype(ctx: RealizeContext, screens: readonly Screen[]): strin
     </div>
   </section>
 
-  <footer>${esc(spec.title)} — clickable prototype. Nothing here is real: no data is saved and no message is sent.</footer>`;
+  <footer>${escapeHtml(spec.title)} — clickable prototype. Nothing here is real: no data is saved and no message is sent.</footer>`;
 
   const script = `  var SCREENS = ${JSON.stringify(screens)};
   var index = 0;

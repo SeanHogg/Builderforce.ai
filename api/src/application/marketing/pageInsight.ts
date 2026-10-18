@@ -39,6 +39,7 @@ import {
   marketingHeatmapScreenshots,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { StatusError } from '../../domain/shared/errors';
 
 /** Below this, a map is a shape rather than a finding. Deliberately low —
  *  it is a floor for "do not interpret", not a claim of significance. */
@@ -51,9 +52,9 @@ export type EmbedMode = (typeof EMBED_MODES)[number];
 export const isEmbedMode = (v: unknown): v is EmbedMode =>
   typeof v === 'string' && (EMBED_MODES as readonly string[]).includes(v);
 
-export class PageInsightError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class PageInsightError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'PageInsightError';
   }
 }

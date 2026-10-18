@@ -28,6 +28,7 @@ import type { Env } from '../../env';
 import { keyResults, objectiveLinks, objectives, projects, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskType } from '../../domain/shared/types';
+import { ValidationError } from '../../domain/shared/errors';
 import type { TaskService } from '../task/TaskService';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { invalidateProjectsList } from '../project/projectsListCache';
@@ -67,7 +68,7 @@ export interface ConvertDeps {
   env?: Env;
 }
 
-export class ConvertError extends Error {}
+export class ConvertError extends ValidationError {}
 
 /** Bust every cache a type change can invalidate: the project's epic tree, the
  *  projects-list aggregate the 360 reads, and the PMO rollup/tree. Best-effort. */

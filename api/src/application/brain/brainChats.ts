@@ -13,6 +13,7 @@ import { normalizeChatTitle } from './chatTitle';
 import { chatColumns, normalizeCapability, type CreateChatDto, type UpdateChatDto } from './brainChatShapes';
 import { canAccessChat, syncPendingMemberships, verifyChatOwnership, verifyProjectInTenant } from './brainChatGuards';
 import type { Db } from '../../infrastructure/database/connection';
+import { bumpChatStructure, bumpTeamChats } from './chatCacheVersions';
 
 export async function listChats(
   db: Db,
@@ -220,6 +221,7 @@ export async function updateChat(
   // `modeChangedTo` is transient provenance for the CALLER (the route writes the audit
   // row — it owns `env` and the waitUntil budget), never a persisted column. Null when
   // the mode was not touched or the PATCH restated the value it already had.
+  await Promise.all([bumpChatStructure(chatId), bumpTeamChats(tenantId)]);
   const previousMode = resolveChatMode(existing as { origin?: string | null; mode?: string | null });
   const modeChangedTo = nextMode && nextMode !== previousMode ? nextMode : null;
   return { ...updated, modeChangedTo };
@@ -233,6 +235,7 @@ export async function archiveChat(db: Db, chatId: number, tenantId: number, user
     .update(brainChats)
     .set({ isArchived: true, updatedAt: new Date() })
     .where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, chatId)));
+  await Promise.all([bumpChatStructure(chatId), bumpTeamChats(tenantId)]);
 
   return { ok: true };
 }

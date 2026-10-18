@@ -67,7 +67,6 @@ export function registerHostTelemetryRoutes<E extends HonoEnv>(
     if (single) {
       const why = rejected[0];
       if (why === 'invalid') return c.json({ error: 'taskId, executionId, and path are required' }, 400);
-      if (why === 'task') return c.json({ error: 'task not found' }, 404);
       if (why === 'execution') return c.json({ error: 'execution not found' }, 404);
       return c.json({ ok: true });
     }

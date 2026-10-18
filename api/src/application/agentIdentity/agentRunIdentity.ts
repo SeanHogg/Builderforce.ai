@@ -12,7 +12,6 @@ import {
   executionLimits,
   executions,
   ideAgents,
-  agents,
   agentRegistrations,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
@@ -100,21 +99,23 @@ export async function freezeIdeAgentDefinition(db: Db, tenantId: number, agentRe
 }
 
 export async function freezeDispatchAgentDefinition(db: Db, args: { tenantId: number; agentId?: number | null; agentRegistrationId?: string | null }): Promise<FrozenAgentDefinition | null> {
-  if (args.agentRegistrationId) {
-    const [row] = await db.select().from(agentRegistrations).where(and(eq(agentRegistrations.tenantId, args.tenantId), eq(agentRegistrations.id, args.agentRegistrationId))).limit(1);
-    if (row) {
-      const { credentialRef: _secretReference, ...definition } = row;
-      return appendDefinitionVersion(db, args.tenantId, 'agent_registration', row.id, definition);
-    }
+  // `agents` is read-only compatibility with no writer; every legacy row was folded into
+  // `agent_registrations` (legacy_agent_id), so a numeric agent id resolves through there.
+  const byRegistration = args.agentRegistrationId
+    ? eq(agentRegistrations.id, args.agentRegistrationId)
+    : args.agentId != null ? eq(agentRegistrations.legacyAgentId, args.agentId) : null;
+  if (!byRegistration) return null;
+  const [row] = await db.select().from(agentRegistrations).where(and(eq(agentRegistrations.tenantId, args.tenantId), byRegistration)).limit(1);
+  if (!row && args.agentRegistrationId && args.agentId != null) {
+    const [legacy] = await db.select().from(agentRegistrations).where(and(eq(agentRegistrations.tenantId, args.tenantId), eq(agentRegistrations.legacyAgentId, args.agentId))).limit(1);
+    return legacy ? freezeRegistration(db, args.tenantId, legacy) : null;
   }
-  if (args.agentId != null) {
-    const [row] = await db.select().from(agents).where(and(eq(agents.tenantId, args.tenantId), eq(agents.id, args.agentId))).limit(1);
-    if (row) {
-      const { apiKeyHash: _credentialHash, ...definition } = row;
-      return appendDefinitionVersion(db, args.tenantId, 'legacy_agent', String(row.id), definition);
-    }
-  }
-  return null;
+  return row ? freezeRegistration(db, args.tenantId, row) : null;
+}
+
+function freezeRegistration(db: Db, tenantId: number, row: typeof agentRegistrations.$inferSelect): Promise<FrozenAgentDefinition> {
+  const { credentialRef: _secretReference, ...definition } = row;
+  return appendDefinitionVersion(db, tenantId, 'agent_registration', row.id, definition);
 }
 
 /** Idempotently binds a frozen definition, principal, grants, and limits to a run. */

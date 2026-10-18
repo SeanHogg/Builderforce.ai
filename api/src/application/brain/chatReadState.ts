@@ -15,6 +15,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { brainChats, brainChatMessages, chatReadState } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { excluded } from '../../infrastructure/database/upsert';
+import { bumpUnreadForUser } from './chatCacheVersions';
 
 /**
  * Advance a user's read high-water mark for one chat. Idempotent and monotonic:
@@ -45,6 +46,8 @@ export async function markChatRead(
         updatedAt: new Date(),
       },
     });
+  // The attention snapshot caches this user's unread map; their pointer just moved.
+  await bumpUnreadForUser(tenantId, userId);
   return target;
 }
 
@@ -58,9 +61,8 @@ export async function markChatRead(
  * the whole messages table. Only chats with ≥1 unread message appear in the map
  * (read chats with nothing new come back as 0 and are dropped here).
  *
- * Not cached: unread is per-user live state that changes on every inbound message,
- * and it rides the already-uncached attention aggregator (same rationale as the
- * rest of that endpoint).
+ * Uncached HERE; the attention poll reads it through `chatUnreadCache.readUnreadCached`,
+ * which is invalidated by `markChatRead` and by every message append.
  */
 export async function unreadCountsForUser(
   db: Db, tenantId: number, userId: string,

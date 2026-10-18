@@ -19,6 +19,7 @@ import { renderPdf } from '../office/pdfWriter';
 import type { MdBlock } from '../office/markdownBlocks';
 import { createPresentation, type Presentation, type PresentationSlide } from '../office/pptxPresentation';
 import type { BrandPalette, RfpResponseBody } from './types';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 
 /** The responder tenant's default palette (Builderforce coral/cyan) when none stored. */
 export const DEFAULT_TENANT_PALETTE: BrandPalette = {
@@ -79,11 +80,7 @@ export function blendPalettes(requester: BrandPalette, tenant: BrandPalette): Br
   };
 }
 
-function esc(v: unknown): string {
-  return String(v ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+const esc = (v: unknown): string => escapeHtml(String(v ?? ''));
 
 const money = (n: number): string => `$${Math.round(n).toLocaleString('en-US')}`;
 

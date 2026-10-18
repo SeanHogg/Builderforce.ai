@@ -54,6 +54,7 @@ import { sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Domain } from './ObjectRegistry';
 import { appsDatabaseOf } from '../ide/appsDatabase';
+import { usageDatabaseOf } from '../llm/usageLedger';
 
 /** `metric_facts.bucket`. */
 export type Bucket = 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'total';
@@ -136,6 +137,8 @@ export type PresentTables = ReadonlySet<string>;
  */
 export interface RollupSources {
   apps: Db;
+  /** The operational database: `llm_usage_log` and the other write-heavy ledgers. */
+  usage: Db;
 }
 
 /**
@@ -215,7 +218,7 @@ export async function runDomainRollup(
   let extra: Record<string, number> = {};
 
   if (rollup.prepare) extra = await rollup.prepare(db, present);
-  const sources: RollupSources = { apps: appsDatabaseOf(db) };
+  const sources: RollupSources = { apps: appsDatabaseOf(db), usage: usageDatabaseOf(db) };
 
   for (const spec of rollup.metrics) {
     const missing = spec.requires.filter((table) => !present.has(table));

@@ -19,6 +19,19 @@ export interface ApiRequestInit extends Omit<RequestInit, 'body'> {
   idempotencyKey?: string;
 }
 
+/**
+ * The API answers `{error:"msg"}` or the nested `{error:{message,code}}`. Reading
+ * `error` as a string alone rendered "[object Object]" for the nested form.
+ * Mirrors frontend/src/lib/apiClient.ts flattenErrorBody (no package the
+ * extension and the web app both import, so one copy per runtime).
+ */
+export function flattenErrorMessage(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  const b = body as { error?: unknown; message?: unknown };
+  const nested = typeof b.error === 'object' && b.error !== null ? (b.error as { message?: unknown }) : null;
+  return [b.message, nested?.message, b.error].find((c): c is string => typeof c === 'string' && c.length > 0);
+}
+
 export class ApiError extends Error {
   constructor(readonly status: number | undefined, message: string) {
     super(message);
@@ -59,7 +72,7 @@ export function createApiClient(deps: { session: Session; baseUrl: string; fetch
         const text = await res.text().catch(() => '');
         let message = text.slice(0, 300);
         try {
-          message = (JSON.parse(text) as { error?: string }).error ?? message;
+          message = flattenErrorMessage(JSON.parse(text)) ?? message;
         } catch {
           /* not JSON */
         }

@@ -39,10 +39,11 @@ import {
   scratchPadAttachments,
 } from '../../infrastructure/database/schema';
 import { scopedToNullableTenant, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { StatusError } from '../../domain/shared/errors';
 
-export class PortfolioIntelError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class PortfolioIntelError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'PortfolioIntelError';
   }
 }

@@ -43,6 +43,7 @@ import {
   enrichmentCache,
 } from '../../infrastructure/database/schema';
 import { scopedToNullableTenant, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `ai_tool_calls.outcome`. */
 export const TOOL_OUTCOMES = ['ok', 'error', 'refused', 'timeout'] as const;
@@ -51,9 +52,9 @@ export type ToolOutcome = (typeof TOOL_OUTCOMES)[number];
 export const isToolOutcome = (v: unknown): v is ToolOutcome =>
   typeof v === 'string' && (TOOL_OUTCOMES as readonly string[]).includes(v);
 
-export class AiOpsError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class AiOpsError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'AiOpsError';
   }
 }

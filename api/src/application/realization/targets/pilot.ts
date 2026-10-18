@@ -13,7 +13,8 @@
  * something you see rather than something you realise.
  */
 
-import { esc, renderProofShell, INGRESS_PRELUDE } from '../proofShell';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
+import { renderProofShell, INGRESS_PRELUDE } from '../proofShell';
 import { audienceOf, criteriaFrom, goalHeadline } from './shared';
 import type { RealizationTarget, RealizeContext, RealizationOutput } from '../realizationTarget';
 
@@ -95,7 +96,7 @@ function renderDashboard(ctx: RealizeContext): string {
     </div>
   </section>
 
-  <footer>${esc(spec.title)} — pilot dashboard. Exit criteria are in <code>pilot/charter.md</code>.</footer>`;
+  <footer>${escapeHtml(spec.title)} — pilot dashboard. Exit criteria are in <code>pilot/charter.md</code>.</footer>`;
 
   const script = `${INGRESS_PRELUDE}
   var COHORT = ${COHORT};

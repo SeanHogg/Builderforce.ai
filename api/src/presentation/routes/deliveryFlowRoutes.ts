@@ -55,7 +55,6 @@ import {
   type ActionStatus,
 } from '../../application/delivery/actionItems';
 import {
-  AgileCostError,
   costTrend,
   currentEstimate,
   estimateAccuracy,
@@ -93,17 +92,6 @@ const OpenChainBody = z.object({
   approvers: z.array(zJsonObject).nullish(),
 });
 
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof ActionItemError || error instanceof AgileCostError || error instanceof ApprovalChainError) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-    throw error;
-  }
-};
-
 const rowId = (raw: string): number => {
   const id = Number(raw);
   if (!Number.isFinite(id) || id <= 0) throw new ActionItemError('That is not an id.', 400);
@@ -135,16 +123,16 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
   // The two literal paths are declared BEFORE `/action-items/:id` so they are not
   // swallowed as ids — Hono matches in registration order.
 
-  router.get('/action-items/overdue', (c) => handle(async () =>
-    Response.json({ items: await overdueActionItems(db, tenant(c)) })));
+  router.get('/action-items/overdue', async (c) =>
+    Response.json({ items: await overdueActionItems(db, tenant(c)) }));
 
-  router.get('/action-items/follow-through', (c) => handle(async () => {
+  router.get('/action-items/follow-through', async (c) => {
     const ref = c.req.query('sourceRef');
     if (!ref) throw new ActionItemError('sourceRef is required', 400);
     return Response.json(await sourceFollowThrough(db, tenant(c), { ref }));
-  }));
+  });
 
-  router.get('/action-items', (c) => handle(async () => {
+  router.get('/action-items', async (c) => {
     const sourceRef = c.req.query('sourceRef');
     const ownerRef = c.req.query('ownerRef');
     return Response.json({
@@ -154,9 +142,9 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
         openOnly: c.req.query('all') !== '1',
       }),
     });
-  }));
+  });
 
-  router.post('/action-items', (c) => handle(async () => {
+  router.post('/action-items', async (c) => {
     const body = await parseBody(c, DeliveryWriteBody);
     const sourceRef = str(body.sourceRef);
     const item = await createActionItem(
@@ -171,9 +159,9 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
       (c.get('userId') as string | undefined) ?? null,
     );
     return Response.json(item, { status: 201 });
-  }));
+  });
 
-  router.patch('/action-items/:id', (c) => handle(async () => {
+  router.patch('/action-items/:id', async (c) => {
     const body = await parseBody(c, DeliveryWriteBody);
     const patch: Record<string, unknown> = {};
     if (body.title !== undefined) patch.title = String(body.title);
@@ -184,31 +172,31 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
     return Response.json(await updateActionItem(
       db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id')), patch,
     ));
-  }));
+  });
 
-  router.post('/action-items/:id/promote', (c) => handle(async () => {
+  router.post('/action-items/:id/promote', async (c) => {
     const body = await parseBody(c, DeliveryWriteBody);
     return Response.json(await promoteToTask(
       db, c.env as Env, tenant(c), await who(c),
       rowId(c.req.param('id')), num(body.taskId) ?? Number.NaN,
     ));
-  }));
+  });
 
   // ── Estimates ─────────────────────────────────────────────────────────────
 
-  router.get('/estimates-accuracy', (c) => handle(async () =>
-    Response.json({ byEstimator: await estimateAccuracy(db, tenant(c)) })));
+  router.get('/estimates-accuracy', async (c) =>
+    Response.json({ byEstimator: await estimateAccuracy(db, tenant(c)) }));
 
-  router.get('/estimates/:taskId', (c) => handle(async () => {
+  router.get('/estimates/:taskId', async (c) => {
     const taskId = rowId(c.req.param('taskId'));
     const [current, history] = await Promise.all([
       currentEstimate(db, tenant(c), taskId),
       estimateHistory(db, tenant(c), taskId),
     ]);
     return Response.json({ current, history });
-  }));
+  });
 
-  router.post('/estimates', (c) => handle(async () => {
+  router.post('/estimates', async (c) => {
     const body = await parseBody(c, DeliveryWriteBody);
     return Response.json(await recordEstimate(db, tenant(c), {
       taskId: num(body.taskId) ?? Number.NaN,
@@ -219,22 +207,22 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
       estimatorRef: str(body.estimatorRef) ?? (c.get('userId') as string | undefined) ?? null,
       confidence: num(body.confidence) ?? null,
     }), { status: 201 });
-  }));
+  });
 
   // ── Sprint economics ──────────────────────────────────────────────────────
 
-  router.get('/sprint-cost-trend', (c) => handle(async () => {
+  router.get('/sprint-cost-trend', async (c) => {
     const projectId = positiveIntParam(c.req.query('projectId'));
     return Response.json({ sprints: await costTrend(db, tenant(c), projectId) });
-  }));
+  });
 
-  router.get('/sprints/:sprintId/cost', (c) => handle(async () => {
+  router.get('/sprints/:sprintId/cost', async (c) => {
     const economics = await sprintEconomics(db, tenant(c), c.req.param('sprintId'));
     if (!economics) return Response.json({ error: 'No cost has been stamped for that sprint.' }, { status: 404 });
     return Response.json(economics);
-  }));
+  });
 
-  router.put('/sprints/:sprintId/cost', manager, (c) => handle(async () => {
+  router.put('/sprints/:sprintId/cost', manager, async (c) => {
     const body = await parseBody(c, DeliveryWriteBody);
     return Response.json(await stampSprintCost(db, c.env as Env, tenant(c), await who(c), {
       sprintId: c.req.param('sprintId'),
@@ -244,19 +232,19 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
       deliveredValue: num(body.deliveredValue) ?? null,
       ...(str(body.currency) !== undefined ? { currency: str(body.currency) as string } : {}),
     }));
-  }));
+  });
 
   // ── Approval chain ────────────────────────────────────────────────────────
 
-  router.get('/approvals/queue', (c) => handle(async () =>
+  router.get('/approvals/queue', async (c) =>
     Response.json({
       queue: await queueFor(db, tenant(c), String(c.req.query('approverRef') ?? c.get('userId') ?? '')),
-    })));
+    }));
 
-  router.get('/approvals/:kind/:ref', (c) => handle(async () =>
-    Response.json(await chainState(db, tenant(c), { kind: c.req.param('kind'), ref: c.req.param('ref') }))));
+  router.get('/approvals/:kind/:ref', async (c) =>
+    Response.json(await chainState(db, tenant(c), { kind: c.req.param('kind'), ref: c.req.param('ref') })));
 
-  router.post('/approvals/:kind/:ref', manager, (c) => handle(async () => {
+  router.post('/approvals/:kind/:ref', manager, async (c) => {
     const body = await parseBody(c, OpenChainBody);
     const raw = body.approvers ?? [];
     const approvers: Approver[] = raw.map((o) => {
@@ -270,9 +258,9 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
       db, c.env as Env, tenant(c), await who(c),
       { kind: c.req.param('kind'), ref: c.req.param('ref') }, approvers,
     ), { status: 201 });
-  }));
+  });
 
-  router.post('/approvals/:kind/:ref/act', (c) => handle(async () => {
+  router.post('/approvals/:kind/:ref/act', async (c) => {
     const body = await parseBody(c, DeliveryWriteBody);
     if (typeof body.approved !== 'boolean') {
       throw new ApprovalChainError('approved must be true or false', 400);
@@ -283,13 +271,13 @@ export function createDeliveryFlowRoutes(db: Db): Hono<HonoEnv> {
       String(body.approverRef ?? c.get('userId') ?? ''),
       body.approved,
     ));
-  }));
+  });
 
-  router.delete('/approvals/:kind/:ref', manager, (c) => handle(async () =>
+  router.delete('/approvals/:kind/:ref', manager, async (c) =>
     Response.json(await cancelChain(
       db, c.env as Env, tenant(c), await who(c),
       { kind: c.req.param('kind'), ref: c.req.param('ref') },
-    ))));
+    )));
 
   return router;
 }

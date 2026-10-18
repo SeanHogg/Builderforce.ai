@@ -10,7 +10,7 @@
  */
 
 import { zipSync, strToU8 } from 'fflate';
-import { richColorHex, type RichAlign } from '@builderforce/creation-canvas-contract';
+import { escapeHtml, richColorHex, type RichAlign } from '@builderforce/creation-canvas-contract';
 import { parseMarkdownBlocks, parseInlineRuns, type MdBlock, type MdRun } from './markdownBlocks';
 
 const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -41,10 +41,6 @@ function resolveTheme(value: DocxTheme = {}): ResolvedDocxTheme {
   };
 }
 
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
 /**
  * One run.
  *
@@ -59,11 +55,11 @@ function run(r: MdRun, opts: { size: number; color?: string; bold?: boolean }, t
     r.bold || opts.bold ? '<w:b/>' : '',
     r.italic ? '<w:i/>' : '',
     r.underline ? '<w:u w:val="single"/>' : '',
-    `<w:rFonts w:ascii="${esc(face)}" w:hAnsi="${esc(face)}"/>`,
-    color ? `<w:color w:val="${esc(color)}"/>` : '',
+    `<w:rFonts w:ascii="${escapeHtml(face)}" w:hAnsi="${escapeHtml(face)}"/>`,
+    color ? `<w:color w:val="${escapeHtml(color)}"/>` : '',
     `<w:sz w:val="${r.size ? Math.round(r.size * 2) : opts.size}"/>`,
   ].join('');
-  return `<w:r><w:rPr>${props}</w:rPr><w:t xml:space="preserve">${esc(r.text)}</w:t></w:r>`;
+  return `<w:r><w:rPr>${props}</w:rPr><w:t xml:space="preserve">${escapeHtml(r.text)}</w:t></w:r>`;
 }
 
 /** Word's paragraph-alignment element. `left` is the default and is not written,

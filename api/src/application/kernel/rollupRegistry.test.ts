@@ -28,7 +28,8 @@ import type { Db } from '../../infrastructure/database/connection';
  * should look like — the spec's own present-table gating decides whether it runs at
  * all, so this never needs to look realistic.
  */
-const STUB_SOURCES: RollupSources = { apps: { execute: async () => ({ rows: [] }) } as unknown as Db };
+const STUB_DB = { execute: async () => ({ rows: [] }) } as unknown as Db;
+const STUB_SOURCES: RollupSources = { apps: STUB_DB, usage: STUB_DB };
 
 /**
  * Keys a writer produces as INPUTS to another metric rather than for a chart.
@@ -131,9 +132,9 @@ describe('the numbers refuse rather than guess', () => {
    */
   const ALL_TABLES = [
     'site_records', 'site_collections', 'project_sites', 'marketing_leads', 'site_users',
-    'site_subscriptions', 'ad_insights', 'tasks', 'projects', 'executions', 'ai_usage_records',
+    'site_subscriptions', 'ad_insights', 'tasks', 'projects', 'executions',
     'job_applications', 'hiring_decisions', 'offer_letters', 'expenses', 'pay_runs', 'ledger_entries',
-    'invoice_line_items', 'metric_facts', 'deals', 'orders', 'tenant_members', 'sessions',
+    'invoice_line_items', 'metric_facts', 'deals', 'orders', 'tenant_members', 'auth_user_sessions',
     'people_employees', 'pulse_responses', 'uptime_samples', 'uptime_checks', 'soc_controls',
     'vulnerability_findings', 'qa_findings', 'portfolio_companies', 'investment_opportunities',
     'support_tickets', 'feedback_sentiments', 'creation_sessions', 'artifacts',

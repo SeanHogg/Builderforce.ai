@@ -10,6 +10,7 @@ import { invite } from '../kernel/InvitationService';
 import { canAccessChat, verifyChatOwnership } from './brainChatGuards';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { bumpChatStructure } from './chatCacheVersions';
 
 /** Active human members of a chat (owner or any member may read the roster). */
 export async function listMembers(db: Db, chatId: number, tenantId: number, userId: string) {
@@ -86,6 +87,7 @@ export async function inviteHuman(
       await db.insert(chatMembers).values({
         chatId, tenantId, userId: existingUser.id, status: 'active', invitedBy: userId,
       });
+      await bumpChatStructure(chatId, env);
     }
     return { status: 'active', memberUserId: existingUser.id, email, chatTitle: chat.title, already: !!dup };
   }
@@ -99,6 +101,7 @@ export async function inviteHuman(
     await db.insert(chatMembers).values({
       chatId, tenantId, invitedEmail: email, status: 'pending', invitedBy: userId,
     });
+    await bumpChatStructure(chatId, env);
     // Also drop a pending TENANT invitation so the cold invitee actually gets a
     // tenant account on signup (the existing tenant-invite auto-conversion adds
     // them to tenant_members). Once in the tenant, syncPendingMemberships promotes
@@ -125,5 +128,6 @@ export async function removeMember(db: Db, chatId: number, tenantId: number, use
     .delete(chatMembers)
     .where(and(eq(chatMembers.id, memberId), eq(chatMembers.chatId, chatId), eq(chatMembers.tenantId, tenantId)))
     .returning({ id: chatMembers.id });
+  if (rows.length > 0) await bumpChatStructure(chatId);
   return { removed: rows.length > 0 };
 }

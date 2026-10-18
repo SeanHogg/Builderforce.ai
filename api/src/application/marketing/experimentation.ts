@@ -51,6 +51,7 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { bumpSplitSitesForTest } from '../replay/abSplitVersion';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `ab_tests.status`. */
 export const TEST_STATUSES = ['draft', 'running', 'stopped', 'concluded'] as const;
@@ -59,9 +60,9 @@ export type TestStatus = (typeof TEST_STATUSES)[number];
 export const isTestStatus = (v: unknown): v is TestStatus =>
   typeof v === 'string' && (TEST_STATUSES as readonly string[]).includes(v);
 
-export class ExperimentError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class ExperimentError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'ExperimentError';
   }
 }

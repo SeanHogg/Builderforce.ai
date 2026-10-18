@@ -47,10 +47,11 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
 import type { Domain } from '../kernel/ObjectRegistry';
+import { StatusError } from '../../domain/shared/errors';
 
-export class CompanyError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class CompanyError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'CompanyError';
   }
 }

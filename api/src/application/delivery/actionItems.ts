@@ -39,6 +39,7 @@ import { actionItems } from '../../infrastructure/database/schema';
 import { scopedToTenant, taskInTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `action_items.status`. `dropped` is not `done`: a commitment nobody intends to
  *  keep is a real outcome and hiding it as completion is how a retro learns
@@ -61,9 +62,9 @@ export const isActionStatus = (v: unknown): v is ActionStatus =>
  */
 export type ActionSource = { ref: string };
 
-export class ActionItemError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class ActionItemError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'ActionItemError';
   }
 }

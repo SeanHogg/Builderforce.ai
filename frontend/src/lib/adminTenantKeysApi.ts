@@ -4,8 +4,7 @@
  * import adminApi.ts — that would be a cycle.
  */
 
-import { apiRequest, type RequestOptions } from './apiClient';
-import { getStoredWebToken } from './auth';
+import { adminRequest } from './apiClient';
 
 export interface AdminTenantApiKeyUsageRow {
   id: number;
@@ -46,11 +45,6 @@ export interface AdminMintedTenantApiKey {
   name: string;
   allowedOrigins: string[] | null;
   createdAt: string;
-}
-
-async function adminRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  if (!getStoredWebToken()) throw new Error('Not authenticated. Sign in with a superadmin account.');
-  return apiRequest<T>(path, { ...opts, auth: 'web' });
 }
 
 /** Tenant API keys (bfk_*) — superadmin mint-on-behalf. Spread onto `adminApi`. */

@@ -1,5 +1,5 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
-import { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
+import { and, desc, eq, getTableColumns, inArray, or, sql } from 'drizzle-orm';
+import { IExecutionRepository, type ExecutionReadOptions } from '../../domain/execution/IExecutionRepository';
 import { Execution, ExecutionProps } from '../../domain/execution/Execution';
 import {
   ExecutionId, TaskId, TenantId, AgentId, AgentHostId, ExecutionStatus,
@@ -7,6 +7,15 @@ import {
 } from '../../domain/shared/types';
 import { executions as executionsTable } from '../database/schema';
 import type { Db } from '../database/connection';
+import { EXECUTION_NON_TERMINAL_STATUSES } from '../../domain/shared/terminalStatus';
+
+/** Newest terminal runs kept per ticket by {@link ExecutionRepository.findByTask}. Far above
+ *  MAX_AUTONOMOUS_RUNS_PER_TASK and the breaker streak, so every gate that counts runs
+ *  sees the same answer — it only stops a pathological ticket loading thousands of rows. */
+export const TASK_EXECUTION_HISTORY_LIMIT = 500;
+
+/** Every column but the `result` blob: the liveness/breaker/backoff callers never read it. */
+const { result: _resultBlob, ...SLIM_COLUMNS } = getTableColumns(executionsTable);
 
 export class ExecutionRepository implements IExecutionRepository {
   constructor(private readonly db: Db) {}
@@ -18,24 +27,36 @@ export class ExecutionRepository implements IExecutionRepository {
     return row ? toDomain(row) : null;
   }
 
-  async findByTask(taskId: TaskId): Promise<Execution[]> {
-    const rows = await this.db
-      .select().from(executionsTable)
-      .where(eq(executionsTable.taskId, taskId))
+  /** Every non-terminal run plus the newest {@link TASK_EXECUTION_HISTORY_LIMIT} others,
+   *  newest first. `slim` leaves the `result` blob unread (it comes back null). */
+  async findByTask(taskId: TaskId, opts: ExecutionReadOptions = {}): Promise<Execution[]> {
+    const rows = await this.select(opts.slim)
+      .where(and(
+        eq(executionsTable.taskId, taskId),
+        or(
+          inArray(executionsTable.status, [...EXECUTION_NON_TERMINAL_STATUSES]),
+          inArray(executionsTable.id, sql`(select id from executions where task_id = ${taskId} order by created_at desc limit ${TASK_EXECUTION_HISTORY_LIMIT})`),
+        ),
+      ))
       .orderBy(desc(executionsTable.createdAt));
     return rows.map(toDomain);
   }
 
-  async findByTasksAndStatuses(taskIds: TaskId[], statuses: ExecutionStatus[]): Promise<Execution[]> {
+  async findByTasksAndStatuses(taskIds: TaskId[], statuses: ExecutionStatus[], opts: ExecutionReadOptions = {}): Promise<Execution[]> {
     if (taskIds.length === 0 || statuses.length === 0) return [];
-    const rows = await this.db
-      .select().from(executionsTable)
+    const rows = await this.select(opts.slim)
       .where(and(
         inArray(executionsTable.taskId, taskIds),
         inArray(executionsTable.status, statuses),
       ))
       .orderBy(desc(executionsTable.createdAt));
     return rows.map(toDomain);
+  }
+
+  private select(slim?: boolean) {
+    return slim
+      ? this.db.select(SLIM_COLUMNS).from(executionsTable)
+      : this.db.select().from(executionsTable);
   }
 
   async findByTenant(tenantId: TenantId, limit = 50): Promise<Execution[]> {
@@ -111,7 +132,7 @@ export class ExecutionRepository implements IExecutionRepository {
   }
 }
 
-function toDomain(row: typeof executionsTable.$inferSelect): Execution {
+function toDomain(row: Omit<typeof executionsTable.$inferSelect, 'result'> & { result?: string | null }): Execution {
   return Execution.reconstitute({
     id:           asExecutionId(row.id),
     taskId:       asTaskId(row.taskId),

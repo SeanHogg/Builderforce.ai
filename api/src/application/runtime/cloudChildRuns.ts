@@ -23,6 +23,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TERMINAL_EXECUTION_STATUSES } from '../../domain/execution/Execution';
 import type { ExecutionStatus } from '../../domain/shared/types';
+import { EXECUTION_NON_TERMINAL_STATUSES } from '../../domain/shared/terminalStatus';
 import { parseJsonObject } from '../../domain/shared/json';
 import { listBranchDiff } from '../repos/readRepoContents';
 import type { TicketRepoContext } from '../repos/commitFileAsPendingChange';
@@ -101,16 +102,22 @@ type ChildRow = { id: number; status: string; payload: string | null; result: st
 
 const isTerminal = (status: string): boolean => TERMINAL_EXECUTION_STATUSES.includes(status as ExecutionStatus);
 
-export async function childrenOf(db: Db, tenantId: number, parentExecutionId: number): Promise<ChildRow[]> {
-  return db
-    .select({ id: executions.id, status: executions.status, payload: executions.payload, result: executions.result, errorMessage: executions.errorMessage })
+/** A parent's children are bounded by its spawn budget; the cap only stops a runaway fan-out. */
+const MAX_CHILD_ROWS = 200;
+
+/** Children still working — ids only, filtered in SQL: liveness never needs the report blobs. */
+async function liveChildIds(db: Db, tenantId: number, parentExecutionId: number): Promise<number[]> {
+  const rows = await db
+    .select({ id: executions.id })
     .from(executions)
-    .where(scopedToTenant(executions, tenantId, eq(executions.parentExecutionId, parentExecutionId)));
+    .where(scopedToTenant(executions, tenantId, eq(executions.parentExecutionId, parentExecutionId), inArray(executions.status, [...EXECUTION_NON_TERMINAL_STATUSES])))
+    .limit(MAX_CHILD_ROWS);
+  return rows.map((r) => r.id);
 }
 
 /** Handles of a run's children that are still working. */
 export async function liveChildHandles(db: Db, tenantId: number, parentExecutionId: number): Promise<string[]> {
-  return (await childrenOf(db, tenantId, parentExecutionId)).filter((c) => !isTerminal(c.status)).map((c) => childHandle(c.id));
+  return (await liveChildIds(db, tenantId, parentExecutionId)).map(childHandle);
 }
 
 /**
@@ -131,7 +138,12 @@ export async function liveChildrenFinishBlock(db: Db, tenantId: number, parentEx
  */
 export async function absorbChildWrites(db: Db, tenantId: number, parentExecutionId: number, repoCtx: TicketRepoContext | null, writtenPaths: Set<string>): Promise<void> {
   if (!repoCtx) return;
-  if (!(await childrenOf(db, tenantId, parentExecutionId)).length) return;
+  const [anyChild] = await db
+    .select({ id: executions.id })
+    .from(executions)
+    .where(scopedToTenant(executions, tenantId, eq(executions.parentExecutionId, parentExecutionId)))
+    .limit(1);
+  if (!anyChild) return;
   const diff = await listBranchDiff({ ...repoCtx, ref: repoCtx.branch }, repoCtx.base, repoCtx.branch);
   if (diff.ok) for (const f of diff.files) writtenPaths.add(f.path);
 }
@@ -190,7 +202,7 @@ export async function settleCloudChildLineage(db: Db, runtime: RuntimeService, e
 /** Stop a run's live children (all, or the named handles). Returns the handles stopped. */
 export async function stopLiveChildren(db: Db, runtime: RuntimeService, tenantId: number, parentExecutionId: number, by: string, handles?: readonly string[]): Promise<string[]> {
   const wanted = handles ? new Set(handles.map(childIdOf).filter((id): id is number => id != null)) : null;
-  const live = (await childrenOf(db, tenantId, parentExecutionId)).filter((c) => !isTerminal(c.status) && (!wanted || wanted.has(c.id)));
+  const live = (await liveChildIds(db, tenantId, parentExecutionId)).filter((id) => !wanted || wanted.has(id)).map((id) => ({ id }));
   const stopped: string[] = [];
   for (const child of live) {
     try {

@@ -35,9 +35,11 @@
 const TEXT_LIKE = /^(text\/|application\/json|application\/xml|application\/x-yaml)/i;
 const PDF_LIKE = /^application\/pdf/i;
 
-export class WatermarkError extends Error {
-  constructor(message: string, readonly status: number, options?: { cause?: unknown }) {
-    super(message, options);
+import { StatusError } from '../../domain/shared/errors';
+
+export class WatermarkError extends StatusError<number> {
+  constructor(message: string, status: number, options?: { cause?: unknown }) {
+    super(message, status, options);
     this.name = 'WatermarkError';
   }
 }

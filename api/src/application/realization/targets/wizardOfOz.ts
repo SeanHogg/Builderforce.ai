@@ -21,7 +21,8 @@
  * difference between a test and a stack of unanswered requests.
  */
 
-import { esc, renderProofShell, INGRESS_PRELUDE } from '../proofShell';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
+import { renderProofShell, INGRESS_PRELUDE } from '../proofShell';
 import { audienceOf, capabilityLabel, criteriaFrom, goalHeadline } from './shared';
 import type { RealizationTarget, RealizeContext, RealizationOutput } from '../realizationTarget';
 
@@ -37,7 +38,7 @@ function renderRequestPage(ctx: RealizeContext): string {
 
   const body = `  <section style="margin-top:0">
     <div class="card">
-      <h2>Ask for ${esc(what.toLowerCase())}</h2>
+      <h2>Ask for ${escapeHtml(what.toLowerCase())}</h2>
       <p class="muted">Tell us what you need. You will have an answer within ${SLA_MINUTES} minutes.</p>
       <form id="request" novalidate>
         <div class="field">
@@ -66,7 +67,7 @@ function renderRequestPage(ctx: RealizeContext): string {
     </div>
   </section>
 
-  <footer>${esc(spec.title)} — ${esc(goalHeadline(spec))}</footer>`;
+  <footer>${escapeHtml(spec.title)} — ${escapeHtml(goalHeadline(spec))}</footer>`;
 
   const script = `  var form = document.getElementById('request');
   var status = document.getElementById('status');
@@ -144,7 +145,7 @@ function renderOperatorConsole(ctx: RealizeContext): string {
     </p>
   </section>
 
-  <footer>${esc(ctx.spec.title)} — operator console. Keep this open while the test is running.</footer>`;
+  <footer>${escapeHtml(ctx.spec.title)} — operator console. Keep this open while the test is running.</footer>`;
 
   const script = `${INGRESS_PRELUDE}
   var SLA_MS = ${SLA_MINUTES} * 60 * 1000;

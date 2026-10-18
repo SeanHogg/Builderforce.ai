@@ -22,7 +22,8 @@
  * anyone can enumerate is a leak, and this one is full of email addresses.
  */
 
-import { esc, renderProofShell, INGRESS_PRELUDE } from '../proofShell';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
+import { renderProofShell, INGRESS_PRELUDE } from '../proofShell';
 import { audienceOf, capabilityLabel, criteriaFrom, goalHeadline, verdictRecorderScript, VERDICT_COLLECTION } from './shared';
 import type { RealizationTarget, RealizeContext, RealizationOutput } from '../realizationTarget';
 import { SMOKE_SOURCE_TAG, SMOKE_SUCCESS_EVENT, SMOKE_UNNAMED_SOURCE, SMOKE_WINDOW_DAYS, smokeTestMeasure } from './smokeTestMeasure';
@@ -41,8 +42,8 @@ function renderLanding(ctx: RealizeContext): string {
   const body = `  <section style="margin-top:0">
     <div class="grid">
 ${benefits.map((benefit) => `      <div class="card">
-        <h3>${esc(benefit)}</h3>
-        <p class="muted" style="margin:0;font-size:14px">Replace this with the outcome, not the feature. What does ${esc(audienceOf(spec))} get?</p>
+        <h3>${escapeHtml(benefit)}</h3>
+        <p class="muted" style="margin:0;font-size:14px">Replace this with the outcome, not the feature. What does ${escapeHtml(audienceOf(spec))} get?</p>
       </div>`).join('\n')}
     </div>
   </section>

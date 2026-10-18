@@ -27,6 +27,7 @@ import type { HonoEnv } from '../../env';
 import { requestCarriesImages } from './vendors/capabilityGate';
 import { wrapStreamForTrace, type StreamedCompletion } from './streamTrace';
 import type { LlmUsage } from './LlmProxyService';
+import { pickPersistedMetadata } from './usageMetadata';
 
 type Env = HonoEnv['Bindings'];
 
@@ -228,7 +229,7 @@ export function logTrace(env: Env, ctx: TraceCtx | undefined | null, input: Trac
     // is purged after 30 days by runRetentionPurge() (maintenance/retentionPurge.ts).
     requestBody:       redactedJsonOrNull(input.requestBody?.messages ?? input.requestBody ?? null),
     responseBody:      redactedJsonOrNull(input.responseBody ?? null),
-    callerMetadata:    jsonOrNull(input.callerMetadata ?? null),
+    callerMetadata:    jsonOrNull(pickPersistedMetadata(input.callerMetadata)),
     ...(input.startedAt ? { createdAt: input.startedAt } : {}),
   };
   enqueueTrace(

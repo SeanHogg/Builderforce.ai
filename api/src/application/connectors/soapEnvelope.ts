@@ -28,6 +28,7 @@
  * upward as ok. That is the same failure TikTok's 200-with-an-error envelope causes,
  * and it is handled in the same place, once.
  */
+import { escapeXml } from '@builderforce/creation-canvas-contract';
 
 /** What an action declares to be spoken over SOAP instead of JSON. */
 export interface ConnectorSoap {
@@ -64,14 +65,7 @@ export const soapContentType = (version: '1.1' | '1.2' = '1.1'): string =>
  * boundary: without it a campaign named `</Name><Status>Active</Status>` would be
  * parsed by the service as extra ELEMENTS, which is XML's version of SQL injection.
  */
-export function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
+export { escapeXml };
 
 /** An element name we are willing to emit. Anything else would let a caller-supplied
  *  key close a tag or introduce an attribute. */

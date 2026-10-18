@@ -30,7 +30,7 @@ import { TenantPlan } from '../../domain/shared/types';
 import { effectivePlanOf, loadTenantPlanRow } from '../tenant/tenantPlanSnapshot';
 import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { sumTenantTextTokensDayAndMonth, utcDayStart, utcMonthStart } from './tokenUsage';
+import { getTenantDayMonthTokens, sumTenantTextTokensDayAndMonth, utcDayStart, utcMonthStart } from './tokenUsage';
 import { aiCreditBalance } from '../points/aiCredits';
 
 export type TokenExhaustionReason = 'daily_exhausted' | 'monthly_exhausted';
@@ -184,7 +184,11 @@ export async function getTenantTokenAvailability(
   const dailyCapped = dailyLimit > 0;
   const monthlyCapped = monthlyLimit > 0;
 
-  const usage = await sumTenantTextTokensDayAndMonth(db, tenantId, utcDayStart(), utcMonthStart());
+  // With an env this is the per-request cached totals (one shared statement for every cap);
+  // without one (a bare-Db caller) it is the direct scan.
+  const usage = env
+    ? await getTenantDayMonthTokens(env, db, tenantId)
+    : await sumTenantTextTokensDayAndMonth(db, tenantId, utcDayStart(), utcMonthStart());
 
   const dailyExhausted = dailyCapped && usage.day >= dailyLimit;
   const monthlyExhausted = monthlyCapped && usage.month >= monthlyLimit;

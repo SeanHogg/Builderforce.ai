@@ -48,7 +48,6 @@ import type { Db } from '../../infrastructure/database/connection';
 import { resolveActorFromContext } from '../../application/activity/activityLog';
 import { parseBody, z, zJsonObject, zNonEmptyString } from './requestBody';
 import {
-  ContactProfileError,
   addEducation,
   alumniOf,
   claimSearch,
@@ -62,7 +61,6 @@ import {
   type Confidence,
 } from '../../application/sales/contactProfile';
 import {
-  EnrichmentError,
   enrichContact,
   enrichmentSavings,
 } from '../../application/enrichment/enrichContact';
@@ -109,17 +107,6 @@ const ProspectBody = z.looseObject({
   attributes: zJsonObject.nullish(),
 });
 
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof ContactProfileError || error instanceof RevenueIntelError || error instanceof EnrichmentError) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-    throw error;
-  }
-};
-
 const rowId = (raw: string): number => {
   const id = Number(raw);
   if (!Number.isFinite(id) || id <= 0) throw new RevenueIntelError('That is not an id.', 400);
@@ -148,14 +135,14 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
 
   // ── Contact depth ─────────────────────────────────────────────────────────
 
-  router.get('/alumni', (c) => handle(async () =>
-    Response.json({ contacts: await alumniOf(db, tenant(c), c.req.query('company') ?? '') })));
+  router.get('/alumni', async (c) =>
+    Response.json({ contacts: await alumniOf(db, tenant(c), c.req.query('company') ?? '') }));
 
-  router.get('/comp-benchmark', manager, (c) => handle(async () =>
-    Response.json({ bands: await compensationBenchmark(db, tenant(c), c.req.query('title') ?? '') })));
+  router.get('/comp-benchmark', manager, async (c) =>
+    Response.json({ bands: await compensationBenchmark(db, tenant(c), c.req.query('title') ?? '') }));
 
-  router.get('/contacts/:ref', (c) => handle(async () =>
-    Response.json(await contactProfile(db, tenant(c), c.req.param('ref')))));
+  router.get('/contacts/:ref', async (c) =>
+    Response.json(await contactProfile(db, tenant(c), c.req.param('ref'))));
 
   /**
    * Buy contact depth from the connected enrichment vendor — THROUGH the cache.
@@ -165,7 +152,7 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
    * costs nothing, but the route cannot know which it will be before it runs, so
    * the gate is on the ask rather than on the outcome.
    */
-  router.post('/contacts/:ref/enrich', manager, (c) => handle(async () => {
+  router.post('/contacts/:ref/enrich', manager, async (c) => {
     const body = await parseBody(c, EnrichBody);
     const env = c.env as Env & { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
     return Response.json(await enrichContact({
@@ -178,13 +165,13 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
       email: body.email,
       ...(body.provider ? { provider: body.provider } : {}),
     }));
-  }));
+  });
 
   /** Money not spent on enrichment — the read `enrichment_cache` was built for. */
-  router.get('/enrichment-savings', manager, (c) => handle(async () =>
-    Response.json({ providers: await enrichmentSavings(db, tenant(c)) })));
+  router.get('/enrichment-savings', manager, async (c) =>
+    Response.json({ providers: await enrichmentSavings(db, tenant(c)) }));
 
-  router.post('/contacts/:ref/experience', (c) => handle(async () => {
+  router.post('/contacts/:ref/experience', async (c) => {
     const body = await parseBody(c, zJsonObject);
     return Response.json(await setExperience(db, tenant(c), c.req.param('ref'), {
       company: str(body.company) ?? null,
@@ -194,9 +181,9 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
       ...(typeof body.isCurrent === 'boolean' ? { isCurrent: body.isCurrent } : {}),
       location: str(body.location) ?? null,
     }), { status: 201 });
-  }));
+  });
 
-  router.post('/contacts/:ref/education', (c) => handle(async () => {
+  router.post('/contacts/:ref/education', async (c) => {
     const body = await parseBody(c, zJsonObject);
     return Response.json(await addEducation(db, tenant(c), c.req.param('ref'), {
       institution: str(body.institution) ?? null,
@@ -205,9 +192,9 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
       startedAt: when(body.startedAt),
       endedAt: when(body.endedAt),
     }), { status: 201 });
-  }));
+  });
 
-  router.post('/contacts/:ref/compensation', manager, (c) => handle(async () => {
+  router.post('/contacts/:ref/compensation', manager, async (c) => {
     const body = await parseBody(c, zJsonObject);
     const observedAt = when(body.observedAt);
     return Response.json(await recordCompensation(db, tenant(c), c.req.param('ref'), {
@@ -219,31 +206,31 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
       ...(str(body.confidence) !== undefined ? { confidence: str(body.confidence) as Confidence } : {}),
       ...(observedAt ? { observedAt } : {}),
     }), { status: 201 });
-  }));
+  });
 
   // ── Saved searches ────────────────────────────────────────────────────────
 
-  router.get('/searches-unclaimed', manager, (c) => handle(async () =>
-    Response.json({ searches: await unclaimedSearches(db, tenant(c)) })));
+  router.get('/searches-unclaimed', manager, async (c) =>
+    Response.json({ searches: await unclaimedSearches(db, tenant(c)) }));
 
-  router.get('/searches', (c) => handle(async () =>
-    Response.json({ searches: await searchesFor(db, tenant(c), c.req.query('ownerRef') ?? me(c)) })));
+  router.get('/searches', async (c) =>
+    Response.json({ searches: await searchesFor(db, tenant(c), c.req.query('ownerRef') ?? me(c)) }));
 
-  router.post('/searches', (c) => handle(async () => {
+  router.post('/searches', async (c) => {
     const body = await parseBody(c, zJsonObject);
     const savedSearchId = num(body.savedSearchId);
     if (savedSearchId === undefined) throw new RevenueIntelError('savedSearchId is required', 400);
     return Response.json(await claimSearch(db, tenant(c), savedSearchId, str(body.ownerRef) ?? me(c)), { status: 201 });
-  }));
+  });
 
-  router.delete('/searches/:id', (c) => handle(async () =>
-    Response.json(await releaseSearch(db, tenant(c), rowId(c.req.param('id')), c.req.query('ownerRef') ?? me(c)))));
+  router.delete('/searches/:id', async (c) =>
+    Response.json(await releaseSearch(db, tenant(c), rowId(c.req.param('id')), c.req.query('ownerRef') ?? me(c))));
 
   // ── ICPs ──────────────────────────────────────────────────────────────────
 
-  router.get('/icps', (c) => handle(async () => Response.json({ icps: await listIcps(db, tenant(c)) })));
+  router.get('/icps', async (c) => Response.json({ icps: await listIcps(db, tenant(c)) }));
 
-  router.post('/icps', manager, (c) => handle(async () => {
+  router.post('/icps', manager, async (c) => {
     const body = await parseBody(c, IcpBody);
     return Response.json(await createIcp(db, tenant(c), {
       name: String(body.name ?? ''),
@@ -251,22 +238,22 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
       criteria: body.criteria ?? {},
       weightings: body.weightings ?? null,
     }), { status: 201 });
-  }));
+  });
 
-  router.post('/icps/:id/default', manager, (c) => handle(async () =>
-    Response.json(await setDefaultIcp(db, tenant(c), rowId(c.req.param('id'))))));
+  router.post('/icps/:id/default', manager, async (c) =>
+    Response.json(await setDefaultIcp(db, tenant(c), rowId(c.req.param('id')))));
 
-  router.get('/icps/:id/effectiveness', manager, (c) => handle(async () =>
-    Response.json({ deciles: await icpEffectiveness(db, tenant(c), rowId(c.req.param('id'))) })));
+  router.get('/icps/:id/effectiveness', manager, async (c) =>
+    Response.json({ deciles: await icpEffectiveness(db, tenant(c), rowId(c.req.param('id'))) }));
 
   // ── Prospects ─────────────────────────────────────────────────────────────
 
-  router.get('/prospects', (c) => handle(async () => {
+  router.get('/prospects', async (c) => {
     const status = c.req.query('status');
     return Response.json({ prospects: await prospectQueue(db, tenant(c), status as ProspectStatus | undefined) });
-  }));
+  });
 
-  router.post('/prospects', (c) => handle(async () => {
+  router.post('/prospects', async (c) => {
     const body = await parseBody(c, ProspectBody);
     const icpId = num(body.icpId);
     if (icpId === undefined) throw new RevenueIntelError('icpId is required', 400);
@@ -277,22 +264,22 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
       attributes: body.attributes ?? {},
       ownerRef: str(body.ownerRef) ?? me(c),
     }), { status: 201 });
-  }));
+  });
 
-  router.patch('/prospects/:id', (c) => handle(async () => {
+  router.patch('/prospects/:id', async (c) => {
     const body = await parseBody(c, zJsonObject);
     return Response.json(await advanceProspect(
       db, c.env as Env, tenant(c), await who(c),
       rowId(c.req.param('id')), String(body.status ?? '') as ProspectStatus,
     ));
-  }));
+  });
 
   // ── Identity resolution ───────────────────────────────────────────────────
 
-  router.get('/identities-duplicates', manager, (c) => handle(async () =>
-    Response.json({ suspects: await suspectedDuplicates(db, tenant(c)) })));
+  router.get('/identities-duplicates', manager, async (c) =>
+    Response.json({ suspects: await suspectedDuplicates(db, tenant(c)) }));
 
-  router.post('/identities', (c) => handle(async () => {
+  router.post('/identities', async (c) => {
     const body = await parseBody(c, zJsonObject);
     return Response.json(await resolveIdentity(db, tenant(c), {
       entityKind: String(body.entityKind ?? '') as EntityKind,
@@ -301,9 +288,9 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
       sourceId: String(body.sourceId ?? ''),
       confidence: num(body.confidence) ?? null,
     }));
-  }));
+  });
 
-  router.get('/identities/:kind/:ref', (c) => handle(async () => {
+  router.get('/identities/:kind/:ref', async (c) => {
     const kind = c.req.param('kind') as EntityKind;
     // A lookup by external id is the importer's question; by canonical ref is the
     // merge screen's. Both live here, told apart by a query parameter rather than
@@ -313,19 +300,19 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
       return Response.json({ canonical: await canonicalFor(db, tenant(c), c.req.param('ref'), sourceId) });
     }
     return Response.json({ identities: await identitiesFor(db, tenant(c), kind, c.req.param('ref')) });
-  }));
+  });
 
   // ── Deal flow ─────────────────────────────────────────────────────────────
 
-  router.get('/deal-flow-by-source', manager, (c) => handle(async () =>
-    Response.json({ sources: await dealFlowBySource(db, tenant(c)) })));
+  router.get('/deal-flow-by-source', manager, async (c) =>
+    Response.json({ sources: await dealFlowBySource(db, tenant(c)) }));
 
-  router.get('/deal-flow', (c) => handle(async () => {
+  router.get('/deal-flow', async (c) => {
     const status = c.req.query('status');
     return Response.json({ opportunities: await dealFlowQueue(db, tenant(c), status as DealFlowStatus | undefined) });
-  }));
+  });
 
-  router.post('/deal-flow', (c) => handle(async () => {
+  router.post('/deal-flow', async (c) => {
     const body = await parseBody(c, zJsonObject);
     return Response.json(await recordDealFlow(db, c.env as Env, tenant(c), await who(c), {
       source: String(body.source ?? ''),
@@ -336,15 +323,15 @@ export function createRevenueIntelRoutes(db: Db): Hono<HonoEnv> {
       ...(str(body.currency) !== undefined ? { currency: str(body.currency) as string } : {}),
       score: num(body.score) ?? null,
     }), { status: 201 });
-  }));
+  });
 
-  router.patch('/deal-flow/:id', (c) => handle(async () => {
+  router.patch('/deal-flow/:id', async (c) => {
     const body = await parseBody(c, zJsonObject);
     return Response.json(await triageDealFlow(
       db, c.env as Env, tenant(c), await who(c),
       rowId(c.req.param('id')), String(body.status ?? '') as DealFlowStatus,
     ));
-  }));
+  });
 
   return router;
 }

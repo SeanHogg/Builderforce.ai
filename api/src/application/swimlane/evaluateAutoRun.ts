@@ -991,7 +991,7 @@ async function finishEvaluation(input: {
   // again (DISP-R1). Absent a memo this is the same single query it always was.
   const plainExecs = input.execMemo
     ? await input.execMemo.listByTask(args.taskId)
-    : (await runtimeService.listByTask(args.taskId)).map((e) => e.toPlain());
+    : (await runtimeService.listByTask(args.taskId, { slim: true })).map((e) => e.toPlain());
   const liveRow = plainExecs.find((e) => ACTIVE_STATUSES.has(e.status));
   const liveExecution = liveRow ? { id: liveRow.id, status: liveRow.status } : null;
 

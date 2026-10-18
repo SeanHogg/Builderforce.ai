@@ -16,7 +16,7 @@ import { eq, and, isNull, desc } from 'drizzle-orm';
 import { readToolAuditEvents } from '../../application/runtime/toolAuditRead';
 import { effectiveSkillsForHost } from '../../application/skills/skillAssignmentPort';
 import { listPlatformPersonas } from '../../application/persona/platformPersonaCatalog';
-import { listAgentHostDirectory } from '../../application/agentHost/agentHostDirectory';
+import { invalidateAgentHostDirectory, listAgentHostDirectory } from '../../application/agentHost/agentHostDirectory';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   agentHosts,
@@ -36,6 +36,8 @@ import { findActiveProjectSpec, listTaskSpecs } from '../../application/prd/spec
 import { cascadeAgentHostDelete } from '../../application/shared/siblingCascade';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { invalidateAgentHostKeyCache } from '../../infrastructure/auth/keyResolutionCache';
+import { cachedHostCronJobs, invalidateHostCronJobs } from '../../application/agentHost/hostCronCache';
+import { verifyAgentHostKey } from '../../infrastructure/auth/agentHostKeyLookup';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { makeSwimlaneCoordinator } from '../../application/swimlane/makeCoordinator';
@@ -77,8 +79,8 @@ import { resolveScheduledAgentBinding } from '../../application/agentHost/schedu
 import {
   heartbeatPayloadFingerprint,
   heartbeatWriteDue,
-  readHeartbeatFingerprint,
-  rememberHeartbeatFingerprint,
+  readHeartbeatState,
+  rememberHeartbeatWrite,
 } from '../../application/agentHost/heartbeatThrottle';
 import { limitParam } from './queryParams';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
@@ -253,10 +255,18 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
   const hashPath = (value: string): Promise<string> => sha256Hex(value.trim().toLowerCase());
 
-  const verifyAgentHostApiKey = async (id: number, key?: string) => {
-    if (!key) return null;
-    return agentHostService.verifyApiKey(id, key);
-  };
+  // Worker bindings are the same object for every request in an isolate, so the first
+  // request's `c.env` is safe to keep: the verify below runs from ~40 handlers and two
+  // registered sub-routers that are handed this function without a context.
+  let bindings: Env | undefined;
+  router.use('*', async (c, next) => {
+    bindings = c.env;
+    await next();
+  });
+
+  // Hash → shared key-resolution cache → id must match: a host poll costs no database
+  // read (see infrastructure/auth/agentHostKeyLookup).
+  const verifyAgentHostApiKey = (id: number, key?: string) => verifyAgentHostKey(bindings, db, id, key);
 
   /**
    * Extract the agentHost API key from the request.
@@ -367,6 +377,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       tenantId: c.get('tenantId') as number,
       status: c.req.query('status'),
       projectId: c.req.query('projectId') != null && Number.isFinite(projectId) ? projectId : null,
+      env: c.env,
     }, agentHostService);
     return c.json({ agentHosts });
   });
@@ -425,6 +436,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     }
     // The plan-limit check above reads a cached count; a new row must re-count.
     await bumpTenantAgentHostCount(c.env, tenantId);
+    await invalidateAgentHostDirectory(c.env, tenantId);
 
     await db
       .update(tenants)
@@ -459,6 +471,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (deleted) {
       await invalidateAgentHostKeyCache(c.env, deleted.apiKeyHash);
       await bumpTenantAgentHostCount(c.env, tenantId);
+      await invalidateAgentHostDirectory(c.env, tenantId);
       // Its telemetry lives on the run-telemetry database, beyond the FK cascade.
       await cascadeAgentHostDelete(db, tenantId, id);
     }
@@ -489,6 +502,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         .where(and(eq(agentHosts.id, agentHostId), eq(agentHosts.tenantId, tenantId)));
       await invalidateOnlineAgentHost(c.env, tenantId);
     }
+    await invalidateAgentHostDirectory(c.env, tenantId);
 
     return c.json({
       agentHost: {
@@ -625,6 +639,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
           eq(agentHosts.tenantId, tenantId),
         ),
       );
+    await invalidateAgentHostDirectory(c.env, tenantId);
 
     return c.body(null, 204);
   });
@@ -645,6 +660,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         target: [agentHostProjects.tenantId, agentHostProjects.agentHostId, agentHostProjects.projectId],
         set: { updatedAt: new Date() },
       });
+    await invalidateAgentHostDirectory(c.env, tenantId);
 
     const assignmentContext = await buildAssignmentContext(agentHostId, tenantId, projectId);
     return c.json({ ok: true, assignmentContext });
@@ -680,6 +696,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
           eq(agentHostProjects.projectId, projectId),
         ),
       );
+    await invalidateAgentHostDirectory(c.env, tenantId);
 
     return c.body(null, 204);
   });
@@ -1043,11 +1060,15 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (projectAgentIdParam === 'none') conditions.push(isNull(cronJobs.projectAgentId));
     else if (projectAgentIdParam) conditions.push(eq(cronJobs.projectAgentId, Number(projectAgentIdParam)));
 
-    const rows = await db
-      .select()
-      .from(cronJobs)
-      .where(and(...conditions))
-      .orderBy(desc(cronJobs.createdAt)).limit(LIST_ROW_CAP);
+    const rows = await cachedHostCronJobs(
+      c.env,
+      { tenantId, agentHostId, projectId: projectIdParam, projectAgentId: projectAgentIdParam },
+      () => db
+        .select()
+        .from(cronJobs)
+        .where(and(...conditions))
+        .orderBy(desc(cronJobs.createdAt)).limit(LIST_ROW_CAP),
+    );
     return c.json({ jobs: rows });
   });
 
@@ -1088,6 +1109,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     };
 
     const [inserted] = await db.insert(cronJobs).values(insertData).returning();
+    await invalidateHostCronJobs(c.env, agentHostId);
     return c.json(inserted, 201);
   });
 
@@ -1148,6 +1170,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       .where(and(eq(cronJobs.id, jobId), eq(cronJobs.tenantId, tenantId), eq(cronJobs.agentHostId, agentHostId)))
       .returning();
     if (!updated) return c.json({ error: 'Not found' }, 404);
+    await invalidateHostCronJobs(c.env, agentHostId);
     return c.json(updated);
   });
 
@@ -1157,6 +1180,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHostId   = Number(c.req.param('id'));
     const jobId    = c.req.param('jobId');
     await db.delete(cronJobs).where(and(eq(cronJobs.id, jobId), eq(cronJobs.tenantId, tenantId), eq(cronJobs.agentHostId, agentHostId)));
+    await invalidateHostCronJobs(c.env, agentHostId);
     return c.body(null, 204);
   });
 
@@ -1231,6 +1255,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       .update(agentHosts)
       .set({ declaredCapabilities: JSON.stringify(caps) })
       .where(and(eq(agentHosts.id, agentHostId), eq(agentHosts.tenantId, tenantId)));
+    await invalidateAgentHostDirectory(c.env, tenantId);
 
     return c.json({ ok: true });
   });
@@ -1268,8 +1293,9 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const machineProfile = normalizeMachineProfile(body.machineProfile);
 
     const fingerprint = heartbeatPayloadFingerprint(capabilitiesJson, machineProfile);
-    const lastFingerprint = fingerprint === null ? null : await readHeartbeatFingerprint(c.env, id);
-    if (!heartbeatWriteDue({ lastSeenAt: agentHost.lastSeenAt, fingerprint, lastFingerprint })) {
+    // Decided from the cached last-write record, not the row: a beat costs no read.
+    const lastState = await readHeartbeatState(c.env, id);
+    if (!heartbeatWriteDue({ state: lastState, fingerprint })) {
       return c.json({ ok: true });
     }
 
@@ -1290,7 +1316,9 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         updatedAt: new Date(),
       })
       .where(eq(agentHosts.id, id));
-    await rememberHeartbeatFingerprint(c.env, id, fingerprint, lastFingerprint);
+    await rememberHeartbeatWrite(c.env, id, fingerprint, lastState);
+    // The beat changed what the host list shows (liveness / capabilities).
+    await invalidateAgentHostDirectory(c.env, Number(agentHost.tenantId));
 
     return c.json({ ok: true });
   });
@@ -1372,6 +1400,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
       .set({ connectedAt: new Date(), lastSeenAt: new Date() })
       .where(eq(agentHosts.id, id));
     await invalidateOnlineAgentHost(env, Number(agentHost.tenantId));
+    await invalidateAgentHostDirectory(env, Number(agentHost.tenantId));
 
     const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(id)));
     const url  = new URL(c.req.url);
@@ -1390,6 +1419,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
         .set({ connectedAt: null })
         .where(eq(agentHosts.id, id));
       await invalidateOnlineAgentHost(env, Number(agentHost.tenantId));
+      await invalidateAgentHostDirectory(env, Number(agentHost.tenantId));
     });
 
     return response;

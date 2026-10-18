@@ -4,8 +4,7 @@
  * import adminApi.ts — that would be a cycle.
  */
 
-import { apiRequest, type RequestOptions } from './apiClient';
-import { getStoredWebToken } from './auth';
+import { adminRequest } from './apiClient';
 import type { VendorId } from './builderforceApi';
 
 /** One row in the superadmin LLM trace list (summary columns only). */
@@ -154,11 +153,6 @@ export interface LlmRatingSummary {
   buckets: LlmRatingBucket[];
   leaders: LlmRatingLeader[];
   models: number;
-}
-
-async function adminRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  if (!getStoredWebToken()) throw new Error('Not authenticated. Sign in with a superadmin account.');
-  return apiRequest<T>(path, { ...opts, auth: 'web' });
 }
 
 /** LLM traces / usage / ratings / vendor health. Spread onto `adminApi`. */

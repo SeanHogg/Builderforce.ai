@@ -8,6 +8,7 @@
  * statement here carries the tenant predicate.
  */
 import { and, desc, eq } from 'drizzle-orm';
+import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, chatMessages, chatSessions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -16,8 +17,8 @@ import { verifyAgentHostApiKey, type AuthedAgentHost } from '../../infrastructur
 export type { AuthedAgentHost };
 
 /** Verify the host's own API key (an inactive host never authenticates). */
-export function authenticateChatHost(db: Db, agentHostId: number, key: string | null | undefined): Promise<AuthedAgentHost | null> {
-  return verifyAgentHostApiKey(db, agentHostId, key);
+export function authenticateChatHost(db: Db, agentHostId: number, key: string | null | undefined, env?: Env): Promise<AuthedAgentHost | null> {
+  return verifyAgentHostApiKey(db, agentHostId, key, env);
 }
 
 export interface HostChatMessageInput {

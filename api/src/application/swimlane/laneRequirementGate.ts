@@ -87,7 +87,7 @@ async function resolveRoleAgent(env: Env, db: Db, tenantId: number, projectId: n
 
 /** A live run already owns this ticket — never pile a second one on top of it. */
 async function hasLiveRun(runtimeService: RuntimeService, taskId: number): Promise<boolean> {
-  const execs = await runtimeService.listByTask(taskId).catch(() => []);
+  const execs = await runtimeService.listByTask(taskId, { slim: true }).catch(() => []);
   return execs
     .map((e) => e.toPlain())
     .some((e) => ['pending', 'submitted', 'running', 'paused'].includes(e.status));

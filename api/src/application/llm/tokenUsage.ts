@@ -14,8 +14,10 @@
 
 import { and, eq, gte, lt, notInArray, sql, type SQL } from 'drizzle-orm';
 import { llmUsageLog } from '../../infrastructure/database/schema';
-import type { Db } from '../../infrastructure/database/connection';
-import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER, clampTokenCount, usageDatabaseOf } from './usageLedger';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
+import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER, clampTokenCount, resolveUsageDatabase, usageDatabaseOf } from './usageLedger';
 import { MEDIA_PRODUCT_NAMES } from './mediaProducts';
 
 /**
@@ -159,4 +161,106 @@ export async function sumTenantTextTokensDayAndMonth(
       billableRow,
     ));
   return { day: toInt(row?.day), month: toInt(row?.month) };
+}
+
+// ── Per-request cap totals (cached) ─────────────────────────────────────────────────
+//
+// The gateway gates every request on FOUR usage figures — today's and this month's
+// text tokens, today's paid-overflow spend and today's premium spend — which used to be
+// three-plus separate uncached SUMs over `llm_usage_log`. They are ONE statement now
+// (FILTER clauses over the month window), cached per tenant per UTC day, and each
+// logged row adds its own contribution to the cached totals so a cap trips on the
+// request after the one that crossed it rather than a cache-TTL later.
+
+export interface TenantUsageTotals {
+  dayTokens: number;
+  monthTokens: number;
+  paidOverflowMillicents: number;
+  premiumMillicents: number;
+}
+
+const TOTALS_CACHE = { kvTtlSeconds: 60, l1TtlMs: 15_000 } as const;
+
+export const tenantUsageTotalsCacheKey = (tenantId: number, now: Date = new Date()): string =>
+  `tokusage:${tenantId}:${utcDayStart(now).toISOString().slice(0, 10)}`;
+
+/** Day/month text tokens + today's overflow and premium spend, from one cached statement. */
+export async function getTenantUsageTotals(
+  env: Env | undefined,
+  db: Db,
+  tenantId: number,
+): Promise<TenantUsageTotals> {
+  return getOrSetCached(
+    env,
+    tenantUsageTotalsCacheKey(tenantId),
+    async () => {
+      const dayStart = utcDayStart();
+      const [row] = await usageDatabaseOf(db)
+        .select({
+          month: sql<number>`COALESCE(SUM(${rowWeight}) FILTER (WHERE ${billableRow}), 0)`,
+          day: sql<number>`COALESCE(SUM(${rowWeight}) FILTER (WHERE ${billableRow} AND ${llmUsageLog.createdAt} >= ${dayStart}), 0)`,
+          overflow: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}) FILTER (WHERE ${llmUsageLog.paidOverflow} AND ${llmUsageLog.createdAt} >= ${dayStart}), 0)`,
+          premium: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}) FILTER (WHERE ${llmUsageLog.premium} AND ${llmUsageLog.createdAt} >= ${dayStart}), 0)`,
+        })
+        .from(llmUsageLog)
+        .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, utcMonthStart())));
+      return {
+        dayTokens: Number(row?.day ?? 0),
+        monthTokens: Number(row?.month ?? 0),
+        paidOverflowMillicents: Number(row?.overflow ?? 0),
+        premiumMillicents: Number(row?.premium ?? 0),
+      };
+    },
+    TOTALS_CACHE,
+  );
+}
+
+/** The fields of a logged usage row that count toward the cap totals. */
+export interface UsageRowContribution {
+  llmProduct: string;
+  totalTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  byo: boolean;
+  surface: string;
+  paidOverflow: boolean;
+  premium: boolean;
+  costUsdMillicents: number;
+}
+
+/** Mirror of {@link rowWeight} + {@link billableRow} for ONE row, so an increment lands
+ *  exactly what the SQL sum would have counted. */
+export function textTokenWeightOf(r: UsageRowContribution): number {
+  if ((MEDIA_PRODUCT_NAMES as readonly string[]).includes(r.llmProduct)) return 0;
+  if (r.byo && (r.surface === 'on_prem' || r.surface === 'vsix')) return 0;
+  return r.totalTokens - r.cacheReadTokens * (1 - CACHE_READ_MULTIPLIER) + r.cacheCreationTokens * (CACHE_CREATION_MULTIPLIER - 1);
+}
+
+/**
+ * Fold a just-logged row into the tenant's cached totals. Only a WARM entry is touched:
+ * on a cold miss the next load sums the table, which already includes this row, so
+ * incrementing a cold read would double count.
+ */
+export async function addUsageToTenantTotals(env: Env, tenantId: number, r: UsageRowContribution): Promise<void> {
+  const key = tenantUsageTotalsCacheKey(tenantId);
+  const cached = await peekCached<TenantUsageTotals>(env, key);
+  if (!cached) return;
+  const weight = textTokenWeightOf(r);
+  await setCached<TenantUsageTotals>(env, key, {
+    dayTokens: cached.dayTokens + weight,
+    monthTokens: cached.monthTokens + weight,
+    paidOverflowMillicents: cached.paidOverflowMillicents + (r.paidOverflow ? r.costUsdMillicents : 0),
+    premiumMillicents: cached.premiumMillicents + (r.premium ? r.costUsdMillicents : 0),
+  }, TOTALS_CACHE);
+}
+
+/** Whole-token day/month figures for the request-path gate (same clamp as the SQL sums). */
+export async function getTenantDayMonthTokens(env: Env | undefined, db: Db, tenantId: number): Promise<{ day: number; month: number }> {
+  const t = await getTenantUsageTotals(env, db, tenantId);
+  return { day: toInt(t.dayTokens), month: toInt(t.monthTokens) };
+}
+
+/** Totals for a caller holding only `env` (the cap checks shared with the cloud agent loop). */
+export async function getTenantUsageTotalsForEnv(env: Env, tenantId: number): Promise<TenantUsageTotals> {
+  return getTenantUsageTotals(env, resolveUsageDatabase(env, buildDatabase(env)), tenantId);
 }

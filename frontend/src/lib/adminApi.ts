@@ -3,7 +3,7 @@
  * All requests use the Web JWT (not tenant token). Requires user.isSuperadmin and WebJWT with sa: true.
  */
 
-import { apiRequest, apiRequestText, type RequestOptions } from './apiClient';
+import { adminRequest, apiRequestText } from './apiClient';
 import { getStoredWebToken } from './auth';
 import type { LlmModelStatus, VendorId } from './builderforceApi';
 import type { PsychometricProfile } from './psychometric';
@@ -927,11 +927,6 @@ export interface EffectivePermissions {
  * separate transport. The only extra behaviour is the friendlier "sign in with a
  * superadmin account" message when no token is stored at all.
  */
-async function adminRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  if (!getStoredWebToken()) throw new Error('Not authenticated. Sign in with a superadmin account.');
-  return apiRequest<T>(path, { ...opts, auth: 'web' });
-}
-
 // ---------------------------------------------------------------------------
 // Admin API
 // ---------------------------------------------------------------------------

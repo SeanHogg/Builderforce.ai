@@ -38,24 +38,27 @@
  * (`key` / `handle` / `name` / `label` / `owner`). The web Agents list has nowhere else
  * to learn them — VS Code already has its local run registry; the API did not.
  *
- * Read-only and bounded. It is NOT read-through cached, on purpose: its callers are the
- * diagnostics capture (one fetch per "Copy diagnostics" click) and the `chats.runs`
- * tool, and every field it returns — status, `produced`, `completedAt`, live children —
- * is live run state that changes under the reader. A cached run status in a report whose
- * entire job is to say what is happening right now is worse than the query it saves.
+ * Read-only and bounded. {@link readChatRunHistory} itself is NOT cached: the diagnostics
+ * capture (one fetch per "Copy diagnostics" click) and the `chats.runs` tool want live
+ * state. The POLLED route (`GET /chats/:id/runs`, every 4-30 s per open chat) goes through
+ * {@link readChatRunHistoryCached}, which is keyed on the tenant's execution-state version
+ * (every run status change orphans it) and the chat's structure token (links / agents /
+ * members), so an unchanged poll costs no statement at all.
  */
 
-import { and, desc, eq, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
-import { executions, tasks } from '../../infrastructure/database/schema';
+import { and, desc, eq, isNotNull, notInArray, sql } from 'drizzle-orm';
+import { agentHosts, chatTicketLinks, executions, ideAgents, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TERMINAL_EXECUTION_STATUSES } from '../../domain/execution/Execution';
-import { linkedRunnableTickets } from './chatLinkedTickets';
+import { RUNNABLE_TICKET_KINDS } from './chatLinkedTickets';
 import { resolveAgentIdentities } from './agentDisplayNames';
 import { resolveChatAccess } from './chatAccess';
+import { cachedChatRead } from './chatCacheVersions';
+import { executionStateVersion } from '../runtime/executionStateVersion';
 import { parseCloudChild } from '../runtime/cloudChildRuns';
 import { parseCloudAgentRef, parseExecutor, parseOriginatingChatId } from '../runtime/cloudDispatch';
-import { agentHosts } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 
 /** How many runs one history read returns. Newest first — an old run explains less. */
 export const CHAT_RUN_HISTORY_LIMIT = 25;
@@ -294,12 +297,27 @@ async function readLiveChatSubagents(db: Db, tenantId: number, chatId: number): 
 }
 
 /**
+ * The ids of the runnable tickets this chat links, as a SQL subquery. The `case` guards the
+ * text-to-int cast: Postgres does not promise the `where` runs before the select list, and a
+ * non-numeric ref must read as "no ticket", never as a cast error on the whole read.
+ */
+function linkedTaskIdsSql(tenantId: number, chatId: number) {
+  const kinds = sql.join(RUNNABLE_TICKET_KINDS.map((k) => sql`${k}`), sql`, `);
+  return sql`(select case when ${chatTicketLinks.ticketRef} ~ '^[0-9]{1,9}$' then ${chatTicketLinks.ticketRef}::int end
+    from ${chatTicketLinks}
+    where ${chatTicketLinks.tenantId} = ${tenantId}
+      and ${chatTicketLinks.chatId} = ${chatId}
+      and ${chatTicketLinks.ticketKind} in (${kinds}))`;
+}
+
+/**
  * Every run started against a ticket this chat links, newest first.
  *
- * Bounded queries, never N+1: the chat's runnable tickets (two, shared with the
- * addressed-agent hand-off), the executions for them in one `IN`, their titles in one
- * `IN`, every distinct agent name in one `IN`, and — only when some run went to a
- * machine — every distinct on-prem host name in one `IN`.
+ * Bounded statements, never N+1: the runs come back in ONE query that already carries each
+ * ticket's title, the on-prem host name and the agent name (joins, not follow-up `IN`s),
+ * with the chat's runnable-ticket count riding along as a scalar subquery. Live sub-agents
+ * are the second statement. Only a legacy run that records its agent on the payload alone
+ * (no `cloud_agent_ref`) costs a third lookup; a chat with no runs costs a count.
  */
 export async function readChatRunHistory(
   db: Db,
@@ -307,73 +325,59 @@ export async function readChatRunHistory(
   chatId: number,
   limit: number = CHAT_RUN_HISTORY_LIMIT,
 ): Promise<ChatRunHistory> {
-  const [linked, subagents] = await Promise.all([
-    linkedRunnableTickets(db, tenantId, chatId),
+  const linkedIds = linkedTaskIdsSql(tenantId, chatId);
+  const [rows, subagents] = await Promise.all([
+    db
+      .select({
+        id: executions.id,
+        taskId: executions.taskId,
+        status: executions.status,
+        submittedBy: executions.submittedBy,
+        source: executions.source,
+        cloudAgentRef: executions.cloudAgentRef,
+        agentHostId: executions.agentHostId,
+        payload: executions.payload,
+        produced: executions.produced,
+        errorMessage: executions.errorMessage,
+        startedAt: executions.startedAt,
+        completedAt: executions.completedAt,
+        createdAt: executions.createdAt,
+        taskTitle: tasks.title,
+        hostName: agentHosts.name,
+        agentName: ideAgents.name,
+        linkedCount: sql<number>`(select count(*)::int from ${tasks} lt where lt.tenant_id = ${tenantId} and lt.id in ${linkedIds})`,
+      })
+      .from(executions)
+      .innerJoin(tasks, and(eq(tasks.id, executions.taskId), eq(tasks.tenantId, tenantId)))
+      .leftJoin(agentHosts, and(eq(agentHosts.id, executions.agentHostId), eq(agentHosts.tenantId, tenantId)))
+      .leftJoin(ideAgents, and(eq(ideAgents.id, executions.cloudAgentRef), eq(ideAgents.tenantId, tenantId)))
+      .where(and(eq(executions.tenantId, tenantId), sql`${executions.taskId} in ${linkedIds}`))
+      .orderBy(desc(executions.createdAt))
+      .limit(clampChatRunHistoryLimit(limit)),
     readLiveChatSubagents(db, tenantId, chatId),
   ]);
-  if (linked.length === 0) {
-    return { linkedRunnableTickets: 0, runs: [], dispatchers: [], executors: [], subagents };
-  }
-  const taskIds = linked.map((t) => t.id);
-
-  const rows = await db
-    .select({
-      id: executions.id,
-      taskId: executions.taskId,
-      status: executions.status,
-      submittedBy: executions.submittedBy,
-      source: executions.source,
-      cloudAgentRef: executions.cloudAgentRef,
-      agentHostId: executions.agentHostId,
-      payload: executions.payload,
-      produced: executions.produced,
-      errorMessage: executions.errorMessage,
-      startedAt: executions.startedAt,
-      completedAt: executions.completedAt,
-      createdAt: executions.createdAt,
-    })
-    .from(executions)
-    .where(and(eq(executions.tenantId, tenantId), inArray(executions.taskId, taskIds)))
-    .orderBy(desc(executions.createdAt))
-    .limit(clampChatRunHistoryLimit(limit));
 
   if (rows.length === 0) {
-    return { linkedRunnableTickets: linked.length, runs: [], dispatchers: [], executors: [], subagents };
+    const [counted] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(tasks)
+      .where(scopedToTenant(tasks, tenantId, sql`${tasks.id} in ${linkedIds}`));
+    return { linkedRunnableTickets: Number(counted?.n ?? 0), runs: [], dispatchers: [], executors: [], subagents };
   }
 
-  // Titles for the tickets that actually appear in the returned runs — not for every
-  // linked ticket, which on a busy chat is the larger set.
-  const runTaskIds = [...new Set(rows.map((r) => r.taskId))];
-  const titleRows = await db
-    .select({ id: tasks.id, title: tasks.title })
-    .from(tasks)
-    .where(scopedToTenant(tasks, tenantId, inArray(tasks.id, runTaskIds)));
-  const titles = new Map(titleRows.map((t) => [t.id, t.title]));
-
-  const identities = await resolveAgentIdentities(
-    db,
-    tenantId,
-    rows.map(runAgentRefOf).filter((r): r is string => r != null),
-  );
-  const names = new Map([...identities].map(([ref, id]) => [ref, id.name] as const));
-
-  // On-prem machine names, in ONE bounded `IN` — and only when a run actually went to a
-  // host, which is the uncommon case. An id alone would be as unreadable here as the raw
-  // agent uuids this report used to print.
-  const hostIds = [...new Set(rows.map((r) => r.agentHostId).filter((h): h is number => h != null))];
-  const hostNames = new Map<number, string>();
-  if (hostIds.length > 0) {
-    const hostRows = await db
-      .select({ id: agentHosts.id, name: agentHosts.name })
-      .from(agentHosts)
-      .where(scopedToTenant(agentHosts, tenantId, inArray(agentHosts.id, hostIds)));
-    for (const h of hostRows) hostNames.set(h.id, h.name);
+  const titles = new Map(rows.map((r) => [r.taskId, r.taskTitle] as const));
+  const hostNames = new Map(rows.flatMap((r) => (r.agentHostId != null && r.hostName != null ? [[r.agentHostId, r.hostName] as const] : [])));
+  const names = new Map<string, string>(rows.flatMap((r) => (r.cloudAgentRef && r.agentName ? [[r.cloudAgentRef, r.agentName] as const] : [])));
+  // Older rows carry the agent on the payload only; resolve those (rarely any) in one `IN`.
+  const payloadOnly = rows.filter((r) => !r.cloudAgentRef).map(runAgentRefOf).filter((r): r is string => r != null);
+  if (payloadOnly.length > 0) {
+    for (const [ref, id] of await resolveAgentIdentities(db, tenantId, payloadOnly)) names.set(ref, id.name);
   }
 
   const runs = toChatRunRecords(rows, titles, names, hostNames);
 
   return {
-    linkedRunnableTickets: linked.length,
+    linkedRunnableTickets: Number(rows[0]!.linkedCount ?? 0),
     runs,
     dispatchers: [...new Set(runs.map((r) => r.submittedBy))],
     executors: [...new Set(runs.map((r) => r.executor ?? (r.hostId != null ? 'on-prem' : 'unknown')))],
@@ -400,4 +404,29 @@ export async function readChatRunHistoryForCaller(
   const chat = await resolveChatAccess(db, { chatId, tenantId, userId });
   if (!chat) return null;
   return readChatRunHistory(db, tenantId, chatId, limit);
+}
+
+/**
+ * {@link readChatRunHistoryForCaller} for the polled route. Per (chat, user): the access
+ * verdict is inside the cached value, so a hit is zero statements. A denial (`null`) is
+ * never cached. Keyed on the tenant's execution-state version, which every run status
+ * change bumps; `produced` / failure text landing without a status change ages out with
+ * the cache TTL.
+ */
+export async function readChatRunHistoryCached(
+  env: Env | undefined,
+  db: Db,
+  tenantId: number,
+  chatId: number,
+  userId: string,
+  limit: number = CHAT_RUN_HISTORY_LIMIT,
+): Promise<ChatRunHistory | null> {
+  const execVersion = env ? await executionStateVersion(env, tenantId) : '-';
+  return cachedChatRead(
+    env,
+    'runs',
+    { chatId, userId, variant: String(clampChatRunHistoryLimit(limit)), tokens: [execVersion] },
+    () => readChatRunHistoryForCaller(db, tenantId, chatId, userId, limit),
+    (history) => history !== null,
+  );
 }

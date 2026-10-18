@@ -32,7 +32,7 @@ import {
   requestFingerprint,
 } from '../../../application/shared/idempotentReplay';
 import { resolveTenantLlmCredentials, byoVendorIdsFromCredentials } from '../../../application/llm/tenantProviderKeyService';
-import { buildHostEgress } from '../../../application/llm/hostEgress';
+import { buildHostEgressForVendors } from '../../../application/llm/hostEgress';
 import { byoRoutingOptions } from '../../../application/llm/tenantProxy';
 import { pricesForCall } from '../../../application/llm/catalogView';
 import { GUEST_TOKEN_PREFIX } from '../../../application/guest/guestToken';
@@ -184,7 +184,7 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
     // Local egress for a vendor whose upstream refuses OUR machine rather than our
     // key (Kimi Code). Resolved once per request; null when this tenant has no
     // runtime connected, in which case those vendors call out directly as before.
-    const hostEgress = await buildHostEgress(c.env, access.tenantId);
+    const hostEgress = await buildHostEgressForVendors(c.env, access.tenantId, byoVendors);
     const routingMode = bodyAny.routingMode === 'auto' || bodyAny.routingMode === 'byo_pool'
       ? bodyAny.routingMode
       : undefined;

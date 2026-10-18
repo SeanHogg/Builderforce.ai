@@ -56,6 +56,7 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `break_even_scenarios.kind` — the column that replaced three tables. */
 export const SCENARIO_KINDS = ['break_even', 'forecast', 'what_if', 'validation'] as const;
@@ -81,9 +82,9 @@ export const isAssumptionRole = (v: unknown): v is AssumptionRole =>
  */
 export const SCENARIO_PROVENANCE = 'declared' as const;
 
-export class ScenarioError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class ScenarioError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'ScenarioError';
   }
 }

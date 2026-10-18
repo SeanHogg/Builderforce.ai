@@ -37,10 +37,11 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { StatusError } from '../../domain/shared/errors';
 
-export class PayableError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class PayableError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'PayableError';
   }
 }

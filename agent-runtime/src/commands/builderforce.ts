@@ -4,7 +4,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { confirm, intro, note, outro, password, select, spinner, text } from "@clack/prompts";
+import { confirm, intro, note, outro, password, spinner, text } from "@clack/prompts";
 import { Command } from "commander";
 import {
   initializeBuilderForceAgentsProject,
@@ -18,6 +18,12 @@ import { theme } from "../terminal/theme.js";
 import { runTui } from "../tui/tui.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import { VERSION } from "../version.js";
+import {
+  authenticateWithPassword,
+  builderforceApiFetch,
+  ensureProjectMapping,
+  selectTenantAndToken,
+} from "./builderforce-api.js";
 import {
   setAnthropicApiKey,
   setGeminiApiKey,
@@ -769,60 +775,6 @@ async function promptLlmProvider(projectRoot: string): Promise<string | null> {
 // Builderforce connection wizard
 // ---------------------------------------------------------------------------
 
-/** Thin fetch wrapper — throws a descriptive error on non-2xx. */
-async function builderforceApiFetch<T>(
-  url: string,
-  opts: RequestInit & { token?: string } = {},
-): Promise<T> {
-  const { token, ...rest } = opts;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-  const res = await fetch(url, { ...rest, headers });
-  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!res.ok) {
-    const msg = (body.error as string) ?? (body.message as string) ?? res.statusText;
-    throw new Error(`${res.status} ${msg}`);
-  }
-  return body as T;
-}
-
-async function ensureProjectMapping(params: {
-  serverUrl: string;
-  tenantJwt: string;
-  projectRoot: string;
-  projectName: string;
-  description?: string;
-  agentNodeId: string;
-}): Promise<{ projectId: string; action: "created" | "updated" } | null> {
-  try {
-    const upsert = await builderforceApiFetch<{
-      action: "created" | "updated";
-      project: { id: string; name: string };
-    }>(`${params.serverUrl}/api/projects/upsert`, {
-      method: "POST",
-      token: params.tenantJwt,
-      body: JSON.stringify({
-        name: params.projectName,
-        description: params.description ?? `Managed from ${params.projectRoot}`,
-      }),
-    });
-
-    await builderforceApiFetch(
-      `${params.serverUrl}/api/agent-hosts/${params.agentNodeId}/projects/${upsert.project.id}`,
-      {
-        method: "PUT",
-        token: params.tenantJwt,
-      },
-    );
-
-    return { projectId: upsert.project.id, action: upsert.action };
-  } catch {
-    return null;
-  }
-}
-
 async function ensureProjectMappingFromStoredCreds(params: {
   projectRoot: string;
   projectName: string;
@@ -947,142 +899,16 @@ async function promptBuilderforceSetup(
   }
   const serverUrl = normalizeBaseUrl(urlInput.trim()) || "https://api.builderforce.ai";
 
-  // ── 2. Login or register ──────────────────────────────────────────────────
-  const authMode = await select({
-    message: "Do you have a Builderforce account?",
-    options: [
-      { value: "login", label: "Yes — log in" },
-      { value: "register", label: "No  — create a free account" },
-    ],
-  });
-  if (typeof authMode === "symbol") {
+  // ── 2-5. Login or register, pick tenant, get tenant-scoped JWT ────────────
+  const webToken = await authenticateWithPassword({ serverUrl, defaultInstanceName });
+  if (!webToken) {
     return null;
   }
-
-  const emailInput = await text({ message: "Email:" });
-  if (typeof emailInput === "symbol" || !emailInput.trim()) {
+  const tenant = await selectTenantAndToken({ serverUrl, webToken, defaultInstanceName });
+  if (!tenant) {
     return null;
   }
-  const email = emailInput.trim();
-
-  let usernameForReg = "";
-  if (authMode === "register") {
-    const unInput = await text({
-      message: "Username:",
-      initialValue: defaultInstanceName.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-    });
-    if (typeof unInput === "symbol" || !unInput.trim()) {
-      return null;
-    }
-    usernameForReg = unInput.trim();
-  }
-
-  const pwdInput = await password({ message: "Password:" });
-  if (typeof pwdInput === "symbol" || !pwdInput.trim()) {
-    return null;
-  }
-  const pwd = pwdInput.trim();
-
-  // ── 3. Authenticate ───────────────────────────────────────────────────────
-  let webToken = "";
-  const authSpin = spinner();
-  try {
-    if (authMode === "register") {
-      authSpin.start("Creating account…");
-      const res = await builderforceApiFetch<{ token: string }>(
-        `${serverUrl}/api/auth/web/register`,
-        {
-          method: "POST",
-          body: JSON.stringify({ email, username: usernameForReg, password: pwd }),
-        },
-      );
-      webToken = res.token;
-      authSpin.stop("Account created");
-    } else {
-      authSpin.start("Authenticating…");
-      const res = await builderforceApiFetch<{ token: string }>(`${serverUrl}/api/auth/web/login`, {
-        method: "POST",
-        body: JSON.stringify({ email, password: pwd }),
-      });
-      webToken = res.token;
-      authSpin.stop("Authenticated");
-    }
-  } catch (err) {
-    authSpin.stop("Authentication failed");
-    note(String(err instanceof Error ? err.message : err), "Error");
-    return null;
-  }
-
-  // ── 4. Pick or create tenant ──────────────────────────────────────────────
-  let tenantId = 0;
-  const tenantSpin = spinner();
-  tenantSpin.start("Loading workspaces…");
-  let tenants: Array<{ id: number; name: string; slug: string }> = [];
-  try {
-    const res = await builderforceApiFetch<{
-      tenants: Array<{ id: number; name: string; slug: string }>;
-    }>(`${serverUrl}/api/tenants`, { token: webToken });
-    tenants = res.tenants;
-    tenantSpin.stop(`${tenants.length} workspace(s) found`);
-  } catch (err) {
-    tenantSpin.stop("Could not load workspaces");
-    note(String(err instanceof Error ? err.message : err), "Error");
-    return null;
-  }
-
-  if (tenants.length === 0) {
-    // No tenants yet — create one
-    const wsNameInput = await text({
-      message: "Create your first workspace:",
-      initialValue: defaultInstanceName,
-    });
-    if (typeof wsNameInput === "symbol" || !wsNameInput.trim()) {
-      return null;
-    }
-    const wsSpin = spinner();
-    wsSpin.start("Creating workspace…");
-    try {
-      const created = await builderforceApiFetch<{ id: number; name: string }>(
-        `${serverUrl}/api/tenants`,
-        { method: "POST", token: webToken, body: JSON.stringify({ name: wsNameInput.trim() }) },
-      );
-      tenantId = created.id;
-      wsSpin.stop(`Workspace "${created.name}" created`);
-    } catch (err) {
-      wsSpin.stop("Could not create workspace");
-      note(String(err instanceof Error ? err.message : err), "Error");
-      return null;
-    }
-  } else if (tenants.length === 1) {
-    tenantId = tenants[0].id;
-    note(`Using workspace: ${tenants[0].name}`, "Workspace");
-  } else {
-    const picked = await select({
-      message: "Select workspace:",
-      options: tenants.map((t) => ({ value: t.id, label: t.name, hint: t.slug })),
-    });
-    if (typeof picked === "symbol") {
-      return null;
-    }
-    tenantId = picked;
-  }
-
-  // ── 5. Get tenant-scoped JWT ──────────────────────────────────────────────
-  let tenantJwt = "";
-  try {
-    const res = await builderforceApiFetch<{ token: string }>(
-      `${serverUrl}/api/auth/tenant-token`,
-      {
-        method: "POST",
-        token: webToken,
-        body: JSON.stringify({ tenantId }),
-      },
-    );
-    tenantJwt = res.token;
-  } catch (err) {
-    note(String(err instanceof Error ? err.message : err), "Could not get workspace token");
-    return null;
-  }
+  const { tenantId, tenantJwt } = tenant;
 
   // ── 6. Register agentNode instance ─────────────────────────────────────────────
   const agentNodeNameInput = await text({

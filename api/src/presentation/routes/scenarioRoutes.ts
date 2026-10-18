@@ -59,7 +59,6 @@ import {
   type ScenarioKind,
 } from '../../application/finance/scenarioModelling';
 import {
-  ChurnError,
   currentRisk,
   modelCalibration,
   predict,
@@ -77,17 +76,6 @@ import { parseBody, parseOptionalBody, zJsonObject } from './requestBody';
  * TypeError.
  */
 const ScenarioWriteBody = zJsonObject;
-
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof ScenarioError || error instanceof ChurnError) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-    throw error;
-  }
-};
 
 const rowId = (raw: string): number => {
   const id = Number(raw);
@@ -110,26 +98,26 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
   // Literal segments first — `provenance`, `compare`, `roi`, `calculations` and
   // `churn` would all be swallowed by `/:id` in registration order otherwise.
 
-  router.get('/provenance', (c) => handle(async () => Response.json(scenarioProvenance())));
+  router.get('/provenance', async (c) => Response.json(scenarioProvenance()));
 
-  router.get('/compare', (c) => handle(async () => {
+  router.get('/compare', async (c) => {
     const ids = (c.req.query('ids') ?? '').split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
     return Response.json(await compareScenarios(db, tenant(c), ids));
-  }));
+  });
 
   // ── Churn ─────────────────────────────────────────────────────────────────
 
-  router.get('/churn/risk', (c) => handle(async () => {
+  router.get('/churn/risk', async (c) => {
     const band = c.req.query('band');
     return Response.json({
       accounts: await currentRisk(db, tenant(c), band ? (band as RiskBand) : undefined),
     });
-  }));
+  });
 
-  router.get('/churn/calibration', (c) => handle(async () =>
-    Response.json({ calibration: await modelCalibration(db, tenant(c)) })));
+  router.get('/churn/calibration', async (c) =>
+    Response.json({ calibration: await modelCalibration(db, tenant(c)) }));
 
-  router.post('/churn', manager, (c) => handle(async () => {
+  router.post('/churn', manager, async (c) => {
     const body = await parseBody(c, ScenarioWriteBody);
     return Response.json(await predict(db, c.env as Env, tenant(c), await who(c), {
       accountRef: String(body.accountRef ?? ''),
@@ -138,27 +126,27 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
       drivers: body.drivers,
       ...(num(body.horizonDays) !== undefined ? { horizonDays: num(body.horizonDays) as number } : {}),
     }), { status: 201 });
-  }));
+  });
 
-  router.post('/churn/:accountRef/outcome', manager, (c) => handle(async () => {
+  router.post('/churn/:accountRef/outcome', manager, async (c) => {
     const body = await parseBody(c, ScenarioWriteBody);
     return Response.json(await recordOutcome(
       db, c.env as Env, tenant(c), await who(c),
       c.req.param('accountRef'), String(body.outcome ?? '') as Outcome,
     ));
-  }));
+  });
 
-  router.get('/churn/:accountRef', (c) => handle(async () =>
-    Response.json({ history: await riskHistory(db, tenant(c), c.req.param('accountRef')) })));
+  router.get('/churn/:accountRef', async (c) =>
+    Response.json({ history: await riskHistory(db, tenant(c), c.req.param('accountRef')) }));
 
   // ── Saved calculations ────────────────────────────────────────────────────
 
-  router.get('/calculations', (c) => handle(async () => {
+  router.get('/calculations', async (c) => {
     const ownerRef = c.req.query('ownerRef');
     return Response.json({ calculations: await listCalculations(db, tenant(c), ownerRef) });
-  }));
+  });
 
-  router.post('/calculations', (c) => handle(async () => {
+  router.post('/calculations', async (c) => {
     const body = await parseBody(c, ScenarioWriteBody);
     return Response.json(await saveCalculation(db, tenant(c), {
       name: String(body.name ?? ''),
@@ -168,17 +156,17 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
       unit: str(body.unit) ?? null,
       ownerRef: str(body.ownerRef) ?? (c.get('userId') as string | undefined) ?? null,
     }), { status: 201 });
-  }));
+  });
 
-  router.delete('/calculations/:id', (c) => handle(async () =>
-    Response.json(await deleteCalculation(db, tenant(c), rowId(c.req.param('id'))))));
+  router.delete('/calculations/:id', async (c) =>
+    Response.json(await deleteCalculation(db, tenant(c), rowId(c.req.param('id')))));
 
   // ── ROI ───────────────────────────────────────────────────────────────────
 
-  router.get('/roi/:kind/:ref', (c) => handle(async () =>
-    Response.json(await roiFor(db, tenant(c), { kind: c.req.param('kind'), ref: c.req.param('ref') }))));
+  router.get('/roi/:kind/:ref', async (c) =>
+    Response.json(await roiFor(db, tenant(c), { kind: c.req.param('kind'), ref: c.req.param('ref') })));
 
-  router.post('/roi/:kind/:ref', manager, (c) => handle(async () => {
+  router.post('/roi/:kind/:ref', manager, async (c) => {
     const body = await parseBody(c, ScenarioWriteBody);
     const periodAt = new Date(String(body.periodAt ?? ''));
     if (Number.isNaN(periodAt.getTime())) throw new ScenarioError('periodAt must be a date', 400);
@@ -187,9 +175,9 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
       periodAt, num(body.cost) ?? 0, num(body.benefit) ?? 0,
       str(body.currency) ?? 'USD', str(body.note) ?? null,
     ), { status: 201 });
-  }));
+  });
 
-  router.put('/roi/:kind/:ref/payback', manager, (c) => handle(async () => {
+  router.put('/roi/:kind/:ref/payback', manager, async (c) => {
     const body = await parseBody(c, ScenarioWriteBody);
     const investment = num(body.investment);
     if (investment === undefined) throw new ScenarioError('investment is required', 400);
@@ -197,16 +185,16 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
       db, tenant(c), { kind: c.req.param('kind'), ref: c.req.param('ref') },
       investment, num(body.monthlyReturn) ?? null, str(body.currency) ?? 'USD',
     ));
-  }));
+  });
 
   // ── Scenarios ─────────────────────────────────────────────────────────────
 
-  router.get('/', (c) => handle(async () => {
+  router.get('/', async (c) => {
     const kind = c.req.query('kind');
     return Response.json({ scenarios: await listScenarios(db, tenant(c), kind ? (kind as ScenarioKind) : undefined) });
-  }));
+  });
 
-  router.post('/', manager, (c) => handle(async () => {
+  router.post('/', manager, async (c) => {
     const body = await parseBody(c, ScenarioWriteBody);
     return Response.json(await createScenario(db, c.env as Env, tenant(c), await who(c), {
       name: String(body.name ?? ''),
@@ -214,15 +202,15 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
       description: str(body.description) ?? null,
       ...(num(body.horizonMonths) !== undefined ? { horizonMonths: num(body.horizonMonths) as number } : {}),
     }), { status: 201 });
-  }));
+  });
 
-  router.get('/:id', (c) => handle(async () =>
-    Response.json(await scenarioDetail(db, tenant(c), rowId(c.req.param('id'))))));
+  router.get('/:id', async (c) =>
+    Response.json(await scenarioDetail(db, tenant(c), rowId(c.req.param('id')))));
 
-  router.post('/:id/baseline', manager, (c) => handle(async () =>
-    Response.json(await setBaseline(db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id'))))));
+  router.post('/:id/baseline', manager, async (c) =>
+    Response.json(await setBaseline(db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id')))));
 
-  router.put('/:id/assumptions/:key', manager, (c) => handle(async () => {
+  router.put('/:id/assumptions/:key', manager, async (c) => {
     const body = await parseBody(c, ScenarioWriteBody);
     return Response.json(await setAssumption(db, tenant(c), rowId(c.req.param('id')), {
       key: c.req.param('key'),
@@ -234,15 +222,15 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
       maxValue: num(body.maxValue) ?? null,
       note: str(body.note) ?? null,
     }));
-  }));
+  });
 
-  router.delete('/:id/assumptions/:key', manager, (c) => handle(async () =>
-    Response.json(await deleteAssumption(db, tenant(c), rowId(c.req.param('id')), c.req.param('key')))));
+  router.delete('/:id/assumptions/:key', manager, async (c) =>
+    Response.json(await deleteAssumption(db, tenant(c), rowId(c.req.param('id')), c.req.param('key'))));
 
-  router.post('/:id/compute', manager, (c) => handle(async () =>
-    Response.json(await computeBreakEven(db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id'))))));
+  router.post('/:id/compute', manager, async (c) =>
+    Response.json(await computeBreakEven(db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id')))));
 
-  router.post('/:id/simulate', manager, (c) => handle(async () => {
+  router.post('/:id/simulate', manager, async (c) => {
     const body = await parseOptionalBody(c, ScenarioWriteBody);
     return Response.json(await runMonteCarlo(
       db, c.env as Env, tenant(c), await who(c), rowId(c.req.param('id')),
@@ -251,7 +239,7 @@ export function createScenarioRoutes(db: Db): Hono<HonoEnv> {
         ...(num(body.seed) !== undefined ? { seed: num(body.seed) as number } : {}),
       },
     ));
-  }));
+  });
 
   return router;
 }

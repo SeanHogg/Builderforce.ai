@@ -45,7 +45,7 @@
  */
 
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
-import { richColorHex, type RichAlign } from '@builderforce/creation-canvas-contract';
+import { escapeHtml, richColorHex, type RichAlign } from '@builderforce/creation-canvas-contract';
 import { parseMarkdownBlocks, parseInlineRuns, type MdBlock, type MdRun } from './markdownBlocks';
 
 /** Delimiter before the footnote/header/footer block a conversion appends. */
@@ -63,10 +63,6 @@ export class DocxSourceUnusableError extends Error {
     super(message);
     this.name = 'DocxSourceUnusableError';
   }
-}
-
-function esc(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 /* ------------------------------------------------------- source scanning --- */
@@ -155,12 +151,12 @@ function runXml(run: MdRun): string {
     run.bold ? '<w:b/>' : '',
     run.italic ? '<w:i/>' : '',
     run.underline ? '<w:u w:val="single"/>' : '',
-    run.font ? `<w:rFonts w:ascii="${esc(run.font)}" w:hAnsi="${esc(run.font)}"/>`
+    run.font ? `<w:rFonts w:ascii="${escapeHtml(run.font)}" w:hAnsi="${escapeHtml(run.font)}"/>`
       : run.code ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>' : '',
-    run.color ? `<w:color w:val="${esc(richColorHex(run.color))}"/>` : '',
+    run.color ? `<w:color w:val="${escapeHtml(richColorHex(run.color))}"/>` : '',
     run.size ? `<w:sz w:val="${Math.round(run.size * 2)}"/><w:szCs w:val="${Math.round(run.size * 2)}"/>` : '',
   ].join('');
-  return `<w:r>${properties ? `<w:rPr>${properties}</w:rPr>` : ''}<w:t xml:space="preserve">${esc(run.text)}</w:t></w:r>`;
+  return `<w:r>${properties ? `<w:rPr>${properties}</w:rPr>` : ''}<w:t xml:space="preserve">${escapeHtml(run.text)}</w:t></w:r>`;
 }
 
 /** Paragraph alignment. Absent for `left`, so a paragraph the author never
@@ -209,7 +205,7 @@ function textXml(text: string, profile: SourceProfile): string {
     // the superscript digit; absent from the source, the digit is plain.
     const element = match[1] === 'fn' ? 'w:footnoteReference' : 'w:endnoteReference';
     const style = profile.styles.has('FootnoteReference') ? '<w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr>' : '<w:rPr><w:vertAlign w:val="superscript"/></w:rPr>';
-    out += `<w:r>${style}<${element} w:id="${esc(match[2]!)}"/></w:r>`;
+    out += `<w:r>${style}<${element} w:id="${escapeHtml(match[2]!)}"/></w:r>`;
     cursor = match.index + match[0].length;
   }
   out += parseInlineRuns(text.slice(cursor)).map(runXml).join('');
@@ -229,7 +225,7 @@ function listParagraph(item: string, ordered: boolean, profile: SourceProfile, a
     // producing a list that renders as unmarked body text.
     return paragraphXml(`${ordered ? '' : '• '}${item}`, profile, styleFor(profile, 'ListParagraph'), align);
   }
-  return paragraphXml(item, profile, `${styleFor(profile, 'ListParagraph')}<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${esc(numId)}"/></w:numPr>`, align);
+  return paragraphXml(item, profile, `${styleFor(profile, 'ListParagraph')}<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${escapeHtml(numId)}"/></w:numPr>`, align);
 }
 
 function tableXml(head: string[], rows: string[][], profile: SourceProfile): string {

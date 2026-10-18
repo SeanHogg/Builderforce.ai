@@ -19,7 +19,6 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
-  FormError,
   closeForm,
   publishForm,
   resolvePublicForm,
@@ -33,17 +32,6 @@ import { parseBody, z, zJsonObject } from './requestBody';
 /** A response is keyed by question id; every per-answer rule (required, choice,
  *  audience) belongs to `submitFormResponse`, so this only insists on the map shape. */
 const FormResponseBody = z.object({ answers: zJsonObject.nullish() });
-
-/** One translation of a refusal into a status, shared by every handler — so a
- *  new endpoint cannot invent a different code for the same rejection. */
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof FormError) return Response.json({ error: error.message }, { status: error.status });
-    throw error;
-  }
-};
 
 export function createFormRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -64,9 +52,9 @@ export function createFormRoutes(db: Db): Hono<HonoEnv> {
    * many messages actually went out, and a publish that minted ten credentials and
    * delivered none must not report the same thing as one that delivered ten.
    */
-  router.post('/publish', (c) => handle(async () => {
+  router.post('/publish', async (c) => {
     // Read field-by-field below and `questions` is the form DEFINITION, validated by
-    // `publishForm` — so the schema keeps every key. `handle` rethrows the 400.
+    // `publishForm` — so the schema keeps every key. The 400 is thrown to app.onError.
     const body = await parseBody(c, zJsonObject);
     const result = await publishForm(db, tenant(c), {
       questionSetId: typeof body.questionSetId === 'string' ? body.questionSetId : undefined,
@@ -99,18 +87,18 @@ export function createFormRoutes(db: Db): Hono<HonoEnv> {
       headers: headerHints(c.req),
     });
     return Response.json({ ...result, delivery });
-  }));
+  });
 
-  router.post('/:id/close', (c) => handle(async () => {
+  router.post('/:id/close', async (c) => {
     await closeForm(db, tenant(c), c.req.param('id'));
     return Response.json({ ok: true });
-  }));
+  });
 
   /** The counters the card shows — three aggregates, never a page of answers. */
-  router.get('/:id/summary', (c) => handle(async () => {
+  router.get('/:id/summary', async (c) => {
     const summary = await summarizeForm(db, tenant(c), c.req.param('id'));
     return summary ? Response.json({ summary }) : Response.json({ error: 'No such form.' }, { status: 404 });
-  }));
+  });
 
   return router;
 }
@@ -126,7 +114,7 @@ export function createFormRoutes(db: Db): Hono<HonoEnv> {
 export function createPublicFormRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  router.get('/:slug', (c) => handle(async () => {
+  router.get('/:slug', async (c) => {
     const resolved = await resolvePublicForm(db, c.req.param('slug'), c.req.query('t'));
     if (!resolved) return Response.json({ error: 'No form at that address.' }, { status: 404 });
     // Deliberately only `form` — the contract's `PublishedForm` projection, which
@@ -138,9 +126,9 @@ export function createPublicFormRoutes(db: Db): Hono<HonoEnv> {
         ? { name: resolved.recipient.name, email: resolved.recipient.email, answered: resolved.recipient.respondedAt != null }
         : null,
     });
-  }));
+  });
 
-  router.post('/:slug', (c) => handle(async () => {
+  router.post('/:slug', async (c) => {
     const resolved = await resolvePublicForm(db, c.req.param('slug'), c.req.query('t'));
     if (!resolved) return Response.json({ error: 'No form at that address.' }, { status: 404 });
     const body = await parseBody(c, FormResponseBody);
@@ -153,7 +141,7 @@ export function createPublicFormRoutes(db: Db): Hono<HonoEnv> {
       env: c.env as Env,
     });
     return Response.json(result);
-  }));
+  });
 
   return router;
 }

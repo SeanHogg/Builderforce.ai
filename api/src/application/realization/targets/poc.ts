@@ -19,7 +19,8 @@
  * harness shows the number next to it.
  */
 
-import { esc, renderProofShell, INGRESS_PRELUDE } from '../proofShell';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
+import { renderProofShell, INGRESS_PRELUDE } from '../proofShell';
 import { criteriaFrom, goalHeadline, headlineCapabilities, verdictRecorderScript, VERDICT_COLLECTION } from './shared';
 import type { RealizationTarget, RealizeContext, RealizationOutput } from '../realizationTarget';
 
@@ -58,7 +59,7 @@ function renderHarness(ctx: RealizeContext): string {
   <section>
     <div class="card">
       <h2>The risky step</h2>
-      <p class="muted" style="margin-top:0">${esc(riskiest)} — isolated from everything that already works.</p>
+      <p class="muted" style="margin-top:0">${escapeHtml(riskiest)} — isolated from everything that already works.</p>
       <div class="field">
         <label for="input">One input per line. Paste ${TRIALS} real examples, not made-up ones.</label>
         <textarea id="input" rows="8" placeholder="A real case&#10;Another real case&#10;A case you expect it to fail on"></textarea>
@@ -84,7 +85,7 @@ function renderHarness(ctx: RealizeContext): string {
     </div>
   </section>
 
-  <footer>${esc(spec.title)} — ${esc(goalHeadline(spec))}</footer>`;
+  <footer>${escapeHtml(spec.title)} — ${escapeHtml(goalHeadline(spec))}</footer>`;
 
   const script = `${INGRESS_PRELUDE}
 ${verdictRecorderScript()}

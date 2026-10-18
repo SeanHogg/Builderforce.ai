@@ -51,6 +51,11 @@ export type WorkflowSpan = {
   estimatedCostUsd?: number;
 };
 
+/** Flush the OTel batch at this many queued spans… */
+const OTEL_FLUSH_SPANS = 25;
+/** …or this long after the first one was queued, whichever comes first. */
+const OTEL_FLUSH_MS = 2_000;
+
 /**
  * WorkflowTelemetryService encapsulates all mutable telemetry state.
  * A single instance (exported as `telemetryService`) is shared across the process.
@@ -63,6 +68,9 @@ export class WorkflowTelemetryService {
   private agentNodeId: string | null = null;
   private apiUrl: string | null = null;
   private apiKey: string | null = null;
+  /** Spans waiting for the next batched OTel POST. */
+  private otelBuffer: WorkflowSpan[] = [];
+  private otelTimer: ReturnType<typeof setTimeout> | null = null;
   /**
    * Active trace ID for the current workflow (W3C-compatible, 32 hex chars).
    * Set when a workflow starts, cleared when it ends.
@@ -290,25 +298,50 @@ export class WorkflowTelemetryService {
     }
   }
 
-  /** Forward span to Builderforce OTel ingest endpoint (fire-and-forget). */
+  /**
+   * Queue a span for the Builderforce OTel ingest endpoint. Spans leave in ONE POST
+   * (an array) every {@link OTEL_FLUSH_SPANS} spans or {@link OTEL_FLUSH_MS}, instead of
+   * one request per span — each request is a database write on the server.
+   */
   private forwardToOtelProxy(span: WorkflowSpan): void {
     if (!this.apiUrl || !this.apiKey || !this.agentNodeId) {
       return;
     }
-    const agentNodeIdNum = parseInt(this.agentNodeId, 10);
-    if (Number.isNaN(agentNodeIdNum)) {
+    if (Number.isNaN(parseInt(this.agentNodeId, 10))) {
       return;
     }
+    this.otelBuffer.push(span);
+    if (this.otelBuffer.length >= OTEL_FLUSH_SPANS) {
+      this.flushOtelSpans();
+      return;
+    }
+    if (!this.otelTimer) {
+      this.otelTimer = setTimeout(() => this.flushOtelSpans(), OTEL_FLUSH_MS);
+      // A pending flush must never keep the process alive on its own.
+      this.otelTimer.unref?.();
+    }
+  }
 
-    const base = normalizeBaseUrl(this.apiUrl);
-    fetch(`${base}/api/telemetry/spans?agentNodeId=${agentNodeIdNum}`, {
+  /** Send every queued span now (fire-and-forget). Also called at shutdown. */
+  flushOtelSpans(): void {
+    if (this.otelTimer) {
+      clearTimeout(this.otelTimer);
+      this.otelTimer = null;
+    }
+    const batch = this.otelBuffer.splice(0);
+    if (batch.length === 0 || !this.apiUrl || !this.apiKey || !this.agentNodeId) {
+      return;
+    }
+    // The server resolves a host from `Authorization: Bearer` + `X-AgentHost-Id` (or
+    // `?agentHostId=`); a bare bearer key names no host and is refused with a 401.
+    fetch(`${normalizeBaseUrl(this.apiUrl)}/api/telemetry/spans`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${this.apiKey}`,
-        ...(span.traceId ? { "X-Trace-Id": span.traceId } : {}),
+        "X-AgentHost-Id": this.agentNodeId,
       },
-      body: JSON.stringify([span]),
+      body: JSON.stringify(batch),
     }).catch((err) => logDebug(`[telemetry] otel proxy forward failed: ${String(err)}`));
   }
 
@@ -351,6 +384,11 @@ export function initTelemetry(opts: {
   linkApiKey?: string | null;
 }): void {
   telemetryService.init(opts);
+}
+
+/** Send any batched spans now — for shutdown paths that would otherwise drop the last <2 s. */
+export function flushTelemetry(): void {
+  telemetryService.flushOtelSpans();
 }
 
 export function emitSpan(span: Record<string, unknown>): void {

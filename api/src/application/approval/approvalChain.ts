@@ -43,13 +43,14 @@ import type { Env } from '../../env';
 import { approvalActions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `approval_actions.state`. */
 export const APPROVAL_STATES = ['waiting', 'active', 'done', 'skipped'] as const;
 
-export class ApprovalChainError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class ApprovalChainError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'ApprovalChainError';
   }
 }

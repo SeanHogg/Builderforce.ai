@@ -10,17 +10,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * deliberately absent: its poller, not a server sweep, executes those rows.)
  */
 const probeResults: Array<Date | null> = [];
+const SCHEDULE_PROBE_COLUMNS = ['m0', 'm1', 'm2', 'm3'];
+let statements = 0;
 
 vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
   buildDatabase: () => ({
-    select: () => {
-      const min = probeResults.shift() ?? null;
-      const b: Record<string, unknown> = {};
-      b.from = () => b;
-      b.where = () => b;
-      b.then = (resolve: (v: unknown[]) => unknown) => resolve([{ min }]);
-      return b;
+    // ONE statement carries every probe: one column per table, in SCHEDULE_SOURCES order.
+    execute: async () => {
+      statements += 1;
+      const row: Record<string, Date | null> = {};
+      SCHEDULE_PROBE_COLUMNS.forEach((c) => { row[c] = probeResults.shift() ?? null; });
+      return { rows: [row] };
     },
   }),
 }));
@@ -61,6 +62,7 @@ const at = (ms: number) => new Date(ms);
 beforeEach(() => {
   reported.length = 0;
   probeResults.length = 0;
+  statements = 0;
 });
 
 describe('publishNextDue', () => {
@@ -71,6 +73,13 @@ describe('publishNextDue', () => {
     expect(result.earliestMs).toBe(NOW + 30_000);
     expect(result.stall).toBeNull();
     expect(store.get('cron:next-due')).toBe(String(NOW + 30_000));
+  });
+
+  it('reads every table in ONE statement', async () => {
+    const { kv } = fakeKv();
+    armProbes(at(NOW + 60_000), null, at(NOW + 5_000), null);
+    await publishNextDue(envWith(kv), NOW);
+    expect(statements).toBe(1);
   });
 
   it('publishes the "none" sentinel when nothing is armed', async () => {

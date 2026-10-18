@@ -36,10 +36,11 @@ import { desc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { fundingRounds } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { StatusError } from '../../domain/shared/errors';
 
-export class FundingRoundError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class FundingRoundError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'FundingRoundError';
   }
 }

@@ -18,7 +18,6 @@ import { Hono, type Context } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { FormError } from '../../application/collection/formPublishing';
 import {
   castPollVote,
   emptyPollTally,
@@ -37,17 +36,6 @@ const VoteBody = z.object({
   answer: z.unknown().optional(),
 });
 
-/** One translation of a refusal into a status, shared by every handler — so a new
- *  endpoint cannot invent a different code for the same rejection. */
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof FormError) return Response.json({ error: error.message }, { status: error.status });
-    throw error;
-  }
-};
-
 export function createPollRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -56,7 +44,7 @@ export function createPollRoutes(db: Db): Hono<HonoEnv> {
 
   /** Publish a poll and OPEN it — one press, because the next thing that happens is a
    *  room being asked to answer. */
-  router.post('/publish', (c) => handle(async () => {
+  router.post('/publish', async (c) => {
     const body = await parseBody(c, zJsonObject);
     const result = await publishPoll(db, tenant(c), {
       ...(typeof body.questionSetId === 'string' ? { questionSetId: body.questionSetId } : {}),
@@ -74,7 +62,7 @@ export function createPollRoutes(db: Db): Hono<HonoEnv> {
       createdBy: (c.get('userId') as string | undefined) ?? null,
     });
     return Response.json(result);
-  }));
+  });
 
   /**
    * Steer a live poll: open or close voting, show or hide the count.
@@ -83,18 +71,18 @@ export function createPollRoutes(db: Db): Hono<HonoEnv> {
    * BUTTONS — hiding the count while voting continues is the move that makes an
    * instrument honest, and a control that could only do both at once would not allow it.
    */
-  router.post('/:id/state', (c) => handle(async () => {
+  router.post('/:id/state', async (c) => {
     const body = await parseBody(c, zJsonObject);
     const state = await setPollState(db, tenant(c), c.req.param('id'), {
       ...(body.status === 'open' || body.status === 'closed' ? { status: body.status } : {}),
       ...(typeof body.showResultsLive === 'boolean' ? { showResultsLive: body.showResultsLive } : {}),
     });
     return Response.json(state);
-  }));
+  });
 
   /** What the facilitator's board draws: the poll, the count, and the shape. The quiz
    *  answers are visible here — the person running the room is the one who wrote them. */
-  router.get('/:id', (c) => handle(async () => {
+  router.get('/:id', async (c) => {
     const resolved = await readPoll(db, tenant(c), c.req.param('id'));
     if (!resolved) return Response.json({ error: 'No such poll.' }, { status: 404 });
     const [tally, responseCount] = await Promise.all([
@@ -102,7 +90,7 @@ export function createPollRoutes(db: Db): Hono<HonoEnv> {
       pollResponseCount(db, tenant(c), resolved.questionSetId),
     ]);
     return Response.json({ poll: resolved.poll, questionSetId: resolved.questionSetId, tally, responseCount });
-  }));
+  });
 
   return router;
 }
@@ -125,7 +113,7 @@ export function createPublicPollRoutes(db: Db): Hono<HonoEnv> {
    * count while the facilitator is hiding it is a hidden count in name only, and the
    * whole reason to hide it is that seeing three answers changes the fourth.
    */
-  router.get('/:slug', (c) => handle(async () => {
+  router.get('/:slug', async (c) => {
     const resolved = await resolvePublicPoll(db, c.req.param('slug'));
     if (!resolved) return Response.json({ error: 'No poll at that address.' }, { status: 404 });
     const reveal = resolved.poll.showResultsLive || resolved.poll.status === 'closed';
@@ -136,9 +124,9 @@ export function createPublicPollRoutes(db: Db): Hono<HonoEnv> {
     // the tenant id and the unstripped quiz answers, and returning it wholesale would
     // hand both to every visitor.
     return Response.json({ poll: resolved.poll, tally, resultsVisible: reveal });
-  }));
+  });
 
-  router.post('/:slug/vote', (c) => handle(async () => {
+  router.post('/:slug/vote', async (c) => {
     const resolved = await resolvePublicPoll(db, c.req.param('slug'));
     if (!resolved) return Response.json({ error: 'No poll at that address.' }, { status: 404 });
     const body = await parseBody(c, VoteBody);
@@ -153,7 +141,7 @@ export function createPublicPollRoutes(db: Db): Hono<HonoEnv> {
     const reveal = resolved.poll.showResultsLive;
     const tally = reveal ? await tallyPoll(db, resolved) : emptyPollTally(resolved.poll.format);
     return Response.json({ ok: true, tally, resultsVisible: reveal });
-  }));
+  });
 
   return router;
 }

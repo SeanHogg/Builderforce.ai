@@ -60,7 +60,6 @@ import {
   unassignedProjects,
 } from '../../application/investor/companyWorkspace';
 import {
-  InvestorAccessError,
   companyInvestorAnalytics,
   derivedTokenFor,
   inviteInvestorToCompany,
@@ -78,19 +77,15 @@ import {
 } from '../../application/investor/startupListing';
 import {
   INVESTOR_INQUIRY_SOURCE,
-  RevenueIntelError,
   dealFlowQueue,
   isDealFlowStatus,
   triageDealFlow,
 } from '../../application/sales/revenueIntelligence';
-import { DataRoomError, readDataRoomDocument } from '../../application/investor/dataRoomSharing';
+import { readDataRoomDocument } from '../../application/investor/dataRoomSharing';
 import type { RfpGenerateDeps } from '../../application/rfp/rfpService';
 import type { TaskService } from '../../application/task/TaskService';
 import type { ToolService } from '../../application/tools/ToolService';
 import type { AuditRunner } from '../../application/tools/AuditRunner';
-import { SignatureError } from '../../application/signature/signatureEngine';
-import { TemplateError } from '../../application/legal/documentTemplates';
-import { WatermarkError } from '../../application/security/documentWatermark';
 // Each handler type-guards every field it reads, so the body is any JSON object; an
 // absent body stays `{}` (the service answers "name is required" etc. itself).
 import { parseBody, parseOptionalBody, z, zJsonObject } from './requestBody';
@@ -131,28 +126,6 @@ const zDeclaredFinance = z.object({
 const zVisibility = z.object({ listed: z.boolean() });
 const zTriage = z.object({ status: z.string().trim().max(16) });
 
-/** One failure translation for the whole group, so the mapping from a rejected
- *  input to a status code exists once rather than in each handler — and an
- *  unexpected error is never flattened into a 400 that hides it. */
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (
-      error instanceof CompanyError
-      || error instanceof InvestorAccessError
-      || error instanceof DataRoomError
-      || error instanceof SignatureError
-      || error instanceof TemplateError
-      || error instanceof WatermarkError
-      || error instanceof RevenueIntelError
-    ) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-    throw error;
-  }
-};
-
 const projectIdFrom = (raw: string): number => {
   const id = Number(raw);
   if (!Number.isFinite(id) || id <= 0) throw new CompanyError('That is not a project id.', 400);
@@ -181,10 +154,10 @@ export function createInvestorRoutes(
 
   // ── companies ────────────────────────────────────────────────────────────
 
-  router.get('/companies', (c) => handle(async () =>
-    Response.json({ companies: await listCompanies(db, c.get('tenantId') as number) })));
+  router.get('/companies', async (c) =>
+    Response.json({ companies: await listCompanies(db, c.get('tenantId') as number) }));
 
-  router.post('/companies', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/companies', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseOptionalBody(c, zJsonObject);
     const company = await createCompany(db, c.env as Env, c.get('tenantId') as number, {
       name: String(body.name ?? ''),
@@ -200,22 +173,22 @@ export function createInvestorRoutes(
       actor: await resolveActorFromContext(c.env as Env, db, c),
     });
     return Response.json({ company }, { status: 201 });
-  }));
+  });
 
-  router.get('/companies/:id', (c) => handle(async () =>
-    Response.json({ company: await companyDetail(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))) })));
+  router.get('/companies/:id', async (c) =>
+    Response.json({ company: await companyDetail(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))) }));
 
   // ── IN-1: a company owns the work being done inside it ────────────────────
 
-  router.get('/companies/:id/projects/available', (c) => handle(async () => {
+  router.get('/companies/:id/projects/available', async (c) => {
     // The company id is validated even though the read does not filter on it: a
     // picker opened against a company that is not here must 404 rather than
     // listing this workspace's unassigned projects under somebody else's heading.
     await companyDetail(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id')));
     return Response.json({ projects: await unassignedProjects(db, c.get('tenantId') as number) });
-  }));
+  });
 
-  router.post('/companies/:id/projects', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/companies/:id/projects', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseOptionalBody(c, zJsonObject);
     const projectId = Number(body.projectId);
     if (!Number.isFinite(projectId) || projectId <= 0) throw new CompanyError('projectId is required.', 400);
@@ -225,9 +198,9 @@ export function createInvestorRoutes(
       actor: await resolveActorFromContext(c.env as Env, db, c),
     });
     return Response.json({ ok: true });
-  }));
+  });
 
-  router.delete('/companies/:id/projects/:projectId', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.delete('/companies/:id/projects/:projectId', requireRole(TenantRole.MANAGER), async (c) => {
     // The company id is still parsed, so a detach aimed at a company that is not
     // here fails as "not here" rather than silently clearing the column.
     await companyDetail(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id')));
@@ -237,14 +210,14 @@ export function createInvestorRoutes(
       actor: await resolveActorFromContext(c.env as Env, db, c),
     });
     return Response.json({ ok: true });
-  }));
+  });
 
   // ── IN-2: an investor is invited to a COMPANY ─────────────────────────────
 
-  router.get('/companies/:id/investors', (c) => handle(async () =>
+  router.get('/companies/:id/investors', async (c) =>
     Response.json({
       investors: await listCompanyInvestors(db, c.env as Env, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))),
-    })));
+    }));
 
   /**
    * Invite one investor to the company.
@@ -253,7 +226,7 @@ export function createInvestorRoutes(
    * credential that reaches every room this company has and every room it will
    * have — which is a larger authority than sharing one room, not a smaller one.
    */
-  router.post('/companies/:id/investors', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/companies/:id/investors', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseOptionalBody(c, zJsonObject);
     const grant = await inviteInvestorToCompany(db, c.env as Env, c.get('tenantId') as number, {
       companyId: companyIdFrom(c.req.param('id')),
@@ -270,9 +243,9 @@ export function createInvestorRoutes(
       createdBy: (c.get('userId') as string | undefined) ?? null,
     });
     return Response.json(grant, { status: 201 });
-  }));
+  });
 
-  router.post('/companies/:id/investors/:grantId/revoke', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/companies/:id/investors/:grantId/revoke', requireRole(TenantRole.MANAGER), async (c) => {
     const result = await revokeCompanyInvestor(
       db,
       c.env as Env,
@@ -282,19 +255,19 @@ export function createInvestorRoutes(
       await resolveActorFromContext(c.env as Env, db, c),
     );
     return Response.json({ ok: true, ...result });
-  }));
+  });
 
-  router.get('/companies/:id/investors/analytics', (c) => handle(async () =>
+  router.get('/companies/:id/investors/analytics', async (c) =>
     Response.json({
       analytics: await companyInvestorAnalytics(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))),
-    })));
+    }));
 
   // ── IN-4: the pack ───────────────────────────────────────────────────────
 
-  router.get('/companies/:id/pack', (c) => handle(async () =>
-    Response.json({ packs: await listCompanyPacks(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))) })));
+  router.get('/companies/:id/pack', async (c) =>
+    Response.json({ packs: await listCompanyPacks(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))) }));
 
-  router.post('/companies/:id/pack', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/companies/:id/pack', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseOptionalBody(c, zJsonObject);
     const userId = (c.get('userId') as string | undefined) ?? '';
     const pack = await buildFundraisingPack(packDeps(c.env as Env), c.get('tenantId') as number, userId, {
@@ -315,7 +288,7 @@ export function createInvestorRoutes(
     // The document itself is `/api/rfp/responses/:id/document` — the ONE renderer,
     // so the pack and a tender response can never quote different numbers.
     return Response.json(pack, { status: 201 });
-  }));
+  });
 
   // ── the startup listing (B2) ──────────────────────────────────────────────
   // Three writers over the one `companies` row, because they are three kinds of
@@ -323,10 +296,10 @@ export function createInvestorRoutes(
   // all three — listing a company puts it in front of strangers, and declared
   // numbers are what an investor reads — while the founder's own team may read.
 
-  router.get('/companies/:id/listing', (c) => handle(async () =>
-    Response.json({ listing: await readStartupListing(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))) })));
+  router.get('/companies/:id/listing', async (c) =>
+    Response.json({ listing: await readStartupListing(db, c.get('tenantId') as number, companyIdFrom(c.req.param('id'))) }));
 
-  router.put('/companies/:id/listing', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.put('/companies/:id/listing', requireRole(TenantRole.MANAGER), async (c) => {
     const patch = await parseBody(c, zListingPatch);
     const listing = await updateStartupListing(db, c.env as Env, c.get('tenantId') as number, {
       companyId: companyIdFrom(c.req.param('id')),
@@ -334,9 +307,9 @@ export function createInvestorRoutes(
       actor: await resolveActorFromContext(c.env as Env, db, c),
     });
     return Response.json({ listing });
-  }));
+  });
 
-  router.put('/companies/:id/listing/finance', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.put('/companies/:id/listing/finance', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseBody(c, zDeclaredFinance);
     const listing = await declareFinance(db, c.env as Env, c.get('tenantId') as number, {
       companyId: companyIdFrom(c.req.param('id')),
@@ -344,9 +317,9 @@ export function createInvestorRoutes(
       actor: await resolveActorFromContext(c.env as Env, db, c),
     });
     return Response.json({ listing });
-  }));
+  });
 
-  router.post('/companies/:id/listing/visibility', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/companies/:id/listing/visibility', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseBody(c, zVisibility);
     const listing = await setListingVisibility(db, c.env as Env, c.get('tenantId') as number, {
       companyId: companyIdFrom(c.req.param('id')),
@@ -354,22 +327,22 @@ export function createInvestorRoutes(
       actor: await resolveActorFromContext(c.env as Env, db, c),
     });
     return Response.json({ listing });
-  }));
+  });
 
   // ── investor interest ─────────────────────────────────────────────────────
   // The same `deal_flow_opportunities` rows the CRO's queue triages, narrowed to
   // this company and to the `investor_inquiry` source. One table, two views.
 
-  router.get('/companies/:id/inquiries', (c) => handle(async () => {
+  router.get('/companies/:id/inquiries', async (c) => {
     const companyId = companyIdFrom(c.req.param('id'));
     const rows = await dealFlowQueue(db, c.get('tenantId') as number, undefined, {
       source: INVESTOR_INQUIRY_SOURCE,
       subjectCompanyId: companyId,
     });
     return Response.json({ inquiries: rows.map(toInquiry) });
-  }));
+  });
 
-  router.post('/companies/:id/inquiries/:inquiryId/status', requireRole(TenantRole.MANAGER), (c) => handle(async () => {
+  router.post('/companies/:id/inquiries/:inquiryId/status', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseBody(c, zTriage);
     if (!isDealFlowStatus(body.status)) return Response.json({ error: 'That is not a triage status.' }, { status: 400 });
     const inquiryId = Number(c.req.param('inquiryId'));
@@ -383,7 +356,7 @@ export function createInvestorRoutes(
       body.status,
     );
     return Response.json({ inquiry: toInquiry(row) });
-  }));
+  });
 
   return router;
 }
@@ -426,7 +399,7 @@ export function createPublicInvestorRoutes(db: Db): Hono<HonoEnv> {
    * do. Every other failure collapses to 404, so an unauthenticated caller cannot
    * distinguish "never existed" from "revoked".
    */
-  router.get('/:token', (c) => handle(async () => {
+  router.get('/:token', async (c) => {
     const resolution = await resolveInvestorGrant(db, c.env as Env, c.req.param('token'));
     if (resolution.outcome === 'invalid') return Response.json({ error: 'This link is no longer valid.' }, { status: 404 });
     if (resolution.outcome === 'nda-pending') {
@@ -434,9 +407,9 @@ export function createPublicInvestorRoutes(db: Db): Hono<HonoEnv> {
     }
     const { tenantId: _tenantId, ...grant } = resolution.grant;
     return Response.json({ outcome: 'ok', grant });
-  }));
+  });
 
-  router.get('/:token/rooms/:roomId', (c) => handle(async () => {
+  router.get('/:token/rooms/:roomId', async (c) => {
     const roomId = Number(c.req.param('roomId'));
     if (!Number.isFinite(roomId) || roomId <= 0) return Response.json({ error: 'This link is no longer valid.' }, { status: 404 });
     const resolution = await openCompanyRoom(db, c.env as Env, c.req.param('token'), Math.floor(roomId));
@@ -446,7 +419,7 @@ export function createPublicInvestorRoutes(db: Db): Hono<HonoEnv> {
     }
     const { tenantId: _tenantId, ...share } = resolution.share;
     return Response.json({ outcome: 'ok', share });
-  }));
+  });
 
   /**
    * One document's bytes.
@@ -461,7 +434,7 @@ export function createPublicInvestorRoutes(db: Db): Hono<HonoEnv> {
    * straight to a document without opening the room must still get the room's own
    * gate, not a 404 that reads like the document was deleted.
    */
-  router.get('/:token/rooms/:roomId/documents/:documentId', (c) => handle(async () => {
+  router.get('/:token/rooms/:roomId/documents/:documentId', async (c) => {
     const token = c.req.param('token');
     const roomId = Number(c.req.param('roomId'));
     if (!Number.isFinite(roomId) || roomId <= 0) return Response.json({ error: 'This link is no longer valid.' }, { status: 404 });
@@ -490,7 +463,7 @@ export function createPublicInvestorRoutes(db: Db): Hono<HonoEnv> {
       disposition: file.disposition,
       headers: { 'x-data-room-watermark': file.stamped ? 'stamped' : 'view-only' },
     });
-  }));
+  });
 
   return router;
 }

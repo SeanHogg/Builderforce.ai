@@ -45,6 +45,7 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `agency_clients.status`. */
 export const CLIENT_STATUSES = ['active', 'paused', 'ended', 'prospect'] as const;
@@ -65,9 +66,9 @@ export const isConsultationStatus = (v: unknown): v is ConsultationStatus =>
 export const isDeckVisibility = (v: unknown): v is DeckVisibility =>
   typeof v === 'string' && (DECK_VISIBILITY as readonly string[]).includes(v);
 
-export class PracticeError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class PracticeError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'PracticeError';
   }
 }

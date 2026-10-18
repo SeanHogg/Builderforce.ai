@@ -22,6 +22,7 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { brainChats, chatMembers, users } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { bumpChatStructure } from './chatCacheVersions';
 
 export const BRAIN_ORIGIN = 'brainstorm';
 /** The always-there team GROUP chat (migration 0294): reuses the whole Brain chat
@@ -56,6 +57,8 @@ export async function syncPendingMemberships(db: Db, tenantId: number, userId: s
       sql`lower(${chatMembers.invitedEmail}) = (select lower(${users.email}) from ${users} where ${users.id} = ${userId})`,
     ))
     .returning({ chatId: chatMembers.chatId });
+  // A pending invite just became membership: the roster and the locked-chat verdict moved.
+  await Promise.all(rows.map((r) => bumpChatStructure(r.chatId)));
   return rows.map((r) => r.chatId);
 }
 

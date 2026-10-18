@@ -34,6 +34,7 @@
 
 import { zipSync, strToU8 } from 'fflate';
 import type { ChartSeries, ResolvedValue } from './types';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 
 /** `{{chart:token}}` inside a chart title — the opt-in marker. */
 const CHART_TOKEN_RE = /\{\{\s*chart:([^{}]+?)\s*\}\}/;
@@ -42,9 +43,6 @@ const CHART_TOKEN_RE = /\{\{\s*chart:([^{}]+?)\s*\}\}/;
 function columnLetter(index: number): string {
   return String.fromCharCode(65 + Math.min(25, Math.max(0, index)));
 }
-
-const xmlEscape = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /**
  * Merge the `<a:t>` runs of an XML fragment into one string. PowerPoint splits a
@@ -98,7 +96,7 @@ function rewriteTitle(chartXml: string, fallback: string): string {
 
   let i = 0;
   const rewritten = title.block.replace(runRe, (_whole, open: string, _text: string, close: string) => {
-    const inner = i === 0 ? xmlEscape(cleaned) : '';
+    const inner = i === 0 ? escapeHtml(cleaned) : '';
     i += 1;
     return `${open}${inner}${close}`;
   });
@@ -107,7 +105,7 @@ function rewriteTitle(chartXml: string, fallback: string): string {
 
 /** `<c:pt idx="…"><c:v>…</c:v></c:pt>` points for a string cache. */
 function strPoints(values: string[]): string {
-  return values.map((v, i) => `<c:pt idx="${i}"><c:v>${xmlEscape(v)}</c:v></c:pt>`).join('');
+  return values.map((v, i) => `<c:pt idx="${i}"><c:v>${escapeHtml(v)}</c:v></c:pt>`).join('');
 }
 
 /**
@@ -149,7 +147,7 @@ function seriesNameBlock(name: string, seriesIndex: number): string {
   return (
     '<c:tx><c:strRef>' +
     `<c:f>Sheet1!$${col}$1</c:f>` +
-    `<c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${xmlEscape(name)}</c:v></c:pt></c:strCache>` +
+    `<c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${escapeHtml(name)}</c:v></c:pt></c:strCache>` +
     '</c:strRef></c:tx>'
   );
 }
@@ -245,12 +243,12 @@ export function buildChartWorkbook(data: ChartSeries): Uint8Array<ArrayBuffer> {
   const rows: string[] = [];
 
   const headerCells = ['<c r="A1" t="inlineStr"><is><t></t></is></c>']
-    .concat(data.series.map((s, i) => `<c r="${columnLetter(i + 1)}1" t="inlineStr"><is><t>${xmlEscape(s.name)}</t></is></c>`));
+    .concat(data.series.map((s, i) => `<c r="${columnLetter(i + 1)}1" t="inlineStr"><is><t>${escapeHtml(s.name)}</t></is></c>`));
   rows.push(`<row r="1">${headerCells.join('')}</row>`);
 
   data.categories.forEach((category, rowIdx) => {
     const r = rowIdx + 2;
-    const cells = [`<c r="A${r}" t="inlineStr"><is><t>${xmlEscape(category)}</t></is></c>`];
+    const cells = [`<c r="A${r}" t="inlineStr"><is><t>${escapeHtml(category)}</t></is></c>`];
     data.series.forEach((s, i) => {
       const v = s.values[rowIdx];
       if (v == null || !Number.isFinite(v)) return;

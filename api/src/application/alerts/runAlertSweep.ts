@@ -14,7 +14,7 @@ import { escapeHtml } from '@builderforce/creation-canvas-contract';
  * and a notification failure never blocks the event row being written.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { alerts, alertEvents, type AlertMetric } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -118,6 +118,12 @@ export async function runAlertSweep(env: Env, db: Db = buildDatabase(env)): Prom
 
   const rules = await db.select().from(alerts).where(eq(alerts.enabled, true));
 
+  // Stamps and fired-event rows are collected and written set-based after the loop
+  // (was 2-3 statements per rule); evaluation itself stays per rule.
+  const evaluatedIds: number[] = [];
+  const triggeredIds: number[] = [];
+  const events: Array<typeof alertEvents.$inferInsert> = [];
+
   for (const rule of rules) {
     try {
       const { value } = await evaluateMetric(db, env, {
@@ -130,7 +136,7 @@ export async function runAlertSweep(env: Env, db: Db = buildDatabase(env)): Prom
       });
 
       // Always record that we looked.
-      await db.update(alerts).set({ lastEvaluatedAt: new Date(now) }).where(eq(alerts.id, rule.id));
+      evaluatedIds.push(rule.id);
 
       if (value == null) continue; // uncomputable scope → skip (never fire on a gap)
       if (!comparatorMatches(value, rule.comparator, rule.threshold)) continue;
@@ -150,7 +156,7 @@ export async function runAlertSweep(env: Env, db: Db = buildDatabase(env)): Prom
         reportCaughtError(err, { source: "application/alerts/runAlertSweep.ts", operation: "runAlertSweep", context: { logMessage: `[cron:alerts] notify failed alert=${rule.id}`, details: err } });
       }
 
-      await db.insert(alertEvents).values({
+      events.push({
         alertId: rule.id,
         tenantId: rule.tenantId,
         metric: rule.metric,
@@ -161,10 +167,20 @@ export async function runAlertSweep(env: Env, db: Db = buildDatabase(env)): Prom
         notifiedSlack: notified.slack,
         notifiedEmail: notified.email,
       });
-
-      await db.update(alerts).set({ lastTriggeredAt: new Date(now) }).where(eq(alerts.id, rule.id));
+      triggeredIds.push(rule.id);
     } catch (err) {
       reportCaughtError(err, { source: "application/alerts/runAlertSweep.ts", operation: "runAlertSweep", context: { logMessage: `[cron:alerts] alert=${rule.id} tenant=${rule.tenantId} failed`, details: err } });
     }
+  }
+  try {
+    if (evaluatedIds.length > 0) {
+      await db.update(alerts).set({ lastEvaluatedAt: new Date(now) }).where(inArray(alerts.id, evaluatedIds));
+    }
+    if (events.length > 0) await db.insert(alertEvents).values(events);
+    if (triggeredIds.length > 0) {
+      await db.update(alerts).set({ lastTriggeredAt: new Date(now) }).where(inArray(alerts.id, triggeredIds));
+    }
+  } catch (err) {
+    reportCaughtError(err, { source: "application/alerts/runAlertSweep.ts", operation: "runAlertSweep", context: { logMessage: '[cron:alerts] batched stamp/event write failed', details: err } });
   }
 }

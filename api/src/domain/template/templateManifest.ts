@@ -38,6 +38,7 @@ import {
 import { referencedBindings } from '../guidedSetup/guidedPlan';
 import { parseDefinition, validateDefinition, type WorkflowDefinition } from '../workflowGraph';
 import { isStartupSector } from '@builderforce/creation-canvas-contract';
+import { slugify } from '@builderforce/creation-canvas-contract';
 
 export type { RequiredConnector, RequiredSecret };
 
@@ -203,7 +204,7 @@ function parseWorkflowOutput(raw: Record<string, unknown>, where: string, errors
   }
   return {
     kind: 'workflow',
-    id: String(raw.id ?? name.toLowerCase().replace(/[^a-z0-9]+/g, '-')).slice(0, 48),
+    id: String(raw.id ?? slugify(name, { maxLength: 48 })).slice(0, 48),
     name,
     ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
     definition,

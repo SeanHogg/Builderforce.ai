@@ -148,6 +148,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
 
   const cloudRunning: ReapedRow[] = [];
   let requeuedCloud = 0;
+  const toFail = new Map<string, number[]>();
   for (const row of cloudCandidates) {
     // Per-surface silence ceiling: the SQL above pulls every cloud run stale past the
     // serverless 90s wall, but a long-lived executor (durable DO / container) heartbeats
@@ -180,7 +181,15 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
     // ran on a long-lived executor (durable/container) and crashed — don't claim a
     // 30s serverless timeout or tell the user to downgrade to a durable runtime.
     const reason = cloudOrphanReason(tsToMs(row.started_at ?? row.created_at), tsToMs(row.updated_at ?? row.created_at));
-    const [failed] = await db
+    const ids = toFail.get(reason) ?? [];
+    ids.push(row.id);
+    toFail.set(reason, ids);
+  }
+
+  // One UPDATE per distinct reason (in practice one or two), not one per row: the
+  // reason text is the only per-row variable, so rows sharing it share a statement.
+  for (const [reason, ids] of toFail) {
+    const failed = await db
       .update(executions)
       .set({
         status: 'failed',
@@ -188,9 +197,9 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
         completedAt: sql`now()`,
         updatedAt: sql`now()`,
       })
-      .where(and(eq(executions.id, row.id), eq(executions.status, 'running')))
+      .where(and(inArray(executions.id, ids), eq(executions.status, 'running')))
       .returning(REAPED_RETURNING);
-    if (failed) cloudRunning.push(failed);
+    cloudRunning.push(...failed);
   }
 
   // Dropped queue: submitted/pending but no agent ever took it.
@@ -240,9 +249,11 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
     ...[...running, ...cloudRunning, ...queued].map((row) => ({ row, toolName: 'run.failed' })),
     ...paused.map((row) => ({ row, toolName: 'run.paused_timeout' })),
   ];
-  await Promise.all(reaped.map(async ({ row: r, toolName }) => {
+  // One multi-row insert per chunk of REAP_BATCH_LIMIT (was one INSERT per reaped run).
+  for (let i = 0; i < reaped.length; i += REAP_BATCH_LIMIT) {
+    const chunk = reaped.slice(i, i + REAP_BATCH_LIMIT);
     try {
-      await runTelemetryDatabase(db).insert(toolAuditEvents).values({
+      await runTelemetryDatabase(db).insert(toolAuditEvents).values(chunk.map(({ row: r, toolName }) => ({
         tenantId: r.tenant_id,
         agentHostId: r.agent_host_id,
         cloudAgentRef: cloudRefFromPayload(r.payload),
@@ -252,16 +263,14 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
         category: 'error',
         result: r.error_message ?? 'Run failed',
         ts: sql`now()`,
-      });
+      })));
     } catch (error) {
       reportCaughtError(error, { source: "application/runtime/staleExecutionReaper.ts", operation: "reapStaleExecutions", context: { logMessage: '[execution-reaper] failure telemetry append failed', details: {
-        tenantId: r.tenant_id,
-        executionId: r.id,
-        toolName,
+        executionIds: chunk.map(({ row }) => row.id),
         error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
       } } });
     }
-  }));
+  }
 
   // A reaped run is terminal, so its callback principal must stop authenticating —
   // the same revocation the happy-path finalize performs, done in bulk here because

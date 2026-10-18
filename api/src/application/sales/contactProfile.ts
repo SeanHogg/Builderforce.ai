@@ -42,6 +42,7 @@ import {
   savedSearches,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `contact_compensations.confidence`. */
 export const CONFIDENCE_LEVELS = ['self_reported', 'inferred', 'verified'] as const;
@@ -50,9 +51,9 @@ export type Confidence = (typeof CONFIDENCE_LEVELS)[number];
 export const isConfidence = (v: unknown): v is Confidence =>
   typeof v === 'string' && (CONFIDENCE_LEVELS as readonly string[]).includes(v);
 
-export class ContactProfileError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class ContactProfileError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'ContactProfileError';
   }
 }

@@ -45,6 +45,7 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `support_articles.status` — editorial. */
 export const ARTICLE_STATUSES = ['draft', 'published', 'archived'] as const;
@@ -71,9 +72,9 @@ export const isWidgetKind = (v: unknown): v is WidgetKind =>
 export const isMonitorKind = (v: unknown): v is MonitorKind =>
   typeof v === 'string' && (MONITOR_KINDS as readonly string[]).includes(v);
 
-export class CustomerSurfaceError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class CustomerSurfaceError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'CustomerSurfaceError';
   }
 }

@@ -22,9 +22,7 @@
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import type { ResolvedBindings } from './types';
 import { asChartValue, buildChartWorkbook, chartTokenOf, embeddedWorkbookPath, rewriteChartXml } from './chartRewriter';
-
-const xmlEscape = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 
 /** token (without braces) → replacement string. Tables become newline-joined text. */
 function buildReplacements(resolved: ResolvedBindings): Map<string, string> {
@@ -41,7 +39,7 @@ function buildReplacements(resolved: ResolvedBindings): Map<string, string> {
 function applyTokens(text: string, repl: Map<string, string>): string {
   return text.replace(/\{\{([^{}]+)\}\}/g, (whole, tokenRaw: string) => {
     const token = tokenRaw.trim();
-    return repl.has(token) ? xmlEscape(repl.get(token)!) : whole;
+    return repl.has(token) ? escapeHtml(repl.get(token)!) : whole;
   });
 }
 

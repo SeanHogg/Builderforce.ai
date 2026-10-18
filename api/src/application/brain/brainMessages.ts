@@ -15,6 +15,7 @@ import { canAccessChat, ensureMembership } from './brainChatGuards';
 import { appendRaw } from './brainMessageStore';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { bumpChatMessages } from './chatCacheVersions';
 
 /** A chat's transcript: the MOST RECENT `limit` messages, oldest-first.
  *  The window is the tail, not the head — see {@link readTimelineTail} for why
@@ -170,6 +171,7 @@ export async function setMessageFeedback(
     .where(eq(brainChatMessages.id, messageId))
     .returning(messageColumns);
   if (!updated) return { error: 'Update failed' as const };
+  await bumpChatMessages(msg.chatId, env);
 
   // The model that actually served this reply, as persisted by the streaming path
   // (see brain-embedded/provenance.ts). Absent on pre-provenance turns — those

@@ -42,10 +42,11 @@ import { executeConnectorAction } from '../connectors/connectorRuntime';
 import { connectedConnectorKeys } from '../connectors/connectorTools';
 import { pickNumber, pickText, rowsFrom } from '../connectors/providerPayload';
 import { setDocumentLines } from './payables';
+import { StatusError } from '../../domain/shared/errors';
 
-export class PayRunError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class PayRunError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'PayRunError';
   }
 }

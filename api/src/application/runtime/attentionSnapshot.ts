@@ -21,12 +21,16 @@
  *     where the HEADLINE states change: the execution-lifecycle outbox drain (inline
  *     for every `RuntimeService` transition), a run pausing on a question, and that
  *     question being answered.
- *   - Everything else this reads — unread counts, chat↔ticket links, the manager's
- *     cadence, and the handful of status writers that bypass `RuntimeService` (listed
- *     in the 2026-09-15 DONE entry) — is bounded by {@link ATTENTION_CACHE}'s TTL.
- *   - `fresh` skips the cache and re-primes it. Surfaces pass it when they KNOW state
- *     just changed (a realtime push, a platform write, regaining focus); only the
- *     unattended timer ticks read the cache.
+ *   - Everything else the TENANT part reads — chat↔ticket links, the manager's cadence,
+ *     and the handful of status writers that bypass `RuntimeService` (listed in the
+ *     2026-09-15 DONE entry) — is bounded by {@link ATTENTION_CACHE}'s TTL.
+ *   - The caller's UNREAD counts are a separate cached part (`chatUnreadCache.ts`): a user
+ *     key inside the tenant entry made nearly every idle poll miss, because the KV TTL
+ *     equalled the poll interval. Split, the tenant part is shared by every poller and the
+ *     unread part is invalidated by chat reads and message appends instead of by the clock.
+ *   - `fresh` re-primes. Surfaces pass it when they KNOW state just changed (a realtime
+ *     push, a platform write, regaining focus); it is throttled to one reload per few
+ *     seconds per key ({@link readThroughFresh}) so a burst of windows cannot stampede Neon.
  *
  * `recentlyActive` is derived from the clock at read time, never cached.
  */
@@ -36,10 +40,10 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { approvals, chatTicketLinks, executions, projectManagerConfigs, tasks } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { getOrSetCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { executionStateVersion } from './executionStateVersion';
 import { liveExecution } from '../rehearsal/executionMode';
-import { unreadCountsForUser } from '../brain/chatReadState';
+import { loadUnread, readUnreadCached, type UnreadSnapshot } from '../brain/chatUnreadCache';
+import { readThroughFresh } from './freshReadThrough';
 
 export type AttentionState = 'running' | 'awaiting_input';
 
@@ -57,13 +61,22 @@ export interface AttentionSnapshot {
   manager: { lastRunAt: string | null; recentlyActive: boolean };
 }
 
-/** What is cached: everything but the clock-derived `recentlyActive`. */
-type CachedAttention = Omit<AttentionSnapshot, 'manager'> & { managerLastRunAt: string | null };
+/** What is cached per tenant: everything user-independent except the clock-derived `recentlyActive`. */
+interface TenantAttention {
+  tasks: AttentionSnapshot['tasks'];
+  chats: AttentionSnapshot['chats'];
+  running: number;
+  awaiting: number;
+  managerLastRunAt: string | null;
+}
 
-/** 60s is Workers KV's minimum TTL; L1 is shorter so a bump reaches an isolate sooner. */
-const ATTENTION_CACHE = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
+/** The key embeds the execution-state version, so a status change orphans it; the TTL only
+ *  bounds the writers that bypass the version bump. L1 is short so a bump reaches an isolate sooner. */
+const ATTENTION_CACHE = { kvTtlSeconds: 300, l1TtlMs: 15_000 };
 
 const LIMIT = 500;
+
+const NO_UNREAD: UnreadSnapshot = { chatUnread: {}, total: 0 };
 
 /** "Manager active" = a pass landed in the last 3 min (cron cadence is 5 min, a pass is seconds). */
 const MANAGER_ACTIVE_WINDOW_MS = 3 * 60_000;
@@ -73,28 +86,39 @@ export async function readAttention(
   db: Db,
   args: { tenantId: number; projectId?: number; userId?: string; fresh?: boolean },
 ): Promise<AttentionSnapshot> {
-  const load = () => loadAttention(db, args.tenantId, args.projectId, args.userId);
-  if (!env) return finalize(await load());
+  if (!env) {
+    const [tenant, unread] = await Promise.all([
+      loadAttention(db, args.tenantId, args.projectId),
+      args.userId ? loadUnread(db, args.tenantId, args.userId) : NO_UNREAD,
+    ]);
+    return compose(tenant, unread);
+  }
 
   const version = await executionStateVersion(env, args.tenantId);
-  const key = `attention:v:${version}:${args.tenantId}:${args.projectId ?? 'all'}:${args.userId ?? '-'}`;
-  if (args.fresh) {
-    const value = await load();
-    await setCached(env, key, value, ATTENTION_CACHE);
-    return finalize(value);
-  }
-  return finalize(await getOrSetCached(env, key, load, ATTENTION_CACHE));
+  const key = `attention:v:${version}:${args.tenantId}:${args.projectId ?? 'all'}`;
+  // The caller's unread map is global (not project-scoped) and only for a real user; an
+  // agentHost runtime token sees {}.
+  const [tenant, unread] = await Promise.all([
+    readThroughFresh(env, key, () => loadAttention(db, args.tenantId, args.projectId), ATTENTION_CACHE, args.fresh),
+    args.userId ? readUnreadCached(env, db, args.tenantId, args.userId, args.fresh) : NO_UNREAD,
+  ]);
+  return compose(tenant, unread);
 }
 
-function finalize(cached: CachedAttention): AttentionSnapshot {
-  const { managerLastRunAt, ...rest } = cached;
+function compose(tenant: TenantAttention, unread: UnreadSnapshot): AttentionSnapshot {
+  const { managerLastRunAt, running, awaiting, ...rest } = tenant;
   const recentlyActive = managerLastRunAt != null && Date.now() - new Date(managerLastRunAt).getTime() < MANAGER_ACTIVE_WINDOW_MS;
-  return { ...rest, manager: { lastRunAt: managerLastRunAt, recentlyActive } };
+  return {
+    ...rest,
+    chatUnread: unread.chatUnread,
+    counts: { running, awaiting, unread: unread.total },
+    manager: { lastRunAt: managerLastRunAt, recentlyActive },
+  };
 }
 
-async function loadAttention(db: Db, tenantId: number, projectId: number | undefined, userId: string | undefined): Promise<CachedAttention> {
-  // Steps 1, 2, 4b and 5 are independent reads, so they start together — one round
-  // trip of latency instead of four. Only the chat links (4) wait, on the task ids.
+async function loadAttention(db: Db, tenantId: number, projectId: number | undefined): Promise<TenantAttention> {
+  // Steps 1, 2 and 5 are independent reads, so they start together — one round
+  // trip of latency instead of three. Only the chat links (4) wait, on the task ids.
   // 1) Every non-terminal execution for the tenant (optionally one project), with its task.
   const execQuery = db
     .select({ id: executions.id, taskId: executions.taskId, status: executions.status })
@@ -122,12 +146,6 @@ async function loadAttention(db: Db, tenantId: number, projectId: number | undef
     ))
     .limit(LIMIT);
 
-  // 4b) Unread Brain chats for the caller — global (not project-scoped), because unread is
-  // inherently cross-project. Only for a real user; an agentHost runtime token sees {}.
-  const unreadQuery = userId
-    ? unreadCountsForUser(db, tenantId, userId).catch(() => ({} as Record<number, number>))
-    : Promise.resolve({} as Record<number, number>);
-
   // 5) AI Manager cadence — the freshest `last managed` stamp across the manager's scope:
   // that project's stamp when project-scoped, MAX across the tenant otherwise.
   const managerQuery = db
@@ -139,7 +157,7 @@ async function loadAttention(db: Db, tenantId: number, projectId: number | undef
       projectId != null ? eq(projectManagerConfigs.projectId, projectId) : undefined,
     ));
 
-  const [execRows, approvalRows, chatUnread, [mgrRow]] = await Promise.all([execQuery, approvalQuery, unreadQuery, managerQuery]);
+  const [execRows, approvalRows, [mgrRow]] = await Promise.all([execQuery, approvalQuery, managerQuery]);
 
   // execId → approval (only executions surfaced above, so already project-scoped).
   const approvalByExec = new Map<number, string>();
@@ -188,19 +206,13 @@ async function loadAttention(db: Db, tenantId: number, projectId: number | undef
   const tasksOut: Record<number, AttentionItem> = {};
   for (const [taskId, item] of taskState) tasksOut[taskId] = item;
 
-  const unreadTotal = Object.values(chatUnread).reduce((a, b) => a + b, 0);
-
   const managerLastRunAt = mgrRow?.lastRunAt ? new Date(mgrRow.lastRunAt).toISOString() : null;
 
   return {
     tasks: tasksOut,
     chats: chatState,
-    chatUnread,
-    counts: {
-      running: [...taskState.values()].filter((i) => i.state === 'running').length,
-      awaiting: [...taskState.values()].filter((i) => i.state === 'awaiting_input').length,
-      unread: unreadTotal,
-    },
+    running: [...taskState.values()].filter((i) => i.state === 'running').length,
+    awaiting: [...taskState.values()].filter((i) => i.state === 'awaiting_input').length,
     managerLastRunAt,
   };
 }

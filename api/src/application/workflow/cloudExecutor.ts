@@ -91,6 +91,7 @@ import { TRANSFORM_NODE_HANDLERS } from './nodes/transform';
 import { CONTROL_NODE_HANDLERS } from './nodes/control';
 import { AI_NODE_HANDLERS } from './nodes/ai';
 import { IO_NODE_HANDLERS } from './nodes/io';
+import { bulkUpdateById, type BulkUpdateRow } from '../../infrastructure/database/bulkUpdate';
 
 /** Default per-cron-tick budget of tasks to execute across all cloud workflows. */
 const DEFAULT_TASK_BUDGET = 50;
@@ -439,6 +440,12 @@ async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const outputs = new Map<string, string>(tasks.filter((t) => t.status === 'completed').map((t) => [t.id, t.output ?? '']));
 
+  // Writes that need no ordering against execution (cascade/prune stamps, iterator
+  // rewires) are collected and flushed as set-based statements after the loop, instead
+  // of one UPDATE per task. The loop reads the in-memory `tasks`, never these rows.
+  const skips: BulkUpdateRow<string>[] = [];
+  const rewires: BulkUpdateRow<string>[] = [];
+
   let processed = 0;
   let madeProgress = true;
   // Did ANY pass change a task's status? Not `processed > 0`: cascades and pruned arms
@@ -461,10 +468,7 @@ async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget
         const status = disposition === 'fail' ? 'failed' : 'cancelled';
         task.status = status;
         task.error = disposition === 'fail' ? 'upstream task failed' : 'skipped — upstream filtered out';
-        await db
-          .update(workflowTasks)
-          .set({ status, error: task.error, completedAt: new Date(), updatedAt: new Date() })
-          .where(eq(workflowTasks.id, task.id));
+        skips.push({ id: task.id, set: { status, error: task.error } });
         madeProgress = true;
         continue;
       }
@@ -484,10 +488,7 @@ async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget
       if (prunedByEdgeLabel(node.depLabels, depTasks.map((d) => ({ id: d.id, status: d.status, output: d.output ?? '' })))) {
         task.status = 'cancelled';
         task.error = 'skipped — this branch was not taken';
-        await db
-          .update(workflowTasks)
-          .set({ status: 'cancelled', output: '', error: task.error, completedAt: new Date(), updatedAt: new Date() })
-          .where(eq(workflowTasks.id, task.id));
+        skips.push({ id: task.id, set: { status: 'cancelled', output: '', error: task.error } });
         madeProgress = true;
         continue;
       }
@@ -553,9 +554,7 @@ async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget
                   createdAt: mutatedAt, updatedAt: mutatedAt,
                 })));
               }
-              for (const [id, dependsOn] of Object.entries(plan.rewire)) {
-                await db.update(workflowTasks).set({ dependsOn, updatedAt: mutatedAt }).where(eq(workflowTasks.id, id));
-              }
+              for (const [id, dependsOn] of Object.entries(plan.rewire)) rewires.push({ id, set: { depends_on: dependsOn } });
               // Reflect the mutation in THIS tick's in-memory view so the loop
               // below sees the new/rewired tasks without a fresh SELECT.
               for (const nt of plan.newTasks) {
@@ -597,6 +596,26 @@ async function advanceCloudWorkflow(env: Env, db: Db, workflowId: string, budget
     }
     if (madeProgress) changedAny = true;
   }
+
+  const stampedAt = new Date();
+  await bulkUpdateById(db, {
+    table: 'workflow_tasks',
+    idColumn: { name: 'id', sqlType: 'uuid' },
+    columns: [
+      { name: 'status', sqlType: 'workflow_task_status' },
+      { name: 'output', sqlType: 'text' },
+      { name: 'error', sqlType: 'text' },
+      { name: 'completed_at', sqlType: 'timestamp' },
+      { name: 'updated_at', sqlType: 'timestamp' },
+    ],
+    rows: skips.map((r) => ({ id: r.id, set: { ...r.set, completed_at: stampedAt, updated_at: stampedAt } })),
+  });
+  await bulkUpdateById(db, {
+    table: 'workflow_tasks',
+    idColumn: { name: 'id', sqlType: 'uuid' },
+    columns: [{ name: 'depends_on', sqlType: 'text' }, { name: 'updated_at', sqlType: 'timestamp' }],
+    rows: rewires.map((r) => ({ id: r.id, set: { ...r.set, updated_at: stampedAt } })),
+  });
 
   // Recompute the workflow status from its tasks — and WRITE it only when it changed or
   // a task moved. This used to re-SELECT every task and UPDATE `workflows` for each

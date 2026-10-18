@@ -10,8 +10,10 @@
  * for that workspace and not a new person anywhere.
  *
  * ── ACTIVE MEANS SEEN, NOT REGISTERED ───────────────────────────────────────
- * `sessions.last_seen_at` is refreshed on use, so a DISTINCT count of user ids
- * per day is the number of people who actually turned up. Counting `is_active`
+ * `auth_user_sessions.last_seen_at` (the table the auth path actually writes; the
+ * consolidated `sessions` has no writer) is refreshed on use, so a DISTINCT count of user ids
+ * per day is the number of people who actually turned up. Sessions carry no
+ * tenant, so a person counts toward every workspace they are an active member of. Counting `is_active`
  * membership rows instead would report a headcount that never moves and call it
  * engagement.
  */
@@ -46,25 +48,24 @@ export const IDENTITY_ROLLUP: DomainRollup = {
     },
     {
       key: 'identity.active_users',
-      requires: ['sessions'],
+      requires: ['auth_user_sessions', 'tenant_members'],
       build: () => fact({
         metric: 'identity.active_users',
         bucket: 'day',
         unit: 'people',
-        tenant: sql`s.tenant_id`,
+        tenant: sql`m.tenant_id`,
         bucketAt: sql`DATE_TRUNC('day', s.last_seen_at)`,
         // DISTINCT: a person with a browser session, a VS Code session and a
         // device token is one active user, and summing sessions would report a
         // daily-active figure that rises when somebody buys a laptop.
         value: sql`COUNT(DISTINCT s.user_id)`,
         tail: sql`
-            FROM sessions s
-           WHERE s.tenant_id IS NOT NULL
-             AND s.user_id IS NOT NULL
-             AND s.last_seen_at IS NOT NULL
+            FROM auth_user_sessions s
+            JOIN tenant_members m ON m.user_id = s.user_id AND m.is_active
+           WHERE s.last_seen_at IS NOT NULL
              AND s.revoked_at IS NULL
              AND s.last_seen_at >= ${since}
-           GROUP BY s.tenant_id, DATE_TRUNC('day', s.last_seen_at)
+           GROUP BY m.tenant_id, DATE_TRUNC('day', s.last_seen_at)
         `,
       }),
     },

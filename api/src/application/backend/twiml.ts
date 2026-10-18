@@ -19,16 +19,10 @@
  * Nested verbs are supported exactly where Twilio nests them: `<Gather>` wraps
  * prompt verbs (`Say`/`Play`), which is what makes an IVR menu possible at all.
  */
+import { escapeXml } from '@builderforce/creation-canvas-contract';
 
 /** Escape the five XML metacharacters. Applied to every text node and attribute. */
-export function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
+export { escapeXml };
 
 /** A prompt verb — the only things `<Gather>` may contain. */
 export interface TwimlSay {

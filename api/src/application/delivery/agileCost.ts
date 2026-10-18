@@ -47,6 +47,7 @@ import type { Env } from '../../env';
 import { sprintFinancialImpact, sprints, taskEffortEstimates } from '../../infrastructure/database/schema';
 import { scopedToTenant, taskInTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `task_effort_estimates.unit`. */
 export const ESTIMATE_UNITS = ['points', 'hours', 'days', 'tshirt'] as const;
@@ -55,9 +56,9 @@ export type EstimateUnit = (typeof ESTIMATE_UNITS)[number];
 export const isEstimateUnit = (v: unknown): v is EstimateUnit =>
   typeof v === 'string' && (ESTIMATE_UNITS as readonly string[]).includes(v);
 
-export class AgileCostError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class AgileCostError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'AgileCostError';
   }
 }

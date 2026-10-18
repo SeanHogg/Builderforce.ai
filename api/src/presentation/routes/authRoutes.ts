@@ -1,6 +1,6 @@
 import { InternalError } from '../../domain/shared/errors';
 import { Hono, type Context } from 'hono';
-import { and, desc, eq, getTableColumns, gt, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, isNull, or, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
 import type { TenantService } from '../../application/tenant/TenantService';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
@@ -17,11 +17,9 @@ import { TenantRole, type UserId } from '../../domain/shared/types';
 import {
   adminImpersonationSessions,
   authTokens,
-  authUserSessions,
   agentHosts,
   tenants,
   userLegalAcceptances,
-  userMfaRecoveryCodes,
   users,
   tenantApiKeys,
   tenantMembers,
@@ -36,17 +34,7 @@ import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infra
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import type { Db } from '../../infrastructure/database/connection';
 import { persistWebSessionToken } from '../../application/auth/webSessionStore';
-import {
-  buildOtpAuthUrl,
-  decryptSecretFromStorage,
-  encryptSecretForStorage,
-  generateRecoveryCodes,
-  generateTotpSecret,
-  hashRecoveryCode,
-  normalizeRecoveryCode,
-  parseTokenTimeToDate,
-  verifyTotpCode,
-} from '../../infrastructure/auth/MfaService';
+import { parseTokenTimeToDate } from '../../infrastructure/auth/MfaService';
 import { deserializeScopes, keyMayActAsMember, revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
 import { issueVerificationCode, verifyVerificationCode, type VerifyResult } from '../../application/auth/EmailVerificationService';
 import { checkTermsAcceptance, invalidateAcceptedTermsVersion, recordAcceptance } from '../../application/legal/termsAcceptance';
@@ -57,6 +45,8 @@ import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidatePsychometricCache } from '../../application/artifact/capabilityContext';
 import { invalidateSalesReferrals } from '../../application/sales/salesReferralFacts';
 import { revokeSessionTokens } from '../../application/auth/sessionRevocation';
+import { listUserSessions } from '../../application/auth/sessionDirectory';
+import { beginMfaSetup, confirmMfaEnable, disableMfa, regenerateRecoveryCodes, verifyMfaChallenge } from '../../application/auth/mfaChallenge';
 import { createSessionIntrospectRoutes } from './sessionIntrospectRoutes';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { coerceJsonArray } from '../../domain/shared/jsonColumn';
@@ -190,61 +180,6 @@ async function provisionFreelancer(
     email: user.email,
     name: user.displayName ?? user.username ?? undefined,
   });
-}
-
-async function assertMfa(
-  db: Db,
-  env: Env,
-  user: typeof users.$inferSelect,
-  code?: string | null,
-  recoveryCode?: string | null,
-): Promise<boolean> {
-  if (!user.mfaEnabled || !user.mfaSecretEnc) return false;
-
-  if (code) {
-    // M2: read under the dedicated credential secret, JWT_SECRET as legacy fallback
-    // (versioned dual-read) so pre-migration MFA rows still decrypt.
-    const secret = await decryptSecretFromStorage(user.mfaSecretEnc, credentialSecret(env), { legacySecret: env.JWT_SECRET });
-    const validTotp = await verifyTotpCode(secret, code);
-    if (validTotp) return true;
-  }
-
-  if (recoveryCode) {
-    const normalized = normalizeRecoveryCode(recoveryCode);
-    const hash = await hashRecoveryCode(normalized);
-    const [stored] = await db
-      .select({ id: userMfaRecoveryCodes.id })
-      .from(userMfaRecoveryCodes)
-      .where(
-        and(
-          eq(userMfaRecoveryCodes.userId, user.id),
-          eq(userMfaRecoveryCodes.codeHash, hash),
-          isNull(userMfaRecoveryCodes.usedAt),
-        ),
-      )
-      .limit(1);
-
-    if (stored) {
-      await db
-        .update(userMfaRecoveryCodes)
-        .set({ usedAt: sql`now()` })
-        .where(eq(userMfaRecoveryCodes.id, stored.id));
-      return true;
-    }
-  }
-
-  return false;
-}
-
-async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
-  await db.delete(userMfaRecoveryCodes).where(eq(userMfaRecoveryCodes.userId, userId));
-  const hashed = await Promise.all(
-    codes.map(async (code) => ({
-      userId,
-      codeHash: await hashRecoveryCode(code),
-    })),
-  );
-  await db.insert(userMfaRecoveryCodes).values(hashed);
 }
 
 /**
@@ -827,7 +762,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
       return c.json({ error: 'MFA is not enabled for this account' }, 400);
     }
 
-    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
+    const valid = await verifyMfaChallenge(db, c.env, user, body.code, body.recoveryCode);
     if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
 
     const superadmin = canUseSuperAdmin(user);
@@ -1167,39 +1102,10 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // POST /api/auth/mfa/setup
   router.post('/mfa/setup', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const [user] = await db
-      .select({ id: users.id, email: users.email, mfaEnabled: users.mfaEnabled })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user) return c.json({ error: 'User not found' }, 404);
-    if (user.mfaEnabled) return c.json({ error: 'MFA is already enabled' }, 409);
-
-    const secret = generateTotpSecret();
-    const encrypted = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    await db
-      .update(users)
-      .set({
-        mfaTempSecretEnc: encrypted,
-        mfaTempExpiresAt: expiresAt,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(users.id, user.id));
-
-    const otpauthUrl = buildOtpAuthUrl({
-      accountName: user.email,
-      secret,
-      issuer: 'BuilderForce Link',
-    });
-
-    return c.json({
-      otpauthUrl,
-      manualEntryKey: secret,
-      expiresIn: 600,
-    });
+    const result = await beginMfaSetup(db, c.env, userId, 'BuilderForce Link');
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    const { ok: _ok, ...setup } = result;
+    return c.json(setup);
   });
 
   // POST /api/auth/mfa/enable
@@ -1208,47 +1114,9 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
     const body = await parseBody(c, MfaEnableBody);
     if (!body.code) return c.json({ error: 'code is required' }, 400);
 
-    const [user] = await db
-      .select({
-        id: users.id,
-        mfaEnabled: users.mfaEnabled,
-        mfaTempSecretEnc: users.mfaTempSecretEnc,
-        mfaTempExpiresAt: users.mfaTempExpiresAt,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user) return c.json({ error: 'User not found' }, 404);
-    if (user.mfaEnabled) return c.json({ error: 'MFA is already enabled' }, 409);
-    if (!user.mfaTempSecretEnc || !user.mfaTempExpiresAt || user.mfaTempExpiresAt <= new Date()) {
-      return c.json({ error: 'MFA setup session expired. Start setup again.' }, 400);
-    }
-
-    const secret = await decryptSecretFromStorage(user.mfaTempSecretEnc, credentialSecret(c.env), { legacySecret: c.env.JWT_SECRET });
-    const valid = await verifyTotpCode(secret, body.code);
-    if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
-
-    const encryptedSecret = await encryptSecretForStorage(secret, credentialSecret(c.env), { upgrade: true });
-    const recoveryCodes = generateRecoveryCodes(10);
-
-    await replaceRecoveryCodes(db, user.id, recoveryCodes);
-
-    await db
-      .update(users)
-      .set({
-        mfaEnabled: true,
-        mfaSecretEnc: encryptedSecret,
-        mfaEnabledAt: sql`now()`,
-        mfaTempSecretEnc: null,
-        mfaTempExpiresAt: null,
-        mfaRecoveryGeneratedAt: sql`now()`,
-        mfaLastVerifiedAt: sql`now()`,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(users.id, user.id));
-
-    return c.json({ enabled: true, recoveryCodes });
+    const result = await confirmMfaEnable(db, c.env, userId, body.code);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ enabled: true, recoveryCodes: result.recoveryCodes });
   });
 
   // POST /api/auth/mfa/disable
@@ -1259,33 +1127,9 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
       return c.json({ error: 'A TOTP code or recovery code is required' }, 400);
     }
 
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user) return c.json({ error: 'User not found' }, 404);
-    if (!user.mfaEnabled) return c.json({ enabled: false });
-
-    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
-    if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
-
-    await db.delete(userMfaRecoveryCodes).where(eq(userMfaRecoveryCodes.userId, user.id));
-    await db
-      .update(users)
-      .set({
-        mfaEnabled: false,
-        mfaSecretEnc: null,
-        mfaTempSecretEnc: null,
-        mfaTempExpiresAt: null,
-        mfaEnabledAt: null,
-        mfaRecoveryGeneratedAt: null,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(users.id, user.id));
-
-    return c.json({ enabled: false });
+    const result = await disableMfa(db, c.env, userId, body.code, body.recoveryCode);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json(result.value);
   });
 
   // POST /api/auth/mfa/recovery-codes/regenerate
@@ -1296,26 +1140,9 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
       return c.json({ error: 'A TOTP code or recovery code is required' }, 400);
     }
 
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user) return c.json({ error: 'User not found' }, 404);
-    if (!user.mfaEnabled) return c.json({ error: 'MFA is not enabled' }, 400);
-
-    const valid = await assertMfa(db, c.env, user, body.code, body.recoveryCode);
-    if (!valid) return c.json({ error: 'Invalid MFA code' }, 401);
-
-    const recoveryCodes = generateRecoveryCodes(10);
-    await replaceRecoveryCodes(db, user.id, recoveryCodes);
-    await db
-      .update(users)
-      .set({ mfaRecoveryGeneratedAt: sql`now()`, updatedAt: sql`now()` })
-      .where(eq(users.id, user.id));
-
-    return c.json({ recoveryCodes });
+    const result = await regenerateRecoveryCodes(db, c.env, userId, body.code, body.recoveryCode);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json(result.value);
   });
 
   // GET /api/auth/sessions
@@ -1323,51 +1150,8 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
     const userId = c.get('userId') as string;
     const currentSessionId = c.get('sessionId') as string | undefined;
 
-    const sessions = await db
-      .select()
-      .from(authUserSessions)
-      .where(eq(authUserSessions.userId, userId))
-      .orderBy(desc(authUserSessions.lastSeenAt));
-
-    const sessionIds = sessions.map((session) => session.id);
-    const tokenRows = sessionIds.length
-      ? await db
-        .select({
-          sessionId: authTokens.sessionId,
-          activeCount: sql<number>`COUNT(COALESCE(${authTokens.tenantId}, 0))`,
-        })
-        .from(authTokens)
-        .where(
-          and(
-            eq(authTokens.userId, userId),
-            inArray(authTokens.sessionId, sessionIds),
-            isNull(authTokens.revokedAt),
-            gt(authTokens.expiresAt, new Date()),
-          ),
-        )
-        .groupBy(authTokens.sessionId)
-      : [];
-
-    const activeBySession = new Map<string, number>();
-    for (const row of tokenRows) {
-      if (!row.sessionId) continue;
-      activeBySession.set(row.sessionId, Number(row.activeCount));
-    }
-
-    return c.json({
-      sessions: sessions.map((session) => ({
-        id: session.id,
-        sessionName: session.sessionName,
-        userAgent: session.userAgent,
-        ipAddress: session.ipAddress,
-        isActive: session.isActive,
-        revokedAt: session.revokedAt,
-        createdAt: session.createdAt,
-        lastSeenAt: session.lastSeenAt,
-        activeTokens: activeBySession.get(session.id) ?? 0,
-        isCurrent: currentSessionId === session.id,
-      })),
-    });
+    const sessions = await listUserSessions(db, userId);
+    return c.json({ sessions: sessions.map((session) => ({ ...session, isCurrent: currentSessionId === session.id })) });
   });
 
   // POST /api/auth/sessions/:sessionId/revoke

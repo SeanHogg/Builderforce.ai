@@ -9,6 +9,7 @@ import {
 import { ValidationError, ForbiddenError } from '../shared/errors';
 import { resolveEffectivePlan, TRIAL_DURATION_DAYS } from './effectivePlan';
 import { SEAT_KIND, type SeatKind } from './SeatKind';
+import { slugify } from '@builderforce/creation-canvas-contract';
 
 export interface TenantMemberProps {
   userId: string;
@@ -69,9 +70,7 @@ export class Tenant {
     // Slug is globally unique. Callers that must guarantee uniqueness (e.g. the
     // auto-provisioned "Default" workspace, whose display name collides across
     // every new user) pass a pre-resolved slug; otherwise derive it from the name.
-    const slug = slugOverride?.trim()
-      ? slugOverride.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
-      : name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const slug = slugify(slugOverride?.trim() ? slugOverride : name, { maxLength: 255 });
     const now = new Date();
     // Every new workspace starts on a 14-day Pro trial: plan=Pro + status=trialing
     // + trial_ends_at = now + 14d. effectivePlan() yields Pro limits until it lapses,

@@ -42,10 +42,11 @@ import {
 import { cacheLookup, cacheSavings, cacheStore } from '../agent/aiOperations';
 import { addEducation, recordCompensation, setExperience } from '../sales/contactProfile';
 import { sha256Hex } from '../../domain/shared/hash';
+import { StatusError } from '../../domain/shared/errors';
 
-export class EnrichmentError extends Error {
-  constructor(message: string, readonly status: 400 | 402 | 404 | 502 = 400) {
-    super(message);
+export class EnrichmentError extends StatusError<400 | 402 | 404 | 502> {
+  constructor(message: string, status: 400 | 402 | 404 | 502 = 400) {
+    super(message, status);
     this.name = 'EnrichmentError';
   }
 }

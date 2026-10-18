@@ -26,3 +26,12 @@ const HTML_ESCAPES: Readonly<Record<string, string>> = {
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] ?? char);
 }
+
+/**
+ * XML escaping — the same five metacharacters, but `'` becomes `&apos;` (the XML
+ * predefined entity) rather than the HTML numeric `&#39;`. TwiML and SOAP both
+ * pin that spelling in their contract tests, so it is the one variance kept.
+ */
+export function escapeXml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => (char === "'" ? '&apos;' : (HTML_ESCAPES[char] ?? char)));
+}

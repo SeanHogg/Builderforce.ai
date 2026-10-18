@@ -27,6 +27,7 @@ import { BUILTIN_CONNECTOR_LIST } from '../connectors/defaults';
 import type { BlueprintTask, RequiredConnector, RequiredSecret } from './blueprint';
 import { matchBlueprint } from './blueprints';
 import type { ChallengeSpec } from './parseBrief';
+import { slugify } from '@builderforce/creation-canvas-contract';
 
 export interface ConsideredBlueprint {
   key: string;
@@ -129,8 +130,7 @@ const asStrings = (v: unknown, cap = 12): string[] =>
 
 /** File-name-safe handler key. */
 function handlerFileName(name: string, index: number): string {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-  return slug || `handler-${index + 1}`;
+  return slugify(name, { maxLength: 40, fallback: `handler-${index + 1}` });
 }
 
 /**

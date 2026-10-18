@@ -21,7 +21,8 @@ import { agentHosts, users, chatTicketLinks } from '../../infrastructure/databas
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
 import { attachChatSummaries } from '../../application/brain/chatSummaries';
-import { readChatRunHistoryForCaller } from '../../application/brain/chatRunHistory';
+import { readChatRunHistoryCached } from '../../application/brain/chatRunHistory';
+import { listAgentsCached, listMembersCached, readMessagesCached, resolveTeamChatCached } from '../../application/brain/chatPolledReads';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached, ticketSearchVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
 import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
@@ -147,7 +148,8 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     if (rawTeam != null && rawTeam !== '' && rawTeam !== 'none' && teamId == null) {
       return c.json({ error: 'Invalid team id' }, 400);
     }
-    const result = await brainService.getOrCreateTeamChat(
+    const result = await resolveTeamChatCached(
+      c.env as Env, db,
       c.get('tenantId') as number,
       c.get('userId') as string,
       { projectId, teamId },
@@ -248,8 +250,8 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const afterSeqRaw = c.req.query('afterSeq');
     const afterSeqNum = afterSeqRaw == null || afterSeqRaw === '' ? NaN : Number(afterSeqRaw);
     const afterSeq = Number.isInteger(afterSeqNum) && afterSeqNum >= 0 ? afterSeqNum : undefined;
-    const result = await brainService.getMessages(
-      id, c.get('tenantId') as number, c.get('userId') as string, limit, afterSeq,
+    const result = await readMessagesCached(
+      c.env as Env, db, id, c.get('tenantId') as number, c.get('userId') as string, limit, afterSeq,
     );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json({ messages: result });
@@ -611,8 +613,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   router.get('/chats/:id/agents', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
-    const svc = new ChatTicketService(db, c.env as Env);
-    const result = await svc.listAgents(c.get('tenantId') as number, id, c.get('userId') as string);
+    const result = await listAgentsCached(c.env as Env, db, c.get('tenantId') as number, id, c.get('userId') as string);
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json({ agents: result });
   });
@@ -625,8 +626,8 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   router.get('/chats/:id/runs', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
-    const history = await readChatRunHistoryForCaller(
-      db, c.get('tenantId') as number, id, c.get('userId') as string,
+    const history = await readChatRunHistoryCached(
+      c.env as Env, db, c.get('tenantId') as number, id, c.get('userId') as string,
     );
     if (!history) return c.json({ error: 'Chat not found' }, 404);
     return c.json(history);
@@ -668,7 +669,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   router.get('/chats/:id/members', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
-    const result = await brainService.listMembers(id, c.get('tenantId') as number, c.get('userId') as string);
+    const result = await listMembersCached(c.env as Env, db, id, c.get('tenantId') as number, c.get('userId') as string);
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json({ members: result });
   });

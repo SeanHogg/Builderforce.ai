@@ -55,6 +55,11 @@ export async function tenantRoleOf(db: Db, tenantId: number, userId: string): Pr
   return isTenantRole(row?.role) ? row.role : null;
 }
 
+/** Is this person an ACTIVE member of the workspace? (The one `tenantRoleOf !== null` check.) */
+export async function isActiveTenantMember(db: Db, tenantId: number, userId: string): Promise<boolean> {
+  return (await tenantRoleOf(db, tenantId, userId)) !== null;
+}
+
 /**
  * The role to report for a workspace in the caller's OWN workspace list.
  *

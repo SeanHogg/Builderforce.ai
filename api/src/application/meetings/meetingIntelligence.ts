@@ -35,6 +35,7 @@ import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agen
 import { broadcastRoom } from '../../infrastructure/relay/broadcastRoom';
 import { syncMinutesForMeeting } from '../ceremony/ceremonyMinutesToCanvas';
 import { condenseTranscript } from '../llm/condense';
+import { bumpChatMessages } from '../brain/chatCacheVersions';
 
 type Meeting = typeof meetings.$inferSelect;
 export type TranscriptSegment = typeof meetingTranscriptSegments.$inferSelect;
@@ -99,6 +100,7 @@ export async function postMeetingChatLine(
       metadata: JSON.stringify({ authoredBy }),
     });
     await db.update(brainChats).set({ updatedAt: new Date() }).where(eq(brainChats.id, chatId));
+    await bumpChatMessages(chatId);
   } catch (error) { /* the meeting chat is a nice-to-have; never fail the turn on it */ 
     reportCaughtError(error, { source: "application/meetings/meetingIntelligence.ts", operation: "postMeetingChatLine" });
   }

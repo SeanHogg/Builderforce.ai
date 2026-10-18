@@ -79,6 +79,29 @@ export class InternalError extends DomainError {
   }
 }
 
+/**
+ * A {@link DomainError} that carries its own HTTP status — the base of the ~35
+ * application error classes (`FormError`, `PayableError`, …) that used to extend
+ * `Error` and be caught by a per-route `try/catch` mapping `.status` to JSON.
+ * `statusOf` already honours `.status`; extending this class makes that explicit and
+ * lets `errorResponseBody` treat the message as written for the caller, including
+ * on a 5xx ("The form could not be published.").
+ */
+export class StatusError<S extends number = number> extends DomainError {
+  /** Extra top-level body fields (a refusal that lists the valid choices). */
+  readonly fields?: Readonly<Record<string, unknown>>;
+  constructor(
+    message: string,
+    readonly status: S,
+    options?: { cause?: unknown; fields?: Readonly<Record<string, unknown>> },
+  ) {
+    super(message);
+    this.name = 'StatusError';
+    if (options && 'cause' in options) this.cause = options.cause;
+    if (options?.fields) this.fields = options.fields;
+  }
+}
+
 /** One field-level problem with a request, as the client should see it. */
 export interface RequestValidationIssue {
   /** Dotted path into the body (`"items.0.id"`), `""` for the whole body. */

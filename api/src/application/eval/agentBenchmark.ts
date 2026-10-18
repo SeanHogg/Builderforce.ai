@@ -18,6 +18,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { agentBenchmarkCases, agentBenchmarkResults } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { evaluateResponse, type EvalJudge } from './semanticEval';
+import { slugify } from '@builderforce/creation-canvas-contract';
 
 export interface BenchmarkCase {
   id: string;
@@ -197,7 +198,7 @@ export async function upsertCase(
   tenantId: number,
   input: { slug: string; name: string; prompt: string; expectations?: string[]; category?: string; projectId?: number | null; enabled?: boolean },
 ): Promise<{ ok: boolean; error?: string }> {
-  const slug = input.slug.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 255);
+  const slug = slugify(input.slug, { maxLength: 255 });
   if (!slug || !input.name.trim() || !input.prompt.trim()) {
     return { ok: false, error: 'slug, name and prompt are required' };
   }

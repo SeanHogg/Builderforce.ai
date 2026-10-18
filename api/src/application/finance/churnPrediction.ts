@@ -37,6 +37,7 @@ import type { Env } from '../../env';
 import { churnPredictions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `churn_predictions.band`. */
 export const RISK_BANDS = ['low', 'medium', 'high', 'critical'] as const;
@@ -50,9 +51,9 @@ export type Outcome = (typeof OUTCOMES)[number];
 export const isOutcome = (v: unknown): v is Outcome =>
   typeof v === 'string' && (OUTCOMES as readonly string[]).includes(v);
 
-export class ChurnError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class ChurnError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'ChurnError';
   }
 }

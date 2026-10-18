@@ -15,15 +15,16 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { llmUsageLog, tenantLlmProviderKeys } from '../../infrastructure/database/schema';
+import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { LlmUsage } from './LlmProxyService';
 import { loadPriceBook } from './catalogView';
-import { buildDatabase, buildTransactionalDatabase, hasSiblingDatabase, siblingDatabaseOf } from '../../infrastructure/database/connection';
+import { buildTransactionalDatabase, hasSiblingDatabase, siblingDatabaseOf } from '../../infrastructure/database/connection';
 import { clearProviderAuthAlertAfterByoSuccess } from './providerAuthAlerts';
 import { providerForVendor } from './llmProviderCatalog';
-import { and, eq, gte, sql, type SQL } from 'drizzle-orm';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { utcDayStart } from './tokenUsage';
+import { sql, type SQL } from 'drizzle-orm';
+import { addUsageToTenantTotals, getTenantUsageTotalsForEnv } from './tokenUsage';
+import { pickPersistedMetadata } from './usageMetadata';
+import { loadTenantProviderRows } from './tenantProviderRows';
 import type { UsageSurface } from '@builderforce/spend-contract';
 
 /** Cache-tier multipliers relative to the base input (prompt) price. cache_read
@@ -102,19 +103,10 @@ export async function isPremiumCapExhausted(
   const cap = resolvePremiumDailyCapMillicents(capOverride);
   if (cap < 0) return false; // unlimited
   try {
-    // The SAME database the rows are written to — `resolveUsageDatabase` sends them to
-    // the operational account when its secret is bound, and a cap that summed the
-    // primary copy there would read zero forever.
-    const db = resolveUsageDatabase(env, buildDatabase(env));
-    const [row] = await db
-      .select({ spent: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
-      .from(llmUsageLog)
-      .where(and(
-        eq(llmUsageLog.tenantId, tenantId),
-        eq(llmUsageLog.premium, true),
-        gte(llmUsageLog.createdAt, utcDayStart()),
-      ));
-    return Math.max(0, Number(row?.spent ?? 0)) >= cap;
+    // The shared cached totals read the SAME database the rows are written to
+    // (`resolveUsageDatabase`), so a split deployment never sums an empty primary copy.
+    const totals = await getTenantUsageTotalsForEnv(env, tenantId);
+    return Math.max(0, totals.premiumMillicents) >= cap;
   } catch {
     return false; // fail open
   }
@@ -515,22 +507,9 @@ async function resolveByoCredentialId(
   provider: string,
 ): Promise<string | null> {
   try {
-    return await getOrSetCached(
-      env,
-      `byo-cred-id:${tenantId}:${provider}`,
-      async () => {
-        const [row] = await buildDatabase(env)
-          .select({ id: tenantLlmProviderKeys.id })
-          .from(tenantLlmProviderKeys)
-          .where(and(
-            eq(tenantLlmProviderKeys.tenantId, tenantId),
-            eq(tenantLlmProviderKeys.provider, provider),
-          ))
-          .limit(1);
-        return row?.id ?? null;
-      },
-      { kvTtlSeconds: 60 },
-    );
+    // The tenant's cached provider rows (one read shared with credential resolution) —
+    // invalidated on every key write, so a rotation's new id is seen immediately.
+    return (await loadTenantProviderRows(env, tenantId)).find((r) => r.provider === provider)?.id ?? null;
   } catch {
     return null;
   }
@@ -576,9 +555,13 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     );
     const savedCostUsdMillicents = computeSavedCostMillicents(pricing, savings);
     // Stamp the surcharge into metadata so an invoice/usage row can show it explicitly.
+    // Only the allowlisted keys are PERSISTED (see usageMetadata) — the raw caller bag held
+    // guest prompt text and was the bulk of this table's size. `savings` above already read
+    // the full bag.
+    const keptMetadata = pickPersistedMetadata(row.metadata);
     const metadata = row.premiumSurcharge
-      ? { ...(row.metadata ?? {}), premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS }
-      : row.metadata;
+      ? { ...(keptMetadata ?? {}), premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS }
+      : keptMetadata;
     // Chat attribution is promoted OUT of metadata into real columns (0934) so
     // per-chat/per-mode spend is an indexed read rather than a JSON scan that
     // silently drops every row whose metadata is absent or not an object. It stays
@@ -636,6 +619,19 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       savedCompletionTokens:  clampTokenCount(savings?.savedCompletionTokens ?? 0),
       recallPromptTokens:     clampTokenCount(savings?.recallPromptTokens ?? 0),
       savedCostUsdMillicents,
+    });
+
+    // Keep the cached cap totals exact between loads (see tokenUsage).
+    await addUsageToTenantTotals(env, row.tenantId, {
+      llmProduct: row.llmProduct,
+      totalTokens: usage.totalTokens,
+      cacheReadTokens: usage.cacheReadTokens ?? 0,
+      cacheCreationTokens: usage.cacheCreationTokens ?? 0,
+      byo: row.byo ?? false,
+      surface: row.surface ?? 'web',
+      paidOverflow: row.paidOverflow ?? false,
+      premium: row.premium ?? row.premiumSurcharge ?? false,
+      costUsdMillicents,
     });
 
     // A successful own-account completion is stronger health evidence than yesterday's

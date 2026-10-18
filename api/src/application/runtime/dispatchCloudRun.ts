@@ -351,7 +351,7 @@ export async function dispatchCloudRunForTask(
       // Same rows either way — the memo only decides whether they cost a query.
       params.execMemo
         ? await params.execMemo.listByTask(params.taskId)
-        : (await runtimeService.listByTask(params.taskId)).map((e) => e.toPlain()),
+        : (await runtimeService.listByTask(params.taskId, { slim: true })).map((e) => e.toPlain()),
       Date.now(),
     );
     if (backoff.blockedBy) {

@@ -17,6 +17,7 @@ import { agentHostProjects, agentHosts } from '../../infrastructure/database/sch
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { AgentHostRepository } from '../../infrastructure/repositories/AgentHostRepository';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
+import { getOrSetCached, invalidateCached, type CacheEnv } from '../../infrastructure/cache/readThroughCache';
 import { AgentHostService, type AgentHostFilterStatus } from './AgentHostService';
 
 export interface AgentHostDirectoryFilter {
@@ -25,6 +26,22 @@ export interface AgentHostDirectoryFilter {
   status?: string | null;
   /** Only hosts linked to this project. */
   projectId?: number | null;
+  /** When present the tenant's host list is read through the cache (the dashboard
+   *  polls it every 30 s). Writers call {@link invalidateAgentHostDirectory}. */
+  env?: CacheEnv;
+}
+
+/** Bounds the staleness of writers that cannot invalidate (heartbeat liveness is
+ *  written by the throttled beat and invalidated there; project-link edits in other
+ *  routes are not). KV's minimum TTL is 60 s. */
+const DIRECTORY_TTL_SECONDS = 60;
+const DIRECTORY_L1_TTL_MS = 30_000;
+const directoryKey = (tenantId: number): string => `agent-hosts:dir:${tenantId}`;
+
+/** Drop the tenant's cached host list — call on register / update / delete / status
+ *  change / project link / connect / capability change. */
+export function invalidateAgentHostDirectory(env: CacheEnv, tenantId: number): Promise<void> {
+  return invalidateCached(env, directoryKey(tenantId));
 }
 
 export interface AgentHostDirectoryEntry {
@@ -54,10 +71,37 @@ export async function listAgentHostDirectory(
   service: AgentHostService = new AgentHostService(new AgentHostRepository(db)),
 ): Promise<AgentHostDirectoryEntry[]> {
   const { tenantId } = filter;
-  const hosts = await service.listAgentHostsForTenant(tenantId, normalizeStatus(filter.status));
+  const status = normalizeStatus(filter.status);
+  if (!filter.env) return applyFilter(await loadEntries(db, tenantId, service, status), filter);
+
+  // Cache the UNFILTERED tenant list and filter in JS, so one entry (one invalidation)
+  // serves every status / project variant. Dates come back from KV as ISO strings,
+  // which is exactly what the JSON response would have serialized them to.
+  const all = await getOrSetCached(
+    filter.env,
+    directoryKey(tenantId),
+    () => loadEntries(db, tenantId, service, null),
+    { kvTtlSeconds: DIRECTORY_TTL_SECONDS, l1TtlMs: DIRECTORY_L1_TTL_MS },
+  );
+  const byStatus = status === 'online' ? all.filter((e) => e.online)
+    : status === 'offline' ? all.filter((e) => !e.online)
+    : all;
+  return applyFilter(byStatus, filter);
+}
+
+const applyFilter = (entries: AgentHostDirectoryEntry[], filter: AgentHostDirectoryFilter): AgentHostDirectoryEntry[] =>
+  filter.projectId != null ? entries.filter((e) => e.projectIds.includes(filter.projectId!)) : entries;
+
+async function loadEntries(
+  db: Db,
+  tenantId: number,
+  service: AgentHostService,
+  status: AgentHostFilterStatus,
+): Promise<AgentHostDirectoryEntry[]> {
+  const hosts = await service.listAgentHostsForTenant(tenantId, status);
   const links = await projectLinksByHost(db, tenantId, hosts.map((h) => h.id));
 
-  const entries = hosts.map((h): AgentHostDirectoryEntry => {
+  return hosts.map((h): AgentHostDirectoryEntry => {
     const projectIds = links.get(h.id) ?? [];
     const capabilities = h.capabilities ?? [];
     const online = isAgentHostOnline(h);
@@ -80,8 +124,6 @@ export async function listAgentHostDirectory(
       },
     };
   });
-
-  return filter.projectId != null ? entries.filter((e) => e.projectIds.includes(filter.projectId!)) : entries;
 }
 
 /** Every host's project links in ONE query, grouped in JS (no per-host round-trip). */

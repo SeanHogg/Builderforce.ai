@@ -37,10 +37,11 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { inTransaction, type Db } from '../../infrastructure/database/connection';
 import { cohortRetention, healthDimensions, hrEmergencyContacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { StatusError } from '../../domain/shared/errors';
 
-export class PeopleInsightError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class PeopleInsightError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'PeopleInsightError';
   }
 }

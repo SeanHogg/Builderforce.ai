@@ -22,6 +22,7 @@
  */
 
 import { and, eq, sql } from 'drizzle-orm';
+import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { connectorConnections, connectorCallLogs } from '../../infrastructure/database/schema';
@@ -39,6 +40,9 @@ import {
 } from './connectorManifest';
 import { findAction, resolveConnector, type ResolvedConnector } from './connectorRegistry';
 import { buildSoapEnvelope, parseXml, soapBodyOf, soapContentType, soapFaultOf } from './soapEnvelope';
+
+/** How often a connection's `last_used_at` freshness marker is rewritten. */
+const CONNECTION_LAST_USED_THROTTLE_MS = 15 * 60_000;
 
 /** Upstream calls are cut off here — an agent loop must not block on a hung API. */
 const CALL_TIMEOUT_MS = 20_000;
@@ -574,12 +578,18 @@ export async function executeConnectorAction(args: {
   });
 
   // Best-effort freshness marker for the connections list; never blocks the result.
+  // Throttled to once per window per connection (isolate-local, like touchTenantApiKey): a
+  // chatty connector was a write statement per call for a marker minutes can't distinguish.
   if (ok) {
-    await db
-      .update(connectorConnections)
-      .set({ lastUsedAt: sql`NOW()` })
-      .where(scopedToTenant(connectorConnections, tenantId, eq(connectorConnections.id, connection.id)))
-      .catch(() => undefined);
+    const touchKey = `connector-touch:${connection.id}`;
+    if (!(await peekCached<boolean>(undefined, touchKey))) {
+      await setCached(undefined, touchKey, true, { l1TtlMs: CONNECTION_LAST_USED_THROTTLE_MS });
+      await db
+        .update(connectorConnections)
+        .set({ lastUsedAt: sql`NOW()` })
+        .where(scopedToTenant(connectorConnections, tenantId, eq(connectorConnections.id, connection.id)))
+        .catch(() => undefined);
+    }
   }
 
   return {

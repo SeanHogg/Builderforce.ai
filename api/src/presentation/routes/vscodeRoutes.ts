@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { projects, tasks, vscodeConnections } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { projects, tasks } from '../../infrastructure/database/schema';
+import { listVscodeConnections, upsertVscodeConnection } from '../../application/vscode/vscodeConnections';
 import { notSystemTask } from '../../application/task/taskScope';
 import type { TenantService } from '../../application/tenant/TenantService';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
@@ -76,26 +76,7 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
     const machineName = (body.machineName ?? '').slice(0, 255) || 'vscode';
     const extensionVersion = (body.extensionVersion ?? '').slice(0, 32) || null;
 
-    const [existing] = await db
-      .select({ id: vscodeConnections.id })
-      .from(vscodeConnections)
-      .where(
-        and(
-          eq(vscodeConnections.tenantId, tenantId),
-          eq(vscodeConnections.userId, userId),
-          eq(vscodeConnections.machineName, machineName),
-        ),
-      )
-      .limit(1);
-
-    if (existing) {
-      await db
-        .update(vscodeConnections)
-        .set({ status: 'active', extensionVersion, lastSeenAt: sql`now()` })
-        .where(scopedToTenant(vscodeConnections, tenantId, eq(vscodeConnections.id, existing.id)));
-    } else {
-      await db.insert(vscodeConnections).values({ tenantId, userId, machineName, extensionVersion });
-    }
+    await upsertVscodeConnection(db, c.env, { tenantId, userId, machineName, extensionVersion });
 
     return c.json({ ok: true });
   });
@@ -139,16 +120,11 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
   });
 
   // GET /api/vscode/connections — list this tenant's VS Code connections (for the
-  // workforce/observability surface). Cached read is unnecessary: small, rarely polled.
+  // workforce/observability surface). The dashboard polls it every 30 s, so it reads
+  // through a short cache that `/connect` invalidates.
   router.get('/connections', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await db
-      .select()
-      .from(vscodeConnections)
-      .where(eq(vscodeConnections.tenantId, tenantId))
-      .orderBy(desc(vscodeConnections.lastSeenAt))
-      .limit(100);
-    return c.json({ connections: rows });
+    return c.json({ connections: await listVscodeConnections(db, c.env, tenantId) });
   });
 
   return router;

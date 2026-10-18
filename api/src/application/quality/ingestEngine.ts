@@ -14,7 +14,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 
 import { eq, sql } from 'drizzle-orm';
-import { errorGroups, errorEvents, errorCollectors, errorGroupUsers } from '../../infrastructure/database/schema';
+import { errorGroups, errorEvents, errorCollectors } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -24,6 +24,7 @@ import { ignoredEventReason } from './ingestIgnoreList';
 import { resolveEventProjectId, type CollectorRef, type MappingRule } from './errorMapping';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { excluded } from '../../infrastructure/database/upsert';
+import { bumpGroupUserCountsSql } from './groupUserCounts';
 
 /** Groups per upsert statement. Neon HTTP carries one statement per request, and
  *  a few hundred rows of sample payloads is the size that stays comfortably

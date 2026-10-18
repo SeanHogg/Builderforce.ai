@@ -27,6 +27,7 @@ import { freelancerStatsCacheKey } from './freelancerRoutes';
 import { TenantRole } from '../../domain/shared/types';
 import { type Db } from '../../infrastructure/database/connection';
 import { requestDb } from '../../application/shared/dbHandle';
+import { listActiveEngagements, type ActiveEngagement } from '../../application/activity/activeEngagements';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   activitySignals,
@@ -80,24 +81,18 @@ const RejectBody = z.object({ reason: z.string().nullable().optional() });
  *  `defaultTenantId` (VSIX: from the tenant token) backfills a signal's tenantId. */
 async function ingestSignals(
   db: Db,
+  env: Env,
   userId: string,
   list: unknown[],
   defaultSource: string,
   defaultTenantId: number | null,
 ): Promise<number> {
-  const engRows = await db
-    .select({
-      id: freelancerEngagements.id,
-      tenantId: freelancerEngagements.tenantId,
-      projectId: freelancerEngagements.projectId,
-    })
-    .from(freelancerEngagements)
-    .where(and(
-      eq(freelancerEngagements.freelancerUserId, userId),
-      isNull(freelancerEngagements.terminatedAt),
-    ));
-  const resolveEngagement = (tenantId: number | null, projectId: number | null): string | null => {
+  // Fetched lazily and at most once: a signal that names its engagement (or has no
+  // tenant to resolve against) never needs the list.
+  let engRows: ActiveEngagement[] | null = null;
+  const resolveEngagement = async (tenantId: number | null, projectId: number | null): Promise<string | null> => {
     if (tenantId == null) return null;
+    engRows ??= await listActiveEngagements(db, env, userId);
     const forTenant = engRows.filter((e) => Number(e.tenantId) === Number(tenantId));
     const byProject = forTenant.find((e) => e.projectId != null && Number(e.projectId) === Number(projectId));
     return (byProject ?? forTenant[0])?.id ?? null;
@@ -110,7 +105,7 @@ async function ingestSignals(
     if (!kind) continue;
     const tenantId = typeof s.tenantId === 'number' ? s.tenantId : defaultTenantId;
     const projectId = typeof s.projectId === 'number' ? s.projectId : null;
-    const engagementId = typeof s.engagementId === 'string' ? s.engagementId : resolveEngagement(tenantId, projectId);
+    const engagementId = typeof s.engagementId === 'string' ? s.engagementId : await resolveEngagement(tenantId, projectId);
     const ref = typeof s.ref === 'string' ? s.ref.slice(0, 300) : null;
     const weight = typeof s.weight === 'number' ? Math.max(1, Math.round(s.weight)) : 1;
     const duration = typeof s.durationSeconds === 'number' ? Math.max(0, Math.round(s.durationSeconds)) : null;
@@ -198,7 +193,7 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
     const body = await parseBody(c, SignalsBody);
     const list = (body.signals ?? []).slice(0, MAX_BATCH);
     if (list.length === 0) return c.json({ ok: true, ingested: 0 });
-    const ingested = await ingestSignals(requestDb(c), userId, list, 'portal', null);
+    const ingested = await ingestSignals(requestDb(c), c.env, userId, list, 'portal', null);
     return c.json({ ok: true, ingested });
   });
 
@@ -212,7 +207,7 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
     const body = await parseBody(c, SignalsBody);
     const list = (body.signals ?? []).slice(0, MAX_BATCH);
     if (list.length === 0) return c.json({ ok: true, ingested: 0 });
-    const ingested = await ingestSignals(requestDb(c), userId, list, 'vscode', tenantId);
+    const ingested = await ingestSignals(requestDb(c), c.env, userId, list, 'vscode', tenantId);
     return c.json({ ok: true, ingested });
   });
 
@@ -222,7 +217,7 @@ export function createActivityRoutes(db: Db): Hono<HonoEnv> {
   router.post('/meeting', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const b = await parseBody(c, MeetingSignalBody);
-    const ingested = await ingestSignals(requestDb(c), userId, [{
+    const ingested = await ingestSignals(requestDb(c), c.env, userId, [{
       source: 'meeting', kind: 'meeting', engagementId: b.engagementId,
       durationSeconds: Math.round(b.durationMinutes * 60),
       occurredAt: b.occurredAt, ref: 'meeting', metadata: b.note ? { note: b.note } : undefined,

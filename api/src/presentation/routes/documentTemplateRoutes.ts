@@ -20,25 +20,12 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
-  TemplateError,
   documentTemplateCatalog,
   renderDocumentTemplate,
   type TemplateValues,
 } from '../../application/legal/documentTemplates';
 import { sendTemplatedDocument } from '../../application/legal/templateSigning';
-import { SignatureError } from '../../application/signature/signatureEngine';
 import { parseBody, zJsonObject } from './requestBody';
-
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof TemplateError || error instanceof SignatureError) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-    throw error;
-  }
-};
 
 /** The template's variables arrive as an untyped object because they ARE untyped —
  *  each template declares its own. Validation is the template's own job
@@ -54,13 +41,13 @@ export function createDocumentTemplateRoutes(db: Db): Hono<HonoEnv> {
   router.get('/', (c) => Response.json({ templates: documentTemplateCatalog() }));
 
   // Both bodies are read field-by-field below (and `values` is the template's own
-  // job), so the schema is "a JSON object" — `handle` rethrows the 400 it raises.
-  router.post('/:key/render', (c) => handle(async () => {
+  // job), so the schema is "a JSON object" — the 400 it raises reaches app.onError.
+  router.post('/:key/render', async (c) => {
     const body = await parseBody(c, zJsonObject);
     return Response.json({ document: renderDocumentTemplate(c.req.param('key'), values(body)) });
-  }));
+  });
 
-  router.post('/:key/send', (c) => handle(async () => {
+  router.post('/:key/send', async (c) => {
     const body = await parseBody(c, zJsonObject);
     const result = await sendTemplatedDocument(db, c.env as Env, c.get('tenantId') as number, {
       templateKey: c.req.param('key'),
@@ -84,7 +71,7 @@ export function createDocumentTemplateRoutes(db: Db): Hono<HonoEnv> {
       createdBy: (c.get('userId') as string | undefined) ?? null,
     });
     return Response.json(result);
-  }));
+  });
 
   return router;
 }

@@ -7,40 +7,29 @@
  * endpoints and the swimlane dispatch-result endpoint need EXACTLY this check,
  * so it lives here once (DRY) rather than being re-implemented per route file.
  */
-import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
-import { agentHosts } from '../database/schema';
-import { verifySecret } from './HashService';
+import type { Env } from '../../env';
 import type { Db } from '../database/connection';
+import { verifyAgentHostKey } from './agentHostKeyLookup';
 
 export interface AuthedAgentHost {
   id: number;
   tenantId: number;
 }
 
-/** Verify an agent API key against the stored hash for agentHost `id`. */
-export async function verifyAgentHostApiKey(
+/**
+ * Verify an agent API key for agentHost `id`. Resolves the key BY HASH through the
+ * shared key-resolution cache (`agentHostKeyLookup`), so a poll costs no database
+ * read; pass `env` to get that cache (omitted ⇒ a direct, uncached read).
+ * A deactivated/suspended host does not authenticate — the loader rejects it.
+ */
+export function verifyAgentHostApiKey(
   db: Db,
   id: number,
   key?: string | null,
+  env?: Env,
 ): Promise<AuthedAgentHost | null> {
-  if (!key) return null;
-  const [agentHost] = await db
-    .select({
-      id: agentHosts.id,
-      tenantId: agentHosts.tenantId,
-      apiKeyHash: agentHosts.apiKeyHash,
-      status: agentHosts.status,
-    })
-    .from(agentHosts)
-    .where(eq(agentHosts.id, id));
-  if (!agentHost) return null;
-  // A deactivated/suspended host must not authenticate. The JWT-exchange door
-  // (`POST /api/auth/agentHost-token`) has always enforced this; the direct-key
-  // door did not, so revoking a host left every key-authed seam open to it.
-  if (agentHost.status !== 'active') return null;
-  const valid = await verifySecret(key, agentHost.apiKeyHash);
-  return valid ? { id: agentHost.id, tenantId: agentHost.tenantId } : null;
+  return verifyAgentHostKey(env, db, id, key);
 }
 
 /** Resolve a agentHost from `Authorization: Bearer` + `X-AgentHost-Id`. */
@@ -48,12 +37,13 @@ async function verifyBearerAgentHost(
   db: Db,
   authHeader: string | undefined,
   agentHostIdHeader: string | undefined,
+  env?: Env,
 ): Promise<AuthedAgentHost | null> {
   if (!authHeader?.startsWith('Bearer ') || !agentHostIdHeader) return null;
   const key = authHeader.slice(7);
   const id = Number(agentHostIdHeader);
   if (!Number.isFinite(id) || id <= 0) return null;
-  return verifyAgentHostApiKey(db, id, key);
+  return verifyAgentHostApiKey(db, id, key, env);
 }
 
 /** The API key on a request: `Authorization: Bearer <key>` or the legacy `?key=`. */
@@ -79,19 +69,19 @@ export async function resolveHostAuth(
   c: Context,
   idPathParam?: string,
 ): Promise<AuthedAgentHost | null> {
-  const bearer = await verifyBearerAgentHost(db, c.req.header('Authorization'), c.req.header('X-AgentHost-Id'));
+  const bearer = await verifyBearerAgentHost(db, c.req.header('Authorization'), c.req.header('X-AgentHost-Id'), c.env);
   if (bearer) return bearer;
 
   const key = extractHostKey(c);
   if (idPathParam && key) {
     const pathId = Number(c.req.param(idPathParam) ?? '');
     if (Number.isFinite(pathId) && pathId > 0) {
-      const fromPath = await verifyAgentHostApiKey(db, pathId, key);
+      const fromPath = await verifyAgentHostApiKey(db, pathId, key, c.env);
       if (fromPath) return fromPath;
     }
   }
 
   const idParam = Number(c.req.query('agentHostId') ?? '');
-  if (!Number.isNaN(idParam) && idParam > 0 && key) return verifyAgentHostApiKey(db, idParam, key);
+  if (!Number.isNaN(idParam) && idParam > 0 && key) return verifyAgentHostApiKey(db, idParam, key, c.env);
   return null;
 }

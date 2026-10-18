@@ -27,7 +27,7 @@ import {
   resolveTenantVendorKeys,
   byoVendorIdsFromCredentials,
 } from '../../../application/llm/tenantProviderKeyService';
-import { buildHostEgress } from '../../../application/llm/hostEgress';
+import { buildHostEgressForVendors } from '../../../application/llm/hostEgress';
 import { withClaudeCodeSystemPrompt, ANTHROPIC_OAUTH_BETA } from '../../../application/llm/anthropicOAuth';
 import { parseAnthropicSseUsage } from '../../../application/llm/anthropicSseUsage';
 import {
@@ -244,7 +244,7 @@ export function mountMessagesRoutes(router: Hono<HonoEnv>): void {
     // Same routing path as /v1/chat/completions: a translated Anthropic request that
     // carried `tools` is an agentic turn and floors onto the paid coder backstop
     // rather than the lite general backstop. (BYO-Claude turns were served above.)
-    const service = proxyForCompletion(c.env, access, openaiBody as unknown as ChatCompletionRequest, { disablePaidOverflow, tenantVendorKeys, hostEgress: await buildHostEgress(c.env, access.tenantId) });
+    const service = proxyForCompletion(c.env, access, openaiBody as unknown as ChatCompletionRequest, { disablePaidOverflow, tenantVendorKeys, hostEgress: await buildHostEgressForVendors(c.env, access.tenantId, byoVendors) });
     const result = await service.complete(openaiBody as unknown as ChatCompletionRequest, undefined, traceId);
     logFailovers(c.env, c.executionCtx, result.failovers, { tenantId: access.tenantId, requestId: traceId });
     logProviderAuthAlerts(c.env, c.executionCtx, access.tenantId, result.failovers);

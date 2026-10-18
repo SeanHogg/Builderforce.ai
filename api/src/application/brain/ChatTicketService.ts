@@ -47,6 +47,7 @@ import { resolveAgentDisplayName, resolveAgentIdentities } from './agentDisplayN
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { broadcastBrainChatChanged } from '../../infrastructure/relay/broadcastRoom';
+import { bumpChatMessages, bumpChatStructure, bumpUnreadForTenant } from './chatCacheVersions';
 
 const CHAT_SCOPE = 'chat';
 
@@ -818,6 +819,7 @@ export class ChatTicketService {
         linkType, createdBy: input.createdBy ?? userId ?? null,
       }).returning();
     }
+    await bumpChatStructure(chatId, this.env);
     // Handoff: if this task-tier ticket already has a cloud-agent owner, bring that agent
     // into the chat it was just linked to (the "assign the ticket, then link it" ordering
     // — the assignment-time trigger fires only for chats linked at assignment time).
@@ -842,6 +844,7 @@ export class ChatTicketService {
     const rows = await this.db.delete(chatTicketLinks)
       .where(and(eq(chatTicketLinks.tenantId, tenantId), eq(chatTicketLinks.chatId, chatId), eq(chatTicketLinks.ticketKind, kind), eq(chatTicketLinks.ticketRef, ref)))
       .returning({ id: chatTicketLinks.id });
+    if (rows.length > 0) await bumpChatStructure(chatId, this.env);
     return { removed: rows.length > 0 };
   }
 
@@ -949,6 +952,11 @@ export class ChatTicketService {
       .where(and(eq(brainChats.tenantId, tenantId), inArray(brainChats.id, sources)));
     await this.db.update(brainChats).set({ updatedAt: new Date() }).where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, input.targetChatId)));
 
+    await Promise.all([
+      bumpChatMessages(input.targetChatId, this.env),
+      bumpUnreadForTenant(tenantId, this.env),
+      ...[input.targetChatId, ...sources].map((id) => bumpChatStructure(id, this.env)),
+    ]);
     return { targetChatId: input.targetChatId, mergedChats: sources.length, messagesMoved, linksMoved };
   }
 
@@ -987,16 +995,19 @@ export class ChatTicketService {
     const chat = await this.ownedChat(chatId, tenantId, userId);
     if (!chat) return { error: 'Chat not found' as const };
     if (!input.agentRef) return { error: 'agentRef is required' as const };
-    return this.assignments.assign(tenantId, {
+    const assigned = await this.assignments.assign(tenantId, {
       agentKind: input.agentKind || 'workforce', agentRef: input.agentRef,
       scope: CHAT_SCOPE, scopeId: String(chatId), role: input.role || 'participant',
     });
+    await bumpChatStructure(chatId, this.env);
+    return assigned;
   }
 
   async removeAgent(tenantId: number, chatId: number, userId: string | null, assignmentId: string) {
     const chat = await this.ownedChat(chatId, tenantId, userId);
     if (!chat) return { error: 'Chat not found' as const };
     const ok = await this.assignments.unassign(tenantId, assignmentId);
+    if (ok) await bumpChatStructure(chatId, this.env);
     return { removed: ok };
   }
 
@@ -1014,6 +1025,7 @@ export class ChatTicketService {
     await this.assignments.assign(tenantId, {
       agentKind: 'workforce', agentRef, scope: CHAT_SCOPE, scopeId: String(chatId), role: 'participant',
     });
+    await bumpChatStructure(chatId, this.env);
     return true;
   }
 
@@ -1038,6 +1050,7 @@ export class ChatTicketService {
       eventKey: eventKey ?? null,
     }).onConflictDoNothing().returning({ id: brainChatMessages.id });
     if (!inserted) return;
+    await Promise.all([bumpChatMessages(chatId, this.env), bumpUnreadForTenant(tenantId, this.env)]);
     await broadcastBrainChatChanged(this.env.SESSION_ROOM, tenantId, chatId);
   }
 

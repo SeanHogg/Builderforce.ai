@@ -14,7 +14,7 @@
  * PATCH  /api/workflows/:id/tasks/:tid   Update individual task state
  */
 import { Hono } from 'hono';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { workflows, workflowTasks, telemetrySpans, projects, agentHosts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -25,6 +25,7 @@ import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { bulkUpdateById } from '../../infrastructure/database/bulkUpdate';
 import { parseBody, z } from './requestBody';
 
 const WORKFLOW_TYPES = ['feature', 'bugfix', 'refactor', 'planning', 'adversarial', 'custom'] as const;
@@ -184,19 +185,34 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
     const now = new Date();
     const isTerminal = (s: string) => s === 'completed' || s === 'failed' || s === 'cancelled';
 
+    // ONE set-based UPDATE for every reported task. An absent output/error keeps the
+    // stored value; duplicate ids merge in report order, as sequential writes would.
+    const merged = new Map<string, Record<string, string | Date | null>>();
     for (const t of body.tasks ?? []) {
-      await db
-        .update(workflowTasks)
-        .set({
-          status: t.status,
-          ...(t.output !== undefined ? { output: t.output } : {}),
-          ...(t.error !== undefined ? { error: t.error } : {}),
-          ...(t.status === 'running' ? { startedAt: now } : {}),
-          ...(isTerminal(t.status) ? { completedAt: now } : {}),
-          updatedAt: now,
-        })
-        .where(and(eq(workflowTasks.id, t.id), eq(workflowTasks.workflowId, id)));
+      merged.set(t.id, {
+        ...(merged.get(t.id) ?? {}),
+        status: t.status,
+        ...(t.output !== undefined ? { output: t.output } : {}),
+        ...(t.error !== undefined ? { error: t.error } : {}),
+        ...(t.status === 'running' ? { started_at: now } : {}),
+        ...(isTerminal(t.status) ? { completed_at: now } : {}),
+        updated_at: now,
+      });
     }
+    await bulkUpdateById(db, {
+      table: 'workflow_tasks',
+      idColumn: { name: 'id', sqlType: 'uuid' },
+      columns: [
+        { name: 'status', sqlType: 'workflow_task_status' },
+        { name: 'output', sqlType: 'text' },
+        { name: 'error', sqlType: 'text' },
+        { name: 'started_at', sqlType: 'timestamp' },
+        { name: 'completed_at', sqlType: 'timestamp' },
+        { name: 'updated_at', sqlType: 'timestamp' },
+      ],
+      rows: [...merged].map(([taskId, set]) => ({ id: taskId, set })),
+      where: sql`t.workflow_id = ${id}::uuid`,
+    });
 
     if (body.status) {
       await db

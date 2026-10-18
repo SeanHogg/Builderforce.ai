@@ -5,8 +5,8 @@ import {
   heartbeatPayloadFingerprint,
   heartbeatWorstCaseAgeMs,
   heartbeatWriteDue,
-  readHeartbeatFingerprint,
-  rememberHeartbeatFingerprint,
+  readHeartbeatState,
+  rememberHeartbeatWrite,
   throttledWriteDue,
 } from './heartbeatThrottle';
 
@@ -19,23 +19,23 @@ describe('heartbeat write throttle', () => {
     expect(heartbeatWorstCaseAgeMs()).toBeLessThan(AGENT_HOST_STALE_MS);
   });
 
-  it('writes when last_seen_at is missing or past the throttle', () => {
-    expect(heartbeatWriteDue({ lastSeenAt: null, fingerprint: null, lastFingerprint: null, now: NOW })).toBe(true);
-    expect(heartbeatWriteDue({
-      lastSeenAt: ago(HEARTBEAT_WRITE_THROTTLE_MS), fingerprint: null, lastFingerprint: null, now: NOW,
-    })).toBe(true);
+  const stateAgo = (ms: number, fingerprint: string | null = null) => ({ fingerprint, writtenAtMs: NOW - ms });
+
+  it('writes when nothing is remembered or the last write is past the throttle', () => {
+    expect(heartbeatWriteDue({ state: null, fingerprint: null, now: NOW })).toBe(true);
+    expect(heartbeatWriteDue({ state: stateAgo(HEARTBEAT_WRITE_THROTTLE_MS), fingerprint: null, now: NOW })).toBe(true);
   });
 
   it('skips a recent liveness-only beat', () => {
-    expect(heartbeatWriteDue({ lastSeenAt: ago(60_000), fingerprint: null, lastFingerprint: null, now: NOW })).toBe(false);
+    expect(heartbeatWriteDue({ state: stateAgo(60_000), fingerprint: null, now: NOW })).toBe(false);
   });
 
-  it('skips a recent beat whose payload is unchanged, writes a changed or unknown one', () => {
+  it('skips a recent beat whose payload is unchanged, writes a changed one', () => {
     const fp = heartbeatPayloadFingerprint('["chat"]', { machineName: 'box' });
     const changed = heartbeatPayloadFingerprint('["chat"]', { machineName: 'box', tunnelUrl: 'https://t' });
-    expect(heartbeatWriteDue({ lastSeenAt: ago(60_000), fingerprint: fp, lastFingerprint: fp, now: NOW })).toBe(false);
-    expect(heartbeatWriteDue({ lastSeenAt: ago(60_000), fingerprint: changed, lastFingerprint: fp, now: NOW })).toBe(true);
-    expect(heartbeatWriteDue({ lastSeenAt: ago(60_000), fingerprint: fp, lastFingerprint: null, now: NOW })).toBe(true);
+    expect(heartbeatWriteDue({ state: stateAgo(60_000, fp), fingerprint: fp, now: NOW })).toBe(false);
+    expect(heartbeatWriteDue({ state: stateAgo(60_000, fp), fingerprint: changed, now: NOW })).toBe(true);
+    expect(heartbeatWriteDue({ state: stateAgo(60_000, null), fingerprint: fp, now: NOW })).toBe(true);
   });
 
   it('the shared rule: unknown or past-throttle writes, a recent write skips unless changed', () => {
@@ -50,10 +50,14 @@ describe('heartbeat write throttle', () => {
     expect(heartbeatPayloadFingerprint('[]', null)).not.toBeNull();
   });
 
-  it('remembers the written fingerprint so the next unchanged beat is skippable', async () => {
+  it('remembers the last write (time + payload) so a beat needs no database read', async () => {
     const fp = heartbeatPayloadFingerprint('["chat"]', { machineName: 'box' });
-    expect(await readHeartbeatFingerprint(undefined, 42)).toBeNull();
-    await rememberHeartbeatFingerprint(undefined, 42, fp, null);
-    expect(await readHeartbeatFingerprint(undefined, 42)).toBe(fp);
+    expect(await readHeartbeatState(undefined, 42)).toBeNull();
+    await rememberHeartbeatWrite(undefined, 42, fp, null, NOW);
+    const state = await readHeartbeatState(undefined, 42);
+    expect(state).toEqual({ fingerprint: fp, writtenAtMs: NOW });
+    // A liveness-only write refreshes the time but keeps the payload fingerprint.
+    await rememberHeartbeatWrite(undefined, 42, null, state, NOW + 1000);
+    expect(await readHeartbeatState(undefined, 42)).toEqual({ fingerprint: fp, writtenAtMs: NOW + 1000 });
   });
 });

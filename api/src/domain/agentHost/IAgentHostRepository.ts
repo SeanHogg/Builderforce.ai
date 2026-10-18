@@ -6,7 +6,6 @@ export interface IAgentHostRepository {
   findById(id: AgentHostId): Promise<AgentHost | null>;
   findByIdAndTenant(id: AgentHostId, tenantId: TenantId): Promise<AgentHost | null>;
   findByTenant(tenantId: TenantId): Promise<AgentHost[]>;
-  verifyApiKey(id: AgentHostId, apiKey: string): Promise<AgentHost | null>;
   /**
    * Transition lifecycle status. `env` is threaded in so the long-TTL `clk_*`
    * auth cache is invalidated AT THE MUTATION — a non-active status must stop the

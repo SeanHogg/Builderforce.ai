@@ -38,6 +38,7 @@ import { hashShareToken, mintShareToken } from '../security/shareToken';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Env } from '../../env';
 import { DAY_MS } from '../../domain/shared/time';
+import { StatusError } from '../../domain/shared/errors';
 
 /** The `question_sets.kind` a canvas `form` object projects to. A kind is a
  *  column value — see the table's own note. */
@@ -53,9 +54,9 @@ const SLUG_LENGTH = 12;
 const MAX_ANSWER_CHARS = 4000;
 const MAX_QUESTIONS = 60;
 
-export class FormError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class FormError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'FormError';
   }
 }

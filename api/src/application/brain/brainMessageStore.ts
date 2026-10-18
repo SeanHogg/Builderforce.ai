@@ -9,6 +9,7 @@ import { brainChats, brainChatMessages } from '../../infrastructure/database/sch
 import { reconcileKeyedBatch, unwrittenKeys } from '../../domain/shared/keyedBatch';
 import { messageColumns, type BrainChatMessageRow } from './brainChatShapes';
 import type { Db } from '../../infrastructure/database/connection';
+import { bumpChatMessages, bumpUnreadForTenant } from './chatCacheVersions';
 
 /** Append messages to a chat (seq-managed insert + touch), NO access check —
  *  callers must have already verified access. Shared by `appendMessages`
@@ -56,10 +57,14 @@ export async function appendRaw(
   // RETURNING already carries it — no follow-up UPDATE round trip.
 
   // Touch updatedAt on the chat
-  await db
+  const [touched] = await db
     .update(brainChats)
     .set({ updatedAt: new Date() })
-    .where(eq(brainChats.id, chatId));
+    .where(eq(brainChats.id, chatId))
+    .returning({ tenantId: brainChats.tenantId });
+  // Orphan the cached transcript reads (`chatPolledReads.ts`) and every cached unread map
+  // in the tenant (a new message can raise anyone's count).
+  await Promise.all([bumpChatMessages(chatId), touched ? bumpUnreadForTenant(touched.tenantId) : undefined]);
 
   const written = rows;
   // Nothing was skipped: every message is new, so the batch IS the answer.

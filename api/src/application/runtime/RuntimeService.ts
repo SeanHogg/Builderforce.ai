@@ -319,8 +319,10 @@ export class RuntimeService {
     return this.reapIfOrphaned(e);
   }
 
-  async listByTask(taskId: number): Promise<Execution[]> {
-    const list = await this.executions.findByTask(asTaskId(taskId));
+  /** `slim` skips the `result` blob — liveness/breaker readers (auto-run evaluator, dispatch
+   *  gate, lane gate) never read it. History is bounded per ticket (see ExecutionRepository). */
+  async listByTask(taskId: number, opts: { slim?: boolean } = {}): Promise<Execution[]> {
+    const list = await this.executions.findByTask(asTaskId(taskId), opts);
     return Promise.all(list.map((e) => this.reapIfOrphaned(e)));
   }
 
@@ -332,6 +334,7 @@ export class RuntimeService {
     const list = await this.executions.findByTasksAndStatuses(
       taskIds.map(asTaskId),
       RuntimeService.NON_TERMINAL_STATUSES,
+      { slim: true },
     );
     return Promise.all(list.map((e) => this.reapIfOrphaned(e)));
   }

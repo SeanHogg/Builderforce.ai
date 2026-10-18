@@ -51,6 +51,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import { buildPaymentProvider } from '../../infrastructure/payment';
 import { PaymentNotConfiguredError } from '../../infrastructure/payment/PaymentProvider';
+import { StatusError } from '../../domain/shared/errors';
 
 /** The kernel capability that makes a `connections` row a merchant account. */
 export const MERCHANT = 'merchant';
@@ -60,9 +61,9 @@ export const MERCHANT = 'merchant';
  *  row does. */
 const MERCHANT_VENDOR = 'stripe';
 
-export class MerchantError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class MerchantError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'MerchantError';
   }
 }

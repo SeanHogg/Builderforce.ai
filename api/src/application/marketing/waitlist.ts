@@ -38,6 +38,7 @@ import type { Env } from '../../env';
 import { regionWaitlist, waitlistEntries } from '../../infrastructure/database/schema';
 import { scopedToNullableTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
+import { StatusError } from '../../domain/shared/errors';
 
 /** Shared by both tables — which is what makes one status machine possible. */
 export const WAITLIST_STATUSES = ['waiting', 'invited', 'joined', 'declined'] as const;
@@ -46,9 +47,9 @@ export type WaitlistStatus = (typeof WAITLIST_STATUSES)[number];
 export const isWaitlistStatus = (v: unknown): v is WaitlistStatus =>
   typeof v === 'string' && (WAITLIST_STATUSES as readonly string[]).includes(v);
 
-export class WaitlistError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class WaitlistError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'WaitlistError';
   }
 }

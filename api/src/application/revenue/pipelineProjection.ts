@@ -58,10 +58,11 @@ import {
   type PipelineFamily,
   type PipelineFamilyKey,
 } from './pipelineFamilies';
+import { StatusError } from '../../domain/shared/errors';
 
-export class PipelineError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class PipelineError extends StatusError<number> {
+  constructor(message: string, status: number) {
+    super(message, status);
     this.name = 'PipelineError';
   }
 }

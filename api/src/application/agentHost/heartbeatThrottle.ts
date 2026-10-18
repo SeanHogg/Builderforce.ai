@@ -34,12 +34,22 @@ export function heartbeatWorstCaseAgeMs(cadenceMs: number = HEARTBEAT_EXPECTED_C
   return Math.ceil(HEARTBEAT_WRITE_THROTTLE_MS / cadenceMs) * cadenceMs + cadenceMs;
 }
 
-/** How long the last-written payload fingerprint is remembered. Long, because it is only
- *  rewritten when the payload CHANGES — a miss just costs one extra row write. */
-const FINGERPRINT_KV_TTL_SECONDS = 24 * 60 * 60;
+/** How long the last-write record is remembered. Long, because a beat rewrites it each
+ *  time the row is written — a miss just costs one extra row write. */
+const STATE_KV_TTL_SECONDS = 24 * 60 * 60;
 
-export const heartbeatFingerprintCacheKey = (agentHostId: number): string =>
-  `agent-host:heartbeat:fp:${agentHostId}`;
+/** What the last row write left behind: when, and which payload. Kept in the cache so a
+ *  beat decides "write or skip" with ZERO database reads (the verifying lookup is cached
+ *  too) — a host beating every few minutes no longer keeps Neon awake just to ask. */
+export interface HeartbeatState {
+  /** Fingerprint last written; null when that write was liveness-only. */
+  fingerprint: string | null;
+  /** When the row was last written (ms epoch). */
+  writtenAtMs: number;
+}
+
+export const heartbeatStateCacheKey = (agentHostId: number): string =>
+  `agent-host:heartbeat:state:${agentHostId}`;
 
 /** A stable fingerprint of what a beat would write besides `last_seen_at`, or null when
  *  the beat carries nothing but liveness (an empty body). */
@@ -73,39 +83,40 @@ export function throttledWriteDue(args: {
 
 /** Pure decision: must this beat write the row? */
 export function heartbeatWriteDue(args: {
-  lastSeenAt: Date | null;
+  /** The remembered last write; null = unknown (cache miss ⇒ write). */
+  state: HeartbeatState | null;
   /** This beat's payload fingerprint; null = liveness only. */
   fingerprint: string | null;
-  /** The fingerprint last written; null = unknown (cache miss). */
-  lastFingerprint: string | null;
   now?: number;
 }): boolean {
   return throttledWriteDue({
-    lastWrittenAtMs: args.lastSeenAt ? args.lastSeenAt.getTime() : null,
+    lastWrittenAtMs: args.state ? args.state.writtenAtMs : null,
     throttleMs: HEARTBEAT_WRITE_THROTTLE_MS,
-    // A liveness-only beat has nothing else to write; an unknown last payload cannot
-    // be claimed "unchanged", so it writes.
-    changed: args.fingerprint !== null && args.fingerprint !== args.lastFingerprint,
+    // A liveness-only beat has nothing else to write; a payload that differs from the
+    // last written one is a change a reader can see.
+    changed: args.fingerprint !== null && args.fingerprint !== args.state?.fingerprint,
     ...(args.now != null ? { now: args.now } : {}),
   });
 }
 
-/** Read the fingerprint last written for a host (L1, then KV). */
-export function readHeartbeatFingerprint(env: CacheEnv, agentHostId: number): Promise<string | null> {
-  return peekCached<string>(env, heartbeatFingerprintCacheKey(agentHostId));
+/** Read the last-write record for a host (L1, then KV). */
+export function readHeartbeatState(env: CacheEnv, agentHostId: number): Promise<HeartbeatState | null> {
+  return peekCached<HeartbeatState>(env, heartbeatStateCacheKey(agentHostId));
 }
 
-/** Remember the fingerprint just written — only when it changed, so steady-state beats
- *  cost no KV writes. */
-export async function rememberHeartbeatFingerprint(
+/** Record a row write. A liveness-only write keeps the previously written fingerprint,
+ *  so the next beat that still carries it is correctly seen as unchanged. */
+export async function rememberHeartbeatWrite(
   env: CacheEnv,
   agentHostId: number,
   fingerprint: string | null,
-  previous: string | null,
+  previous: HeartbeatState | null,
+  now: number = Date.now(),
 ): Promise<void> {
-  if (fingerprint === null || fingerprint === previous) return;
-  await setCached(env, heartbeatFingerprintCacheKey(agentHostId), fingerprint, {
-    kvTtlSeconds: FINGERPRINT_KV_TTL_SECONDS,
-    l1TtlMs: HEARTBEAT_WRITE_THROTTLE_MS,
-  });
+  await setCached<HeartbeatState>(
+    env,
+    heartbeatStateCacheKey(agentHostId),
+    { fingerprint: fingerprint ?? previous?.fingerprint ?? null, writtenAtMs: now },
+    { kvTtlSeconds: STATE_KV_TTL_SECONDS, l1TtlMs: HEARTBEAT_WRITE_THROTTLE_MS },
+  );
 }

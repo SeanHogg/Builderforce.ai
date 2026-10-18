@@ -23,7 +23,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *   4. reject if the id (nonce) was already processed.
  */
 
-import { and, eq, isNotNull, lte } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, lte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -238,33 +238,36 @@ export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps 
   });
   const timestamp = nowSec();
 
-  await Promise.all(
-    targets.map(async (sub) => {
-      // Create the delivery row first so its id is the signed nonce. Persist the
-      // exact body so the retry sweep can re-send identical bytes under the same
-      // nonce (the receiver dedupes on the nonce, so a retry is idempotent).
-      //
-      // ON CONFLICT DO NOTHING against `uq_webhook_delivery_event` is THE replay
-      // guard, and it is the insert rather than a preceding read on purpose: two
-      // concurrent retries both read "not seen", both pass a check, and both POST.
-      // No row back therefore means "this occurrence is already enqueued or already
-      // sent" — the correct outcome is to send nothing at all, not to try again.
-      const [delivery] = await db
-        .insert(webhookDeliveries)
-        .values({
-          subscriptionId: sub.id,
-          tenantId: input.tenantId,
-          segmentId: input.segmentId ?? null,
-          eventType: input.eventType,
-          eventId: input.eventId,
-          status: 'pending',
-          attempts: 1,
-          payload: body,
-        })
-        .onConflictDoNothing()
-        .returning({ id: webhookDeliveries.id });
-      if (!delivery) return;
+  // Create every delivery row first (ONE multi-row insert) so each id is the signed
+  // nonce. Persist the exact body so the retry sweep can re-send identical bytes under
+  // the same nonce (the receiver dedupes on the nonce, so a retry is idempotent).
+  //
+  // ON CONFLICT DO NOTHING against `uq_webhook_delivery_event` is THE replay
+  // guard, and it is the insert rather than a preceding read on purpose: two
+  // concurrent retries both read "not seen", both pass a check, and both POST.
+  // A target with no row back therefore means "this occurrence is already enqueued
+  // or already sent" — the correct outcome is to send nothing at all.
+  const created = await db
+    .insert(webhookDeliveries)
+    .values(targets.map((sub) => ({
+      subscriptionId: sub.id,
+      tenantId: input.tenantId,
+      segmentId: input.segmentId ?? null,
+      eventType: input.eventType,
+      eventId: input.eventId,
+      status: 'pending',
+      attempts: 1,
+      payload: body,
+    })))
+    .onConflictDoNothing()
+    .returning({ id: webhookDeliveries.id, subscriptionId: webhookDeliveries.subscriptionId });
+  const subById = new Map(targets.map((sub) => [sub.id, sub]));
+  const deliveredByStatus = new Map<number, string[]>();
 
+  await Promise.all(
+    created.map(async (delivery) => {
+      const sub = subById.get(delivery.subscriptionId);
+      if (!sub) return;
       try {
         const signature = await signWebhook(sub.secret, delivery.id, timestamp, body);
         const res = await doFetch(sub.url, {
@@ -278,22 +281,28 @@ export async function emitWebhookEvent(db: Db, input: EmitInput, deps: EmitDeps 
           body,
         });
         if (res.ok) {
-          await db
-            .update(webhookDeliveries)
-            .set({ status: 'delivered', responseStatus: res.status, nextRetryAt: null, deliveredAt: new Date(timestamp * 1000) })
-            .where(eq(webhookDeliveries.id, delivery.id));
+          deliveredByStatus.set(res.status, [...(deliveredByStatus.get(res.status) ?? []), delivery.id]);
         } else {
           // Non-2xx — schedule a retry (or dead-letter once exhausted).
           await recordDeliveryFailure(db, delivery.id, 1, timestamp, `HTTP ${res.status}`, res.status);
         }
       } catch (err) {
         await recordDeliveryFailure(db, delivery.id, 1, timestamp, err)
-          .catch((error) => { /* never let bookkeeping throw into the emit path */ 
+          .catch((error) => { /* never let bookkeeping throw into the emit path */
             reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "emitWebhookEvent" });
           });
       }
     }),
   );
+
+  // One bulk status write per distinct 2xx code (in practice one), not per delivery.
+  await Promise.all([...deliveredByStatus].map(([status, ids]) => db
+    .update(webhookDeliveries)
+    .set({ status: 'delivered', responseStatus: status, nextRetryAt: null, deliveredAt: new Date(timestamp * 1000) })
+    .where(inArray(webhookDeliveries.id, ids))
+    .catch((error) => {
+      reportCaughtError(error, { source: "application/seams/webhookService.ts", operation: "emitWebhookEvent", context: { logMessage: '[webhook] bulk delivered stamp failed' } });
+    })));
 
   return targets.length;
 }

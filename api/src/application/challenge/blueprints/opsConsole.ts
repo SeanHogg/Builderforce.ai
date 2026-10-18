@@ -15,6 +15,7 @@
  * This is served from the project's own subdomain and has no access to the app's
  * theme tokens, so light and dark are declared here rather than inherited.
  */
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 
 export interface ConsoleMeter {
   label: string;
@@ -40,8 +41,6 @@ export interface OpsConsoleOptions {
 
 /** HTML-escape a value going into generated markup. `&` first, or the escapes
  *  of the later replacements would themselves be escaped. */
-const esc = (v: string): string =>
-  v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 export function renderOpsConsole(options: OpsConsoleOptions): string {
   const meters = options.meters ?? [];
@@ -53,7 +52,7 @@ export function renderOpsConsole(options: OpsConsoleOptions): string {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${esc(options.title)}</title>
+<title>${escapeHtml(options.title)}</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -95,8 +94,8 @@ export function renderOpsConsole(options: OpsConsoleOptions): string {
 </head>
 <body>
 <div class="wrap">
-  <h1>${esc(options.title)}</h1>
-  <p class="sub">${esc(options.subtitle)}</p>
+  <h1>${escapeHtml(options.title)}</h1>
+  <p class="sub">${escapeHtml(options.subtitle)}</p>
 
   <section class="grid" id="meters"></section>
 
@@ -104,7 +103,7 @@ export function renderOpsConsole(options: OpsConsoleOptions): string {
     <h2 class="section">Webhook endpoints</h2>
     <div class="card scroll">
       <table>
-        <thead><tr><th>What</th><th>${esc(options.targetLabel)}</th><th>Status</th></tr></thead>
+        <thead><tr><th>What</th><th>${escapeHtml(options.targetLabel)}</th><th>Status</th></tr></thead>
         <tbody id="endpoints"></tbody>
       </table>
     </div>

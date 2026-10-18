@@ -33,6 +33,8 @@ import { agentHosts } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { VendorEgress } from './vendors/types';
+import { vendorRequiresLocalEgress } from './vendors/registry';
+import type { VendorId } from './vendors/types';
 
 /** Minimal shape of the relay binding this module needs — narrower than the DO class so
  *  the LLM layer doesn't take a dependency on the whole relay implementation. */
@@ -172,4 +174,22 @@ export async function buildHostEgress(env: Env, tenantId: number): Promise<Vendo
       headers: reply.response.headers ?? {},
     });
   };
+}
+
+/**
+ * {@link buildHostEgress}, but only for a tenant whose connected vendors include one that
+ * declares `requiresLocalEgress` (Kimi, ollama-local, freetoken). Everyone else would pay
+ * an `agent_hosts` lookup per completion for a transport nothing would ever use.
+ * `connectedVendorIds` are the dispatch vendor ids of the tenant's connected providers
+ * (`TenantLlmCredentials.providerPriorities[].vendor`).
+ */
+export async function buildHostEgressForVendors(
+  env: Env,
+  tenantId: number,
+  connectedVendorIds: Iterable<string>,
+): Promise<VendorEgress | null> {
+  for (const vendorId of connectedVendorIds) {
+    if (vendorRequiresLocalEgress(vendorId as VendorId)) return buildHostEgress(env, tenantId);
+  }
+  return null;
 }

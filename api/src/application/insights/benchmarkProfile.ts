@@ -22,10 +22,11 @@ import type { Env } from '../../env';
 import { tenantBenchmarkProfiles } from '../../infrastructure/database/schema';
 import { bumpCacheVersion, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { getBenchmarkProfile, listBenchmarkCohorts, type BenchmarkingResult } from './benchmarkingInsights';
+import { StatusError } from '../../domain/shared/errors';
 
-export class BenchmarkProfileError extends Error {
-  constructor(message: string, readonly status: 400 = 400, readonly detail: Record<string, unknown> = {}) {
-    super(message);
+export class BenchmarkProfileError extends StatusError<400> {
+  constructor(message: string, status: 400 = 400, readonly detail: Record<string, unknown> = {}) {
+    super(message, status, { fields: detail });
     this.name = 'BenchmarkProfileError';
   }
 }

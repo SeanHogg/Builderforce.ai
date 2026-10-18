@@ -38,7 +38,6 @@ import {
   type ReservationStatus,
 } from '../../application/commerce/bookings';
 import {
-  PracticeError,
   addClient,
   branding,
   clientEconomics,
@@ -58,7 +57,6 @@ import {
   type DeckVisibility,
 } from '../../application/commerce/agencyPractice';
 import {
-  AiOpsError,
   cacheSavings,
   callsForRun,
   classificationMix,
@@ -85,7 +83,6 @@ import {
   weightedScore,
 } from '../../application/people/peopleInsight';
 import {
-  PortfolioIntelError,
   addComparable,
   allModules,
   attachToPad,
@@ -149,19 +146,6 @@ import {
   WidgetBody,
 } from './practiceOpsRoutes.schemas';
 
-const handle = async (run: () => Promise<Response>): Promise<Response> => {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof BookingError || error instanceof PracticeError
-      || error instanceof AiOpsError || error instanceof PeopleInsightError
-      || error instanceof PortfolioIntelError || error instanceof CustomerSurfaceError) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-    throw error;
-  }
-};
-
 const rowId = (raw: string): number => {
   const id = Number(raw);
   if (!Number.isFinite(id) || id <= 0) throw new BookingError('That is not an id.', 400);
@@ -186,10 +170,10 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
 
   // ── Booking ───────────────────────────────────────────────────────────────
 
-  router.get('/booking/services', (c) => handle(async () =>
-    Response.json({ services: await listServices(db, tenant(c)) })));
+  router.get('/booking/services', async (c) =>
+    Response.json({ services: await listServices(db, tenant(c)) }));
 
-  router.post('/booking/services', manager, (c) => handle(async () => {
+  router.post('/booking/services', manager, async (c) => {
     const body = await parseBody(c, CreateServiceBody);
     return Response.json(await createService(db, tenant(c), {
       slug: String(body.slug ?? ''),
@@ -202,12 +186,12 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       ...(body.mode != null ? { mode: body.mode as BookingMode } : {}),
       ...(body.capacity != null ? { capacity: body.capacity } : {}),
     }), { status: 201 });
-  }));
+  });
 
-  router.get('/booking/services/:id/hosts', (c) => handle(async () =>
-    Response.json({ hosts: await serviceHosts(db, tenant(c), rowId(c.req.param('id'))) })));
+  router.get('/booking/services/:id/hosts', async (c) =>
+    Response.json({ hosts: await serviceHosts(db, tenant(c), rowId(c.req.param('id'))) }));
 
-  router.post('/booking/services/:id/hosts', manager, (c) => handle(async () => {
+  router.post('/booking/services/:id/hosts', manager, async (c) => {
     const body = await parseBody(c, AddHostBody);
     return Response.json(await addHost(db, tenant(c), rowId(c.req.param('id')), {
       hostRef: String(body.hostRef ?? ''),
@@ -215,22 +199,22 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       ...(body.priority != null ? { priority: body.priority } : {}),
       connectionId: body.connectionId ?? null,
     }), { status: 201 });
-  }));
+  });
 
-  router.get('/booking/services/:id/busy', (c) => handle(async () => {
+  router.get('/booking/services/:id/busy', async (c) => {
     const from = when(c.req.query('from'));
     const to = when(c.req.query('to'));
     if (!from || !to) throw new BookingError('from and to are required', 400);
     return Response.json({ busy: await busyIntervals(db, tenant(c), rowId(c.req.param('id')), from, to) });
-  }));
+  });
 
-  router.get('/booking/upcoming', (c) => handle(async () =>
-    Response.json({ reservations: await upcoming(db, tenant(c), c.req.query('hostRef')) })));
+  router.get('/booking/upcoming', async (c) =>
+    Response.json({ reservations: await upcoming(db, tenant(c), c.req.query('hostRef')) }));
 
-  router.get('/booking/stats', manager, (c) => handle(async () =>
-    Response.json({ stats: await bookingStats(db, tenant(c)) })));
+  router.get('/booking/stats', manager, async (c) =>
+    Response.json({ stats: await bookingStats(db, tenant(c)) }));
 
-  router.post('/booking/reservations', (c) => handle(async () => {
+  router.post('/booking/reservations', async (c) => {
     const body = await parseBody(c, ReserveBody);
     const startsAt = when(body.startsAt);
     const serviceId = body.serviceId;
@@ -243,22 +227,22 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       bookerEmail: body.bookerEmail ?? null,
       ...(body.timezone != null ? { timezone: body.timezone } : {}),
     }), { status: 201 });
-  }));
+  });
 
-  router.patch('/booking/reservations/:id', (c) => handle(async () => {
+  router.patch('/booking/reservations/:id', async (c) => {
     const body = await parseBody(c, StatusBody);
     return Response.json(await setReservationStatus(
       db, c.env as Env, tenant(c), await who(c),
       rowId(c.req.param('id')), String(body.status ?? '') as ReservationStatus,
     ));
-  }));
+  });
 
   // ── Agency ────────────────────────────────────────────────────────────────
 
-  router.get('/agency', (c) => handle(async () =>
-    Response.json({ practices: await listPractices(db, tenant(c)) })));
+  router.get('/agency', async (c) =>
+    Response.json({ practices: await listPractices(db, tenant(c)) }));
 
-  router.put('/agency/:agencyRef/branding', manager, (c) => handle(async () => {
+  router.put('/agency/:agencyRef/branding', manager, async (c) => {
     const body = await parseBody(c, BrandingBody);
     return Response.json(await setBranding(db, tenant(c), {
       agencyRef: c.req.param('agencyRef'),
@@ -268,20 +252,20 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       tagline: body.tagline ?? null,
       website: body.website ?? null,
     }));
-  }));
+  });
 
-  router.get('/agency/:agencyRef/branding', (c) => handle(async () =>
-    Response.json({ branding: await branding(db, tenant(c), c.req.param('agencyRef')) })));
+  router.get('/agency/:agencyRef/branding', async (c) =>
+    Response.json({ branding: await branding(db, tenant(c), c.req.param('agencyRef')) }));
 
-  router.get('/agency/:agencyRef/economics', manager, (c) => handle(async () =>
-    Response.json({ clients: await clientEconomics(db, tenant(c), c.req.param('agencyRef')) })));
+  router.get('/agency/:agencyRef/economics', manager, async (c) =>
+    Response.json({ clients: await clientEconomics(db, tenant(c), c.req.param('agencyRef')) }));
 
-  router.get('/agency/:agencyRef/clients', (c) => handle(async () =>
+  router.get('/agency/:agencyRef/clients', async (c) =>
     Response.json({
       clients: await listClients(db, tenant(c), c.req.param('agencyRef'), c.req.query('status') as ClientStatus | undefined),
-    })));
+    }));
 
-  router.post('/agency/:agencyRef/clients', manager, (c) => handle(async () => {
+  router.post('/agency/:agencyRef/clients', manager, async (c) => {
     const body = await parseBody(c, AddClientBody);
     return Response.json(await addClient(db, c.env as Env, tenant(c), await who(c), {
       agencyRef: c.req.param('agencyRef'),
@@ -291,19 +275,19 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       ...(body.currency != null ? { currency: body.currency } : {}),
       startedAt: when(body.startedAt) ?? null,
     }), { status: 201 });
-  }));
+  });
 
-  router.patch('/agency/clients/:id', manager, (c) => handle(async () => {
+  router.patch('/agency/clients/:id', manager, async (c) => {
     const body = await parseBody(c, StatusBody);
     return Response.json(await setClientStatus(db, tenant(c), rowId(c.req.param('id')), String(body.status ?? '') as ClientStatus));
-  }));
+  });
 
   // ── Consulting ────────────────────────────────────────────────────────────
 
-  router.get('/consulting/decks', (c) => handle(async () =>
-    Response.json({ decks: await listDecks(db, tenant(c), c.req.query('visibility') as DeckVisibility | undefined) })));
+  router.get('/consulting/decks', async (c) =>
+    Response.json({ decks: await listDecks(db, tenant(c), c.req.query('visibility') as DeckVisibility | undefined) }));
 
-  router.put('/consulting/decks', manager, (c) => handle(async () => {
+  router.put('/consulting/decks', manager, async (c) => {
     const body = await parseBody(c, SaveDeckBody);
     return Response.json(await saveDeck(db, c.env as Env, tenant(c), await who(c), {
       ...(body.id != null ? { id: body.id } : {}),
@@ -315,15 +299,15 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       ...(body.currency != null ? { currency: body.currency } : {}),
       ...(body.visibility != null ? { visibility: body.visibility as DeckVisibility } : {}),
     }));
-  }));
+  });
 
-  router.get('/consulting/:consultantRef/consultations', (c) => handle(async () =>
-    Response.json({ consultations: await consultationsFor(db, tenant(c), c.req.param('consultantRef')) })));
+  router.get('/consulting/:consultantRef/consultations', async (c) =>
+    Response.json({ consultations: await consultationsFor(db, tenant(c), c.req.param('consultantRef')) }));
 
-  router.get('/consulting/:consultantRef/knowledge', (c) => handle(async () =>
-    Response.json({ docs: await knowledgeDocsFor(db, tenant(c), c.req.param('consultantRef')) })));
+  router.get('/consulting/:consultantRef/knowledge', async (c) =>
+    Response.json({ docs: await knowledgeDocsFor(db, tenant(c), c.req.param('consultantRef')) }));
 
-  router.post('/consulting/:consultantRef/knowledge', (c) => handle(async () => {
+  router.post('/consulting/:consultantRef/knowledge', async (c) => {
     const body = await parseBody(c, KnowledgeDocBody);
     return Response.json(await publishKnowledgeDoc(db, c.env as Env, tenant(c), await who(c), {
       consultantRef: c.req.param('consultantRef'),
@@ -331,9 +315,9 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       summary: body.summary ?? null,
       artifactId: body.artifactId ?? null,
     }), { status: 201 });
-  }));
+  });
 
-  router.post('/consulting/consultations', (c) => handle(async () => {
+  router.post('/consulting/consultations', async (c) => {
     const body = await parseBody(c, ConsultationBody);
     return Response.json(await recordConsultation(db, tenant(c), {
       consultantRef: String(body.consultantRef ?? ''),
@@ -344,26 +328,26 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       rateCents: body.rateCents ?? null,
       ...(body.currency != null ? { currency: body.currency } : {}),
     }), { status: 201 });
-  }));
+  });
 
-  router.patch('/consulting/consultations/:id', (c) => handle(async () => {
+  router.patch('/consulting/consultations/:id', async (c) => {
     const body = await parseBody(c, ConsultationStatusBody);
     return Response.json(await setConsultationStatus(
       db, c.env as Env, tenant(c), await who(c),
       rowId(c.req.param('id')), String(body.status ?? '') as ConsultationStatus,
       body.recordingArtifactId ?? null,
     ));
-  }));
+  });
 
   // ── AI operations ─────────────────────────────────────────────────────────
 
-  router.get('/ai/tools', (c) => handle(async () =>
-    Response.json({ tools: await toolUsage(db, tenant(c)) })));
+  router.get('/ai/tools', async (c) =>
+    Response.json({ tools: await toolUsage(db, tenant(c)) }));
 
-  router.get('/ai/tools/:runRef', (c) => handle(async () =>
-    Response.json({ calls: await callsForRun(db, tenant(c), c.req.param('runRef')) })));
+  router.get('/ai/tools/:runRef', async (c) =>
+    Response.json({ calls: await callsForRun(db, tenant(c), c.req.param('runRef')) }));
 
-  router.post('/ai/tools', (c) => handle(async () => {
+  router.post('/ai/tools', async (c) => {
     const body = await parseBody(c, ToolCallBody);
     return Response.json(await recordToolCall(db, tenant(c), {
       toolName: String(body.toolName ?? ''),
@@ -373,15 +357,15 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       arguments: body.arguments,
       result: body.result,
     }), { status: 201 });
-  }));
+  });
 
-  router.get('/ai/classifications', (c) => handle(async () =>
-    Response.json({ mix: await classificationMix(db, tenant(c)) })));
+  router.get('/ai/classifications', async (c) =>
+    Response.json({ mix: await classificationMix(db, tenant(c)) }));
 
-  router.get('/ai/classifications/:messageRef', (c) => handle(async () =>
-    Response.json({ labels: await labelsFor(db, tenant(c), c.req.param('messageRef')) })));
+  router.get('/ai/classifications/:messageRef', async (c) =>
+    Response.json({ labels: await labelsFor(db, tenant(c), c.req.param('messageRef')) }));
 
-  router.post('/ai/classifications', (c) => handle(async () => {
+  router.post('/ai/classifications', async (c) => {
     const body = await parseBody(c, ClassificationBody);
     return Response.json(await classifyMessage(db, tenant(c), {
       messageRef: String(body.messageRef ?? ''),
@@ -391,12 +375,12 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       entities: body.entities,
       model: String(body.model ?? ''),
     }), { status: 201 });
-  }));
+  });
 
-  router.get('/ai/competitors', (c) => handle(async () =>
-    Response.json({ competitors: await listCompetitors(db, tenant(c), c.req.query('category')) })));
+  router.get('/ai/competitors', async (c) =>
+    Response.json({ competitors: await listCompetitors(db, tenant(c), c.req.query('category')) }));
 
-  router.put('/ai/competitors', manager, (c) => handle(async () => {
+  router.put('/ai/competitors', manager, async (c) => {
     const body = await parseBody(c, CompetitorBody);
     return Response.json(await upsertCompetitor(db, tenant(c), {
       ...(body.id != null ? { id: body.id } : {}),
@@ -407,20 +391,20 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       strengths: body.strengths,
       weaknesses: body.weaknesses,
     }));
-  }));
+  });
 
-  router.get('/ai/cache-savings', manager, (c) => handle(async () =>
-    Response.json({ providers: await cacheSavings(db, tenant(c)) })));
+  router.get('/ai/cache-savings', manager, async (c) =>
+    Response.json({ providers: await cacheSavings(db, tenant(c)) }));
 
-  router.delete('/ai/cache-expired', manager, (c) => handle(async () =>
-    Response.json(await purgeExpired(db, tenant(c)))));
+  router.delete('/ai/cache-expired', manager, async (c) =>
+    Response.json(await purgeExpired(db, tenant(c))));
 
   // ── People ────────────────────────────────────────────────────────────────
 
-  router.get('/people/dimensions', (c) => handle(async () =>
-    Response.json({ dimensions: await listDimensions(db, tenant(c)) })));
+  router.get('/people/dimensions', async (c) =>
+    Response.json({ dimensions: await listDimensions(db, tenant(c)) }));
 
-  router.put('/people/dimensions', manager, (c) => handle(async () => {
+  router.put('/people/dimensions', manager, async (c) => {
     const body = await parseBody(c, DimensionBody);
     return Response.json(await upsertDimension(db, tenant(c), {
       key: String(body.key ?? ''),
@@ -430,17 +414,17 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       benchmark: body.benchmark ?? null,
       ...(body.position != null ? { position: body.position } : {}),
     }));
-  }));
+  });
 
-  router.post('/people/health-score', (c) => handle(async () => {
+  router.post('/people/health-score', async (c) => {
     const body = await parseBody(c, HealthScoreBody);
     return Response.json(await weightedScore(db, tenant(c), body.scores ?? {}));
-  }));
+  });
 
-  router.get('/people/employees/:id/emergency-contacts', manager, (c) => handle(async () =>
-    Response.json({ contacts: await emergencyContactsFor(db, tenant(c), rowId(c.req.param('id'))) })));
+  router.get('/people/employees/:id/emergency-contacts', manager, async (c) =>
+    Response.json({ contacts: await emergencyContactsFor(db, tenant(c), rowId(c.req.param('id'))) }));
 
-  router.post('/people/employees/:id/emergency-contacts', manager, (c) => handle(async () => {
+  router.post('/people/employees/:id/emergency-contacts', manager, async (c) => {
     const body = await parseBody(c, EmergencyContactBody);
     return Response.json(await setEmergencyContact(db, tenant(c), rowId(c.req.param('id')), {
       name: String(body.name ?? ''),
@@ -449,23 +433,23 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       email: body.email ?? null,
       ...(body.isPrimary != null ? { isPrimary: body.isPrimary } : {}),
     }), { status: 201 });
-  }));
+  });
 
-  router.delete('/people/emergency-contacts/:id', manager, (c) => handle(async () =>
-    Response.json(await deleteEmergencyContact(db, tenant(c), rowId(c.req.param('id'))))));
+  router.delete('/people/emergency-contacts/:id', manager, async (c) =>
+    Response.json(await deleteEmergencyContact(db, tenant(c), rowId(c.req.param('id')))));
 
-  router.get('/people/cohorts', (c) => handle(async () => {
+  router.get('/people/cohorts', async (c) => {
     const periodDays = c.req.query('periodDays');
     if (periodDays) {
       return Response.json({ cohorts: await cohortComparison(db, tenant(c), Number(periodDays)) });
     }
     return Response.json({ horizons: await retentionByHorizon(db, tenant(c)) });
-  }));
+  });
 
-  router.get('/people/cohorts/:cohortKey', (c) => handle(async () =>
-    Response.json({ curve: await cohortCurve(db, tenant(c), c.req.param('cohortKey')) })));
+  router.get('/people/cohorts/:cohortKey', async (c) =>
+    Response.json({ curve: await cohortCurve(db, tenant(c), c.req.param('cohortKey')) }));
 
-  router.post('/people/cohorts', manager, (c) => handle(async () => {
+  router.post('/people/cohorts', manager, async (c) => {
     const body = await parseBody(c, CohortBody);
     const cohortStartedAt = when(body.cohortStartedAt);
     if (!cohortStartedAt) throw new PeopleInsightError('cohortStartedAt is required', 400);
@@ -476,21 +460,21 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       startingCount: body.startingCount ?? 0,
       retainedCount: body.retainedCount ?? 0,
     }), { status: 201 });
-  }));
+  });
 
   // ── Portfolio ─────────────────────────────────────────────────────────────
 
-  router.get('/portfolio/modules', (c) => handle(async () => {
+  router.get('/portfolio/modules', async (c) => {
     const rung = c.req.query('rung');
     return Response.json({
       modules: rung ? await visibleModules(db, tenant(c), Number(rung)) : await allModules(db, tenant(c)),
     });
-  }));
+  });
 
-  router.get('/portfolio/modules/ladder', manager, (c) => handle(async () =>
-    Response.json({ ladder: await rungLadder(db, tenant(c)) })));
+  router.get('/portfolio/modules/ladder', manager, async (c) =>
+    Response.json({ ladder: await rungLadder(db, tenant(c)) }));
 
-  router.put('/portfolio/modules', manager, (c) => handle(async () => {
+  router.put('/portfolio/modules', manager, async (c) => {
     const body = await parseBody(c, ModuleBody);
     return Response.json(await upsertModule(db, tenant(c), {
       key: String(body.key ?? ''),
@@ -500,18 +484,18 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       ...(body.requiredRung != null ? { requiredRung: body.requiredRung } : {}),
       ...(body.position != null ? { position: body.position } : {}),
     }));
-  }));
+  });
 
-  router.get('/portfolio/companies/:id/comparables', (c) => handle(async () =>
+  router.get('/portfolio/companies/:id/comparables', async (c) =>
     Response.json({
       comparables: await comparablesFor(db, tenant(c), rowId(c.req.param('id'))),
       spread: await comparableSpread(db, tenant(c), rowId(c.req.param('id'))),
-    })));
+    }));
 
-  router.get('/portfolio/companies/:id/valuation', (c) => handle(async () =>
-    Response.json(await impliedValuation(db, tenant(c), rowId(c.req.param('id'))))));
+  router.get('/portfolio/companies/:id/valuation', async (c) =>
+    Response.json(await impliedValuation(db, tenant(c), rowId(c.req.param('id')))));
 
-  router.post('/portfolio/companies/:id/comparables', manager, (c) => handle(async () => {
+  router.post('/portfolio/companies/:id/comparables', manager, async (c) => {
     const body = await parseBody(c, ComparableBody);
     return Response.json(await addComparable(db, tenant(c), rowId(c.req.param('id')), {
       peerName: String(body.peerName ?? ''),
@@ -520,12 +504,12 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       growthRate: body.growthRate ?? null,
       multiple: body.multiple ?? null,
     }), { status: 201 });
-  }));
+  });
 
-  router.get('/portfolio/pads/:padObjectId', (c) => handle(async () =>
-    Response.json({ attachments: await padAttachments(db, tenant(c), c.req.param('padObjectId')) })));
+  router.get('/portfolio/pads/:padObjectId', async (c) =>
+    Response.json({ attachments: await padAttachments(db, tenant(c), c.req.param('padObjectId')) }));
 
-  router.post('/portfolio/pads/:padObjectId', (c) => handle(async () => {
+  router.post('/portfolio/pads/:padObjectId', async (c) => {
     const body = await parseBody(c, PadAttachmentBody);
     return Response.json(await attachToPad(db, tenant(c), {
       padObjectId: c.req.param('padObjectId'),
@@ -534,30 +518,30 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       placement: body.placement,
       addedBy: (c.get('userId') as string | undefined) ?? null,
     }), { status: 201 });
-  }));
+  });
 
-  router.patch('/portfolio/attachments/:id', (c) => handle(async () => {
+  router.patch('/portfolio/attachments/:id', async (c) => {
     const body = await parseBody(c, AttachmentPatchBody);
     return Response.json(await updateAttachment(db, tenant(c), rowId(c.req.param('id')), {
       ...(body.label !== undefined ? { label: body.label } : {}),
       ...(body.placement !== undefined ? { placement: body.placement } : {}),
     }));
-  }));
+  });
 
-  router.delete('/portfolio/attachments/:id', (c) => handle(async () =>
-    Response.json(await detach(db, tenant(c), rowId(c.req.param('id'))))));
+  router.delete('/portfolio/attachments/:id', async (c) =>
+    Response.json(await detach(db, tenant(c), rowId(c.req.param('id')))));
 
   // ── Customer surface ──────────────────────────────────────────────────────
 
-  router.get('/support/articles', (c) => handle(async () =>
+  router.get('/support/articles', async (c) =>
     Response.json({
       articles: await listArticles(db, tenant(c), {
         ...(c.req.query('status') ? { status: c.req.query('status') as ArticleStatus } : {}),
         ...(c.req.query('category') ? { category: c.req.query('category') as string } : {}),
       }),
-    })));
+    }));
 
-  router.post('/support/articles', manager, (c) => handle(async () => {
+  router.post('/support/articles', manager, async (c) => {
     const body = await parseBody(c, ArticleBody);
     return Response.json(await createArticle(db, c.env as Env, tenant(c), await who(c), {
       slug: String(body.slug ?? ''),
@@ -570,25 +554,25 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       ...(body.visibility != null ? { visibility: body.visibility as ArticleVisibility } : {}),
       ownerRef: body.ownerRef ?? (c.get('userId') as string | undefined) ?? null,
     }), { status: 201 });
-  }));
+  });
 
-  router.patch('/support/articles/:id/status', manager, (c) => handle(async () => {
+  router.patch('/support/articles/:id/status', manager, async (c) => {
     const body = await parseBody(c, StatusBody);
     return Response.json(await setArticleStatus(db, tenant(c), rowId(c.req.param('id')), String(body.status ?? '') as ArticleStatus));
-  }));
+  });
 
-  router.patch('/support/articles/:id/visibility', manager, (c) => handle(async () => {
+  router.patch('/support/articles/:id/visibility', manager, async (c) => {
     const body = await parseBody(c, ArticleVisibilityBody);
     return Response.json(await setArticleVisibility(
       db, c.env as Env, tenant(c), await who(c),
       rowId(c.req.param('id')), String(body.visibility ?? '') as ArticleVisibility,
     ));
-  }));
+  });
 
-  router.get('/support/widgets', (c) => handle(async () =>
-    Response.json({ widgets: await listWidgets(db, tenant(c)) })));
+  router.get('/support/widgets', async (c) =>
+    Response.json({ widgets: await listWidgets(db, tenant(c)) }));
 
-  router.put('/support/widgets/:key', manager, (c) => handle(async () => {
+  router.put('/support/widgets/:key', manager, async (c) => {
     const body = await parseBody(c, WidgetBody);
     return Response.json(await upsertWidget(db, tenant(c), {
       key: c.req.param('key'),
@@ -601,22 +585,22 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       ...(body.cooldownDays != null ? { cooldownDays: body.cooldownDays } : {}),
       ...(body.enabled != null ? { enabled: body.enabled } : {}),
     }));
-  }));
+  });
 
-  router.get('/support/widgets/:key/should-prompt', (c) => handle(async () => {
+  router.get('/support/widgets/:key/should-prompt', async (c) => {
     const last = when(c.req.query('lastRespondedAt'));
     return Response.json(await shouldPrompt(db, tenant(c), c.req.param('key'), last ?? null));
-  }));
+  });
 
-  router.post('/support/widgets/:key/response', (c) => handle(async () => {
+  router.post('/support/widgets/:key/response', async (c) => {
     await countWidgetResponse(db, tenant(c), c.req.param('key'));
     return new Response(null, { status: 204 });
-  }));
+  });
 
-  router.get('/support/monitors', (c) => handle(async () =>
-    Response.json({ monitors: await listMonitors(db, tenant(c)) })));
+  router.get('/support/monitors', async (c) =>
+    Response.json({ monitors: await listMonitors(db, tenant(c)) }));
 
-  router.put('/support/monitors', manager, (c) => handle(async () => {
+  router.put('/support/monitors', manager, async (c) => {
     const body = await parseBody(c, MonitorBody);
     return Response.json(await upsertMonitor(db, tenant(c), {
       ...(body.id != null ? { id: body.id } : {}),
@@ -632,16 +616,16 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       regions: body.regions,
       ...(body.enabled != null ? { enabled: body.enabled } : {}),
     }));
-  }));
+  });
 
-  router.post('/support/monitors/:id/probe', (c) => handle(async () => {
+  router.post('/support/monitors/:id/probe', async (c) => {
     const body = await parseBody(c, ProbeBody);
     if (typeof body.ok !== 'boolean') throw new CustomerSurfaceError('ok must be true or false', 400);
     return Response.json(await evaluateProbe(db, tenant(c), rowId(c.req.param('id')), {
       ok: body.ok,
       consecutiveFailures: body.consecutiveFailures ?? 0,
     }));
-  }));
+  });
 
   return router;
 }
@@ -660,16 +644,16 @@ export function createPublicSupportRoutes(db: Db): Hono<HonoEnv> {
     return Math.floor(id);
   };
 
-  router.get('/:tenantId/help', (c) => handle(async () =>
+  router.get('/:tenantId/help', async (c) =>
     Response.json({
       articles: await publicArticles(db, tenantParam(c.req.param('tenantId')), c.req.query('category')),
-    })));
+    }));
 
-  router.get('/:tenantId/help/:slug', (c) => handle(async () => {
+  router.get('/:tenantId/help/:slug', async (c) => {
     const article = await publicArticle(db, tenantParam(c.req.param('tenantId')), c.req.param('slug'));
     if (!article) return Response.json({ error: 'No published article at that address.' }, { status: 404 });
     return Response.json(article);
-  }));
+  });
 
   return router;
 }

@@ -21,7 +21,8 @@ import { originAllowed, deserializeScopes } from './tenantApiKeyService';
 import { coerceStringArrayOrNull } from '../../domain/shared/jsonColumn';
 import { TenantRole } from '../../domain/shared/types';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { agentHosts, tenantApiKeys, users } from '../../infrastructure/database/schema';
+import { tenantApiKeys, users } from '../../infrastructure/database/schema';
+import { loadAgentHostKeyByHash } from '../../infrastructure/auth/agentHostKeyLookup';
 import { resolveKeyCached, type ResolvedKey } from '../../infrastructure/auth/keyResolutionCache';
 import { resolveTenantMembership, type ResolvedMembership } from '../auth/tenantMembership';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
@@ -65,36 +66,9 @@ export type TenantAccess = TenantPlanSnapshot & {
 };
 
 /**
- * DB loader for an agentHost (`bfa_*` / legacy `clk_*`) key → its cached auth
- * envelope. Extracted so the full auth path ({@link requireTenantAccess}) and the
- * pre-auth rate-limit resolver ({@link resolveBearerTenantId}) share the EXACT
- * loader, and therefore write a byte-identical value under the shared
- * `auth:clk:<hash>` cache key — a divergent minimal loader would poison the cache
- * with a payload missing fields the full path needs.
- */
-async function loadAgentHostKeyByHash(env: HonoEnv['Bindings'], keyHash: string): Promise<ResolvedKey> {
-  const db = buildDatabase(env);
-  const [r] = await db
-    .select({
-      id:               agentHosts.id,
-      tenantId:         agentHosts.tenantId,
-      status:           agentHosts.status,
-      tokenDailyLimit:  agentHosts.tokenDailyLimit,
-    })
-    .from(agentHosts)
-    .where(eq(agentHosts.apiKeyHash, keyHash))
-    .limit(1);
-  if (!r || r.status !== 'active') return { ok: false, reason: 'Invalid or inactive agentHost API key' };
-  return {
-    ok: true,
-    payload: { id: r.id, tenantId: r.tenantId, tokenDailyLimit: r.tokenDailyLimit ?? null },
-  };
-}
-
-/**
  * DB loader for a tenant API key (`bfk_*`) → its cached auth envelope. Shared by
  * {@link requireTenantAccess} and {@link resolveBearerTenantId} for the same
- * cache-shape reason as {@link loadAgentHostKeyByHash}.
+ * cache-shape reason as `loadAgentHostKeyByHash` (infrastructure/auth/agentHostKeyLookup).
  */
 async function loadTenantApiKeyByHash(env: HonoEnv['Bindings'], keyHash: string): Promise<ResolvedKey> {
   const db = buildDatabase(env);
@@ -171,7 +145,7 @@ export async function resolveBearerTenantId(c: Context<HonoEnv>): Promise<number
   try {
     if (token.startsWith('bfa_') || token.startsWith('clk_')) {
       const keyHash = await hashSecret(token);
-      const resolved = await resolveKeyCached(c.env, 'clk', keyHash, () => loadAgentHostKeyByHash(c.env, keyHash));
+      const resolved = await resolveKeyCached(c.env, 'clk', keyHash, () => loadAgentHostKeyByHash(buildDatabase(c.env), keyHash));
       return resolved.ok ? Number((resolved.payload as { tenantId: number }).tenantId) : null;
     }
     if (token.startsWith('bfk_')) {
@@ -200,7 +174,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
   if (token.startsWith('bfa_') || token.startsWith('clk_')) {
     const keyHash = await hashSecret(token);
 
-    const resolved = await resolveKeyCached(c.env, 'clk', keyHash, () => loadAgentHostKeyByHash(c.env, keyHash));
+    const resolved = await resolveKeyCached(c.env, 'clk', keyHash, () => loadAgentHostKeyByHash(buildDatabase(c.env), keyHash));
 
     if (!resolved.ok) throw new Error(resolved.reason);
     const agentHost = resolved.payload as { id: number; tenantId: number; tokenDailyLimit: number | null };

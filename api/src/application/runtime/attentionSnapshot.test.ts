@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readAttention } from './attentionSnapshot';
 import { bumpExecutionState } from './executionStateVersion';
-import { approvals, executions, projectManagerConfigs } from '../../infrastructure/database/schema';
+import { FRESH_MIN_INTERVAL_MS } from './freshReadThrough';
+import { approvals, chatReadState, executions, projectManagerConfigs } from '../../infrastructure/database/schema';
+import { bumpUnreadForTenant, bumpUnreadForUser } from '../brain/chatCacheVersions';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -82,17 +84,68 @@ describe('readAttention', () => {
   });
 
   it('fresh bypasses the cache and re-primes it for the next plain read', async () => {
+    vi.useFakeTimers();
+    try {
+      const { env } = fakeEnv();
+      const { db, callsFor } = fakeDb(EMPTY_ROWS);
+
+      await readAttention(env, db, { tenantId: 1 });
+      expect(callsFor(executions)).toBe(1);
+
+      vi.advanceTimersByTime(FRESH_MIN_INTERVAL_MS + 1);
+      await readAttention(env, db, { tenantId: 1, fresh: true });
+      expect(callsFor(executions)).toBe(2); // fresh past the throttle window reloads
+
+      await readAttention(env, db, { tenantId: 1 });
+      expect(callsFor(executions)).toBe(2); // now served from the re-primed cache
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('throttles fresh: a burst inside the window reloads at most once', async () => {
     const { env } = fakeEnv();
     const { db, callsFor } = fakeDb(EMPTY_ROWS);
 
     await readAttention(env, db, { tenantId: 1 });
+    await Promise.all([1, 2, 3, 4].map(() => readAttention(env, db, { tenantId: 1, fresh: true })));
+    expect(callsFor(executions)).toBe(1); // the just-loaded entry answers every fresh read
+  });
+
+  it('shares the tenant part across users and caches each user's unread map separately', async () => {
+    const { env } = fakeEnv();
+    const rows = new Map<unknown, unknown[]>([...EMPTY_ROWS, [chatReadState, []]]);
+    const { db, callsFor } = fakeDb(rows);
+
+    await readAttention(env, db, { tenantId: 1, userId: 'a' });
+    await readAttention(env, db, { tenantId: 1, userId: 'b' });
+    expect(callsFor(executions)).toBe(1); // one tenant read serves both users
+    expect(callsFor(chatReadState)).toBe(2); // one unread read per user
+
+    await readAttention(env, db, { tenantId: 1, userId: 'a' });
+    await readAttention(env, db, { tenantId: 1, userId: 'b' });
     expect(callsFor(executions)).toBe(1);
+    expect(callsFor(chatReadState)).toBe(2); // idle polls cost nothing
+  });
 
-    await readAttention(env, db, { tenantId: 1, fresh: true });
-    expect(callsFor(executions)).toBe(2); // fresh always reloads
+  it('a chat read re-reads only that user's unread; a new message re-reads the tenant's', async () => {
+    const { env } = fakeEnv();
+    const rows = new Map<unknown, unknown[]>([...EMPTY_ROWS, [chatReadState, []]]);
+    const { db, callsFor } = fakeDb(rows);
 
-    await readAttention(env, db, { tenantId: 1 });
-    expect(callsFor(executions)).toBe(2); // now served from the re-primed cache
+    await readAttention(env, db, { tenantId: 1, userId: 'a' });
+    await readAttention(env, db, { tenantId: 1, userId: 'b' });
+
+    await bumpUnreadForUser(1, 'a', env);
+    await readAttention(env, db, { tenantId: 1, userId: 'a' });
+    await readAttention(env, db, { tenantId: 1, userId: 'b' });
+    expect(callsFor(chatReadState)).toBe(3); // only user a reloaded
+
+    await bumpUnreadForTenant(1, env);
+    await readAttention(env, db, { tenantId: 1, userId: 'a' });
+    await readAttention(env, db, { tenantId: 1, userId: 'b' });
+    expect(callsFor(chatReadState)).toBe(5); // everyone's unread reloaded
+    expect(callsFor(executions)).toBe(1); // the tenant part never moved
   });
 
   it('bumpExecutionState orphans the cached snapshot so the next read reloads (a new version)', async () => {

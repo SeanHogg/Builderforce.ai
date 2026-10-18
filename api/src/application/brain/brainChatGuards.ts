@@ -13,6 +13,7 @@ import {
 } from './chatAccess';
 import { loadProjectInTenant } from '../project/projectOwnership';
 import type { Db } from '../../infrastructure/database/connection';
+import { bumpChatStructure } from './chatCacheVersions';
 
 /**
  * The OWNER gate for rename / archive.
@@ -103,9 +104,11 @@ export async function ensureMembership(db: Db, chatId: number, tenantId: number,
   try {
     // One statement: an existing row (whatever its status) wins on the unique
     // (chat_id, user_id) index, exactly as the old read-then-insert left it alone.
-    await db.insert(chatMembers)
+    const added = await db.insert(chatMembers)
       .values({ chatId, tenantId, userId, status: 'active', role: 'participant' })
-      .onConflictDoNothing({ target: [chatMembers.chatId, chatMembers.userId] });
+      .onConflictDoNothing({ target: [chatMembers.chatId, chatMembers.userId] })
+      .returning({ id: chatMembers.id });
+    if (added.length > 0) await bumpChatStructure(chatId);
   } catch (error) {
     /* audience tracking is non-critical — never fail a post over it */
   

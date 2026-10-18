@@ -46,6 +46,7 @@ import {
 import { scopedToNullableTenant, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
+import { StatusError } from '../../domain/shared/errors';
 
 /** `podcast_outreach.status`. */
 export const OUTREACH_STATUSES = ['researching', 'pitched', 'booked', 'recorded', 'published', 'declined'] as const;
@@ -60,9 +61,9 @@ export const isOutreachStatus = (v: unknown): v is OutreachStatus =>
 export const isFlowStatus = (v: unknown): v is FlowStatus =>
   typeof v === 'string' && (FLOW_STATUSES as readonly string[]).includes(v);
 
-export class ContentError extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409 = 400) {
-    super(message);
+export class ContentError extends StatusError<400 | 404 | 409> {
+  constructor(message: string, status: 400 | 404 | 409 = 400) {
+    super(message, status);
     this.name = 'ContentError';
   }
 }

@@ -30,16 +30,12 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { tenantSitesKey } from '../replay/replayCacheKeys';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { injectBeforeBodyClose } from './siteAttribution';
+import { escapeHtml } from '@builderforce/creation-canvas-contract';
 
 /** The marker that makes the injection idempotent. */
 export const REPLAY_LOADER_MARKER = 'bf-replay-loader';
 
 const HOSTED_SITE_TTL_SECONDS = 5 * 60;
-
-/** Escape for a double-quoted HTML attribute. */
-function attr(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 /** The CDN origin: the Worker's `REPLAY_CDN_ORIGIN` var when bound, else the contract default (D5). */
 function cdnOrigin(env: Env): string {
@@ -51,8 +47,8 @@ function cdnOrigin(env: Env): string {
 export function hostedReplayLoaderTag(input: { siteId: string; versionToken: string; cdnOrigin?: string; variant?: string | null }): string {
   const src = replayLoaderUrl(input.cdnOrigin ?? REPLAY_CDN_ORIGIN);
   // `data-variant`: the A/B arm this document was served from (`siteAbSplit.ts`).
-  const variant = input.variant ? ` data-variant="${attr(input.variant)}"` : '';
-  return `<script async src="${attr(src)}" data-site="hosted:${attr(input.siteId)}" data-release="${attr(input.versionToken)}"${variant} data-bf-marker="${REPLAY_LOADER_MARKER}"></script>`;
+  const variant = input.variant ? ` data-variant="${escapeHtml(input.variant)}"` : '';
+  return `<script async src="${escapeHtml(src)}" data-site="hosted:${escapeHtml(input.siteId)}" data-release="${escapeHtml(input.versionToken)}"${variant} data-bf-marker="${REPLAY_LOADER_MARKER}"></script>`;
 }
 
 /** Add the loader to a document unless it already has one (ours or a pasted one). */

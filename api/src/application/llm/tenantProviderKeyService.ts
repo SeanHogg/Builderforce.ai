@@ -26,7 +26,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * queried through the Drizzle query builder (`tenantLlmProviderKeys`).
  */
 
-import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { tenantLlmProviderKeys, tenantMembers } from '../../infrastructure/database/schema';
@@ -58,6 +58,7 @@ import {
 import { loadAlertedByoVendors } from './providerAuthAlerts';
 import { listProviderModelSelections, type ProviderModelSelections } from './providerModelSelection';
 import { invalidateProviderModelCaches } from './providerModelCacheKeys';
+import { loadTenantProviderRows, invalidateTenantProviderRows } from './tenantProviderRows';
 import { byoSelectedModelRefs } from './byoModelRouting';
 
 export {
@@ -212,7 +213,7 @@ export async function setTenantProviderKey(
     });
   // A new key can serve a different model set (a Token Plan is a subset of pay-as-you-go),
   // so the cached "what this account can call" list must follow it.
-  await invalidateProviderModelCaches(env, tenantId, provider);
+  await Promise.all([invalidateProviderModelCaches(env, tenantId, provider), invalidateTenantProviderRows(env, tenantId)]);
 }
 
 /** Store (or replace) a tenant's OAuth subscription tokens, encrypted at rest. */
@@ -241,7 +242,7 @@ export async function setTenantProviderOAuth(
       // account replaces the credential, so it is a new instance (0953).
       set: { id: sql`gen_random_uuid()`, keyEnc, authType: 'oauth', updatedAt: sql`NOW()` },
     });
-  await invalidateProviderModelCaches(env, tenantId, provider);
+  await Promise.all([invalidateProviderModelCaches(env, tenantId, provider), invalidateTenantProviderRows(env, tenantId)]);
 }
 
 export interface OpenAICodexResolution {
@@ -250,8 +251,8 @@ export interface OpenAICodexResolution {
 }
 
 /** Resolve and rotate a tenant's ChatGPT/Codex subscription credential. */
-export async function resolveOpenAICodexResolution(env: Env, tenantId: number): Promise<OpenAICodexResolution> {
-  const row = await loadProviderRow(env, tenantId, 'openai');
+export async function resolveOpenAICodexResolution(env: Env, tenantId: number, fresh = false): Promise<OpenAICodexResolution> {
+  const row = await loadProviderRow(env, tenantId, 'openai', fresh);
   if (row?.lookup_failed) return { auth: null, reason: 'lookup_failed' };
   if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { auth: null };
   let tokens: OpenAICodexOAuthTokens;
@@ -260,6 +261,9 @@ export async function resolveOpenAICodexResolution(env: Env, tenantId: number): 
   } catch { return { auth: null, reason: 'undecryptable' }; }
   if (!tokens.access || !tokens.refresh || !tokens.accountId) return { auth: null, reason: 'undecryptable' };
   if (Date.now() < tokens.expires) return { auth: { accessToken: tokens.access, accountId: tokens.accountId } };
+  // Expired per the CACHED row: re-read before rotating so a refresh another isolate already
+  // made is used instead of replaying the retired refresh token.
+  if (!fresh) return resolveOpenAICodexResolution(env, tenantId, true);
   try {
     const refreshed = await refreshOpenAICodexToken(tokens.refresh);
     await setTenantProviderOAuth(env, tenantId, 'openai', refreshed, null);
@@ -274,8 +278,8 @@ export async function resolveOpenAICodexResolution(env: Env, tenantId: number): 
 
 export interface XaiOAuthResolution { token: string | null; reason?: ByoUnresolvedReason }
 
-export async function resolveXaiOAuthResolution(env: Env, tenantId: number): Promise<XaiOAuthResolution> {
-  const row = await loadProviderRow(env, tenantId, 'xai');
+export async function resolveXaiOAuthResolution(env: Env, tenantId: number, fresh = false): Promise<XaiOAuthResolution> {
+  const row = await loadProviderRow(env, tenantId, 'xai', fresh);
   if (row?.lookup_failed) return { token: null, reason: 'lookup_failed' };
   if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { token: null };
   let tokens: XaiOAuthTokens;
@@ -283,6 +287,7 @@ export async function resolveXaiOAuthResolution(env: Env, tenantId: number): Pro
   catch { return { token: null, reason: 'undecryptable' }; }
   if (!tokens.access || !tokens.refresh) return { token: null, reason: 'undecryptable' };
   if (Date.now() < tokens.expires) return { token: tokens.access };
+  if (!fresh) return resolveXaiOAuthResolution(env, tenantId, true); // see the OpenAI resolver
   try {
     const refreshed = await refreshXaiToken(tokens.refresh);
     await setTenantProviderOAuth(env, tenantId, 'xai', refreshed, null);
@@ -311,8 +316,8 @@ export interface KimiOAuthResolution { token: string | null; reason?: ByoUnresol
  * rotates on nearly every resolution, and the rotated refresh token must be stored or the
  * next call presents one the server has already retired.
  */
-export async function resolveKimiOAuthResolution(env: Env, tenantId: number): Promise<KimiOAuthResolution> {
-  const row = await loadProviderRow(env, tenantId, 'kimi');
+export async function resolveKimiOAuthResolution(env: Env, tenantId: number, fresh = false): Promise<KimiOAuthResolution> {
+  const row = await loadProviderRow(env, tenantId, 'kimi', fresh);
   if (row?.lookup_failed) return { token: null, reason: 'lookup_failed' };
   if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { token: null };
   let tokens: KimiOAuthTokens;
@@ -320,6 +325,7 @@ export async function resolveKimiOAuthResolution(env: Env, tenantId: number): Pr
   catch { return { token: null, reason: 'undecryptable' }; }
   if (!tokens.access || !tokens.refresh) return { token: null, reason: 'undecryptable' };
   if (Date.now() < tokens.expires) return { token: tokens.access };
+  if (!fresh) return resolveKimiOAuthResolution(env, tenantId, true); // see the OpenAI resolver
   try {
     const refreshed = await refreshKimiOAuth(tokens.refresh);
     await setTenantProviderOAuth(env, tenantId, 'kimi', refreshed, null);
@@ -344,24 +350,15 @@ async function loadProviderRow(
   env: Env,
   tenantId: number,
   provider: LlmProvider,
+  fresh = false,
 ): Promise<ProviderKeyRow | null> {
   // Defensive: a BYO-credential lookup is an ENRICHMENT on the hot completion path
   // — a transient DB error (or an env without NEON bound) must degrade to "no BYO
   // credential" (the cascade keeps its operator-key floor), never 500 the request.
   try {
-    const db = buildDatabase(env);
-    const rows = await db
-      .select({ keyEnc: tenantLlmProviderKeys.keyEnc, authType: tenantLlmProviderKeys.authType })
-      .from(tenantLlmProviderKeys)
-      .where(and(
-        eq(tenantLlmProviderKeys.tenantId, tenantId),
-        eq(tenantLlmProviderKeys.provider, provider),
-      ))
-      .limit(1);
-    const row = rows[0];
+    const row = (await loadTenantProviderRows(env, tenantId, { fresh })).find((r) => r.provider === provider);
     if (!row) return null;
-    // Drizzle hands back camelCase; the callers below read the snake_case column
-    // names this row shape has always exposed — map back rather than rename them.
+    // The callers below read the snake_case column names this row shape has always exposed.
     return { key_enc: row.keyEnc ?? undefined, auth_type: row.authType ?? undefined };
   } catch (error) {
     reportCaughtError(error, { source: 'application/llm/tenantProviderKeyService.ts', operation: 'loadProviderRow', context: { tenantId, provider } });
@@ -407,8 +404,9 @@ export interface AnthropicResolution {
 export async function resolveAnthropicResolution(
   env: Env,
   tenantId: number,
+  fresh = false,
 ): Promise<AnthropicResolution> {
-  const row = await loadProviderRow(env, tenantId, 'anthropic');
+  const row = await loadProviderRow(env, tenantId, 'anthropic', fresh);
   if (row?.lookup_failed) return { auth: null, reason: 'lookup_failed' };
   if (!row?.key_enc) return { auth: null }; // nothing connected — not a failure
   const authType = (row.auth_type ?? 'api_key') as ProviderAuthType;
@@ -436,6 +434,7 @@ export async function resolveAnthropicResolution(
   if (Date.now() < tokens.expires) {
     return { auth: { mode: 'oauth', accessToken: tokens.access } };
   }
+  if (!fresh) return resolveAnthropicResolution(env, tenantId, true); // see the OpenAI resolver
 
   try {
     const refreshed = await refreshAnthropicToken(tokens.refresh);
@@ -485,36 +484,22 @@ export async function resolveAnthropicOAuthToken(env: Env, tenantId: number): Pr
  * the OAuth token. Best-effort: a DB/decrypt error degrades to "no BYO keys" (the
  * cascade keeps its operator-key floor), never throws on the hot completion path.
  *
- * Secrets are decrypted per call (cheap AES-GCM) and never cached to KV — the one
- * PK-indexed read here replaces what would otherwise be a per-provider fan-out.
+ * Secrets are decrypted per call (cheap AES-GCM); only CIPHERTEXT is cached
+ * ({@link loadTenantProviderRows}), so KV never holds a usable secret.
  */
 export async function resolveTenantVendorKeys(env: Env, tenantId: number): Promise<TenantVendorKeys> {
-  let rows: Array<{ provider?: string; key_enc?: string; auth_type?: string }> = [];
+  let rows: Awaited<ReturnType<typeof loadTenantProviderRows>>;
   try {
-    const db = buildDatabase(env);
-    const selected = await db
-      .select({
-        provider: tenantLlmProviderKeys.provider,
-        keyEnc: tenantLlmProviderKeys.keyEnc,
-        authType: tenantLlmProviderKeys.authType,
-      })
-      .from(tenantLlmProviderKeys)
-      .where(eq(tenantLlmProviderKeys.tenantId, tenantId));
-    // Keep the snake_case row shape the loop below has always read.
-    rows = selected.map((r) => ({
-      provider: r.provider ?? undefined,
-      key_enc: r.keyEnc ?? undefined,
-      auth_type: r.authType ?? undefined,
-    }));
+    rows = await loadTenantProviderRows(env, tenantId);
   } catch {
     return {};
   }
   const out: TenantVendorKeys = {};
   for (const row of rows) {
-    if (!row.provider || !isSupportedProvider(row.provider)) continue;
-    if ((row.auth_type ?? 'api_key') !== 'api_key' || !row.key_enc) continue;
+    if (!isSupportedProvider(row.provider)) continue;
+    if ((row.authType ?? 'api_key') !== 'api_key' || !row.keyEnc) continue;
     try {
-      out[row.provider] = await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET });
+      out[row.provider] = await decryptSecretFromStorage(row.keyEnc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET });
     } catch (error) { /* skip an undecryptable row — never fail the batch */ 
       reportCaughtError(error, { source: "application/llm/tenantProviderKeyService.ts", operation: "resolveTenantVendorKeys" });
     }
@@ -763,31 +748,14 @@ export async function listTenantProviderKeys(
   env: Env,
   tenantId: number,
 ): Promise<ProviderKeySummary[]> {
-  const db = buildDatabase(env);
-  const selected = await db
-    .select({
-      id: tenantLlmProviderKeys.id,
-      provider: tenantLlmProviderKeys.provider,
-      authType: tenantLlmProviderKeys.authType,
-      priority: tenantLlmProviderKeys.priority,
-    })
-    .from(tenantLlmProviderKeys)
-    .where(eq(tenantLlmProviderKeys.tenantId, tenantId))
-    // `priority` NULL = unset and MUST sort last (a set precedence always wins).
-    .orderBy(sql`${tenantLlmProviderKeys.priority} ASC NULLS LAST`, asc(tenantLlmProviderKeys.provider));
-  const rows: Array<{ id: string; provider: string; auth_type?: string; priority?: number | null }> = selected.map((r) => ({
-    id: r.id,
-    provider: r.provider,
-    auth_type: r.authType ?? undefined,
-    priority: r.priority,
-  }));
-  return rows
+  // Already ordered by precedence (priority ASC, unset last, then provider).
+  return (await loadTenantProviderRows(env, tenantId))
     .filter((r) => isSupportedProvider(r.provider))
     .map((r) => ({
       id: r.id,
       provider: r.provider as LlmProvider,
-      authType: ((r.auth_type ?? 'api_key') === 'oauth' ? 'oauth' : 'api_key') as ProviderAuthType,
-      priority: typeof r.priority === 'number' ? r.priority : null,
+      authType: ((r.authType ?? 'api_key') === 'oauth' ? 'oauth' : 'api_key') as ProviderAuthType,
+      priority: r.priority,
     }));
 }
 
@@ -834,6 +802,7 @@ export async function setTenantProviderPriorityRanks(
       eq(tenantLlmProviderKeys.tenantId, tenantId),
       inArray(tenantLlmProviderKeys.provider, entries.map(([provider]) => provider)),
     ));
+  await invalidateTenantProviderRows(env, tenantId);
 }
 
 /**
@@ -861,5 +830,5 @@ export async function deleteTenantProviderKey(env: Env, tenantId: number, provid
       eq(tenantLlmProviderKeys.provider, provider),
     ));
   // The row's model selection went with it (ON DELETE CASCADE) — the cached copy must too.
-  await invalidateProviderModelCaches(env, tenantId, provider);
+  await Promise.all([invalidateProviderModelCaches(env, tenantId, provider), invalidateTenantProviderRows(env, tenantId)]);
 }
