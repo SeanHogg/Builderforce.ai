@@ -74,7 +74,7 @@ export function canvasRunBuildCommandAction(
 ): BrainAction {
   return {
     name: 'canvas_run_build_command',
-    description: `${SHARED_DESCRIPTION} It runs in this browser's own Node runtime against the build's current files — npm, node, npx and the usual shell built-ins, pipes and && work; native addons and system binaries do not. Files the command creates, changes or deletes are saved back to the workspace (dependencies and build output are not). Do NOT start a long-running server or watcher (npm run dev, vite): it never exits and is stopped at the timeout — the live preview already runs the app. A command that fails, including that timeout, is recorded for canvas_read_build_diagnostics; use that for the preview's own errors too.`,
+    description: `${SHARED_DESCRIPTION} It runs in this browser's own Node runtime against the build's current files — npm, node, npx and the usual shell built-ins, pipes and && work; native addons and system binaries do not. Unlike the VSIX, which uses the user's real shell and follows that shell's pipefail setting, this in-browser shell fails a pipeline when any stage exits non-zero. Files the command creates, changes or deletes are saved back to the workspace (dependencies and build output are not). Do NOT start a long-running server or watcher (npm run dev, vite): it never exits and is stopped at the timeout — the live preview already runs the app. A command that fails, including that timeout, is recorded for canvas_read_build_diagnostics; use that for the preview's own errors too.`,
     mutates: true,
     parameters: {
       type: 'object', required: ['command'], additionalProperties: false,
