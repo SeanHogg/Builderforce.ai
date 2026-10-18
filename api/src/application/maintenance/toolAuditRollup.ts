@@ -82,7 +82,12 @@ export type ToolAuditRollupResult = DayFoldResult;
  * to the existing tally rather than duplicating the grain.
  */
 const foldDay = (db: Db, day: string) => db.execute(sql`
-  WITH folded AS (
+  WITH
+  -- SET LOCAL app.retention = 'on' for this statement (neon-http has no session).
+  -- Referenced below so PG 12+ cannot skip the CTE. Cited events are still skipped;
+  -- the gate is here so a later fold that also drains evidence shares the txn.
+  _retention AS (SELECT set_config('app.retention', 'on', true) AS v),
+  folded AS (
     SELECT tenant_id, ts::date AS day, tool_name, category, agent_host_id, cloud_agent_ref,
            count(*)::int AS events,
            count(DISTINCT execution_id)::int AS distinct_executions,
@@ -91,6 +96,7 @@ const foldDay = (db: Db, day: string) => db.execute(sql`
            max(ts) AS last_ts
       FROM tool_audit_events
      WHERE ts >= ${day}::date AND ts < ${day}::date + interval '1 day'
+       AND (SELECT v FROM _retention) = 'on'
        AND NOT EXISTS (SELECT 1 FROM execution_claim_evidence e WHERE e.tool_audit_event_id = tool_audit_events.id)
      GROUP BY 1, 2, 3, 4, 5, 6
   ),

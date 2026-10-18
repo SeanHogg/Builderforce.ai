@@ -3,7 +3,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import { MACHINE_LIFECYCLE_VERBS, purgeVisitorActivity } from '../marketing/visitorActivity';
 import type { PurgeStatement } from './boundedPurge';
 import { SWEPT_TABLES } from './sweptTables';
-import { BOUNDED_TELEMETRY_TABLES, EXPIRED_CREDENTIAL_TABLES } from './sweptTablesBounded';
+import { AUDIT_RETENTION_DAYS, BOUNDED_TELEMETRY_TABLES, EXPIRED_CREDENTIAL_TABLES } from './sweptTablesBounded';
 
 const realDb = buildDatabase({ NEON_DATABASE_URL: 'postgresql://user:pw@localhost/db' } as Parameters<typeof buildDatabase>[0]);
 const toSQL = (s: PurgeStatement) => (s as unknown as { toSQL(): { sql: string; params: unknown[] } }).toSQL();
@@ -15,6 +15,8 @@ const byName = (relation: string) => {
 };
 
 const TELEMETRY_WINDOWS: Record<string, number> = {
+  execution_claims: 90, execution_claim_evidence: 90,
+  agent_context_contributions: 90, agent_outbound_inspections: 90, agent_run_principals: 90,
   telemetry_spans: 30, connector_call_logs: 90, outbound_fetch_log: 90, agent_inference_logs: 90,
   catalog_adoption_events: 180, newsletter_events: 400, email_delivery_failures: 90, webhook_deliveries: 90,
   deliveries: 180, monitor_events: 90, alert_events: 180, ide_training_logs: 90,
@@ -35,7 +37,7 @@ describe('bounded telemetry retention entries', () => {
   });
 
   it('puts the run-telemetry tables on BOTH endpoints and everything else on core only', () => {
-    const both = ['usage_snapshots', 'run_model_outcomes', 'replay_visit_summaries', 'replay_releases'];
+    const both = ['execution_claims', 'execution_claim_evidence', 'usage_snapshots', 'run_model_outcomes', 'replay_visit_summaries', 'replay_releases'];
     for (const relation of Object.keys(TELEMETRY_WINDOWS)) {
       expect([...byName(relation).connections].sort(), relation).toEqual(both.includes(relation) ? ['primary', 'transactional'] : ['primary']);
     }
@@ -57,10 +59,16 @@ describe('bounded telemetry retention entries', () => {
   });
 });
 
-describe('immutable audit tables', () => {
-  it('are deliberately not swept (their immutability triggers reject every DELETE)', () => {
-    for (const relation of ['execution_claims', 'execution_claim_evidence', 'agent_context_contributions', 'agent_outbound_inspections', 'agent_run_principals']) {
-      expect(SWEPT_TABLES.some((t) => t.relation === relation), relation).toBe(false);
+describe('audit retention tables', () => {
+  const AUDIT = ['execution_claims', 'execution_claim_evidence', 'agent_context_contributions', 'agent_outbound_inspections', 'agent_run_principals'] as const;
+
+  it('are swept at the 90-day SOC 2 window, not reclaimable, and open the DELETE gate in the same statement', () => {
+    expect(AUDIT_RETENTION_DAYS).toBe(90);
+    for (const relation of AUDIT) {
+      const entry = byName(relation);
+      expect(entry.retentionDays, relation).toBe(90);
+      expect(entry.reclaimable, relation).toBe(false);
+      expect(toSQL(entry.purge(realDb, CUTOFF)).sql, relation).toContain("set_config('app.retention', 'on', true)");
     }
   });
 });
@@ -93,7 +101,7 @@ describe('expired credential retention entries', () => {
     expect(sql).toContain('"last_seen_at" <');
   });
 
-  it('drops execution limits only when their run has no unexpired principal (the principals themselves are immutable-cascaded and not swept)', () => {
+  it('drops execution limits only when their run has no unexpired principal (principals themselves are swept at 90 days)', () => {
     const q = toSQL(byName('execution_limits').purge(realDb, CUTOFF));
     expect(q.sql).toContain('not exists (select 1 from "agent_run_principals"');
     expect(q.sql).toContain('"agent_run_principals"."expires_at" >=');

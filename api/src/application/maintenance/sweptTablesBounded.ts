@@ -14,10 +14,14 @@
  * (credentials, delivery records, claims, analytics aggregates): the weekly `VACUUM FULL`
  * takes an ACCESS EXCLUSIVE lock, which is only acceptable for a feed whose writer may fail.
  *
- * NOT HERE: immutable audit tables (execution_claims / execution_claim_evidence, agent_context_contributions,
- * agent_outbound_inspections, and agent_run_principals whose cascade hits the immutable agent_capability_grants)
- * are protected by BEFORE UPDATE OR DELETE triggers, so a purge would fail nightly; they are deliberately not swept.
- * `agent_host_sync_history` (declared in the Drizzle schema but no migration ever
+ * Audit tables (execution_claims / execution_claim_evidence, agent_context_contributions,
+ * agent_outbound_inspections, and agent_run_principals whose cascade hits agent_capability_grants)
+ * used to be excluded because BEFORE DELETE triggers rejected every purge. 1238 / 0018 gate
+ * DELETE on `SET LOCAL app.retention = 'on'` (UPDATE stays forbidden); the entries below
+ * open that GUC in the same statement via set_config(..., true) so neon-http (no session)
+ * still sees it. Window: 90 days, the SOC 2 evidence window of tool_audit_events.
+ *
+ * NOT HERE: `agent_host_sync_history` (declared in the Drizzle schema but no migration ever
  * created it, so there is nothing to sweep) and `replay_issue_representatives` (no time
  * column; it cascades from `replay_issues` / `replay_recordings`, which ARE swept).
  */
@@ -27,7 +31,9 @@ import { acrossTenants, type TenantOwnedTable } from '../../infrastructure/datab
 import { boundedDelete } from './boundedPurge';
 import type { SweptConnection, SweptTable } from './sweptTables';
 import {
+  agentContextContributions,
   agentInferenceLogs,
+  agentOutboundInspections,
   agentRunPrincipals,
   alertEvents,
   authTokens,
@@ -38,6 +44,8 @@ import {
   deviceAuthorizations,
   emailDeliveryFailures,
   emailOtpChallenges,
+  executionClaimEvidence,
+  executionClaims,
   executionLimits,
   ideTrainingLogs,
   magicLinkTokens,
@@ -62,6 +70,16 @@ const CORE: readonly SweptConnection[] = ['primary'];
 /** Tables whose writers moved to the operational endpoint but whose core copy was never dropped. */
 const BOTH: readonly SweptConnection[] = ['transactional', 'primary'];
 
+/**
+ * SOC 2 evidence window — same 90 days as `tool_audit_events` (sweptTables.ts). Claims
+ * cite those events; trust-history and run-principal rows are the matching audit trail
+ * for a run, so they share the window rather than inventing a third.
+ */
+export const AUDIT_RETENTION_DAYS = 90;
+
+/** Opens the 1238/0018 DELETE gate for the rest of this statement (SET LOCAL equivalent). */
+const retentionGate = sql`set_config('app.retention', 'on', true) = 'on'`;
+
 interface BoundedEntry {
   relation: string;
   connections: readonly SweptConnection[];
@@ -77,6 +95,12 @@ interface BoundedEntry {
   days: number;
   floor?: number;
   reclaimable?: boolean;
+  /**
+   * BEFORE DELETE on this table rejects unless `app.retention = 'on'`. AND the gate
+   * into the delete itself — neon-http has no session, so a prior `SET LOCAL` would
+   * not apply to a later round-trip.
+   */
+  gated?: boolean;
   rationale: string;
 }
 
@@ -89,9 +113,10 @@ function entry(o: BoundedEntry): SweptTable {
     ...(o.reclaimable === false ? { reclaimable: false } : {}),
     rationale: o.rationale,
     purge: (db, cutoff) => {
-      const predicate = o.expired
+      const aged = o.expired
         ? o.expired(cutoff)
         : and(lt(o.column!, cutoff), o.only?.(cutoff))!;
+      const predicate = o.gated ? and(aged, retentionGate)! : aged;
       return boundedDelete(db, o.table, o.tenanted ? acrossTenants(o.tenanted, 'scheduled_sweep', predicate) : predicate);
     },
   };
@@ -99,6 +124,19 @@ function entry(o: BoundedEntry): SweptTable {
 
 /** Append-only telemetry and event feeds that had no window at all. */
 export const BOUNDED_TELEMETRY_TABLES: readonly SweptTable[] = [
+  // ── Immutable audit (DELETE only when SET LOCAL app.retention = 'on') ──
+  // 90 days = tool_audit_events SOC 2 window. Claims cite those events (RESTRICT);
+  // purging claims (CASCADE evidence) unblocks the trail. UPDATE stays forbidden.
+  entry({ relation: 'execution_claims', connections: BOTH, table: executionClaims, tenanted: executionClaims, column: executionClaims.createdAt, days: AUDIT_RETENTION_DAYS, reclaimable: false, gated: true,
+    rationale: 'SOC 2 execution claims. 90-day window matches tool_audit_events; evidence CASCADE. BEFORE DELETE honours app.retention=on.' }),
+  entry({ relation: 'execution_claim_evidence', connections: BOTH, table: executionClaimEvidence, tenanted: executionClaimEvidence, column: executionClaimEvidence.createdAt, days: AUDIT_RETENTION_DAYS, reclaimable: false, gated: true,
+    rationale: 'Citations from claims to tool_audit_events (ON DELETE RESTRICT). Same 90-day window; must drain before the trail can be purged.' }),
+  entry({ relation: 'agent_context_contributions', connections: CORE, table: agentContextContributions, tenanted: agentContextContributions, column: agentContextContributions.createdAt, days: AUDIT_RETENTION_DAYS, reclaimable: false, gated: true,
+    rationale: 'Per-run context-contribution trust history. 90-day audit window; DELETE gated on app.retention.' }),
+  entry({ relation: 'agent_outbound_inspections', connections: CORE, table: agentOutboundInspections, tenanted: agentOutboundInspections, column: agentOutboundInspections.createdAt, days: AUDIT_RETENTION_DAYS, reclaimable: false, gated: true,
+    rationale: 'Per-run outbound inspection trust history. 90-day audit window; DELETE gated on app.retention.' }),
+  entry({ relation: 'agent_run_principals', connections: CORE, table: agentRunPrincipals, tenanted: agentRunPrincipals, column: agentRunPrincipals.createdAt, days: AUDIT_RETENTION_DAYS, reclaimable: false, gated: true,
+    rationale: 'Per-run machine principals. 90-day window; capability grants CASCADE. Grants DELETE trigger honours app.retention so the cascade can fire.' }),
   entry({ relation: 'telemetry_spans', connections: CORE, table: telemetrySpans, tenanted: telemetrySpans, column: telemetrySpans.createdAt, days: 30, floor: 7,
     rationale: 'OTel workflow spans forwarded from agents; read while debugging a recent run.' }),
   entry({ relation: 'connector_call_logs', connections: CORE, table: connectorCallLogs, tenanted: connectorCallLogs, column: connectorCallLogs.createdAt, days: 90, floor: 14,
@@ -165,7 +203,7 @@ export const EXPIRED_CREDENTIAL_TABLES: readonly SweptTable[] = [
     rationale: 'Device-code grants (CLI / VS Code sign-in); the issued key is encrypted on the row, so leaving expired ones is also a hygiene gap.' }),
   // execution_limits has no expiry of its own and is keyed by execution, not principal: a row
   // is dead once its run has no live principal. Order-independent — it tests the principal's
-  // expiry, not its existence — so it works whether or not the principal is already gone.
+  // expiry, not its existence — so it still works now that principals themselves are swept.
   entry({ relation: 'execution_limits', connections: CORE, table: executionLimits, tenanted: executionLimits, days: EXPIRED_GRACE_DAYS + 30, reclaimable: false,
     expired: (cutoff) => and(
       lt(executionLimits.createdAt, cutoff),

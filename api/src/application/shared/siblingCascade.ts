@@ -3,6 +3,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import {
   agentHosts,
   executionClaimEvidence,
+  executionClaims,
   executions,
   projectSites,
   runContextState,
@@ -29,12 +30,20 @@ import { runTelemetryDatabase } from './runTelemetryDatabase';
  * a parent without its children. When a sibling is not split out, the core keys have
  * already cascaded and these statements find nothing.
  *
- * TWO DELIBERATE EXCEPTIONS, both on the telemetry side:
- *   • `execution_claims` / `execution_claim_evidence` are immutable by trigger and are
- *     never deleted here — a claim is history about a run, not data about a tenant.
- *   • a `tool_audit_events` row that a claim cites is kept for the same reason (its key
- *     is ON DELETE RESTRICT). Everything else about the deleted parent goes.
+ * Tenant erasure deletes claims/evidence too (1238/0018: BEFORE DELETE honours
+ * `SET LOCAL app.retention = 'on'` in the same neon-http batch). That unblocks
+ * `tool_audit_events` (RESTRICT). Host/segment cascades still skip cited events —
+ * those claims belong to executions that are not being erased.
  */
+
+/** neon-http: SET LOCAL only lasts for this batch (one transaction). */
+async function withRetention(db: Db, statements: unknown[]): Promise<void> {
+  if (statements.length === 0) return;
+  await db.batch([
+    db.execute(sql`SET LOCAL app.retention = 'on'`),
+    ...statements,
+  ] as unknown as Parameters<Db['batch']>[0]);
+}
 
 /** Trail rows no claim cites — the only ones the cascade may delete. */
 const uncited = notExists(
@@ -64,20 +73,26 @@ export async function cascadeProjectDelete(core: Db, projectIds: readonly number
 export async function cascadeTenantDelete(core: Db, tenantId: number): Promise<void> {
   await appsDatabaseOf(core).delete(projectSites).where(eq(projectSites.tenantId, tenantId));
   const telemetry = runTelemetryDatabase(core);
-  await telemetry.delete(toolAuditEvents).where(and(eq(toolAuditEvents.tenantId, tenantId), uncited));
-  await telemetry.delete(toolAuditDaily).where(eq(toolAuditDaily.tenantId, tenantId));
-  await telemetry.delete(usageSnapshots).where(eq(usageSnapshots.tenantId, tenantId));
-  await telemetry.delete(runContextState).where(eq(runContextState.tenantId, tenantId));
+  // Claims first (CASCADE evidence), then the trail — RESTRICT no longer blocks.
+  await withRetention(telemetry, [
+    telemetry.delete(executionClaims).where(eq(executionClaims.tenantId, tenantId)),
+    telemetry.delete(toolAuditEvents).where(eq(toolAuditEvents.tenantId, tenantId)),
+    telemetry.delete(toolAuditDaily).where(eq(toolAuditDaily.tenantId, tenantId)),
+    telemetry.delete(usageSnapshots).where(eq(usageSnapshots.tenantId, tenantId)),
+    telemetry.delete(runContextState).where(eq(runContextState.tenantId, tenantId)),
+  ]);
   await telemetry.update(runModelOutcomes).set({ tenantId: null, projectId: null }).where(eq(runModelOutcomes.tenantId, tenantId));
 }
 
 /** After an agent host is deleted: the telemetry it posted goes with it. */
 export async function cascadeAgentHostDelete(core: Db, tenantId: number, agentHostId: number): Promise<void> {
   const telemetry = runTelemetryDatabase(core);
-  await telemetry.delete(toolAuditEvents)
-    .where(and(eq(toolAuditEvents.tenantId, tenantId), eq(toolAuditEvents.agentHostId, agentHostId), uncited));
-  await telemetry.delete(usageSnapshots)
-    .where(and(eq(usageSnapshots.tenantId, tenantId), eq(usageSnapshots.agentHostId, agentHostId)));
+  await withRetention(telemetry, [
+    telemetry.delete(toolAuditEvents)
+      .where(and(eq(toolAuditEvents.tenantId, tenantId), eq(toolAuditEvents.agentHostId, agentHostId), uncited)),
+    telemetry.delete(usageSnapshots)
+      .where(and(eq(usageSnapshots.tenantId, tenantId), eq(usageSnapshots.agentHostId, agentHostId))),
+  ]);
 }
 
 /** What a segment owns on the telemetry side, captured BEFORE the segment's core rows
@@ -108,20 +123,27 @@ export async function collectSegmentTelemetryKeys(core: Db, tenantId: number, se
 export async function cascadeSegmentDelete(core: Db, keys: SegmentTelemetryKeys): Promise<void> {
   const telemetry = runTelemetryDatabase(core);
   const { tenantId, segmentId } = keys;
-  await telemetry.delete(toolAuditEvents)
-    .where(and(eq(toolAuditEvents.tenantId, tenantId), eq(toolAuditEvents.segmentId, segmentId), uncited));
-  await telemetry.delete(usageSnapshots)
-    .where(and(eq(usageSnapshots.tenantId, tenantId), eq(usageSnapshots.segmentId, segmentId)));
+  const statements: unknown[] = [
+    telemetry.delete(toolAuditEvents)
+      .where(and(eq(toolAuditEvents.tenantId, tenantId), eq(toolAuditEvents.segmentId, segmentId), uncited)),
+    telemetry.delete(usageSnapshots)
+      .where(and(eq(usageSnapshots.tenantId, tenantId), eq(usageSnapshots.segmentId, segmentId))),
+  ];
   for (const ids of chunks(keys.executionIds)) {
-    await telemetry.delete(toolAuditEvents)
-      .where(and(eq(toolAuditEvents.tenantId, tenantId), inArray(toolAuditEvents.executionId, ids), uncited));
-    await telemetry.delete(usageSnapshots)
-      .where(and(eq(usageSnapshots.tenantId, tenantId), inArray(usageSnapshots.executionId, ids)));
+    statements.push(
+      telemetry.delete(toolAuditEvents)
+        .where(and(eq(toolAuditEvents.tenantId, tenantId), inArray(toolAuditEvents.executionId, ids), uncited)),
+      telemetry.delete(usageSnapshots)
+        .where(and(eq(usageSnapshots.tenantId, tenantId), inArray(usageSnapshots.executionId, ids))),
+    );
   }
   for (const ids of chunks(keys.agentHostIds)) {
-    await telemetry.delete(toolAuditEvents)
-      .where(and(eq(toolAuditEvents.tenantId, tenantId), inArray(toolAuditEvents.agentHostId, ids), uncited));
-    await telemetry.delete(usageSnapshots)
-      .where(and(eq(usageSnapshots.tenantId, tenantId), inArray(usageSnapshots.agentHostId, ids)));
+    statements.push(
+      telemetry.delete(toolAuditEvents)
+        .where(and(eq(toolAuditEvents.tenantId, tenantId), inArray(toolAuditEvents.agentHostId, ids), uncited)),
+      telemetry.delete(usageSnapshots)
+        .where(and(eq(usageSnapshots.tenantId, tenantId), inArray(usageSnapshots.agentHostId, ids))),
+    );
   }
+  await withRetention(telemetry, statements);
 }
