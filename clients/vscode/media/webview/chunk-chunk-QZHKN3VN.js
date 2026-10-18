@@ -1,1 +1,1 @@
-import{_ as s}from"./chunk-mermaid.core.js";var t,e=(t=class{constructor(i){this.init=i,this.records=this.init()}reset(){this.records=this.init()}},s(t,"ImperativeState"),t);export{e as I};
+import{_ as i}from"./chunk-mermaid.core.js";var r=class{constructor(t){this.init=t,this.records=this.init()}static{i(this,"ImperativeState")}reset(){this.records=this.init()}};export{r as I};

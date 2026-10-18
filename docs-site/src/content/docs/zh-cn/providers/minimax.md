@@ -2,7 +2,7 @@
 read_when:
   - 你想在 BuilderForce Agents 中使用 MiniMax 模型
   - 你需要 MiniMax 设置指南
-summary: 在 BuilderForce Agents 中使用 MiniMax M2.1
+summary: 在 BuilderForce Agents 中使用 MiniMax M3 与 MiniMax-M3.1-Flash-Preview
 title: MiniMax
 x-i18n:
   generated_at: "2026-02-03T10:08:52Z"
@@ -15,26 +15,22 @@ x-i18n:
 
 # MiniMax
 
-MiniMax 是一家构建 **M2/M2.1** 模型系列的 AI 公司。当前面向编程的版本是 **MiniMax M2.1**（2025 年 12 月 23 日），专为现实世界的复杂任务而构建。
+MiniMax 是一家构建 **M2/M3** 模型系列的 AI 公司。当前面向编程的版本是 **MiniMax-M3.1-Flash-Preview**（智能体推理、工具调用、编程与结构化任务执行；100 万上下文、可调思考深度）以及 **MiniMax-M3**（前沿多模态编程，约 100+ tps，100 万上下文）。
 
-来源：[MiniMax M2.1 发布说明](https://www.minimax.io/news/minimax-m21)
+## 模型概述
 
-## 模型概述（M2.1）
+| 模型 | 上下文 | 说明 |
+| --- | --- | --- |
+| **MiniMax-M3.1-Flash-Preview** | 1,000,000 | 智能体推理、工具调用、编程、结构化任务执行；可调思考深度。默认智能体旗舰。 |
+| **MiniMax-M3** | 1,000,000 | 前沿多模态编程（约 100+ tps）。默认对话 / API Key 模型。 |
+| **MiniMax-M2.7** | 204,800 | 递归自我改进（约 60 tps）。 |
+| **MiniMax-M2.7-highspeed** | 204,800 | 与 M2.7 同等质量，更快（约 100 tps）。 |
+| **MiniMax-M2.5** | 204,800 | 上一代；API 上仍可用。 |
 
-MiniMax 强调 M2.1 的以下改进：
+## MiniMax-M2.7 vs MiniMax-M2.7-highspeed
 
-- 更强的**多语言编程**能力（Rust、Java、Go、C++、Kotlin、Objective-C、TS/JS）。
-- 更好的 **Web/应用开发**和美观输出质量（包括原生移动端）。
-- 改进的**复合指令**处理，适用于办公风格的工作流程，基于交错思考和集成约束执行。
-- **更简洁的响应**，更低的 token 使用量和更快的迭代循环。
-- 更强的**工具/智能体框架**兼容性和上下文管理（Claude Code、Droid/Factory AI、Cline、Kilo Code、Roo Code、BlackBox）。
-- 更高质量的**对话和技术写作**输出。
-
-## MiniMax M2.1 vs MiniMax M2.1 Lightning
-
-- **速度：** Lightning 是 MiniMax 定价文档中的"快速"变体。
-- **成本：** 定价显示相同的输入成本，但 Lightning 的输出成本更高。
-- **编程计划路由：** Lightning 后端在 MiniMax 编程计划中不能直接使用。MiniMax 自动将大多数请求路由到 Lightning，但在流量高峰期会回退到常规 M2.1 后端。
+- **速度：** highspeed 是更快的 M2.7 变体（约 100 tps vs 约 60 tps）。
+- **质量：** MiniMax 文档称性能相同，highspeed 更敏捷。
 
 ## 选择设置方式
 
@@ -57,7 +53,7 @@ builderforce onboard --auth-choice minimax-portal
 
 详情参见 [MiniMax OAuth 插件 README](https://github.com/SeanHogg/Builderforce.ai/tree/main/extensions/minimax-portal-auth)。
 
-### MiniMax M2.1（API 密钥）
+### MiniMax M3（API 密钥）
 
 **适用于：** 使用 Anthropic 兼容 API 的托管 MiniMax。
 
@@ -65,12 +61,12 @@ builderforce onboard --auth-choice minimax-portal
 
 - 运行 `builderforce configure`
 - 选择 **Model/auth**
-- 选择 **MiniMax M2.1**
+- 选择 **MiniMax M3**
 
 ```json5
 {
   env: { MINIMAX_API_KEY: "sk-..." },
-  agents: { defaults: { model: { primary: "minimax/MiniMax-M2.1" } } },
+  agents: { defaults: { model: { primary: "minimax/MiniMax-M3" } } },
   models: {
     mode: "merge",
     providers: {
@@ -80,12 +76,21 @@ builderforce onboard --auth-choice minimax-portal
         api: "anthropic-messages",
         models: [
           {
-            id: "MiniMax-M2.1",
-            name: "MiniMax M2.1",
-            reasoning: false,
-            input: ["text"],
+            id: "MiniMax-M3.1-Flash-Preview",
+            name: "MiniMax M3.1 Flash Preview",
+            reasoning: true,
+            input: ["text", "image"],
             cost: { input: 15, output: 60, cacheRead: 2, cacheWrite: 10 },
-            contextWindow: 200000,
+            contextWindow: 1000000,
+            maxTokens: 8192,
+          },
+          {
+            id: "MiniMax-M3",
+            name: "MiniMax M3",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: { input: 15, output: 60, cacheRead: 2, cacheWrite: 10 },
+            contextWindow: 1000000,
             maxTokens: 8192,
           },
         ],
@@ -95,9 +100,9 @@ builderforce onboard --auth-choice minimax-portal
 }
 ```
 
-### MiniMax M2.1 作为备用（Opus 为主）
+### MiniMax M3 作为备用（Opus 为主）
 
-**适用于：** 保持 Opus 4.5 为主模型，故障时切换到 MiniMax M2.1。
+**适用于：** 保持 Opus 4.6 为主模型，故障时切换到 MiniMax M3。
 
 ```json5
 {
@@ -105,12 +110,12 @@ builderforce onboard --auth-choice minimax-portal
   agents: {
     defaults: {
       models: {
-        "anthropic/claude-opus-4-5": { alias: "opus" },
-        "minimax/MiniMax-M2.1": { alias: "minimax" },
+        "anthropic/claude-opus-4-6": { alias: "opus" },
+        "minimax/MiniMax-M3": { alias: "minimax" },
       },
       model: {
-        primary: "anthropic/claude-opus-4-5",
-        fallbacks: ["minimax/MiniMax-M2.1"],
+        primary: "anthropic/claude-opus-4-6",
+        fallbacks: ["minimax/MiniMax-M3"],
       },
     },
   },
@@ -162,7 +167,7 @@ builderforce onboard --auth-choice minimax-portal
 
 1. 运行 `builderforce configure`。
 2. 选择 **Model/auth**。
-3. 选择 **MiniMax M2.1**。
+3. 选择 **MiniMax M3**。
 4. 在提示时选择你的默认模型。
 
 ## 配置选项
@@ -181,23 +186,26 @@ builderforce onboard --auth-choice minimax-portal
 - 如果需要精确的成本跟踪，请更新 `models.json` 中的定价值。
 - MiniMax 编程计划推荐链接（9 折优惠）：https://platform.minimax.io/subscribe/coding-plan?code=DbXJTRClnb&source=link
 - 参见 [/concepts/model-providers](/concepts/model-providers) 了解提供商规则。
-- 使用 `builderforce models list` 和 `builderforce models set minimax/MiniMax-M2.1` 切换模型。
+- 使用 `builderforce models list` 和 `builderforce models set minimax/MiniMax-M3` 切换模型。
 
 ## 故障排除
 
-### "Unknown model: minimax/MiniMax-M2.1"
+### "Unknown model: minimax/MiniMax-M3"
 
 这通常意味着 **MiniMax 提供商未配置**（没有提供商条目，也没有找到 MiniMax 认证配置文件/环境变量密钥）。此检测的修复在 **2026.1.12** 中（撰写本文时尚未发布）。修复方法：
 
 - 升级到 **2026.1.12**（或从源码 `main` 分支运行），然后重启 Gateway 网关。
-- 运行 `builderforce configure` 并选择 **MiniMax M2.1**，或
+- 运行 `builderforce configure` 并选择 **MiniMax M3**，或
 - 手动添加 `models.providers.minimax` 块，或
 - 设置 `MINIMAX_API_KEY`（或 MiniMax 认证配置文件）以便注入提供商。
 
 确保模型 id **区分大小写**：
 
-- `minimax/MiniMax-M2.1`
-- `minimax/MiniMax-M2.1-lightning`
+- `minimax/MiniMax-M3.1-Flash-Preview`
+- `minimax/MiniMax-M3`
+- `minimax/MiniMax-M2.7`
+- `minimax/MiniMax-M2.7-highspeed`
+- `minimax/MiniMax-M2.5`
 
 然后重新检查：
 

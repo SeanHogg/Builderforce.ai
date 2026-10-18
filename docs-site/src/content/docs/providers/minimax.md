@@ -1,5 +1,5 @@
 ---
-summary: "Use MiniMax M2.1 in BuilderForce Agents"
+summary: "Use MiniMax M3 and MiniMax-M3.1-Flash-Preview in BuilderForce Agents"
 read_when:
   - You want MiniMax models in BuilderForce Agents
   - You need MiniMax setup guidance
@@ -8,32 +8,25 @@ title: "MiniMax"
 
 # MiniMax
 
-MiniMax is an AI company that builds the **M2/M2.1** model family. The current
-coding-focused release is **MiniMax M2.1** (December 23, 2025), built for
-real-world complex tasks.
+MiniMax is an AI company that builds the **M2/M3** model family. The current
+coding-focused releases are **MiniMax-M3.1-Flash-Preview** (agentic reasoning,
+tool use, coding, and structured task execution; 1M context, tunable thinking
+depth) and **MiniMax-M3** (frontier multimodal coding, ~100+ tps, 1M context).
 
-Source: [MiniMax M2.1 release note](https://www.minimax.io/news/minimax-m21)
+## Model overview
 
-## Model overview (M2.1)
+| Model | Context | Notes |
+| --- | --- | --- |
+| **MiniMax-M3.1-Flash-Preview** | 1,000,000 | Agentic reasoning, tool use, coding, structured task execution; tunable thinking depth. Default agentic flagship. |
+| **MiniMax-M3** | 1,000,000 | Frontier multimodal coding (~100+ tps). Default chat / API-key model. |
+| **MiniMax-M2.7** | 204,800 | Recursive self-improvement (~60 tps). |
+| **MiniMax-M2.7-highspeed** | 204,800 | Same quality as M2.7, faster (~100 tps). |
+| **MiniMax-M2.5** | 204,800 | Previous generation; still live on the API. |
 
-MiniMax highlights these improvements in M2.1:
+## MiniMax-M2.7 vs MiniMax-M2.7-highspeed
 
-- Stronger **multi-language coding** (Rust, Java, Go, C++, Kotlin, Objective-C, TS/JS).
-- Better **web/app development** and aesthetic output quality (including native mobile).
-- Improved **composite instruction** handling for office-style workflows, building on
-  interleaved thinking and integrated constraint execution.
-- **More concise responses** with lower token usage and faster iteration loops.
-- Stronger **tool/agent framework** compatibility and context management (Claude Code,
-  Droid/Factory AI, Cline, Kilo Code, Roo Code, BlackBox).
-- Higher-quality **dialogue and technical writing** outputs.
-
-## MiniMax M2.1 vs MiniMax M2.1 Lightning
-
-- **Speed:** Lightning is the “fast” variant in MiniMax’s pricing docs.
-- **Cost:** Pricing shows the same input cost, but Lightning has higher output cost.
-- **Coding plan routing:** The Lightning back-end isn’t directly available on the MiniMax
-  coding plan. MiniMax auto-routes most requests to Lightning, but falls back to the
-  regular M2.1 back-end during traffic spikes.
+- **Speed:** highspeed is the faster M2.7 variant (~100 tps vs ~60 tps).
+- **Quality:** MiniMax documents the same performance, with highspeed being more agile.
 
 ## Choose a setup
 
@@ -56,7 +49,7 @@ You will be prompted to select an endpoint:
 
 See [MiniMax OAuth plugin README](https://github.com/SeanHogg/Builderforce.ai/tree/main/extensions/minimax-portal-auth) for details.
 
-### MiniMax M2.1 (API key)
+### MiniMax M3 (API key)
 
 **Best for:** hosted MiniMax with Anthropic-compatible API.
 
@@ -64,12 +57,12 @@ Configure via CLI:
 
 - Run `builderforce configure`
 - Select **Model/auth**
-- Choose **MiniMax M2.1**
+- Choose **MiniMax M3**
 
 ```json5
 {
   env: { MINIMAX_API_KEY: "sk-..." },
-  agents: { defaults: { model: { primary: "minimax/MiniMax-M2.1" } } },
+  agents: { defaults: { model: { primary: "minimax/MiniMax-M3" } } },
   models: {
     mode: "merge",
     providers: {
@@ -79,12 +72,21 @@ Configure via CLI:
         api: "anthropic-messages",
         models: [
           {
-            id: "MiniMax-M2.1",
-            name: "MiniMax M2.1",
-            reasoning: false,
-            input: ["text"],
+            id: "MiniMax-M3.1-Flash-Preview",
+            name: "MiniMax M3.1 Flash Preview",
+            reasoning: true,
+            input: ["text", "image"],
             cost: { input: 15, output: 60, cacheRead: 2, cacheWrite: 10 },
-            contextWindow: 200000,
+            contextWindow: 1000000,
+            maxTokens: 8192,
+          },
+          {
+            id: "MiniMax-M3",
+            name: "MiniMax M3",
+            reasoning: true,
+            input: ["text", "image"],
+            cost: { input: 15, output: 60, cacheRead: 2, cacheWrite: 10 },
+            contextWindow: 1000000,
             maxTokens: 8192,
           },
         ],
@@ -94,9 +96,9 @@ Configure via CLI:
 }
 ```
 
-### MiniMax M2.1 as fallback (Opus primary)
+### MiniMax M3 as fallback (Opus primary)
 
-**Best for:** keep Opus 4.6 as primary, fail over to MiniMax M2.1.
+**Best for:** keep Opus 4.6 as primary, fail over to MiniMax M3.
 
 ```json5
 {
@@ -105,11 +107,11 @@ Configure via CLI:
     defaults: {
       models: {
         "anthropic/claude-opus-4-6": { alias: "opus" },
-        "minimax/MiniMax-M2.1": { alias: "minimax" },
+        "minimax/MiniMax-M3": { alias: "minimax" },
       },
       model: {
         primary: "anthropic/claude-opus-4-6",
-        fallbacks: ["minimax/MiniMax-M2.1"],
+        fallbacks: ["minimax/MiniMax-M3"],
       },
     },
   },
@@ -162,7 +164,7 @@ Use the interactive config wizard to set MiniMax without editing JSON:
 
 1. Run `builderforce configure`.
 2. Select **Model/auth**.
-3. Choose **MiniMax M2.1**.
+3. Choose **MiniMax M3**.
 4. Pick your default model when prompted.
 
 ## Configuration options
@@ -181,25 +183,28 @@ Use the interactive config wizard to set MiniMax without editing JSON:
 - Update pricing values in `models.json` if you need exact cost tracking.
 - Referral link for MiniMax Coding Plan (10% off): [https://platform.minimax.io/subscribe/coding-plan?code=DbXJTRClnb&source=link](https://platform.minimax.io/subscribe/coding-plan?code=DbXJTRClnb&source=link)
 - See [/concepts/model-providers](/concepts/model-providers) for provider rules.
-- Use `builderforce models list` and `builderforce models set minimax/MiniMax-M2.1` to switch.
+- Use `builderforce models list` and `builderforce models set minimax/MiniMax-M3` to switch.
 
 ## Troubleshooting
 
-### “Unknown model: minimax/MiniMax-M2.1”
+### “Unknown model: minimax/MiniMax-M3”
 
 This usually means the **MiniMax provider isn’t configured** (no provider entry
 and no MiniMax auth profile/env key found). A fix for this detection is in
 **2026.1.12** (unreleased at the time of writing). Fix by:
 
 - Upgrading to **2026.1.12** (or run from source `main`), then restarting the gateway.
-- Running `builderforce configure` and selecting **MiniMax M2.1**, or
+- Running `builderforce configure` and selecting **MiniMax M3**, or
 - Adding the `models.providers.minimax` block manually, or
 - Setting `MINIMAX_API_KEY` (or a MiniMax auth profile) so the provider can be injected.
 
 Make sure the model id is **case‑sensitive**:
 
-- `minimax/MiniMax-M2.1`
-- `minimax/MiniMax-M2.1-lightning`
+- `minimax/MiniMax-M3.1-Flash-Preview`
+- `minimax/MiniMax-M3`
+- `minimax/MiniMax-M2.7`
+- `minimax/MiniMax-M2.7-highspeed`
+- `minimax/MiniMax-M2.5`
 
 Then recheck with:
 
