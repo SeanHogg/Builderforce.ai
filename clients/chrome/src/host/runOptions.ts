@@ -10,8 +10,11 @@
  */
 import {
   buildComposerDirectives,
+  composeEvermindHooks,
   effortProfile,
   isChatMode,
+  loadOnDeviceAnswerStore,
+  onDeviceMemoryHooks,
   projectMemoryHooks,
   reasoningForRun,
   type ChatMode,
@@ -54,7 +57,15 @@ export function createRunOptions(deps: RunOptionsDeps): (chatId: number) => Prom
     const memoryOn = chat?.memoryEnabled ?? true;
     const evermind =
       memoryOn && projectId !== null && memoryAvailable(deps.signedIn(), projectId)
-        ? projectMemoryHooks(projectId, request, chat?.serverId ?? null, 'rovr')
+        ? composeEvermindHooks(
+            // On-device first, exactly as the web does: a near-identical question
+            // already answered in this browser costs no round trip. The loader returns
+            // null without WebGPU, so a device that cannot run it falls through to the
+            // server tier rather than failing the turn. Scoped to THIS project — the
+            // store is partitioned by scope, so another project's answer cannot replay.
+            onDeviceMemoryHooks(() => loadOnDeviceAnswerStore(projectId)),
+            projectMemoryHooks(projectId, request, chat?.serverId ?? null, 'rovr'),
+          )
         : undefined;
     const reasoning = reasoningForRun({ effort, thinking: chat?.thinking ?? false });
     return {
