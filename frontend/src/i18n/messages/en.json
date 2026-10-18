@@ -10791,7 +10791,7 @@
         "Anthropic": "Claude Pro/Max + Opus 4.5",
         "OpenAI": "GPT-4, GPT-5, o1",
         "Google": "Gemini 2.5 Pro/Flash",
-        "MiniMax": "MiniMax-M2.1",
+        "MiniMax": "MiniMax-M3 & M2.7",
         "xAI": "Grok 3 & 4",
         "Vercel AI Gateway": "Hundreds of models, 1 API key",
         "OpenRouter": "Unified API gateway",
