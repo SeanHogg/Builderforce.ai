@@ -1,49 +1,25 @@
 /**
- * The SHARED BRAIN's on-device answer memory — an SSM-embedding semantic cache that
- * answers a near-identical question WITHOUT a server in the path.
+ * The web app's on-device answer memory — a thin wrapper over the shared store loader.
  *
- * It differs from the cross-surface semantic response cache (the agent-runtime's
- * `SsmMemoryService.getCachedOrGenerate`, backed by the api's `/semantic-cache` index)
- * on purpose:
+ * The store itself moved to `@seanhogg/builderforce-brain-embedded`
+ * (`loadOnDeviceAnswerStore`): the SSM runtime and `SemanticCache` are host-agnostic, and
+ * keeping them here meant Rovr — which runs in Chrome with WebGPU — could not reach a
+ * tier it is perfectly able to run. This file remains only so existing web callers keep
+ * their import, and so the project scope is applied in exactly one place.
  *
- *   • **No L2.** This tier exists to answer without a server; a shared backend would put
- *     one back and would also duplicate the server-side Q&A cache the Brain already
- *     consults on the next tier down.
- *   • **A near-identity threshold** ({@link ON_DEVICE_ANSWER_THRESHOLD}) instead of a
- *     paraphrase-tolerant one — a memory answering a person is held to a stricter bar
- *     than one avoiding a bill.
- *
- * Gracefully optional: the embedder is an on-device WebGPU SSM, so when WebGPU (or the
- * tokenizer/model assets) are absent the memory is simply `null` and the Brain falls
- * through to its server tier — never an error. The heavy runtime is loaded via dynamic
- * `import()` so it stays out of the main bundle.
+ * PARTITIONED BY PROJECT. The previous builder was memoised under one global key, so a
+ * near-identical question asked in project B could replay an answer cached from project
+ * A within the same tab. The scope is now part of the loader's key, and each scope gets
+ * its own cache instance. A chat with no project yet falls back to a web-only partition
+ * that is shared with no project at all.
  */
 
-import type { SemanticCache } from '@seanhogg/builderforce-memory';
-import { hasWebGPU, ON_DEVICE_ANSWER_THRESHOLD } from '@seanhogg/builderforce-brain-embedded';
-import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
+import { loadOnDeviceAnswerStore, type OnDeviceAnswerStore } from '@seanhogg/builderforce-brain-embedded';
 
-const BRAIN_CACHE_KEY = 'semantic-response-cache:brain-on-device';
+/** The partition used when a web chat has no project yet — shared with no project. */
+const UNSCOPED = 'web:unscoped';
 
-/** Lazily build (once) the Brain's on-device answer memory; null when unavailable. */
-export function getOnDeviceAnswerMemory(): Promise<SemanticCache | null> {
-  return getOrSetClientCached(BRAIN_CACHE_KEY, buildOnDeviceAnswerMemory);
-}
-
-async function buildOnDeviceAnswerMemory(): Promise<SemanticCache | null> {
-  if (!hasWebGPU()) return null;
-  try {
-    const mod = await import('@seanhogg/builderforce-memory');
-    // Browser uses the global WebGPU/IndexedDB automatically; modelSize keeps the
-    // embedding model light. Asset/WebGPU failures throw → caught → null (no memory).
-    const runtime = await mod.SSM.create({ session: { modelSize: 'small' } });
-    return new mod.SemanticCache({
-      embed: (text: string) => runtime.embed(text),
-      threshold: ON_DEVICE_ANSWER_THRESHOLD,
-      ttlMs: 24 * 60 * 60 * 1_000,
-    });
-  } catch (err) {
-    console.warn('[semantic-cache] unavailable — on-device memory off:', err);
-    return null;
-  }
+/** The Brain's on-device answer memory for one project; null when unavailable. */
+export function getOnDeviceAnswerMemory(projectId?: number | null): Promise<OnDeviceAnswerStore | null> {
+  return loadOnDeviceAnswerStore(projectId == null ? UNSCOPED : projectId);
 }
