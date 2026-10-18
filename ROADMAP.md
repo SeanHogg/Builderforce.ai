@@ -287,11 +287,11 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **On-device models (PRD 34) have not yet answered a turn in a real browser.** What is proven:
   - `bfi`'s Q1_0 and f16-KV kernels match the CPU reference on a real GPU (native wgpu/Vulkan, `BFI_REQUIRE_GPU=1`);
   - `bfi-web` builds for wasm32;
-  - every host's page-engine wiring is unit-tested against fakes.
+  - every host's page-engine wiring is unit-tested against fakes;
+  - the on-device **answer store** is wired on the web Brain, the VSIX webview and Rovr, partitioned by project, and falls through to the server when WebGPU or the embedder is absent (2026-10-18, #5228 / #5238 / #5239 / #4908). That is not a model answering a turn.
 
   What has not happened: in Chrome or Edge with WebGPU, no one has downloaded a Bonsai GGUF or a WebLLM model from the picker and chatted on it in the VSIX webview, Rovr or builderforce.ai. That run would confirm the served context (`contextTokens` after load), the WebGPU out-of-memory retry, and tokens per second. *Blocker: a person-driven browser session with a WebGPU adapter. Nothing here can drive WebGPU headless.*
 - **Rovr cannot pin the BYO pool.** Its pin (`settings.pinnedModel`) is one model id, so choosing the "your keys" pool row in the `/` Model tab falls back to Auto (`clients/chrome/src/sidepanel/useRovrChatOptions.ts`). Fix = a typed pin (`{ kind: 'model' | 'pool' }`) read by `inference/route.ts`. Not blocked. Unblocks full Model-tab parity with the web and the editor.
-- **`answer_cache` is a dead table.** The live Q&A cache is `project_facts` (`qa:v2:` keys, `projectMemory.ts`); `answer_cache` (`schema/agents.ts`) has no writer. *Blocker: operator go-ahead to DROP a table.* Unblocks one cache table fewer to reason about.
 
 ### Brain chat `[agents]`
 

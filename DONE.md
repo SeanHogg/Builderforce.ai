@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-10-18 — On-device answer store wired on every host, partitioned by project
+
+- The shared Brain's on-device Q&A tier (`loadOnDeviceAnswerStore`) now answers from the user's machine on the web Brain, the VS Code webview and Rovr, scoped per project so one project's answer cannot replay in another. A missing WebGPU adapter or a failed embedder load falls through to the server; the failure is reported, not swallowed (`reportPageEngineFailure`, stage `load`). Commits `597012010`, `7128fe8af`, `dfa54b0ad`, `d6b2de8e6`, `302258e98`, `9f80944b8` (#5228, #5238, #5239, #4908, #5240).
+- This does **not** close the Evermind → LLM roadmap item. The Knowledge & Learning Pipeline (baseline → extract → review → retrain; abandoned #161 / #674 / #675) is still outstanding, and no on-device model has answered a turn in a real browser (PRD 34).
+
+## ✅ RESOLVED 2026-10-18 — Dropped the unused `answer_cache` table
+
+- Live Q&A cache is `project_facts` (`qa:v2:` keys). `answer_cache` had no writer; migration 1239 drops it (`ba92b46ac`).
+
 ## ✅ RESOLVED 2026-10-18 — Saving a chat turn hit the tenant rate limit (api 2026.10.58)
 
 - `POST /api/brain/chats/:id/messages` returned 429 from the app-wide per-tenant limiter, dropping the turn ("Could not save the turn"). `rateLimitMiddleware.ts` now has an `EXEMPT_ROUTES` data list (`isRateLimitExempt`); turn saves are neither counted nor blocked, while reads of the same path keep the limit. Covered in `rateLimitMiddleware.test.ts`.
