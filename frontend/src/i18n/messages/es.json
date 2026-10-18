@@ -11661,6 +11661,10 @@
       "your-app-talks-back": {
         "title": "Tu app ahora te responde: su consola, conexiones en vivo y una copia que puedes llevarte",
         "description": "La app que construyes en un lienzo de Builderforce ahora te muestra lo que registra, mantiene funcionando en la vista previa sus conexiones en vivo y sus inicios de sesión, vuelve sin reinstalar en tu próxima visita y se descarga como un proyecto que es tuyo."
+      },
+      "edits-land-while-you-watch": {
+        "title": "Los cambios llegan mientras miras: actualizaciones en caliente, hojas de estilo reales y los frameworks que ya usas",
+        "description": "La app que construyes en un lienzo de Builderforce ahora se actualiza en su sitio mientras editas, conservando lo que escribiste y dónde estabas. Compila Sass, SCSS y Less, aísla de verdad los CSS Modules, carga las hojas de estilo de tus paquetes y ejecuta servidores de desarrollo de Next.js y SvelteKit en el navegador."
       }
     }
   },

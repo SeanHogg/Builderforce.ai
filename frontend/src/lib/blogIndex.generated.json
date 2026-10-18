@@ -3,7 +3,7 @@
     "slug": "edits-land-while-you-watch",
     "title": "Edits land while you watch — hot updates, real stylesheets and the frameworks you already use",
     "date": "2026-10-18",
-    "description": "The app you build on a Builderforce canvas now updates in place as you edit, keeping what you typed and where you scrolled. It compiles Sass, SCSS and Less, scopes CSS Modules for real, loads the stylesheets your packages ship, and runs a Next.js dev server in the browser.",
+    "description": "The app you build on a Builderforce canvas now updates in place as you edit, keeping what you typed and where you scrolled. It compiles Sass, SCSS and Less, scopes CSS Modules for real, loads the stylesheets your packages ship, and runs Next.js and SvelteKit dev servers in the browser.",
     "tags": [
       "creation-canvas",
       "app-development",

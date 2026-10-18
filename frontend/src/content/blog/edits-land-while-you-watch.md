@@ -1,7 +1,7 @@
 ---
 title: Edits land while you watch — hot updates, real stylesheets and the frameworks you already use
 date: 2026-10-18
-description: The app you build on a Builderforce canvas now updates in place as you edit, keeping what you typed and where you scrolled. It compiles Sass, SCSS and Less, scopes CSS Modules for real, loads the stylesheets your packages ship, and runs a Next.js dev server in the browser.
+description: The app you build on a Builderforce canvas now updates in place as you edit, keeping what you typed and where you scrolled. It compiles Sass, SCSS and Less, scopes CSS Modules for real, loads the stylesheets your packages ship, and runs Next.js and SvelteKit dev servers in the browser.
 tags: [creation-canvas, app-development, preview, runtime, product]
 author: Sean Hogg
 ---
@@ -56,7 +56,7 @@ This release closes both gaps.
 
 ## Next.js in the browser
 
-A Next.js project now runs its own dev server, `next dev`, inside the browser tab, the same way an Express or Vite app already did. The page you open is rendered by Next itself, from your `app/` directory, with nothing of ours in between.
+A Next.js project now runs its own dev server, `next dev`, inside the browser tab, the same way an Express or Vite app already did. The page you open is rendered by Next itself, from your `app/` directory, with nothing of ours in between. SvelteKit projects run the same way: `vite dev` starts real Vite, and SvelteKit renders the page on its own server.
 
 To make that work, the runtime underneath gained the parts of Node a framework like Next quietly relies on. Processes can now message each other (`child_process.fork` and `worker_threads`), dynamic imports load the project's own files, and Next's WebAssembly compiler loads where its native one can't. Most of those changes help other tools too.
 
@@ -71,7 +71,7 @@ Hot updates take the reload out of that trip, and keeping your place takes out t
 - **Restyle without losing your place:** open a modal, edit its CSS and watch it change.
 - **Bring your stylesheets as they are:** SCSS partials, Less, CSS Modules and your packages' own CSS.
 - **Edit a React component mid-flow** and keep the state you were testing with.
-- **Open a Next.js project** on a canvas and run it.
+- **Open a Next.js or SvelteKit project** on a canvas and run it.
 
 ---
 

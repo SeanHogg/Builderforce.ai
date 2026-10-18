@@ -11661,6 +11661,10 @@
       "your-app-talks-back": {
         "title": "Ihre App antwortet jetzt – ihre Konsole, Live-Verbindungen und eine Kopie zum Mitnehmen",
         "description": "Die App, die Sie auf einem Builderforce-Canvas bauen, zeigt Ihnen jetzt, was sie protokolliert, hält ihre Live-Verbindungen und Logins in der Vorschau am Laufen, kommt bei Ihrem nächsten Besuch ohne Neuinstallation zurück und lässt sich als Projekt herunterladen, das Ihnen gehört."
+      },
+      "edits-land-while-you-watch": {
+        "title": "Änderungen kommen an, während Sie zusehen – Hot Updates, echte Stylesheets und die Frameworks, die Sie schon nutzen",
+        "description": "Die App, die Sie auf einem Builderforce-Canvas bauen, aktualisiert sich jetzt beim Bearbeiten an Ort und Stelle und behält, was Sie eingegeben haben und wohin Sie gescrollt haben. Sie kompiliert Sass, SCSS und Less, kapselt CSS Modules wirklich, lädt die Stylesheets Ihrer Pakete und startet Next.js- und SvelteKit-Entwicklungsserver im Browser."
       }
     }
   },

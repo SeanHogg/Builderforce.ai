@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-10-18 — Edits land while you watch: hot updates, Sass/Less, real CSS Modules, package stylesheets, Next.js and SvelteKit dev servers (builderforce-webcontainers 2026.10.9 · frontend 2026.10.67 · api 2026.10.51)
+
+The top five runtime gaps from the parity review, closed in one release.
+- **Hot updates:** stylesheet edits swap in place; React components re-render keeping state through the official `react-refresh` runtime, with the module graph deciding what re-runs and when a reload is needed.
+- **Styles:** Sass/SCSS/Less in files, CSS Modules and component `<style lang>`, with imports resolved from the project, `node_modules`, then the package CDN; CSS Modules scoped for real (`composes`, `:global`, keyframes); package stylesheets imported from JS load in the preview. `buildSite` passes `createCdnStyleCompilers()` so the published site compiles the same way.
+- **Framework dev servers as real Node processes:** `next dev` serves Next.js (WebAssembly SWC chosen through `process.versions.webcontainer`, a user-directed exception to the own-names rule); `vite dev` serves SvelteKit on real Vite. Installs swap native-only tools for WebAssembly twins (`esbuild-wasm`, `@rollup/wasm-node`, napi-rs `-wasm32-wasi` siblings). Node-compat work behind it: binary-safe pipes, per-stream stdio inherit, `fs.read(0)`, children killed with their parent, real `ref`/`unref`, `vm` contexts as the code's global, top-level await of dynamic imports, Node's `pathToFileURL`, a default `Host` header, `fs.ReadStream`/`WriteStream` callable without `new` (graceful-fs), and a per-process global that code compiled with `new Function` shares.
+- **Not closed (runtime ROADMAP item 15):** Nuxt needs oxc-parser's threaded WASI build (SharedArrayBuffer, i.e. cross-origin isolation, which the runtime refuses to require); SvelteKit restarts once or twice after start on a misread watcher event, and a request landing mid-restart gets one 500.
+- Release note: migration 1235. Blog: `edits-land-while-you-watch` in five locales.
+
 ## ✅ RESOLVED 2026-10-17 — Neon load audit, second pass: the 17 open findings closed (api 2026.10.50 · frontend 2026.10.66 · agent-runtime 2026.10.9 · write-outbox 2026.10.2)
 
 Shipped across `5d9ad73`, `1fe80f5`, `f292306`, `80cc3f0`, `0853640` and this commit. Status per finding is on https://claude.ai/artifact/K3mA6TPM1rknr2zJq1qT3q.
