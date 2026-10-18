@@ -2477,22 +2477,31 @@ Closes gap-list rows G1 (acting in native apps), G2 (vault + takeover), G3 (rout
 - **Where:** NEW `api/src/application/brain/{agentDisplayNames,chatLinkedTickets,chatRunHistory}.ts` (+ `chatRunHistory.test.ts`), NEW `packages/brain-ui/src/chatTickets/chatDiagnosticsReads.ts`; `ChatTicketService.listAgents`, `addressedAgentRun.ts` (migrated onto the shared linked-ticket query), `builtinMcpService.ts`, `cloudAgentToolset.ts`, `brainRoutes.ts`; `brain-embedded/src/{chatMode,chatDiagnostics,gatherChatDiagnostics,brainRunStore,useBrainConversation,index}.ts`; `packages/brain-ui/src/chatTickets/{types,restAdapter,useChatParticipants}.ts`; `clients/vscode/webview/src/chat/VsCodeChatSurface.tsx`, `clients/vscode/src/builderforcePanel.ts`, `clients/vscode/l10n/*`; `frontend/src/components/brain/BrainPanel.tsx`, `frontend/src/lib/brain/{chatModes,index}.ts`.
 - **Verify:** Type-check clean across api, brain-embedded, brain-ui, clients/vscode and frontend (Sonnet pass; both package dists rebuilt — they are consumed through `dist`, and a stale one masks errors across the seam). Tests: `brain-embedded` chatMode / chatDiagnostics / gatherChatDiagnostics / selectTools, `api` chatRunHistory / addressedAgentRun / chatRunMilestones / builtinMcpService, `brain-ui` chatTickets, `clients/vscode` localToolsAdvertised. New coverage asserts the chat #103 configuration specifically: an IDE session WITH file tools AND a roster gets `DISPATCH TO THEM` and not `DO IT HERE WHEN YOU CAN`, while an unstaffed IDE chat keeps the original ordering. A live end-to-end re-test is tracked in the Gap Register.
 
+## ⚠️ CORRECTION 2026-10-18 — Advisor Platform roadmap is NOT shipped (retracts the 2026-09-22 entry below)
+
+- **What was wrong.** The entry below marked epic #2545 done and roadmap `69584c3f` shipped. A code review on 2026-10-18 found **2 of 6 acceptance criteria actually ship**. The epic's own board fields already said `codeDelivered: false`, `staleImplementation: true`, and its branch `builderforce/task-2545` has 0 commits ahead of main — the `done` came from two documentation subtasks, not delivery.
+- **Ships:** A0 (Talent `person` ↔ `booking_services` bind — `frontend/src/lib/freelance/booking.ts`, `freelancerRoutes.ts:156`, `frontend/src/lib/freelance/rankAdvisors.ts` with Free/price-0 scoring) and A2 (`one_to_many` capacity counting in `api/src/application/commerce/bookings.ts:52,151,275`). Kill conditions hold: `advisor` is absent from `MARKETPLACE_LISTING_KINDS`.
+- **Does not ship:** A1 (no reservation→meeting/calendar/restricted-Brain path; `kind: 'advisory'` → 0 matches in `api/src`), A3 (`course` kind exists at `marketplaceListings.ts:347` but nothing stage-tags it; `enrol` → 0 matches under `application/marketplace`), A4 (`pack` kind exists at `:314` but no per-`BUSINESS_STAGES` toolkit), A5 (`continue_with_advisor` → 0 matches repo-wide).
+- **Corrected on the board.** Epic #2545 reopened to `in_progress`. Gaps filed and linked to Brain chat #112: **#5233** (A1), **#5234** (A3), **#5235** (A4), **#5236** (A5), all under #2545, assigned to Ada. Spec `400b7152` stays `draft` and roadmap `69584c3f` stays `planned` — neither was ever flipped, so the "shipped" claim below was never true on the board either.
+
 ## ✅ RESOLVED 2026-09-22 — Advisor Platform roadmap shipped (PRD 26)
 
+> **Superseded — see the correction above. Do not treat this entry as current.**
+
 - **What:** Advisor Platform as marketplace composition — mentoring, workshops, Academy and templates on Talent + bookings + LMS, not a SCORE clone. The epics and child tasks have all been merged:
-  - Epic #2545 (Build Advisor platform as marketplace composition) - DONE
+  - Epic #2545 (Build Advisor platform as marketplace composition) - DONE *(reopened 2026-10-18 — see correction)*
   - Task #2527 (Advisor profiles + marketplace category) - merged as PR #844
   - Task #2532 (Public visitor booking + advisory meeting join) - merged as PR #845
   - Task #2538 (Meeting Notes listing + minutes→tasks + follow-up) - merged as PR #846
   - Task #2546 (PRD 26) - DONE
-  - Spec #400b7152 - complete
+  - Spec #400b7152 - complete *(incorrect — spec is still `draft`)*
 - **Why:** All P0/P1 child tickets merged; epic complete; roadmap ready to ship
-- **Where:** 
+- **Where:**
   - Specs: `docs/specs/26-prd-advisor-platform.md`, `docs/specs/26-implementation-notes-advisor-platform.md`
   - Task specs: `specs/tasks/task-2527.md`, `specs/tasks/task-2532.md`, `specs/tasks/task-2581.md`
 - **Verify:** All PRs merged to main (#844, #845, #846)
 
-- **Roadmap 69584c3f** - changed from "planned" → "shipped"
+- **Roadmap 69584c3f** - changed from "planned" → "shipped" *(never applied — roadmap is still `planned`)*
 
 ## ✅ RESOLVED 2026-09-21 — PRD 27: Staffed work, the coordination gate, and chat diagnostics as data
 
