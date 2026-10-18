@@ -226,13 +226,19 @@ export function workFiledNotStaffedVerdict(s: StaffingSummary): string {
  * Render the staffing picture as report lines (empty when the run neither filed nor
  * staffed anything — a plain question does not need a staffing paragraph).
  */
-export function formatStaffingSummary(s: StaffingSummary): string[] {
+export function formatStaffingSummary(s: StaffingSummary, opts?: { sessionShipped?: number }): string[] {
   if (s.verdict === 'no-work-filed' && s.dispatchAttempts === 0 && s.personaSubagents.length === 0) return [];
   const refused = s.dispatchRefusals.length
     ? ` (${s.dispatchRefusals.length} refused: ${formatDispatchRefusals(s.dispatchRefusals)})`
     : '';
-  const tail =
-    s.verdict === 'filed-not-staffed'
+  // A session that wrote and shipped the change is not an unstaffed ticket. Counting
+  // "0 dispatched" as "nobody is running it" is how a local editor run that committed
+  // the work was reported as stuck (chat #150).
+  const shipped = opts?.sessionShipped ?? 0;
+  const sessionDidIt = shipped > 0 && (s.verdict === 'filed-not-staffed' || s.verdict === 'staffing-refused');
+  const tail = sessionDidIt
+    ? ` — the session itself changed the code (${shipped} write/commit call(s) succeeded); a cloud dispatch was not required`
+    : s.verdict === 'filed-not-staffed'
       ? ' — the work was filed but nobody is running it'
       : s.verdict === 'staffing-refused'
         ? ' — every attempt to staff the work was refused, so nobody is running it'

@@ -1,3 +1,5 @@
+import type { SpendSavingsSummary } from './spendSavings';
+
 /**
  * chatDiagnostics — a pure serializer for the "Copy diagnostics" action.
  *
@@ -229,6 +231,11 @@ export interface ChatDiagnosticsData {
   tickets?: Array<{ kind: string; ref: string; label?: string; linkType?: string; status?: string }>;
   /** Plan, quota and model entitlement for the signed-in tenant (see the interface). */
   account?: ChatDiagnosticsAccount | null;
+  /**
+   * This chat's own dollar cost (`BrainChat.spend`). Plan meters above are quota
+   * counters and stay at 0 on an unlimited plan even when the chat spent money.
+   */
+  spend?: SpendSavingsSummary | null;
   /**
    * How many tools the model could actually call, and why not more. Without this
    * a tool-less Brain ("I don't have that data", zero tool calls) is
@@ -650,6 +657,29 @@ function fmtAdvertised(tools: NonNullable<ChatDiagnosticsData['tools']>): string
   return '';
 }
 
+function usd(n: number): string {
+  return String.fromCharCode(36) + n.toFixed(n >= 1 ? 2 : 4);
+}
+
+
+/** This chat's dollar rollup, or null when the host had none to pass. */
+export function formatChatSpend(spend: SpendSavingsSummary | null | undefined): string | null {
+  if (!spend?.spend) return null;
+  const s = spend.spend;
+  const saved = spend.saved;
+  const savedBit = saved && (saved.measuredUsd > 0 || saved.estimatedUsd > 0)
+    ? ` · saved ${usd(saved.measuredUsd)} measured / ${usd(saved.estimatedUsd)} estimated (${saved.tokensSaved.toLocaleString('en-US')} tok)`
+    : '';
+  const unpriced = s.unpricedTokens > 0
+    ? ` · ${s.unpricedTokens.toLocaleString('en-US')} tok unpriced`
+    : '';
+  return (
+    `- This chat's cost: platform ${usd(s.platformUsd)} · your key ${usd(s.yourKeyUsd)} · total ${usd(s.totalUsd)}`
+    + ` · ${s.promptTokens.toLocaleString('en-US')} prompt + ${s.completionTokens.toLocaleString('en-US')} completion tok`
+    + ` · ${s.requests} request(s)${unpriced}${savedBit}`
+  );
+}
+
 /**
  * Render the diagnostics block as Markdown lines (no trailing blank line). Every field
  * is best-effort: an absent value is shown as "unknown"/"none" rather than omitted, so
@@ -747,6 +777,9 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
   } else {
     lines.push('- Plan / usage: not gathered (account snapshot unavailable — signed out, or the consumption endpoint failed)');
   }
+
+  const spendLine = formatChatSpend(d.spend);
+  lines.push(spendLine ?? "- This chat's cost: not on this chat row (no spend rollup — dollars are not the plan meters above)");
 
   // Tool availability — the difference between "the model chose not to act" and
   // "the model COULD not act". A zero here explains any number of turns that end

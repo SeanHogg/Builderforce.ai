@@ -65,6 +65,7 @@ export function useCopyDiagnostics({
         surface: 'VS Code (VSIX)',
         chatId,
         chatTitle: activeChat?.title ?? null,
+        spend: activeChat?.spend ?? null,
         chatVisibility,
         // The mode the run actually bound to — it decides whether "planned it and
         // stopped" is correct behaviour or a failure.

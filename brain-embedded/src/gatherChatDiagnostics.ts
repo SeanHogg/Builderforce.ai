@@ -103,6 +103,8 @@ export interface ChatDiagnosticsSources {
   userId?: string | null;
   /** The transcript — read only for the newest assistant turn's learn outcome. */
   messages?: readonly ChatDiagnosticsMessageLike[];
+  /** This chat's dollar rollup (`BrainChat.spend`). Null when the server has none yet. */
+  spend?: import('./spendSavings').SpendSavingsSummary | null;
   /** The live tool registry the conversation runs on, and why it might be short. */
   tools?: { count: number; error?: string | null; loading?: boolean };
   /** The run's trace, so the report states the tools the model was ACTUALLY handed
@@ -253,6 +255,7 @@ export async function gatherChatDiagnostics(src: ChatDiagnosticsSources): Promis
     runs,
     tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
     account,
+    spend: src.spend ?? null,
     tools: src.tools
       ? {
           count: src.tools.count,

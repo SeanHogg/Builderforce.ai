@@ -645,6 +645,13 @@ export interface BrainDiagnostics {
    */
   staffing: StaffingSummary;
   /**
+   * Successful writes, commits and pushes this session made itself. A non-zero count
+   * means "0 dispatched" is not "nobody is running the work" — the session did it.
+   */
+  sessionShipped: number;
+  /** Evermind + project-facts usage recorded in the trace. See {@link memoryUsageInTrace}. */
+  memoryUsage: MemoryUsageSummary;
+  /**
    * Build/runtime failures the run's LAST diagnostics read still reported — the app the
    * run was working on was broken when it stopped looking. 0 when no read reported any,
    * or a later read came back clean. See {@link unresolvedAppFailuresInTrace}.
@@ -767,6 +774,84 @@ export interface BrainDiagnosticsContext {
    * broken.
    */
   running?: boolean;
+}
+
+/** What this run asked of BuilderForce memory, from the trace — not the project's inventory. */
+export interface MemoryUsageSummary {
+  /** Evermind recall steps, including a recorded miss (count 0). */
+  evermindRecalls: number;
+  /** Items those recalls returned. */
+  evermindItems: number;
+  /** Prompt tokens the injected recall block added, when the step recorded them. */
+  evermindPromptTokens: number;
+  learnSteps: number;
+  reconcileSteps: number;
+  /** `recall_facts` calls — the shared project-facts store. */
+  factsRead: number;
+  /** `remember_fact` calls. */
+  factsWritten: number;
+}
+
+const MEMORY_READ_TOOLS = new Set(['recall_facts', 'builtin_recall_facts']);
+const MEMORY_WRITE_TOOLS = new Set(['remember_fact', 'builtin_remember_fact']);
+
+export function memoryUsageInTrace(events: BrainTraceEvent[]): MemoryUsageSummary {
+  const out: MemoryUsageSummary = {
+    evermindRecalls: 0,
+    evermindItems: 0,
+    evermindPromptTokens: 0,
+    learnSteps: 0,
+    reconcileSteps: 0,
+    factsRead: 0,
+    factsWritten: 0,
+  };
+  for (const ev of events) {
+    if (ev.category === 'recall' && ev.label === 'evermind.recall') {
+      out.evermindRecalls += 1;
+      const result = ev.result;
+      if (result && typeof result === 'object') {
+        const count = (result as { count?: unknown }).count;
+        if (typeof count === 'number') out.evermindItems += count;
+        const tokens = (result as { blockTokens?: unknown }).blockTokens;
+        if (typeof tokens === 'number') out.evermindPromptTokens += tokens;
+      }
+    } else if (ev.category === 'learn') {
+      out.learnSteps += 1;
+    } else if (ev.category === 'reconcile') {
+      out.reconcileSteps += 1;
+    } else if (ev.category === 'tool' && !ev.isError && !isFailedToolResult(ev.result)) {
+      if (MEMORY_READ_TOOLS.has(ev.label)) out.factsRead += 1;
+      if (MEMORY_WRITE_TOOLS.has(ev.label)) out.factsWritten += 1;
+    }
+  }
+  return out;
+}
+
+export function formatMemoryUsage(m: MemoryUsageSummary): string {
+  const used = m.evermindRecalls + m.learnSteps + m.reconcileSteps + m.factsRead + m.factsWritten;
+  if (used === 0) {
+    return 'BuilderForce memory: none recorded in this run — no Evermind recall step, no learn/reconcile, no recall_facts/remember_fact. A recall the loop did not trace is indistinguishable from one that never ran.';
+  }
+  const tok = m.evermindPromptTokens > 0 ? `, ~${m.evermindPromptTokens.toLocaleString('en-US')} prompt tok` : '';
+  return (
+    `BuilderForce memory: Evermind recalls ${m.evermindRecalls} (${m.evermindItems} item(s)${tok})`
+    + ` · learn steps ${m.learnSteps} · reconcile ${m.reconcileSteps}`
+    + ` · project-fact reads ${m.factsRead} · project-fact writes ${m.factsWritten}`
+  );
+}
+
+/**
+ * Writes and publishes this session made itself. Ticket creates do not count: filing
+ * work and then not dispatching it is exactly the staffing gap. A successful edit,
+ * commit or push means the session did the work a cloud run would have done.
+ */
+export function sessionShippedInTrace(events: BrainTraceEvent[]): number {
+  let n = 0;
+  for (const ev of events) {
+    if (ev.category !== 'tool' || ev.isError || isFailedToolResult(ev.result)) continue;
+    if (isCodeChangeTool(ev.label) || ev.label === 'git_commit' || ev.label === 'git_push') n += 1;
+  }
+  return n;
 }
 
 export function computeBrainDiagnostics(
@@ -928,7 +1013,13 @@ export function computeBrainDiagnostics(
   const noProgress = progress.spinning || (progress.noEffect && !ctx.running);
   // Filed versus staffed — the outcome question no other signal here asks.
   const staffing = staffingSummaryInTrace(events);
-  const workFiledNotStaffed = staffing.verdict === 'filed-not-staffed' || staffing.verdict === 'staffing-refused';
+  const sessionShipped = sessionShippedInTrace(events);
+  const memoryUsage = memoryUsageInTrace(events);
+  // A session that wrote and shipped the change is not an unstaffed ticket. Filing
+  // tickets and then doing the work locally is the editor path, not a stuck board.
+  const workFiledNotStaffed =
+    sessionShipped === 0
+    && (staffing.verdict === 'filed-not-staffed' || staffing.verdict === 'staffing-refused');
   const unresolvedAppFailures = unresolvedAppFailuresInTrace(events);
   const healthy =
     errors.length === 0 && !loopExhausted && emptyOrLengthFinishes === 0 && !contextSignal
@@ -981,6 +1072,8 @@ export function computeBrainDiagnostics(
     progress,
     contextPressureOnly,
     staffing,
+    sessionShipped,
+    memoryUsage,
     unresolvedAppFailures,
     likelyCause,
   };
@@ -1088,7 +1181,8 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
   // Filed vs staffed. Sits beside progress because it answers the same class of question
   // — "did anything actually come of this?" — for the half progress cannot see: work that
   // was created perfectly and handed to nobody. See `staffingSummary.ts`.
-  lines.push(...(d.staffing ? formatStaffingSummary(d.staffing) : []));
+  if (d.memoryUsage) lines.push(formatMemoryUsage(d.memoryUsage));
+  lines.push(...(d.staffing ? formatStaffingSummary(d.staffing, { sessionShipped: d.sessionShipped }) : []));
   // WHICH steps failed. `Errors: 1` alone forced a reader to scroll the transcript
   // hunting for the failure; naming it is the difference between a number and a lead.
   if (d.errorSteps?.length) {

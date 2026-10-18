@@ -583,3 +583,36 @@ describe('app-errors-unresolved', () => {
     expect(d.unresolvedAppFailures).toBe(0);
   });
 });
+
+describe('memory usage and local shipping', () => {
+  it('names Evermind recall and project-fact tools, and does not count a memory answer as a recall', () => {
+    const d = computeBrainDiagnostics([
+      { ts: '', category: 'recall', label: 'evermind.recall', result: { count: 3, blockTokens: 120 } },
+      { ts: '', category: 'recall', label: 'memory.answer', result: { source: 'cache', skippedLlm: true } },
+      { ts: '', category: 'tool', label: 'recall_facts', result: { ok: true } },
+      { ts: '', category: 'tool', label: 'remember_fact', result: { ok: true } },
+      { ts: '', category: 'learn', label: 'evermind.learn' },
+    ]);
+    expect(d.memoryUsage.evermindRecalls).toBe(1);
+    expect(d.memoryUsage.evermindItems).toBe(3);
+    expect(d.memoryUsage.evermindPromptTokens).toBe(120);
+    expect(d.memoryUsage.factsRead).toBe(1);
+    expect(d.memoryUsage.factsWritten).toBe(1);
+    expect(d.memoryUsage.learnSteps).toBe(1);
+    const report = formatBrainDiagnostics(d).join('\n');
+    expect(report).toContain('BuilderForce memory: Evermind recalls 1 (3 item(s)');
+    expect(report).toContain('120 prompt tok');
+    expect(report).toContain('project-fact reads 1');
+  });
+
+  it('does not call a session that wrote the code unstaffed', () => {
+    const d = computeBrainDiagnostics([
+      { ts: '', category: 'tool', label: 'builtin_tasks_create', result: { ok: true, id: 1 } },
+      { ts: '', category: 'tool', label: 'edit_file', result: { ok: true } },
+      { ts: '', category: 'tool', label: 'git_commit', result: { ok: true } },
+    ]);
+    expect(d.sessionShipped).toBe(2);
+    expect(d.likelyCause).not.toBe('work-filed-not-staffed');
+    expect(formatBrainDiagnostics(d).join('\n')).toContain('the session itself changed the code');
+  });
+});

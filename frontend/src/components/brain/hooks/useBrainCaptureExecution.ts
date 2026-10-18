@@ -73,6 +73,7 @@ export function useBrainCaptureExecution({
         surface: 'Web',
         chatId,
         chatTitle: chats.activeChat?.title ?? null,
+        spend: chats.activeChat?.spend ?? null,
         // What the run was OBLIGED to do. The same trace is a good answer in `chat` and
         // an unfinished execution in `work`; without the mode those read identically.
         mode: chatMode,

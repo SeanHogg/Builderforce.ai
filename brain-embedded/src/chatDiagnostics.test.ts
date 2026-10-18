@@ -446,4 +446,19 @@ describe('formatChatDiagnostics — WHERE the work ran', () => {
     // ...and it must NOT claim they were shell-less, which is a different, stronger claim.
     expect(out).not.toMatch(/executed on the DURABLE surface/);
   });
+
+  it('prints this chat dollar rollup when the host passed one, and says so when it did not', () => {
+    const withSpend = formatChatDiagnostics({
+      ...base(),
+      spend: {
+        spend: { platformUsd: 1.25, yourKeyUsd: 0, totalUsd: 1.25, promptTokens: 90000, completionTokens: 3000, requests: 12, unpricedTokens: 0 },
+        saved: null,
+      },
+    }).join('\n');
+    expect(withSpend).toContain("This chat's cost:");
+    expect(withSpend).toContain('$1.25');
+    expect(withSpend).toContain('90,000 prompt');
+    const without = formatChatDiagnostics(base()).join('\n');
+    expect(without).toMatch(/not on this chat row/);
+  });
 });

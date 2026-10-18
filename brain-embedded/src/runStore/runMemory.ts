@@ -48,14 +48,21 @@ export async function recallForRun(c: RunCell, convo: ChatCompletionMessage[], e
   if (recalled?.seeded && recalled.items.length > 0) {
     const block = formatEvermindMemoryBlock(recalled.items);
     if (block) {
+      const blockTokens = transcriptTokens([{ role: 'system', content: block }]);
       pushTrace(c, {
         ts: nowIso(),
         category: 'recall',
         label: 'evermind.recall',
         args: { query, version: recalled.version },
-        result: { count: recalled.items.length, version: recalled.version, mode: recalled.mode, items: recalled.items },
+        result: {
+          count: recalled.items.length,
+          version: recalled.version,
+          mode: recalled.mode,
+          blockTokens,
+          items: recalled.items,
+        },
       });
-      return { recalled, block, blockTokens: transcriptTokens([{ role: 'system', content: block }]) };
+      return { recalled, block, blockTokens };
     }
   }
   return { recalled, block: null, blockTokens: 0 };

@@ -238,6 +238,7 @@ export async function probe(opts: ProbeOptions): Promise<ProbeResult> {
     surface: 'VS Code (headless probe)',
     chatId,
     chatTitle: chat.title,
+    spend: chat.spend ?? null,
     // `visibility` rides the chat row on the wire but is not on `BrainChat`; the
     // webview reads it exactly this way, so both reports name the same field.
     chatVisibility: (chat as unknown as { visibility?: 'shared' | 'locked' }).visibility ?? null,
