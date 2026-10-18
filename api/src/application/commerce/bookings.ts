@@ -46,6 +46,7 @@ import {
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
+import { provisionConfirmedAdvisory } from './advisoryReservation';
 import { StatusError } from '../../domain/shared/errors';
 
 /** `booking_services.mode`. */
@@ -352,7 +353,7 @@ export async function reserveForHost(
     ))
     .limit(1);
   if (!hosted) throw new BookingError('That service is not offered by this person.', 404);
-  return reserve(db, env, hosted.tenantId, actor, {
+  const reserved = await reserve(db, env, hosted.tenantId, actor, {
     serviceId: input.serviceId,
     startsAt: input.startsAt,
     hostRef: ref,
@@ -360,6 +361,10 @@ export async function reserveForHost(
     bookerEmail: input.bookerEmail ?? null,
     timezone: input.timezone,
   });
+  // A1: confirmed 1:1 only. The helper no-ops group and round-robin, and a
+  // thread/calendar failure must not un-confirm the reservation.
+  await provisionConfirmedAdvisory(db, env, reserved);
+  return reserved;
 }
 
 /**
