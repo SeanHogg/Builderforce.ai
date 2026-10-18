@@ -9,12 +9,13 @@
  * mirrors it onto the Observability timeline under its OWN tool name so "released
  * because nobody answered" is distinguishable from a crashed run.
  *
- * Driven against a tiny in-memory fake of the Drizzle builder chain (same approach
- * as staleExecutionReaper.test.ts) — no live database.
+ * Driven against the shared in-memory fake of the Drizzle builder chain
+ * (__fixtures__/staleExecutionReaperDb.ts, same as staleExecutionReaper.test.ts) — no
+ * live database. The idle probe is scripted to flag the paused sweep (plus host/queued,
+ * which reap nothing here) so the sweep's UPDATE always runs and its cutoff is observable.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { SQL } from 'drizzle-orm';
-import { PgDialect } from 'drizzle-orm/pg-core';
+import { createReaperFakeDb, newReaperFakeDbScript, type ReaperFakeDbScript } from './__fixtures__/staleExecutionReaperDb';
 
 interface Captured {
   /** The cutoff timestamp the paused sweep compared against. */
@@ -28,65 +29,36 @@ interface Captured {
 
 let pausedRows: Array<Record<string, unknown>> = [];
 let captured: Captured;
+let script: ReaperFakeDbScript;
 
-const dialect = new PgDialect();
-/** Bound parameters of a Drizzle WHERE clause, in order. */
-function paramsOf(where: unknown): unknown[] {
-  return where ? dialect.sqlToQuery(where as SQL).params : [];
-}
-
-function leaf<T>(rows: T[]) {
-  return {
-    returning: () => Promise.resolve(rows),
-    then: <R1, R2>(ok?: ((v: T[]) => R1 | PromiseLike<R1>) | null, err?: ((e: unknown) => R2 | PromiseLike<R2>) | null) =>
-      Promise.resolve(rows).then(ok, err),
-    // Best-effort writers attach `.catch(...)` directly to the builder.
-    catch: <R>(err?: ((e: unknown) => R | PromiseLike<R>) | null) => Promise.resolve(rows).catch(err),
-  };
-}
-
-function fakeDb() {
-  return {
-    // Stale cloud-candidate SELECT (and the park-age sibling sweep) — nothing here.
-    select: () => {
-      const where = () => Promise.resolve([]);
-      return { from: () => ({ where, innerJoin: () => ({ where }) }) };
+function newScript(): ReaperFakeDbScript {
+  return newReaperFakeDbScript({
+    probe: () => ({ host_running: true, cloud_running: false, queued: true, paused: true, park_age: false }),
+    // The paused sweep binds its status first: `status = $1 and coalesce(...) < $2`
+    // (then failStaleBatch's `id IN (SELECT … LIMIT 100)` subquery).
+    onUpdate: (set, params) => {
+      if (params[0] === 'paused') {
+        captured.pausedReason = String(set.errorMessage);
+        captured.pausedCutoff = String(params[1]);
+        return pausedRows;
+      }
+      // The host-running + queued sweeps, and the principal revocation.
+      return [];
     },
-    update: () => ({
-      set: (set: Record<string, unknown>) => ({
-        // The paused sweep binds its status first: `status = $1 and coalesce(...) < $2`.
-        where: (cond: unknown) => {
-          const params = paramsOf(cond);
-          if (params[0] === 'paused') {
-            captured.pausedReason = String(set.errorMessage);
-            captured.pausedCutoff = String(params[1]);
-            return leaf(pausedRows);
-          }
-          // The host-running + queued sweeps.
-          return leaf<Record<string, unknown>>([]);
-        },
-      }),
-    }),
     // Resume-record cleanup for the questions nobody answered.
-    delete: () => ({
-      where: (cond: unknown) => {
-        for (const p of paramsOf(cond)) captured.clearedPauseState.push(Number(p));
-        return leaf<Record<string, unknown>>([]);
-      },
-    }),
+    onDelete: (params) => {
+      for (const p of params) captured.clearedPauseState.push(Number(p));
+    },
     // Telemetry mirror.
-    insert: () => ({
-      values: (v: Record<string, unknown>) => {
-        captured.events.push({ executionId: Number(v.executionId), toolName: String(v.toolName) });
-        return Promise.resolve();
-      },
-    }),
-  };
+    onInsert: (v) => {
+      captured.events.push({ executionId: Number(v.executionId), toolName: String(v.toolName) });
+    },
+  });
 }
 
 vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
-  buildDatabase: () => fakeDb(),
+  buildDatabase: () => createReaperFakeDb(script),
 }));
 
 import { reapStaleExecutions } from './staleExecutionReaper';
@@ -96,6 +68,7 @@ const env = { NEON_DATABASE_URL: 'postgres://fake' } as unknown as Parameters<ty
 const NOW = Date.parse('2026-07-19T12:00:00.000Z');
 
 beforeEach(() => {
+  script = newScript();
   pausedRows = [];
   captured = { pausedCutoff: null, pausedReason: null, events: [], clearedPauseState: [] };
 });

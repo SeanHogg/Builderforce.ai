@@ -8,12 +8,11 @@
  * which executions get re-queued vs failed without a live database.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { SQL } from 'drizzle-orm';
-import { PgDialect } from 'drizzle-orm/pg-core';
+import { createReaperFakeDb, newReaperFakeDbScript, type ReaperFakeDbScript } from './__fixtures__/staleExecutionReaperDb';
 
-// A controllable fake of the Drizzle `Db`. Each test seeds the candidate rows + the
-// PR count, and we capture the UPDATEs/INSERTs the reaper issues. Sweeps are told
-// apart by the `set` payload they write plus the bound params of their WHERE.
+// A controllable fake of the Drizzle `Db` (shared fixture). Each test seeds the candidate
+// rows + the PR count, and we capture the UPDATEs/INSERTs the reaper issues. Sweeps are
+// told apart by the `set` payload they write plus the bound params of their WHERE.
 interface Captured {
   failed: number[];
   failedReasons: Map<number, string>;
@@ -21,83 +20,38 @@ interface Captured {
   requeueEvents: number[];
 }
 
-let candidateRows: Array<Record<string, unknown>> = [];
 let captured: Captured;
-/** What the one-statement idle probe reports; `null` = derive cloud_running from candidates. */
-let probeRow: Record<string, unknown> | null = null;
-/** Every statement kind the reaper issued, so the idle case can assert "probe only". */
-let calls: string[] = [];
+let script: ReaperFakeDbScript;
 
-const dialect = new PgDialect();
-/** Bound parameters of a Drizzle WHERE clause, in order. */
-function paramsOf(where: unknown): unknown[] {
-  return where ? dialect.sqlToQuery(where as SQL).params : [];
-}
-
-/** A `.where()` leaf that is awaitable directly AND via `.returning()`. */
-function leaf<T>(rows: T[]) {
-  return {
-    returning: () => Promise.resolve(rows),
-    then: <R1, R2>(ok?: ((v: T[]) => R1 | PromiseLike<R1>) | null, err?: ((e: unknown) => R2 | PromiseLike<R2>) | null) =>
-      Promise.resolve(rows).then(ok, err),
-  };
-}
-
-function fakeDb() {
-  return {
-    // Only the stale-cloud-candidate SELECT projects `open_pr_count`; every other
-    // read (tasks kinds, the park-age sibling sweep) yields nothing here.
-    execute: () => {
-      calls.push('execute');
-      return Promise.resolve({ rows: [probeRow ?? {
-        host_running: false, cloud_running: candidateRows.length > 0, queued: false, paused: false, park_age: false,
-      }] });
+function newScript(): ReaperFakeDbScript {
+  return newReaperFakeDbScript({
+    onUpdate: (set, params) => {
+      const id = Number(params[0]);
+      // Persist the one-retry flag (requeue path) — payload-only update.
+      if (set.status === undefined && set.payload !== undefined) {
+        captured.requeuedPayloads.set(id, String(set.payload));
+        return [];
+      }
+      // Fail ONE cloud run by id: `where id = $1 and status = $2` binds the id first.
+      // The batched running/queued/paused sweeps bind a status string there instead.
+      if (set.status === 'failed' && Number.isFinite(id)) {
+        const reason = String(set.errorMessage);
+        captured.failed.push(id);
+        captured.failedReasons.set(id, reason);
+        return [{ id, tenant_id: 1, agent_host_id: null, payload: null, error_message: reason }];
+      }
+      // The host-running + queued + paused sweeps (no candidates in these tests).
+      return [];
     },
-    select: (fields: Record<string, unknown>) => {
-      calls.push('open_pr_count' in fields ? 'candidates' : 'select');
-      const rows = 'open_pr_count' in fields ? candidateRows : [];
-      // Awaitable directly and through the `.orderBy().limit()` the bounded candidate pull adds.
-      const where = () => {
-        const p = Promise.resolve(rows);
-        const limited = Object.assign(p, { limit: () => p });
-        return Object.assign(p, { limit: () => p, orderBy: () => limited });
-      };
-      return { from: () => ({ where, innerJoin: () => ({ where }) }) };
+    onInsert: (v) => {
+      if (v.toolName === 'runtime.requeue') captured.requeueEvents.push(Number(v.executionId));
     },
-    update: () => (calls.push('update'), {
-      set: (set: Record<string, unknown>) => ({
-        where: (cond: unknown) => {
-          const id = Number(paramsOf(cond)[0]);
-          // Persist the one-retry flag (requeue path) — payload-only update.
-          if (set.status === undefined && set.payload !== undefined) {
-            captured.requeuedPayloads.set(id, String(set.payload));
-            return leaf<Record<string, unknown>>([]);
-          }
-          // Fail ONE cloud run by id: `where id = $1 and status = $2` binds the id first.
-          // The bulk running/queued/paused sweeps bind a status string there instead.
-          if (set.status === 'failed' && Number.isFinite(id)) {
-            const reason = String(set.errorMessage);
-            captured.failed.push(id);
-            captured.failedReasons.set(id, reason);
-            return leaf([{ id, tenant_id: 1, agent_host_id: null, payload: null, error_message: reason }]);
-          }
-          // The host-running + queued + paused sweeps (no candidates in these tests).
-          return leaf<Record<string, unknown>>([]);
-        },
-      }),
-    }),
-    insert: () => ({
-      values: (v: Record<string, unknown>) => {
-        if (v.toolName === 'runtime.requeue') captured.requeueEvents.push(Number(v.executionId));
-        return Promise.resolve();
-      },
-    }),
-  };
+  });
 }
 
 vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
-  buildDatabase: () => fakeDb(),
+  buildDatabase: () => createReaperFakeDb(script),
 }));
 
 import { reapStaleExecutions } from './staleExecutionReaper';
@@ -119,16 +73,14 @@ function envWithRunner(ok = true) {
 const STALE_TS = '2000-01-01T00:00:00.000Z'; // far past every deadline
 
 beforeEach(() => {
-  candidateRows = [];
-  probeRow = null;
-  calls = [];
+  script = newScript();
   captured = { failed: [], failedReasons: new Map(), requeuedPayloads: new Map(), requeueEvents: [] };
   startMock.mockReset();
 });
 
 describe('reapStaleExecutions — orphaned cloud run re-dispatch', () => {
   it('re-dispatches an orphan with no prior work onto CloudRunnerDO (not failed)', async () => {
-    candidateRows = [{
+    script.candidates = [{
       id: 42, tenant_id: 1, agent_host_id: null, payload: '{"model":"m"}', error_message: null,
       task_id: 7, task_title: 'Build feature', task_description: 'do it',
       project_id: 3, cloud_agent_ref: 'agent-x', open_pr_count: 0, updated_at: STALE_TS,
@@ -151,7 +103,7 @@ describe('reapStaleExecutions — orphaned cloud run re-dispatch', () => {
   });
 
   it('fails an orphan that already has an open PR (no re-dispatch — avoids a double PR)', async () => {
-    candidateRows = [{
+    script.candidates = [{
       id: 99, tenant_id: 1, agent_host_id: null, payload: '{}', error_message: null,
       task_id: 8, task_title: 'PR task', task_description: null,
       project_id: 3, cloud_agent_ref: null, open_pr_count: 1, updated_at: STALE_TS,
@@ -166,7 +118,7 @@ describe('reapStaleExecutions — orphaned cloud run re-dispatch', () => {
   });
 
   it('does not re-dispatch a run already re-queued once (only one retry, then fail)', async () => {
-    candidateRows = [{
+    script.candidates = [{
       id: 5, tenant_id: 1, agent_host_id: null, payload: '{"reaperRequeued":true}', error_message: null,
       task_id: 9, task_title: 'Retried', task_description: null,
       project_id: 3, cloud_agent_ref: null, open_pr_count: 0, updated_at: STALE_TS,
@@ -182,7 +134,7 @@ describe('reapStaleExecutions — orphaned cloud run re-dispatch', () => {
   it('stamps the LONG-LIVED crash reason (not the serverless ~30s one) on a run that ran past the wall', async () => {
     // Container/durable run that heartbeated for ~77s then went silent — exactly the
     // execution #62 shape. It already used its one retry, so it is failed here.
-    candidateRows = [{
+    script.candidates = [{
       id: 62, tenant_id: 1, agent_host_id: null, payload: '{"reaperRequeued":true}', error_message: null,
       task_id: 78, task_title: 'Avatar filters', task_description: null,
       project_id: 3, cloud_agent_ref: 'bob', open_pr_count: 0,
@@ -198,7 +150,7 @@ describe('reapStaleExecutions — orphaned cloud run re-dispatch', () => {
 
   it('stamps the serverless ~30s reason on a short-lived Worker-loop orphan', async () => {
     // No heartbeat past start (started == last activity) → the dying Worker loop.
-    candidateRows = [{
+    script.candidates = [{
       id: 63, tenant_id: 1, agent_host_id: null, payload: '{"reaperRequeued":true}', error_message: null,
       task_id: 79, task_title: 'Quick task', task_description: null,
       project_id: 3, cloud_agent_ref: null, open_pr_count: 0,
@@ -220,7 +172,7 @@ describe('reapStaleExecutions — per-surface silence ceiling (execution #136)',
     // The exact #136 shape: a durable tick made ONE 93s LLM call, so updated_at is 93s
     // stale — past the 90s pull floor but WELL inside the durable ceiling. The run is
     // alive (mid-completion), so the reaper must leave it be.
-    candidateRows = [{
+    script.candidates = [{
       id: 136, tenant_id: 1, agent_host_id: null, payload: '{"executor":"durable","model":"m"}', error_message: null,
       task_id: 79, task_title: 'OKR 4', task_description: null,
       project_id: 3, cloud_agent_ref: 'kevin', open_pr_count: 0,
@@ -240,7 +192,7 @@ describe('reapStaleExecutions — per-surface silence ceiling (execution #136)',
     // `parseExecutor` reads it as unknown. A payload written before it was removed must
     // therefore fall to the long-lived ceiling: there is no longer a surface that dies
     // silently at ~30s, and reaping a possibly-live run is the worse failure mode.
-    candidateRows = [{
+    script.candidates = [{
       id: 200, tenant_id: 1, agent_host_id: null, payload: '{"executor":"worker","reaperRequeued":true}', error_message: null,
       task_id: 80, task_title: 'Quick', task_description: null,
       project_id: 3, cloud_agent_ref: null, open_pr_count: 0,
@@ -254,7 +206,7 @@ describe('reapStaleExecutions — per-surface silence ceiling (execution #136)',
   });
 
   it('REAPS a durable run that is genuinely silent (past the long-lived ceiling)', async () => {
-    candidateRows = [{
+    script.candidates = [{
       id: 201, tenant_id: 1, agent_host_id: null, payload: '{"executor":"durable","reaperRequeued":true}', error_message: null,
       task_id: 81, task_title: 'Dead', task_description: null,
       project_id: 3, cloud_agent_ref: null, open_pr_count: 0,
@@ -272,24 +224,24 @@ describe('reapStaleExecutions — idle probe', () => {
   it('issues ONLY the probe when nothing is stale (no UPDATE, no candidate SELECT, no park-age sweep)', async () => {
     const res = await reapStaleExecutions(envWithRunner(true));
 
-    expect(calls).toEqual(['execute']);
+    expect(script.calls).toEqual(['execute']);
     expect(res).toEqual({ failedRunning: 0, failedQueued: 0, failedPaused: 0, requeuedCloud: 0, parkAge: { stale: 0, unparked: 0 } });
   });
 
   it('runs only the sweeps the probe flagged', async () => {
-    probeRow = { host_running: false, cloud_running: false, queued: true, paused: false, park_age: false };
+    script.probe = () => ({ host_running: false, cloud_running: false, queued: true, paused: false, park_age: false });
 
     await reapStaleExecutions(envWithRunner(true));
 
     // The queued UPDATE runs; the cloud candidate SELECT does not.
-    expect(calls).toContain('execute');
-    expect(calls).toContain('update');
-    expect(calls).not.toContain('candidates');
+    expect(script.calls).toContain('execute');
+    expect(script.calls).toContain('update');
+    expect(script.calls).not.toContain('candidates');
   });
 
   it('accepts text-typed booleans from the probe', async () => {
-    probeRow = { host_running: 'f', cloud_running: 't', queued: 'f', paused: 'f', park_age: 'f' };
-    candidateRows = [{
+    script.probe = () => ({ host_running: 'f', cloud_running: 't', queued: 'f', paused: 'f', park_age: 'f' });
+    script.candidates = [{
       id: 7, tenant_id: 1, agent_host_id: null, payload: '{"reaperRequeued":true}', error_message: null,
       task_id: 1, task_title: 'x', task_description: null,
       project_id: 3, cloud_agent_ref: null, open_pr_count: 0, updated_at: STALE_TS,

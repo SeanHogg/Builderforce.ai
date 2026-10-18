@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { SQL } from 'drizzle-orm';
-import { PgDialect } from 'drizzle-orm/pg-core';
+import { createReaperFakeDb, newReaperFakeDbScript, type ReaperFakeDbScript } from './__fixtures__/staleExecutionReaperDb';
 
 /**
  * Cron-reaper → chat narration. The stale-execution reaper fails runs with bulk
@@ -19,64 +18,39 @@ const h = vi.hoisted(() => ({
   reapedRunningRows: [] as Array<Record<string, unknown>>,
   reapedQueuedRows: [] as Array<Record<string, unknown>>,
   reapedPausedRows: [] as Array<Record<string, unknown>>,
-  taskKindRows: [] as Array<Record<string, unknown>>,
-  taskKindQueries: 0,
 }));
 
-const dialect = new PgDialect();
-/** Bound parameters of a Drizzle WHERE clause, in order — how the three bulk
- *  sweeps are told apart (each binds its own status value first). */
-function paramsOf(where: unknown): unknown[] {
-  return where ? dialect.sqlToQuery(where as SQL).params : [];
-}
+let script: ReaperFakeDbScript;
 
-function leaf<T>(rows: T[]) {
-  return {
-    returning: () => Promise.resolve(rows),
-    then: <R1, R2>(ok?: ((v: T[]) => R1 | PromiseLike<R1>) | null, err?: ((e: unknown) => R2 | PromiseLike<R2>) | null) =>
-      Promise.resolve(rows).then(ok, err),
-    // Best-effort writers attach `.catch(...)` directly to the builder.
-    catch: <R>(err?: ((e: unknown) => R | PromiseLike<R>) | null) => Promise.resolve(rows).catch(err),
-  };
-}
-
-function fakeDb() {
-  return {
-    select: (fields: Record<string, unknown>) => {
-      const rows = () => {
-        // The batched ticket-kind read (the no-N+1 assertion below counts these).
-        if ('task_type' in fields) {
-          h.taskKindQueries += 1;
-          return h.taskKindRows;
-        }
-        return []; // stale cloud candidates — none in these tests
-      };
-      const where = () => Promise.resolve(rows());
-      return { from: () => ({ where, innerJoin: () => ({ where }) }) };
-    },
-    update: () => ({
-      set: () => ({
-        where: (cond: unknown) => {
-          const params = paramsOf(cond);
-          if (params[0] === 'paused') return leaf(h.reapedPausedRows);
-          if (params.includes('submitted')) return leaf(h.reapedQueuedRows);
-          if (params[0] === 'running') return leaf(h.reapedRunningRows);
-          return leaf<Record<string, unknown>>([]);
-        },
-      }),
+function newScript(): ReaperFakeDbScript {
+  return newReaperFakeDbScript({
+    // The idle probe flags exactly the sweeps that have rows, as the real EXISTS arms do.
+    probe: () => ({
+      host_running: h.reapedRunningRows.length > 0,
+      cloud_running: false, // stale cloud candidates — none in these tests
+      queued: h.reapedQueuedRows.length > 0,
+      paused: h.reapedPausedRows.length > 0,
+      park_age: false,
     }),
-    // Resume-record cleanup for the reaped (unanswered) questions.
-    delete: () => ({ where: () => leaf<Record<string, unknown>>([]) }),
-    // tool_audit_events telemetry mirror — asserted elsewhere.
-    insert: () => ({ values: () => Promise.resolve() }),
-  };
+    // Each batched sweep binds its own status value first; the principal revocation
+    // (status 'revoked') binds execution ids and reaps nothing.
+    onUpdate: (set, params) => {
+      if (set.status !== 'failed') return [];
+      if (params[0] === 'paused') return h.reapedPausedRows;
+      if (params.includes('submitted')) return h.reapedQueuedRows;
+      if (params[0] === 'running') return h.reapedRunningRows;
+      return [];
+    },
+  });
 }
 
 vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../infrastructure/database/connection')>()),
-  buildDatabase: () => fakeDb(),
+  buildDatabase: () => createReaperFakeDb(script),
 }));
-vi.mock('../maintenance/parkAgeTimeout', () => ({
+vi.mock('../maintenance/parkAgeTimeout', async (importOriginal) => ({
+  // Keep the real cutoff resolver (the reaper reads it for the probe); stub only the sweep.
+  ...(await importOriginal<typeof import('../maintenance/parkAgeTimeout')>()),
   runParkAgeTimeoutSweep: async () => ({ stale: 0, unparked: 0 }),
 }));
 vi.mock('../brain/ChatTicketService', async (importOriginal) => {
@@ -102,8 +76,7 @@ beforeEach(() => {
   h.reapedRunningRows.length = 0;
   h.reapedQueuedRows.length = 0;
   h.reapedPausedRows.length = 0;
-  h.taskKindRows.length = 0;
-  h.taskKindQueries = 0;
+  script = newScript();
 });
 
 describe('reapStaleExecutions — chat narration of silent deaths', () => {
@@ -112,7 +85,7 @@ describe('reapStaleExecutions — chat narration of silent deaths', () => {
       id: 301, tenant_id: 4, agent_host_id: 9, payload: '{"cloudAgentRef":"agent-x"}',
       error_message: 'Execution timed out — the agent did not report completion.', task_id: 55,
     });
-    h.taskKindRows.push({ id: 55, task_type: 'epic' });
+    script.taskKinds.push({ id: 55, task_type: 'epic' });
 
     await reapStaleExecutions(env, NOW);
 
@@ -130,7 +103,7 @@ describe('reapStaleExecutions — chat narration of silent deaths', () => {
       id: 77, tenant_id: 1, agent_host_id: null, payload: null,
       error_message: PAUSED_ORPHAN_REASON, task_id: 12,
     });
-    h.taskKindRows.push({ id: 12, task_type: 'task' });
+    script.taskKinds.push({ id: 12, task_type: 'task' });
 
     await reapStaleExecutions(env, NOW);
 
@@ -145,7 +118,7 @@ describe('reapStaleExecutions — chat narration of silent deaths', () => {
       id: 88, tenant_id: 2, agent_host_id: null, payload: null,
       error_message: 'Execution was never picked up by an agent within the dispatch window.', task_id: 30,
     });
-    h.taskKindRows.push({ id: 30, task_type: 'gap' });
+    script.taskKinds.push({ id: 30, task_type: 'gap' });
 
     await reapStaleExecutions(env, NOW);
 
@@ -159,17 +132,17 @@ describe('reapStaleExecutions — chat narration of silent deaths', () => {
       { id: 2, tenant_id: 1, agent_host_id: 9, payload: null, error_message: 'x', task_id: 11 },
     );
     h.reapedPausedRows.push({ id: 3, tenant_id: 1, agent_host_id: null, payload: null, error_message: 'x', task_id: 12 });
-    h.taskKindRows.push({ id: 10, task_type: 'task' }, { id: 11, task_type: 'epic' }, { id: 12, task_type: 'task' });
+    script.taskKinds.push({ id: 10, task_type: 'task' }, { id: 11, task_type: 'epic' }, { id: 12, task_type: 'task' });
 
     await reapStaleExecutions(env, NOW);
 
-    expect(h.taskKindQueries).toBe(1);
+    expect(script.taskKindReads).toBe(1);
     expect(h.milestones).toHaveLength(3);
   });
 
   it('posts nothing (and skips the tasks read) when the sweep reaped nothing', async () => {
     await reapStaleExecutions(env, NOW);
     expect(h.milestones).toHaveLength(0);
-    expect(h.taskKindQueries).toBe(0);
+    expect(script.taskKindReads).toBe(0);
   });
 });
