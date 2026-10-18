@@ -55,6 +55,18 @@ export type EnrollRefusal =
   | { ok: false; reason: 'not_a_path'; detail: string }
   | { ok: false; reason: 'not_published'; detail: string };
 
+/** A direct course enrolment (not a path). Same table, `path_ref` left null. */
+export type CourseEnrollRefusal =
+  | { ok: false; reason: 'not_a_course'; detail: string }
+  | { ok: false; reason: 'not_published'; detail: string };
+
+export interface CourseEnrollment {
+  courseId: number;
+  learnerRef: string;
+  /** The row's status after a first insert. A repeat call does not read it back. */
+  status: 'enrolled';
+}
+
 const progressCacheKey = (tenantId: number, pathId: number, learnerRef: string) =>
   `learning:path-progress:${tenantId}:${pathId}:${learnerRef}`;
 
@@ -104,6 +116,43 @@ export async function enrollInPath(
   });
 
   return { ok: true, progress: await recomputePathProgress(db, env, input.tenantId, input.pathId, input.learnerRef) };
+}
+
+/**
+ * Enrol a learner in ONE published course — the Academy hook on this same table.
+ *
+ * {@link enrollInPath} is the path. A founder enrolling in a stage-tagged course
+ * listing is this: one `course_enrollments` row, `path_ref` left null, so finishing
+ * the course on its own is not mistaken for advancing a curriculum. Re-enrolment
+ * touches only `updated_at` — never status, progress, or path_ref — so a course
+ * already taken inside a path keeps that link and the progress already earned.
+ */
+export async function enrollInCourse(
+  db: Db,
+  input: { tenantId: number; courseId: number; learnerRef: string; dueAt?: Date | null },
+): Promise<{ ok: true; enrollment: CourseEnrollment } | CourseEnrollRefusal> {
+  const course = await loadCourse(db, input.tenantId, input.courseId);
+  if (!course || course.kind !== 'course') {
+    return { ok: false, reason: 'not_a_course', detail: 'that id is not a course in this workspace' };
+  }
+  if (course.status !== 'published') {
+    return { ok: false, reason: 'not_published', detail: 'a draft course cannot be enrolled in' };
+  }
+
+  await db.insert(courseEnrollments).values({
+    tenantId: input.tenantId,
+    courseId: input.courseId,
+    learnerRef: input.learnerRef,
+    dueAt: input.dueAt ?? null,
+  }).onConflictDoUpdate({
+    target: [courseEnrollments.tenantId, courseEnrollments.courseId, courseEnrollments.learnerRef],
+    set: { updatedAt: new Date() },
+  });
+
+  return {
+    ok: true,
+    enrollment: { courseId: input.courseId, learnerRef: input.learnerRef, status: 'enrolled' },
+  };
 }
 
 /**
