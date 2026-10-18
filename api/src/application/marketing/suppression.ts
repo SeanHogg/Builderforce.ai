@@ -34,10 +34,10 @@ export async function suppressedEmails(db: Db, tenantId: number, emails: string[
        WHERE tenant_id = ${tenantId} AND email IN (${list(batch)})
       UNION ALL
       SELECT 'e', LOWER(identifier_value) FROM data_suppression_list
-       WHERE tenant_id = ${tenantId} AND identifier_type = 'email' AND LOWER(identifier_value) IN (${list(batch)})
+       WHERE tenant_id = ${tenantId} AND LOWER(identifier_type) = 'email' AND LOWER(identifier_value) IN (${list(batch)})
       UNION ALL
       SELECT 'd', LOWER(identifier_value) FROM data_suppression_list
-       WHERE tenant_id = ${tenantId} AND identifier_type = 'domain' AND LOWER(identifier_value) IN (${list(domains)})
+       WHERE tenant_id = ${tenantId} AND LOWER(identifier_type) = 'domain' AND LOWER(identifier_value) IN (${list(domains)})
     `));
     const blockedDomains = new Set(rows.filter((r) => r.k === 'd').map((r) => String(r.v)));
     const blockedEmails = new Set(rows.filter((r) => r.k === 'e').map((r) => String(r.v)));

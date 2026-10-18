@@ -71,7 +71,7 @@ import { parseJsonObject } from '../../domain/shared/json';
 import { findNearDuplicateByTitle } from '../../domain/shared/nearDuplicateTitle';
 import { signJwt } from '../../infrastructure/auth/JwtService';
 import { invalidateHostCronJobs } from '../agentHost/hostCronCache';
-import { specStatusEnum, workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
+import { specStatusEnum, workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agentRegistrations, projectAgents, agentAssignments, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { listAgentHostUsageSnapshots } from '../agentHost/agentHostUsage';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -1887,8 +1887,8 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'approvals.delete', mutates: true, description: 'Delete an approval rule by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const rows = await ctx.db.delete(approvalRules).where(and(eq(approvalRules.id, str(a.id)), eq(approvalRules.tenantId, ctx.tenantId))).returning({ id: approvalRules.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
-  // ---- Registered agents (read) ----
-  { tool: 'agents.list', mutates: false, description: 'List registered agents in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(agents).where(eq(agents.tenantId, ctx.tenantId)).limit(200) },
+  // ---- Workforce / cloud agents (read) — same source as cloud_agents.list_mine ----
+  { tool: 'agents.list', mutates: false, description: 'List registered agents in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(ideAgents).where(eq(ideAgents.tenantId, ctx.tenantId)).orderBy(desc(ideAgents.createdAt)).limit(200) },
 
   // ---- Boards (read) ----
   { tool: 'boards.list', mutates: false, description: 'List project boards in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(boards).where(eq(boards.tenantId, ctx.tenantId)).limit(200) },
@@ -2277,9 +2277,9 @@ const CATALOG: BuiltinTool[] = [
   },
 
   // ---- Agents: registered (read) + per-project + assignments ----
-  // registered_agents.list mirrors the existing agents.list (the tenant `agents` table) under the
-  // web Brain's domain name so the dispatch layer (keyed on domain.method) reaches it.
-  { tool: 'registered_agents.list', mutates: false, description: 'List tenant-registered endpoint agents (claude/openai/ollama/http).', parameters: obj({}), run: (ctx) => ctx.db.select().from(agents).where(eq(agents.tenantId, ctx.tenantId)).limit(200) },
+  // registered_agents.list is the tenant `agent_registrations` table (claude/openai/ollama/http
+  // endpoints) under the web Brain's domain name so the dispatch layer (keyed on domain.method) reaches it.
+  { tool: 'registered_agents.list', mutates: false, description: 'List tenant-registered endpoint agents (claude/openai/ollama/http).', parameters: obj({}), run: (ctx) => ctx.db.select().from(agentRegistrations).where(eq(agentRegistrations.tenantId, ctx.tenantId)).limit(200) },
   // project_agents is tenant-scoped (NO segment_id).
   { tool: 'project_agents.list', mutates: false, description: 'List agents attached to a project.', parameters: obj({ projectId: N }, ['projectId']), run: (ctx, a) => ctx.db.select().from(projectAgents).where(and(eq(projectAgents.tenantId, ctx.tenantId), eq(projectAgents.projectId, num(a.projectId)))).limit(200) },
   {

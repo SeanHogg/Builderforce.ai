@@ -32,7 +32,7 @@ import {
   ceremonySessions,
   ideAgents,
   ideProjects,
-  agents,
+  agentRegistrations,
   tasks,
   workflows,
   workflowDefinitions,
@@ -593,13 +593,45 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
 
     const agentIds = ids('agent');
     if (agentIds.length) {
-      const numeric = agentIds.map(Number).filter((id) => Number.isInteger(id) && id > 0);
-      const text = agentIds.filter((id) => !numeric.includes(Number(id)));
-      const [legacy, workforce] = await Promise.all([
-        numeric.length ? db.select({ id: agents.id }).from(agents).where(and(eq(agents.tenantId, tenantId), eq(agents.segmentId, segmentId), inArray(agents.id, numeric))) : Promise.resolve([]),
-        text.length ? db.select({ id: ideAgents.id }).from(ideAgents).where(and(eq(ideAgents.tenantId, tenantId), inArray(ideAgents.id, text))) : Promise.resolve([]),
+      // Numeric refs are the folded `agents.id` on `agent_registrations.legacy_agent_id`
+      // (Postgres int4). Text refs are workforce `ide_agents.id` or registration UUIDs.
+      const numeric: number[] = [];
+      const text: string[] = [];
+      for (const id of agentIds) {
+        if (/^\d+$/.test(id)) {
+          const n = Number(id);
+          if (!Number.isInteger(n) || n < 1 || n > 2_147_483_647) {
+            return 'An Agent is unavailable or belongs to another workspace';
+          }
+          numeric.push(n);
+        } else {
+          text.push(id);
+        }
+      }
+      const [byLegacy, workforce, byUuid] = await Promise.all([
+        numeric.length
+          ? db.select({ id: agentRegistrations.legacyAgentId }).from(agentRegistrations).where(and(
+              eq(agentRegistrations.tenantId, tenantId),
+              eq(agentRegistrations.segmentId, segmentId),
+              inArray(agentRegistrations.legacyAgentId, numeric),
+            ))
+          : Promise.resolve([]),
+        text.length
+          ? db.select({ id: ideAgents.id }).from(ideAgents).where(and(eq(ideAgents.tenantId, tenantId), inArray(ideAgents.id, text)))
+          : Promise.resolve([]),
+        text.length
+          ? db.select({ id: agentRegistrations.id }).from(agentRegistrations).where(and(
+              eq(agentRegistrations.tenantId, tenantId),
+              eq(agentRegistrations.segmentId, segmentId),
+              inArray(agentRegistrations.id, text),
+            ))
+          : Promise.resolve([]),
       ]);
-      if (legacy.length + workforce.length !== agentIds.length) return 'An Agent is unavailable or belongs to another workspace';
+      const found = new Set<string>();
+      for (const row of byLegacy) if (row.id != null) found.add(String(row.id));
+      for (const row of workforce) found.add(row.id);
+      for (const row of byUuid) found.add(row.id);
+      if (agentIds.some((id) => !found.has(id))) return 'An Agent is unavailable or belongs to another workspace';
     }
 
     const ceremonyIds = ids('ceremony');

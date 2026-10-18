@@ -39,6 +39,7 @@ import {
   CHAT_SCOPED_AGENT_TOOLS, resolveReplayAuth,
 } from './builtinMcpService';
 import { TenantRole } from '../../domain/shared/types';
+import { agentRegistrations, ideAgents } from '../../infrastructure/database/schema';
 
 const db = {} as never;
 const TENANT = 7;
@@ -227,6 +228,7 @@ describe('listBuiltinTools', () => {
     expect(names).toContain('builtin_prompts_list');
     expect(names).toContain('builtin_approvals_list');
     expect(names).toContain('builtin_agents_list');
+    expect(names).toContain('builtin_registered_agents_list');
     expect(names).toContain('builtin_boards_list');
     expect(names).toContain('builtin_cron_list');
     expect(names).toContain('builtin_web_search');
@@ -488,6 +490,42 @@ describe('callBuiltinTool', () => {
 
   it('throws on an unknown tool', async () => {
     await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.nuke', arguments: {} })).rejects.toThrow(/Unknown built-in tool/);
+  });
+
+  it('agents.list reads ide_agents, not the legacy agents table', async () => {
+    const fromTables: unknown[] = [];
+    const listDb = {
+      select: vi.fn(() => {
+        const chain: Record<string, unknown> = {};
+        const self = () => chain;
+        chain.from = (table: unknown) => { fromTables.push(table); return chain; };
+        chain.where = self;
+        chain.orderBy = self;
+        chain.limit = async () => [];
+        chain.then = (resolve: (v: unknown) => unknown) => Promise.resolve([]).then(resolve);
+        return chain;
+      }),
+    } as never;
+    await callBuiltinTool(listDb, { tenantId: TENANT, tool: 'agents.list', arguments: {} });
+    expect(fromTables).toEqual([ideAgents]);
+  });
+
+  it('registered_agents.list reads agent_registrations, not the legacy agents table', async () => {
+    const fromTables: unknown[] = [];
+    const listDb = {
+      select: vi.fn(() => {
+        const chain: Record<string, unknown> = {};
+        const self = () => chain;
+        chain.from = (table: unknown) => { fromTables.push(table); return chain; };
+        chain.where = self;
+        chain.orderBy = self;
+        chain.limit = async () => [];
+        chain.then = (resolve: (v: unknown) => unknown) => Promise.resolve([]).then(resolve);
+        return chain;
+      }),
+    } as never;
+    await callBuiltinTool(listDb, { tenantId: TENANT, tool: 'registered_agents.list', arguments: {} });
+    expect(fromTables).toEqual([agentRegistrations]);
   });
 });
 

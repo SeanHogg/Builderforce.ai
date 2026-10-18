@@ -53,6 +53,16 @@ export class AssignedAgentNotFoundError extends Error {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Postgres `integer` (int4). Digit strings outside this overflow the bind. */
+const INT4_MAX = 2_147_483_647;
+
+function parseInt4Id(ref: string): number | null {
+  if (!/^\d+$/.test(ref)) return null;
+  const n = Number(ref);
+  if (!Number.isInteger(n) || n < 1 || n > INT4_MAX) return null;
+  return n;
+}
+
 /** The base_model sentinel that means "no explicit model — use tenant default". */
 const DEFAULT_MODEL_SENTINEL = 'builderforce-default';
 
@@ -75,9 +85,10 @@ export async function resolveAssignedAgent(
 
   if (opts.agentKind === 'registered') {
     const ref = opts.agentRef;
+    const legacyId = parseInt4Id(ref);
     const key = UUID_RE.test(ref)
       ? eq(agentRegistrations.id, ref)
-      : /^\d+$/.test(ref) ? eq(agentRegistrations.legacyAgentId, Number(ref)) : null;
+      : legacyId != null ? eq(agentRegistrations.legacyAgentId, legacyId) : null;
     const [row] = key
       ? await db.select({ name: agentRegistrations.name }).from(agentRegistrations)
           .where(and(key, eq(agentRegistrations.tenantId, tenantId))).limit(1)

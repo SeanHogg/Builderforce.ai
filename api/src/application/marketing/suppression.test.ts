@@ -30,4 +30,11 @@ describe('suppressedEmails', () => {
     await expect(isSuppressed(fakeDb([[{ k: 'e', v: 'a@x.com' }]]) as unknown as Db, 7, 'A@x.com')).resolves.toBe(true);
     await expect(isSuppressed(fakeDb([[]]) as unknown as Db, 7, 'a@x.com')).resolves.toBe(false);
   });
+
+  it('compares identifier_type case-insensitively', async () => {
+    const db = fakeDb([[]]);
+    await suppressedEmails(db as unknown as Db, 7, ['a@x.com']);
+    const dumped = JSON.stringify(db.calls);
+    expect(dumped).toContain('LOWER(identifier_type)');
+  });
 });
