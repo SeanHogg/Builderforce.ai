@@ -356,6 +356,34 @@ export function allowanceState(
  * report NAMES the likely cause instead of leaving the reader to correlate numbers.
  * Ordered most-actionable first. Returns [] when nothing is obviously wrong.
  */
+const TASK_TERMINAL = new Set(['done', 'completed', 'archived', 'cancelled', 'canceled']);
+const CEREMONY_TERMINAL = new Set(['completed', 'done', 'closed', 'cancelled', 'canceled', 'archived']);
+
+/**
+ * A linked ticket the session percent still owes. Terminal vocabulary is the
+ * one each kind actually uses — a spec is `complete`, a roadmap is `shipped`,
+ * a task/gap/epic is `done`. Unknown status is not treated as open.
+ */
+function linkedTicketIsOpen(ticket: { kind: string; status?: string }): boolean {
+  const status = ticket.status?.trim().toLowerCase();
+  if (!status) return false;
+  switch (ticket.kind) {
+    case 'spec':
+      return status !== 'complete';
+    case 'roadmap':
+      return status !== 'shipped';
+    case 'task':
+    case 'gap':
+    case 'epic':
+      return !TASK_TERMINAL.has(status);
+    case 'retro':
+    case 'poker':
+      return !CEREMONY_TERMINAL.has(status);
+    default:
+      return false;
+  }
+}
+
 function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
   const out: string[] = [];
   const ev = d.evermind;
@@ -466,6 +494,23 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
       `⚠️ ${hollow.length} run(s) on this chat COMPLETED without producing anything — no commit, PR, merge or lane move (runs ${hollow.slice(0, 5).map((r) => `#${r.executionId}`).join(', ')}). A green run that shipped nothing is not progress; read those runs' output before dispatching the same work again.`,
     );
   }
+  // The session percent is the weighted mean of EVERY linked ticket, not "did a
+  // run finish". A reader who sees a green execution history and a 50% session
+  // cannot tell which tickets are still open, or why nobody flipped them.
+  const open = (d.tickets ?? []).filter(linkedTicketIsOpen);
+  if (open.length > 0) {
+    const shown = open.slice(0, 8);
+    out.push(
+      `⚠️ ${open.length} linked ticket(s) are still open. The session percent is the weighted mean of every linked ticket — a completed run does not close a spec, roadmap, epic or gap, and a ticket whose acceptance is unmet must not be flipped to done to make that percent read 100.`,
+    );
+    for (const tk of shown) {
+      const title = tk.label ? ` "${tk.label}"` : '';
+      out.push(`ℹ️ Still open: ${tk.kind} #${tk.ref}${title} (${tk.status}).`);
+    }
+    if (open.length > shown.length) {
+      out.push(`ℹ️ …and ${open.length - shown.length} more open linked ticket(s).`);
+    }
+  }
 
   // Tool availability outranks most other causes: with no tools the model CANNOT
   // fetch anything, so every data question ends in "I don't have that" or an
@@ -546,7 +591,20 @@ function dispatcherGloss(submittedBy: string): string {
   if (submittedBy.startsWith('system:coordinator')) return "the manager's coordination pass";
   if (submittedBy.startsWith('manager:')) return 'the manager';
   if (submittedBy.includes('lane-approver')) return 'a lane approver';
+  // composeDispatcherLabel('system:auto-exec', 'producer'|'reviewer', roleKey),
+  // or the bare sweep label in autonomousExecutionSweep.
+  if (submittedBy.startsWith('system:auto-exec')) return autoExecGloss(submittedBy);
   return 'unrecognised dispatcher';
+}
+
+/** `system:auto-exec[:producer|reviewer[:role]]` — board autonomy, with the role when it was composed. */
+function autoExecGloss(submittedBy: string): string {
+  const rest = submittedBy.slice('system:auto-exec'.length).replace(/^:/, '');
+  const [kind, ...roleParts] = rest.split(':').filter(Boolean);
+  const role = roleParts.join(':');
+  if (kind === 'producer') return role ? `board autonomy, producing as ${role}` : 'board autonomy (auto-exec producer)';
+  if (kind === 'reviewer') return role ? `board autonomy, reviewing as ${role}` : 'board autonomy (auto-exec reviewer)';
+  return 'board autonomy (auto-exec)';
 }
 
 /**

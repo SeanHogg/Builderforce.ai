@@ -174,6 +174,43 @@ describe('epic health (container, over its children)', () => {
     const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '1' }])).get('epic:1')!;
     expect(h).toMatchObject({ done: 3, total: 5, progressPct: 60 });
   });
+
+  it('withholds 100 when every child is done but no coder left a non-doc file', async () => {
+    // Epic #2545: 2/2 documentation children, developer runs, zero code files.
+    queue = [
+      [{ id: 2545, title: 'Advisor platform', status: 'done', completedAt: new Date() }],
+      [{ parentId: 2545, total: 2, done: 2 }],
+      [{ id: 31648, taskId: 2546, parentTaskId: 2545, payload: JSON.stringify({ roleKey: 'developer' }) }],
+      [{ executionId: 31648, path: 'docs/specs/26-prd-advisor-platform.md' }],
+    ];
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
+    expect(h.progressPct).toBe(75);
+    expect(h.unsupportedDelivery).toBe(true);
+    expect(h).toMatchObject({ done: 2, total: 2, status: 'done' });
+  });
+
+  it('keeps 100 when a coder run on a child changed a non-doc file', async () => {
+    queue = [
+      [{ id: 2545, title: 'Advisor platform', status: 'done', completedAt: new Date() }],
+      [{ parentId: 2545, total: 2, done: 2 }],
+      [{ id: 31649, taskId: 2546, parentTaskId: 2545, payload: JSON.stringify({ roleKey: 'developer' }) }],
+      [{ executionId: 31649, path: 'api/src/application/commerce/bookings.ts' }],
+    ];
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2545' }])).get('epic:2545')!;
+    expect(h.progressPct).toBe(100);
+    expect(h.unsupportedDelivery).toBeUndefined();
+  });
+
+  it('keeps 100 when there is no execution to judge — absence is not evidence', async () => {
+    queue = [
+      [{ id: 2473, title: 'Speech hop', status: 'done', completedAt: new Date() }],
+      [{ parentId: 2473, total: 5, done: 5 }],
+      [],
+    ];
+    const h = (await service().ticketHealthBatch(1, [{ kind: 'epic', ref: '2473' }])).get('epic:2473')!;
+    expect(h.progressPct).toBe(100);
+    expect(h.unsupportedDelivery).toBeUndefined();
+  });
 });
 
 /**

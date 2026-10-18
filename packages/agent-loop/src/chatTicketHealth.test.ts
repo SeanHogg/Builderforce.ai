@@ -97,6 +97,18 @@ describe('rollupChatTicketHealth', () => {
       { progressPct: 0, done: 0, total: 1, status: 'canceled' },
     ])).toEqual({ pct: 50, done: 0, total: 1 });
   });
+
+  it('does not let an unsupported epic 100 pull the session to complete', () => {
+    // Chat #112: epic children were documentation, so the chip said 100 while
+    // the spec, roadmap and gaps were still open. The cap keeps the mean honest.
+    const result = rollupChatTicketHealth([
+      { progressPct: 100, done: 1, total: 1, status: 'done', unsupportedDelivery: true },
+      { progressPct: 0, done: 0, total: 1, status: 'draft' },
+      { progressPct: 0, done: 0, total: 1, status: 'planned' },
+    ]);
+    expect(result.pct).toBeLessThan(100);
+    expect(result.pct).toBe(25);
+  });
 });
 
 /** The tree used to floor what the picker and the rail rounded — one point apart. */

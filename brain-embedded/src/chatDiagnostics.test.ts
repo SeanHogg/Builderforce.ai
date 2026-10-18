@@ -312,6 +312,37 @@ describe('formatChatDiagnostics — the dispatch pathway', () => {
     expect(out).toMatch(/none by a person pressing Run/);
   });
 
+  it('glosses the auto-exec dispatcher instead of calling it unrecognised', () => {
+    const out = formatChatDiagnostics(staffed({
+      runs: {
+        linkedRunnableTickets: 2,
+        runs: [run({ executionId: 32230, submittedBy: 'system:auto-exec:producer:developer' })],
+        dispatchers: ['system:auto-exec:producer:developer'],
+      },
+    })).join('\n');
+    expect(out).toContain('system:auto-exec:producer:developer (board autonomy, producing as developer)');
+    expect(out).not.toContain('unrecognised dispatcher');
+  });
+
+  it('names the linked tickets that keep the session percent below 100', () => {
+    const out = formatChatDiagnostics(staffed({
+      tickets: [
+        { kind: 'task', ref: '2520', label: 'Offline toast', status: 'done' },
+        { kind: 'spec', ref: '400b7152', label: 'Advisor platform', status: 'draft' },
+        { kind: 'epic', ref: '2545', label: 'Build Advisor platform', status: 'in_progress' },
+        { kind: 'roadmap', ref: '69584c3f', label: 'Advisor platform', status: 'planned' },
+        { kind: 'gap', ref: '5233', label: 'A1 reservation', status: 'in_progress' },
+      ],
+    })).join('\n');
+    expect(out).toMatch(/4 linked ticket\(s\) are still open/);
+    expect(out).toContain('Still open: spec #400b7152 "Advisor platform" (draft)');
+    expect(out).toContain('Still open: epic #2545 "Build Advisor platform" (in_progress)');
+    expect(out).toContain('Still open: roadmap #69584c3f "Advisor platform" (planned)');
+    expect(out).toContain('Still open: gap #5233 "A1 reservation" (in_progress)');
+    expect(out).not.toContain('Still open: task #2520');
+    expect(out).toMatch(/must not be flipped to done/);
+  });
+
   it('flags a COMPLETED run that shipped nothing', () => {
     // A green run that left no commit, PR, merge or lane move is not progress, and every
     // surface that prints only the status reads it as success.

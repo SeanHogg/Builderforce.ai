@@ -1,5 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { rollupChatTicketHealth, TASK_CLOSED_STATUSES } from '@builderforce/agent-loop';
+import { rollupChatTicketHealth, TASK_CLOSED_STATUSES, UNSUPPORTED_DELIVERY_PROGRESS_CAP } from '@builderforce/agent-loop';
 /**
  * ChatTicketService — the single source of logic for tying Brain chats to work
  * items, computing a chat's ticket health, tracing chat↔ticket lineage, and
@@ -34,12 +34,16 @@ import {
   pokerStories,
   retrospectives,
   retroItems,
+  executions,
+  taskFileChanges,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { isCeremonySessionDone } from '../../domain/agile/ceremonySession';
 import { notSystemTask } from '../task/taskScope';
 import { buildTaskProgressBreakdown } from '../task/taskProgressBreakdown';
+import { coderProducedCode } from '../task/taskActivity';
+import { liveExecution } from '../rehearsal/executionMode';
 import { keyResultProgress, objectiveProgress } from '../pmo/portfolioRollup';
 import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 import { resolveChatAccess } from './chatAccess';
@@ -121,9 +125,21 @@ export interface TicketHealth {
    *   completion signal; do not treat a near-100 value as done.
    * - `progressPct === 100` corresponds to `done === total` and, for a leaf, to a
    *   terminal `status`. Both agree by construction — there is no state where
-   *   `progressPct` is 100 while the item is not complete.
+   *   `progressPct` is 100 while the item is not complete, except the cap below.
+   * - EXCEPTION — unsupported delivery. An epic whose children (or own status)
+   *   read complete, but a live execution on the epic or a direct child exists and
+   *   no coder run left a non-documentation file, does NOT emit 100. `progressPct`
+   *   is capped at `UNSUPPORTED_DELIVERY_PROGRESS_CAP` and `unsupportedDelivery`
+   *   is set. No executions means unknown, not unsupported — absence is not
+   *   evidence, so 100 is still emitted. The cap is applied before the value is
+   *   stored, so a consumer that ignores the flag still cannot read 100.
    */
   progressPct: number;
+  /**
+   * Set when this epic's 100 was withheld because delivery evidence does not
+   * support it. Absent when delivery is supported or there is nothing to judge.
+   */
+  unsupportedDelivery?: boolean;
   done: number;
   total: number;
   /** False when the referenced ticket no longer exists in the tenant. */
@@ -420,6 +436,64 @@ export class ChatTicketService {
   }
 
   /**
+   * Epics that read complete, but a live execution on the epic or a direct child
+   * exists and no coder run left a non-documentation file.
+   *
+   * Same grain as the child rollup (one parent hop) and the same evidence as
+   * `summarizeTaskActivity`'s `staleImplementation`. No executions ⇒ unknown,
+   * not unsupported: absence is not evidence, and a genuinely closed epic with
+   * no run history must still emit 100.
+   */
+  private async epicsWithUnsupportedDelivery(tenantId: number, epicIds: number[]): Promise<Set<number>> {
+    const unsupported = new Set<number>();
+    if (epicIds.length === 0) return unsupported;
+    const wanted = new Set(epicIds);
+    const execRows = await this.db
+      .select({
+        id: executions.id,
+        taskId: executions.taskId,
+        parentTaskId: tasks.parentTaskId,
+        payload: executions.payload,
+      })
+      .from(executions)
+      .innerJoin(tasks, eq(tasks.id, executions.taskId))
+      .where(and(
+        eq(executions.tenantId, tenantId),
+        liveExecution(),
+        or(inArray(executions.taskId, epicIds), inArray(tasks.parentTaskId, epicIds)),
+      ));
+    if (execRows.length === 0) return unsupported;
+    const fileRows = await this.db
+      .select({ executionId: taskFileChanges.executionId, path: taskFileChanges.path })
+      .from(taskFileChanges)
+      .where(inArray(taskFileChanges.executionId, execRows.map((row) => row.id)));
+    const pathsByExec = new Map<number, string[]>();
+    for (const file of fileRows) {
+      const list = pathsByExec.get(file.executionId) ?? [];
+      list.push(file.path);
+      pathsByExec.set(file.executionId, list);
+    }
+    const byEpic = new Map<number, typeof execRows>();
+    for (const row of execRows) {
+      const owners: number[] = [];
+      if (wanted.has(row.taskId)) owners.push(row.taskId);
+      if (row.parentTaskId != null && wanted.has(row.parentTaskId)) owners.push(row.parentTaskId);
+      for (const epicId of owners) {
+        const list = byEpic.get(epicId) ?? [];
+        list.push(row);
+        byEpic.set(epicId, list);
+      }
+    }
+    for (const epicId of epicIds) {
+      const rows = byEpic.get(epicId);
+      if (!rows || rows.length === 0) continue;
+      const supported = rows.some((row) => coderProducedCode(row.payload, pathsByExec.get(row.id) ?? []));
+      if (!supported) unsupported.add(epicId);
+    }
+    return unsupported;
+  }
+
+  /**
    * Batched health for a set of (kind, ref) targets — one aggregate query per
    * tier, so a chat with N linked tickets costs a constant handful of queries.
    *
@@ -504,16 +578,36 @@ export class ChatTicketService {
           .where(scopedToTenant(tasks, tenantId, inArray(tasks.parentTaskId, [...epicIds])))
           .groupBy(tasks.parentTaskId);
         const childByParent = new Map(childRows.map((r) => [Number(r.parentId), { total: Number(r.total), done: Number(r.done) }]));
+        // Only epics that would emit 100 are worth a delivery read. A partial
+        // container is already < 100; querying it would not change the chip.
+        const claimedComplete: number[] = [];
+        for (const id of epicIds) {
+          const r = selfById.get(id);
+          if (!r) continue;
+          const c = childByParent.get(id) ?? { total: 0, done: 0 };
+          const claimed = c.total > 0
+            ? c.done === c.total
+            : (r.completedAt != null || DONE_STATUS.has(r.status));
+          if (claimed) claimedComplete.push(id);
+        }
+        const unsupported = await this.epicsWithUnsupportedDelivery(tenantId, claimedComplete);
         for (const id of epicIds) {
           const r = selfById.get(id);
           if (!r) { out.set(key('epic', String(id)), missing('epic', String(id))); continue; }
           const c = childByParent.get(id) ?? { total: 0, done: 0 };
           const total = c.total;
           const done = c.done;
-          const progressPct = total > 0 ? Math.round((done / total) * 100) : (r.completedAt != null || DONE_STATUS.has(r.status) ? 100 : 0);
+          const claimed = total > 0
+            ? Math.round((done / total) * 100)
+            : (r.completedAt != null || DONE_STATUS.has(r.status) ? 100 : 0);
+          const unsupportedDelivery = unsupported.has(id);
+          const progressPct = unsupportedDelivery
+            ? Math.min(claimed, UNSUPPORTED_DELIVERY_PROGRESS_CAP)
+            : claimed;
           const parent = parentByChild.get(id);
           out.set(key('epic', String(id)), {
             kind: 'epic', ref: String(id), label: r.title, status: r.status, progressPct, done, total, exists: true,
+            ...(unsupportedDelivery ? { unsupportedDelivery: true } : {}),
             ...(parent ? { parent } : {}),
           });
         }

@@ -38,7 +38,21 @@ export interface ChatTicketHealthInput {
   total: number;
   /** Lane key. Cancelled work is skipped — it is off the board, not remaining. */
   status?: string | null;
+  /**
+   * The reported `progressPct` is not backed by delivery evidence. Lowers a 100
+   * to {@link UNSUPPORTED_DELIVERY_PROGRESS_CAP}; never raises a lower figure.
+   */
+  unsupportedDelivery?: boolean;
 }
+
+/**
+ * Ceiling for a ticket whose children (or own status) read complete, but a live
+ * execution exists and no coder run left a non-documentation file. Same rung as
+ * `in_review` on the status ladder: claimed done, not verified by delivery.
+ * Exact 100 remains the only completion signal — this cap exists so a
+ * documentation-only close cannot emit it.
+ */
+export const UNSUPPORTED_DELIVERY_PROGRESS_CAP = 75;
 
 export interface ChatTicketHealth {
   /** Overall progress 0–100. */
@@ -54,6 +68,13 @@ export function isExcludedFromChatHealth(status?: string | null): boolean {
   return isCancelledTaskStatus(status);
 }
 
+/** 100 is the completion signal. Unsupported delivery may not emit it. */
+function effectiveProgressPct(t: ChatTicketHealthInput): number {
+  const raw = Number.isFinite(t.progressPct) ? t.progressPct : 0;
+  if (t.unsupportedDelivery === true && raw >= 100) return UNSUPPORTED_DELIVERY_PROGRESS_CAP;
+  return raw;
+}
+
 /** Roll a chat's linked tickets up into its one progress figure. */
 export function rollupChatTicketHealth(tickets: readonly ChatTicketHealthInput[]): ChatTicketHealth {
   let done = 0;
@@ -62,7 +83,7 @@ export function rollupChatTicketHealth(tickets: readonly ChatTicketHealthInput[]
   let counted = 0;
   for (const tk of tickets) {
     if (isExcludedFromChatHealth(tk.status)) continue;
-    const pct = Number.isFinite(tk.progressPct) ? tk.progressPct : 0;
+    const pct = effectiveProgressPct(tk);
     const weight = Number.isFinite(tk.total) && tk.total > 0 ? tk.total : 1;
     done += Number.isFinite(tk.done) ? tk.done : 0;
     total += weight;

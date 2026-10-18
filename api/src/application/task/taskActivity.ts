@@ -54,6 +54,16 @@ export function isCodePath(path: string): boolean {
   return !DOC_PATH.test(path.replace(/\\/g, '/'));
 }
 
+/**
+ * A coder/developer/engineer execution that changed at least one non-documentation
+ * path. The same evidence `summarizeTaskActivity` uses for `staleImplementation`,
+ * so a chat-health read and a task-get read cannot disagree about "did this ship".
+ */
+export function coderProducedCode(payload: string | null, paths: readonly string[]): boolean {
+  const role = executionRole(payload) ?? '';
+  return CODER_ROLE.test(role) && paths.some(isCodePath);
+}
+
 export function summarizeTaskActivity(
   taskStatus: string,
   executions: TaskExecutionActivityInput[],

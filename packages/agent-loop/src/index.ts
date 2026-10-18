@@ -25,6 +25,7 @@ export {
   isExcludedFromChatHealth,
   displayChatProgressPct,
   chatProgressIsStale,
+  UNSUPPORTED_DELIVERY_PROGRESS_CAP,
   type ChatTicketHealth,
   type ChatTicketHealthInput,
 } from "./chatTicketHealth.js";

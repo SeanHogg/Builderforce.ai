@@ -13573,6 +13573,27 @@ function allowanceState(meter) {
   if (meter.remaining <= 0) return "exhausted";
   return meter.percentUsed >= 80 ? "warn" : "ok";
 }
+var TASK_TERMINAL = /* @__PURE__ */ new Set(["done", "completed", "archived", "cancelled", "canceled"]);
+var CEREMONY_TERMINAL = /* @__PURE__ */ new Set(["completed", "done", "closed", "cancelled", "canceled", "archived"]);
+function linkedTicketIsOpen(ticket) {
+  const status2 = ticket.status?.trim().toLowerCase();
+  if (!status2) return false;
+  switch (ticket.kind) {
+    case "spec":
+      return status2 !== "complete";
+    case "roadmap":
+      return status2 !== "shipped";
+    case "task":
+    case "gap":
+    case "epic":
+      return !TASK_TERMINAL.has(status2);
+    case "retro":
+    case "poker":
+      return !CEREMONY_TERMINAL.has(status2);
+    default:
+      return false;
+  }
+}
 function diagnosticsSignals(d) {
   const out = [];
   const ev = d.evermind;
@@ -13647,6 +13668,20 @@ function diagnosticsSignals(d) {
       `\u26A0\uFE0F ${hollow.length} run(s) on this chat COMPLETED without producing anything \u2014 no commit, PR, merge or lane move (runs ${hollow.slice(0, 5).map((r) => `#${r.executionId}`).join(", ")}). A green run that shipped nothing is not progress; read those runs' output before dispatching the same work again.`
     );
   }
+  const open = (d.tickets ?? []).filter(linkedTicketIsOpen);
+  if (open.length > 0) {
+    const shown = open.slice(0, 8);
+    out.push(
+      `\u26A0\uFE0F ${open.length} linked ticket(s) are still open. The session percent is the weighted mean of every linked ticket \u2014 a completed run does not close a spec, roadmap, epic or gap, and a ticket whose acceptance is unmet must not be flipped to done to make that percent read 100.`
+    );
+    for (const tk of shown) {
+      const title = tk.label ? ` "${tk.label}"` : "";
+      out.push(`\u2139\uFE0F Still open: ${tk.kind} #${tk.ref}${title} (${tk.status}).`);
+    }
+    if (open.length > shown.length) {
+      out.push(`\u2139\uFE0F \u2026and ${open.length - shown.length} more open linked ticket(s).`);
+    }
+  }
   const tools = d.tools;
   if (tools && !tools.loading) {
     if (tools.error) {
@@ -13706,7 +13741,16 @@ function dispatcherGloss(submittedBy) {
   if (submittedBy.startsWith("system:coordinator")) return "the manager's coordination pass";
   if (submittedBy.startsWith("manager:")) return "the manager";
   if (submittedBy.includes("lane-approver")) return "a lane approver";
+  if (submittedBy.startsWith("system:auto-exec")) return autoExecGloss(submittedBy);
   return "unrecognised dispatcher";
+}
+function autoExecGloss(submittedBy) {
+  const rest = submittedBy.slice("system:auto-exec".length).replace(/^:/, "");
+  const [kind, ...roleParts] = rest.split(":").filter(Boolean);
+  const role = roleParts.join(":");
+  if (kind === "producer") return role ? `board autonomy, producing as ${role}` : "board autonomy (auto-exec producer)";
+  if (kind === "reviewer") return role ? `board autonomy, reviewing as ${role}` : "board autonomy (auto-exec reviewer)";
+  return "board autonomy (auto-exec)";
 }
 function executorGloss(executor) {
   if (executor === "on-prem") return "on-prem machine (real shell, the machine's own clone)";
