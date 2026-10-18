@@ -7,6 +7,8 @@
  * the moment a host maps it — and an unmapped key still reads as words, never as a
  * raw `snake_case` id.
  */
+import { stringsFrom, type LabelLookup } from '../labelCatalog';
+
 export interface WorkStatusLabels {
   loading: string;
   account: string;
@@ -89,4 +91,22 @@ export function workStatusLabels(overrides?: Partial<WorkStatusLabels>): WorkSta
 /** A key's display name: the mapped label, else its words (never a raw `snake_case` id). */
 export function labelForKey(map: Record<string, string>, key: string): string {
   return map[key] ?? key.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
+/**
+ * THE Status tab copy from a host catalog — the ONE key table every host reads it
+ * through: each field by name, and the keyed records as `billing.<state>`,
+ * `plans.<tier>`, `meters.<meterKey>` and `units.<unit>` (the server's own keys). A key
+ * the catalog lacks keeps the English default; `{used}`/`{limit}`/`{unit}`/`{version}`
+ * must come back literal — the panel fills them.
+ */
+export function workStatusLabelsFrom(lookup: LabelLookup): WorkStatusLabels {
+  const d = DEFAULT_WORK_STATUS_LABELS;
+  return {
+    ...stringsFrom(d, lookup),
+    billing: stringsFrom(d.billing, lookup, 'billing.'),
+    plans: stringsFrom(d.plans, lookup, 'plans.'),
+    meters: stringsFrom(d.meters, lookup, 'meters.'),
+    units: stringsFrom(d.units, lookup, 'units.'),
+  };
 }

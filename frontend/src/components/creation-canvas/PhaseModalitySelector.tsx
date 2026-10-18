@@ -6,7 +6,7 @@ import type { CanvasPhaseReadiness } from '@/lib/canvasPhaseReadiness';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { useCanvasPhase } from './phase/CanvasPhaseContext';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/phase.module.css';
 
 /**
  * ONE fused widget: which PHASE of the session's own methodology this is, over which

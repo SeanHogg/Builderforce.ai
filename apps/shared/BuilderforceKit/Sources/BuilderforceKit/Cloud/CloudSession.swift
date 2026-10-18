@@ -100,7 +100,7 @@ public actor CloudSession {
 
     public func workspaces() async throws -> [CloudWorkspace] {
         struct Listing: Decodable { let tenants: [CloudWorkspace]? }
-        let data = try await self.perform(CloudAPIRequest(method: "GET", path: "/api/vscode/tenants"))
+        let data = try await self.perform(CloudAPIRequest(method: "GET", path: "/api/tenants"))
         return try CloudJSON.decode(Listing.self, from: data).tenants ?? []
     }
 

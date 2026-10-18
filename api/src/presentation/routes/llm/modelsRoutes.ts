@@ -6,19 +6,17 @@
  * GET /v1/health  — per-model availability for the free/pro pools
  */
 import type { Hono } from 'hono';
-import type { HonoEnv } from '../../../env';
+import type { Env, HonoEnv } from '../../../env';
 import {
   llmProxyForPlan,
   productNameForPlan,
   modelPoolForPlan,
   codingModelsForPlan,
-  FREE_MODEL_POOL,
-  PRO_MODEL_POOL,
 } from '../../../application/llm/LlmProxyService';
 import { PREMIUM_REQUEST_SURCHARGE_MILLICENTS } from '../../../application/llm/usageLedger';
 import { allVendorFlagships } from '../../../application/llm/vendors';
 import { getCatalogCached } from '../../../application/llm/modelCatalog';
-import { FREE_IMAGE_MODEL_POOL, PAID_IMAGE_MODEL_POOL } from '../../../application/llm/ImageProxyService';
+import { llmHealthReport } from '../../../application/health/platformHealth';
 import { toTenantPlan } from '../../../application/tenant/featureEntitlements';
 import {
   listTenantProviderKeys,
@@ -211,26 +209,8 @@ export function mountModelsRoutes(router: Hono<HonoEnv>): void {
     });
   });
 
-  router.get('/v1/health', async (c) => {
-    // Per-model availability/cooldown for each pool, mirroring /v1/models'
-    // `status()` shape (LlmModelStatus[]). The observability UI renders these
-    // as the free/pro pool tabs, so the contract is `free`/`pro` arrays +
-    // `timestamp` — NOT bare pool counts. Global pools, so no tenant needed.
-    const [free, pro] = await Promise.all([
-      llmProxyForPlan(c.env, 'free').status(),
-      llmProxyForPlan(c.env, 'pro').status(),
-    ]);
-    return c.json({
-      status: 'ok',
-      service: 'builderforceLLM',
-      free,
-      pro,
-      timestamp: new Date().toISOString(),
-      // Retained for any non-UI consumer of the historical shape.
-      pool: FREE_MODEL_POOL.length,
-      proPool: PRO_MODEL_POOL.length,
-      imagePool: FREE_IMAGE_MODEL_POOL.length,
-      imageProPool: PAID_IMAGE_MODEL_POOL.length,
-    });
-  });
+  // Per-model availability/cooldown for each plan's pool — the `planPools` section of
+  // THE health use case (application/health/platformHealth). Global pools, so no
+  // tenant is needed; the `free`/`pro` arrays are the observability UI's contract.
+  router.get('/v1/health', async (c) => c.json(await llmHealthReport(c.env as Env)));
 }

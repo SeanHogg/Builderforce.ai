@@ -11,7 +11,7 @@ import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignup
 import { useModelIdentity } from '@/lib/useLlmModels';
 import { Icon } from '@/components/ui/Icon';
 import type { Edge } from '@xyflow/react';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/brain.module.css';
 import { creationObjectDefinition, creationObjectName } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
 import { brainActivityLine, useBrainActivity } from './BrainActivityView';

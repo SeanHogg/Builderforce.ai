@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/marketing.module.css';
 import { networkGlyph } from '@/lib/networkGlyph';
 import { useFormat } from '@/i18n/useFormat';
 import type { CreationBodyProps } from './types';

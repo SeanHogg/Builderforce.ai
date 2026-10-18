@@ -9,7 +9,7 @@
  *   POST /api/auth/web/register/verify  → { token, user }
  *   POST /api/auth/web/register/resend
  *   POST /api/auth/magic-link
- *   GET  /api/auth/my-tenants           (with the token just issued)
+ *   GET  /api/tenants                   (with the token just issued)
  *   POST /api/auth/tenant-token         (the web → tenant token exchange)
  *   PUT  /api/auth/default-tenant       (adopting a legacy default with that same token)
  *
@@ -141,7 +141,7 @@ export async function resendVerificationCode(email: string): Promise<{ cooldownS
  * account's default workspace marked `isDefault`.
  */
 export async function getMyTenants(webToken: string): Promise<Tenant[]> {
-  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/auth/my-tenants`, {
+  const res = await fetchWithTransportReport(`${AUTH_API_URL}/api/tenants`, {
     headers: { Authorization: `Bearer ${webToken}` },
   });
   checkUnauthorizedAndRedirect(res, !!webToken);

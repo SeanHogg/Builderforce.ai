@@ -31,7 +31,7 @@ import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { canvasChromeShows } from '@/lib/canvasChrome';
 import { CanvasBarGroup } from './CanvasBarGroup';
 import { useContributedSurfaceActions } from './canvasSurfaceActions';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/chrome.module.css';
 
 /**
  * The ONE control set for "what can I do to this canvas".

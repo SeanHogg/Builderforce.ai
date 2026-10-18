@@ -1,4 +1,3 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * Job postings + proposals (the bidding side of the freelance marketplace) and the
  * in-app notification feed.
@@ -62,7 +61,6 @@ import {
   postingTypeIfStated,
   projectLength,
   upsertJobPosting,
-  type PostingAttachment,
 } from '../../application/marketplace/jobPostings';
 import {
   countLiveInvitesByJob, createInvite, hasLiveInvite, markInviteViewed, readInvitesForJob, readInvitesForUser,
@@ -72,13 +70,14 @@ import {
   recommendPostingsForFreelancer, recommendTalentForPosting,
 } from '../../application/marketplace/talentRecommendations';
 import {
-  createMilestone, readJobSchedule,
+  addScheduleMilestone, readJobSchedule,
   readProposalSchedule, readProposalSchedules, replaceProposalSchedule,
   type ProposedMilestoneInput,
 } from '../../application/marketplace/milestones';
 import { hireShape } from '../../application/marketplace/engagementShape';
 import { clientRatingCountSql, clientRatingSql, jobColumns, mapJob, mapProposal, proposalColumns } from '../../application/marketplace/jobs/jobRows';
 import { acceptProposal } from '../../application/marketplace/jobs/acceptProposal';
+import { deleteAttachmentBlob, putAttachment, serveAttachment } from '../../application/marketplace/jobs/jobAttachmentStore';
 import { markNotificationsRead, readNotificationFeed } from '../../application/notifications/notificationFeed';
 import { summariseEscrow } from '../../application/marketplace/escrow';
 import type { EvalJudge } from '../../application/eval/semanticEval';
@@ -192,7 +191,8 @@ async function seekerTenantId(db: Db, env: Env, userId: string): Promise<number 
 
 
 // ---------------------------------------------------------------------------
-// Attachments (0985) — the EXISTING bucket, not a new blob store
+// Attachments (0985) — the EXISTING bucket, not a new blob store. Storage
+// (put / serve / delete) is application/marketplace/jobs/jobAttachmentStore.ts.
 // ---------------------------------------------------------------------------
 //
 // `env.UPLOADS` is the same R2 bucket `POST /api/freelancers/me/resume` and
@@ -218,34 +218,6 @@ async function readUpload(c: { req: { formData(): Promise<FormData> } }): Promis
   const type = file.type || 'application/octet-stream';
   if (!ATTACHMENT_MIME.has(type)) return { ok: false, error: `File type ${type} is not allowed`, status: 415 };
   return { ok: true, file };
-}
-
-/** Put the bytes and describe them. The caller owns where the description is stored. */
-async function putAttachment(env: Env, prefix: string, file: File): Promise<PostingAttachment | null> {
-  if (!env.UPLOADS) return null;
-  const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
-  const id = crypto.randomUUID();
-  const key = `${prefix}/${id}.${ext}`;
-  await env.UPLOADS.put(key, file.stream(), {
-    httpMetadata: { contentType: file.type || 'application/octet-stream' },
-  });
-  return { id, key, name: file.name.slice(0, 200), mime: file.type || null, size: file.size };
-}
-
-/** Stream one already-authorised attachment out of R2. */
-async function serveAttachment(env: Env, attachments: PostingAttachment[], attachmentId: string): Promise<Response> {
-  const found = attachments.find((a) => a.id === attachmentId);
-  if (!found) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
-  if (!env.UPLOADS) return new Response(JSON.stringify({ error: 'File storage is not configured' }), { status: 503, headers: { 'content-type': 'application/json' } });
-  const obj = await env.UPLOADS.get(found.key);
-  if (!obj) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
-  const headers = new Headers();
-  headers.set('Content-Type', found.mime ?? obj.httpMetadata?.contentType ?? 'application/octet-stream');
-  // An attachment is somebody's brief or work sample: shown in the app, never cached by
-  // a shared proxy.
-  headers.set('Cache-Control', 'private, max-age=300');
-  headers.set('Content-Disposition', `inline; filename="${found.name.replace(/[^\w.\- ]/g, '_')}"`);
-  return new Response(obj.body, { headers });
 }
 
 export function createJobRoutes(): Hono<HonoEnv> {
@@ -576,11 +548,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     await db.update(jobProposals)
       .set({ attachments, updatedAt: sql`NOW()` })
       .where(and(eq(jobProposals.id, pid), eq(jobProposals.freelancerUserId, userId)));
-    if (c.env.UPLOADS) {
-      await c.env.UPLOADS.delete(target.key).catch((error) => {
-        reportCaughtError(error, { source: 'presentation/routes/jobRoutes.ts', operation: 'deleteProposalAttachment', level: 'warning', context: { key: target.key } });
-      });
-    }
+    await deleteAttachmentBlob(c.env as Env, target.key, 'deleteProposalAttachment');
     return c.json({ ok: true, attachments });
   });
 
@@ -633,16 +601,11 @@ export function createJobRoutes(): Hono<HonoEnv> {
     if (!title) return c.json({ error: 'title is required' }, 400);
     const amountCents = Math.floor(Number(b.amountCents ?? 0));
     if (!Number.isFinite(amountCents) || amountCents < 0) return c.json({ error: 'amountCents must be a positive integer' }, 400);
-    // The posting must be this tenant's, and must still be open: adding deliverables to
-    // a filled job would change the agreement after somebody was hired against it.
-    const [job] = await db.select({ id: jobPostings.id })
-      .from(jobPostings)
-      .where(and(eq(jobPostings.id, jobId), eq(jobPostings.tenantId, tenantId), eq(jobPostings.status, 'open')))
-      .limit(1);
-    if (!job) return c.json({ error: 'Not found' }, 404);
-    const milestone = await createMilestone(db, {
+    // The posting must be this tenant's and still open — the shared authoring use
+    // case owns that rule (milestones.ts `addScheduleMilestone`).
+    const milestone = await addScheduleMilestone(db, {
       tenantId,
-      jobId,
+      parent: { kind: 'job', jobId },
       title,
       description: b.description ?? null,
       amountCents,
@@ -651,6 +614,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
       dueAt: b.dueAt ? new Date(b.dueAt) : null,
       createdByUserId: c.get('userId') as string,
     });
+    if (!milestone) return c.json({ error: 'Not found' }, 404);
     return c.json({ milestone }, 201);
   });
 
@@ -871,13 +835,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     await db.update(jobPostings)
       .set({ attachments, updatedAt: sql`NOW()` })
       .where(and(eq(jobPostings.id, id), eq(jobPostings.tenantId, tenantId)));
-    if (c.env.UPLOADS) {
-      await c.env.UPLOADS.delete(target.key).catch((error) => {
-        // The row is already detached, so the file is unreachable either way; a failed
-        // blob delete is a cleanup problem, not a failed request. Logged, never silent.
-        reportCaughtError(error, { source: 'presentation/routes/jobRoutes.ts', operation: 'deleteJobAttachment', level: 'warning', context: { key: target.key } });
-      });
-    }
+    await deleteAttachmentBlob(c.env as Env, target.key, 'deleteJobAttachment');
     await invalidatePostingCaches(c.env as Env, tenantId, job.source_ticket_id);
     return c.json({ ok: true, attachments });
   });

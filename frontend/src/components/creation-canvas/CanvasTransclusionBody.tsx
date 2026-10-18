@@ -23,7 +23,7 @@ import { useTranslations } from 'next-intl';
 import { DocumentMarkdown } from '@/components/DocumentMarkdown';
 import { knowledgeApi } from '@/lib/knowledgeApi';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/bodies.module.css';
 
 /** How much of a long document a CARD shows. The whole point of a card is that it is
  *  glanceable; the link below opens the document itself, which is where a person goes to

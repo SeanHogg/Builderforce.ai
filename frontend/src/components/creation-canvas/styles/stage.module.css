@@ -1,0 +1,219 @@
+/* The board stage: the floating toolbars and panels drawn over the board (selection, present, history, change sets, outcome metrics, drawing, file drop).
+   Split out of CreationCanvas.module.css, which keeps the board shell and the
+   canvas palette (`--canvas-*`, light and dark) that every rule here reads. */
+
+.primaryButton {
+  border-radius:var(--radius-md); padding:8px 13px; border:1px solid var(--canvas-line); cursor:pointer; font-family:inherit; font-size:12px; font-weight:650;
+}
+.primaryButton { background:var(--canvas-accent); color:var(--text-on-accent); border-color:var(--canvas-accent); }
+.accountGateBackdrop { position:fixed; z-index:80; inset:0; display:grid; place-items:center; padding:20px; background:rgba(3,8,18,.58); backdrop-filter:blur(5px); }
+.accountGate { position:relative; box-sizing:border-box; width:min(440px,100%); display:grid; justify-items:center; padding:30px; border:1px solid var(--canvas-line); border-radius:var(--radius-xl); background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 28px 90px rgba(0,0,0,.4); text-align:center; }
+.accountGateClose { position:absolute; top:11px; right:12px; width:30px; height:30px; border:0; border-radius:var(--radius-md); background:transparent; color:var(--canvas-muted); font-size:21px; cursor:pointer; }.accountGateClose:hover { background:var(--canvas-hover); }
+.accountGateIcon { width:44px; height:44px; display:grid; place-items:center; margin-bottom:11px; border-radius:var(--radius-lg); background:color-mix(in srgb,var(--canvas-accent) 16%,var(--canvas-panel)); color:var(--canvas-accent); font-size:22px; }
+.accountGate > small { color:var(--canvas-accent); font-size:10px; font-weight:750; letter-spacing:.08em; text-transform:uppercase; }.accountGate h2 { margin:6px 0 9px; font-size:21px; line-height:1.2; }.accountGate > p { max-width:360px; margin:0; color:var(--canvas-muted); font-size:12px; line-height:1.55; }
+.accountGateBenefits { width:100%; display:grid; gap:7px; box-sizing:border-box; margin:18px 0; padding:12px 14px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel-muted); color:var(--canvas-ink); font-size:11px; text-align:left; }
+.accountGateActions { width:100%; display:grid; grid-template-columns:1fr 1fr; gap:8px; }.accountGateActions button { min-height:39px; }
+.accountGateLater { margin-top:12px; border:0; background:transparent; color:var(--canvas-muted); font:600 10px var(--font-sans); cursor:pointer; }.accountGateLater:hover { color:var(--canvas-ink); text-decoration:underline; }
+.mergePanel select option { background:var(--canvas-panel); color:var(--canvas-ink); }
+/* Centred on the OPEN board, not on the viewport:with Brain docked to one edge a
+   plain 50% puts the actions for the thing you just selected underneath it. Same
+   arithmetic as the composer, which centres on the board the dock leaves behind. */
+/* --- The presentation control ---------------------------------------------
+   The ONE piece of chrome present mode adds rather than hides, so it is the one
+   thing on screen competing with the board for a room's attention: it sits at the
+   BOTTOM centre, out of the reading path, and stays small.
+
+   Every colour is a token, because a presentation is the surface most likely to be
+   thrown at a projector in whichever theme the presenter happens to be running.
+   Fluid rather than fixed-width — a frame title is as long as somebody made it, so
+   the title truncates and the controls never wrap off a narrow screen. */
+.presentBar {
+  position:absolute; z-index:14; bottom:18px; left:50%; transform:translateX(-50%);
+  display:flex; align-items:center; gap:4px;
+  max-width:min(92vw, 640px); padding:5px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-lg);
+  background:var(--canvas-panel); color:var(--canvas-ink);
+  box-shadow:0 10px 30px var(--canvas-shadow, rgba(60,48,36,.16));
+}
+.presentBar button {
+  flex:none; min-width:34px; min-height:34px;
+  border:0; border-radius:var(--radius-sm); padding:6px 10px;
+  background:transparent; color:var(--canvas-ink); font:600 13px var(--font-sans); cursor:pointer;
+}
+.presentBar button:hover:not(:disabled),
+.presentBar button:focus-visible { background:var(--canvas-hover); }
+.presentBar button:disabled { opacity:.35; cursor:not-allowed; }
+.presentPosition {
+  display:grid; gap:1px; min-width:0; padding:0 8px; text-align:center;
+}
+.presentPosition b { color:var(--canvas-ink); font-size:11px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+/* The title is the only unbounded string here, so it is the only one that truncates. */
+.presentPosition small {
+  overflow:hidden; color:var(--canvas-muted); font-size:10px;
+  text-overflow:ellipsis; white-space:nowrap;
+}
+.presentExit { color:var(--canvas-muted)!important; font-size:10px!important; }
+
+.selectionToolbar { position:absolute; z-index:13; top:14px; left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2); transform:translateX(-50%); display:flex; align-items:center; gap:4px; padding:5px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:rgba(255,255,255,.98); box-shadow:0 9px 28px rgba(60,48,36,.13); }
+.selectionToolbar span { padding:0 7px; color:var(--canvas-muted); font-size:10px; white-space:nowrap; }
+.selectionToolbar button { border:0; border-radius:var(--radius-sm); padding:6px 8px; background:transparent; color:var(--canvas-ink); font:600 10px var(--font-sans); cursor:pointer; }
+.selectionToolbar button:hover { background:var(--canvas-panel-muted); }.selectionToolbar button:disabled { opacity:.4; cursor:not-allowed; }
+/* Set apart from the four beside it, which all only change a VIEW of the objects. The
+   rule is scoped under `.selectionToolbar` so it beats the generic hover above it
+   without an `!important`, and both colours are the canonical danger tokens, so it
+   reads correctly in either theme. */
+.selectionToolbar .selectionDelete { color:var(--danger-text); }
+.selectionToolbar .selectionDelete:hover:not(:disabled) { background:var(--danger-bg); color:var(--danger-text); }
+/* Dark keeps its own toolbar-button hover further down the sheet, at a specificity this
+   rule has to match or the destructive button would hover the same slate blue as the
+   four beside it. */
+:global(html:not([data-theme='light'])) .selectionToolbar .selectionDelete:hover:not(:disabled) { background:var(--danger-bg); }
+/* The loading state is the board with its objects not yet drawn, so it is painted
+   from the board and card tokens — pinned to light greys it flashed a white sheet
+   over a dark canvas on every load. */
+.canvasSkeleton { position:absolute; inset:0; z-index:25; display:grid; place-items:center; background:color-mix(in srgb,var(--canvas-board) 88%,transparent); color:var(--canvas-muted); }
+.canvasSkeleton span { position:absolute; width:260px; height:150px; border:1px solid var(--canvas-widget-border); border-radius:var(--radius-lg); background:linear-gradient(100deg,var(--canvas-panel-muted) 25%,var(--canvas-widget-surface) 45%,var(--canvas-panel-muted) 65%); background-size:220% 100%; animation:canvasShimmer 1.3s infinite linear; }
+.canvasSkeleton span:nth-child(1){ transform:translate(-320px,-120px); }.canvasSkeleton span:nth-child(2){ transform:translate(0,-30px); }.canvasSkeleton span:nth-child(3){ transform:translate(320px,100px); }.canvasSkeleton b{ transform:translateY(140px); }
+.performanceNotice { position:absolute; z-index:14; top:14px; left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2); transform:translateX(-50%); display:flex; align-items:center; gap:8px; max-width:min(660px,max(240px,calc(100% - 500px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)))); padding:8px 10px; border:1px solid #f3cf82; border-radius:var(--radius-md); background:#fff9e8; color:#704f10; box-shadow:0 8px 22px rgba(76,55,14,.1); font-size:10px; }.performanceNotice span{flex:1}.performanceNotice button{border:1px solid #d9ad54;border-radius:var(--radius-sm);background:#fff;color:inherit;padding:4px 7px;cursor:pointer}
+@keyframes canvasShimmer { to { background-position:-220% 0; } }
+@media (prefers-reduced-motion:reduce) { .canvasSkeleton span { animation:none; } }
+.historyPanel { position:absolute; z-index:14; top:var(--canvas-top-chrome-space); right:calc(14px + var(--brain-dock-right, 0px)); bottom:86px; width:280px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:rgba(255,255,255,.98); box-shadow:0 14px 42px rgba(60,48,36,.14); color:var(--canvas-ink); overflow:auto; }
+.historyPanel header { position:sticky; top:0; display:flex; justify-content:space-between; padding:14px; border-bottom:1px solid var(--canvas-line); background:#fff; }.historyPanel header div { display:grid; gap:3px; }.historyPanel header strong { font-size:12px; }.historyPanel header small { color:var(--canvas-muted); font-size:9px; }.historyPanel header button { border:0; background:transparent; color:var(--canvas-muted); font-size:17px; cursor:pointer; }
+.panelHeaderActions { display:flex; align-items:center; gap:5px; }.panelHeaderActions > button:first-child { min-height:27px!important; padding:3px 7px!important; border:1px solid var(--canvas-line)!important; font-size:9px!important; }
+.diagnosticsPanel { right:calc(14px + var(--brain-dock-right, 0px)); }.diagnosticsSummary { padding:12px!important; }.diagnosticsSummary dl { display:grid; gap:7px; margin:0; }.diagnosticsSummary dl div { display:flex; justify-content:space-between; gap:12px; padding-bottom:6px; border-bottom:1px solid var(--canvas-line); }.diagnosticsSummary dt { color:var(--canvas-muted); font-size:9px; }.diagnosticsSummary dd { margin:0; color:var(--canvas-ink); font-size:9px; font-weight:650; text-align:right; }
+.outcomeMetricsPanel { width:360px; display:flex; flex-direction:column; }
+.outcomeMetricsPanel > header { flex:none; }
+.outcomeMetricsPanel > .outcomeMetricList { display:grid; gap:0; padding:0; }
+.outcomeMetric { display:grid; gap:4px; padding:10px 13px; border-bottom:1px solid var(--canvas-line); }
+.outcomeMetric > div { display:flex; align-items:baseline; justify-content:space-between; gap:14px; }
+.outcomeMetric strong { color:var(--canvas-ink); font-size:10px; font-weight:650; }
+.outcomeMetric span { flex:none; color:var(--canvas-ink); font-size:11px; font-weight:760; }
+.outcomeMetric small { color:var(--canvas-muted); font-size:8px; }
+.outcomeMetric em { color:var(--tone-danger-ink); font-style:normal; font-weight:800; }.outcomeMetric em[data-positive='true'] { color:var(--tone-success-ink); }
+/* The one number the whole method is steered by, given the room to say so. */
+.outcomeNorthStar { display:grid; gap:4px; padding:14px 13px; border-bottom:1px solid var(--canvas-line); background:color-mix(in srgb,var(--canvas-accent) 8%,var(--canvas-panel)); }
+.outcomeNorthStar > b { color:var(--canvas-accent-ink); font-size:8px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; }
+.outcomeNorthStar > strong { color:var(--canvas-ink); font-size:11px; font-weight:700; }
+.outcomeNorthStar > span { color:var(--canvas-ink); font-size:26px; font-weight:800; line-height:1.1; }
+.outcomeNorthStar > small { color:var(--canvas-muted); font-size:8px; line-height:1.5; }
+.outcomeNorthStar em { color:var(--tone-danger-ink); font-style:normal; font-weight:800; }.outcomeNorthStar em[data-positive='true'] { color:var(--tone-success-ink); }
+/* Metrics group by the act of the method they measure; the heading is what
+   stops "delivery success" and "was it graded?" reading as equal rows. */
+.outcomeFamily { padding:9px 13px 3px; color:var(--canvas-muted); font-size:8px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; background:var(--canvas-panel-muted); border-bottom:1px solid var(--canvas-line); }
+.outcomeMetricsPanel > .outcomeEmpty { display:grid; justify-items:center; gap:8px; padding:28px 20px; text-align:center; }
+.outcomeEmpty > span { width:42px; height:42px; display:grid; place-items:center; border-radius:var(--radius-lg); background:color-mix(in srgb,var(--canvas-accent) 13%,var(--canvas-panel)); color:var(--canvas-accent); font-size:21px; }
+.outcomeEmpty strong { font-size:12px; }.outcomeEmpty p { margin:0; padding:0!important; font-size:10px; line-height:1.5; }
+.outcomeMetricsPanel > footer { display:grid; gap:3px; margin-top:auto; padding:11px 13px; border-top:1px solid var(--canvas-line); background:var(--canvas-panel-muted); color:var(--canvas-muted); font-size:8px; }
+.outcomeMetricsPanel > footer span { color:var(--canvas-ink); font-weight:650; }
+/* The checkpoint namer, INLINE in the panel rather than a native prompt — see
+   `createCheckpoint`. Inline so the person can see the list they are adding to
+   while they name the entry, which a modal cannot show. Grid rather than flex so
+   the field takes the slack and the button stays its own width at any panel size. */
+.checkpointForm { display:grid; grid-template-columns:1fr auto; gap:6px; padding:10px 8px 4px; }
+.checkpointForm input {
+  min-width:0; padding:7px 8px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink);
+  font:500 10px var(--font-sans);
+}
+.checkpointForm input::placeholder { color:var(--canvas-muted); }
+.checkpointForm input:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:1px; }
+.checkpointForm button { white-space:nowrap; }
+.checkpointForm button:disabled { opacity:.45; cursor:not-allowed; }
+
+.historyPanel > p,.historyPanel > div > p { padding:14px; color:var(--canvas-muted); font-size:10px; line-height:1.5; }.historyPanel > div { display:grid; padding:8px; gap:6px; }.historyPanel > div > button { display:grid; gap:3px; padding:9px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fbfdff; color:var(--canvas-ink); text-align:left; cursor:pointer; }.historyPanel > div > button b { font-size:10px; }.historyPanel > div > button span { color:var(--canvas-muted); font-size:8px; }
+.changeSetPanel { position:absolute; z-index:15; top:var(--canvas-top-chrome-space); right:calc(310px + var(--brain-dock-right, 0px)); width:330px; border:1px solid #cfc5f0; border-radius:var(--radius-lg); background:rgba(255,255,255,.99); box-shadow:0 16px 48px rgba(58,40,112,.18); color:var(--canvas-ink); overflow:hidden; }
+.changeSetPanel header { display:flex; justify-content:space-between; padding:13px; border-bottom:1px solid #e6e0f5; background:#faf8ff; }.changeSetPanel header div { display:grid; gap:3px; }.changeSetPanel header strong { font-size:12px; }.changeSetPanel header small { color:#796d99; font-size:9px; }.changeSetPanel header button { border:0; background:transparent; color:var(--canvas-muted); font-size:17px; cursor:pointer; }
+.changeSetPanel > div { display:grid; max-height:310px; overflow:auto; padding:8px; gap:5px; }.changeSetPanel label { display:flex; align-items:flex-start; gap:8px; padding:8px; border:1px solid #e2ddef; border-radius:var(--radius-md); background:#fff; cursor:pointer; }.changeSetPanel label input { margin-top:2px; accent-color:#7357e7; }.changeSetPanel label span { display:grid; gap:2px; }.changeSetPanel label b { font-size:9px; }.changeSetPanel label small { color:#83769f; font-size:8px; }
+.changeSetPanel footer { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:7px; padding:10px; border-top:1px solid #e6e0f5; background:#faf8ff; }
+
+/* Working on one section at the size of a screen — the breadcrumb that says you
+   are inside a frame, and the way back out. It replaced the modal workflow editor,
+   so it deliberately does not look like a dialog:the board is still the board. */
+.frameFocusBar { position:absolute; z-index:17; top:var(--canvas-top-chrome-space); left:50%; display:flex; align-items:center; gap:10px; padding:7px 12px; border:1px solid var(--canvas-line); border-radius:999px; background:var(--canvas-panel); box-shadow:0 10px 30px rgba(60,48,36,.16); transform:translateX(-50%); }
+.frameFocusBar b { overflow-wrap:anywhere; font-size:11px; color:var(--canvas-ink); }
+.frameFocusBar span { font-size:10px; color:var(--canvas-muted); }
+.frameFocusBar button { padding:4px 10px; border:1px solid var(--canvas-line); border-radius:999px; background:var(--canvas-panel-muted); color:var(--canvas-ink); font:inherit; font-size:10px; font-weight:600; cursor:pointer; }
+.frameFocusBar button:hover,.frameFocusBar button:focus-visible { background:var(--canvas-hover); }
+.mergePanel { position:absolute; z-index:19; inset:var(--canvas-top-chrome-space) 14px 86px auto; width:390px; overflow:auto; padding:14px; border:1px solid #cfc5f0; border-radius:var(--radius-lg); background:#fff; box-shadow:0 18px 55px rgba(58,40,112,.2); }
+.mergePanel header { display:flex; justify-content:space-between; gap:10px; }.mergePanel header button { border:0;background:transparent;font-size:18px;cursor:pointer; }.mergePanel label { display:grid; gap:6px; margin:10px 0; padding:10px; border:1px solid #e2ddef; border-radius:var(--radius-md); }.mergePanel label span { display:flex; gap:8px; }.mergePanel select { padding:6px;border:1px solid var(--canvas-line);border-radius:var(--radius-sm);font:inherit; }
+.primaryButton:disabled { opacity:.45; cursor:not-allowed; }
+.workflowFocus { position:absolute; z-index:40; inset:10px; display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 24px 80px var(--canvas-shadow); color:var(--canvas-ink); }
+.workflowFocus > header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 15px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
+.workflowFocus > header div { display:grid; gap:2px; }.workflowFocus > header small { color:var(--canvas-muted); font-size:11px; }.workflowFocus > header button { width:32px; height:32px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); color:inherit; font-size:20px; cursor:pointer; }
+.workflowFocusBody { display:flex; flex:1; min-height:0; }
+
+/* Canvas CHROME follows the application theme:the panels, menus and rails around
+   the board. Objects ON the board are not listed here — they are painted by the two
+   object palettes declared at the top of this file, and listing `.node` here quietly
+   overrode both (it is declared later, at equal specificity), so every card fell
+   back to the panel colour and the Brain object lost its identity entirely.
+   Artifact previews (for example the website mockup) keep their authored colors so
+   dark mode does not alter what the user is designing. */
+.selectionToolbar,
+.presentBar,
+.historyPanel,
+.historyPanel header,
+.changeSetPanel,
+.changeSetPanel label,
+.mergePanel {
+  border-color:var(--canvas-line);
+  background:var(--canvas-panel);
+  color:var(--canvas-ink);
+}
+.selectionToolbar button,
+.historyPanel > div > button,
+.checkpointForm input {
+  border-color:var(--canvas-line);
+  background:var(--canvas-panel-muted);
+  color:var(--canvas-ink);
+}
+.selectionToolbar button:hover,
+.presentBar button:hover:not(:disabled) { background:var(--canvas-hover); }
+.historyPanel,
+.changeSetPanel,
+.mergePanel { box-shadow:0 14px 42px var(--canvas-shadow); }
+:global(html:not([data-theme='light'])) .selectionToolbar button {
+  background:#142238;
+}
+:global(html:not([data-theme='light'])) .selectionToolbar button:hover {
+  background:#1c304b;
+  border-color:rgba(103,156,255,.5);
+}
+:global(html:not([data-theme='light'])) .selectionToolbar,
+:global(html:not([data-theme='light'])) .historyPanel,
+:global(html:not([data-theme='light'])) .historyPanel header {
+  background:rgba(17,29,47,.97);
+}
+
+/* Held over the board while a file is dragged in from the desktop. It never
+   takes the pointer:an overlay that swallowed dragleave would flicker. */
+.fileDropOverlay {
+  position:absolute; inset:0; z-index:24; display:grid; place-items:center;
+  padding:16px; pointer-events:none;
+  background:var(--canvas-drop-veil,rgba(91,92,226,.09));
+  backdrop-filter:blur(1px);
+}
+.fileDropOverlay > div {
+  display:grid; justify-items:center; gap:5px;
+  max-width:min(320px,calc(100% - 32px)); padding:18px 22px;
+  border:2px dashed var(--canvas-accent-ink,#0b5f58); border-radius:var(--radius-lg);
+  background:var(--canvas-widget-surface,#fff);
+  box-shadow:0 18px 46px var(--canvas-shadow,rgba(24,43,74,.18));
+  text-align:center;
+}
+.fileDropOverlay span { color:var(--canvas-accent-ink,#0b5f58); font-size:22px; line-height:1; }
+.fileDropOverlay strong { color:var(--canvas-ink,var(--text-primary)); font-size:13px; }
+.fileDropOverlay small { color:var(--canvas-muted,var(--text-muted)); font-size:11px; line-height:1.4; }
+/* ── The pen tray ──────────────────────────────────────────────────────────
+   Visible only while a tool is held. Wraps on a phone rather than pushing the
+   board sideways, and every target clears 34px so it is usable with a finger. */
+.drawingToolbar{position:absolute;left:50%;transform:translateX(-50%);bottom:96px;z-index:9;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:min(92vw,760px);padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);box-shadow:0 12px 32px rgba(0,0,0,.22)}
+.drawingToolbar button{display:inline-flex;gap:5px;align-items:center;padding:6px 9px;min-height:34px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-elevated);color:var(--text-secondary);font-size:12px}
+.drawingToolbar button[aria-pressed="true"]{border-color:var(--coral-bright);color:var(--text-primary)}
+.drawingToolbar button span{font-size:13px;line-height:1}
+.drawingColor,.drawingWidth{display:inline-flex;gap:6px;align-items:center;font-size:11px;color:var(--text-secondary)}
+.drawingColor input{width:34px;height:30px;padding:0;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)}
+.drawingWidth input{width:90px}
+.drawingDone{margin-left:auto}
+@media(max-width:767px){.drawingToolbar{bottom:120px;gap:4px;padding:6px}.drawingToolbar button b{display:none}.drawingWidth input{width:64px}}

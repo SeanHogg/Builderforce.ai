@@ -2,7 +2,9 @@ import { AuditEvent } from './AuditEvent';
 import { TenantId } from '../shared/types';
 
 export interface AuditQueryOptions {
-  tenantId?:    TenantId;
+  /** Required: an audit read is always one tenant's trail (there is no
+   *  cross-tenant audit query — the operator trail is `admin_audit_log`). */
+  tenantId:     TenantId;
   userId?:      string;
   limit?:       number;
   offset?:      number;

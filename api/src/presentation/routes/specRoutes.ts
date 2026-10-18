@@ -16,19 +16,15 @@
  * POST   /api/specs/:id/workflows      Link an existing workflow to a spec (tenant JWT)
  */
 import { Hono } from 'hono';
-import { eq, and } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { specs, workflows, projects, tasks } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
-import { linkSpecToTask } from '../../application/prd/taskPrd';
-import { importSpecFromBoard, publicSpecImportResult, SpecImportError } from '../../application/prd/importSpec';
-import { bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import { publicSpecImportResult, SpecImportError } from '../../application/prd/importSpec';
+import {
+  SPEC_STATUSES, deleteSpec, getSpec, importSpec, linkWorkflowToSpec, listSpecWorkflows, listSpecs, patchSpec, upsertSpec,
+} from '../../application/prd/specStore';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { parseBody, z } from './requestBody';
-
-const SPEC_STATUSES = ['draft', 'ready', 'in_progress', 'complete'] as const;
 
 /** `goal` stays optional so the handler's own "goal is required" wins; `taskList` is
  *  stored as JSON exactly as sent. */
@@ -71,68 +67,11 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
   // dual-auth middleware (Bearer + X-AgentHost-Id, or ?agentHostId=&key=).
   router.post('/', hostOrTenantAuth(db), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const agentHostId = requestAgentHostId(c);
-
     const body = await parseBody(c, UpsertSpecBody);
-
     if (!body.goal?.trim()) return c.json({ error: 'goal is required' }, 400);
 
-    const specId = body.id ?? crypto.randomUUID();
-    const now = new Date();
-
-    // Cross-tenant upsert guard: the caller supplies body.id and the conflict target
-    // is the global specs.id PK, so without this check a caller could overwrite
-    // another tenant's spec by guessing its id. Only reject on an id that already
-    // exists under a different tenant; a novel id creates a fresh row as normal.
-    if (body.id) {
-      const [existing] = await db.select({ tenantId: specs.tenantId }).from(specs).where(eq(specs.id, specId));
-      if (existing && existing.tenantId !== tenantId) return c.json({ error: 'Spec not found' }, 404);
-    }
-
-    await db
-      .insert(specs)
-      .values({
-        id:        specId,
-        tenantId,
-        projectId: body.projectId ?? null,
-        agentHostId,
-        goal:      body.goal.trim(),
-        status:    body.status ?? 'draft',
-        kind:      body.kind ?? 'feature',
-        prd:       body.prd ?? null,
-        archSpec:  body.archSpec ?? null,
-        taskList:  body.taskList != null ? JSON.stringify(body.taskList) : null,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: [specs.id],
-        set: {
-          goal:      body.goal.trim(),
-          status:    body.status ?? 'draft',
-          ...(body.kind !== undefined ? { kind: body.kind } : {}),
-          prd:       body.prd ?? null,
-          archSpec:  body.archSpec ?? null,
-          taskList:  body.taskList != null ? JSON.stringify(body.taskList) : null,
-          updatedAt: now,
-        },
-      });
-
-    // Agent write-back: link the pushed spec to its task as the primary PRD, so
-    // "agents update the task's PRD as they work" lands on the task's linked spec.
-    if (body.taskId != null) {
-      const [task] = await db
-        .select({ id: tasks.id })
-        .from(tasks)
-        .innerJoin(projects, eq(projects.id, tasks.projectId))
-        .where(and(eq(tasks.id, body.taskId), eq(projects.tenantId, tenantId)));
-      if (task) await linkSpecToTask(db, { taskId: body.taskId, specId, tenantId, isPrimary: true });
-    }
-
-    // A spec is a link-picker ticket kind — orphan the chat↔ticket typeahead cache.
-    await bumpTicketSearchVersion(c.env as Env, tenantId);
-
-    const [row] = await db.select().from(specs).where(scopedToTenant(specs, tenantId, eq(specs.id, specId)));
+    const row = await upsertSpec(db, c.env as Env, { tenantId, agentHostId: requestAgentHostId(c) }, { ...body, goal: body.goal });
+    if (!row) return c.json({ error: 'Spec not found' }, 404);
     return c.json(row, 201);
   });
 
@@ -147,7 +86,7 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
     if (body.projectId == null) return c.json({ error: 'projectId is required' }, 400);
     if (!body.externalId?.trim()) return c.json({ error: 'externalId is required' }, 400);
     try {
-      const result = await importSpecFromBoard(db, c.env as Env, {
+      const result = await importSpec(db, c.env as Env, {
         tenantId,
         projectId: body.projectId,
         externalId: body.externalId,
@@ -155,7 +94,6 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
         connectionId: body.connectionId,
         taskId: body.taskId,
       });
-      await bumpTicketSearchVersion(c.env as Env, tenantId);
       return c.json(publicSpecImportResult(result.spec, { created: result.created, linkedTaskId: result.linkedTaskId }), result.created ? 201 : 200);
     } catch (err) {
       if (err instanceof SpecImportError) return c.json({ error: err.message }, err.status);
@@ -163,71 +101,38 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
     }
   });
 
-  // GET /api/specs?projectId=
+  // GET /api/specs?projectId=&kind=
   router.get('/', async (c) => {
-    const tenantId  = c.get('tenantId') as number;
     const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
-    const kind      = c.req.query('kind') || null;
-
-    const filters = [eq(specs.tenantId, tenantId)];
-    if (projectId != null) filters.push(eq(specs.projectId, projectId));
-    if (kind != null) filters.push(eq(specs.kind, kind));
-    const rows = await db.select().from(specs).where(and(...filters));
-
+    const rows = await listSpecs(db, c.get('tenantId') as number, { projectId, kind: c.req.query('kind') || null });
     return c.json({ specs: rows });
   });
 
   // GET /api/specs/:id
   router.get('/:id', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const id = c.req.param('id');
-    const [row] = await db.select().from(specs).where(and(eq(specs.id, id), eq(specs.tenantId, tenantId)));
+    const row = await getSpec(db, c.get('tenantId') as number, c.req.param('id'));
     if (!row) return c.json({ error: 'Spec not found' }, 404);
     return c.json(row);
   });
 
   // PATCH /api/specs/:id
   router.patch('/:id', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const id = c.req.param('id');
-
     const body = await parseBody(c, PatchSpecBody);
-
-    await db
-      .update(specs)
-      .set({
-        ...(body.goal     !== undefined ? { goal: body.goal.trim() } : {}),
-        ...(body.status   !== undefined ? { status: body.status } : {}),
-        ...(body.prd      !== undefined ? { prd: body.prd } : {}),
-        ...(body.archSpec !== undefined ? { archSpec: body.archSpec } : {}),
-        ...(body.taskList !== undefined ? { taskList: JSON.stringify(body.taskList) } : {}),
-        updatedAt: new Date(),
-      })
-      .where(and(eq(specs.id, id), eq(specs.tenantId, tenantId)));
-
-    const [row] = await db.select().from(specs).where(and(eq(specs.id, id), eq(specs.tenantId, tenantId)));
+    const row = await patchSpec(db, c.get('tenantId') as number, c.req.param('id'), body);
     if (!row) return c.json({ error: 'Spec not found' }, 404);
     return c.json(row);
   });
 
-  // DELETE /api/specs/:id
+  // DELETE /api/specs/:id — idempotent: 204 whether or not a row went.
   router.delete('/:id', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const id = c.req.param('id');
-    await db.delete(specs).where(and(eq(specs.id, id), eq(specs.tenantId, tenantId)));
+    await deleteSpec(db, c.get('tenantId') as number, c.req.param('id'));
     return c.body(null, 204);
   });
 
   // GET /api/specs/:id/workflows
   router.get('/:id/workflows', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const specId = c.req.param('id');
-
-    // Verify spec exists in tenant
-    const [spec] = await db.select({ id: specs.id }).from(specs).where(and(eq(specs.id, specId), eq(specs.tenantId, tenantId)));
-    if (!spec) return c.json({ error: 'Spec not found' }, 404);
-
-    const rows = await db.select().from(workflows).where(and(eq(workflows.specId, specId), eq(workflows.tenantId, tenantId)));
+    const rows = await listSpecWorkflows(db, c.get('tenantId') as number, c.req.param('id'));
+    if (!rows) return c.json({ error: 'Spec not found' }, 404);
     return c.json({ workflows: rows });
   });
 
@@ -235,18 +140,12 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
   router.post('/:id/workflows', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const specId = c.req.param('id');
-
-    const [spec] = await db.select({ id: specs.id }).from(specs).where(and(eq(specs.id, specId), eq(specs.tenantId, tenantId)));
-    if (!spec) return c.json({ error: 'Spec not found' }, 404);
+    if (!(await getSpec(db, tenantId, specId))) return c.json({ error: 'Spec not found' }, 404);
 
     const body = await parseBody(c, LinkWorkflowBody);
     if (!body.workflowId) return c.json({ error: 'workflowId is required' }, 400);
 
-    await db
-      .update(workflows)
-      .set({ specId, updatedAt: new Date() })
-      .where(and(eq(workflows.id, body.workflowId), eq(workflows.tenantId, tenantId)));
-
+    await linkWorkflowToSpec(db, tenantId, specId, body.workflowId);
     return c.json({ ok: true });
   });
 

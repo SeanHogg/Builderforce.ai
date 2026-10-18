@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/bodies.module.css';
 import { canvasDiagram } from '@/lib/canvasDocuments';
 import { diagramGraphStats, diagramLabelLines, diagramShapePolygon, type DiagramGraph } from '@/lib/diagramGraph';
 import { diagramNotation, readDiagramSource } from '@/lib/diagramNotations';

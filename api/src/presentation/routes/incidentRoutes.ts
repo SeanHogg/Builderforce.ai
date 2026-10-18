@@ -34,7 +34,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { businessContacts, workflows, workflowDefinitions } from '../../infrastructure/database/schema';
-import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { incidentVersionKey, monitoringVersionKey } from '../../application/insights/versionKeys';
 import { IncidentService, incidentRoomKey, type IncidentSeverity, type IncidentStatus } from '../../application/incident/IncidentService';
 import { CONVENTIONAL_WHY_STEPS, MAX_WHY_STEPS, PostmortemWhyService, type WhyStepInput } from '../../application/incident/PostmortemWhyService';
@@ -44,6 +44,7 @@ import { prodIncidents } from '../../infrastructure/database/schema';
 import { OnCallService, type RotationKind } from '../../application/incident/OnCallService';
 import { EscalationService } from '../../application/incident/EscalationService';
 import { dispatchIncidentTriage } from '../../application/incident/incidentDispatch';
+import { bumpProdIncidentCaches } from '../../application/incident/incidentCaches';
 import { instantiateWorkflowRun, runTargetFromDefinition, type RunTarget } from '../../application/workflow/instantiateRun';
 import { parseDefinition } from '../../domain/workflowGraph';
 import type { HonoEnv, Env } from '../../env';
@@ -159,8 +160,10 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
+  // Bumps the board Quality lens too: it reads the same prod_incidents rows, and a
+  // rotation write over-invalidating it is cheaper than a stale MTTR after a resolve.
   const invalidate = (c: { env: HonoEnv['Bindings'] }, tenantId: number) =>
-    bumpCacheVersion(c.env, incidentVersionKey(tenantId));
+    bumpProdIncidentCaches(c.env as Env, tenantId);
 
   // ── On-call rotations ──────────────────────────────────────────────────────
   router.get('/on-call/rotations', async (c) => {

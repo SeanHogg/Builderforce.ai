@@ -20,19 +20,17 @@
  * Auth: `Authorization: Bearer <bfk_… | bfai_…>`.
  * Rate limiting: applied upstream via the shared rate limiter middleware.
  */
-import { Hono } from 'hono';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { Hono, type Context } from 'hono';
 import type { Db } from '../../infrastructure/database/connection';
-import * as schema from '../../infrastructure/database/schema';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { touchTenantApiKey } from '../../application/llm/tenantApiKeyService';
-// THE `/api/v1` credential check. It used to be a private `requireApiKey` right
-// here, which was right while this file was the only router on the mount; the
-// canvas, webhook and widget routers are three more callers, and a second copy of
-// an authorization check is the copy that keeps granting access after the original
-// learns to refuse. See `publicApiAuth.ts`.
-import { skillSearchMatches } from '../../application/marketplace/skillSearch';
+// THE `/api/v1` credential check, shared with the canvas, webhook and widget
+// routers mounted below — see `publicApiAuth.ts`.
 import { requirePublicApiKey } from '../../application/publicApi/publicApiAuth';
+import { listPublishedSkills } from '../../application/marketplace/marketplaceSkillCatalog';
+import { getPublicAgent, listWorkforceAgents } from '../../application/workforce/agentDirectory';
+import { pagePublicAgents, toPublicApiAgent } from '../../application/publicApi/publicAgentListing';
+import { listPlatformPersonas } from '../../application/persona/platformPersonaCatalog';
 import { createPublicCanvasRoutes } from './publicCanvasApiRoutes';
 import { createPublicWebhookRoutes } from './publicWebhookApiRoutes';
 import { createPublicWidgetRoutes } from './publicWidgetApiRoutes';
@@ -59,71 +57,39 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
   router.route('/', createPublicExtensionRoutes(db));
 
   // ── Public read endpoints (tenant API key, `read:catalog`) ────────────────
+  // Each is a thin adapter over the catalogue that owns the read, so the developer
+  // API lists exactly what the marketplace lists, from the same cache.
+
+  /** The key check + last-used touch every catalogue read starts with. */
+  const authorize = async (c: Context<HonoEnv>, touch = true) => {
+    const auth = await requirePublicApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    if (auth.ok && touch) c.executionCtx.waitUntil(touchTenantApiKey(db, auth.keyId));
+    return auth;
+  };
 
   /**
-   * GET /api/v1/agents – list published agents
+   * GET /api/v1/agents – list published marketplace agents
    * Query: ?q=&skill=&page=1&limit=24
    */
   router.get('/agents', async (c) => {
-    const auth = await requirePublicApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    const auth = await authorize(c);
     if (!auth.ok) return c.json({ error: auth.error }, auth.status);
-
-    // Update last_used_at (fire-and-forget)
-    c.executionCtx.waitUntil(touchTenantApiKey(db, auth.keyId));
-
-    const { page = '1', limit = '24' } = c.req.query();
-    const pageNum  = Math.max(1, Number(page));
-    const limitNum = Math.min(100, Math.max(1, Number(limit)));
-    const offset   = (pageNum - 1) * limitNum;
-
-    const rows = await db
-      .select({
-        id:        schema.agents.id,
-        name:      schema.agents.name,
-        type:      schema.agents.type,
-        isActive:  schema.agents.isActive,
-        createdAt: schema.agents.createdAt,
-      })
-      .from(schema.agents)
-      .where(eq(schema.agents.isActive, true))
-      .orderBy(desc(schema.agents.createdAt))
-      .limit(limitNum)
-      .offset(offset);
-
-    const [countRow] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(schema.agents)
-      .where(eq(schema.agents.isActive, true));
-
-    return c.json({ agents: rows, total: Number(countRow?.count ?? 0), page: pageNum, limit: limitNum });
+    const { q, skill, page, limit } = c.req.query();
+    return c.json(pagePublicAgents(
+      await listWorkforceAgents(c.env as Env, db, { scope: 'public' }),
+      { q, skill, page, limit },
+    ));
   });
 
   /**
-   * GET /api/v1/agents/:id – get a single agent
+   * GET /api/v1/agents/:id – get a single published agent
    */
   router.get('/agents/:id', async (c) => {
-    const auth = await requirePublicApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    const auth = await authorize(c);
     if (!auth.ok) return c.json({ error: auth.error }, auth.status);
-
-    c.executionCtx.waitUntil(touchTenantApiKey(db, auth.keyId));
-
-    const agentId = parseInt(c.req.param('id'), 10);
-    if (isNaN(agentId)) return c.json({ error: 'Invalid agent ID' }, 400);
-    const [row] = await db
-      .select({
-        id:        schema.agents.id,
-        name:      schema.agents.name,
-        type:      schema.agents.type,
-        isActive:  schema.agents.isActive,
-        createdAt: schema.agents.createdAt,
-        updatedAt: schema.agents.updatedAt,
-      })
-      .from(schema.agents)
-      .where(and(eq(schema.agents.id, agentId), eq(schema.agents.isActive, true)))
-      .limit(1);
-
+    const row = await getPublicAgent(db, c.req.param('id'));
     if (!row) return c.json({ error: 'Agent not found' }, 404);
-    return c.json({ agent: row });
+    return c.json({ agent: toPublicApiAgent(row) });
   });
 
   /**
@@ -131,88 +97,18 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * Query: ?q=&category=&page=1&limit=24
    */
   router.get('/skills', async (c) => {
-    const auth = await requirePublicApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    const auth = await authorize(c);
     if (!auth.ok) return c.json({ error: auth.error }, auth.status);
-
-    c.executionCtx.waitUntil(touchTenantApiKey(db, auth.keyId));
-
-    const { q, category, page = '1', limit = '24' } = c.req.query();
-    const pageNum  = Math.max(1, Number(page));
-    const limitNum = Math.min(100, Math.max(1, Number(limit)));
-    const offset   = (pageNum - 1) * limitNum;
-
-    const conditions = [eq(schema.marketplaceSkills.published, true), ...(category ? [eq(schema.marketplaceSkills.category, category)] : [])];
-
-    let rows;
-    if (q) {
-      rows = await db
-        .select({
-          id:            schema.marketplaceSkills.id,
-          name:          schema.marketplaceSkills.name,
-          slug:          schema.marketplaceSkills.slug,
-          description:   schema.marketplaceSkills.description,
-          category:      schema.marketplaceSkills.category,
-          tags:          schema.marketplaceSkills.tags,
-          version:       schema.marketplaceSkills.version,
-          icon_url:      schema.marketplaceSkills.iconUrl,
-          downloads:     schema.marketplaceSkills.downloads,
-          likes:         schema.marketplaceSkills.likes,
-          price_cents:   schema.marketplaceSkills.priceCents,
-          pricing_model: schema.marketplaceSkills.pricingModel,
-          price_unit:    schema.marketplaceSkills.priceUnit,
-          author_username: schema.users.username,
-        })
-        .from(schema.marketplaceSkills)
-        .innerJoin(schema.users, eq(schema.marketplaceSkills.authorId, schema.users.id))
-        .where(and(...conditions, skillSearchMatches(q)))
-        .orderBy(desc(schema.marketplaceSkills.downloads))
-        .limit(limitNum)
-        .offset(offset);
-    } else {
-      rows = await db
-        .select({
-          id:            schema.marketplaceSkills.id,
-          name:          schema.marketplaceSkills.name,
-          slug:          schema.marketplaceSkills.slug,
-          description:   schema.marketplaceSkills.description,
-          category:      schema.marketplaceSkills.category,
-          tags:          schema.marketplaceSkills.tags,
-          version:       schema.marketplaceSkills.version,
-          icon_url:      schema.marketplaceSkills.iconUrl,
-          downloads:     schema.marketplaceSkills.downloads,
-          likes:         schema.marketplaceSkills.likes,
-          price_cents:   schema.marketplaceSkills.priceCents,
-          pricing_model: schema.marketplaceSkills.pricingModel,
-          price_unit:    schema.marketplaceSkills.priceUnit,
-          author_username: schema.users.username,
-        })
-        .from(schema.marketplaceSkills)
-        .innerJoin(schema.users, eq(schema.marketplaceSkills.authorId, schema.users.id))
-        .where(and(...conditions))
-        .orderBy(desc(schema.marketplaceSkills.downloads))
-        .limit(limitNum)
-        .offset(offset);
-    }
-
-    const [countRow] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(schema.marketplaceSkills)
-      .where(and(...conditions));
-
-    return c.json({ skills: rows, total: Number(countRow?.count ?? 0), page: pageNum, limit: limitNum });
+    return c.json(await listPublishedSkills(c.env as Env, db, c.req.query()));
   });
 
   /**
-   * GET /api/v1/personas – list built-in persona definitions
-   * Returns the canonical list — no auth required.
+   * GET /api/v1/personas – list the active platform persona catalogue
    */
   router.get('/personas', async (c) => {
-    const auth = await requirePublicApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    const auth = await authorize(c, false);
     if (!auth.ok) return c.json({ error: auth.error }, auth.status);
-
-    // Platform personas from DB (admin-managed)
-    const rows = await db.select().from(schema.platformPersonas).where(eq(schema.platformPersonas.active, true));
-    return c.json({ personas: rows });
+    return c.json({ personas: await listPlatformPersonas(c.env as Env, db, 'active') });
   });
 
   return router;

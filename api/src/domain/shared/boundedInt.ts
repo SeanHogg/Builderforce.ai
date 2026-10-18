@@ -39,6 +39,23 @@ export function offsetParam(raw: unknown): number {
   return boundedIntParam(raw, { def: 0, min: 0 });
 }
 
+/**
+ * An optional positive-integer parameter (a project id, a team id, a row id).
+ *
+ * Strict on purpose. `Number('')` is 0 and `Number(undefined)` is NaN, both of
+ * which fail `isInteger && > 0`, so a missing parameter and a junk one produce
+ * the same `undefined` — and an id of `0`, which no serial column ever issues,
+ * is rejected rather than quietly filtering on a row that cannot exist.
+ *
+ * Lives here (not only in the route layer's `queryParams`) because application
+ * code reads it too — every export source parses `?projectId=` — and must not
+ * import a route module to do so.
+ */
+export function positiveIntParam(raw: unknown): number | undefined {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
 /** A `?days=` window: `def` when absent or junk, clamped to `[min, max]`. */
 export function daysParam(raw: unknown, def = 30, max = 365, min = 1): number {
   return boundedIntParam(raw, { def, min, max });

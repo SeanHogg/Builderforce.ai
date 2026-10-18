@@ -29,7 +29,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/bodies.module.css';
 
 /** How often the DISPLAY re-derives. Four times a second: fast enough that the seconds
  *  digit never looks stuck, slow enough that a board of ten clocks is not a render

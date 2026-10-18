@@ -28,7 +28,7 @@ import { ledgerEntries } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { taxReportVersionKey } from './taxCacheVersion';
-import { csvMatrix } from '../export/tabularExport';
+import type { ExportTable } from '../export/exportSource';
 import { USD_CENTS } from '../kernel/denominations';
 import {
   calendarYearBounds,
@@ -192,29 +192,31 @@ const CSV_HEADER = [
 ] as const;
 
 /**
- * Render the report as a filer-ready CSV.
+ * The report as a filer-ready table.
  *
- * The columns are this module's; the ESCAPING is `csvMatrix`, the api's one CSV
- * writer — a report that quotes a comma in a street address differently from
- * every other export is how a spreadsheet silently shifts a column.
+ * The columns are this module's; the SERIALISING is `export/exportSource`, which
+ * renders every export's CSV through `csvMatrix` — a report that quotes a comma
+ * in a street address differently from every other export is how a spreadsheet
+ * silently shifts a column.
  *
  * `onlyReportable` defaults to true: the file exists to be uploaded to a filer,
  * and shipping the below-threshold recipients by default would file forms for
  * people who must not receive one. Pass false for the reconciliation view.
  */
-export function taxYearReportToCsv(report: TaxYearReport, opts?: { onlyReportable?: boolean }): string {
+export function taxYearReportTable(report: TaxYearReport, opts?: { onlyReportable?: boolean }): ExportTable {
   const rows = opts?.onlyReportable === false ? report.rows : report.rows.filter((r) => r.reportable);
-  return csvMatrix(CSV_HEADER, rows.map((r) => [
+  return { columns: CSV_HEADER, rows: rows.map((r) => [
     r.recipientType, r.legalName, r.businessName,
     r.addressLine1, r.addressLine2, r.addressCity, r.addressRegion, r.addressPostalCode, r.addressCountry,
     r.taxIdLast4, r.taxIdType, r.formType,
     r.totalPaidUsd.toFixed(2), r.payoutCount, r.profileComplete ? 'yes' : 'no', r.thresholdReason,
-  ]));
+  ]) };
 }
 
-/** The filename a download offers. Named so a year's files sort together. */
+/** The filename stem a download offers (the format adds the extension). Named
+ *  so a year's files sort together. */
 export function taxYearReportFilename(year: number, onlyReportable: boolean): string {
-  return `tax-${year}-${onlyReportable ? 'filings' : 'all-recipients'}.csv`;
+  return `tax-${year}-${onlyReportable ? 'filings' : 'all-recipients'}`;
 }
 
 /** Every year that has at least one payout — what the year picker offers. */

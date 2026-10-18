@@ -4,16 +4,16 @@
  * (`adminRoutes.ts`). Single source of truth for raw-key generation,
  * hashing, table layout, and origin-allowlist semantics.
  */
-import { and, desc, eq, gte, isNull, lt, or, sql, sum } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { usageDatabaseOf, usageRequestCount } from './usageLedger';
+import { readUsageRows, readUsageTotals, rollingWindowStart, tenantScope, type UsageFilter } from './usageQuery';
 import type { Env } from '../../env';
-import { llmUsageLog, tenantApiKeys } from '../../infrastructure/database/schema';
+import { tenantApiKeys } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { invalidateKeyCache } from '../../infrastructure/auth/keyResolutionCache';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
-import { coerceJsonObject, coerceStringArrayOrNull } from '../../domain/shared/jsonColumn';
+import { coerceStringArrayOrNull } from '../../domain/shared/jsonColumn';
 import {
   deserializeScopes as sharedDeserializeScopes,
   hasScope as sharedHasScope,
@@ -552,8 +552,6 @@ export async function queryTenantApiKeyUsage(
   const days  = Math.min(Math.max(args.days  ?? 30,  1),  90);
   const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
   const page  = Math.max(args.page ?? 1, 1);
-  const offset = (page - 1) * limit;
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
   // Confirm the key exists for this tenant before exposing usage. Prevents
   // a caller with one tenant's auth from probing another tenant's key ids.
@@ -566,83 +564,39 @@ export async function queryTenantApiKeyUsage(
     return { summary: { total: 0, totalTokens: 0, modelCount: 0 }, rows: [], days, page, limit };
   }
 
-  // The key row is core; its usage is on the ledger's database (operational in prod).
-  const usageDb = usageDatabaseOf(db);
-  const rowsRaw = await usageDb
-    .select({
-      id:               llmUsageLog.id,
-      createdAt:        llmUsageLog.createdAt,
-      model:            llmUsageLog.model,
-      promptTokens:     llmUsageLog.promptTokens,
-      completionTokens: llmUsageLog.completionTokens,
-      totalTokens:      llmUsageLog.totalTokens,
-      retries:          llmUsageLog.retries,
-      streamed:         llmUsageLog.streamed,
-      useCase:          llmUsageLog.useCase,
-      metadata:         llmUsageLog.metadata,
-      idempotencyKey:   llmUsageLog.idempotencyKey,
-      userId:           llmUsageLog.userId,
-    })
-    .from(llmUsageLog)
-    .where(and(
-      eq(llmUsageLog.tenantApiKeyId, args.keyId),
-      eq(llmUsageLog.tenantId, args.tenantId),
-      gte(llmUsageLog.createdAt, since),
-    ))
-    .orderBy(desc(llmUsageLog.createdAt))
-    .limit(limit)
-    .offset(offset);
-
-  // Single GROUP BY for total + token sum + distinct-model count. Cheaper
-  // than three separate queries and keeps the cards consistent with rows.
-  const [summary] = await usageDb
-    .select({
-      total:       usageRequestCount(),
-      totalTokens: sum(llmUsageLog.totalTokens),
-      modelCount:  sql<number>`COUNT(DISTINCT ${llmUsageLog.model})::int`,
-    })
-    .from(llmUsageLog)
-    .where(and(
-      eq(llmUsageLog.tenantApiKeyId, args.keyId),
-      eq(llmUsageLog.tenantId, args.tenantId),
-      gte(llmUsageLog.createdAt, since),
-    ));
-
-  const rows: TenantApiKeyUsageRow[] = rowsRaw.map((r) => ({
-    id:               r.id,
-    createdAt:        r.createdAt.toISOString(),
-    model:            r.model,
-    promptTokens:     r.promptTokens,
-    completionTokens: r.completionTokens,
-    totalTokens:      r.totalTokens,
-    retries:          r.retries,
-    streamed:         r.streamed,
-    useCase:          r.useCase,
-    metadata:         parseMetadata(r.metadata),
-    idempotencyKey:   r.idempotencyKey,
-    userId:           r.userId,
-  }));
+  // The key row is core; its usage is read through THE usage query use case, which
+  // resolves the ledger's own database (operational in prod) — the same filter shape
+  // `/llm/v1/usage?detail=true` lists, narrowed to this key.
+  const filter: UsageFilter = {
+    scope: tenantScope(args.tenantId),
+    since: rollingWindowStart(days),
+    tenantApiKeyId: args.keyId,
+  };
+  const [listing, totals] = await Promise.all([
+    readUsageRows(db, filter, { limit, page }),
+    readUsageTotals(db, filter),
+  ]);
 
   return {
-    summary: {
-      total:       Number(summary?.total ?? 0),
-      totalTokens: Number(summary?.totalTokens ?? 0),
-      modelCount:  Number(summary?.modelCount ?? 0),
-    },
-    rows,
+    summary: { total: totals.requests, totalTokens: totals.totalTokens, modelCount: totals.modelCount },
+    rows: listing.rows.map((r) => ({
+      id:               r.id,
+      createdAt:        r.createdAt,
+      model:            r.model,
+      promptTokens:     r.promptTokens,
+      completionTokens: r.completionTokens,
+      totalTokens:      r.totalTokens,
+      retries:          r.retries,
+      streamed:         r.streamed,
+      useCase:          r.useCase,
+      metadata:         r.metadata,
+      idempotencyKey:   r.idempotencyKey,
+      userId:           r.userId,
+    })),
     days,
     page,
     limit,
   };
-}
-
-/** `llm_usage_log.metadata` is a `jsonb` column typed as a record, so the driver hands
- *  it back already parsed — the same round-trip `deserializeOrigins` above was fixed
- *  for. Routed through the ONE shared coercer rather than a second private JSON.parse,
- *  which is what choked on rows written since the column became jsonb. Null in, null
- *  out: an absent metadata blob is not an empty one. */
-function parseMetadata(value: unknown): Record<string, unknown> | null {
-  return value == null ? null : coerceJsonObject(value);
 }
 
 /**

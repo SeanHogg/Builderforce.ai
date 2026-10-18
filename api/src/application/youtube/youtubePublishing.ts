@@ -2,11 +2,10 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { connectionCredentialConflict, connections, credentials } from '../../infrastructure/database/schema';
-import { refreshAccessToken } from '../../infrastructure/auth/oauthState';
+import { GOOGLE_OAUTH_ENDPOINTS } from '../shared/providerOAuthConnect';
 import {
-  isTerminalRefreshFailure,
-  mergeRefreshedTokens,
-  oauthTokensStale,
+  providerGrantRefresher,
+  refreshGrantIfStale,
   sealOAuthTokens,
   unsealOAuthTokens,
   type SealedOAuthTokens,
@@ -14,8 +13,7 @@ import {
 
 export const YOUTUBE_PROVIDER = {
   name: 'google', capability: 'youtube', label: 'YouTube',
-  authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenUrl: 'https://oauth2.googleapis.com/token',
+  ...GOOGLE_OAUTH_ENDPOINTS,
   scopes: [
     'openid', 'email', 'profile',
     'https://www.googleapis.com/auth/youtube.upload',
@@ -62,20 +60,22 @@ export async function freshYouTubeToken(db: Db, env: Env, tenantId: number, user
   if (!row) throw new Error('YouTube is not connected.');
   const tokens = await unsealOAuthTokens(env, tenantId, row.credential.secretEnc, row.credential.secretIv);
   if (!tokens) throw new Error('The YouTube connection must be reconnected.');
-  if (!oauthTokensStale(tokens)) return tokens.accessToken;
-  if (!tokens.refreshToken) throw new Error('The YouTube connection must be reconnected.');
-  try {
-    const refreshed = await refreshAccessToken({ tokenUrl: YOUTUBE_PROVIDER.tokenUrl, clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET! }, tokens.refreshToken);
-    const next = mergeRefreshedTokens(tokens, refreshed);
-    const sealed = await sealOAuthTokens(env, tenantId, next);
-    await db.update(credentials).set({ secretEnc: sealed.enc, secretIv: sealed.iv, expiresAt: next.expiresAtMs ? new Date(next.expiresAtMs) : null, lastUsedAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(credentials.id, row.credential.id), eq(credentials.tenantId, tenantId)));
-    return next.accessToken;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Token refresh failed';
-    if (isTerminalRefreshFailure(message)) await db.update(connections).set({ status: 'revoked', lastError: message, updatedAt: new Date() }).where(and(eq(connections.id, connectionId), eq(connections.tenantId, tenantId)));
-    throw error;
+  // The shared lifecycle decides; this function only writes the credential row.
+  const refresh = await refreshGrantIfStale(tokens, providerGrantRefresher(env, YOUTUBE_PROVIDER));
+  if (!refresh.ok) {
+    if (refresh.reason === 'no_refresh_token') throw new Error('The YouTube connection must be reconnected.');
+    if (refresh.reason === 'unconfigured') throw new Error('YouTube OAuth is not configured on this deployment.');
+    if (refresh.reason === 'revoked') {
+      await db.update(connections).set({ status: 'revoked', lastError: refresh.message, updatedAt: new Date() }).where(and(eq(connections.id, connectionId), eq(connections.tenantId, tenantId)));
+    }
+    throw refresh.error;
   }
+  if (!refresh.refreshed) return refresh.tokens.accessToken;
+  const next = refresh.tokens;
+  const sealed = await sealOAuthTokens(env, tenantId, next);
+  await db.update(credentials).set({ secretEnc: sealed.enc, secretIv: sealed.iv, expiresAt: next.expiresAtMs ? new Date(next.expiresAtMs) : null, lastUsedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(credentials.id, row.credential.id), eq(credentials.tenantId, tenantId)));
+  return next.accessToken;
 }
 
 /** The grant an upload spends: whose `connections` row, and which user owns it. */

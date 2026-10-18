@@ -24,7 +24,20 @@
  * Provider-specific ADVICE still belongs to the provider (only the OpenAI flow
  * has a Codex CLI that can eat the code off localhost), so the hint is a
  * parameter — the classification and the wire contract are shared.
+ *
+ * The provider DESCRIPTORS ({@link SubscriptionOAuthClient}) and the authorize /
+ * exchange / refresh calls built on the shared OAuth primitive live here too, so
+ * each provider module is its descriptor plus its own token parsing.
  */
+
+import {
+  buildAuthorizationUrl,
+  exchangeCodeForTokens,
+  refreshAccessToken,
+  TokenEndpointError,
+  type TokenClient,
+  type TokenResponse,
+} from '../shared/providerOAuthConnect';
 
 /** A pasted authorization code, split from whatever wrapper it arrived in. */
 export interface PastedAuthorizationCode {
@@ -157,4 +170,80 @@ export function throwTokenExchangeFailure(params: {
   const detail = params.body.slice(0, 240);
   if (isSpentAuthorizationCode(params.status, detail)) throw spentAuthorizationCodeError(params.spentHint);
   throw new OAuthExchangeError(`${params.label} OAuth token request failed (${params.status}): ${detail}`, params.status);
+}
+
+/**
+ * A subscription provider's PUBLIC OAuth client, as data.
+ *
+ * The three paste-back providers differ only in values: the published client id,
+ * the redirect the provider registered for it (a page we do not own), the scopes,
+ * extra authorize params, and — for Anthropic alone — a JSON token body. The URL,
+ * the exchange, the refresh and the failure classification are shared, so a
+ * fourth provider is one more descriptor, not a fourth fetch.
+ */
+export interface SubscriptionOAuthClient {
+  /** Provider name for error messages, e.g. `'Anthropic'`. */
+  label: string;
+  clientId: string;
+  authUrl: string;
+  tokenUrl: string;
+  redirectUri: string;
+  scopes: readonly string[];
+  extraAuthParams?: Record<string, string>;
+  tokenBodyEncoding?: TokenClient['bodyEncoding'];
+  /** Provider-specific advice appended when the pasted code turns out to be spent. */
+  spentHint?: string;
+}
+
+const tokenClientOf = (client: SubscriptionOAuthClient): TokenClient => ({
+  tokenUrl: client.tokenUrl,
+  clientId: client.clientId,
+  ...(client.tokenBodyEncoding ? { bodyEncoding: client.tokenBodyEncoding } : {}),
+});
+
+/** The consent URL for a subscription provider (PKCE S256, our random `state`). */
+export function subscriptionAuthorizeUrl(
+  client: SubscriptionOAuthClient,
+  params: { state: string; challenge: string },
+): string {
+  return buildAuthorizationUrl(client.authUrl, {
+    clientId: client.clientId,
+    redirectUri: client.redirectUri,
+    scopes: client.scopes,
+    state: params.state,
+    codeChallenge: params.challenge,
+    ...(client.extraAuthParams ? { extra: client.extraAuthParams } : {}),
+  });
+}
+
+/**
+ * Trade a pasted code (+ PKCE verifier) for tokens. A refusal is classified once
+ * here — spent code (400), unentitled account (403), or upstream failure (502) —
+ * instead of by each provider module.
+ */
+export async function exchangeSubscriptionCode(
+  client: SubscriptionOAuthClient,
+  params: { code: string; verifier: string; extra?: Record<string, string> },
+): Promise<TokenResponse> {
+  try {
+    return await exchangeCodeForTokens(tokenClientOf(client), params.code, client.redirectUri, {
+      code_verifier: params.verifier,
+      ...(params.extra ?? {}),
+    });
+  } catch (error) {
+    if (error instanceof TokenEndpointError && error.status >= 400) {
+      throwTokenExchangeFailure({ status: error.status, body: error.body, label: client.label, spentHint: client.spentHint });
+    }
+    throw error;
+  }
+}
+
+/**
+ * Re-mint subscription tokens. Throws the shared {@link TokenEndpointError},
+ * whose `status` is the UPSTREAM status — the resolvers read it to tell a revoked
+ * refresh token (401/403) from a transient failure, which a 400/403/502 API
+ * status would blur.
+ */
+export function refreshSubscriptionToken(client: SubscriptionOAuthClient, refreshToken: string): Promise<TokenResponse> {
+  return refreshAccessToken(tokenClientOf(client), refreshToken);
 }

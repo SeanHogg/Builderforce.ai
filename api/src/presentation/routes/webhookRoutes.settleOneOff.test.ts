@@ -33,6 +33,7 @@ vi.mock('../../application/marketplace/listingCommerce', () => ({
 }));
 vi.mock('../../application/knowledge/knowledgeCommerce', () => ({
   completeKnowledgeCheckout: mocks.completeKnowledgeCheckout,
+  KNOWLEDGE_PURCHASE_KIND: 'knowledge_listing',
 }));
 vi.mock('../../application/marketplace/skillCommerce', () => ({
   completeSkillCheckout: mocks.completeSkillCheckout,
@@ -40,6 +41,7 @@ vi.mock('../../application/marketplace/skillCommerce', () => ({
 }));
 vi.mock('../../application/finance/receivables', () => ({
   settleInvoiceCheckout: mocks.settleInvoiceCheckout,
+  TENANT_INVOICE_KIND: 'tenant_invoice',
 }));
 vi.mock('../../application/observability/caughtErrorReporter', () => ({
   reportCaughtError: mocks.reportCaughtError,
@@ -67,12 +69,15 @@ async function deliver(event: Record<string, unknown>) {
   return { status: res.status, body: await res.json() as Record<string, unknown> };
 }
 
+// A knowledge sale arrives as an ordinary self-named `checkout.completed`; the
+// purchase registry settles it by kind from the signed metadata.
+const KNOWLEDGE_META = { purchaseKind: 'knowledge_listing', listingId: 'l-1', buyerTenantId: '42', tenantId: '42', buyerUserId: 'u-buyer' };
 const KNOWLEDGE = {
-  type: 'knowledge.purchased',
+  type: 'checkout.completed',
   purchaseKind: 'knowledge_listing',
   checkoutSessionId: 'cs_1',
-  buyerUserId: 'u-buyer',
   tenantId: 42,
+  metadata: KNOWLEDGE_META,
   externalCustomerId: 'cus_1',
   externalSubscriptionId: '',
   raw: {},
@@ -86,7 +91,7 @@ beforeEach(() => {
   mocks.reportCaughtError.mockReset();
 });
 
-describe('knowledge.purchased — the close-the-tab path', () => {
+describe('checkout.completed knowledge_listing — the close-the-tab path', () => {
   it('settles the purchase the redirect never got to record', async () => {
     mocks.completeKnowledgeCheckout.mockResolvedValue({ purchaseId: 'p-1' });
     const { status, body } = await deliver(KNOWLEDGE);
@@ -98,13 +103,13 @@ describe('knowledge.purchased — the close-the-tab path', () => {
   });
 
   it('acknowledges without settling when the metadata names no buyer', async () => {
-    const { body } = await deliver({ ...KNOWLEDGE, buyerUserId: undefined });
+    const { body } = await deliver({ ...KNOWLEDGE, metadata: { ...KNOWLEDGE_META, buyerUserId: '' } });
     expect(body).toEqual({ received: true, processed: false });
     expect(mocks.completeKnowledgeCheckout).not.toHaveBeenCalled();
   });
 
   it('acknowledges without settling when the metadata names no workspace', async () => {
-    const { body } = await deliver({ ...KNOWLEDGE, tenantId: undefined });
+    const { body } = await deliver({ ...KNOWLEDGE, metadata: { ...KNOWLEDGE_META, buyerTenantId: '' } });
     expect(body).toEqual({ received: true, processed: false });
     expect(mocks.completeKnowledgeCheckout).not.toHaveBeenCalled();
   });
@@ -119,23 +124,26 @@ describe('knowledge.purchased — the close-the-tab path', () => {
   });
 });
 
-describe('the other two flows keep the same contract', () => {
-  it('settles a creation listing', async () => {
-    mocks.completeListingCheckout.mockResolvedValue({});
-    const { body } = await deliver({
-      type: 'listing.purchased', checkoutSessionId: 'cs_2', buyerRef: 'u-b', tenantId: 7,
-      externalCustomerId: 'cus_1', externalSubscriptionId: '', raw: {},
-    });
+describe('invoice.paid — keeps its trigger name, settles through the same registry', () => {
+  const INVOICE = {
+    type: 'invoice.paid', purchaseKind: 'tenant_invoice', checkoutSessionId: 'cs_3', tenantId: 7,
+    metadata: { purchaseKind: 'tenant_invoice', invoiceRef: 'INV-1', invoiceTenantId: '7' },
+    externalCustomerId: 'cus_1', externalSubscriptionId: '', raw: {},
+  };
+
+  it('settles the receivable for the SELLER tenant named in the metadata', async () => {
+    mocks.settleInvoiceCheckout.mockResolvedValue({ applied: true });
+    const { body } = await deliver(INVOICE);
     expect(body).toEqual({ received: true, processed: true });
+    expect(mocks.settleInvoiceCheckout).toHaveBeenCalledWith(expect.anything(), expect.anything(), {
+      tenantId: 7, invoiceRef: 'INV-1', checkoutSessionId: 'cs_3',
+    });
   });
 
   // An invoice reports whether it APPLIED, and a second arrival applies nothing.
   it('reports a receivable that had already been settled as unprocessed', async () => {
     mocks.settleInvoiceCheckout.mockResolvedValue({ applied: false });
-    const { body } = await deliver({
-      type: 'invoice.paid', checkoutSessionId: 'cs_3', invoiceRef: 'INV-1', tenantId: 7,
-      externalCustomerId: 'cus_1', externalSubscriptionId: '', raw: {},
-    });
+    const { body } = await deliver(INVOICE);
     expect(body).toEqual({ received: true, processed: false });
   });
 });

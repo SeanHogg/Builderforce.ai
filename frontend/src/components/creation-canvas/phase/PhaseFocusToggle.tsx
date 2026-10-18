@@ -1,7 +1,7 @@
 // No 'use client' directive: rendered only inside `CreationCanvas`, which declares it.
 import { useTranslations } from 'next-intl';
 import { useCanvasPhase } from './CanvasPhaseContext';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/chrome.module.css';
 
 /** A lens: a ring with the centre filled — "bring this forward". */
 function PhaseFocusIcon() {

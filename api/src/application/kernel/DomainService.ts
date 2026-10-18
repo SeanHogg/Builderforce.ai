@@ -32,6 +32,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { activityLog, metricFacts, objects } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 import { DOMAINS, type Domain } from './ObjectRegistry';
+import { activityDatabase, getActivityLog, type ActivityLogRow } from '../activity/activityLog';
 
 /**
  * The roster as data (PRD 20 §3, §7).
@@ -143,7 +144,6 @@ export type DomainSummary = {
 
 const summaryKey = (t: number, d: string) => `kernel:domain:${t}:${d}:summary`;
 const itemsKey = (t: number, d: string, limit: number) => `kernel:domain:${t}:${d}:items:${limit}`;
-const activityKey = (t: number, d: string, limit: number) => `kernel:domain:${t}:${d}:activity:${limit}`;
 const metricsKey = (t: number, d: string, days: number) => `kernel:domain:${t}:${d}:metrics:${days}`;
 const rosterKey = (t: number) => `kernel:domain:${t}:roster`;
 
@@ -179,7 +179,9 @@ export async function getRosterSummary(db: Db, env: Env, tenantId: number): Prom
           .from(objects)
           .where(and(eq(objects.tenantId, tenantId), isNull(objects.archivedAt)))
           .groupBy(objects.domain),
-        db
+        // The activity half reads the database the activity writers append to
+        // (`activityDatabase`), not the caller's — the same rule as the feed.
+        activityDatabase(env, db)
           .select({
             domain: objects.domain,
             n: count(),
@@ -254,40 +256,20 @@ export async function getDomainItems(
   });
 }
 
-/** One timeline component, fed one shape, for every seat (§7.1). */
+/**
+ * One timeline component, fed one shape, for every seat (§7.1) — a `domain`
+ * filter over THE activity read (`activity/activityLog.getActivityLog`), the
+ * same rows and shape `/api/objects/:id/activity` and `/api/activity/log` serve.
+ */
 export async function getDomainActivity(
   db: Db,
   env: Env,
   tenantId: number,
   domain: Domain,
   limit?: number,
-) {
-  const take = clamp(limit, 50);
-  return getOrSetCached(
-    env,
-    activityKey(tenantId, domain, take),
-    async () => {
-      return db
-        .select({
-          id: activityLog.id,
-          verb: activityLog.verb,
-          actorType: activityLog.actorType,
-          actorName: activityLog.actorName,
-          targetLabel: activityLog.targetLabel,
-          summary: activityLog.summary,
-          occurredAt: activityLog.occurredAt,
-          objectId: activityLog.objectId,
-          objectKind: objects.kind,
-          objectTitle: objects.title,
-        })
-        .from(activityLog)
-        .innerJoin(objects, eq(activityLog.objectId, objects.id))
-        .where(and(eq(activityLog.tenantId, tenantId), eq(objects.domain, domain)))
-        .orderBy(desc(activityLog.occurredAt))
-        .limit(take);
-    },
-    { kvTtlSeconds: 60, l1TtlMs: 15_000 },
-  );
+): Promise<ActivityLogRow[]> {
+  const page = await getActivityLog(env, db, tenantId, { domain, limit: clamp(limit, 50) });
+  return page.events;
 }
 
 export type MetricSeries = { metric: string; unit: string | null; points: { at: string; value: number }[] };

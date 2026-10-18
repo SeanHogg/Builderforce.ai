@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { canvasProjectId } from '@/lib/canvasProjectRef';
 import { useVoiceStudio } from '@/lib/voiceStudio';
 import type { BrowserSpeechRecognition } from '../canvasBoardTypes';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/inspector.module.css';
 import { VoiceConfigPanel } from '../canvasLazyPanels';
 import { VoiceOutput } from '@/components/builder/VoiceOutput';
 

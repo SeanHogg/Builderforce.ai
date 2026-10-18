@@ -2,7 +2,7 @@
 import { useRef, useState, type ChangeEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
 import { LEGAL_DOCUMENT_CATEGORIES, uploadLegalDocumentFile, type LegalDocumentCategory } from '@/lib/legalDocumentApi';
 import { useFormat } from "@/i18n/useFormat";
 import { faultText } from '@/lib/apiClient';

@@ -3,7 +3,9 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { nextPhaseOffer } from '@/lib/canvasPhaseReadiness';
 import { useCanvasPhase, useLetBrain } from './CanvasPhaseContext';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/phase.module.css';
+import chromeStyles from '../styles/chrome.module.css';
+import surfacesStyles from '../styles/surfaces.module.css';
 
 /**
  * THE PATH — what an unready phase is missing, and the shortest way there.
@@ -41,13 +43,13 @@ export function CanvasPhasePath() {
   if (offer) {
     if (dismissedIn === phase) return null;
     return (
-      <div className={styles.phasePath} role="status" data-tone="next" data-testid="canvas-phase-path">
+      <div className={chromeStyles.phasePath} role="status" data-tone="next" data-testid="canvas-phase-path">
         <p className={styles.phasePathBody}>{t('phasePath.advance', { phase: stage(phase), next: stage(offer) })}</p>
-        <div className={styles.phasePathActions}>
-          <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => setPhase(offer)}>
+        <div className={surfacesStyles.phasePathActions}>
+          <button type="button" className={surfacesStyles.phasePathButton} data-primary="true" onClick={() => setPhase(offer)}>
             {t('phasePath.goTo', { phase: stage(offer) })}
           </button>
-          <button type="button" className={styles.phasePathButton} onClick={() => setDismissedIn(phase)}>
+          <button type="button" className={surfacesStyles.phasePathButton} onClick={() => setDismissedIn(phase)}>
             {t('phasePath.stay', { phase: stage(phase) })}
           </button>
         </div>
@@ -59,10 +61,10 @@ export function CanvasPhasePath() {
   if (current.ready) {
     const advisory = current.advisories[0]!;
     return (
-      <div className={styles.phasePath} role="status" data-tone="warning" data-testid="canvas-phase-path">
+      <div className={chromeStyles.phasePath} role="status" data-tone="warning" data-testid="canvas-phase-path">
         <p className={styles.phasePathAdvisory}>{t(`requirement.${advisory.id}.advisory` as 'requirement.metric.advisory')}</p>
-        <div className={styles.phasePathActions}>
-          <button type="button" className={styles.phasePathButton} onClick={() => setPhase(advisory.satisfiedIn)}>
+        <div className={surfacesStyles.phasePathActions}>
+          <button type="button" className={surfacesStyles.phasePathButton} onClick={() => setPhase(advisory.satisfiedIn)}>
             {t('phasePath.goTo', { phase: stage(advisory.satisfiedIn) })}
           </button>
         </div>
@@ -73,7 +75,7 @@ export function CanvasPhasePath() {
   const first = current.missing[0]!;
   const kicker = t('phasePath.kicker', { phase: stage(phase), count: current.missing.length });
   return (
-    <div className={styles.phasePath} role="status" data-collapsed={collapsed ? 'true' : 'false'} data-testid="canvas-phase-path" data-stage={phase}>
+    <div className={chromeStyles.phasePath} role="status" data-collapsed={collapsed ? 'true' : 'false'} data-testid="canvas-phase-path" data-stage={phase}>
       <div className={styles.phasePathHead}>
         <span className={styles.phasePathKicker}>{kicker}</span>
         <button
@@ -94,11 +96,11 @@ export function CanvasPhasePath() {
           {current.missing.map((requirement) => (
             <li key={requirement.id} data-testid="canvas-phase-path-step">
               <span>{t(`requirement.${requirement.id}.label` as 'requirement.idea.label')}</span>
-              {requirement === first && <div className={styles.phasePathActions}>
-                <button type="button" className={styles.phasePathButton} onClick={() => setPhase(requirement.satisfiedIn)}>
+              {requirement === first && <div className={surfacesStyles.phasePathActions}>
+                <button type="button" className={surfacesStyles.phasePathButton} onClick={() => setPhase(requirement.satisfiedIn)}>
                   {t('phasePath.goTo', { phase: stage(requirement.satisfiedIn) })}
                 </button>
-                <button type="button" className={styles.phasePathButton} data-primary="true" onClick={() => letBrain.runRequirement(requirement.id)}>
+                <button type="button" className={surfacesStyles.phasePathButton} data-primary="true" onClick={() => letBrain.runRequirement(requirement.id)}>
                   {letBrain.requirementLabel(requirement.id)}
                 </button>
               </div>}

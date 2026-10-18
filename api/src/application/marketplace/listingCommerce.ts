@@ -590,8 +590,7 @@ export async function completeListingCheckout(
  *
  * The pay-once analog of `recordBusinessPhoneEvent`: the purchase registry
  * calls this from both the one-off settler (`checkout.completed`) and the
- * add-on recorder (a leftover `listing.purchased` or `addon.*` event that
- * still names this kind). Incomplete metadata is not an error — the
+ * add-on recorder (an `addon.*` event that still names this kind). Incomplete metadata is not an error — the
  * registry acknowledges rather than 500'ing the processor into a retry.
  */
 export async function recordMarketplaceListingEvent(
@@ -604,7 +603,7 @@ export async function recordMarketplaceListingEvent(
   if (!checkoutSessionId) return false;
   const tenantId = event.tenantId
     ?? Number(event.metadata?.buyerTenantId ?? event.metadata?.tenantId);
-  const buyerRef = event.buyerRef ?? event.metadata?.buyerRef;
+  const buyerRef = event.metadata?.buyerRef;
   if (!Number.isInteger(tenantId) || tenantId <= 0 || !buyerRef) return false;
   await completeListingCheckout(db, env, {
     tenantId,

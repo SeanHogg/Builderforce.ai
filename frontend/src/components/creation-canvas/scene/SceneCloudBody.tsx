@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { CANVAS_SCENE_ASPECTS, canvasSceneShotsToRender, type CanvasSceneAspect, type CanvasSceneSpec } from '@builderforce/creation-canvas-contract';
 import { useCloudScene, type SceneMovieDraft } from '@/hooks/useCloudScene';
 import { CLOUD_SHOT_SECONDS } from '@/lib/sceneStoryboard';
-import canvasStyles from '../CreationCanvas.module.css';
+import canvasStyles from '../styles/world.module.css';
 import styles from './Scene.module.css';
 import { SceneShotList } from './SceneShotList';
 

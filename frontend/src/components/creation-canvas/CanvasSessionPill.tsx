@@ -3,7 +3,8 @@
 // would only add another file to the architecture ratchet's client-component tally — the
 // same reason `CanvasSessionActions` omits it.
 import { Icon } from '@/components/ui/Icon';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/chrome.module.css';
+import commandBarStyles from './styles/commandBar.module.css';
 
 /**
  * "Something just happened" — floating in the canvas's top-left corner.
@@ -28,7 +29,7 @@ export interface CanvasSessionPillProps {
 export function CanvasSessionPill({ notice }: CanvasSessionPillProps) {
   if (!notice) return null;
   return (
-    <div className={`${styles.floatCard} ${styles.sessionPill}`} data-testid="canvas-session-pill">
+    <div className={`${commandBarStyles.floatCard} ${commandBarStyles.sessionPill}`} data-testid="canvas-session-pill">
       <span className={styles.spark} aria-hidden><Icon source="✦" size="1em" /></span>
       <span className={styles.pillStatus}>
         <span className={styles.saved}>{notice}</span>

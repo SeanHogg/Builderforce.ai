@@ -15,7 +15,7 @@
  * with no special case anywhere downstream.
  */
 
-import { isProviderOAuthConfigured } from '../shared/providerOAuthConnect';
+import { GOOGLE_OAUTH_ENDPOINTS, MICROSOFT_OAUTH_ENDPOINTS, isProviderOAuthConfigured } from '../shared/providerOAuthConnect';
 
 /** Everything the tree and the importer need about one item. */
 export interface DriveItem {
@@ -154,8 +154,7 @@ export function googleQueryValue(value: string): string {
 export const googleDrive: DriveProvider = {
   name: 'google',
   label: 'Google Drive',
-  authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenUrl: 'https://oauth2.googleapis.com/token',
+  ...GOOGLE_OAUTH_ENDPOINTS,
   // `drive.readonly` is the narrowest scope that can both list and export. We
   // never write back, so nothing broader is justified.
   scopes: [
@@ -251,8 +250,7 @@ interface GraphItem {
 export const microsoftDrive: DriveProvider = {
   name: 'microsoft',
   label: 'OneDrive',
-  authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-  tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+  ...MICROSOFT_OAUTH_ENDPOINTS,
   // `offline_access` is what yields a refresh token on Graph; `Files.Read` is
   // read-only across the signed-in user's own drive.
   scopes: ['offline_access', 'openid', 'email', 'profile', 'User.Read', 'Files.Read'],

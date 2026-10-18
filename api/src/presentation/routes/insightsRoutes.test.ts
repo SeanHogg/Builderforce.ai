@@ -15,7 +15,12 @@ const deliveryCollectors = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock('../../application/metrics/workforceMetrics', () => ({ computeDora: deliveryCollectors.dora }));
+vi.mock('../../application/metrics/workforceMetrics', () => ({
+  computeDora: deliveryCollectors.dora,
+  // The route reads through the shared version-keyed reader; skip its cache here.
+  readDora: (db: unknown, _env: unknown, tenantId: number, days: number, projectId?: number) =>
+    (deliveryCollectors.dora as (...args: unknown[]) => unknown)(db, tenantId, days, projectId),
+}));
 vi.mock('../../application/insights/bottleneckInsights', () => ({ computeBottleneckInsights: deliveryCollectors.bottlenecks }));
 vi.mock('../../application/insights/lifecycleInsights', () => ({ computeLifecycleInsights: deliveryCollectors.lifecycle }));
 
@@ -36,6 +41,8 @@ vi.mock('../middleware/authMiddleware', () => ({
 // paywall, and pass a fake db rather than an env — so stub the gate to "entitled".
 vi.mock('../middleware/insightPlanGate', () => ({
   requirePlanFeature: () => async (_c: any, next: any) => next(),
+  // The export adapter applies a source's declared plan feature as a value.
+  planFeatureGate: async () => null,
 }));
 
 import { createInsightsRoutes } from './insightsRoutes';
@@ -114,6 +121,9 @@ describe('insightsRoutes — lens reads', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/csv');
     expect(res.headers.get('content-disposition')).toContain('attachment');
+    // A historical path is now a deprecated alias of the canonical export door.
+    expect(res.headers.get('deprecation')).toBe('true');
+    expect(res.headers.get('link')).toBe('</api/exports/sources/insights.evidence-pack>; rel="successor-version"');
   });
 });
 

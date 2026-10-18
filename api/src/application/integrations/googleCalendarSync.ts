@@ -15,6 +15,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { memberProfiles } from '../../infrastructure/database/schema';
 import type { PtoBlock } from '../member/ptoWindows';
+import { GOOGLE_OAUTH_ENDPOINTS, providerTokenClient, refreshAccessToken } from '../shared/providerOAuthConnect';
 
 export interface BusyBlock { start: string; end: string; }
 export interface CalEvent { summary?: string; eventType?: string; start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string }; }
@@ -53,27 +54,24 @@ export function derivePto(events: CalEvent[]): PtoBlock[] {
   return out;
 }
 
-interface OAuthEnv { GOOGLE_OAUTH_CLIENT_ID?: string; GOOGLE_OAUTH_CLIENT_SECRET?: string }
+/**
+ * The calendar-sync grant's token descriptor. It is the integration-credential
+ * client (`GOOGLE_OAUTH_*`), not the sign-in/connect client (`GOOGLE_CLIENT_*`),
+ * because the refresh token was minted for that client and only it can redeem it.
+ */
+const CALENDAR_SYNC_TOKEN_CLIENT = {
+  tokenUrl: GOOGLE_OAUTH_ENDPOINTS.tokenUrl,
+  clientIdKey: 'GOOGLE_OAUTH_CLIENT_ID',
+  clientSecretKey: 'GOOGLE_OAUTH_CLIENT_SECRET',
+} as const;
 
 /** Refresh an expired access token if a refresh token + OAuth client are
  *  configured. Returns the new access token, or null when refresh isn't possible. */
-async function refreshAccessToken(env: Env, refreshToken: string): Promise<string | null> {
-  const e = env as unknown as OAuthEnv;
-  if (!e.GOOGLE_OAUTH_CLIENT_ID || !e.GOOGLE_OAUTH_CLIENT_SECRET) return null;
+async function refreshCalendarAccessToken(env: Env, refreshToken: string): Promise<string | null> {
+  const client = providerTokenClient(env as unknown as Record<string, unknown>, CALENDAR_SYNC_TOKEN_CLIENT);
+  if (!client) return null;
   try {
-    const res = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: e.GOOGLE_OAUTH_CLIENT_ID,
-        client_secret: e.GOOGLE_OAUTH_CLIENT_SECRET,
-        refresh_token: refreshToken,
-        grant_type: 'refresh_token',
-      }),
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { access_token?: string };
-    return json.access_token ?? null;
+    return (await refreshAccessToken(client, refreshToken)).access_token;
   } catch {
     return null;
   }
@@ -122,7 +120,7 @@ export async function syncMemberCalendar(
 
   let { freeBusy, events } = await call(token);
   if ((freeBusy.status === 401 || events.status === 401) && input.credential.refreshToken) {
-    const fresh = await refreshAccessToken(env, input.credential.refreshToken);
+    const fresh = await refreshCalendarAccessToken(env, input.credential.refreshToken);
     if (fresh) { token = fresh; ({ freeBusy, events } = await call(fresh)); }
   }
   if (!freeBusy.ok) return { ok: false, message: `freeBusy failed (${freeBusy.status})` };

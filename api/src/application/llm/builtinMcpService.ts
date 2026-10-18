@@ -69,11 +69,13 @@ import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/
 import { parseJsonObject } from '../../domain/shared/json';
 import { findNearDuplicateByTitle } from '../../domain/shared/nearDuplicateTitle';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { specStatusEnum, workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
+import { specStatusEnum, workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import { listAgentHostUsageSnapshots } from '../agentHost/agentHostUsage';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { publicAgentScope } from '../marketplace/publicAgentScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
+import { addDashboardWidget, createSavedDashboard, deleteSavedDashboard, listSavedDashboards, removeDashboardWidget, updateDashboardWidget, updateSavedDashboard } from '../dashboards/savedDashboards';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
 import { integrationCredentials } from '../../infrastructure/database/schema';
@@ -109,7 +111,8 @@ import { OnCallService } from '../incident/OnCallService';
 import { EscalationService } from '../incident/EscalationService';
 import { recallSops } from '../knowledge/recallSops';
 import { publishKnowledgeDoc } from '../knowledge/publishKnowledgeDoc';
-import { importSpecFromBoard, publicSpecImportResult, SpecImportError } from '../prd/importSpec';
+import { publicSpecImportResult, SpecImportError } from '../prd/importSpec';
+import { deleteSpec, getSpec, importSpec, listSpecs } from '../prd/specStore';
 import { SecurityTicketAccessService } from '../security/SecurityTicketAccessService';
 import { recallProjectFacts, upsertProjectFact } from './projectFacts';
 import type { Task } from '../../domain/task/Task';
@@ -1465,8 +1468,8 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'workflows.get', mutates: false, description: 'Get one workflow by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(workflows).where(and(eq(workflows.id, str(a.id)), eq(workflows.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
 
   // ---- Specs / PRDs (read) ----
-  { tool: 'specs.list', mutates: false, description: 'List specs / PRDs (compact: id/projectId/goal/status/kind + a short PRD snippet), optionally filtered by project, capped by limit (default 50, max 200). Use specs.get for one spec\'s full PRD / arch-spec / task-list body.', parameters: obj({ projectId: N, limit: N }), run: async (ctx, a) => { const rows = await ctx.db.select().from(specs).where(a.projectId != null ? and(eq(specs.tenantId, ctx.tenantId), eq(specs.projectId, num(a.projectId))) : eq(specs.tenantId, ctx.tenantId)).orderBy(desc(specs.updatedAt)).limit(LIST_MAX_LIMIT); return listEnvelope('specs', rows.map((r) => compactSpec(r as unknown as Record<string, unknown>)), clampLimit(a.limit)); } },
-  { tool: 'specs.get', mutates: false, description: 'Get one spec / PRD by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(specs).where(and(eq(specs.id, str(a.id)), eq(specs.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
+  { tool: 'specs.list', mutates: false, description: 'List specs / PRDs (compact: id/projectId/goal/status/kind + a short PRD snippet), optionally filtered by project, capped by limit (default 50, max 200). Use specs.get for one spec\'s full PRD / arch-spec / task-list body.', parameters: obj({ projectId: N, limit: N }), run: async (ctx, a) => { const rows = await listSpecs(ctx.db, ctx.tenantId, { projectId: a.projectId != null ? num(a.projectId) : null, limit: LIST_MAX_LIMIT }); return listEnvelope('specs', rows.map((r) => compactSpec(r as unknown as Record<string, unknown>)), clampLimit(a.limit)); } },
+  { tool: 'specs.get', mutates: false, description: 'Get one spec / PRD by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => getSpec(ctx.db, ctx.tenantId, str(a.id)) },
   {
     tool: 'specs.create', mutates: true,
     description: 'Create a spec / PRD. goal is required; optionally attach to a project and include the PRD body.',
@@ -1492,7 +1495,7 @@ const CATALOG: BuiltinTool[] = [
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('Importing a spec requires the platform environment (board credentials cannot be decrypted without it).');
       try {
-        const result = await importSpecFromBoard(ctx.db, ctx.env, {
+        const result = await importSpec(ctx.db, ctx.env, {
           tenantId: ctx.tenantId,
           projectId: num(a.projectId),
           externalId: str(a.externalId),
@@ -1500,7 +1503,6 @@ const CATALOG: BuiltinTool[] = [
           connectionId: a.connectionId != null ? str(a.connectionId) : null,
           taskId: a.taskId != null ? num(a.taskId) : null,
         });
-        if (ctx.env) await bumpTicketSearchVersion(ctx.env, ctx.tenantId);
         return publicSpecImportResult(result.spec, { created: result.created, linkedTaskId: result.linkedTaskId });
       } catch (err) {
         if (err instanceof SpecImportError) throw new Error(err.message);
@@ -1508,7 +1510,7 @@ const CATALOG: BuiltinTool[] = [
       }
     },
   },
-  { tool: 'specs.delete', mutates: true, description: 'Delete a spec / PRD by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const rows = await ctx.db.delete(specs).where(and(eq(specs.id, str(a.id)), eq(specs.tenantId, ctx.tenantId))).returning({ id: specs.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+  { tool: 'specs.delete', mutates: true, description: 'Delete a spec / PRD by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => ({ deleted: (await deleteSpec(ctx.db, ctx.tenantId, str(a.id))) ? str(a.id) : null }) },
 
   // ---- Product roadmap (roadmap_items — a project/segment-scoped product artifact) ----
   // NOT a planning-spine node: its own uuid-keyed table. A chat can be tied to a roadmap
@@ -2302,17 +2304,20 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'agent_assignments.remove', mutates: true, description: 'Remove an agent assignment by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(agentAssignments).where(and(eq(agentAssignments.id, str(a.id)), eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg))).returning({ id: agentAssignments.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
   // ---- Saved dashboards (segment-scoped) + widgets (tenant-scoped via parent dashboard) ----
-  // data/query SKIPPED — they resolve metric values via computation, not a table read.
-  { tool: 'dashboards.list', mutates: false, description: "List the workspace's saved dashboards (with their widgets).", parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const ds = await ctx.db.select().from(savedDashboards).where(and(eq(savedDashboards.tenantId, ctx.tenantId), eq(savedDashboards.segmentId, seg))).orderBy(desc(savedDashboards.updatedAt)).limit(200); const widgets = await ctx.db.select().from(dashboardWidgets).where(eq(dashboardWidgets.tenantId, ctx.tenantId)); return ds.map((d) => ({ ...d, widgets: widgets.filter((w) => w.dashboardId === d.id) })); } },
+  // THE dashboards application layer (application/dashboards/savedDashboards.ts) — the
+  // same functions /api/dashboards runs, so a tool-made widget obeys the same metric
+  // whitelist and ownership check as one made in the UI.
+  // data/query SKIPPED here — they resolve metric values via computation (see the replayRoute tools below).
+  { tool: 'dashboards.list', mutates: false, description: "List the workspace's saved dashboards (with their widgets).", parameters: obj({}), run: async (ctx) => listSavedDashboards(ctx.db, ctx.tenantId, await resolveSegment(ctx.db, ctx.tenantId)) },
   {
     tool: 'dashboards.create', mutates: true,
     description: 'Create a saved dashboard.',
     parameters: obj({ name: S, isDefault: B }, ['name']),
     run: async (ctx, a) => {
-      const name = str(a.name).trim(); if (!name) throw new Error('name is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(savedDashboards).values({ tenantId: ctx.tenantId, segmentId: seg, name, ...(typeof a.isDefault === 'boolean' ? { isDefault: a.isDefault } : {}) }).returning();
-      return row;
+      const result = await createSavedDashboard(ctx.db, { tenantId: ctx.tenantId, segmentId: seg, name: a.name, isDefault: typeof a.isDefault === 'boolean' ? a.isDefault : null });
+      if (!result.ok) throw new Error(result.error);
+      return result.row;
     },
   },
   {
@@ -2321,25 +2326,28 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ id: N, name: S, isDefault: B }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const patch: Json = { updatedAt: new Date() };
-      if (a.name != null) patch.name = str(a.name);
-      if (typeof a.isDefault === 'boolean') patch.isDefault = a.isDefault;
-      const [row] = await ctx.db.update(savedDashboards).set(patch).where(and(eq(savedDashboards.id, num(a.id)), eq(savedDashboards.tenantId, ctx.tenantId), eq(savedDashboards.segmentId, seg))).returning();
+      const row = await updateSavedDashboard(ctx.db, ctx.tenantId, seg, num(a.id), {
+        name: a.name != null ? str(a.name) : null,
+        isDefault: typeof a.isDefault === 'boolean' ? a.isDefault : null,
+      });
       if (!row) throw new Error('dashboard not found');
       return row;
     },
   },
-  { tool: 'dashboards.delete', mutates: true, description: 'Delete a saved dashboard (and its widgets).', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [d] = await ctx.db.select({ id: savedDashboards.id }).from(savedDashboards).where(and(eq(savedDashboards.id, num(a.id)), eq(savedDashboards.tenantId, ctx.tenantId), eq(savedDashboards.segmentId, seg))).limit(1); if (!d) return { deleted: null }; await ctx.db.delete(dashboardWidgets).where(and(eq(dashboardWidgets.dashboardId, d.id), eq(dashboardWidgets.tenantId, ctx.tenantId))); await ctx.db.delete(savedDashboards).where(and(eq(savedDashboards.id, d.id), eq(savedDashboards.tenantId, ctx.tenantId), eq(savedDashboards.segmentId, seg))); return { deleted: num(a.id) }; } },
+  { tool: 'dashboards.delete', mutates: true, description: 'Delete a saved dashboard (and its widgets).', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => ({ deleted: await deleteSavedDashboard(ctx.db, ctx.tenantId, await resolveSegment(ctx.db, ctx.tenantId), num(a.id)) }) },
   {
     tool: 'dashboards.add_widget', mutates: true,
     description: 'Add a widget charting a whitelisted metric to a dashboard. viz: stat|bar|line|gauge.',
     parameters: obj({ dashboardId: N, metricKey: S, viz: { type: 'string', enum: ['stat', 'bar', 'line', 'gauge'] }, title: S, position: N }, ['dashboardId', 'metricKey']),
     run: async (ctx, a) => {
-      const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [d] = await ctx.db.select({ id: savedDashboards.id }).from(savedDashboards).where(and(eq(savedDashboards.id, num(a.dashboardId)), eq(savedDashboards.tenantId, ctx.tenantId), eq(savedDashboards.segmentId, seg))).limit(1);
-      if (!d) throw new Error('dashboard not found');
-      const [row] = await ctx.db.insert(dashboardWidgets).values({ tenantId: ctx.tenantId, dashboardId: d.id, metricKey: str(a.metricKey), ...(a.viz != null ? { viz: str(a.viz) } : {}), title: a.title != null ? str(a.title) : null, ...(a.position != null ? { position: num(a.position) } : {}) }).returning();
-      return row;
+      const result = await addDashboardWidget(ctx.db, ctx.tenantId, num(a.dashboardId), {
+        metricKey: a.metricKey,
+        viz: a.viz,
+        title: a.title != null ? str(a.title) : undefined,
+        position: a.position != null ? num(a.position) : undefined,
+      });
+      if (!result.ok) throw new Error(result.status === 404 ? 'dashboard not found' : result.error);
+      return result.row;
     },
   },
   {
@@ -2347,20 +2355,17 @@ const CATALOG: BuiltinTool[] = [
     description: 'Update a dashboard widget (metric, viz, title or position).',
     parameters: obj({ dashboardId: N, widgetId: N, metricKey: S, viz: { type: 'string', enum: ['stat', 'bar', 'line', 'gauge'] }, title: S, position: N }, ['dashboardId', 'widgetId']),
     run: async (ctx, a) => {
-      const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [d] = await ctx.db.select({ id: savedDashboards.id }).from(savedDashboards).where(and(eq(savedDashboards.id, num(a.dashboardId)), eq(savedDashboards.tenantId, ctx.tenantId), eq(savedDashboards.segmentId, seg))).limit(1);
-      if (!d) throw new Error('dashboard not found');
-      const patch: Json = {};
-      if (a.metricKey != null) patch.metricKey = str(a.metricKey);
-      if (a.viz != null) patch.viz = str(a.viz);
-      if (a.title != null) patch.title = str(a.title);
-      if (a.position != null) patch.position = num(a.position);
-      const [row] = await ctx.db.update(dashboardWidgets).set(patch).where(and(eq(dashboardWidgets.id, num(a.widgetId)), eq(dashboardWidgets.dashboardId, d.id), eq(dashboardWidgets.tenantId, ctx.tenantId))).returning();
-      if (!row) throw new Error('widget not found');
-      return row;
+      const result = await updateDashboardWidget(ctx.db, ctx.tenantId, num(a.dashboardId), num(a.widgetId), {
+        ...(a.metricKey != null ? { metricKey: str(a.metricKey) } : {}),
+        ...(a.viz != null ? { viz: str(a.viz) } : {}),
+        ...(a.title != null ? { title: str(a.title) } : {}),
+        ...(a.position != null ? { position: num(a.position) } : {}),
+      });
+      if (!result.ok) throw new Error(result.status === 404 ? 'widget not found' : result.error);
+      return result.row;
     },
   },
-  { tool: 'dashboards.remove_widget', mutates: true, description: 'Remove a widget from a dashboard.', parameters: obj({ dashboardId: N, widgetId: N }, ['dashboardId', 'widgetId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [d] = await ctx.db.select({ id: savedDashboards.id }).from(savedDashboards).where(and(eq(savedDashboards.id, num(a.dashboardId)), eq(savedDashboards.tenantId, ctx.tenantId), eq(savedDashboards.segmentId, seg))).limit(1); if (!d) return { deleted: null }; const rows = await ctx.db.delete(dashboardWidgets).where(and(eq(dashboardWidgets.id, num(a.widgetId)), eq(dashboardWidgets.dashboardId, d.id), eq(dashboardWidgets.tenantId, ctx.tenantId))).returning({ id: dashboardWidgets.id }); return { deleted: rows.length > 0 ? num(a.widgetId) : null }; } },
+  { tool: 'dashboards.remove_widget', mutates: true, description: 'Remove a widget from a dashboard.', parameters: obj({ dashboardId: N, widgetId: N }, ['dashboardId', 'widgetId']), run: async (ctx, a) => ({ deleted: await removeDashboardWidget(ctx.db, ctx.tenantId, num(a.dashboardId), num(a.widgetId)) }) },
 
   // ---- Alerts (segment-scoped rules) + alert events (tenant-scoped) ----
   { tool: 'alerts.list', mutates: false, description: 'List threshold alert rules defined on platform metrics.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(alerts).where(and(eq(alerts.tenantId, ctx.tenantId), eq(alerts.segmentId, seg))).orderBy(desc(alerts.createdAt)).limit(200); } },
@@ -3678,7 +3683,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'agent_host_projects.list', mutates: false, description: 'Projects associated with an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(agentHostProjects).where(and(eq(agentHostProjects.tenantId, ctx.tenantId), eq(agentHostProjects.segmentId, seg), eq(agentHostProjects.agentHostId, num(a.agentHostId)))).limit(200); } },
   // usage_snapshots is tenant-level run telemetry on its own database; the segment boundary
   // is the host, which is checked against the caller's segment on core first.
-  { tool: 'usage_snapshots.list', mutates: false, description: 'Token usage snapshots for an agent host.', parameters: obj({ agentHostId: N, limit: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const hostId = num(a.agentHostId); const [host] = await ctx.db.select({ id: agentHosts.id }).from(agentHosts).where(and(eq(agentHosts.id, hostId), eq(agentHosts.tenantId, ctx.tenantId), eq(agentHosts.segmentId, seg))).limit(1); if (!host) return []; return runTelemetryDatabase(ctx.db).select().from(usageSnapshots).where(and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.agentHostId, hostId))).orderBy(desc(usageSnapshots.ts)).limit(clampLimit(a.limit)); } },
+  { tool: 'usage_snapshots.list', mutates: false, description: 'Token usage snapshots for an agent host.', parameters: obj({ agentHostId: N, limit: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const hostId = num(a.agentHostId); const [host] = await ctx.db.select({ id: agentHosts.id }).from(agentHosts).where(and(eq(agentHosts.id, hostId), eq(agentHosts.tenantId, ctx.tenantId), eq(agentHosts.segmentId, seg))).limit(1); if (!host) return []; return listAgentHostUsageSnapshots(ctx.db, ctx.tenantId, hostId, clampLimit(a.limit)); } },
 
   // =====================================================================
   // Web-Brain parity tail — every remaining web platformActions capability,
@@ -3703,9 +3708,11 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'agent_host_projects.unassign', mutates: true, description: 'Remove a project↔agent-host association.', parameters: obj({ agentHostId: N, projectId: N }, ['agentHostId', 'projectId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/agent-hosts/${num(a.agentHostId)}/projects/${num(a.projectId)}`) },
 
   // ---- Agent host skills ----
-  { tool: 'agent_host_skills.list', mutates: false, description: 'Skills assigned to an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/skill-assignments?agentHostId=${num(a.agentHostId)}`) },
-  { tool: 'agent_host_skills.assign', mutates: true, description: 'Assign a skill to an agent host.', parameters: obj({ agentHostId: N, skillSlug: S }, ['agentHostId', 'skillSlug']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/skill-assignments/agentHost/${num(a.agentHostId)}`, { skillSlug: str(a.skillSlug) }) },
-  { tool: 'agent_host_skills.revoke', mutates: true, description: 'Revoke a skill assignment.', parameters: obj({ assignmentId: N }, ['assignmentId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/skill-assignments/${num(a.assignmentId)}`) },
+  // The canonical kebab `/api/skill-assignments/agent-hosts/:id` routes. (These replaced
+  // `?agentHostId=`, `/agentHost/:id` and `/:assignmentId`, which the API never served.)
+  { tool: 'agent_host_skills.list', mutates: false, description: 'Skills assigned directly to an agent host (host scope; tenant-wide grants are not included).', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/skill-assignments/agent-hosts/${num(a.agentHostId)}`) },
+  { tool: 'agent_host_skills.assign', mutates: true, description: 'Assign a skill to an agent host.', parameters: obj({ agentHostId: N, skillSlug: S }, ['agentHostId', 'skillSlug']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/skill-assignments/agent-hosts/${num(a.agentHostId)}`, { skillSlug: str(a.skillSlug) }) },
+  { tool: 'agent_host_skills.revoke', mutates: true, description: "Revoke a skill from an agent host (by the host id and the skill's slug).", parameters: obj({ agentHostId: N, skillSlug: S }, ['agentHostId', 'skillSlug']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/skill-assignments/agent-hosts/${num(a.agentHostId)}/${encodeURIComponent(str(a.skillSlug))}`) },
 
   // ---- Agent host channels (multi-channel messaging) ----
   { tool: 'channels.list', mutates: false, description: 'List messaging channels on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${num(a.agentHostId)}/channels`) },
@@ -4083,7 +4090,7 @@ const CATALOG: BuiltinTool[] = [
 
   // ---- Saved dashboards: computed reads (metrics catalogue, resolved data, NL query) ----
   { tool: 'dashboards.metrics', mutates: false, description: 'List the whitelisted metric keys a dashboard widget can chart.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/dashboards/metrics') },
-  { tool: 'dashboards.data', mutates: false, description: 'Resolve every widget on a dashboard to its current value.', parameters: obj({ dashboardId: N }, ['dashboardId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/dashboards/dashboards/${num(a.dashboardId)}/data`) },
+  { tool: 'dashboards.data', mutates: false, description: 'Resolve every widget on a dashboard to its current value.', parameters: obj({ dashboardId: N }, ['dashboardId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/dashboards/${num(a.dashboardId)}/data`) },
   { tool: 'dashboards.query', mutates: false, description: 'Ask a natural-language question; it is mapped deterministically to one whitelisted metric and answered.', parameters: obj({ question: S }, ['question']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/dashboards/query', { question: str(a.question) }) },
 
   // ---- Provider keys (remove a stored key; list already exists above) ----

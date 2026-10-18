@@ -9,6 +9,7 @@
  * `{percent}` (0–100) and `{tokens}` (a formatted context window).
  */
 import type { LocalModelRow } from '@seanhogg/builderforce-brain-embedded';
+import { stringsFrom } from '../labelCatalog';
 
 export interface LocalModelLabels {
   /** Heading above the downloadable catalog. */
@@ -61,12 +62,7 @@ export type LocalModelLabelLookup = (field: keyof LocalModelLabels) => string | 
  * Placeholders (`{size}`, `{percent}`, `{tokens}`) must come back literal.
  */
 export function localModelLabelsFrom(lookup: LocalModelLabelLookup): LocalModelLabels {
-  const out = { ...DEFAULT_LOCAL_MODEL_LABELS };
-  for (const field of LOCAL_MODEL_LABEL_FIELDS) {
-    const text = lookup(field);
-    if (text) out[field] = text;
-  }
-  return out;
+  return stringsFrom(DEFAULT_LOCAL_MODEL_LABELS, (key) => lookup(key as keyof LocalModelLabels));
 }
 
 /** Why a row is unsupported → the label that says so. A registry, so a new fit code

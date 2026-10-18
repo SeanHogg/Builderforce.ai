@@ -12,7 +12,10 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, carts, managedAgentHostRequests, settings } from '../../infrastructure/database/schema';
 import type { WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
-import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+
+type ManagedAgentHostRequestRow = typeof managedAgentHostRequests.$inferSelect;
 
 export const MANAGED_AGENT_HOST_KIND = 'managed_agent_host';
 export const MANAGED_AGENT_HOST_FEATURE = 'managed_agent_host';
@@ -225,14 +228,50 @@ export async function provisionManagedAgentHostRequest(
   return { request: updated };
 }
 
+/** Who is reading the request list: one workspace, or the operator queue across all of them. */
+export type ManagedAgentHostRequestScope = { tenantId: number } | 'platform';
+
 /**
- * The operator's provisioning queue across every workspace, newest first, optionally
- * one status. An unknown status reads as "every status" rather than an empty list.
+ * The ONE managed-host request list, newest first, optionally one status. The tenant
+ * page (`/api/managed-agent-hosts`) and the superadmin queue (`/api/admin/managed-agent-hosts`)
+ * differ only in scope, so they share this query rather than each carrying its own.
+ * An unknown status reads as "every status" rather than an empty list.
  */
-export async function listManagedAgentHostRequests(db: Db, status?: string): Promise<Array<typeof managedAgentHostRequests.$inferSelect>> {
+export async function listManagedAgentHostRequests(
+  db: Db,
+  scope: ManagedAgentHostRequestScope,
+  status?: string,
+): Promise<ManagedAgentHostRequestRow[]> {
   const statuses = status && isRequestStatus(status) ? [status] : [...MANAGED_AGENT_HOST_REQUEST_STATUSES];
+  const byStatus = inArray(managedAgentHostRequests.status, statuses);
   return db.select().from(managedAgentHostRequests)
-    .where(acrossTenants(managedAgentHostRequests, 'platform_admin', inArray(managedAgentHostRequests.status, statuses)))
+    .where(scope === 'platform'
+      ? acrossTenants(managedAgentHostRequests, 'platform_admin', byStatus)
+      : scopedToTenant(managedAgentHostRequests, scope.tenantId, byStatus))
     .orderBy(desc(managedAgentHostRequests.createdAt))
-    .limit(200);
+    .limit(scope === 'platform' ? 200 : LIST_ROW_CAP);
+}
+
+/** One of the workspace's own requests, or null when it is not theirs / does not exist. */
+export async function getManagedAgentHostRequest(db: Db, tenantId: number, requestId: number): Promise<ManagedAgentHostRequestRow | null> {
+  const [row] = await db.select().from(managedAgentHostRequests)
+    .where(scopedToTenant(managedAgentHostRequests, tenantId, eq(managedAgentHostRequests.id, requestId)))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Record a tenant's waitlist request as pending; provisioning is kicked off by the caller. */
+export async function createManagedAgentHostRequest(
+  db: Db,
+  input: { tenantId: number; agentHostName: string; region?: string | null; notes?: string | null },
+): Promise<ManagedAgentHostRequestRow> {
+  const [inserted] = await db.insert(managedAgentHostRequests).values({
+    tenantId: input.tenantId,
+    agentHostName: input.agentHostName,
+    region: input.region ?? 'us-east',
+    notes: input.notes ?? null,
+    status: 'pending',
+  }).returning();
+  if (!inserted) throw new Error('managed_agent_host_requests insert returned no row');
+  return inserted;
 }

@@ -11,9 +11,10 @@
  *   • CSRF — the callback is a top-level browser redirect carrying no bearer
  *     token, so the HMAC-signed `state` naming the tenant, the user and the
  *     extension is the only thing authenticating it.
- *   • `returnTo` — constrained to a path on our own app by the SAME `safeReturnTo`
- *     the other three connect flows use, so a crafted value round-tripped through
- *     a hostile authorization server cannot make this an open redirect.
+ *   • `returnTo` — constrained to a path on our own app by the SAME signed connect
+ *     state every other connect flow uses (`signProviderConnectState`), so a crafted
+ *     value round-tripped through a hostile authorization server cannot make this
+ *     an open redirect.
  *
  * The one genuine difference from the mailbox/drive/calendar flows, and why this
  * cannot simply call them: there, the OAuth client is configured per DEPLOYMENT
@@ -26,8 +27,8 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import { tenantMcpExtensions } from '../../../infrastructure/database/schema';
-import { signState, verifyState } from '../../../infrastructure/auth/oauthState';
-import { safeReturnTo } from '../../shared/providerOAuthConnect';
+import { signProviderConnectState, verifyProviderConnectState } from '../../shared/providerOAuthConnect';
+import { grantFromTokenResponse } from '../../integrations/oauthTokenVault';
 import {
   buildAuthorizeUrl,
   createPkcePair,
@@ -46,14 +47,9 @@ import type { McpProtocol } from './mcpWireClient';
  *  vary it per extension — the extension id rides in the signed state instead. */
 export const MCP_OAUTH_CALLBACK_PATH = '/api/mcp-oauth/callback';
 
-/** What the signed `state` carries across the round trip. */
-interface McpConnectState extends Record<string, unknown> {
-  kind: 'mcp-extension';
-  extensionId: string;
-  tenantId: number;
-  userId: string;
-  returnTo: string;
-}
+/** The provider name the shared connect `state` is signed for. The extension id
+ *  rides beside it in the same signed envelope. */
+const MCP_STATE_PROVIDER = 'mcp-extension';
 
 const DEFAULT_RETURN_TO = '/settings/integrations';
 
@@ -133,13 +129,14 @@ export async function beginMcpOAuthConnect(
     .set({ oauthEnc: sealed.enc, oauthIv: sealed.iv })
     .where(and(eq(tenantMcpExtensions.id, row.id), eq(tenantMcpExtensions.tenantId, args.tenantId)));
 
-  const state = await signState(env.JWT_SECRET, {
-    kind: 'mcp-extension',
-    extensionId: row.id,
-    tenantId: args.tenantId,
+  const state = await signProviderConnectState(env, {
+    providerName: MCP_STATE_PROVIDER,
     userId: args.userId,
-    returnTo: safeReturnTo(args.returnTo, DEFAULT_RETURN_TO),
-  } satisfies McpConnectState);
+    tenantId: args.tenantId,
+    returnTo: args.returnTo,
+    returnToFallback: DEFAULT_RETURN_TO,
+    extra: { extensionId: row.id },
+  });
 
   return { ok: true, authorizeUrl: buildAuthorizeUrl(registration, { redirectUri: args.redirectUri, state, codeChallenge }) };
 }
@@ -159,13 +156,14 @@ export async function completeMcpOAuthConnect(
   env: Env,
   args: { rawState: string; code: string; redirectUri: string },
 ): Promise<McpCallbackResult> {
-  const state = await verifyState<McpConnectState>(env.JWT_SECRET, args.rawState);
-  if (!state || state.kind !== 'mcp-extension') {
+  const state = await verifyProviderConnectState(env, MCP_STATE_PROVIDER, args.rawState, DEFAULT_RETURN_TO);
+  if (!state || typeof state.extensionId !== 'string') {
     return { ok: false, reason: 'invalid_state', returnTo: null, message: 'Invalid or expired authorization state' };
   }
-  const returnTo = safeReturnTo(state.returnTo, DEFAULT_RETURN_TO);
+  const returnTo = state.returnTo;
+  const extensionId: string = state.extensionId;
 
-  const row = await loadRow(db, state.tenantId, state.extensionId);
+  const row = await loadRow(db, state.tenantId, extensionId);
   const consent = row ? await openRegistration(env, state.tenantId, row) : null;
   if (!row || !consent?.codeVerifier) {
     return { ok: false, reason: 'no_pending_consent', returnTo, message: 'No authorization was in flight for this server' };
@@ -176,12 +174,7 @@ export async function completeMcpOAuthConnect(
     await storeGrant(db, env, {
       tenantId: state.tenantId,
       extensionId: row.id,
-      tokens: {
-        accessToken: tokens.access_token,
-        ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
-        ...(tokens.expires_in ? { expiresAtMs: Date.now() + tokens.expires_in * 1000 } : {}),
-        ...(tokens.scope ? { scope: tokens.scope } : {}),
-      },
+      tokens: grantFromTokenResponse(tokens),
     });
     // Burn the verifier: the consent it proves has been spent.
     const { codeVerifier: _spent, ...registration } = consent;

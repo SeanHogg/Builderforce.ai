@@ -15,7 +15,7 @@
  * gate can never dark-launch a paywall on a lens before the plan flag exists.
  */
 
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import type { HonoEnv } from '../../env';
 import { PLAN_FEATURE_LABEL, type PlanFeature } from '../../domain/tenant/planFeatures';
 import { requireFeature } from './featureGate';
@@ -27,9 +27,19 @@ import { requireFeature } from './featureGate';
  */
 export function requirePlanFeature(feature: string): MiddlewareHandler<HonoEnv> {
   return async (c, next) => {
-    if (!(feature in PLAN_FEATURE_LABEL)) return next(); // flag not defined yet → no-op
-    const gate = await requireFeature(c, feature as PlanFeature);
+    const gate = await planFeatureGate(c, feature);
     if (gate) return gate; // 402 upgrade_required
     return next();
   };
+}
+
+/**
+ * The same check as a value rather than a middleware: the 402 response, or null
+ * to proceed. For handlers whose gate is DATA (an export source declares its
+ * `planFeature`), so the one adapter applies whatever the source names instead of
+ * every route re-attaching its own middleware.
+ */
+export async function planFeatureGate(c: Context<HonoEnv>, feature: string): Promise<Response | null> {
+  if (!(feature in PLAN_FEATURE_LABEL)) return null; // flag not defined yet → no-op
+  return requireFeature(c, feature as PlanFeature);
 }

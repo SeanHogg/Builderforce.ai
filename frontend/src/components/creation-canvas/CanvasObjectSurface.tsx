@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 import { creationObjectDefinition, creationObjectName } from './creationObjectRegistry';
 import type { CreationNodeData } from './types';
 

@@ -180,3 +180,21 @@ export async function countFeedbackByStatus(
     return out;
   }, { kvTtlSeconds: scope ? 300 : 30 });
 }
+
+/**
+ * One triage page plus its per-status header counts — the ONE read behind every
+ * feedback queue. The workspace queue passes its tenant (and optional project);
+ * the superadmin roll-up passes `tenantId: null`. Scope is the only difference,
+ * so it is a parameter rather than a second handler that assembles the same pair.
+ */
+export async function loadFeedbackQueue(
+  db: Db,
+  env: Env,
+  filter: FeedbackListFilter,
+): Promise<{ submissions: FeedbackListItem[]; counts: Record<string, number> }> {
+  const [submissions, counts] = await Promise.all([
+    listFeedbackSubmissions(db, env, filter),
+    countFeedbackByStatus(db, env, { tenantId: filter.tenantId, projectId: filter.projectId ?? null }),
+  ]);
+  return { submissions, counts };
+}

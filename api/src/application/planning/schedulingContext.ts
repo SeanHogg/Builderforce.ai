@@ -17,14 +17,8 @@
 import { and, eq, gte, isNull, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { sprints } from '../../infrastructure/database/schema';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
-import {
-  computeMemberMetrics,
-  memberMetricsCacheKey,
-  readWorkforceMetricsVersion,
-  type MemberScorecard,
-} from '../metrics/workforceMetrics';
+import { readMemberMetrics, type MemberScorecard } from '../metrics/workforceMetrics';
 import { loadWorkingCalendar } from './workingCalendar';
 import type { AssigneeCapacity, SprintWindow, WorkingCalendar } from './scheduleWork';
 
@@ -137,13 +131,5 @@ async function loadMemberCapacityCards(
   tenantId: number,
   projectId?: number,
 ): Promise<MemberScorecard[]> {
-  const compute = () => computeMemberMetrics(db, tenantId, CAPACITY_METRICS_DAYS, projectId);
-  if (!env) return compute();
-  const version = await readWorkforceMetricsVersion(env, tenantId);
-  return getOrSetCached(
-    env,
-    memberMetricsCacheKey(tenantId, version, CAPACITY_METRICS_DAYS, projectId),
-    compute,
-    { kvTtlSeconds: 300, l1TtlMs: 30_000 },
-  );
+  return readMemberMetrics(db, env, tenantId, CAPACITY_METRICS_DAYS, projectId);
 }

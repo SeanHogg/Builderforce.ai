@@ -15,6 +15,7 @@
  */
 import { DEFAULT_MODEL_CHOICE_LABELS, type ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
 import { DEFAULT_LOCAL_MODEL_LABELS, type LocalModelLabels } from '../localModels/labels';
+import { stringsFrom, type LabelLookup } from '../labelCatalog';
 
 export type {
   ChatModelOptions,
@@ -112,4 +113,14 @@ export const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels = {
 /** Merge a host's partial overrides over the English defaults. */
 export function promptOptionsLabels(overrides?: Partial<PromptOptionsLabels>): PromptOptionsLabels {
   return overrides ? { ...DEFAULT_PROMPT_OPTIONS_LABELS, ...overrides } : DEFAULT_PROMPT_OPTIONS_LABELS;
+}
+
+/**
+ * THE `/` menu's copy from a host catalog — the ONE key table every host reads it
+ * through (every field by name, the on-device list's included). A key the catalog lacks
+ * keeps the English default; row templates (`{runtime}`, `{size}` …) must come back
+ * literal — the menu fills them per row.
+ */
+export function promptOptionsLabelsFrom(lookup: LabelLookup): PromptOptionsLabels {
+  return stringsFrom(DEFAULT_PROMPT_OPTIONS_LABELS, lookup);
 }

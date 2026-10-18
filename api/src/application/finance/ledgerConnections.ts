@@ -28,12 +28,10 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { connections, connectionCredentialConflict, credentials, syncStates } from '../../infrastructure/database/schema';
-import { refreshAccessToken } from '../../infrastructure/auth/oauthState';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
-  isTerminalRefreshFailure,
-  mergeRefreshedTokens,
-  oauthTokensStale,
+  providerGrantRefresher,
+  refreshGrantIfStale,
   sealOAuthTokens,
   unsealOAuthTokens,
 } from '../integrations/oauthTokenVault';
@@ -320,56 +318,53 @@ export async function openLedgerCredential(
     externalAccountId: row.externalAccount || undefined,
   });
 
-  if (!tokens.refreshToken || !oauthTokensStale(tokens) || !provider.oauth) {
-    return { ok: true, credential: credential(tokens.accessToken, tokens.refreshToken, tokens.fields), provider: name };
-  }
+  // A `fields` provider (NetSuite) and a non-expiring grant (Plaid) have nothing to
+  // refresh, so they are handed back as stored.
+  const current = { ok: true as const, credential: credential(tokens.accessToken, tokens.refreshToken, tokens.fields), provider: name };
+  if (!provider.oauth) return current;
 
-  const bag = env as unknown as Record<string, string | undefined>;
-  const clientId = bag[provider.oauth.clientIdKey];
-  const clientSecret = bag[provider.oauth.clientSecretKey];
-  if (!clientId || !clientSecret) {
-    return { ok: false, status: 'unavailable', error: `${provider.label} is not configured on this deployment.` };
-  }
-
-  try {
-    const refreshed = await refreshAccessToken(
-      { tokenUrl: provider.oauth.tokenUrl, clientId, clientSecret },
-      tokens.refreshToken,
-    );
-    const next = mergeRefreshedTokens(tokens, refreshed);
-    const sealed = await sealOAuthTokens(env, tenantId, next);
-    await db
-      .update(credentials)
-      .set({
-        secretEnc: sealed.enc,
-        secretIv: sealed.iv,
-        expiresAt: next.expiresAtMs ? new Date(next.expiresAtMs) : null,
-        status: 'active',
-        rotatedAt: sql`NOW()`,
-        updatedAt: sql`NOW()`,
-      })
-      .where(scopedToTenant(credentials, tenantId, and(
-        eq(credentials.connectionId, connectionId),
-        eq(credentials.purpose, LEDGER_SECRET_PURPOSE),
-      )));
-    return {
-      ok: true,
-      provider: name,
-      credential: credential(next.accessToken, next.refreshToken, next.fields),
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Token refresh failed';
-    if (isTerminalRefreshFailure(message)) {
-      await markConnection(db, tenantId, connectionId, { status: 'revoked', lastError: message.slice(0, 1_000) });
-      return { ok: false, status: 'revoked', error: 'This connection needs to be reconnected.' };
+  const refresh = await refreshGrantIfStale(tokens, providerGrantRefresher(env, provider.oauth));
+  if (!refresh.ok) {
+    switch (refresh.reason) {
+      case 'no_refresh_token':
+        return current;
+      case 'unconfigured':
+        return { ok: false, status: 'unavailable', error: `${provider.label} is not configured on this deployment.` };
+      case 'revoked':
+        await markConnection(db, tenantId, connectionId, { status: 'revoked', lastError: refresh.message.slice(0, 1_000) });
+        return { ok: false, status: 'revoked', error: 'This connection needs to be reconnected.' };
+      case 'failed':
+        reportCaughtError(refresh.error, {
+          source: 'application/finance/ledgerConnections.ts',
+          operation: 'openLedgerCredential',
+        });
+        await markLedgerError(db, tenantId, connectionId, refresh.message);
+        return { ok: false, status: 'unavailable', error: 'Could not refresh access to that book.' };
     }
-    reportCaughtError(error, {
-      source: 'application/finance/ledgerConnections.ts',
-      operation: 'openLedgerCredential',
-    });
-    await markLedgerError(db, tenantId, connectionId, message);
-    return { ok: false, status: 'unavailable', error: 'Could not refresh access to that book.' };
   }
+  if (!refresh.refreshed) return current;
+
+  const next = refresh.tokens;
+  const sealed = await sealOAuthTokens(env, tenantId, next);
+  await db
+    .update(credentials)
+    .set({
+      secretEnc: sealed.enc,
+      secretIv: sealed.iv,
+      expiresAt: next.expiresAtMs ? new Date(next.expiresAtMs) : null,
+      status: 'active',
+      rotatedAt: sql`NOW()`,
+      updatedAt: sql`NOW()`,
+    })
+    .where(scopedToTenant(credentials, tenantId, and(
+      eq(credentials.connectionId, connectionId),
+      eq(credentials.purpose, LEDGER_SECRET_PURPOSE),
+    )));
+  return {
+    ok: true,
+    provider: name,
+    credential: credential(next.accessToken, next.refreshToken, next.fields),
+  };
 }
 
 /**

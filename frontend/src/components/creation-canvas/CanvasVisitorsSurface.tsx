@@ -19,7 +19,7 @@ import { useCounterBrainDockSide } from './hooks/useCounterBrainDockSide';
 import { useCanvasSessionFacts } from './chrome/canvasSessionContext';
 import { ProjectProofScoreboard } from './ProjectProofScoreboard';
 import type { CreationFlowNode } from './CreationNode';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 
 const INSIGHTS = CAPABILITY_APPS.insights;
 

@@ -111,7 +111,7 @@ import { GuestPromptService } from './application/marketing/GuestPromptService';
 import { PlatformBroadcastService } from './application/marketing/PlatformBroadcastService';
 import { MarketingService } from './application/marketing/MarketingService';
 import { createAgentHostRoutes }        from './presentation/routes/agentHostRoutes';
-import { AGENT_HOST_BASE_PATH, LEGACY_AGENT_HOST_PATHS, legacyAliasNotice } from './presentation/middleware/legacyAlias';
+import { AGENT_HOST_BASE_PATH, LEGACY_AGENT_HOST_PATHS, LEGACY_MANAGED_AGENT_HOST_PATHS, MANAGED_AGENT_HOST_BASE_PATH, forwardToCanonical, mountWithLegacyAliases } from './presentation/middleware/legacyAlias';
 import { AgentHostRepository }          from './infrastructure/repositories/AgentHostRepository';
 import { IAgentHostRepository }         from './domain/agentHost/IAgentHostRepository';
 import { createSkillAssignmentRoutes } from './presentation/routes/skillAssignmentRoutes';
@@ -266,8 +266,9 @@ import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRou
 import { createPublicApiRoutes }       from './presentation/routes/publicApiRoutes';
 import { createStudioRoutes }          from './presentation/routes/studioWeightRoutes';
 import { createEvermindModelRoutes }   from './presentation/routes/evermindModelRoutes';
-import { createProjectEvermindRoutes, createProjectEvermindAgentRoutes }  from './presentation/routes/projectEvermindRoutes';
-import { createProjectFactsRoutes, createProjectFactsAgentRoutes }  from './presentation/routes/projectFactsRoutes';
+import { createProjectEvermindRoutes }  from './presentation/routes/projectEvermindRoutes';
+import { createProjectFactsRoutes }  from './presentation/routes/projectFactsRoutes';
+import { agentHostDoor } from './presentation/middleware/frontDoor';
 import { createProjectMediaRoutes } from './presentation/routes/projectMediaRoutes';
 import { createRunContextRoutes }    from './presentation/routes/runContextRoutes';
 // Cloud Agent Boards — agentic swimlanes, external board sync, PRD versioning, multi-repo PRs
@@ -563,6 +564,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Not applied to /api/admin/* (emulation tokens are already blocked there).
   app.use('/api/*', emulationMiddleware as Parameters<typeof app.use>[1]);
 
+  // Liveness only, deliberately with NO I/O so an uptime check never wakes a database.
+  // Every deeper probe is a section of application/health/platformHealth.
   app.get('/health', (c) => c.json({ status: 'ok', worker: 'api.builderforce.ai', version: API_VERSION }));
 
   // OpenAPI 3.1 document — BuilderForce Agents-facing endpoints (P4-4)
@@ -651,6 +654,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/backend-runtime', createBackendRuntimeRoutes(db));
 
   // Marketplace (no JWT required for read, required for write)
+  // Its old auth doors are aliases of the ONE web auth flow — same gates, same
+  // session row, same rate limit — never a second register/login implementation.
+  app.post('/marketplace/auth/register', forwardToCanonical(app, '/api/auth/web/register'));
+  app.post('/marketplace/auth/login',    forwardToCanonical(app, '/api/auth/web/login'));
+  app.get('/marketplace/auth/me',        forwardToCanonical(app, '/api/auth/me'));
   app.route('/marketplace', createMarketplaceRoutes(db));
 
   // Public workforce registry (browse published agents without login)
@@ -869,16 +877,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/sso-connections', createSsoAdminRoutes(db));
 
   // BuilderForce Agents instances + skill assignments (tenant JWT inside each router)
-  app.route(AGENT_HOST_BASE_PATH, createAgentHostRoutes(db, agentHostService));
-  // The pre-rebrand aliases, mounted from ONE list rather than as three hand-copied
-  // `app.route` lines that could drift apart. Every alias serves the SAME router and
-  // stamps `Deprecation` + `Link: rel="successor-version"`, so a fleet still calling an
-  // old path says so in its own response headers and the aliases can be retired on
-  // evidence rather than on a guess. See {@link legacyAliasNotice}.
-  for (const alias of LEGACY_AGENT_HOST_PATHS) {
-    app.use(`${alias}/*`, legacyAliasNotice(AGENT_HOST_BASE_PATH));
-    app.route(alias, createAgentHostRoutes(db, agentHostService));
-  }
+  // Pre-rebrand aliases serve the SAME router and stamp `Deprecation` + successor
+  // `Link`, so they can be retired on evidence. See {@link mountWithLegacyAliases}.
+  mountWithLegacyAliases(app, AGENT_HOST_BASE_PATH, LEGACY_AGENT_HOST_PATHS, () => createAgentHostRoutes(db, agentHostService));
   app.route('/api/skill-assignments', createSkillAssignmentRoutes(db));
   app.route('/api/artifact-assignments', createArtifactAssignmentRoutes(db));
   app.route('/api/project-agents', createProjectAgentRoutes(db));
@@ -1144,8 +1145,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/facts',             createFactsRoutes(db));            // FACTS library
   app.route('/api/prompt-analyzer',   createPromptAnalyzerRoutes(db));   // prompt telemetry → improved version
   app.route('/api/insights',          createForecastRoutes(db));         // forecasting + anomaly lens
-  app.route('/api/managed-agent-hosts',   createManagedAgentHostRoutes(db));
-  app.route('/api/managed-claws',          createManagedAgentHostRoutes(db)); // @deprecated back-compat alias
+  mountWithLegacyAliases(app, MANAGED_AGENT_HOST_BASE_PATH, LEGACY_MANAGED_AGENT_HOST_PATHS, () => createManagedAgentHostRoutes(db));
   app.route('/api/cost-forecast',   createCostForecastRoutes(db));
   app.route('/api/dashboard',       createDashboardRoutes(db));
   app.route('/api/consumption',     createConsumptionRoutes(db));
@@ -1197,11 +1197,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // text kinds are authored directly and shape-checked. Free pool only.
   app.route('/api/creative', createCreativeRoutes());
   app.route('/api/projects',  createProjectEvermindRoutes(db));
-  app.route('/api/agent/projects', createProjectEvermindAgentRoutes(db));
+  app.route('/api/agent/projects', createProjectEvermindRoutes(db, agentHostDoor(db)));
   app.route('/api/projects',  createProjectFactsRoutes(db));
   // The images and clips generated for a project — Studio's Media panel.
   app.route('/api/projects',  createProjectMediaRoutes(db));
-  app.route('/api/agent/projects', createProjectFactsAgentRoutes(db));
+  app.route('/api/agent/projects', createProjectFactsRoutes(db, agentHostDoor(db)));
   // The ONE run-context source every prompt-assembly surface consumes (the cloud engine
   // in-process; VS Code and the on-prem runner over HTTP). ONE router on both paths —
   // `hostOrTenantAuth` already accepts either a tenant JWT or an agent-host API key, so

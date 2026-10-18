@@ -12,6 +12,9 @@
  *
  * The rows, the read-through cache and its invalidation live in
  * `application/dashboards/dashboardPins.ts`.
+ *
+ * Naming: a pin is NOT a saved dashboard (`/api/dashboards`) nor the manager home
+ * snapshot (`/api/dashboard`) — see the naming note in `dashboardsRoutes.ts`.
  */
 
 import { Hono } from 'hono';

@@ -5,7 +5,8 @@ import {
   type CanvasSurfaceId,
 } from '@/lib/canvasSurfaces';
 import { canvasSurfaceGlyph } from './canvasSurfaceIcons';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/chrome.module.css';
+import commandBarStyles from './styles/commandBar.module.css';
 
 /**
  * The ONE control that picks the canvas surface.
@@ -111,5 +112,5 @@ export function CanvasSurfaceSwitcher({ surface, onChange, variant, allowedIds }
 
   if (variant === 'mobile') return <>{tabs}</>;
 
-  return <div className={styles.surfaceTabs} role="group" aria-label={t('surface.switcher')}>{tabs}</div>;
+  return <div className={commandBarStyles.surfaceTabs} role="group" aria-label={t('surface.switcher')}>{tabs}</div>;
 }

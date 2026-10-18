@@ -142,7 +142,11 @@ export function whereColumns(where: unknown): string[] {
     seen.add(node);
     const record = node as Record<string, unknown>;
     // A Drizzle Column carries its physical `name` plus a `table` back-reference.
-    if (typeof record.name === 'string' && 'table' in record) found.add(record.name);
+    // Stop there: descending into `table` would collect every column of the table.
+    if (typeof record.name === 'string' && 'table' in record) {
+      found.add(record.name);
+      return;
+    }
     for (const value of Object.values(record)) {
       if (Array.isArray(value)) value.forEach((v) => walk(v, depth + 1));
       else walk(value, depth + 1);

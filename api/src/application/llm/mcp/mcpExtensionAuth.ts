@@ -27,9 +27,8 @@ import { tenantMcpExtensions } from '../../../infrastructure/database/schema';
 import { decryptSecretFromStorage } from '../../../infrastructure/auth/MfaService';
 import { credentialSecret, decryptCredentials, encryptCredentials } from '../../integrations/credentialCrypto';
 import {
-  isTerminalRefreshFailure,
-  mergeRefreshedTokens,
   oauthTokensStale,
+  refreshGrantIfStale,
   sealOAuthTokens,
   unsealOAuthTokens,
   type SealedOAuthTokens,
@@ -130,25 +129,33 @@ export async function resolveAuthorization(
   if (env && row.tokenEnc && row.tokenIv) {
     const tokens = await unsealOAuthTokens(env, row.tenantId, row.tokenEnc, row.tokenIv);
     if (tokens) {
-      if (!oauthTokensStale(tokens) || !tokens.refreshToken) return `Bearer ${tokens.accessToken}`;
-      const registration = await openRegistration(env, row.tenantId, row);
-      if (!registration) return `Bearer ${tokens.accessToken}`;
-      try {
-        const refreshed = await refreshMcpToken(registration, tokens.refreshToken);
-        const merged = mergeRefreshedTokens(tokens, refreshed);
-        await storeGrant(db, env, { tenantId: row.tenantId, extensionId: row.id, tokens: merged });
-        return `Bearer ${merged.accessToken}`;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (isTerminalRefreshFailure(message)) {
+      // The registration (our client at this server's AS) is only opened when the
+      // grant is actually stale — the common path never decrypts it.
+      const registration = oauthTokensStale(tokens) && tokens.refreshToken ? await openRegistration(env, row.tenantId, row) : null;
+      const refresh = await refreshGrantIfStale(
+        tokens,
+        registration ? (refreshToken) => refreshMcpToken(registration, refreshToken) : null,
+      );
+      if (refresh.ok) {
+        if (refresh.refreshed) {
+          await storeGrant(db, env, { tenantId: row.tenantId, extensionId: row.id, tokens: refresh.tokens });
+        }
+        return `Bearer ${refresh.tokens.accessToken}`;
+      }
+      switch (refresh.reason) {
+        // Nothing to refresh with: hand out what we have and let the server judge it.
+        case 'no_refresh_token':
+        case 'unconfigured':
+          return `Bearer ${tokens.accessToken}`;
+        case 'revoked':
           await clearGrant(db, { tenantId: row.tenantId, extensionId: row.id });
-        } else {
-          reportCaughtError(error, {
+          return null;
+        case 'failed':
+          reportCaughtError(refresh.error, {
             source: 'application/llm/mcp/mcpExtensionAuth.ts',
             operation: 'resolveAuthorization.refresh',
           });
-        }
-        return null;
+          return null;
       }
     }
   }

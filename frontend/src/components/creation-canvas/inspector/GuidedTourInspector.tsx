@@ -2,7 +2,7 @@ import type { CreationFlowNode } from '../CreationNode';
 import type { CreationNodeData } from '../types';
 import { useTranslations } from 'next-intl';
 import { type CanvasTourDesign, canvasTourDesignFromNode } from '@/lib/onboarding/canvasTourDesign';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/inspector.module.css';
 
 export function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode; nodes: CreationFlowNode[]; onChange: (patch: Partial<CreationNodeData>) => void }) {
   const t = useTranslations('creationCanvas.tourBuilder');

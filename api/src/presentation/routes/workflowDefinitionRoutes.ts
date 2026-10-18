@@ -14,6 +14,7 @@
  *   POST   /api/workflow-definitions/:id/run   Compile + instantiate an execution run
  */
 import { Hono } from 'hono';
+import { downloadResponse } from '../../application/export/exportDownload';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
@@ -23,8 +24,6 @@ import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import {
   definitionToYaml,
   parseDefinition,
-  validateDefinition,
-  yamlToDefinition,
   type WorkflowDefinition,
 } from '../../domain/workflowGraph';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -50,6 +49,7 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { parseBody, parseOptionalBody, z } from './requestBody';
+import { importHandler } from './importRoutes';
 
 /** Normalize an incoming graph payload to a well-formed WorkflowDefinition. */
 function coerceDefinition(input: unknown): WorkflowDefinition {
@@ -86,7 +86,6 @@ const definitionFields = {
 const CreateDefinitionBody = z.object({ name: z.string().nullish(), ...definitionFields });
 /** A present `name` is trimmed and written, so it must be a string when sent. */
 const PatchDefinitionBody = z.object({ name: z.string().optional(), ...definitionFields });
-const ImportDefinitionBody = z.object({ name: z.string().nullish(), yaml: z.string().nullish() });
 const RunDefinitionBody = z.object({
   agentHostId: z.number().nullish(),
   runtime: z.string().nullish(),
@@ -349,31 +348,10 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // POST /import — create a definition from a hand-authored YAML/JSON document.
+  // The registered `workflow-definition` importer through the one import
+  // sequence (also at /api/import/workflow-definition; `dryRun: true` previews).
   // Registered before /:id routes; `/import` is a distinct path so no collision.
-  router.post('/import', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const body = await parseBody(c, ImportDefinitionBody);
-    if (!body.yaml || !body.yaml.trim()) return c.json({ error: 'yaml is required' }, 400);
-
-    let def: WorkflowDefinition;
-    try {
-      def = yamlToDefinition(body.yaml);
-    } catch (e) {
-      return c.json({ error: `Could not parse YAML: ${e instanceof Error ? e.message : String(e)}` }, 400);
-    }
-    const invalid = validateDefinition(def);
-    if (invalid) return c.json({ error: invalid }, 400);
-
-    const row = await createWorkflowDefinition(db, c.env as Env, {
-      tenantId,
-      segmentId: c.get('segmentId') ?? null,
-      name: body.name?.trim() || 'Imported workflow',
-      description: null,
-      definition: def,
-      target: coerceRunTarget({}),
-    });
-    return c.json(row, 201);
-  });
+  router.post('/import', importHandler('workflow-definition', db));
 
   // GET /:id — full definition (graph included)
   router.get('/:id', async (c) => {
@@ -398,10 +376,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
     if (!row) return c.json({ error: 'Workflow definition not found' }, 404);
     const yaml = definitionToYaml(parseDefinition(row.definition));
-    return c.body(yaml, 200, {
-      'Content-Type': 'application/yaml; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${row.name.replace(/[^a-z0-9-_]+/gi, '_')}.yaml"`,
-    });
+    return downloadResponse(yaml, { filename: `${row.name.replace(/[^a-z0-9-_]+/gi, '_')}.yaml`, contentType: 'yaml' });
   });
 
   // GET /:id/triggers — the materialized, activatable triggers for a definition,

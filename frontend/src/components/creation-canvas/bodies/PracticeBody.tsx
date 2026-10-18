@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/practice.module.css';
 import { practiceAttempts, practiceMode, practiceQuestions, practiceProgress, recordPracticeAttempt } from '@/lib/canvasPractice';
 import { PracticeRunner } from '../PracticeRunner';
 import type { CreationBodyProps } from './types';

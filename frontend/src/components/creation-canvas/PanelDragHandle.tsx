@@ -4,7 +4,7 @@
 import type { ButtonHTMLAttributes } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/commandBar.module.css';
 
 export interface PanelDragHandleProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Whether this panel currently sits away from the position its own layout would give

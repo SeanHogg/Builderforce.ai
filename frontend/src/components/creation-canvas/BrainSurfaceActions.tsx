@@ -4,7 +4,7 @@
  */
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/brain.module.css';
 import { BrainSurfaceMenu } from './BrainSurfaceMenu';
 import { CopyCanvasDiagnosticsButton } from './canvasDiagnosticsContext';
 import { useBrainSurfaceView } from './brainSurfaceView';

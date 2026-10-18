@@ -16,7 +16,15 @@ import {
 } from '../../infrastructure/database/schema';
 import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { hashPassword } from '../../infrastructure/auth/HashService';
-import { signState, verifyState, exchangeCodeForTokens } from '../../infrastructure/auth/oauthState';
+import { signState, verifyState } from '../../infrastructure/auth/oauthState';
+import {
+  buildAuthorizationUrl,
+  exchangeCodeForTokens,
+  GOOGLE_OAUTH_ENDPOINTS,
+  MICROSOFT_OAUTH_ENDPOINTS,
+  providerOAuthCredentials,
+  type OAuthProviderConfig,
+} from '../../application/shared/providerOAuthConnect';
 import { mintSessionExchangeCode, readSessionExchangeCode } from '../../application/auth/sessionExchange';
 import { ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
 import type { Db } from '../../infrastructure/database/connection';
@@ -41,16 +49,24 @@ const AddPasswordBody = z.object({ password: z.string().nullish() });
 // ---------------------------------------------------------------------------
 // Provider configuration
 // ---------------------------------------------------------------------------
+//
+// Sign-in providers are the SAME descriptor shape every connect flow uses
+// (`OAuthProviderConfig`: endpoints, scopes, env keys, authorize extras), plus
+// the two things only sign-in needs — where to read the profile and how to parse
+// it. The authorization URL and the code exchange are the shared ones; what this
+// file keeps to itself is the session: the login state envelope, account
+// linking, and the web JWT.
 
-interface ProviderCfg {
-  authUrl: string;
-  tokenUrl: string;
+interface LoginProviderDef extends OAuthProviderConfig {
   userInfoUrl: string;
-  scopes: string[];
+  clientIdKey: keyof Env & string;
+  clientSecretKey: keyof Env & string;
+  parseUser: (d: Record<string, unknown>) => ProviderUser;
+}
+
+interface ProviderCfg extends LoginProviderDef {
   clientId: string;
   clientSecret: string;
-  extraAuthParams?: Record<string, string>;
-  parseUser: (d: Record<string, unknown>) => ProviderUser;
 }
 
 interface ProviderUser {
@@ -60,22 +76,9 @@ interface ProviderUser {
   avatar?: string;
 }
 
-const PROVIDER_DEFS: Record<
-  string,
-  {
-    authUrl: string;
-    tokenUrl: string;
-    userInfoUrl: string;
-    scopes: string[];
-    extraAuthParams?: Record<string, string>;
-    clientIdKey: keyof Env;
-    clientSecretKey: keyof Env;
-    parseUser: (d: Record<string, unknown>) => ProviderUser;
-  }
-> = {
+const PROVIDER_DEFS: Record<string, LoginProviderDef> = {
   google: {
-    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    tokenUrl: 'https://oauth2.googleapis.com/token',
+    ...GOOGLE_OAUTH_ENDPOINTS,
     userInfoUrl: 'https://www.googleapis.com/oauth2/v3/userinfo',
     scopes: ['openid', 'email', 'profile'],
     extraAuthParams: { access_type: 'offline', prompt: 'select_account' },
@@ -122,8 +125,7 @@ const PROVIDER_DEFS: Record<
     }),
   },
   microsoft: {
-    authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-    tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+    ...MICROSOFT_OAUTH_ENDPOINTS,
     userInfoUrl: 'https://graph.microsoft.com/v1.0/me',
     scopes: ['openid', 'profile', 'email', 'User.Read'],
     clientIdKey: 'MICROSOFT_CLIENT_ID',
@@ -139,10 +141,8 @@ const PROVIDER_DEFS: Record<
 function getProviderCfg(name: string, env: Env): ProviderCfg | null {
   const def = PROVIDER_DEFS[name];
   if (!def) return null;
-  const clientId = (env as unknown as Record<string, string | undefined>)[def.clientIdKey] ?? '';
-  const clientSecret = (env as unknown as Record<string, string | undefined>)[def.clientSecretKey] ?? '';
-  if (!clientId || !clientSecret) return null;
-  return { ...def, clientId, clientSecret };
+  const credentials = providerOAuthCredentials(env as unknown as Record<string, unknown>, def);
+  return credentials ? { ...def, ...credentials } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -206,16 +206,8 @@ async function verifyOAuthState(jwtSecret: string, state: string): Promise<OAuth
 
 
 // ---------------------------------------------------------------------------
-// OAuth code exchange + user info fetch
+// User info fetch (the code exchange is the shared one)
 // ---------------------------------------------------------------------------
-
-async function exchangeCode(
-  cfg: Pick<ProviderCfg, 'tokenUrl' | 'clientId' | 'clientSecret'>,
-  code: string,
-  callbackUrl: string,
-): Promise<{ access_token: string; refresh_token?: string }> {
-  return exchangeCodeForTokens(cfg, code, callbackUrl);
-}
 
 async function fetchUserInfo(
   userInfoUrl: string,
@@ -349,16 +341,13 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     const origin = new URL(c.req.url).origin;
     const callbackUrl = `${origin}/api/auth/oauth/${name}/callback`;
 
-    const params = new URLSearchParams({
-      client_id: cfg.clientId,
-      redirect_uri: callbackUrl,
-      response_type: 'code',
-      scope: cfg.scopes.join(' '),
+    return c.redirect(buildAuthorizationUrl(cfg.authUrl, {
+      clientId: cfg.clientId,
+      redirectUri: callbackUrl,
+      scopes: cfg.scopes,
       state,
-      ...cfg.extraAuthParams,
-    });
-
-    return c.redirect(`${cfg.authUrl}?${params.toString()}`);
+      ...(cfg.extraAuthParams ? { extra: cfg.extraAuthParams } : {}),
+    }));
   });
 
   // -------------------------------------------------------------------------
@@ -389,7 +378,11 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     let providerUser: ProviderUser;
 
     try {
-      const tokens = await exchangeCode(cfg, code, callbackUrl);
+      const tokens = await exchangeCodeForTokens(
+        { tokenUrl: cfg.tokenUrl, clientId: cfg.clientId, clientSecret: cfg.clientSecret },
+        code,
+        callbackUrl,
+      );
       accessToken = tokens.access_token;
       refreshToken = tokens.refresh_token;
       const raw = await fetchUserInfo(cfg.userInfoUrl, accessToken);

@@ -1,20 +1,16 @@
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono } from 'hono';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
-import type { Env, HonoEnv } from '../../env';
+import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, tasks, vscodeConnections } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../../application/task/taskScope';
 import type { TenantService } from '../../application/tenant/TenantService';
-import { landPendingInvitations } from '../../application/tenant/pendingInvitationLanding';
-import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import { parseOptionalBody, z } from './requestBody';
-
-/** `POST /tenants` — an absent body reads as a missing name, which the handler refuses itself. */
-const CreateWorkspaceBody = z.object({ name: z.string().nullish() });
+import { legacyAliasNotice } from '../middleware/legacyAlias';
+import { WORKSPACES_PATH, workspaceHandlers } from './workspaceHandlers';
 
 /** `POST /connect` — a bare heartbeat is valid; both fields have defaults. */
 const ConnectBody = z.object({
@@ -27,8 +23,8 @@ const ConnectBody = z.object({
  * Authenticated with a tenant JWT (exchanged from the editor's tenant API key via
  * /api/auth/tenant-api-key-token), so the signed-in USER is known (c.get('userId'))
  * even though the key is bound to ONE tenant. That lets the editor enumerate / create /
- * switch the user's OTHER workspaces without a browser round-trip — the userId-scoped
- * equivalent of the web-only /api/tenants/{mine,create} (which require a web session).
+ * switch the user's OTHER workspaces without a browser round-trip. Listing and
+ * creating now live at the person-level GET/POST /api/tenants; the switch stays here.
  */
 export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -42,32 +38,13 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
     return c.json({ userId });
   });
 
-  // GET /api/vscode/tenants — workspaces the signed-in user belongs to.
-  // Intentionally uncached: low-QPS interactive call (only when opening the workspace
-  // picker) that MUST reflect a just-created workspace immediately — same posture as
-  // the web /api/tenants/mine. Doubles as the membership source for the switch below.
-  router.get('/tenants', async (c) => {
-    const userId = c.get('userId') as string;
-    // Same contract as the web `/api/auth/my-tenants`: land any invitation
-    // addressed to this account before listing, so a teammate invited by email
-    // sees the workspace here on their first look rather than never.
-    await landPendingInvitations(db, c.env as Env, tenantService, userId);
-    const tenants = await tenantService.listTenantsForUser(userId);
-    return c.json({ tenants });
-  });
-
-  // POST /api/vscode/tenants — create a workspace; the caller becomes its owner.
-  router.post('/tenants', async (c) => {
-    const userId = c.get('userId') as string;
-    const body = await parseOptionalBody(c, CreateWorkspaceBody);
-    const name = body.name?.trim();
-    if (!name) return c.json({ error: 'name is required' }, 400);
-    const tenant = await tenantService.createTenant({ name, ownerUserId: userId });
-    await provisionBuiltinAgents(db, tenant.id).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/vscodeRoutes.ts", operation: "createVscodeRoutes" });
-    });   // seed Validator + Security
-    return c.json(tenant.toPlain(), 201);
-  });
+  // GET/POST /api/vscode/tenants — legacy aliases of GET/POST /api/tenants (the
+  // canonical path accepts this editor's workspace token too). Kept for shipped
+  // editors and mobile apps; same handlers, so the list still lands pending
+  // invitations and the create still seeds the built-in agents.
+  const workspaces = workspaceHandlers(db, tenantService);
+  router.get('/tenants', legacyAliasNotice(WORKSPACES_PATH), workspaces.list);
+  router.post('/tenants', legacyAliasNotice(WORKSPACES_PATH), workspaces.create);
 
   // POST /api/vscode/tenants/:id/token — SWITCH workspace: mint a tenant-scoped editor
   // JWT for :id, but ONLY if the caller is a member (so the editor can act on another
@@ -129,7 +106,7 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
   // me" delivery channel that mirrors the web board's human-assignee lane. Bounded to 50
   // and open-only (completedAt IS NULL). Intentionally uncached: a low-QPS interactive
   // poll that MUST reflect a just-assigned task immediately — same posture as
-  // /api/vscode/tenants and /connections above.
+  // /api/tenants and /connections.
   router.get('/tasks', async (c) => {
     const userId = c.get('userId') as string;
     const tenantId = c.get('tenantId') as number;

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  insightsApi, pmoApi, releasesApi, agileMetricsApi,
+  insightsApi, pmoApi, agileMetricsApi,
   type DeliveryInsights, type DeliverableScope, type DeliveryStatus, type BurnPoint,
-  type Initiative, type ProductRelease, type VelocityInsights,
+  type Initiative, type VelocityInsights,
   type DeliverableUpdate, type DeliverableUpdateStatus,
   type ScenarioResponse, type LifecycleInsights, type LifecyclePhase, type ScopeEffortPoint,
 } from '@/lib/builderforceApi';
+import { releasesApi, type Release } from '@/lib/releasesApi';
 import { ValueStreamGraph } from './ValueStreamGraph';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
@@ -359,7 +360,7 @@ export function DeliveryLens() {
       const [inits, projs, rels] = await Promise.all([
         pmoApi.initiatives.list().catch(() => [] as Initiative[]),
         fetchProjects().catch(() => [] as Project[]),
-        releasesApi.list().catch(() => [] as ProductRelease[]),
+        releasesApi.list().then((r) => r.releases).catch(() => [] as Release[]),
       ]);
       if (!alive) return;
       const list: Pick[] = currentProjectId == null ? [

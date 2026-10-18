@@ -402,8 +402,8 @@ See [Marketplace](/link/marketplace/) for full guide. Quick reference:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/marketplace/auth/register` | Register marketplace account |
-| `POST` | `/marketplace/auth/login` | Login → JWT |
+| `POST` | `/marketplace/auth/register` | Deprecated alias of `POST /api/auth/web/register` |
+| `POST` | `/marketplace/auth/login` | Deprecated alias of `POST /api/auth/web/login` |
 | `GET` | `/marketplace/skills` | List published skills |
 | `GET` | `/marketplace/skills/:slug` | Get skill detail |
 | `POST` | `/marketplace/skills` | Publish a skill (marketplace JWT required) |
@@ -488,7 +488,7 @@ Requires a WebJWT with `sa: true`. Not available on managed cloud to regular use
 | `GET` | `/api/admin/tenants` | All tenants + member/agent counts |
 | `GET` | `/api/admin/health` | System health (DB ping, model pool, row counts) |
 | `GET` | `/api/admin/errors` | Recent API error log (last 200 entries) |
-| `POST` | `/api/admin/impersonate` | Issue a tenant JWT for any user+tenant pair |
+| `POST` | `/api/admin/impersonate` | Deprecated alias of `POST /api/admin/impersonation/start` (audited, read-only emulation token) |
 | … | (see repo for full list) | Newsletter, legal, privacy requests |
 
 ---

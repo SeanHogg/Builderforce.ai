@@ -1,0 +1,332 @@
+/* Canvas chrome around the board: the phone app bar, surface strip and tabs, lens bar, roster, invite sheet and panel filters.
+   Split out of CreationCanvas.module.css, which keeps the board shell and the
+   canvas palette (`--canvas-*`, light and dark) that every rule here reads. */
+
+.pillStatus { display:flex; align-items:center; gap:7px; min-width:0; }
+.pillStatus:empty { display:none; }
+/* No `.commandBarDivider` here any more: the bar separated its sets with hairlines
+   before they were captioned groups, and a captioned trough already says where one set
+   ends. It had no consumer left, so it went with the layout it drew. */
+.commandBarCollapse {
+  flex:none; display:grid; place-items:center;
+  width:var(--canvas-bar-control,28px); height:var(--canvas-bar-control,28px); padding:0;
+  border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); cursor:pointer;
+}
+.commandBarCollapse:hover, .commandBarCollapse:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.commandBarCollapse > svg { display:block; width:15px; height:15px; }
+
+/* Run is the only control on this bar that STARTS something, so it is the only one with
+   a fill. Positive rather than brand: the accent is already spent on "which surface am I
+   on", and two blues at the same weight in one window is a decision nobody can read. */
+.runButton {
+  flex:none; display:inline-flex; align-items:center; gap:6px;
+  /* Height from the token and NO vertical padding: padding plus an inherited 1.5
+     line-height made this the tallest thing on the bar at ~33px, so the Run group's
+     trough stood 5px prouder than the four beside it. `line-height:1` keeps the word
+     centred in the box the token sets rather than setting the box itself. */
+  height:var(--canvas-bar-control,28px); padding:0 11px; line-height:1;
+  border:1px solid var(--tone-success-mark); border-radius:var(--radius-md);
+  background:var(--tone-success-mark); color:var(--text-on-accent);
+  font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap;
+}
+.runButton:hover, .runButton:focus-visible { filter:brightness(1.07); outline:none; }
+.runButton > svg { display:block; width:13px; height:13px; }
+
+.sessionActions { display:flex; align-items:center; }
+/* `white-space:nowrap` with nowhere to overflow to meant this was HARD CLIPPED by the
+   bar rather than shortened — "Saved on this device" reading "Saved or" mid-word, which
+   looks like a rendering fault rather than a squeeze. The row has since grown (a fourth
+   surface tab, a Publish button), so the clip shows up on an ordinary 1440px desktop.
+   It shrinks and ellipsises now: a truncated status still reads as a status. */
+.saved { min-width:0; overflow:hidden; color:var(--canvas-muted); font-size:11px; white-space:nowrap; text-overflow:ellipsis; }
+.sessionActions { gap:8px; position:relative; }
+.avatarPink { background:#e94b9b; }.avatarOrange { background:#ff9827; }.avatarGreen { background:#43b77d; }
+/* Bring someone into THIS group. A dashed circle rather than a filled one — the
+   avatars beside it are people who are already here, this is the empty slot that
+   adds one — sized to sit with them rather than announce itself as a separate
+   control. No text: the roster it trails already says who is part of this. */
+.rosterInvite {
+  flex:none; display:grid; place-items:center; margin-left:4px; padding:0;
+  /* The same circle as the avatars it trails - it was 26px against their 28px, which
+     is close enough to read as a mistake rather than as a different kind of thing. */
+  width:var(--canvas-bar-control,26px); height:var(--canvas-bar-control,26px);
+  border:1.5px dashed var(--canvas-line); border-radius:50%; background:transparent; color:var(--canvas-muted); cursor:pointer;
+}
+.rosterInvite:hover, .rosterInvite:focus-visible { border-color:var(--canvas-accent); border-style:solid; color:var(--canvas-accent); outline:none; }
+.rosterInvite > svg { display:block; width:13px; height:13px; }
+.sessionActionButton {
+  width:30px; height:var(--canvas-bar-control,28px); display:inline-grid; place-items:center; padding:0;
+  border:0; border-radius:var(--radius-sm); background:transparent;
+  color:var(--canvas-muted); font-family:inherit; cursor:pointer;
+}
+.sessionActionButton > svg { display:block; width:15px; height:15px; }
+.sessionActionButton:hover,.sessionActionButton:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.sessionActionButton:disabled { opacity:.45; cursor:not-allowed; }
+/* A mode that is on, or a panel this button owns that is open, is LIT — the same
+   signal the surface switcher uses for the surface you are on. */
+.sessionActionButton[aria-pressed='true'],.sessionActionButton[aria-expanded='true'] {
+  background:var(--canvas-panel); color:var(--canvas-accent); box-shadow:0 1px 2px var(--canvas-shadow);
+}
+/* Shared FREE session (no account): the roster and the stop/keep controls. The
+   invite link itself is the shared GuestInviteLink component, which brings its
+   own theme-token styling — these only lay out what sits around it. */
+.shareRoomPeople { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.shareRoomPeople span {
+  padding:3px 8px; border-radius:var(--radius-full); font-size:11px;
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); border:1px solid var(--canvas-line);
+}
+.shareRoomActions { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+.shareRoomActions button { flex:1 1 auto; min-height:32px; font-size:12px; font-weight:600; cursor:pointer; }
+/* "Stop sharing" is a reversal, not the primary action — it must not read as the
+   thing to press. Only the keep-your-work action stays accented. */
+.shareRoomActions button:first-child {
+  background:transparent; color:var(--canvas-muted); border:1px solid var(--canvas-line);
+}
+/* THE SHEET'S OWN WAY OUT, carried by every bar sheet rather than by one of them.
+   Both sheets were dismissed only by pressing the button that opened them — which the
+   sheet itself covers — or by choosing a row that closed them, and most of what the
+   ••• sheet holds deliberately does not: the view trough is pressed repeatedly, and
+   the connector selects are returned to. So the sheet states its name and offers the
+   way out on the same line. See `CanvasMenuSheet.tsx`. */
+.moreMenuSheetHeader {
+  grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; gap:8px;
+  margin:-2px -2px 1px; padding:1px 1px 5px; border-bottom:1px solid var(--canvas-line);
+}
+/* `.moreMenu button` makes every child a full-width row with a 22px glyph chip, which is
+   right for a named errand and wrong for a dismiss. Width, padding and the chip are taken
+   back here — including the chip's hover background, which would otherwise light a box
+   around the ×. Kept at 28px square so it stays a real tap target on a phone. */
+.moreMenuSheetHeader button { width:auto; min-width:28px; min-height:28px; flex:none; justify-content:center; padding:0 6px; color:var(--canvas-muted); font-size:15px; line-height:1; }
+.moreMenuSheetHeader button > span,
+.moreMenuSheetHeader button:hover > span,
+.moreMenuSheetHeader button:focus-visible > span { width:auto; height:auto; background:transparent; font-size:15px; }
+.moreMenuSheetHeader button:hover,.moreMenuSheetHeader button:focus-visible { background:var(--canvas-hover); color:var(--canvas-accent); }
+/* A SET OF GLYPHS inside the sheet, not a column of rows. The view commands (zoom, fit,
+   arrange, mini map, outline) live here now — they are not a stage of the arc, so they
+   cannot be captioned by one on the bar, and a second floating pill in the corner would
+   have put "what can I do here" back into two places. They keep the trough shape they had
+   on the bar so a set still reads as a set, and they wrap rather than overflow at the
+   sheet's fixed width. */
+.moreMenuTools {
+  grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:2px; padding:2px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted);
+}
+/* Undo the sheet's row chrome for these: `.moreMenu button` makes every child a
+   full-width flex row with a 22px glyph chip, which is right for a named errand and wrong
+   for a zoom control. */
+/* `display` and `width` are restated rather than released - these ARE
+   `.sessionActionButton`s, and `.moreMenu button` outranks that class on both, so letting
+   go of the width collapsed each one onto its 15px glyph and left a trough of ragged
+   targets under a heading that promised a set. */
+.moreMenuTools button { display:inline-grid; width:var(--canvas-bar-control,30px); padding:0; }
+.canvasToolActive { border-color:#5b5ce2!important; background:#eeebff!important; color:#503cc9!important; }
+.templateFilters { position:sticky; z-index:1; top:-12px; display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:8px 0; background:var(--canvas-panel,#fff); }
+.templateFilters input { grid-column:1 / -1; }
+.templateFilters input,.templateFilters select { min-width:0; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); padding:7px; background:var(--canvas-panel,#fff); color:var(--canvas-ink); font:inherit; }
+.iconButton { width:29px; height:29px; display:grid; flex:none; place-items:center; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fff; color:var(--canvas-muted); cursor:pointer; }
+/* Search + chip filters for ANY canvas side panel (see CanvasPanelFilters.tsx).
+   Named for the role, not for the Files library that happened to grow it first —
+   the outline renders the same control, and two copies of it would drift. */
+.panelControls { display:grid; gap:6px; padding:8px 10px; border-bottom:1px solid var(--canvas-line); }
+.panelSearch {
+  width:100%; box-sizing:border-box; padding:5px 8px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); font:inherit; font-size:11px;
+}
+.panelSearch::placeholder { color:var(--canvas-muted); }
+.panelSearch:focus-visible { outline:2px solid var(--canvas-accent-ink); outline-offset:-1px; }
+.panelFilters { display:flex; flex-wrap:wrap; gap:4px; }
+.panelFilters button {
+  /* 24px keeps the chip tappable at a phone width without breaking the 11px scale. */
+  min-height:24px; padding:2px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-full);
+  background:transparent; color:var(--canvas-muted); font-size:10px; cursor:pointer;
+}
+.panelFilters button:hover,.panelFilters button:focus-visible { color:var(--canvas-ink); outline:none; border-color:var(--canvas-accent-ink); }
+.panelFilters button[aria-pressed='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
+
+/* The bar's link out (Open in Studio) wears the segmented group's button shape, so the
+   group reads as one row of glyphs whatever each one does. */
+.appStudioLink { flex:none; display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:2px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; font-weight:650; white-space:nowrap; text-decoration:none; }
+.appStudioLink:hover,.appStudioLink:focus-visible { background:var(--canvas-hover); outline:none; }
+
+.lensBar {
+  position:absolute; z-index:20; top:0; left:0; right:0; box-sizing:border-box;
+  display:flex; align-items:center; gap:8px 12px; flex-wrap:wrap; min-width:0;
+  padding:8px 12px; border-bottom:1px solid var(--canvas-line);
+  background:var(--canvas-panel); color:var(--canvas-ink);
+}
+.lensBarLead { display:flex; align-items:center; gap:10px; min-width:0; flex:1 1 200px; }
+.lensBarTitle { min-width:0; overflow:hidden; color:var(--canvas-ink); font-size:13px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.lensBarNotice { min-width:0; overflow:hidden; color:var(--canvas-muted); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.lensBarSurface { display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+.lensBarActions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
+.lensBarPublish {
+  flex:none; display:inline-flex; align-items:center; min-height:28px; padding:2px 12px;
+  border:1px solid var(--canvas-accent); border-radius:var(--radius-md);
+  background:var(--canvas-accent); color:var(--text-on-accent); font:650 11px var(--font-sans); cursor:pointer;
+}
+.lensBarPublish[aria-pressed='true'] { background:color-mix(in srgb, var(--canvas-accent) 12%, var(--canvas-panel)); color:var(--canvas-accent); }
+.lensBarPublish:hover,.lensBarPublish:focus-visible { filter:brightness(1.06); outline:none; }
+.lensBarReturn {
+  flex:none; display:inline-flex; align-items:center; gap:4px; min-height:28px; padding:2px 10px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel); color:var(--canvas-ink); font:600 11px var(--font-sans); cursor:pointer;
+}
+.lensBarReturn:hover,.lensBarReturn:focus-visible { border-color:var(--canvas-accent); color:var(--canvas-accent); outline:none; }
+/* A phone: at most two rows. The lead (mark + name) and the actions share the first —
+   the name gives way first, and "Open on canvas" is its icon — and the surface's own
+   controls take the second, scrolling sideways rather than wrapping into a third. */
+@media (max-width:767px) {
+  .lensBar { padding:6px 8px; gap:6px 8px; flex-wrap:wrap; }
+  .lensBarLead { flex:1 1 0; }
+  .lensBarNotice { display:none; }
+  .lensBarActions { margin-left:auto; flex-wrap:nowrap; }
+  .lensBarLinkLabel { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  .lensBarSurface { order:3; flex:1 0 100%; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
+}
+/* ── THE PHONE'S SURFACE STRIP ────────────────────────────────────────────────────
+   The band under the canvas app bar that says which reading of the session is on
+   screen. It replaced a floating icon COLUMN over the board's top-left corner: five
+   unlabelled glyphs stacked on the surface's own heading, which answered "what am I
+   looking at" with a picture.
+
+   Words AND icons, 44px tall, scrolling sideways in its OWN band — the one place a
+   sideways scroll is expected and the one place it cannot cover the work. `display:none`
+   on a desktop, where the fused phase/surface card is the chrome instead. */
+.surfaceStrip {
+  display:none;
+  align-items:center;
+  gap:4px;
+  height:56px;
+  padding:6px 10px;
+  border-bottom:1px solid var(--canvas-line);
+  background:var(--canvas-panel);
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+  overscroll-behavior-x:contain;
+}
+.surfaceStrip::-webkit-scrollbar { display:none; }
+.surfaceStripTab {
+  display:inline-flex; flex:none; align-items:center; gap:6px;
+  height:44px; padding:0 12px;
+  border:0; border-radius:var(--radius-full);
+  background:transparent; color:var(--canvas-muted);
+  font:650 13px var(--font-sans); white-space:nowrap; cursor:pointer;
+}
+.surfaceStripTab > svg { display:block; width:15px; height:15px; }
+.surfaceStripTab:hover,.surfaceStripTab:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.surfaceStripTab[aria-pressed='true'] { background:var(--canvas-accent); color:var(--text-on-accent); font-weight:700; }
+.surfaceStripTab[aria-pressed='true'] > svg { color:currentColor; }
+.surfaceTab {
+  display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:5px 10px;
+  border:0; border-radius:var(--radius-sm); background:transparent;
+  color:var(--canvas-muted); font-family:inherit; font-size:12px; font-weight:650; cursor:pointer;
+}
+.surfaceTab > svg { display:block; width:15px; height:15px; }
+.surfaceTab:hover,.surfaceTab:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.surfaceTab[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
+.surfaceTab[aria-pressed='true'] > svg { color:var(--canvas-accent); }
+/* Between the phone breakpoint and a roomy desktop the words go and the glyphs stay —
+   the group is still one lit segment in a trough, which is the part that carries the
+   meaning. `aria-label` keeps the name, so nothing is lost to a screen reader. */
+@media (max-width:1180px) { .surfaceTab > span { display:none; } .surfaceTab { padding:5px 8px; } }
+
+/* ── THE CANVAS APP BAR AND ITS STRIP — the phone's own chrome ────────────────────
+   `/create/<id>` on a phone is an APP SCREEN. The shell stands its header down on a
+   stage route (`globals.css`, `.shell[data-phone-chrome='stage']`) and the canvas draws
+   this instead: a 52px bar that is entirely about THIS session, over a 56px strip of
+   surface tabs. `display:none` above the breakpoint, where the floating cards are the
+   chrome.
+
+   ABSOLUTE, like every other piece of canvas chrome, so the board still runs the whole
+   height of the shell behind it and everything that must clear it reads the MEASURED
+   `--canvas-top-chrome-space`. Never `position:fixed`: the persistent bottom nav owns
+   the bottom of the frame and `.app-frame` already reserves its height — a fixed band
+   here would have to subtract `--mobile-nav-height` and would be a second place that
+   number lives. */
+.canvasPhoneChrome { display:none; }
+.canvasAppBar {
+  display:flex; align-items:center; gap:4px;
+  height:52px; padding:0 6px 0 2px;
+  border-bottom:1px solid var(--canvas-line);
+  background:var(--canvas-panel);
+}
+.canvasAppBarButton {
+  display:grid; place-items:center; flex:none;
+  width:44px; height:44px; padding:0;
+  border:0; border-radius:var(--radius-md);
+  background:transparent; color:var(--canvas-ink);
+  font:400 22px/1 var(--font-sans); cursor:pointer;
+}
+.canvasAppBarButton:hover,.canvasAppBarButton:focus-visible { background:var(--canvas-hover); outline:none; }
+/* The session's name and its stage, as ONE control: pressing either opens the phase
+   stepper, because a stage you can read and not change is a label. */
+.canvasAppBarTitle {
+  display:flex; flex:1; flex-direction:column; align-items:flex-start; gap:1px;
+  min-width:0; min-height:44px; padding:0 6px;
+  border:0; border-radius:var(--radius-md);
+  background:transparent; color:var(--canvas-ink);
+  font-family:var(--font-sans); text-align:left; cursor:pointer;
+}
+.canvasAppBarTitle:hover,.canvasAppBarTitle:focus-visible { background:var(--canvas-hover); outline:none; }
+.canvasAppBarTitle strong { max-width:100%; overflow:hidden; font-size:15px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+/* The arc's hue and the arc's word — `--stage-<id>` and `nav.stage.<id>`, the same two
+   the left rail and the command bar's captions use. */
+.canvasAppBarStage { display:flex; align-items:center; gap:5px; color:var(--app-bar-stage,var(--canvas-muted)); font-size:11px; font-weight:650; }
+.canvasAppBarStage > i { width:6px; height:6px; flex:none; border-radius:var(--radius-full); background:currentColor; }
+.canvasAppBarStage[data-stage='idea'] { --app-bar-stage:var(--stage-idea); }
+.canvasAppBarStage[data-stage='make'] { --app-bar-stage:var(--stage-make); }
+.canvasAppBarStage[data-stage='run'] { --app-bar-stage:var(--stage-run); }
+.canvasAppBarStage[data-stage='measure'] { --app-bar-stage:var(--stage-measure); }
+.canvasAppBarStage[data-stage='reach'] { --app-bar-stage:var(--stage-reach); }
+.canvasAppBarFaces {
+  display:inline-flex; align-items:center;
+  height:32px; padding:0 8px 0 3px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-full);
+  background:var(--canvas-panel); color:var(--canvas-muted);
+  font:700 11px var(--font-sans); cursor:pointer;
+}
+.canvasAppBarFaces:disabled { cursor:default; }
+.canvasAppBarFaces:not(:disabled):hover,.canvasAppBarFaces:focus-visible { border-color:var(--canvas-accent); outline:none; }
+.canvasAppBarFaces > i {
+  display:grid; place-items:center;
+  width:24px; height:24px;
+  border:2px solid var(--canvas-panel); border-radius:var(--radius-full);
+  font:700 9px var(--font-sans); font-style:normal;
+}
+.canvasAppBarFaces > i + i { margin-left:-8px; }
+.canvasAppBarFaces > b { margin-left:4px; font-weight:700; }
+.iconButton {
+  border-color:var(--canvas-line);
+  background:var(--canvas-panel);
+  color:var(--canvas-ink);
+}
+:global(html:not([data-theme='light'])) .iconButton {
+  background:#142238;
+}
+/* The same row read at panel scale. A card is zoomed with the board and can be
+   compact; the inspector is fixed-size UI and its controls must stay tappable. */
+.panelActions.panelActions button { min-height:30px; padding:6px 11px; font-size:12px; }
+/* The leading glyph gives each format a distinct silhouette so a familiar action
+   is reachable without reading the row. Muted so it reads as a marker, not as a
+   second label competing with the format name. */
+.cardActionIcon { font-size:1.05em; line-height:1; opacity:.75; }
+.panelActions.panelActions .cardActionIcon { font-size:1.1em; }
+
+/* THE PATH CARD — under the phase card on a desktop, under the strip on a phone; both
+   inside the measured box, so the chrome-space token grows with it. */
+.phasePath {
+  display:grid; gap:6px; margin-top:6px; padding:8px 10px; max-width:420px; box-sizing:border-box;
+  border:1px solid color-mix(in srgb, var(--canvas-phase-hue) 45%, var(--canvas-line)); border-radius:var(--radius-md);
+  background:color-mix(in srgb, var(--canvas-phase-hue) 8%, var(--canvas-panel)); color:var(--canvas-ink); text-align:left;
+}
+.phasePath[data-tone='warning'] { border-color:var(--canvas-phase-warn-mark); background:var(--canvas-phase-warn-bg); }
+.phasePath[data-tone='next'] { border-color:var(--canvas-phase-ring); }
+@media (max-width:767px) {
+  .phasePath { max-width:none; margin:6px 8px 0; }
+  /* The stage sheet shows every stage's readiness, so the path card folds away while it
+     is open: the sheet opens under the measured band, and the card was inside that band —
+     pushing the sheet's first row halfway down the screen, under the prompt. */
+  .canvasPhoneChrome:has(.canvasAppBarTitle[aria-expanded='true']) .phasePath { display:none; }
+}

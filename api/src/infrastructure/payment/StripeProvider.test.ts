@@ -337,6 +337,28 @@ describe('self-named purchases never activate the workspace plan', () => {
     });
   });
 
+  // A knowledge listing used to be its own `knowledge.purchased` event with its own
+  // webhook branch; it is now one more kind the purchase registry settles.
+  it('reads a knowledge listing sale as an ordinary self-named checkout', async () => {
+    const body = completed('payment', { purchaseKind: 'knowledge_listing', tenantId: '42', buyerTenantId: '42', buyerUserId: 'u-b', listingId: 'l1' });
+    const event = await makeProvider().parseWebhook(body, await sign(body));
+    expect(event).toMatchObject({
+      type: 'checkout.completed', purchaseKind: 'knowledge_listing', tenantId: 42,
+      metadata: { buyerUserId: 'u-b', listingId: 'l1' },
+    });
+  });
+
+  // A tenant invoice keeps its `invoice.paid` name (integration triggers subscribe
+  // to it) but carries kind + metadata so the same registry settles it.
+  it('reads a tenant invoice payment as invoice.paid for the SELLER, with its metadata', async () => {
+    const body = completed('payment', { purchaseKind: 'tenant_invoice', invoiceRef: 'INV-1', invoiceTenantId: '7' });
+    const event = await makeProvider().parseWebhook(body, await sign(body));
+    expect(event).toMatchObject({
+      type: 'invoice.paid', purchaseKind: 'tenant_invoice', tenantId: 7, checkoutSessionId: 'cs_own',
+      metadata: { invoiceRef: 'INV-1' },
+    });
+  });
+
   it('reads a self-named subscription checkout as an add-on activation', async () => {
     const body = completed('subscription', { purchaseKind: 'spawn_plan', tenantId: '9' });
     const event = await makeProvider().parseWebhook(body, await sign(body));

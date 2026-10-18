@@ -17,7 +17,7 @@ import { toolAuditEvents, usageSnapshots } from '../../infrastructure/database/s
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { listExecutionMessages } from './executionSteering';
 import { listExecutionLlmTurns } from '../llm/executionTraces';
-import { executionUsageCost } from '../llm/usageCostSummary';
+import { executionUsageCost } from '../llm/usageQuery';
 import type { Env } from '../../env';
 
 /** The newest telemetry rows the caller already holds. Absent ⇒ a full read. */

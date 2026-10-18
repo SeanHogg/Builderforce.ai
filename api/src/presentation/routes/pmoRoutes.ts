@@ -33,7 +33,6 @@ import {
   keyResults,
   objectiveLinks,
   objectives,
-  pmoDependencies,
   portfolios,
   projects,
   tasks,
@@ -42,7 +41,6 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   computePortfolioRollup,
   loadPmoTree,
-  wouldCreateCycle,
   type PmoScopeKind,
 } from '../../application/pmo/portfolioRollup';
 import { computeValueStream } from '../../application/pmo/valueStream';
@@ -58,10 +56,13 @@ import {
   type CostClass,
 } from '../../application/pmo/planningSpine';
 import { pmoVersionKey } from '../../application/pmo/pmoCacheKeys';
+import { addInitiativeDependency, deleteInitiativeDependency } from '../../application/pmo/initiativeDependencies';
 import {
   loadWorkingCalendarSettings,
   saveWorkingCalendarSettings,
 } from '../../application/planning/workingCalendar';
+import { capexOpexExportSource } from '../../application/pmo/capexOpexExport';
+import { exportSourceHandler } from './exportSourceRoute';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { taskCreatedHook } from '../../application/task/taskCreationHook';
@@ -181,47 +182,22 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── Initiative dependency edges (blocker → blocked; critical-path input) ────
+  // Thin adapters: the write and its cycle gate live in application/pmo/initiativeDependencies.
   router.post('/dependencies', requireRole(TenantRole.MANAGER), async (c) => {
-    const { tenantId, segmentId } = scope(c);
+    const segment = scope(c);
     const body = await parseBody(c, DependencyBody);
-    const from = body.fromInitiativeId;
-    const to = body.toInitiativeId;
-    if (!from || !to) return c.json({ error: 'fromInitiativeId and toInitiativeId are required' }, 400);
-    if (from === to) return c.json({ error: 'an initiative cannot depend on itself' }, 400);
-
-    // Both endpoints must belong to this tenant/segment.
-    const ends = await db
-      .select({ id: initiatives.id })
-      .from(initiatives)
-      .where(and(inArray(initiatives.id, [from, to]), eq(initiatives.tenantId, tenantId), eq(initiatives.segmentId, segmentId)));
-    if (ends.length !== 2) return c.json({ error: 'initiative not found' }, 404);
-
-    // Reject an edge that would close a cycle in the existing dependency graph.
-    const existing = await db
-      .select({ fromInitiativeId: pmoDependencies.fromInitiativeId, toInitiativeId: pmoDependencies.toInitiativeId })
-      .from(pmoDependencies)
-      .where(and(eq(pmoDependencies.tenantId, tenantId), eq(pmoDependencies.segmentId, segmentId)));
-    if (wouldCreateCycle(existing, from, to)) return c.json({ error: 'that dependency would create a cycle' }, 409);
-
-    const rows = await db
-      .insert(pmoDependencies)
-      .values({ tenantId, segmentId, fromInitiativeId: from, toInitiativeId: to })
-      .onConflictDoNothing({ target: [pmoDependencies.fromInitiativeId, pmoDependencies.toInitiativeId] })
-      .returning();
-    await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
-    return c.json(rows[0] ?? { fromInitiativeId: from, toInitiativeId: to }, 201);
+    const result = await addInitiativeDependency(db, segment, body.fromInitiativeId, body.toInitiativeId);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    await bumpCacheVersion(c.env as Env, pmoVersionKey(segment.tenantId));
+    return c.json(result.edge, 201);
   });
 
   router.delete('/dependencies/:id', requireRole(TenantRole.MANAGER), async (c) => {
-    const { tenantId, segmentId } = scope(c);
-    const id = c.req.param('id');
-    const rows = await db
-      .delete(pmoDependencies)
-      .where(and(eq(pmoDependencies.id, id), eq(pmoDependencies.tenantId, tenantId), eq(pmoDependencies.segmentId, segmentId)))
-      .returning({ id: pmoDependencies.id });
-    if (!rows[0]) return c.json({ error: 'not found' }, 404);
-    await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
-    return c.json({ deleted: rows[0].id });
+    const segment = scope(c);
+    const deleted = await deleteInitiativeDependency(db, segment, c.req.param('id'));
+    if (!deleted) return c.json({ error: 'not found' }, 404);
+    await bumpCacheVersion(c.env as Env, pmoVersionKey(segment.tenantId));
+    return c.json({ deleted });
   });
 
   // ── Planning spine: the unified, dated, cost-bearing hierarchy ──────────────
@@ -243,33 +219,10 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     return c.json(spine);
   });
 
-  // ── Period-bounded CapEx/OpEx finance export (CSV) ──────────────────────────
+  // ── Period-bounded CapEx/OpEx finance export ────────────────────────────────
   // ?from=YYYY-MM-DD&to=YYYY-MM-DD bounds the LLM + logged-time cost; ?project= scopes.
-  router.get('/spine/export.csv', async (c) => {
-    const { tenantId, segmentId } = scope(c);
-    const from = c.req.query('from');
-    const to = c.req.query('to');
-    const dateOk = (s: string | undefined): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
-    const window = dateOk(from) && dateOk(to) ? { from, to } : undefined;
-    const projectRaw = Number(c.req.query('project'));
-    const projectId = Number.isFinite(projectRaw) && projectRaw > 0 ? projectRaw : undefined;
-
-    const spine = await loadPlanningSpine(db, tenantId, segmentId, { projectId, window });
-    const esc = (v: unknown) => {
-      const s = String(v ?? '');
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const header = ['kind', 'id', 'title', 'effective_cost_class', 'llm_usd', 'human_usd', 'total_usd', 'capex_usd', 'opex_usd'];
-    const lines = [header.join(',')];
-    for (const n of spine.nodes) {
-      lines.push([n.kind, n.id, esc(n.title), n.effectiveCostClass ?? '', n.cost.llmUsd.toFixed(2), n.cost.humanUsd.toFixed(2), n.cost.totalUsd.toFixed(2), n.cost.capexUsd.toFixed(2), n.cost.opexUsd.toFixed(2)].join(','));
-    }
-    lines.push(['TOTAL', '', '', '', spine.totals.llmUsd.toFixed(2), spine.totals.humanUsd.toFixed(2), spine.totals.totalUsd.toFixed(2), spine.totals.capexUsd.toFixed(2), spine.totals.opexUsd.toFixed(2)].join(','));
-    const suffix = window ? `${window.from}_${window.to}` : 'all';
-    return new Response(lines.join('\n'), {
-      headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="capex-opex-${suffix}.csv"` },
-    });
-  });
+  // A registered export source (also at /api/exports/sources/pmo.capex-opex).
+  router.get('/spine/export.csv', exportSourceHandler(capexOpexExportSource, db));
 
   // ── CAPEX/OPEX classification: set the class on any level, or run the agent ──
   const COST_KINDS = new Set(['portfolio', 'objective', 'initiative', 'epic', 'task']);

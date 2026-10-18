@@ -44,6 +44,8 @@ import {
   createPolicyGate, createPolicyPack, deletePolicyGate, deletePolicyPack,
   listPolicyPacks, resolvePolicyGates, updatePolicyGate, updatePolicyPack,
 } from '../../application/governance/policyPackService';
+import { soc2EvidenceExportSource } from '../../application/governance/soc2EvidenceExport';
+import { exportSourceHandler } from './exportSourceRoute';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { createStakeholderAlignmentRoutes } from './stakeholderAlignmentRoutes';
@@ -195,47 +197,10 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
     return c.json(updated);
   });
 
-  // Export the segment's SOC 2 controls WITH their attached evidence as one
-  // structured JSON audit package (SEC-1 evidence export). Read for any member —
-  // an auditor/host pulls the whole posture in a single call. Segment-threaded
-  // like every other governance read, so a segmented tenant exports only the
-  // active segment's controls + evidence.
-  router.get('/soc2/export', async (c) => {
-    const { tenantId, segmentId } = scope(c);
-    const [controls, evidence] = await Promise.all([
-      db
-        .select()
-        .from(socControls)
-        .where(and(eq(socControls.tenantId, tenantId), eq(socControls.segmentId, segmentId))),
-      db
-        .select()
-        .from(socEvidence)
-        .where(and(eq(socEvidence.tenantId, tenantId), eq(socEvidence.segmentId, segmentId))),
-    ]);
-
-    // Group evidence under its control so the package is control-centric.
-    const byControl = new Map<string, Array<Record<string, unknown>>>();
-    for (const e of evidence as Array<Record<string, unknown>>) {
-      const cid = String(e.controlId);
-      const list = byControl.get(cid) ?? [];
-      list.push(e);
-      byControl.set(cid, list);
-    }
-    const controlsWithEvidence = (controls as Array<Record<string, unknown>>).map((ctl) => ({
-      ...ctl,
-      evidence: byControl.get(String(ctl.id)) ?? [],
-    }));
-
-    return c.json({
-      framework: 'SOC 2',
-      exportedAt: new Date().toISOString(),
-      tenantId,
-      segmentId,
-      controlCount: controlsWithEvidence.length,
-      evidenceCount: (evidence as unknown[]).length,
-      controls: controlsWithEvidence,
-    });
-  });
+  // The segment's SOC 2 controls WITH their evidence (SEC-1 evidence export) —
+  // a registered export source: JSON package by default, csv|xlsx grid on
+  // request (also at /api/exports/sources/governance.soc2-evidence).
+  router.get('/soc2/export', exportSourceHandler(soc2EvidenceExportSource, db));
 
   // Attach evidence to a control.
   router.post('/soc2/controls/:id/evidence', requireRole(TenantRole.MANAGER), async (c) => {

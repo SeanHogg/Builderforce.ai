@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/pitch.module.css';
 import { pitchCompetitionFor, pitchCriteria, pitchReadiness, pitchReadinessTone, pitchWeakestCriteria } from '@/lib/pitchCompetition';
 import type { CreationBodyProps } from './types';
 import { PitchLabel, PitchScoreRow } from './pitchParts';

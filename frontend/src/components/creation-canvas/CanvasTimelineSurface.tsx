@@ -8,7 +8,7 @@ import { useMemo } from 'react';
 import { formatClock } from '@/lib/duration';
 import { useTranslations } from 'next-intl';
 import { canvasVideoDuration, canvasVideoTimelineFrom } from '@builderforce/creation-canvas-contract';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
 import { CanvasVideoEditor } from './CanvasVideoEditor';
 import type { CreationNodeData } from './types';

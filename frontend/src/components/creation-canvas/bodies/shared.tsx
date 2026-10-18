@@ -1,6 +1,6 @@
 import { MathAwareText } from '@/components/academic/MathAwareText';
 import type { CreationNodeData } from '../types';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/marketing.module.css';
 
 /*
  * Helpers more than one card body reads. ONE copy each: a second `textValue` in a body

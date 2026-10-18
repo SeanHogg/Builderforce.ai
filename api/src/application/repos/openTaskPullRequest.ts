@@ -13,7 +13,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { tasks } from '../../infrastructure/database/schema';
 import { resolveDefaultRepoForTask } from './resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
-import { createPullRequest } from './createPullRequest';
+import { createPullRequest, type OpenPrInput, type OpenPrResult } from './createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from './mergeBranchToBase';
 import { recordPullRequestRow } from './recordPullRequestRow';
 import { listSpanningRepoWrites, recordBindingPullRequest } from './taskRepoSet';
@@ -73,6 +73,31 @@ export async function releaseTaskPrClaim(db: Db, tenantId: number, taskId: numbe
     });
 }
 
+/**
+ * THE task PR-open step: claim → create on the provider → release the claim if the
+ * create failed. Both finalize surfaces — {@link openTaskPullRequest} (Done-drag,
+ * host and runtime routes) and the cloud run-end finalize (`finalizeCloudRun`) —
+ * open a task's PR through this, so the single-PR invariant (0140) is enforced in
+ * ONE place rather than re-sequenced by each caller. Recording the row and the
+ * merge policy stay with the caller: they genuinely differ between surfaces.
+ *
+ * `claimLost` is not an error — another path holds (or completed) the claim.
+ */
+export async function openClaimedPullRequest(
+  db: Db,
+  tenantId: number,
+  taskId: number,
+  pr: OpenPrInput,
+): Promise<OpenPrResult | { ok: false; claimLost: true }> {
+  const claimed = await claimTaskPrOpen(db, tenantId, taskId);
+  if (!claimed) return { ok: false, claimLost: true };
+  const created = await createPullRequest(pr)
+    .catch((error): OpenPrResult => ({ ok: false, code: 'provider_error', reason: error instanceof Error ? error.message : 'pr failed' }));
+  // Release so a manual/automatic retry can re-attempt the create.
+  if (!created.ok) await releaseTaskPrClaim(db, tenantId, taskId);
+  return created;
+}
+
 export async function openTaskPullRequest(
   db: Db,
   secret: string,
@@ -99,14 +124,8 @@ export async function openTaskPullRequest(
 
   // Atomic single-PR claim (0140) — taken BEFORE the external create so two
   // concurrent finalize paths (inline run-end + human Done-drag) can't both open a
-  // PR. The read-time `!githubPrUrl` guard in callers is now backed by this write.
-  // A lost claim is NOT an error: the invariant held, another path is opening it.
-  const claimed = await claimTaskPrOpen(db, tenantId, taskId);
-  if (!claimed) {
-    return { ok: false, status: 409, error: 'PR already being opened for this task', claimLost: true };
-  }
-
-  const pr = await createPullRequest({
+  // PR. A lost claim is NOT an error: the invariant held, another path is opening it.
+  const pr = await openClaimedPullRequest(db, tenantId, taskId, {
     provider: resolved.repo.provider,
     host: resolved.repo.host,
     owner: resolved.repo.owner,
@@ -118,8 +137,7 @@ export async function openTaskPullRequest(
     body: prBody,
   });
   if (!pr.ok) {
-    // Release the claim so a manual/automatic retry can re-attempt the create.
-    await releaseTaskPrClaim(db, tenantId, taskId);
+    if ('claimLost' in pr) return { ok: false, status: 409, error: 'PR already being opened for this task', claimLost: true };
     return { ok: false, status: pr.code === 'unsupported' ? 501 : 502, error: pr.reason };
   }
 

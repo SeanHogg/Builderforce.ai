@@ -65,6 +65,20 @@ export function hostOrTenantAuth(db: Db, idPathParam?: string): MiddlewareHandle
 }
 
 /**
+ * Middleware: accept ONLY a registered agent host's key — the `/api/agent/*` doors,
+ * where a person's JWT is not a credential. Publishes the same identity as
+ * {@link hostOrTenantAuth}, so handlers shared with the JWT door read one shape.
+ */
+export function hostKeyAuth(db: Db): MiddlewareHandler<HonoEnv> {
+  return async (c, next) => {
+    const identity = await resolveAgentHostIdentity(db, c);
+    if (!identity) return c.json({ error: 'unauthorized' }, 401);
+    publish(c, db, identity);
+    await next();
+  };
+}
+
+/**
  * The agent host behind this request, or null when a person authenticated.
  *
  * Reads the `machineActor` both doors publish rather than a second variable, so

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/documents.module.css';
 import { RESUME_SECTION_ORDER, type CanvasResumeDocument, type CanvasResumeEducation, type CanvasResumeSkill, type CanvasResumeWork, type ResumeSectionId } from '@/lib/canvasResume';
 import { useDragReorder } from '@/lib/useDragReorder';
 

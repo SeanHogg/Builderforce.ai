@@ -1,6 +1,6 @@
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from '../types';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/bodies.module.css';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
 import { formatBytes } from '@/lib/formatBytes';
 import type { CreationBodyProps } from './types';

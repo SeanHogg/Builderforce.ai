@@ -1,9 +1,19 @@
 /**
- * The `/api/v1/webhooks` subscription CRUD — every row here is a
+ * THE outbound-webhook subscription use case — every row here is a
  * `webhook_subscriptions` row delivered by the same `application/seams/webhookService`
- * loop every other webhook uses. See `presentation/routes/publicWebhookApiRoutes.ts`
- * for the wire contract; this module owns the persistence and the domain refusals
- * (https-only url, at least one known event, secret length) that go with it.
+ * loop every other webhook uses. This module owns the persistence and the domain
+ * refusals (https-only url, at least one known event, secret length) that go with it.
+ *
+ * Two doors call it, and they stay two doors on purpose:
+ *   • `/api/v1/webhooks` (`publicWebhookApiRoutes.ts`) — a tenant API key, TENANT-wide
+ *     subscriptions (optionally one board), PATCH/rotate and the deliveries log.
+ *   • `/v1/webhooks` (`seamRoutes.ts`) — the channel-3 host seam (spec 05 §4): a
+ *     service token naming an end-client, so every row is narrowed to ONE segment and
+ *     the wire shape is the one the host integration already parses.
+ * The scope and the response shape differ; the RULES must not. The seam used to run
+ * its own insert with a weaker copy of the validation (no url length cap, any secret
+ * length), so a host could register a subscription `/api/v1` would refuse. Both doors
+ * now go through the functions below.
  */
 
 import { and, desc, eq } from 'drizzle-orm';
@@ -19,6 +29,7 @@ import { generateApiKey } from '../../infrastructure/auth/HashService';
 import { isWebhookEvent, WEBHOOK_EVENTS } from '../seams/webhookService';
 import { CREATION_UUID_RE as UUID_RE } from '../creation/creationGraphWriter';
 import { parseEvents } from '../seams/webhookService';
+import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 
 export type WebhookSubscriptionRow = typeof webhookSubscriptions.$inferSelect;
 
@@ -65,7 +76,10 @@ function validateEvents(raw: unknown): string[] | null {
 
 export interface CreateWebhookSubscriptionArgs {
   tenantId: number;
-  keyId: string;
+  /** The credential that registered it. Null only for a caller with no key row. */
+  keyId: string | null;
+  /** Narrow to ONE end-client segment — the `/v1` seam. Omitted ⇒ tenant-wide. */
+  segmentId?: string | null;
   url: string;
   events: unknown;
   secret?: string;
@@ -109,8 +123,8 @@ export async function createWebhookSubscription(
     .values({
       tenantId: args.tenantId,
       // NULL: a `/api/v1` subscription is tenant-wide unless it named a board.
-      // The seam subscriptions still set it; see the column's comment.
-      segmentId: null,
+      // The seam subscriptions set it; see the column's comment.
+      segmentId: args.segmentId ?? null,
       sessionId,
       url,
       secret,
@@ -176,6 +190,57 @@ export async function deleteWebhookSubscription(db: Db, tenantId: number, id: st
   const [row] = await db
     .delete(webhookSubscriptions)
     .where(scopedToTenant(webhookSubscriptions, tenantId, eq(webhookSubscriptions.id, id)))
+    .returning({ id: webhookSubscriptions.id });
+  return Boolean(row);
+}
+
+/** The `/v1` seam's view of a subscription: the columns the host integration was
+ *  built against (`events` is the stored JSON text, exactly as it always returned). */
+export interface SegmentWebhookSubscription {
+  id: string;
+  url: string;
+  events: string;
+  active: boolean;
+  createdAt: Date;
+}
+
+/** One end-client segment's subscriptions — the `/v1/webhooks` list. */
+export async function listSegmentWebhookSubscriptions(
+  db: Db,
+  tenantId: number,
+  segmentId: string,
+): Promise<SegmentWebhookSubscription[]> {
+  return db
+    .select({
+      id: webhookSubscriptions.id,
+      url: webhookSubscriptions.url,
+      events: webhookSubscriptions.events,
+      active: webhookSubscriptions.active,
+      createdAt: webhookSubscriptions.createdAt,
+    })
+    .from(webhookSubscriptions)
+    .where(scopedToTenant(webhookSubscriptions, tenantId, eq(webhookSubscriptions.segmentId, segmentId)))
+    .orderBy(desc(webhookSubscriptions.createdAt))
+    .limit(LIST_ROW_CAP);
+}
+
+/** Unsubscribe within one segment. The tenant predicate rides along with the
+ *  segment's so a segment id alone can never reach another tenant's row. */
+export async function deleteSegmentWebhookSubscription(
+  db: Db,
+  tenantId: number,
+  segmentId: string,
+  id: string,
+): Promise<boolean> {
+  if (!UUID_RE.test(id)) return false;
+  const [row] = await db
+    .delete(webhookSubscriptions)
+    .where(scopedToTenant(
+      webhookSubscriptions,
+      tenantId,
+      eq(webhookSubscriptions.id, id),
+      eq(webhookSubscriptions.segmentId, segmentId),
+    ))
     .returning({ id: webhookSubscriptions.id });
   return Boolean(row);
 }

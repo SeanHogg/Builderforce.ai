@@ -65,8 +65,13 @@ describe('vscodeRoutes — workspace (tenant) management', () => {
     // function` and the route answered 500 — the endpoint was never actually asserted.
     const res = await createVscodeRoutes(makeDb([]) as any, ts as any).request('/tenants', undefined, ENV);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ tenants: WORKSPACES });
+    // The shared "my workspaces" contract: the account default rides along (null here —
+    // the stub db has no stored default).
+    expect(await res.json()).toEqual({ defaultTenantId: null, tenants: WORKSPACES });
     expect(ts.listTenantsForUser).toHaveBeenCalledWith(USER);
+    // Legacy alias of GET /api/tenants — announces its successor.
+    expect(res.headers.get('Deprecation')).toBe('true');
+    expect(res.headers.get('Link')).toBe('</api/tenants>; rel="successor-version"');
   });
 
   it('POST /tenants creates a workspace owned by the caller (201)', async () => {

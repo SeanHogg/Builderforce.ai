@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/bodies.module.css';
 import { PIPELINE_MAX_CARDS_PER_CELL, cardProbabilityPercent, cardsAt, pipelineTotals, readPipelineModel, stageTotals } from '@/lib/canvasSalesPipeline';
 import { useMoneyFormat } from '@/lib/useMoneyFormat';
 import type { CreationBodyProps } from './types';

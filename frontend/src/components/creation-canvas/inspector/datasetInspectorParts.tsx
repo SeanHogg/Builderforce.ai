@@ -2,7 +2,7 @@ import type { CreationNodeData } from '../types';
 import { useTranslations } from 'next-intl';
 import { tabularFromObject } from '@/lib/canvasTabularData';
 import { detectGeoColumns } from '@/lib/canvasGeo';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/inspector.module.css';
 import { useFormat } from '@/i18n/useFormat';
 
 /**

@@ -13,7 +13,7 @@ import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { STUDIO_ROUTE } from '@/lib/studio/studioHost';
 import { useContributedSurfaceActions } from '../canvasSurfaceActions';
 import { useCanvasSessionFacts } from './canvasSessionContext';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/chrome.module.css';
 
 export interface CanvasLensBarProps {
   /** Publishes `--canvas-top-chrome-space`: everything full-bleed starts under this bar. */

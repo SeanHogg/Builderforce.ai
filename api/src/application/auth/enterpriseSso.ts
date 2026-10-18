@@ -50,6 +50,7 @@ import {
   challengeRecordName, newChallengeToken, normalizeHostname, verifyChallengeToken,
   type DnsLookupDeps,
 } from '../shared/dnsVerification';
+import { buildAuthorizationUrl, exchangeCodeForTokens, TokenEndpointError, type TokenResponse } from '../shared/providerOAuthConnect';
 import type { Env } from '../../env';
 
 const SOURCE = 'application/auth/enterpriseSso.ts';
@@ -631,15 +632,15 @@ export async function startSsoLogin(
     throw new SsoError('This connection has no usable endpoints. Check its discovery URL, or type the authorization, token and JWKS endpoints.', 502);
   }
   const nonce = randomUrlToken(24);
-  const url = new URL(endpoints.authorizationUrl);
-  for (const [key, value] of Object.entries({
-    response_type: 'code',
-    client_id: connection.clientId,
-    redirect_uri: redirectUri,
-    scope: connection.scopes,
-    nonce,
-  })) url.searchParams.set(key, value);
-  return { url: url.toString(), nonce };
+  // The SHARED authorization URL builder (the connect flows use it too); the
+  // session logic — nonce, id_token verification, account binding — stays here.
+  const url = buildAuthorizationUrl(endpoints.authorizationUrl, {
+    clientId: connection.clientId,
+    redirectUri,
+    scopes: connection.scopes,
+    extra: { nonce },
+  });
+  return { url, nonce };
 }
 
 export interface SsoIdentity {
@@ -691,27 +692,25 @@ export async function completeSsoLogin(
   const clientSecret = await clientSecretFor(env, db, connection);
   if (!clientSecret) return { ok: false, error: 'This connection has no client secret stored. Re-enter it in Settings → Security.' };
 
-  let tokenResponse: Response;
+  // The code exchange is the SHARED one; only what is done with the id_token is SSO's.
+  let body: TokenResponse;
   try {
-    tokenResponse = await fetch(endpoints.tokenUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: redirectUri,
-        client_id: connection.clientId,
-        client_secret: clientSecret,
-      }),
-    });
+    body = await exchangeCodeForTokens(
+      { tokenUrl: endpoints.tokenUrl, clientId: connection.clientId, clientSecret },
+      code,
+      redirectUri,
+    );
   } catch (error) {
+    if (error instanceof TokenEndpointError) {
+      return error.status >= 400
+        ? { ok: false, error: `The identity provider rejected the sign-in (${error.status}).` }
+        : { ok: false, error: 'The identity provider returned an incomplete token response.' };
+    }
     reportCaughtError(error, { source: SOURCE, operation: 'completeSsoLogin.token' });
     return { ok: false, error: 'The identity provider could not be reached.' };
   }
-  if (!tokenResponse.ok) return { ok: false, error: `The identity provider rejected the sign-in (${tokenResponse.status}).` };
 
-  const body = await tokenResponse.json().catch(() => null) as { id_token?: string } | null;
-  const idToken = typeof body?.id_token === 'string' ? body.id_token : '';
+  const idToken = typeof body.id_token === 'string' ? body.id_token : '';
   if (!idToken) return { ok: false, error: 'The identity provider returned no id_token. Check that the connection requests the `openid` scope.' };
 
   const parsed = parseJws(idToken);
@@ -749,7 +748,7 @@ export async function completeSsoLogin(
   // Called only when the token is short of what we need, because it is a second
   // round trip on the critical path of every sign-in.
   if ((!email || !name) && endpoints.userinfoUrl) {
-    const accessToken = (body as { access_token?: string } | null)?.access_token;
+    const accessToken = body.access_token;
     if (typeof accessToken === 'string') {
       const profile = await fetch(endpoints.userinfoUrl, {
         headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' },

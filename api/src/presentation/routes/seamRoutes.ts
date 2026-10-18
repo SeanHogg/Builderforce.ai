@@ -13,16 +13,17 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authenticateServiceToken } from '../middleware/serviceTokenAuth';
 import { respondToAccessError } from './llmRoutes';
-import { customerFeedback, webhookSubscriptions } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { isWebhookEvent, WEBHOOK_EVENTS } from '../../application/seams/webhookService';
-import { generateApiKey } from '../../infrastructure/auth/HashService';
-import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
+import { ingestCustomerFeedback } from '../../application/reports/customerFeedbackInbox';
+import { parseEvents, WEBHOOK_EVENTS } from '../../application/seams/webhookService';
+import {
+  createWebhookSubscription,
+  deleteSegmentWebhookSubscription,
+  listSegmentWebhookSubscriptions,
+} from '../../application/publicApi/publicWebhookSubscriptionService';
 import { parseOptionalBody, z } from './requestBody';
 
 /**
@@ -44,7 +45,7 @@ const FeedbackIngestBody = z.looseObject({
   contact: z.string().nullish(),
 });
 
-/** `events` is filtered through `isWebhookEvent`, so unknown entries are dropped, not refused. */
+/** `events` is filtered to known events by the use case, so unknown entries are dropped, not refused. */
 const WebhookSubscribeBody = z.looseObject({
   ...segmentCoordinates,
   url: z.string().nullish(),
@@ -71,34 +72,24 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
     if (!eventId) return c.json({ error: 'eventId is required' }, 400);
     if (!text) return c.json({ error: 'text is required' }, 400);
 
-    // Idempotent on (segment, external_ref): a re-delivered event returns the
-    // existing candidate rather than creating a duplicate.
-    const [row] = await db
-      .insert(customerFeedback)
-      .values({
-        tenantId: svc.tenantId,
-        segmentId: svc.segmentId,
-        externalRef: eventId,
-        widgetId: body.widgetId ?? null,
-        text,
-        sentiment: body.sentiment ?? null,
-        contact: body.contact ?? null,
-      })
-      .onConflictDoNothing()
-      .returning({ id: customerFeedback.id, status: customerFeedback.status });
-
-    if (!row) {
-      const [existing] = await db
-        .select({ id: customerFeedback.id, status: customerFeedback.status })
-        .from(customerFeedback)
-        .where(and(eq(customerFeedback.segmentId, svc.segmentId), eq(customerFeedback.externalRef, eventId)))
-        .limit(1);
-      return c.json({ id: existing?.id ?? null, status: existing?.status ?? 'new', deduped: true }, 200);
-    }
-    return c.json({ id: row.id, status: row.status, deduped: false }, 201);
+    // Idempotent on (segment, external_ref) — the VoC use case owns the rule.
+    const result = await ingestCustomerFeedback(db, {
+      tenantId: svc.tenantId,
+      segmentId: svc.segmentId,
+      eventId,
+      text,
+      widgetId: body.widgetId,
+      sentiment: body.sentiment,
+      contact: body.contact,
+    });
+    return c.json(result, result.deduped ? 200 : 201);
   });
 
   // ── Outbound-webhook subscriptions (host manages its own) ──────────────────
+  // Thin adapters over THE subscription use case (publicWebhookSubscriptionService),
+  // the same one `/api/v1/webhooks` calls. What stays here is only what makes this
+  // door different: the service token resolves ONE end-client segment, and the
+  // response keeps the shape the host integration already parses.
   router.get('/webhooks', async (c) => {
     let svc;
     try {
@@ -108,17 +99,7 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
     } catch (err) {
       return respondToAccessError(c, err);
     }
-    const rows = await db
-      .select({
-        id: webhookSubscriptions.id,
-        url: webhookSubscriptions.url,
-        events: webhookSubscriptions.events,
-        active: webhookSubscriptions.active,
-        createdAt: webhookSubscriptions.createdAt,
-      })
-      .from(webhookSubscriptions)
-      .where(eq(webhookSubscriptions.segmentId, svc.segmentId))
-      .orderBy(desc(webhookSubscriptions.createdAt)).limit(LIST_ROW_CAP);
+    const rows = await listSegmentWebhookSubscriptions(db, svc.tenantId, svc.segmentId);
     // The secret is never returned after creation.
     return c.json({ subscriptions: rows, availableEvents: WEBHOOK_EVENTS });
   });
@@ -133,30 +114,19 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
 
-    const url = (body.url ?? '').trim();
-    if (!/^https:\/\/[^\s]+$/.test(url)) {
-      return c.json({ error: 'url must be an https URL' }, 400);
-    }
-    const events = Array.isArray(body.events) ? body.events.filter(isWebhookEvent) : [];
-    if (events.length === 0) {
-      return c.json({ error: `events must include at least one of: ${WEBHOOK_EVENTS.join(', ')}` }, 400);
-    }
-    // Caller may supply a secret (to verify deliveries) or we mint one and
-    // return it ONCE. It is never returned again on list.
-    const secret = (body.secret ?? '').trim() || generateApiKey('whsec');
-
-    const [row] = await db
-      .insert(webhookSubscriptions)
-      .values({
-        tenantId: svc.tenantId,
-        segmentId: svc.segmentId,
-        url,
-        secret,
-        events: JSON.stringify(events),
-      })
-      .returning({ id: webhookSubscriptions.id, createdAt: webhookSubscriptions.createdAt });
-
-    return c.json({ id: row?.id, url, events, secret, createdAt: row?.createdAt }, 201);
+    // Caller may supply a secret (to verify deliveries) or the use case mints one;
+    // either way it is returned ONCE and never again on list.
+    const result = await createWebhookSubscription(db, {
+      tenantId: svc.tenantId,
+      segmentId: svc.segmentId,
+      keyId: svc.tenantApiKeyId,
+      url: body.url ?? '',
+      events: body.events,
+      secret: body.secret ?? undefined,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    const row = result.subscription;
+    return c.json({ id: row.id, url: row.url, events: parseEvents(row.events), secret: result.secret, createdAt: row.createdAt }, 201);
   });
 
   router.delete('/webhooks/:id', async (c) => {
@@ -169,12 +139,9 @@ export function createSeamRoutes(db: Db): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
     const id = c.req.param('id');
-    const [deleted] = await db
-      .delete(webhookSubscriptions)
-      .where(and(eq(webhookSubscriptions.id, id), eq(webhookSubscriptions.segmentId, svc.segmentId)))
-      .returning({ id: webhookSubscriptions.id });
+    const deleted = await deleteSegmentWebhookSubscription(db, svc.tenantId, svc.segmentId, id);
     if (!deleted) return c.json({ error: 'subscription not found' }, 404);
-    return c.json({ ok: true, id: deleted.id });
+    return c.json({ ok: true, id });
   });
 
   return router;

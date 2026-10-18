@@ -24,7 +24,7 @@ import {
   formatBibliography, formatReference, isBibliographySort, defaultSortFor,
 } from '@/lib/academic/citations';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/dashboards.module.css';
 import { useFormat } from "@/i18n/useFormat";
 
 /**

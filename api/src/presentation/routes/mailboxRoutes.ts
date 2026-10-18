@@ -19,17 +19,15 @@ import { statusResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
-import {
-  buildProviderConsentUrl,
-  completeProviderOAuthCallback,
-} from '../../application/shared/providerOAuthConnect';
+import { mountProviderOAuthConnect } from './providerOAuthConnectRoutes';
 import {
   availableMailboxProviders,
   clampMailboxLimit,
   getMailboxProvider,
   safeAttachmentFilename,
+  type MailboxProvider,
   type MailboxQuery,
 } from '../../application/mailbox/mailboxProviders';
 import {
@@ -64,7 +62,6 @@ import {
   stopMailboxWatch,
 } from '../../application/mailbox/mailboxWatch';
 import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { parseOptionalBody, z } from './requestBody';
 
 /**
@@ -188,9 +185,6 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ ok: true });
   });
 
-  const callbackUrl = (c: { req: { url: string } }, provider: string) =>
-    `${new URL(c.req.url).origin}/api/mailbox/callback/${provider}`;
-
   // GET /providers — what this deployment can offer + what is already connected.
   r.get('/providers', async (c) => c.json({
     providers: availableMailboxProviders(c.env as unknown as Record<string, unknown>),
@@ -201,65 +195,24 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
   r.get('/connections', async (c) =>
     c.json({ connections: await listMailboxConnections(db, c.get('tenantId') as number) }));
 
-  /**
-   * GET /connect/:provider — build the consent URL.
-   *
-   * Returned as JSON for the client to navigate to, rather than a 302 from here:
-   * a top-level navigation cannot carry the bearer token, so the browser must
-   * make the jump itself after an authenticated fetch.
-   */
-  r.get('/connect/:provider', async (c) => {
-    const env = c.env as Env;
-    const name = c.req.param('provider');
-    const provider = getMailboxProvider(name);
-    if (!provider) return c.json({ error: 'Unknown mailbox provider.' }, 400);
-
-    const authUrl = await buildProviderConsentUrl(env, provider, {
-      providerName: name,
-      redirectUri: callbackUrl(c, name),
-      userId: c.get('userId') as string,
-      tenantId: c.get('tenantId') as number,
-      returnTo: c.req.query('returnTo'),
-      returnToFallback: DEFAULT_RETURN_TO,
-    });
-    if (!authUrl) {
-      return c.json({ error: `${provider.label} is not configured on this deployment.` }, 503);
-    }
-    return c.json({ authUrl });
-  });
-
-  // GET /callback/:provider — provider redirect (PUBLIC; authed by signed state).
-  r.get('/callback/:provider', async (c) => {
-    const env = c.env as Env;
-    const name = c.req.param('provider');
-    const provider = getMailboxProvider(name);
-    const base = resolveAppBaseUrl(env);
-    const code = c.req.query('code');
-    const rawState = c.req.query('state');
-
-    // The user declining consent is a normal outcome, not an error — say so.
-    if (c.req.query('error')) return c.redirect(`${base}${DEFAULT_RETURN_TO}?mailbox=declined`);
-    if (!provider || !code || !rawState) return c.redirect(`${base}${DEFAULT_RETURN_TO}?mailbox=error`);
-
-    const result = await completeProviderOAuthCallback(env, provider, {
-      providerName: name, code, rawState, redirectUri: callbackUrl(c, name),
-    });
-    if (!result.ok) {
-      if (result.reason === 'exchange_failed') {
-        reportCaughtError(result.error, { source: 'presentation/routes/mailboxRoutes.ts', operation: 'callback' });
-      }
-      const returnTo = result.returnTo ?? DEFAULT_RETURN_TO;
-      const outcome = result.reason === 'exchange_failed' ? 'error' : result.reason;
-      return c.redirect(`${base}${returnTo}?mailbox=${outcome}`);
-    }
-    const { state, tokens: tok } = result;
-
-    try {
+  // GET /connect/:provider + GET /callback/:provider — the shared connect pair;
+  // only storing the grant and arming its watch is the mailbox's own.
+  mountProviderOAuthConnect<MailboxProvider>(r, {
+    callbackPath: (name) => `/api/mailbox/callback/${name}`,
+    outcomeParam: 'mailbox',
+    defaultReturnTo: DEFAULT_RETURN_TO,
+    source: 'presentation/routes/mailboxRoutes.ts',
+    resolveConnect: (name) => {
+      const provider = getMailboxProvider(name);
+      return provider ? { provider, oauth: provider, label: provider.label } : { error: 'Unknown mailbox provider.' };
+    },
+    onConnected: async (c, { provider, state, tokens }) => {
+      const env = c.env as Env;
       // The mailbox address is not optional the way a calendar's is: it is the
       // From: of every campaign and the natural key of the row, so a grant we
       // cannot name is refused rather than stored half-identified.
-      const account = await provider.accountInfo(tok.access_token);
-      if (!account.email) return c.redirect(`${base}${state.returnTo}?mailbox=no_account`);
+      const account = await provider.accountInfo(tokens.access_token);
+      if (!account.email) return 'no_account';
 
       const saved = await saveMailboxConnection(db, env, {
         tenantId: state.tenantId,
@@ -267,10 +220,10 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
         provider: provider.name,
         accountEmail: account.email,
         displayName: account.displayName,
-        accessToken: tok.access_token,
-        refreshToken: tok.refresh_token,
-        expiresInSeconds: tok.expires_in,
-        scope: tok.scope ?? provider.scopes.join(' '),
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresInSeconds: tokens.expires_in,
+        scope: tokens.scope ?? provider.scopes.join(' '),
       });
       // Arm the push subscription as part of connecting, not on the next sweep —
       // a mailbox connected at 09:00 must be able to start a workflow at 09:01.
@@ -280,11 +233,8 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
       c.executionCtx.waitUntil(
         ensureMailboxWatch(db, env, state.tenantId, saved.id).then(() => undefined),
       );
-      return c.redirect(`${base}${state.returnTo}?mailbox=connected`);
-    } catch (error) {
-      reportCaughtError(error, { source: 'presentation/routes/mailboxRoutes.ts', operation: 'callback' });
-      return c.redirect(`${base}${state.returnTo}?mailbox=error`);
-    }
+      return 'connected';
+    },
   });
 
   // PATCH /connections/:id — the sending opt-in/out. Manager-gated: this is what

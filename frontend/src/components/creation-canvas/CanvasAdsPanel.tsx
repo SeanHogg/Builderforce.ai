@@ -19,7 +19,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
 import { PanelTabs } from './PanelTabs';
 import { AdAccountsTab } from './ads/AdAccountsTab';
 import { AdCampaignsTab } from './ads/AdCampaignsTab';

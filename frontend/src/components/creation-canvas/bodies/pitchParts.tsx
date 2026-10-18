@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/pitch.module.css';
 import { PITCH_MAX_SCORE, type PitchLabelled } from '@/lib/pitchCompetition';
 
 /**

@@ -12,9 +12,11 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * All routes require a tenant-scoped JWT (authMiddleware).
  */
 import { Hono, type Context } from 'hono';
-import { eq, and, isNull, desc, inArray, gte } from 'drizzle-orm';
-import { synthesizeRunFailedEvent } from '../../application/runtime/toolAuditReadRepair';
+import { eq, and, isNull, desc } from 'drizzle-orm';
+import { readToolAuditEvents } from '../../application/runtime/toolAuditRead';
 import { effectiveSkillsForHost } from '../../application/skills/skillAssignmentPort';
+import { listPlatformPersonas } from '../../application/persona/platformPersonaCatalog';
+import { listAgentHostDirectory } from '../../application/agentHost/agentHostDirectory';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   agentHosts,
@@ -26,16 +28,11 @@ import {
   cronJobs,
   projects,
   tenants,
-  usageSnapshots,
-  toolAuditEvents,
-  approvals,
   executions,
   marketplaceSkills,
-  specs,
-  taskSpecs,
-  platformPersonas,
 } from '../../infrastructure/database/schema';
-import { runTelemetryDatabase } from '../../application/shared/runTelemetryDatabase';
+import { agentHostUsageTotals, listAgentHostUsageSnapshots } from '../../application/agentHost/agentHostUsage';
+import { findActiveProjectSpec, listTaskSpecs } from '../../application/prd/specStore';
 import { cascadeAgentHostDelete } from '../../application/shared/siblingCascade';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { invalidateAgentHostKeyCache } from '../../infrastructure/auth/keyResolutionCache';
@@ -65,14 +62,15 @@ import { agentDispatches } from '../../infrastructure/database/schema';
 import { taskInTenant } from '../../infrastructure/database/tenantScope';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { invalidateOnlineAgentHost } from '../../application/llm/hostEgress';
-import { normalizeRequestKind } from '../../domain/approval/requestKind';
+import { requestApproval } from '../../application/approval/requestApproval';
+import { legacyAliasNotice } from '../middleware/legacyAlias';
 import type { HonoEnv, Env } from '../../env';
 import { invalidateProjectGovernance } from '../../application/runtime/runContextSource';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import type { AgentHostService } from '../../application/agentHost/AgentHostService';
 import { classifyContextFiles, normalizeMachineProfile } from './agentHostAssignmentContext';
-import { TenantRole } from '../../domain/shared/types';
+import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { bumpTenantAgentHostCount } from '../../application/tenant/tenantResourceCounts';
 import { resolveScheduledAgentBinding } from '../../application/agentHost/scheduledAgentBinding';
@@ -113,7 +111,8 @@ import {
   isRootBodyIssue,
   nullWhenNoJsonObject,
 } from './agentHostRoutes.schemas';
-import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
+import { reportExecutionState } from '../../application/runtime/reportExecutionState';
+import { buildRuntimeService } from '../../buildRuntimeService';
 import { registerLateSteerRoute } from './agentHostLateSteerRoute';
 import { registerHostTelemetryRoutes } from './agentHostTelemetryRoutes';
 
@@ -356,30 +355,20 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     });
   });
 
-  // GET /api/agent-hosts – list all agentHosts for the current tenant
+  // GET /api/agent-hosts – THE tenant host list (canonical for the legacy
+  // /api/tenants/:id/agentHosts and /api/projects/:id/agentHosts aliases).
   // Optional query params:
-  //  - status=online  (only agentHosts with connectedAt NOT NULL)
-  //  - status=offline (only agentHosts with connectedAt NULL)
+  //  - status=online|offline  (canonical liveness rule, not connectedAt alone)
+  //  - projectId=<id>         (only hosts linked to that project)
+  // Rows carry capabilities, project links and a capability summary.
   router.get('/', authMiddleware, async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const status = (c.req.query('status') ?? '').toString().trim().toLowerCase();
-
-    const filterStatus = status === 'online' || status === 'offline' ? status : null;
-    const agentHosts = await agentHostService.listAgentHostsForTenant(tenantId, filterStatus);
-
-    const rows = agentHosts.map((agentHost) => ({
-      id: agentHost.id,
-      name: agentHost.name,
-      slug: agentHost.slug,
-      status: agentHost.status,
-      // Canonical liveness — connectedAt alone is unreliable (stuck-online bug).
-      online: isAgentHostOnline(agentHost),
-      connectedAt: agentHost.connectedAt,
-      lastSeenAt: agentHost.lastSeenAt,
-      createdAt: agentHost.createdAt,
-    }));
-
-    return c.json({ agentHosts: rows });
+    const projectId = Number(c.req.query('projectId'));
+    const agentHosts = await listAgentHostDirectory(db, {
+      tenantId: c.get('tenantId') as number,
+      status: c.req.query('status'),
+      projectId: c.req.query('projectId') != null && Number.isFinite(projectId) ? projectId : null,
+    }, agentHostService);
+    return c.json({ agentHosts });
   });
 
   // POST /api/agent-hosts – register a new BuilderForce Agents instance
@@ -1816,22 +1805,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await agentHostService.getAgentHostForTenant(agentHostId, tenantId);
     if (!agentHost) return c.json({ error: 'AgentHost not found' }, 404);
 
-    const snapshots = await runTelemetryDatabase(db)
-      .select({
-        id:               usageSnapshots.id,
-        agentHostId:      usageSnapshots.agentHostId,
-        sessionKey:       usageSnapshots.sessionKey,
-        inputTokens:      usageSnapshots.inputTokens,
-        outputTokens:     usageSnapshots.outputTokens,
-        contextTokens:    usageSnapshots.contextTokens,
-        contextWindowMax: usageSnapshots.contextWindowMax,
-        compactionCount:  usageSnapshots.compactionCount,
-        ts:               usageSnapshots.ts,
-      })
-      .from(usageSnapshots)
-      .where(and(eq(usageSnapshots.agentHostId, agentHostId), eq(usageSnapshots.tenantId, tenantId)))
-      .orderBy(desc(usageSnapshots.ts))
-      .limit(limit);
+    const snapshots = await listAgentHostUsageSnapshots(db, tenantId, agentHostId, limit);
 
     return c.json({ snapshots });
   });
@@ -1852,42 +1826,9 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const execRaw = Number(c.req.query('executionId'));
     const executionId = Number.isFinite(execRaw) && execRaw > 0 ? execRaw : null;
 
-    const conditions = [
-      eq(toolAuditEvents.agentHostId,    agentHostId),
-      eq(toolAuditEvents.tenantId,  tenantId),
-      ...(runId       ? [eq(toolAuditEvents.runId,       runId)]       : []),
-      ...(sessKey     ? [eq(toolAuditEvents.sessionKey,  sessKey)]     : []),
-      ...(executionId ? [eq(toolAuditEvents.executionId, executionId)] : []),
-    ];
-
-    const rows = await runTelemetryDatabase(db)
-      .select({
-        id:          toolAuditEvents.id,
-        runId:       toolAuditEvents.runId,
-        sessionKey:  toolAuditEvents.sessionKey,
-        toolCallId:  toolAuditEvents.toolCallId,
-        toolName:    toolAuditEvents.toolName,
-        category:    toolAuditEvents.category,
-        args:        toolAuditEvents.args,
-        result:      toolAuditEvents.result,
-        durationMs:  toolAuditEvents.durationMs,
-        executionId: toolAuditEvents.executionId,
-        ts:          toolAuditEvents.ts,
-      })
-      .from(toolAuditEvents)
-      .where(and(...conditions))
-      .orderBy(toolAuditEvents.ts)
-      .limit(limit);
-
-    // Read-path repair (shared with the cloud tool-audit read): surface a terminal
-    // `run.failed` for an execution that failed without emitting the telemetry event,
-    // so a DISCONNECTED host's Log/Timeline tab shows the failure. Events are oldest-
-    // first here, so the terminal failure appends.
-    if (executionId != null) {
-      const synthetic = await synthesizeRunFailedEvent(db, tenantId, executionId, rows);
-      if (synthetic) rows.push(synthetic);
-    }
-
+    // ONE read for host and cloud tool-audit (toolAuditRead.ts); this door only
+    // names the host. Oldest-first, which the host Log tab renders.
+    const rows = await readToolAuditEvents(db, tenantId, { kind: 'agentHost', agentHostId, runId, sessionKey: sessKey }, { limit, order: 'oldest', executionId });
     return c.json({ events: rows });
   });
 
@@ -1895,7 +1836,8 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
   // POST /api/agent-hosts/:id/approval-request?key=<agentHostApiKey>
   // P3-3: AgentHost creates a pending approval for a destructive/high-risk action.
   // -------------------------------------------------------------------------
-  router.post('/:id/approval-request', async (c) => {
+  // Kept for deployed agent hosts; the canonical door is POST /api/approvals?agentHostId=&key=.
+  router.post('/:id/approval-request', legacyAliasNotice('/api/approvals'), async (c) => {
     const agentHostId = Number(c.req.param('id'));
     const key    = extractAgentHostKey(c);
     const env    = c.env;
@@ -1904,97 +1846,55 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const body = await parseBody(c, ApprovalRequestBody);
-
-    if (!body.actionType || !body.description) {
-      return c.json({ error: 'actionType and description are required' }, 400);
-    }
-
-    const kind = normalizeRequestKind(body.kind);
-
-    const approvalId = crypto.randomUUID();
-    await db.insert(approvals).values({
-      id:          approvalId,
+    // Thin adapter over the ONE request use case (`POST /api/approvals` is the
+    // canonical door): this path used to insert on its own and so skipped the
+    // auto-approval rules, the `task.execution` forgery guard and the notifications.
+    const result = await requestApproval(db, env, {
       tenantId:    agentHost.tenantId,
       agentHostId,
-      requestedBy: body.requestedBy ?? String(agentHostId),
-      kind,
+      callerUserId: null,
+      requestedBy: body.requestedBy,
+      kind:        body.kind,
       actionType:  body.actionType,
       description: body.description,
-      metadata:    body.metadata != null ? JSON.stringify(body.metadata) : null,
-      expiresAt:   body.expiresAt ? new Date(body.expiresAt) : null,
+      metadata:    body.metadata,
+      expiresAt:   body.expiresAt,
     });
-
-    // Notify connected browser clients via the relay
-    if (env.AGENT_HOST_RELAY) {
-      const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(agentHostId)));
-      stub.fetch(new Request('https://internal/dispatch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'approval.request',
-          approvalId,
-          kind,
-          actionType:  body.actionType,
-          description: body.description,
-          expiresAt:   body.expiresAt,
-        }),
-      })).catch((error) => reportCaughtError(error, { source: "presentation/routes/agentHostRoutes.ts", operation: "createAgentHostRoutes", context: { logMessage: '[agent-host] approval relay notification failed', details: {
-        agentHostId,
-        approvalId,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-      } } }));
-    }
-
-    return c.json({ ok: true, approvalId }, 201);
+    if (!result.ok) return c.json({ error: result.error }, result.httpStatus);
+    return c.json({ ok: true, approvalId: result.approvalId, status: result.status }, 201);
   });
 
   // -------------------------------------------------------------------------
   // PATCH /api/agent-hosts/:id/executions/:eid/state
-  // AgentHost callback: update execution lifecycle state after task.assign dispatch.
-  // Reports running → completed / failed back to the executions table so the
-  // portal reflects live task status without requiring a tenant JWT.
+  // AgentHost callback: running → completed / failed / cancelled after a task.assign
+  // dispatch. An ADAPTER: it proves the host key and that the run was dispatched to
+  // THIS host, then applies the ONE execution-state use case the tenant-JWT door uses
+  // (reportExecutionState.ts) — so a host-run report syncs the ticket lane, streams
+  // live and records its insight exactly like any other run. Late/duplicate reports
+  // are acknowledged with the run as it stands, never resurrecting a cancelled run.
   // -------------------------------------------------------------------------
   router.patch('/:id/executions/:eid/state', async (c) => {
-    const agentHostId      = Number(c.req.param('id'));
+    const agentHostId = Number(c.req.param('id'));
     const executionId = Number(c.req.param('eid'));
-    const key         = extractAgentHostKey(c);
 
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(agentHostId, extractAgentHostKey(c));
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const body = await parseBody(c, ExecutionStateBody);
 
-    const valid = ['running', 'completed', 'failed', 'cancelled'];
-    if (!valid.includes(body.status)) {
-      return c.json({ error: `status must be one of: ${valid.join(', ')}` }, 400);
-    }
-
-    const now = new Date();
-    await db
-      .update(executions)
-      .set({
-        status: body.status as 'running' | 'completed' | 'failed' | 'cancelled',
-        ...(body.result       !== undefined ? { result: body.result }             : {}),
-        ...(body.errorMessage !== undefined ? { errorMessage: body.errorMessage } : {}),
-        ...(body.status === 'running'   ? { startedAt: now }   : {}),
-        ...(body.status === 'completed' || body.status === 'failed' || body.status === 'cancelled'
-          ? { completedAt: now }
-          : {}),
-        updatedAt: now,
-      })
-      .where(and(eq(executions.id, executionId), eq(executions.agentHostId, agentHostId)));
-
-    const [row] = await db
-      .select()
+    const [owned] = await db
+      .select({ tenantId: executions.tenantId })
       .from(executions)
-      .where(and(eq(executions.id, executionId), eq(executions.agentHostId, agentHostId)));
-    if (!row) return c.json({ error: 'Execution not found' }, 404);
-    // Terminal: a steer still pending on the run never reached it — it is LATE and
-    // starts a follow-up run under the person who sent it (lateSteerFollowUp.ts).
-    if (body.status !== 'running') {
-      c.executionCtx.waitUntil(settleLateSteersSafely({ env: c.env as unknown as Env, db }, { executionId, tenantId: row.tenantId }));
-    }
-    return c.json(row);
+      .where(and(eq(executions.id, executionId), eq(executions.agentHostId, agentHostId), eq(executions.tenantId, Number(agentHost.tenantId))))
+      .limit(1);
+    if (!owned) return c.json({ error: 'Execution not found' }, 404);
+
+    const env = c.env as unknown as Env;
+    const execution = await reportExecutionState(
+      { env, db, runtimeService: buildRuntimeService(env, db), waitUntil: (task) => c.executionCtx.waitUntil(task), tolerateLate: true },
+      { executionId, tenantId: owned.tenantId, status: body.status as ExecutionStatus, result: body.result, errorMessage: body.errorMessage },
+    );
+    return c.json(execution.toPlain());
   });
 
   // POST /api/agent-hosts/:id/late-steers — steers a host could not deliver because
@@ -2024,19 +1924,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
 
     if (!assignment) return c.json({ spec: null });
 
-    const [spec] = await db
-      .select()
-      .from(specs)
-      .where(
-        and(
-          eq(specs.projectId, assignment.projectId),
-          eq(specs.tenantId, Number(agentHost.tenantId)),
-          inArray(specs.status, ['ready', 'in_progress']),
-        ),
-      )
-      .orderBy(desc(specs.updatedAt))
-      .limit(1);
-
+    const spec = await findActiveProjectSpec(db, Number(agentHost.tenantId), assignment.projectId);
     return c.json({ spec: spec ?? null });
   });
 
@@ -2052,16 +1940,7 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost = await verifyAgentHostApiKey(agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    const rows = await db
-      .select({
-        id: specs.id, goal: specs.goal, status: specs.status, prd: specs.prd,
-        archSpec: specs.archSpec, taskList: specs.taskList, projectId: specs.projectId,
-        isPrimary: taskSpecs.isPrimary, createdAt: specs.createdAt, updatedAt: specs.updatedAt,
-      })
-      .from(taskSpecs)
-      .innerJoin(specs, eq(specs.id, taskSpecs.specId))
-      .where(and(eq(taskSpecs.taskId, taskId), eq(specs.tenantId, Number(agentHost.tenantId))))
-      .orderBy(desc(taskSpecs.isPrimary), desc(specs.updatedAt)).limit(LIST_ROW_CAP);
+    const rows = await listTaskSpecs(db, Number(agentHost.tenantId), taskId);
 
     return c.json({ specs: rows });
   });
@@ -2076,13 +1955,8 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     const agentHost   = await verifyAgentHostApiKey(agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
-    const rows = await db
-      .select()
-      .from(platformPersonas)
-      .where(eq(platformPersonas.active, true))
-      .orderBy(platformPersonas.name).limit(LIST_ROW_CAP);
-
-    return c.json({ personas: rows });
+    // Same active catalogue as /api/v1/personas — one cached read.
+    return c.json({ personas: await listPlatformPersonas(c.env as Env, db, 'active') });
   });
 
   // -------------------------------------------------------------------------
@@ -2096,16 +1970,8 @@ export function createAgentHostRoutes(db: Db, agentHostService: AgentHostService
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const rows = await runTelemetryDatabase(db)
-      .select({
-        inputTokens:  usageSnapshots.inputTokens,
-        outputTokens: usageSnapshots.outputTokens,
-      })
-      .from(usageSnapshots)
-      .where(and(eq(usageSnapshots.agentHostId, agentHostId), gte(usageSnapshots.ts, since)));
-
-    const totalInput  = rows.reduce((s, r) => s + r.inputTokens, 0);
-    const totalOutput = rows.reduce((s, r) => s + r.outputTokens, 0);
+    const { inputTokens: totalInput, outputTokens: totalOutput } =
+      await agentHostUsageTotals(db, Number(agentHost.tenantId), agentHostId, since);
     return c.json({
       period:            '30d',
       since:             since.toISOString(),

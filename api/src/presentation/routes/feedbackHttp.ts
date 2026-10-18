@@ -23,6 +23,8 @@
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../env';
 import type { SubmitQuotaExceeded, SubmitResult } from '../../application/feedback/feedbackEngine';
+import { parseFeedbackStatus, type FeedbackListFilter } from '../../application/feedback/feedbackQueries';
+import { limitParam } from './queryParams';
 
 export type FeedbackSubmitOutcome = SubmitResult | { rateLimited: true } | SubmitQuotaExceeded;
 
@@ -50,3 +52,28 @@ export function respondToFeedbackSubmit(
   }
   return c.json(result, acceptedStatus);
 }
+
+/**
+ * The triage-queue query string (`status`, `limit`, `before`) read ONCE for both
+ * queue doors — the workspace queue and the superadmin roll-up — so a paging or
+ * status-filter rule cannot differ between them. The caller supplies the scope.
+ */
+export function feedbackQueueFilter(
+  c: Context<HonoEnv>,
+  scope: { tenantId: number | null; projectId?: number | null },
+): FeedbackListFilter {
+  return {
+    tenantId: scope.tenantId,
+    projectId: scope.projectId ?? null,
+    status: parseFeedbackStatus(c.req.query('status')),
+    limit: c.req.query('limit') ? limitParam(c.req.query('limit'), 50, 500) : undefined,
+    before: c.req.query('before') ?? null,
+  };
+}
+
+/** The human gate's two answers; anything else is the caller's 400. */
+export function isFeedbackDecision(value: unknown): value is 'approved' | 'declined' {
+  return value === 'approved' || value === 'declined';
+}
+
+export const FEEDBACK_DECISION_ERROR = "decision must be 'approved' or 'declined'";

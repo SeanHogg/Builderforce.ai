@@ -10,7 +10,8 @@ import { useCanvasPhase } from '../phase/CanvasPhaseContext';
 import { CanvasPhasePath } from '../phase/CanvasPhasePath';
 import type { CanvasSessionActionHandler } from '../CanvasSessionActions';
 import type { useCanvasBrainSurface } from '../hooks/useCanvasBrainSurface';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/chrome.module.css';
+import commandBarStyles from '../styles/commandBar.module.css';
 
 export interface CanvasTopChromeProps {
   phoneViewport: boolean;
@@ -94,7 +95,7 @@ export function CanvasTopChrome({ phoneViewport, topChromeRef, title, surface, s
           the taller of the two things on the top line; on a phone the app-bar wrapper
           above is measured instead, because this one is `display:none` there and a
           hidden box measures zero. */}
-      {canvasChromeShows('surfaces', collapsed) && <div ref={phoneViewport ? undefined : topChromeRef} className={`${styles.floatCard} ${styles.surfaceChips}`}>
+      {canvasChromeShows('surfaces', collapsed) && <div ref={phoneViewport ? undefined : topChromeRef} className={`${commandBarStyles.floatCard} ${commandBarStyles.surfaceChips}`}>
         <PhaseModalitySelector phase={phase} onPhaseChange={setPhase} surface={surface} onSurfaceChange={setSurface} />
         {!phoneViewport && pathInChrome && <CanvasPhasePath />}
       </div>}

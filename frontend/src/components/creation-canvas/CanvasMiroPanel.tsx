@@ -18,7 +18,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
+import adsStyles from './styles/ads.module.css';
 import { connectorsApi, type ConnectorConnection } from '@/lib/connectorsApi';
 import {
   miroBoardToCanvas, type MiroBoardSummary, type MiroConnector, type MiroImportResult, type MiroItem,
@@ -145,34 +146,34 @@ export function CanvasMiroPanel({ onImport, onClose, connectHref }: CanvasMiroPa
         >{connection.name}</button>)}
       </div>}
 
-      {error && <p className={styles.driveNotice} role="alert">{error}</p>}
+      {error && <p className={adsStyles.driveNotice} role="alert">{error}</p>}
 
-      <div className={styles.driveList} role="list">
+      <div className={adsStyles.driveList} role="list">
         {boards.map((board) => <div key={board.id} className={styles.driveRow} role="listitem">
           <button
             type="button"
-            className={styles.driveRowMain}
+            className={adsStyles.driveRowMain}
             disabled={busyId !== null}
             onClick={() => void importBoard(board)}
           >
             <span aria-hidden>▦</span>
-            <span className={styles.driveRowName}>{board.name || t('untitledBoard')}</span>
+            <span className={adsStyles.driveRowName}>{board.name || t('untitledBoard')}</span>
             <small>{busyId === board.id
               ? (progress ? t('importingCount', { count: progress }) : t('importing'))
               : t('import')}</small>
           </button>
         </div>)}
 
-        {loading && <p className={styles.driveEmpty}>{t('loading')}</p>}
-        {!loading && !connections.length && <p className={styles.driveEmpty}>{t('connectPrompt')}</p>}
-        {!loading && connections.length > 0 && !boards.length && <p className={styles.driveEmpty}>{t('noBoards')}</p>}
+        {loading && <p className={adsStyles.driveEmpty}>{t('loading')}</p>}
+        {!loading && !connections.length && <p className={adsStyles.driveEmpty}>{t('connectPrompt')}</p>}
+        {!loading && connections.length > 0 && !boards.length && <p className={adsStyles.driveEmpty}>{t('noBoards')}</p>}
       </div>
 
       {/* The one honest thing to say about Miroverse, said where someone would
           otherwise go looking for it. A community template becomes importable the
           moment it is copied into the person's own Miro account, which is what
           Miro's own terms permit — so this is a route, not a refusal. */}
-      <p className={styles.driveEmpty}>{t('communityTemplateHint')}</p>
+      <p className={adsStyles.driveEmpty}>{t('communityTemplateHint')}</p>
 
       {!connections.length && <a className={styles.driveMore} href={connectHref}>{t('connect')}</a>}
     </aside>

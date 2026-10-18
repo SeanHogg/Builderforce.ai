@@ -1,6 +1,6 @@
 import { useTranslations } from 'next-intl';
 import { FlowExecutionSettings } from '../FlowExecutionSettings';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/bodies.module.css';
 import type { CreationBodyProps } from './types';
 import { asRecord } from './shared';
 import { liveStepDotClass } from '../liveGraphStatus';

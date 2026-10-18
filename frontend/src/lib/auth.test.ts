@@ -219,11 +219,11 @@ describe('resendVerificationCode', () => {
 // ---------------------------------------------------------------------------
 
 describe('getMyTenants', () => {
-  it('GETs /api/auth/my-tenants with Bearer token', async () => {
+  it('GETs /api/tenants with Bearer token', async () => {
     fetchSpy.mockResolvedValueOnce(mockOk([sampleTenant]));
     const result = await getMyTenants('web-token-123');
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toMatch(/\/api\/auth\/my-tenants$/);
+    expect(url).toMatch(/\/api\/tenants$/);
     expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer web-token-123');
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('tenant-1');

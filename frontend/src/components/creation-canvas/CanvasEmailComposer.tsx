@@ -25,7 +25,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/documents.module.css';
+import inspectorStyles from './styles/inspector.module.css';
 import type { CreationNodeData } from './types';
 import {
   mailboxApi,
@@ -129,13 +130,13 @@ export function CanvasEmailComposer({ data, editable, persistence, onChange }: {
   const configurable = providers.filter((provider) => provider.configured);
 
   return <>
-    <section className={styles.inspectorSection} aria-label={t('mailbox')}>
-      <div className={styles.inspectorSectionHeading}>
+    <section className={inspectorStyles.inspectorSection} aria-label={t('mailbox')}>
+      <div className={inspectorStyles.inspectorSectionHeading}>
         <strong>{t('mailbox')}</strong>
         <span>{received ? t('receivedLabel') : selectedId != null ? t('readyToSend') : t('notConnected')}</span>
       </div>
-      {!loaded ? <p className={styles.inspectorHint}>{t('loadingMailboxes')}</p>
-        : anonymous ? <p className={styles.inspectorHint}>{t('anonymousHint')}</p>
+      {!loaded ? <p className={inspectorStyles.inspectorHint}>{t('loadingMailboxes')}</p>
+        : anonymous ? <p className={inspectorStyles.inspectorHint}>{t('anonymousHint')}</p>
         : sendable.length > 0 ? <>
           <label>{t('sendsFrom')}
             <select
@@ -151,10 +152,10 @@ export function CanvasEmailComposer({ data, editable, persistence, onChange }: {
               {sendable.map((connection) => <option key={connection.id} value={connection.id}>{connection.accountEmail}</option>)}
             </select>
           </label>
-          {!resolved.ok && <p className={styles.inspectorHint}>{resolved.error}</p>}
+          {!resolved.ok && <p className={inspectorStyles.inspectorHint}>{resolved.error}</p>}
         </> : <>
-          <p className={styles.inspectorHint}>{connections.length ? t('noSendingMailbox') : t('noMailboxHint')}</p>
-          <div className={styles.inspectorPills}>
+          <p className={inspectorStyles.inspectorHint}>{connections.length ? t('noSendingMailbox') : t('noMailboxHint')}</p>
+          <div className={inspectorStyles.inspectorPills}>
             {configurable.map((provider) => <button key={provider.name} type="button" disabled={busy || !editable} onClick={() => void connect(provider)}>{t('connectProvider', { provider: provider.label })}</button>)}
           </div>
         </>}
@@ -204,7 +205,7 @@ export function CanvasEmailComposer({ data, editable, persistence, onChange }: {
 
     {received
       ? webUrl && <a className={styles.inspectorSettingsLink} href={webUrl} target="_blank" rel="noreferrer noopener">{t('openInProvider')}</a>
-      : <button type="button" className={styles.fullButton} disabled={!canSend || busy} onClick={() => void send()}>{busy ? t('sending') : t('send')}</button>}
-    {notice && <p className={styles.inspectorHint} role="status">{notice}</p>}
+      : <button type="button" className={inspectorStyles.fullButton} disabled={!canSend || busy} onClick={() => void send()}>{busy ? t('sending') : t('send')}</button>}
+    {notice && <p className={inspectorStyles.inspectorHint} role="status">{notice}</p>}
   </>;
 }

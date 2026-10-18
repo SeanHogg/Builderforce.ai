@@ -14,7 +14,7 @@ import { runVariablePath, upstreamRunVariables } from '@/domains/workflow/domain
 import { creationObjectName } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/inspector.module.css';
 
 /**
  * CONFIGURING A STEP THAT LIVES ON THE BOARD.

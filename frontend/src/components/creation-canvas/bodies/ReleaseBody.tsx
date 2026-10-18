@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/bodies.module.css';
 import type { CreationBodyProps } from './types';
 import { useCreationNodeActions } from './nodeActions';
 import { authoredText } from './shared';

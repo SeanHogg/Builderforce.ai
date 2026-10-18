@@ -5,7 +5,7 @@ import type { BuiltinAgentSurfaceIntent } from '@/lib/team/builtinAgentSurface';
 import { type CanvasResumeShare, tasksApi } from '@/lib/builderforceApi';
 import type { IdeProject } from '@/lib/types';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/inspector.module.css';
 import { AUTHORED_DRAWING_STROKE, AUTHORED_WEBSITE_ACCENT } from '@/domains/canvas/domain/authoredColors';
 import { DatasetPlotAction, DatasetProfileSummary } from './datasetInspectorParts';
 import { CanvasResumeEditor } from '../CanvasResumeEditor';

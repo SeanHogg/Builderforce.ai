@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { Edge } from '@xyflow/react';
 import { useCanvasPhase } from './CanvasPhaseContext';
 import { phaseFocusOf } from '@/lib/canvasPhaseLens';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/phase.module.css';
 
 /**
  * The phase lens, applied to CONNECTIONS: an edge between two cards the phase is not

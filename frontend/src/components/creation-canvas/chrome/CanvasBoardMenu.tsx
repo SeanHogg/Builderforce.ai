@@ -4,7 +4,8 @@ import { MoreActionsIcon } from '@/components/canvas/CanvasCommands';
 import { CanvasMenuSheet } from '../CanvasMenuSheet';
 import { CanvasBoardMenuBody, type CanvasBoardMenuBodyProps, type CanvasDockPanel } from '../CanvasBoardMenuBody';
 import type { CanvasGesture } from '../canvasPointerMode';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/chrome.module.css';
+import commandBarStyles from '../styles/commandBar.module.css';
 
 export interface CanvasBoardMenuProps {
   open: boolean;
@@ -63,7 +64,7 @@ export function CanvasBoardMenu({
 }: CanvasBoardMenuProps) {
   const t = useTranslations('creationCanvas');
   return (
-      <span className={styles.handoffGroup} data-testid="canvas-board-menu">
+      <span className={commandBarStyles.handoffGroup} data-testid="canvas-board-menu">
           <button type="button" className={styles.sessionActionButton} aria-expanded={open} aria-haspopup="menu" aria-label={t('moreActions')} title={t('moreActions')} onClick={onToggle}><MoreActionsIcon /></button>
           {/* NO SAVE BUTTON HERE: a guest board is kept by taking an account, and the
               header's CTA already becomes "Keep your work" the moment this browser holds

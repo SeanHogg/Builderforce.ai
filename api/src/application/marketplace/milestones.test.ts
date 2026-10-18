@@ -32,7 +32,7 @@ vi.mock('../integrations/payments', () => ({
 }));
 
 const {
-  moveMilestone, deleteDraftMilestone, bindScheduleToEngagement, readJobSchedule,
+  moveMilestone, deleteDraftMilestone, bindScheduleToEngagement, readJobSchedule, addScheduleMilestone,
   readProposalSchedules, replaceProposalSchedule, readEngagementSchedule, readFreelancerMilestones,
 } = await import('./milestones');
 
@@ -488,5 +488,36 @@ describe('deleteDraftMilestone', () => {
   it('reports false when the row was past draft — a financial record is not editable', async () => {
     const db = fakeDb([[]]);
     expect(await deleteDraftMilestone(db as unknown as Db, 7, 'm-1')).toBe(false);
+  });
+});
+
+// Both authoring routes (`/api/jobs/:id/milestones`, `/api/engagements/:id/milestones`)
+// call this, so the parent-ownership rule they used to each re-type is pinned once.
+describe('addScheduleMilestone', () => {
+  const fields = { tenantId: 7, title: 'Design', amountCents: 1000, createdByUserId: 'u-c' };
+
+  it("refuses a job that is not this tenant's open posting, writing nothing", async () => {
+    const db = fakeDb([[]]);
+    expect(await addScheduleMilestone(db as unknown as Db, { ...fields, parent: { kind: 'job', jobId: 'j-1' } })).toBeNull();
+    expect(db.calls.map((c) => c.kind)).toEqual(['select']);
+  });
+
+  it('writes a draft on an open posting, with no engagement or freelancer', async () => {
+    const db = fakeDb([[{ id: 'j-1' }], [milestone({ jobId: 'j-1', engagementId: null })]]);
+    const created = await addScheduleMilestone(db as unknown as Db, { ...fields, parent: { kind: 'job', jobId: 'j-1' } });
+    expect(created?.jobId).toBe('j-1');
+    expect(db.calls[1]?.payload).toMatchObject({ jobId: 'j-1', engagementId: null, freelancerUserId: null, status: 'draft' });
+  });
+
+  it('refuses an engagement outside the tenant', async () => {
+    const db = fakeDb([[]]);
+    expect(await addScheduleMilestone(db as unknown as Db, { ...fields, parent: { kind: 'engagement', engagementId: 'e-9' } })).toBeNull();
+    expect(db.calls).toHaveLength(1);
+  });
+
+  it("binds an engagement line to that engagement's freelancer", async () => {
+    const db = fakeDb([[{ id: 'e-1', freelancerUserId: 'user-f' }], [milestone()]]);
+    await addScheduleMilestone(db as unknown as Db, { ...fields, parent: { kind: 'engagement', engagementId: 'e-1' } });
+    expect(db.calls[1]?.payload).toMatchObject({ engagementId: 'e-1', freelancerUserId: 'user-f', jobId: null, status: 'draft' });
   });
 });

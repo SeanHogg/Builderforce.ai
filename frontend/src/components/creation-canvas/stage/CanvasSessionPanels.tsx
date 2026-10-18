@@ -5,7 +5,7 @@ import { CopyButton } from '@/components/CopyButton';
 import type { CanvasTimelineMessage } from '../canvasBoardTypes';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
 import type { useCanvasDiagnostics } from '../hooks/useCanvasDiagnostics';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/stage.module.css';
 
 type BuildDiagnostics = ReturnType<typeof useCanvasDiagnostics>['buildDiagnostics'];
 

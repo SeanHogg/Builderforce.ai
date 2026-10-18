@@ -10,7 +10,8 @@
  * one step later — the moment a column is added to one, the workbook and the CSV
  * describe different reports and a reviewer cannot tell which is authoritative.
  * So {@link capitalizationTables} is the single shape, and each format is a
- * rendering of it.
+ * rendering of it — produced by `export/exportSource`, the api's one export
+ * renderer, from the tables this module returns.
  *
  * WHY BOTH FORMATS EXIST. CSV is the interchange format — it imports anywhere and
  * carries no types. XLSX is the one a finance reviewer actually works in: the two
@@ -28,8 +29,8 @@
  */
 
 import type { AllocationHistory, AllocationInsights } from '../insights/allocationInsights';
-import { sheetsToXlsx, type XlsxCell, type XlsxSheet } from '../office/xlsxWriter';
-import { csvMatrix } from '../export/tabularExport';
+import type { XlsxCell } from '../office/xlsxWriter';
+import type { ExportTable } from '../export/exportSource';
 
 /** Round a nullable number to `dp` decimals, or null for null. Kept NUMERIC (not
  *  pre-formatted text) so the workbook writes real numbers and only the CSV
@@ -90,14 +91,16 @@ export function capitalizationTables(history: AllocationHistory, current: Alloca
 }
 
 /**
- * The report → CSV: one flat grid, `section` naming which table a row came from.
+ * The report as ONE flat grid, `section` naming which table a row came from —
+ * what the CSV (and HTML) render of the export is serialised from.
  *
  * A CSV has one header, so the two tables are unioned and each row leaves the
  * other table's columns empty. That is the format's limitation and the reason the
- * workbook below exists — but the CSV stays because it is what imports into
- * everything, and a reader who only ever had this file must not lose it.
+ * workbook exists — the xlsx render uses {@link capitalizationTables} as its two
+ * sheets instead — but the CSV stays because it is what imports into everything,
+ * and a reader who only ever had this file must not lose it.
  */
-export function capitalizationToCsv(history: AllocationHistory, current: AllocationInsights): string {
+export function capitalizationFlatTable(history: AllocationHistory, current: AllocationInsights): ExportTable {
   const [months, epics] = capitalizationTables(history, current) as [ReportTable, ReportTable];
 
   // The union header, months' columns first. `key` is the row's identity in its
@@ -110,19 +113,12 @@ export function capitalizationToCsv(history: AllocationHistory, current: Allocat
     return [section, key, ...header.slice(2).map((c) => byColumn.get(c) ?? '')];
   };
 
-  const rows = [
-    ...months.rows.map((r) => pad('month', r[0] ?? '', months.columns, r)),
-    ...epics.rows.map((r) => pad('epic', r[0] ?? '', epics.columns, r)),
-  ];
-  return csvMatrix(header, rows);
-}
-
-/** The report → a two-sheet .xlsx workbook. */
-export function capitalizationToXlsx(history: AllocationHistory, current: AllocationInsights): Uint8Array {
-  const sheets: XlsxSheet[] = capitalizationTables(history, current).map((table) => ({
-    title: table.title,
-    columns: table.columns,
-    rows: table.rows,
-  }));
-  return sheetsToXlsx(sheets);
+  return {
+    title: 'Capitalization report',
+    columns: header,
+    rows: [
+      ...months.rows.map((r) => pad('month', r[0] ?? '', months.columns, r)),
+      ...epics.rows.map((r) => pad('epic', r[0] ?? '', epics.columns, r)),
+    ],
+  };
 }

@@ -28,7 +28,7 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
   const [showAdd, setShowAdd] = useState(false);
   const [searchQ, setSearchQ] = useState('');
   const [adding, setAdding] = useState<string | null>(null);
-  const [revoking, setRevoking] = useState<number | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -62,11 +62,11 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
     }
   };
 
-  const handleRevoke = async (assignmentId: number) => {
-    setRevoking(assignmentId);
+  const handleRevoke = async (skillSlug: string) => {
+    setRevoking(skillSlug);
     try {
-      await agentHostSkillsApi.revoke(assignmentId);
-      setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
+      await agentHostSkillsApi.revoke(agentHostId, skillSlug);
+      setAssignments((prev) => prev.filter((a) => !(a.scope === 'host' && a.skillSlug === skillSlug)));
     } catch {
       // ignore
     } finally {
@@ -182,14 +182,14 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
             Tenant-wide
           </div>
           {tenantAssignments.map((a) => (
-            <div key={a.id} style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div key={`tenant:${a.skillSlug}`} style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {a.skill?.name ?? a.skillSlug}
+                  {a.skillName ?? a.skillSlug}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                   {a.skillSlug}
-                  {a.skill?.category ? ` · ${a.skill.category}` : ''}
+                  {a.skillVer ? ` · v${a.skillVer}` : ''}
                 </div>
               </div>
               <span
@@ -217,14 +217,14 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
             AgentHost-specific
           </div>
           {agentHostAssignments.map((a) => (
-            <div key={a.id} style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div key={`host:${a.skillSlug}`} style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {a.skill?.name ?? a.skillSlug}
+                  {a.skillName ?? a.skillSlug}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                   {a.skillSlug}
-                  {a.skill?.category ? ` · ${a.skill.category}` : ''}
+                  {a.skillVer ? ` · v${a.skillVer}` : ''}
                 </div>
               </div>
               <span
@@ -242,8 +242,8 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
               </span>
               <button
                 type="button"
-                onClick={() => handleRevoke(a.id)}
-                disabled={revoking === a.id}
+                onClick={() => handleRevoke(a.skillSlug)}
+                disabled={revoking === a.skillSlug}
                 style={{
                   padding: '4px 10px',
                   fontSize: 11,
@@ -252,10 +252,10 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
                   color: 'var(--coral-bright)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: 'var(--radius-sm)',
-                  cursor: revoking === a.id ? 'wait' : 'pointer',
+                  cursor: revoking === a.skillSlug ? 'wait' : 'pointer',
                 }}
               >
-                {revoking === a.id ? '…' : 'Revoke'}
+                {revoking === a.skillSlug ? '…' : 'Revoke'}
               </button>
             </div>
           ))}

@@ -21,15 +21,11 @@
 
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
-import {
-  buildProviderConsentUrl,
-  completeProviderOAuthCallback,
-} from '../../application/shared/providerOAuthConnect';
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { mountProviderOAuthConnect } from './providerOAuthConnectRoutes';
 import { failResponse } from '../middleware/errorResponse';
-import { availableDriveProviders, getDriveProvider } from '../../application/drive/driveProviders';
+import { availableDriveProviders, getDriveProvider, type DriveProvider } from '../../application/drive/driveProviders';
 import {
   deleteDriveConnection,
   downloadDriveFile,
@@ -57,91 +53,42 @@ export function createDriveRoutes(db: Db): Hono<HonoEnv> {
     return authMiddleware(c, next);
   });
 
-  const callbackUrl = (c: { req: { url: string } }, provider: string) =>
-    `${new URL(c.req.url).origin}/api/drive/callback/${provider}`;
-
   // GET /providers — what this deployment can offer + what is already connected.
   r.get('/providers', async (c) => c.json({
     providers: availableDriveProviders(c.env as unknown as Record<string, unknown>),
     connections: await listDriveConnections(db, c.get('tenantId') as number, c.get('userId') as string),
   }));
 
-  /**
-   * GET /connect/:provider — build the consent URL.
-   *
-   * Returned as JSON for the client to navigate to, rather than a 302 from here:
-   * a top-level navigation cannot carry the bearer token, so the browser must
-   * make the jump itself after an authenticated fetch.
-   */
-  r.get('/connect/:provider', async (c) => {
-    const env = c.env as Env;
-    const name = c.req.param('provider');
-    const provider = getDriveProvider(name);
-    if (!provider) return c.json({ error: 'Unknown drive provider.' }, 400);
-
-    const authUrl = await buildProviderConsentUrl(env, provider, {
-      providerName: name,
-      redirectUri: callbackUrl(c, name),
-      userId: c.get('userId') as string,
-      tenantId: c.get('tenantId') as number,
-      returnTo: c.req.query('returnTo'),
-      returnToFallback: DEFAULT_RETURN_TO,
-    });
-    if (!authUrl) {
-      return c.json({ error: `${provider.label} is not configured on this deployment.` }, 503);
-    }
-    return c.json({ authUrl });
-  });
-
-  // GET /callback/:provider — provider redirect (PUBLIC; authed by signed state).
-  r.get('/callback/:provider', async (c) => {
-    const env = c.env as Env;
-    const name = c.req.param('provider');
-    const provider = getDriveProvider(name);
-    const base = resolveAppBaseUrl(env);
-    const code = c.req.query('code');
-    const rawState = c.req.query('state');
-
-    // Declining consent is a normal outcome, not an error — say so.
-    if (c.req.query('error')) return c.redirect(`${base}${DEFAULT_RETURN_TO}?drive=declined`);
-    if (!provider || !code || !rawState) return c.redirect(`${base}${DEFAULT_RETURN_TO}?drive=error`);
-
-    const result = await completeProviderOAuthCallback(env, provider, {
-      providerName: name, code, rawState, redirectUri: callbackUrl(c, name),
-    });
-    if (!result.ok) {
-      if (result.reason === 'exchange_failed') {
-        reportCaughtError(result.error, { source: SOURCE, operation: 'callback' });
-      }
-      const returnTo = result.returnTo ?? DEFAULT_RETURN_TO;
-      const outcome = result.reason === 'exchange_failed' ? 'error' : result.reason;
-      return c.redirect(`${base}${returnTo}?drive=${outcome}`);
-    }
-    const { state, tokens: tok } = result;
-
-    try {
+  // GET /connect/:provider + GET /callback/:provider — the shared connect pair;
+  // only storing the grant is drive's own.
+  mountProviderOAuthConnect<DriveProvider>(r, {
+    callbackPath: (name) => `/api/drive/callback/${name}`,
+    outcomeParam: 'drive',
+    defaultReturnTo: DEFAULT_RETURN_TO,
+    source: SOURCE,
+    resolveConnect: (name) => {
+      const provider = getDriveProvider(name);
+      return provider ? { provider, oauth: provider, label: provider.label } : { error: 'Unknown drive provider.' };
+    },
+    onConnected: async (c, { provider, state, tokens }) => {
       // The account is the natural key of the row and the label a person picks
       // between two connected drives by, so a grant we cannot name is refused
       // rather than stored half-identified.
-      const account = await provider.accountInfo(tok.access_token);
-      if (!account.email) return c.redirect(`${base}${state.returnTo}?drive=no_account`);
-
-      await saveDriveConnection(db, env, {
+      const account = await provider.accountInfo(tokens.access_token);
+      if (!account.email) return 'no_account';
+      await saveDriveConnection(db, c.env as Env, {
         tenantId: state.tenantId,
         userId: state.userId,
         provider: provider.name,
         accountEmail: account.email,
         displayName: account.displayName,
-        accessToken: tok.access_token,
-        refreshToken: tok.refresh_token,
-        expiresInSeconds: tok.expires_in,
-        scope: tok.scope ?? provider.scopes.join(' '),
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresInSeconds: tokens.expires_in,
+        scope: tokens.scope ?? provider.scopes.join(' '),
       });
-      return c.redirect(`${base}${state.returnTo}?drive=connected`);
-    } catch (error) {
-      reportCaughtError(error, { source: SOURCE, operation: 'callback' });
-      return c.redirect(`${base}${state.returnTo}?drive=error`);
-    }
+      return 'connected';
+    },
   });
 
   r.delete('/connections/:id', async (c) => {

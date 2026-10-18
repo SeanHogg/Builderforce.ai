@@ -288,7 +288,7 @@ export function useOnboardingState(): OnboardingState {
     await acceptActiveTerms(webToken, terms.version);
     setNeedsTerms(false);
     // After a terms bump, a returning SINGLE-workspace user would otherwise be
-    // bounced through the tenant picker: both /my-tenants and /tenant-token are
+    // bounced through the tenant picker: both /api/tenants and /tenant-token are
     // terms-gated, so the callback's auto-select returned null. Now that terms
     // are accepted both are ungated — auto-select the lone workspace so the user
     // lands straight on /dashboard. Guarded: any failure falls through to the

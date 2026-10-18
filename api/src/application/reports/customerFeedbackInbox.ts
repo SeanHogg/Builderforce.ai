@@ -1,6 +1,13 @@
 /**
- * Voice-of-Customer inbox — triage of ingested `customer_feedback` rows.
- * Backs `GET /api/reports/feedback` and `PATCH /api/reports/feedback/:id`.
+ * Voice-of-Customer inbox — the ONE use case for `customer_feedback`: the host's
+ * ingest (`POST /v1/ingest/feedback`) and the segment's triage
+ * (`GET /api/reports/feedback`, `PATCH /api/reports/feedback/:id`).
+ *
+ * Deliberately NOT folded into Product Feedback (`feedback_submissions`, the
+ * snippet / in-app panel / provider webhooks / superadmin roll-up). That is a
+ * project-scoped backlog intake whose rows open human-gated tickets; this is a
+ * segment-scoped VoC stream the host (BurnRateOS) pushes for an end-client, keyed
+ * by the host's event id, with no project and no ticket until a person triages it.
  */
 
 import { and, desc, eq } from 'drizzle-orm';
@@ -15,6 +22,52 @@ const KNOWN_STATUSES = new Set<string>(FEEDBACK_STATUSES);
 
 export function isFeedbackStatus(value: unknown): value is FeedbackStatus {
   return typeof value === 'string' && KNOWN_STATUSES.has(value);
+}
+
+export interface CustomerFeedbackEvent {
+  tenantId: number;
+  segmentId: string;
+  /** The host's event id — unique per segment, so a re-delivery is idempotent. */
+  eventId: string;
+  text: string;
+  widgetId?: string | null;
+  sentiment?: string | null;
+  contact?: string | null;
+}
+
+/**
+ * Record one host-pushed feedback event. Idempotent on (segment, external_ref): a
+ * re-delivered event returns the existing row with `deduped: true` rather than a
+ * duplicate candidate.
+ */
+export async function ingestCustomerFeedback(
+  db: Db,
+  event: CustomerFeedbackEvent,
+): Promise<{ id: string | null; status: string; deduped: boolean }> {
+  const [row] = await db
+    .insert(customerFeedback)
+    .values({
+      tenantId: event.tenantId,
+      segmentId: event.segmentId,
+      externalRef: event.eventId,
+      widgetId: event.widgetId ?? null,
+      text: event.text,
+      sentiment: event.sentiment ?? null,
+      contact: event.contact ?? null,
+    })
+    .onConflictDoNothing()
+    .returning({ id: customerFeedback.id, status: customerFeedback.status });
+  if (row) return { id: row.id, status: row.status, deduped: false };
+
+  const [existing] = await db
+    .select({ id: customerFeedback.id, status: customerFeedback.status })
+    .from(customerFeedback)
+    .where(scopedToTenant(
+      customerFeedback, event.tenantId,
+      eq(customerFeedback.segmentId, event.segmentId), eq(customerFeedback.externalRef, event.eventId),
+    ))
+    .limit(1);
+  return { id: existing?.id ?? null, status: existing?.status ?? 'new', deduped: true };
 }
 
 /** The segment's feedback, newest first; an unknown status filter is ignored. */

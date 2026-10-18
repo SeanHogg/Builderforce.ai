@@ -11,7 +11,7 @@
 import type { SettingsField } from '@/lib/canvasKindSettings';
 import type { CreationNodeData } from './types';
 import { AUTHORED_COLOR_FALLBACK } from '@/domains/canvas/domain/authoredColors';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/inspector.module.css';
 
 export function SettingsFieldControl({
   field,

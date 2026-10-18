@@ -18,7 +18,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/ads.module.css';
 import {
   AD_DEVICES, AD_GENDERS, AD_MAX_AGE, AD_MIN_AGE, AD_PLACEMENTS,
   normalizeGenders,

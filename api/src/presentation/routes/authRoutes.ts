@@ -3,7 +3,6 @@ import { Hono, type Context } from 'hono';
 import { and, desc, eq, getTableColumns, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
 import type { TenantService } from '../../application/tenant/TenantService';
-import { landPendingInvitations } from '../../application/tenant/pendingInvitationLanding';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { credentialSecret } from '../../application/integrations/credentialCrypto';
@@ -12,6 +11,8 @@ import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { headerHints, rememberUserLocale } from '../../application/email/emailLocaleResolver';
 import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
+import { legacyAliasNotice } from '../middleware/legacyAlias';
+import { WORKSPACES_PATH, workspaceHandlers } from './workspaceHandlers';
 import { TenantRole, type UserId } from '../../domain/shared/types';
 import {
   adminImpersonationSessions,
@@ -256,7 +257,7 @@ async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
  * Web / marketplace flow (email + password):
  *   POST /api/auth/web/register   – create account, returns WebJWT + user
  *   POST /api/auth/web/login      – verify password, returns WebJWT + user
- *   GET  /api/auth/my-tenants     – list tenants the caller belongs to (WebJWT required)
+ *   GET  /api/auth/my-tenants     – DEPRECATED alias of GET /api/tenants (WebJWT required)
  *   PUT  /api/auth/default-tenant – set/clear the workspace opened automatically (WebJWT required)
  *   POST /api/auth/tenant-token   – exchange WebJWT + tenantId for tenant-scoped JWT
  *   GET  /api/auth/me             – return caller's profile (WebJWT required)
@@ -1104,18 +1105,10 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
     return c.json({ token, expiresIn, agentHostId: agentHost.id, tenantId: agentHost.tenantId });
   });
 
-  // GET /api/auth/my-tenants  (requires WebJWT)
-  router.get('/my-tenants', webAuthMiddleware, async (c) => {
-    const userId = c.get('userId') as string;
-    // Land any invitation sent to this account's address before it existed (or
-    // before it last returned) FIRST — it becomes a membership and appears in the
-    // list below on this very request. This is the endpoint every client actually
-    // calls to discover its workspaces, so without this a cold invitee signs up,
-    // sees nothing, and the invitation stays pending forever.
-    await landPendingInvitations(db, c.env as Env, tenantService, userId);
-    const result = await authService.myTenants(userId);
-    return c.json(result);
-  });
+  // GET /api/auth/my-tenants — legacy alias of GET /api/tenants, kept for shipped
+  // CLIs and web builds. Same handler (lands pending invitations, returns
+  // `defaultTenantId`), same web-token auth.
+  router.get('/my-tenants', legacyAliasNotice(WORKSPACES_PATH), webAuthMiddleware, workspaceHandlers(db, tenantService).list);
 
   // PUT /api/auth/default-tenant  (requires WebJWT + body: { tenantId | null })
   // The workspace this account opens automatically — returned by /my-tenants.

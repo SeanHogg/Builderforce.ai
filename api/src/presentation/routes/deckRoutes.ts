@@ -16,6 +16,7 @@
  */
 
 import { Hono } from 'hono';
+import { downloadResponse } from '../../application/export/exportDownload';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -41,16 +42,8 @@ const GenerateDeckBody = z.object({
   quarter: z.string().nullish(),
 });
 
-const PPTX_CT = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-
 function pptxResponse(bytes: Uint8Array, filename: string): Response {
-  return new Response(bytes, {
-    headers: {
-      'content-type': PPTX_CT,
-      'content-disposition': `attachment; filename="${filename.replace(/"/g, '')}"`,
-      'cache-control': 'no-store',
-    },
-  });
+  return downloadResponse(bytes, { filename, contentType: 'pptx' });
 }
 
 export function createDeckRoutes(db: Db): Hono<HonoEnv> {

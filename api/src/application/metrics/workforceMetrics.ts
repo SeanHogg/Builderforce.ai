@@ -70,6 +70,49 @@ export async function bumpWorkforceMetricsVersion(env: Env, tenantId: number): P
   await getOrSetCached(env, key, async () => current + 1, { kvTtlSeconds: 86_400 });
 }
 
+/**
+ * The ONE cached scorecard read. Every reader of "who did what in the last N days"
+ * (the /api/members routes, the scheduler's capacity load, the ceremony roster) goes
+ * through here so the key, the version token and the TTLs cannot drift between them.
+ * `env` is optional for callers that run without a cache binding (tests, scripts).
+ */
+export async function readMemberMetrics(
+  db: Db,
+  env: Env | undefined,
+  tenantId: number,
+  days: number,
+  projectId?: number,
+): Promise<MemberScorecard[]> {
+  const compute = () => computeMemberMetrics(db, tenantId, days, projectId);
+  if (!env) return compute();
+  const version = await readWorkforceMetricsVersion(env, tenantId);
+  return getOrSetCached(env, memberMetricsCacheKey(tenantId, version, days, projectId), compute, {
+    kvTtlSeconds: 300,
+    l1TtlMs: 30_000,
+  });
+}
+
+/**
+ * The ONE cached DORA read — the twin of {@link readMemberMetrics}. `/api/insights/dora`
+ * and `/api/members/dora` each cached `computeDora` under their own key (one unversioned,
+ * so a deploy did not show until the TTL ran out); both now share this key + version token.
+ */
+export async function readDora(
+  db: Db,
+  env: Env | undefined,
+  tenantId: number,
+  days: number,
+  projectId?: number,
+): Promise<DoraRollup> {
+  const compute = () => computeDora(db, tenantId, days, projectId);
+  if (!env) return compute();
+  const version = await readWorkforceMetricsVersion(env, tenantId);
+  return getOrSetCached(env, doraCacheKey(tenantId, version, days, projectId), compute, {
+    kvTtlSeconds: 300,
+    l1TtlMs: 30_000,
+  });
+}
+
 // ── member identity (mirrors application/reports/completedByAssignee precedence) ─
 export type MemberKind = 'human' | 'cloud_agent' | 'host_agent';
 

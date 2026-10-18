@@ -22,13 +22,11 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { driveConnections } from '../../infrastructure/database/schema';
-import { refreshAccessToken } from '../../infrastructure/auth/oauthState';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
-  isTerminalRefreshFailure,
-  mergeRefreshedTokens,
-  oauthTokensStale,
+  providerGrantRefresher,
+  refreshGrantIfStale,
   sealOAuthTokens,
   unsealOAuthTokens,
 } from '../integrations/oauthTokenVault';
@@ -213,55 +211,45 @@ export async function freshDriveToken(
   const provider = getDriveProvider(row.provider);
   if (!provider) return { ok: false, status: 'unavailable', error: 'That drive provider is no longer supported.' };
 
-  const rec = env as unknown as Record<string, string | undefined>;
-  const clientId = rec[provider.clientIdKey];
-  const clientSecret = rec[provider.clientSecretKey];
-  if (!clientId || !clientSecret) {
-    return { ok: false, status: 'unavailable', error: `${provider.label} is not configured on this deployment.` };
-  }
-
   const tokens = await unsealOAuthTokens(env, tenantId, row.tokenEnc, row.tokenIv);
   if (!tokens) return { ok: false, status: 'unavailable', error: 'Stored drive credentials could not be decrypted.' };
 
-  if (!oauthTokensStale(tokens)) {
-    return { ok: true, accessToken: tokens.accessToken, provider, cacheVersion: row.cacheVersion };
-  }
-  if (!tokens.refreshToken) {
-    await markRevoked(db, tenantId, connectionId, 'No refresh token stored — reconnect this drive.');
-    return { ok: false, status: 'revoked', error: 'No refresh token stored — reconnect this drive.' };
-  }
-
-  try {
-    const refreshed = await refreshAccessToken(
-      { tokenUrl: provider.tokenUrl, clientId, clientSecret },
-      tokens.refreshToken,
-    );
-    const next = mergeRefreshedTokens(tokens, refreshed);
-    const sealed = await sealOAuthTokens(env, tenantId, next);
-    await db
-      .update(driveConnections)
-      .set({
-        tokenEnc: sealed.enc,
-        tokenIv: sealed.iv,
-        expiresAt: next.expiresAtMs ? new Date(next.expiresAtMs) : null,
-        status: 'connected',
-        lastError: null,
-        updatedAt: sql`NOW()`,
-      })
-      .where(scopedToTenant(driveConnections, tenantId, eq(driveConnections.id, connectionId)));
-    return { ok: true, accessToken: next.accessToken, provider, cacheVersion: row.cacheVersion };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Token refresh failed';
-    if (isTerminalRefreshFailure(message)) {
-      await markRevoked(db, tenantId, connectionId, message);
-      return { ok: false, status: 'revoked', error: 'This drive needs to be reconnected.' };
+  // The shared lifecycle decides; this function only writes the drive row.
+  const refresh = await refreshGrantIfStale(tokens, providerGrantRefresher(env, provider));
+  if (refresh.ok) {
+    if (refresh.refreshed) {
+      const next = refresh.tokens;
+      const sealed = await sealOAuthTokens(env, tenantId, next);
+      await db
+        .update(driveConnections)
+        .set({
+          tokenEnc: sealed.enc,
+          tokenIv: sealed.iv,
+          expiresAt: next.expiresAtMs ? new Date(next.expiresAtMs) : null,
+          status: 'connected',
+          lastError: null,
+          updatedAt: sql`NOW()`,
+        })
+        .where(scopedToTenant(driveConnections, tenantId, eq(driveConnections.id, connectionId)));
     }
-    reportCaughtError(error, { source: 'application/drive/driveService.ts', operation: 'freshDriveToken' });
-    await db
-      .update(driveConnections)
-      .set({ lastError: message.slice(0, 1_000), updatedAt: sql`NOW()` })
-      .where(scopedToTenant(driveConnections, tenantId, eq(driveConnections.id, connectionId)));
-    return { ok: false, status: 'unavailable', error: 'Could not refresh access to this drive.' };
+    return { ok: true, accessToken: refresh.tokens.accessToken, provider, cacheVersion: row.cacheVersion };
+  }
+  switch (refresh.reason) {
+    case 'unconfigured':
+      return { ok: false, status: 'unavailable', error: `${provider.label} is not configured on this deployment.` };
+    case 'no_refresh_token':
+      await markRevoked(db, tenantId, connectionId, 'No refresh token stored — reconnect this drive.');
+      return { ok: false, status: 'revoked', error: 'No refresh token stored — reconnect this drive.' };
+    case 'revoked':
+      await markRevoked(db, tenantId, connectionId, refresh.message);
+      return { ok: false, status: 'revoked', error: 'This drive needs to be reconnected.' };
+    case 'failed':
+      reportCaughtError(refresh.error, { source: 'application/drive/driveService.ts', operation: 'freshDriveToken' });
+      await db
+        .update(driveConnections)
+        .set({ lastError: refresh.message.slice(0, 1_000), updatedAt: sql`NOW()` })
+        .where(scopedToTenant(driveConnections, tenantId, eq(driveConnections.id, connectionId)));
+      return { ok: false, status: 'unavailable', error: 'Could not refresh access to this drive.' };
   }
 }
 

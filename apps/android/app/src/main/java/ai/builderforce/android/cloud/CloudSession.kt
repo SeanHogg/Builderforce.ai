@@ -89,7 +89,7 @@ class CloudSession(private val prefs: SecurePrefs, private val config: CloudConf
   }
 
   suspend fun workspaces(): List<Workspace> {
-    val v = api("GET", "/api/vscode/tenants")
+    val v = api("GET", "/api/tenants")
     return v.objOrNull()?.get("tenants").arrOrEmpty().mapNotNull { el ->
       val o = el.objOrNull() ?: return@mapNotNull null
       val id = o["id"].longOrNull() ?: return@mapNotNull null

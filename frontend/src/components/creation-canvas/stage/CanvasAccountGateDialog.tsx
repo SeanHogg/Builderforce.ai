@@ -7,7 +7,7 @@ import { claimLocalDraft } from '@/lib/pendingWork';
 import { faultText } from '@/lib/apiClient';
 import type { AccountGate } from '../canvasBoardTypes';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/stage.module.css';
 import { canvasLensSessionPath } from '@/lib/canvasLens';
 
 export interface CanvasAccountGateDialogProps {

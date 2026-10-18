@@ -6,7 +6,7 @@
  * Builderforce accent set for a tenant that has not set one. `blendPalettes` co-brands the two — the requesting org leads the header
  * (their colours make the buyer feel seen), the responder tenant owns the accent — and
  * `renderRfpDocHtml` emits a self-contained, inline-styled proposal document (no external
- * assets) that any browser prints to PDF cleanly, mirroring `tabularExport.toHtmlTable`.
+ * assets) that any browser prints to PDF cleanly, mirroring `tabularExport.htmlMatrix`.
  *
  * `renderRfpDocPdf` emits the SAME proposal as real PDF bytes. `renderRfpDocPptx`
  * is the third rendering — a slide deck an investor can open in PowerPoint —

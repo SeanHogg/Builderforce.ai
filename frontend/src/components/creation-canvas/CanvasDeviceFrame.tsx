@@ -6,7 +6,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 import { CANVAS_VIEWPORT_WIDTHS, type CanvasViewport } from '@builderforce/creation-canvas-contract';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
+import nodeStyles from './styles/node.module.css';
 
 /**
  * THE framed document — one document, laid out at a real device width, scaled into
@@ -103,7 +104,7 @@ export function CanvasDeviceFrame({
   return (
     <div
       ref={wrapRef}
-      className={`${styles.deviceFrameWrap} ${className ?? ''}`}
+      className={`${nodeStyles.deviceFrameWrap} ${className ?? ''}`}
       data-viewport={viewport}
       // Published to the stylesheet so a surface can size the DEVICE (and centre it)
       // without restating the widths — one source of truth, `CANVAS_VIEWPORT_WIDTHS`.

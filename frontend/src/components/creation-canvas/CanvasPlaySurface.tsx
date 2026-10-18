@@ -9,7 +9,7 @@ import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { GAME_FRAME_SANDBOX, gameDocumentFrom, gameRuntimeFor, gameWorldFrom } from '@/lib/gameTargets';
 import { controlLabels, readGameControls } from '@/lib/gamePoster';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 import { CanvasFullscreenAction } from './CanvasFullscreenAction';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
 import type { CanvasRosterMember, CreationNodeData } from './types';

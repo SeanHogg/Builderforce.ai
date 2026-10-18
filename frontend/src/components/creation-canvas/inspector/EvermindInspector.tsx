@@ -1,6 +1,6 @@
 import type { CreationFlowNode } from '../CreationNode';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/inspector.module.css';
 import { EvermindValidationProvider } from '@/components/builder/EvermindValidationContext';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
 

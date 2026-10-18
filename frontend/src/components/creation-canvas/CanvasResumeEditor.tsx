@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
 import { DocumentEditor } from './DocumentEditor';
 import { ResumeStructuredEditor } from './ResumeStructuredEditor';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/documents.module.css';
 import { importCanvasFile, type ImportTranslator } from '@/domains/canvas/application/ImportCanvasFile';
 import { importResumeSource } from '@/lib/resumeImportApi';
 import {

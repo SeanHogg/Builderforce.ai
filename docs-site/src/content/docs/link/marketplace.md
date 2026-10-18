@@ -44,32 +44,32 @@ Skills are sorted by **downloads then likes** (most popular first). Each skill c
 
 ## 3. Creating a Marketplace Account
 
-The Marketplace uses a **separate auth system** from the orchestration API (email + password → JWT, no API key required). This lets anyone publish skills without needing a paid tenant.
+The Marketplace uses the **same Builderforce account** as the web app (email + password → web JWT, no API key or paid workspace required). Sign up once and you can publish skills.
 
 ```http
-POST /marketplace/auth/register
+POST /api/auth/web/register
 Content-Type: application/json
 
 {
   "email": "dev@example.com",
   "username": "my-handle",
   "password": "strong-password",
-  "display_name": "My Name"
+  "agreeToTerms": true,
+  "ageAttested": true
 }
 ```
 
-**Response 201:**
-```json
-{ "token": "<marketplace-jwt>", "user": { "id": "…", "email": "…", "username": "my-handle" } }
-```
+**Response 201:** `{ "verificationRequired": true, "email": "dev@example.com" }` — enter the emailed code at `POST /api/auth/web/register/verify` to receive your session token.
 
 Store the token and include it as `Authorization: Bearer <token>` on all authenticated marketplace requests.
 
 To log in on a subsequent session:
 ```http
-POST /marketplace/auth/login
+POST /api/auth/web/login
 { "email": "dev@example.com", "password": "strong-password" }
 ```
+
+`/marketplace/auth/register`, `/marketplace/auth/login` and `/marketplace/auth/me` still answer, as deprecated aliases of these routes (they return `Deprecation: true` and a successor `Link`).
 
 ---
 

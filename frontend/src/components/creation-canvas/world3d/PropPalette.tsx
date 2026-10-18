@@ -1,6 +1,6 @@
 import { useTranslations } from 'next-intl';
 import type { CanvasWorldPropKind } from '@builderforce/creation-canvas-contract';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/world.module.css';
 
 /**
  * PropPalette — left-rail drag source for `world` surfaces. Dropping a tile

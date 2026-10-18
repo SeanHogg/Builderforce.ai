@@ -14,7 +14,7 @@ import { makeSpecDeriveBoard } from '@/lib/specObjects';
 import type { CreationNodeData } from './types';
 import { IdeaLogRow } from './IdeaLogRow';
 import { IdeaStageBar, type IdeaStageFilter } from './IdeaStageBar';
-import canvasStyles from './CreationCanvas.module.css';
+import canvasStyles from './styles/surfaces.module.css';
 import styles from './CanvasIdeasSurface.module.css';
 
 /** The kinds this surface ever creates: the idea itself, the interview that tests

@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/bodies.module.css';
 import { Icon } from '@/components/ui/Icon';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasAppLocalKey } from '@/lib/canvasSessionApp';

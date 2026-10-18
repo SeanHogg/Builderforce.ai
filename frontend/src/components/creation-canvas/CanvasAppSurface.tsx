@@ -16,7 +16,8 @@ import type { ProjectModality } from '@/lib/modality';
 import { CanvasAppStart } from './CanvasAppStart';
 import type { CanvasSessionAppActions } from './hooks/useCanvasSessionApp';
 import { useCanvasSessionFacts } from './chrome/canvasSessionContext';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
+import shellStyles from './CreationCanvas.module.css';
 import type { CreationNodeData } from './types';
 
 // The editor, the runtime client and the panels are the heaviest code on the canvas, and
@@ -97,7 +98,7 @@ export function CanvasAppSurface({ nodes, session, persistence, sessionTitle, en
 
   return (
     <section
-      className={styles.appSurface}
+      className={shellStyles.appSurface}
       data-testid="canvas-app-surface"
       aria-label={t('regionLabel')}
       onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onExit(); } }}

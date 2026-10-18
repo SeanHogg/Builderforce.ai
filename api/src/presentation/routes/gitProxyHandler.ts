@@ -1,12 +1,15 @@
 /**
  * gitProxyHandler — the ONE route-level git smart-HTTP proxy handler.
  *
- * Two mounts need byte-identical behaviour: `/api/git-proxy/:repoId/...` (the
- * browser worker, tenant JWT or host key) and
+ * Three mounts need byte-identical behaviour: `/api/git-proxy/:repoId/...` (the
+ * browser worker, tenant JWT or host key),
  * `/api/agent-hosts/:id/git-proxy/:repoId/...` (a deployed host's own path,
- * kept so already-shipped fleets keep working). They used to be two copies of
- * the same twenty lines; a change to one — the credential resolution, the
- * allowed sub-paths, the error mapping — silently skipped the other.
+ * kept so already-shipped fleets keep working) and
+ * `/api/runtime/internal/container-git/:executionId.git/...` (a cloud container,
+ * authenticated by its run token, repo resolved from the run's ticket). They used
+ * to be separate copies; a change to one — the allowed sub-paths, the request
+ * marshalling, the error mapping — silently skipped the others. Only the DOOR
+ * (auth + which repo) differs; {@link proxyGitSmartHttp} is the shared body.
  *
  * The security boundary is the point of the seam: the tenant's git credential is
  * decrypted and injected SERVER-SIDE, so a push/clone token never reaches the
@@ -15,7 +18,7 @@
  */
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import type { Context } from 'hono';
-import { executeGitProxy } from '../../application/repos/gitProxy';
+import { executeGitProxy, type ProxyRepo } from '../../application/repos/gitProxy';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
@@ -46,9 +49,23 @@ export async function handleGitProxyRequest(
   const resolved = await resolveRepoCredential(db, secret, tenantId, repoId);
   if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
 
+  return proxyGitSmartHttp(c, resolved.repo, resolved.token, subPath, method);
+}
+
+/**
+ * Forward one smart-HTTP request to `repo` with `token` injected server-side. Every
+ * mount calls this once it has authenticated the caller and resolved the repo.
+ */
+export async function proxyGitSmartHttp(
+  c: Context,
+  repo: ProxyRepo,
+  token: string,
+  subPath: string,
+  method: 'GET' | 'POST',
+): Promise<Response> {
   const result = await executeGitProxy({
-    repo: resolved.repo,
-    token: resolved.token,
+    repo,
+    token,
     subPath,
     method,
     query: method === 'GET' ? new URL(c.req.url).searchParams.toString() : undefined,

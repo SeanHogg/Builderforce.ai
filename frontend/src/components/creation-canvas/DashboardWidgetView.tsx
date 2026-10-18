@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/dashboards.module.css';
 import {
   DASHBOARD_MAX_CATEGORIES,
   dashboardChartDefinition,

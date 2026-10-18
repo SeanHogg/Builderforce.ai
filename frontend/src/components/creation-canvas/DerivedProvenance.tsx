@@ -27,7 +27,7 @@
 import { useTranslations } from 'next-intl';
 import { basisNotice, type RowBasis } from '@/lib/canvasDatasetVersion';
 import { evaluateGate, type EvaluationGateInput } from '@/lib/canvasEvaluationGate';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/node.module.css';
 
 /** Read a `basis` field off arbitrary node data without trusting its shape. */
 function readBasis(value: unknown): RowBasis | null {

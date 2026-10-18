@@ -1,4 +1,4 @@
-import styles from './CreationCanvas.module.css';
+import styles from './styles/chrome.module.css';
 
 /**
  * Search + chip filters for a canvas side panel.

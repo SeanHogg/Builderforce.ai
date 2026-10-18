@@ -3,6 +3,7 @@ import { useTranslations } from 'next-intl';
 import {
   getBrainCapability,
   useArmedNewChat,
+  useChatCreation,
   type useBrainChats,
   type ChatMode,
   type WorkOptionId,
@@ -22,7 +23,7 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
 }) {
   const tBrain = useTranslations('brain');
   // The chat hook's methods are individually stable; its result object is not.
-  const { setCapability, activeChatId, activeChat } = chats;
+  const { setCapability, activeChatId, activeChat, autoTitle } = chats;
   const [input, setInput] = useState('');
   /** Bumped to pull focus into the composer after something seeds it. */
   const [composerFocusToken, setComposerFocusToken] = useState(0);
@@ -45,10 +46,14 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
     return created;
   }, [createArmed, isPage, setDockedTab]);
 
-  const ensureChatId = useCallback(async () => {
-    const c = await startNewChat();
-    return c?.id ?? null;
-  }, [startNewChat]);
+  // "The first message creates the chat" — the shared single-flight creation (a fast
+  // second send joins the first's create) through THIS surface's new-chat path, and the
+  // first user turn names the chat. Both are `useBrainConversation` options.
+  const { ensureChatId, onFirstUserTurn } = useChatCreation({
+    chatId: activeChatId,
+    create: async () => (await startNewChat())?.id ?? null,
+    autoTitle,
+  });
 
   // ---- Capability ("what are we making?") ----------------------------------
   // A property of the CHAT (migration 0345), so the choice follows the
@@ -96,6 +101,7 @@ export function useBrainChatStart({ chats, isPage, setDockedTab }: {
     composerFocusToken,
     startNewChat,
     ensureChatId,
+    onFirstUserTurn,
     capabilityId,
     capabilityPrompt,
     selectCapability,

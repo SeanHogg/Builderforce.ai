@@ -14,7 +14,7 @@ import { usePins } from '@/lib/widgets/PinsProvider';
 import { CanvasBarGroup } from './CanvasBarGroup';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
 import { CanvasInsightsThisCanvas } from './CanvasInsightsThisCanvas';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 
 /** The Ask-a-question card is a registered widget, same as `/insights` shows it —
  *  one guaranteed tile so this surface is never empty before anyone has pinned

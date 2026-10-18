@@ -17,6 +17,7 @@
  */
 
 import { Hono } from 'hono';
+import { downloadResponse } from '../../application/export/exportDownload';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
@@ -145,15 +146,14 @@ export function createPublicDataRoomRoutes(db: Db): Hono<HonoEnv> {
     // The id is PREFIXED (`dd:12` / `legal:<uuid>`) because a room holds two
     // shapes and a recipient does not care which table a document came from.
     const file = await readDataRoomDocument(db, c.env as Env, c.req.param('token'), c.req.param('documentId'));
-    return new Response(file.bytes, {
-      headers: {
-        'content-type': file.mime,
-        'content-disposition': `${file.disposition}; filename="${file.filename.replace(/"/g, '')}"`,
-        // A watermarked room's documents must not sit in a shared cache: the stamp
-        // names one recipient, and a cached copy would hand it to the next one.
-        'cache-control': 'no-store',
-        'x-data-room-watermark': file.stamped ? 'stamped' : 'view-only',
-      },
+    // `no-store` (the default): a watermarked room's documents must not sit in a
+    // shared cache — the stamp names one recipient, and a cached copy would hand
+    // it to the next one.
+    return downloadResponse(file.bytes, {
+      filename: file.filename,
+      contentType: file.mime,
+      disposition: file.disposition,
+      headers: { 'x-data-room-watermark': file.stamped ? 'stamped' : 'view-only' },
     });
   }));
 

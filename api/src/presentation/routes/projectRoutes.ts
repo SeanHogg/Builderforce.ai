@@ -1,6 +1,6 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono, type Context } from 'hono';
-import { and, count, desc, eq, gte, inArray, max, min, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import { notSystemTask } from '../../application/task/taskScope';
 import { provisionProject } from '../../application/project/provisionProject';
@@ -16,15 +16,16 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
-import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHostProjects, agentHosts, objectiveLinks, objectives, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
 import { nullableDateParam } from './queryParams';
 import { relayToRoom } from './realtimeRelay';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
+import { AGENT_HOST_BASE_PATH, legacyAliasNotice } from '../middleware/legacyAlias';
+import { agentHostInTenant, listAgentHostDirectory } from '../../application/agentHost/agentHostDirectory';
 import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
-import { llmUsageLog } from '../../infrastructure/database/schema';
-import { resolveUsageDatabase, usageRequestCount } from '../../application/llm/usageLedger';
+import { projectSpend } from '../../application/llm/usageReports';
+import { namedWindowStart } from '../../application/llm/usageQuery';
 import { completeJson } from '../../application/llm/completeJson';
 import { asJsonObject } from '../../domain/shared/json';
 import { parseBody } from './requestBody';
@@ -617,67 +618,17 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
    * every project, user, team and repo — far too much to load to answer "what has
    * this ticket board cost me". This is that one question, scoped and cached.
    *
-   * Reads the SAME database the ledger writes to (`resolveUsageDatabase`), which is
-   * the boundary several other readers get wrong: with the operational secret bound,
-   * a primary-database read here would return zero forever.
-   *
-   * BYO rows record cost 0 by design (the tenant's own account paid), so `costUsd` is
-   * platform-funded spend and `byoTokens` reports the rest separately rather than
-   * letting a BYO-heavy project look free.
+   * The figures come from `projectSpend` (application/llm/usageReports) over THE
+   * usage query use case, so they match the project's row in `/api/dashboard/usage`
+   * by construction — same filter, same aggregate, same ledger database.
    */
   router.get('/:id/spend', requirePermission(PERMISSIONS.PROJECT_READ), async (c) => {
     const tenantId = c.get('tenantId');
     const project = await projectService.getProject(c.req.param('id'), tenantId);
     const window = c.req.query('window') ?? 'month';
-
-    const windowStart = new Date();
-    windowStart.setUTCHours(0, 0, 0, 0);
-    if (window === 'week') windowStart.setUTCDate(windowStart.getUTCDate() - 6);
-    else if (window === 'month') windowStart.setUTCDate(1);
-
-    // Keyed on the hour so the window boundary can't serve yesterday's totals, and
-    // short-TTL because spend is a number people watch while work runs.
-    const payload = await getOrSetCached(
-      c.env as Env,
-      `project-spend:v1:${tenantId}:${project.id}:${window}:${windowStart.toISOString().slice(0, 13)}`,
-      async () => {
-        const usageDb = resolveUsageDatabase(c.env as Env, db);
-        const where = and(
-          eq(llmUsageLog.tenantId, tenantId),
-          eq(llmUsageLog.projectId, project.id),
-          gte(llmUsageLog.createdAt, windowStart),
-        );
-        const [totals, byModel] = await Promise.all([
-          usageDb.select({
-            totalTokens: sql<number>`COALESCE(SUM(${llmUsageLog.totalTokens}), 0)`,
-            costMc: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)`,
-            requests: usageRequestCount(),
-            byoTokens: sql<number>`COALESCE(SUM(CASE WHEN ${llmUsageLog.byo} THEN ${llmUsageLog.totalTokens} ELSE 0 END), 0)`,
-          }).from(llmUsageLog).where(where),
-          usageDb.select({
-            model: llmUsageLog.model,
-            totalTokens: sql<number>`COALESCE(SUM(${llmUsageLog.totalTokens}), 0)`,
-            costMc: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)`,
-          }).from(llmUsageLog).where(where)
-            .groupBy(llmUsageLog.model)
-            .orderBy(desc(sql`SUM(${llmUsageLog.costUsdMillicents})`))
-            .limit(5),
-        ]);
-        const t = totals[0];
-        return {
-          totalTokens: Number(t?.totalTokens ?? 0),
-          byoTokens: Number(t?.byoTokens ?? 0),
-          requests: Number(t?.requests ?? 0),
-          costUsd: Number(t?.costMc ?? 0) / 100_000,
-          topModels: byModel.map((m) => ({
-            model: m.model,
-            totalTokens: Number(m.totalTokens ?? 0),
-            costUsd: Number(m.costMc ?? 0) / 100_000,
-          })),
-        };
-      },
-      { kvTtlSeconds: 60, l1TtlMs: 30_000 },
-    );
+    const windowStart = namedWindowStart(window);
+    // A thin adapter over THE usage query use case (cached, ledger-database-resolved).
+    const payload = await projectSpend(c.env as Env, db, tenantId, project.id, windowStart);
 
     return c.json({ projectId: project.id, window, windowStart: windowStart.toISOString(), ...payload });
   });
@@ -949,17 +900,11 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
 
       const defaultCandidate = requestedAgentHostId ?? tenantRow?.defaultAgentHostId ?? null;
       if (defaultCandidate) {
-        const [agentHost] = await db
-          .select({ id: agentHosts.id })
-          .from(agentHosts)
-          .where(and(eq(agentHosts.id, defaultCandidate), eq(agentHosts.tenantId, tenantId)))
-          .limit(1);
-
-        if (agentHost) {
-          selectedAgentHostId = agentHost.id;
+        if (await agentHostInTenant(db, tenantId, defaultCandidate)) {
+          selectedAgentHostId = defaultCandidate;
           await db
             .insert(agentHostProjects)
-            .values({ tenantId, agentHostId: agentHost.id, projectId: project.id, role: 'default' })
+            .values({ tenantId, agentHostId: defaultCandidate, projectId: project.id, role: 'default' })
             .onConflictDoUpdate({
               target: [agentHostProjects.tenantId, agentHostProjects.agentHostId, agentHostProjects.projectId],
               set: { updatedAt: new Date() },
@@ -996,42 +941,30 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     return c.body(null, 204);
   });
 
-  // GET /api/projects/:id/agentHosts — list agentHosts associated with a project
-  router.get('/:id/agentHosts', requirePermission(PERMISSIONS.PROJECT_READ), async (c) => {
-    const tenantId = c.get('tenantId');
-    const proj = await projectService.getProject(c.req.param('id'), tenantId);
-    const projectId = proj.id;
-
-    const rows = await db
-      .select({
-        id:          agentHosts.id,
-        name:        agentHosts.name,
-        slug:        agentHosts.slug,
-        status:      agentHosts.status,
-        connectedAt: agentHosts.connectedAt,
-        lastSeenAt:  agentHosts.lastSeenAt,
-        createdAt:   agentHosts.createdAt,
-      })
-      .from(agentHostProjects)
-      .innerJoin(agentHosts, eq(agentHostProjects.agentHostId, agentHosts.id))
-      .where(and(
-        eq(agentHostProjects.projectId, projectId),
-        eq(agentHostProjects.tenantId, tenantId),
-      ));
-
-    return c.json({
-      agentHosts: rows.map((r) => ({
-        id:          String(r.id),
-        name:        r.name,
-        slug:        r.slug,
-        status:      r.status,
-        online:      isAgentHostOnline(r),
-        connectedAt: r.connectedAt?.toISOString() ?? null,
-        lastSeenAt:  r.lastSeenAt?.toISOString() ?? null,
-        createdAt:   r.createdAt.toISOString(),
-      })),
-    });
-  });
+  // GET /api/projects/:id/agentHosts — legacy alias of GET /api/agent-hosts?projectId=
+  // (same directory read). Keeps its historical projection: string ids, ISO dates.
+  router.get(
+    '/:id/agentHosts',
+    requirePermission(PERMISSIONS.PROJECT_READ),
+    legacyAliasNotice((c) => `${AGENT_HOST_BASE_PATH}?projectId=${encodeURIComponent(c.req.param('id') ?? '')}`),
+    async (c) => {
+      const tenantId = c.get('tenantId');
+      const proj = await projectService.getProject(c.req.param('id'), tenantId);
+      const hosts = await listAgentHostDirectory(db, { tenantId, projectId: proj.id });
+      return c.json({
+        agentHosts: hosts.map((h) => ({
+          id:          String(h.id),
+          name:        h.name,
+          slug:        h.slug,
+          status:      h.status,
+          online:      h.online,
+          connectedAt: h.connectedAt?.toISOString() ?? null,
+          lastSeenAt:  h.lastSeenAt?.toISOString() ?? null,
+          createdAt:   h.createdAt.toISOString(),
+        })),
+      });
+    },
+  );
 
   return router;
 }

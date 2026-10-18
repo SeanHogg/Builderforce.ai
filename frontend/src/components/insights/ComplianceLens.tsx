@@ -27,7 +27,7 @@ export function ComplianceLens() {
   const exportCsv = async () => {
     setExporting(true);
     try {
-      const csv = await apiRequestText(`/api/insights/compliance/export?format=csv&days=90`);
+      const csv = await apiRequestText(`/api/exports/sources/insights.evidence-pack?format=csv&days=90`);
       downloadText(csv, `evidence-pack-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
     } finally {
       setExporting(false);

@@ -15,7 +15,7 @@ import {
   canvasWebsitePageMessage,
 } from '@/lib/canvasWebsite';
 import { CanvasDeviceFrame } from './CanvasDeviceFrame';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 import {
   WEBSITE_CONTENT_FRAME_SANDBOX,
   isMarkupSectionBody,

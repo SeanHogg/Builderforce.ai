@@ -34,7 +34,7 @@ import {
   rdFinancialsQuarterly, rdRevenueQuarterly, rdFteAllocationQuarterly,
 } from '../../infrastructure/database/schema';
 import { computeEngineeringInsights } from '../../application/insights/engineeringInsights';
-import { computeDora } from '../../application/metrics/workforceMetrics';
+import { readDora } from '../../application/metrics/workforceMetrics';
 import { computeFinanceInsights } from '../../application/insights/financeInsights';
 import { computeAllocationInsights, computeAllocationHistory, type AllocationGoalMap } from '../../application/insights/allocationInsights';
 import { computeDeliveryInsights, type DeliverableScope } from '../../application/insights/deliveryInsights';
@@ -42,7 +42,9 @@ import { buildScenario } from '../../application/insights/deliveryScenario';
 import { computeBottleneckInsights } from '../../application/insights/bottleneckInsights';
 import { computeLifecycleInsights } from '../../application/insights/lifecycleInsights';
 import { normalizeAllocationCategory } from '../../application/llm/allocationCategories';
-import { computeComplianceSummary, buildEvidencePack, evidencePackToCsv } from '../../application/insights/complianceInsights';
+import { computeComplianceSummary } from '../../application/insights/complianceInsights';
+import { capitalizationExportSource, evidencePackExportSource, PREMIUM_INSIGHTS_FEATURE } from '../../application/insights/insightsExportSources';
+import { exportSourceHandler } from './exportSourceRoute';
 import { computeQualityInsights } from '../../application/insights/qualityInsights';
 import { computeChatModeUsage } from '../../application/insights/chatModeInsights';
 import { computePeopleInsights } from '../../application/insights/peopleInsights';
@@ -50,7 +52,6 @@ import { computeRdFinancials } from '../../application/insights/rdFinancialsInsi
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { positiveIntParam, boundedIntParam, daysParam, fiscalYearParam, periodParam } from './queryParams';
-import { capitalizationToCsv, capitalizationToXlsx } from '../../application/metrics/capitalizationReport';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -61,7 +62,7 @@ const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
  * insightPlanGate). Developer-facing delivery lenses (dora/delivery/bottlenecks/
  * lifecycle) stay role-only — they're the IC's day-to-day view, not a paid tier.
  */
-const PREMIUM_INSIGHTS = 'advancedInsights';
+const PREMIUM_INSIGHTS = PREMIUM_INSIGHTS_FEATURE;
 
 /** Current calendar month 'YYYY-MM' (UTC) when no `?period=` given. */
 
@@ -75,8 +76,9 @@ export {
 } from '../../application/insights/versionKeys';
 import {
   financeVersionKey, allocationVersionKey, qualityVersionKey,
-  peopleVersionKey, aiProgramVersionKey, rdFinancialsVersionKey,
+  peopleVersionKey, aiProgramVersionKey, rdFinancialsVersionKey, prodIncidentVersionKeys,
 } from '../../application/insights/versionKeys';
+import { legacyAliasNotice } from '../middleware/legacyAlias';
 
 
 
@@ -113,9 +115,8 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const days = daysParam(c.req.query('days'), 30);
     const projectId = positiveIntParam(c.req.query('projectId'));
-    const env = c.env as Env;
-    const key = `insights:dora:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
-    return c.json(await getOrSetCached(env, key, () => computeDora(db, tenantId, days, projectId), SHORT_TTL));
+    // The shared, version-keyed DORA reader — the same cache entry /api/members/dora reads.
+    return c.json(await readDora(db, c.env as Env, tenantId, days, projectId));
   });
 
   // LENS #3 — FinOps (manager). Budget writes bump the finance version token.
@@ -204,53 +205,10 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     ));
   });
 
-  /** The download formats the capitalization report is served in. `xlsx` is the
-   *  one a finance reviewer works in (two sheets, real numbers); `csv` is the
-   *  interchange fallback; `json` is for a script. */
-  const EXPORT_FORMATS = ['csv', 'xlsx', 'json'] as const;
-  type ExportFormat = (typeof EXPORT_FORMATS)[number];
-  const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-
-  // Capitalization report DOWNLOAD (csv | xlsx | json). A point-in-time snapshot
-  // handed to finance or an auditor, so it is deliberately NOT cached — a download
-  // must be what the numbers are now, not what they were up to a TTL ago — and it
-  // reuses the exact same two collectors the on-screen report renders from, so a
-  // downloaded file can never disagree with the page it was downloaded from.
-  router.get('/allocation/history/export', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
-    const { tenantId } = scope(c);
-    const now = Date.now();
-    const months = boundedIntParam(c.req.query('months'), { def: 12, min: 1, max: 24 });
-    const projectId = positiveIntParam(c.req.query('projectId'));
-    const requested = c.req.query('format');
-    const format: ExportFormat = (EXPORT_FORMATS as readonly string[]).includes(requested ?? '')
-      ? requested as ExportFormat
-      : 'csv';
-
-    const [history, current] = await Promise.all([
-      computeAllocationHistory(db, tenantId, months, now, { projectId }, { lineage: true }),
-      computeAllocationInsights(db, tenantId, 30 * months, now, { projectId }, new Map(), { lineage: true }),
-    ]);
-
-    if (format === 'json') {
-      return c.json({ generatedAt: new Date(now).toISOString(), months, projectId: projectId ?? null, history, current });
-    }
-
-    const stamp = new Date(now).toISOString().slice(0, 10);
-    const scopeTag = projectId == null ? '' : `-project-${projectId}`;
-    const filename = `capitalization-${months}m${scopeTag}-${stamp}.${format}`;
-    const body: BodyInit = format === 'xlsx'
-      // `.slice()` detaches a plain ArrayBuffer from the fflate view — a Response
-      // built straight from a Uint8Array over a pooled buffer can serialise the
-      // whole pool.
-      ? capitalizationToXlsx(history, current).slice().buffer as ArrayBuffer
-      : capitalizationToCsv(history, current);
-    return new Response(body, {
-      headers: {
-        'content-type': format === 'xlsx' ? XLSX_MIME : 'text/csv; charset=utf-8',
-        'content-disposition': `attachment; filename="${filename}"`,
-      },
-    });
-  });
+  // Capitalization report DOWNLOAD (csv | xlsx | json) — a registered export
+  // source; the rows, formats and gates are declared on it, served by the one
+  // export adapter (also at /api/exports/sources/insights.capitalization).
+  router.get('/allocation/history/export', exportSourceHandler(capitalizationExportSource, db));
 
   // LENS — delivery: burnup/burndown + completion forecast + scope creep for a
   // chosen deliverable (initiative | project | release | sprint). Developer-gated
@@ -438,24 +396,17 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     return c.json(await getOrSetCached(env, key, () => computeChatModeUsage(db, tenantId, days), SHORT_TTL));
   });
 
-  // LENS #6 — evidence-pack export (manager). Not cached: it's a download, and the
-  // bounded query is a deliberate point-in-time snapshot for an audit request.
-  router.get('/compliance/export', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
-    const { tenantId } = scope(c);
-    const days = daysParam(c.req.query('days'), 90);
-    const format = c.req.query('format') === 'json' ? 'json' : 'csv';
-    const rows = await buildEvidencePack(db, tenantId, days);
-    const stamp = new Date().toISOString().slice(0, 10);
-    if (format === 'json') {
-      return c.json({ generatedAt: new Date().toISOString(), windowDays: days, rows });
-    }
-    return new Response(evidencePackToCsv(rows), {
-      headers: {
-        'content-type': 'text/csv; charset=utf-8',
-        'content-disposition': `attachment; filename="evidence-pack-${stamp}.csv"`,
-      },
-    });
-  });
+  // LENS #6 — evidence-pack export (manager, premium) — a registered export
+  // source (also at /api/exports/sources/insights.evidence-pack).
+  router.get('/compliance/export', exportSourceHandler(evidencePackExportSource, db));
+
+  // `/quality/incidents` is the board-deck manual-entry view of the SAME
+  // prod_incidents rows `/api/incidents` owns (not a second incident table). Kept
+  // for deployed callers on its segment-scoped tracker contract, but marked as a
+  // legacy alias so new callers use the incident surface, and its writes bump the
+  // incident cache as well as the Quality lens (prodIncidentVersionKeys).
+  router.use('/quality/incidents', legacyAliasNotice('/api/incidents'));
+  router.use('/quality/incidents/*', legacyAliasNotice('/api/incidents'));
 
   // FinOps budget CRUD (generic tracker; writes manager-gated + bump finance version).
   mountTrackers(router, db, [
@@ -487,7 +438,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
       opts: {
         fields: ['projectId', 'title', 'severity', 'status', 'isAlertOnly', 'source', 'externalRef', 'startedAt', 'acknowledgedAt', 'resolvedAt', 'impact', 'rootCause', 'postmortemUrl'],
         required: ['title'],
-        bumpVersionKeys: (t) => [qualityVersionKey(t)],
+        bumpVersionKeys: prodIncidentVersionKeys,
       },
     },
     {

@@ -38,6 +38,8 @@ import { managedAgentHostContainerRuntime } from '../tenant/managedAgentHostRunt
 import { completeSpawnTopUp, SPAWN_TOKENS_KIND } from '../spawn/spawnTopUp';
 import { recordSpawnPlanEvent, SPAWN_PLAN_KIND } from '../spawn/spawnMembership';
 import { REPLAY_PACK_KIND } from '../commerce/replayPacks';
+import { KNOWLEDGE_PURCHASE_KIND, completeKnowledgeCheckout } from '../knowledge/knowledgeCommerce';
+import { TENANT_INVOICE_KIND, settleInvoiceCheckout } from '../finance/receivables';
 import { REPLAY_PACK_ORDER_PREFIX, refundReplayPackOrder, settleReplayPack } from '../commerce/replayPackSettlement';
 
 export interface OneOffSettlement {
@@ -86,6 +88,24 @@ const ONE_OFF_SETTLERS: Readonly<Record<string, OneOffSettler>> = {
     await completeListingCheckout(db, env, { tenantId, buyerRef, checkoutSessionId });
     return true;
   },
+  // A knowledge listing is bought by a USER on behalf of a workspace; both are
+  // in the signed metadata, and both must match on the redirect leg too.
+  [KNOWLEDGE_PURCHASE_KIND]: async (db, env, { checkoutSessionId, metadata }) => {
+    const tenantId = Number(metadata.buyerTenantId);
+    const buyerUserId = metadata.buyerUserId;
+    if (!Number.isInteger(tenantId) || tenantId <= 0 || !buyerUserId) return null;
+    await completeKnowledgeCheckout(db, env, { tenantId, buyerUserId, checkoutSessionId });
+    return true;
+  },
+  // A TENANT's own invoice paid by THEIR customer (FO-C4). The tenant here is the
+  // SELLER (`invoiceTenantId`), never a buyer workspace; reports whether it applied
+  // because a second arrival of a settled receivable applies nothing.
+  [TENANT_INVOICE_KIND]: async (db, env, { checkoutSessionId, metadata }) => {
+    const tenantId = Number(metadata.invoiceTenantId);
+    const invoiceRef = metadata.invoiceRef;
+    if (!Number.isInteger(tenantId) || tenantId <= 0 || !invoiceRef) return null;
+    return (await settleInvoiceCheckout(db, env, { tenantId, invoiceRef, checkoutSessionId })).applied;
+  },
   // Insights recording packs (PRD 33 D4): credits on the tenant's
   // `replay_recordings` ledger, keyed on the checkout so redirect + webhook = one row.
   [REPLAY_PACK_KIND]: (db, env, settlement) => settleReplayPack(db, env, settlement),
@@ -113,8 +133,8 @@ const ADDON_RECORDERS: Readonly<Record<string, AddonRecorder>> = {
   },
   [SPAWN_PLAN_KIND]: recordSpawnPlanEvent,
   // Pay-once listings settle on `checkout.completed` via the one-off settler.
-  // This recorder is the close-the-tab path for a leftover `listing.purchased`
-  // or `addon.*` event that still names the kind — same grant, re-read from Stripe.
+  // This recorder is the close-the-tab path for an `addon.*` event that still
+  // names the kind — same grant, re-read from Stripe.
   [MARKETPLACE_LISTING_KIND]: recordMarketplaceListingEvent,
 };
 

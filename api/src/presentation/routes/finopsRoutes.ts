@@ -9,17 +9,16 @@
  *   GET   /rd-tax/config            QRE definition (qualified categories + rate)   [manager]
  *   PATCH /rd-tax/config            upsert QRE definition                          [manager]
  *   GET   /rd-tax                   QRE rollup (computeRdTaxCredit, cached)        [manager]
- *   GET   /soc/controls            controls register (seeded defaults if empty)   [manager]
+ *   GET   /soc/controls            controls register + coverage (cached)         [manager]
  *   POST  /soc/controls            create a control (seeds defaults on first write)[manager]
  *   PATCH /soc/controls/:id        update a control assertion                     [manager]
- *   GET   /soc/coverage            control-coverage summary (cached)              [manager]
+ *   GET   /soc/coverage            @deprecated alias of GET /soc/controls          [manager]
  *   GET   /audit-report            assembled period report (cached)              [manager]
  *   GET   /audit-report/export     download as csv|json + log the run (not cached)[manager]  → auditReportRunRoutes
  *   GET   /audit-report/runs       recent audit-report runs (cached)             [manager]  → auditReportRunRoutes
  */
 
-import { Hono } from 'hono';
-import { and, eq } from 'drizzle-orm';
+import { Hono, type Context } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
@@ -27,17 +26,21 @@ import { getOrSetCached, getCacheVersion, invalidateCached } from '../../infrast
 import { financeVersionKey, allocationVersionKey } from '../../application/insights/versionKeys';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { rdTaxCreditConfig, finopsSocControls } from '../../infrastructure/database/schema';
+import { rdTaxCreditConfig } from '../../infrastructure/database/schema';
 import {
   computeRdTaxCredit,
   getRdTaxCreditConfig,
   DEFAULT_BLENDED_LABOR_RATE_USD,
 } from '../../application/finops/rdTaxCredit';
 import {
-  computeControlCoverage,
+  addSocControl,
   DEFAULT_SOC_CONTROLS,
-  type SocControlStatus,
+  normalizeSocStatus,
+  readControlCoverage,
+  updateSocControl,
+  type SocControlPatch,
 } from '../../application/finops/socControls';
+import { legacyAliasNotice } from '../middleware/legacyAlias';
 import { assembleAuditReport } from '../../application/finops/auditReport';
 import { createAuditReportRunRoutes } from './auditReportRunRoutes';
 import { daysParam, periodParam } from './queryParams';
@@ -49,14 +52,6 @@ const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
 function rdConfigCacheKey(tenantId: number): string {
   return `finops:rdtax:t:${tenantId}`;
-}
-function socCoverageCacheKey(tenantId: number): string {
-  return `finops:soc:t:${tenantId}`;
-}
-
-/** Normalize an asserted control status, defaulting to 'gap'. */
-function normStatus(s: unknown): SocControlStatus {
-  return s === 'implemented' || s === 'partial' || s === 'gap' ? s : 'gap';
 }
 
 function asStringArray(v: unknown): string[] | undefined {
@@ -108,61 +103,32 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── SOC 1 Type II controls ─────────────────────────────────────────────────
+  // SOC 1 (financial-reporting controls, `finops_soc_controls`) lives here; SOC 2 Trust
+  // Services (`soc_controls`, segment-scoped, with evidence) is /api/governance/soc2 —
+  // two registers, two tables, never one surface. See finops-soc-controls-collision.
 
-  router.get('/soc/controls', requireRole(TenantRole.MANAGER), async (c) => {
-    const { tenantId } = scope(c);
-    return c.json(await computeControlCoverage(db, tenantId));
-  });
+  const socControls = async (c: Context<HonoEnv>) => c.json(await readControlCoverage(c.env as Env, db, scope(c).tenantId));
+  router.get('/soc/controls', requireRole(TenantRole.MANAGER), socControls);
+  // `/soc/coverage` ran the same computation as `/soc/controls` (uncached there):
+  // it is now the same cached handler, kept for older callers.
+  router.get('/soc/coverage', requireRole(TenantRole.MANAGER), legacyAliasNotice('/api/finops/soc/controls'), socControls);
 
-  router.get('/soc/coverage', requireRole(TenantRole.MANAGER), async (c) => {
-    const { tenantId } = scope(c);
-    const env = c.env as Env;
-    return c.json(await getOrSetCached(env, socCoverageCacheKey(tenantId), () => computeControlCoverage(db, tenantId), SHORT_TTL));
-  });
-
-  // Create a control. On the first write for a tenant that still shows seeded
-  // defaults, persist the default register first so the table becomes authoritative.
   router.post('/soc/controls', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const body = await parseOptionalBody(c, zJsonObject);
-
-    const existing = await db
-      .select({ id: finopsSocControls.id })
-      .from(finopsSocControls)
-      .where(eq(finopsSocControls.tenantId, tenantId))
-      .limit(1);
-    if (existing.length === 0) {
-      await db.insert(finopsSocControls).values(
-        DEFAULT_SOC_CONTROLS.map((d) => ({
-          tenantId,
-          controlRef: d.controlRef,
-          objective: d.objective,
-          category: d.category,
-          status: 'gap' as const,
-        })),
-      ).onConflictDoNothing();
-    }
-
     const controlRef = typeof body.controlRef === 'string' && body.controlRef.trim() ? body.controlRef.trim() : null;
     const objective = typeof body.objective === 'string' && body.objective.trim() ? body.objective.trim() : null;
-    if (controlRef && objective) {
-      const category = typeof body.category === 'string' && body.category.trim() ? body.category.trim() : 'general';
-      await db
-        .insert(finopsSocControls)
-        .values({
-          tenantId,
+    const control = controlRef && objective
+      ? {
           controlRef,
           objective,
-          category,
-          status: normStatus(body.status),
+          category: typeof body.category === 'string' && body.category.trim() ? body.category.trim() : 'general',
+          status: normalizeSocStatus(body.status),
           owner: typeof body.owner === 'string' ? body.owner : null,
           note: typeof body.note === 'string' ? body.note : '',
-        })
-        .onConflictDoNothing();
-    }
-
-    await invalidateCached(c.env as Env, socCoverageCacheKey(tenantId));
-    return c.json(await computeControlCoverage(db, tenantId), 201);
+        }
+      : null;
+    return c.json(await addSocControl(c.env as Env, db, tenantId, control), 201);
   });
 
   router.patch('/soc/controls/:id', requireRole(TenantRole.MANAGER), async (c) => {
@@ -171,27 +137,21 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
     if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid control id' }, 400);
     const body = await parseOptionalBody(c, zJsonObject);
 
-    const set: Record<string, unknown> = { updatedAt: new Date() };
-    if (body.status !== undefined) set.status = normStatus(body.status);
-    if (typeof body.owner === 'string') set.owner = body.owner;
-    if (typeof body.note === 'string') set.note = body.note;
-    if (typeof body.objective === 'string' && body.objective.trim()) set.objective = body.objective.trim();
-    if (typeof body.category === 'string' && body.category.trim()) set.category = body.category.trim();
-    if (body.lastReviewed === true) set.lastReviewed = new Date();
+    const patch: SocControlPatch = {};
+    if (body.status !== undefined) patch.status = normalizeSocStatus(body.status);
+    if (typeof body.owner === 'string') patch.owner = body.owner;
+    if (typeof body.note === 'string') patch.note = body.note;
+    if (typeof body.objective === 'string' && body.objective.trim()) patch.objective = body.objective.trim();
+    if (typeof body.category === 'string' && body.category.trim()) patch.category = body.category.trim();
+    if (body.lastReviewed === true) patch.lastReviewed = new Date();
     else if (typeof body.lastReviewed === 'string') {
       const d = new Date(body.lastReviewed);
-      if (!Number.isNaN(d.getTime())) set.lastReviewed = d;
+      if (!Number.isNaN(d.getTime())) patch.lastReviewed = d;
     }
 
-    const updated = await db
-      .update(finopsSocControls)
-      .set(set)
-      .where(and(eq(finopsSocControls.id, id), eq(finopsSocControls.tenantId, tenantId)))
-      .returning({ id: finopsSocControls.id });
-    if (updated.length === 0) return c.json({ error: 'control not found' }, 404);
-
-    await invalidateCached(c.env as Env, socCoverageCacheKey(tenantId));
-    return c.json(await computeControlCoverage(db, tenantId));
+    const coverage = await updateSocControl(c.env as Env, db, tenantId, id, patch);
+    if (!coverage) return c.json({ error: 'control not found' }, 404);
+    return c.json(coverage);
   });
 
   // ── Audit-Ready Reports ────────────────────────────────────────────────────

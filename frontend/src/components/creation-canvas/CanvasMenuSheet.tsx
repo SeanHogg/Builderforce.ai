@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/chrome.module.css';
+import commandBarStyles from './styles/commandBar.module.css';
 
 /**
  * A BAR SHEET — the popover the bottom bar opens, and the ONE way out of it.
@@ -83,9 +84,9 @@ export function CanvasMenuSheet({ title, testId, onClose, role, placement = 'pop
   }, [onClose]);
 
   return (
-    <div className={styles.moreMenu} data-placement={placement} data-testid={testId} aria-label={title} {...(role ? { role } : {})}>
+    <div className={commandBarStyles.moreMenu} data-placement={placement} data-testid={testId} aria-label={title} {...(role ? { role } : {})}>
       <div className={styles.moreMenuSheetHeader}>
-        <span className={styles.moreMenuSheetTitle}>{title}</span>
+        <span className={commandBarStyles.moreMenuSheetTitle}>{title}</span>
         <button
           type="button"
           data-testid={`${testId}-close`}

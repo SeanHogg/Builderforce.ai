@@ -9,7 +9,7 @@ import { useTranslations } from 'next-intl';
 import { Canvas } from '@react-three/fiber';
 import type { CanvasWorldScene } from '@builderforce/creation-canvas-contract';
 import { isTypingTarget } from '@/lib/keyboardTarget';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/world.module.css';
 import { useSpacePresence } from '../canvasSpacePresence';
 import Scene3D from './Scene3D';
 import { DEFAULT_WALKER_COLOR } from './PlayerController';

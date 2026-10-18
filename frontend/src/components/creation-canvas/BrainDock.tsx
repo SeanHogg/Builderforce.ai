@@ -2,7 +2,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePointerResize } from '@/lib/usePointerResize';
 import { SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/brain.module.css';
+import shellStyles from './CreationCanvas.module.css';
 import { BrainSurface, type BrainSurfaceBodyProps } from './BrainSurface';
 import { BrainSurfaceActions } from './BrainSurfaceActions';
 import { BrainSurfaceViewProvider } from './brainSurfaceView';
@@ -120,7 +121,7 @@ export function BrainDock({
         onClick={onClose}
       />
       <aside
-        className={styles.brainDock}
+        className={shellStyles.brainDock}
         data-mode={mode}
         data-side={side}
         data-size={size}

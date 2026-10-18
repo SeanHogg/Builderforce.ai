@@ -4,7 +4,7 @@ import { useFormat } from '@/i18n/useFormat';
 import type { CreationSnapshotSummary } from '@/lib/builderforceApi';
 import type { LocalCheckpointSummary } from '@/lib/creationCheckpoints';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/stage.module.css';
 
 export interface CanvasHistoryPanelProps {
   open: boolean;

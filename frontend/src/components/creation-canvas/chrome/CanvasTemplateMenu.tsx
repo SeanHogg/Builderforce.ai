@@ -8,7 +8,8 @@ import { matchesTemplateQuery } from '@/lib/templates/contract';
 import type { CreationTemplate as ServerCreationTemplate } from '@/lib/builderforceApi';
 import type { CreationObjectKind } from '../types';
 import type { FramePreset } from '../canvasBoardTypes';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/chrome.module.css';
+import commandBarStyles from '../styles/commandBar.module.css';
 
 /** The category filter is over template SOURCES rather than the packs' own two-value
  *  `category` field, because the browser renders every source. */
@@ -51,7 +52,7 @@ export function CanvasTemplateMenu({ open, onClose, browser, onPrompt, onPack, s
   const router = useRouter();
   if (!open) return null;
   const { search, setSearch, kind, setKind, category, setCategory, entries } = browser;
-  return <div className={styles.templateMenu}>
+  return <div className={commandBarStyles.templateMenu}>
             <header><div><strong>{t('canvasTemplates')}</strong><small>{t('marketplacePacks')}</small></div><button onClick={onClose} aria-label={t('closeTemplates')}>×</button></header>
             <div className={styles.templateFilters}><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('searchTemplates')} aria-label={t('searchTemplates')} /><select value={category} onChange={(event) => setCategory(event.target.value as TemplateCategoryFilter)} aria-label={t('filterTemplateCategory')}><option value="all">{t('allCategories')}</option><option value="pack">{t('templateCategoryObjectPack')}</option><option value="workspace">{t('templateCategoryAutomation')}</option><option value="prompt">{t('templateCategoryPrompt')}</option></select><select value={kind} onChange={(event) => setKind(event.target.value as CreationObjectKind | 'all')} aria-label={t('filterTemplateKind')}><option value="all">{t('allMediaKinds')}</option>{PACK_OBJECT_KINDS.map((objectKind) => <option key={objectKind} value={objectKind}>{t(`object.${objectKind}`)}</option>)}</select></div>
             {/* ONE catalogue. This browser used to iterate `CREATION_TEMPLATES`

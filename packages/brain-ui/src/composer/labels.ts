@@ -9,6 +9,7 @@
  * sentence and the composer supplies the figure.
  */
 import type { ChatMode, Effort } from '@seanhogg/builderforce-brain-embedded';
+import { stringsFrom, type LabelLookup } from '../labelCatalog';
 
 export interface ComposerLabels {
   placeholder: string;
@@ -79,4 +80,25 @@ export const DEFAULT_COMPOSER_LABELS: ComposerLabels = {
 
 export function composerLabels(overrides?: Partial<ComposerLabels>): ComposerLabels {
   return overrides ? { ...DEFAULT_COMPOSER_LABELS, ...overrides } : DEFAULT_COMPOSER_LABELS;
+}
+
+/**
+ * THE composer copy from a host catalog — the ONE key table every host reads it
+ * through. Canonical keys are the field names; the per-choice ones are
+ * `modeLabel.<mode>`, `modeHint.<mode>` and `effortDesc.<level>` (figure `answer`),
+ * plus `effortThinkingSuffix` (`thinking`) and `thinkingOnDesc` (`budget`). A key the
+ * catalog lacks keeps the English default. `overrides` is for copy a host words from
+ * another source on purpose (the web's chat-mode vocabulary).
+ */
+export function composerLabelsFrom(lookup: LabelLookup, overrides?: Partial<ComposerLabels>): ComposerLabels {
+  const d = DEFAULT_COMPOSER_LABELS;
+  return {
+    ...stringsFrom(d, lookup),
+    modeLabel: (mode) => lookup(`modeLabel.${mode}`) || d.modeLabel(mode),
+    modeHint: (mode) => lookup(`modeHint.${mode}`) || d.modeHint(mode),
+    effortDesc: (level, answer) => lookup(`effortDesc.${level}`, { answer }) || d.effortDesc(level, answer),
+    effortThinkingSuffix: (thinking) => lookup('effortThinkingSuffix', { thinking }) || d.effortThinkingSuffix(thinking),
+    thinkingOnDesc: (budget) => lookup('thinkingOnDesc', { budget }) || d.thinkingOnDesc(budget),
+    ...overrides,
+  };
 }

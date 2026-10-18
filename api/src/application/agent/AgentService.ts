@@ -28,11 +28,17 @@ export class AgentService {
     return this.agents.update(agent.deactivate());
   }
 
-  async listSkills(agentId?: number): Promise<Skill[]> {
+  /**
+   * Legacy skills, always tenant-scoped. With an agent id the agent must belong
+   * to the tenant (404 otherwise); without one, every skill on the tenant's agents.
+   * The unscoped variant `/api/skills` used to call returned every workspace's rows.
+   */
+  async listSkills(tenantId: number, agentId?: number): Promise<Skill[]> {
     if (agentId !== undefined) {
+      await this.getAgent(agentId, tenantId);
       return this.skills.findAllByAgent(asAgentId(agentId));
     }
-    return this.skills.findAll();
+    return this.skills.findAllByTenant(asTenantId(tenantId));
   }
 
 }

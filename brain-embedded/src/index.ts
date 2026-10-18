@@ -697,3 +697,13 @@ export { isManagerRole } from './workspaceRoles';
 export { PromptInput, type PromptInputProps } from './ui/PromptInput';
 export type { SavingsBreakdown, SavingsBySource, SavingsSourceKey, SpendBreakdown, SpendSavingsSummary } from './spendSavings';
 export { USAGE_SURFACE_HEADER, USAGE_SURFACES, isUsageSurface, withUsageSurface, type UsageSurface } from './usageSurface';
+
+// THE ONE turn door (steer → queue while running → send) and Stop, the ONE turn queue
+// under it (moved from brain-ui, which re-exports it), and "the first message creates
+// the chat" (single in-flight create + first-turn auto-title port).
+export { useChatTurns } from './useChatTurns';
+export type { ChatTurns, ChatTurnsOptions } from './useChatTurns';
+export { useQueuedTurns } from './useQueuedTurns';
+export type { QueuedItem, QueuedTurns, QueuedTurnsOptions } from './useQueuedTurns';
+export { useChatCreation } from './useChatCreation';
+export type { ChatCreation, ChatCreationOptions } from './useChatCreation';

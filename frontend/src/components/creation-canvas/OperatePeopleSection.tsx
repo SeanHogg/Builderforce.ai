@@ -2,7 +2,8 @@
 import { useTranslations } from 'next-intl';
 import { useFormat } from '@/i18n/useFormat';
 import { useSiteAudience } from './hooks/useSiteAudience';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/inspector.module.css';
+import surfacesStyles from './styles/surfaces.module.css';
 
 export interface OperatePeopleSectionProps {
   /** The primary app's durable project (`binding.ideProjectId`), or null before there is one. */
@@ -24,10 +25,10 @@ export function OperatePeopleSection({ projectId }: OperatePeopleSectionProps) {
   const { status, summary } = useSiteAudience(projectId);
 
   const body = (() => {
-    if (status === 'loading') return <p className={styles.placeSectionHint} role="status">{t('loading')}</p>;
-    if (status === 'error') return <p className={styles.placeSectionHint} role="alert">{t('error')}</p>;
+    if (status === 'loading') return <p className={surfacesStyles.placeSectionHint} role="status">{t('loading')}</p>;
+    if (status === 'error') return <p className={surfacesStyles.placeSectionHint} role="alert">{t('error')}</p>;
     if (status === 'idle' || !summary?.published) {
-      return <p className={styles.placeSectionHint} role="status">{t('notPublished')}</p>;
+      return <p className={surfacesStyles.placeSectionHint} role="status">{t('notPublished')}</p>;
     }
     const stats: Array<{ id: string; value: string; label: string }> = [
       { id: 'users', value: fmt.number(summary.users), label: t('users') },
@@ -40,13 +41,13 @@ export function OperatePeopleSection({ projectId }: OperatePeopleSectionProps) {
       <ul className={styles.placeStats} data-testid="operate-people-stats">
         {stats.map((stat) => <li key={stat.id} data-testid={`operate-people-${stat.id}`}><strong>{stat.value}</strong><span>{stat.label}</span></li>)}
       </ul>
-      <p className={styles.placeSectionHint}>{t('trafficNote', { days: summary.days })}</p>
+      <p className={surfacesStyles.placeSectionHint}>{t('trafficNote', { days: summary.days })}</p>
     </>;
   })();
 
   return (
-    <section className={styles.placeSection} aria-labelledby="operate-people" data-testid="operate-people">
-      <div className={styles.placeSectionHead}><h2 id="operate-people" className={styles.placeSectionTitle}>{t('title')}</h2></div>
+    <section className={surfacesStyles.placeSection} aria-labelledby="operate-people" data-testid="operate-people">
+      <div className={surfacesStyles.placeSectionHead}><h2 id="operate-people" className={surfacesStyles.placeSectionTitle}>{t('title')}</h2></div>
       {body}
     </section>
   );

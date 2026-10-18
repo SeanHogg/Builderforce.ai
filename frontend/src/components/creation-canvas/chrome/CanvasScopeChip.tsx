@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { useTranslations } from 'next-intl';
 import { ContextChip } from '@seanhogg/builderforce-brain-ui';
 import { Icon } from '@/components/ui/Icon';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/composer.module.css';
 
 /** What a Brain turn reads — the whole board, the selection, its neighbourhood or a frame. */
 export type CanvasScopeMode = 'auto' | 'canvas' | 'selection' | 'connected' | 'frame';

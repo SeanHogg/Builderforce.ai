@@ -21,6 +21,18 @@
  *
  * Stateless — nothing is persisted and nothing is read, so there is no cache or
  * invalidation surface (unlike /api/decks, which stores generated decks in R2).
+ *
+ * ── THE EXPORT SOURCES ─────────────────────────────────────────────────────
+ *   GET /sources               the tabular sources this caller may pull  [member]
+ *   GET /sources/:id?format=   one source as csv|json|html|xlsx           [source's own gate]
+ *
+ * Every tabular download in the api (insights, member metrics, the audit
+ * report, tax, the CapEx/OpEx spine, the operator audit log and permission
+ * matrix) is a registered source (`application/export/exportSources.ts`) and
+ * is served here and at its historical path by the SAME adapter
+ * (`exportSourceRoute.ts`). These need a real session: unlike the stateless
+ * renders above, a source READS workspace data, so the guest allowance below
+ * does not apply to them.
  */
 
 import { Hono, type Context, type Next } from 'hono';
@@ -35,13 +47,18 @@ import { DocxSourceUnusableError, markdownIntoDocxSource } from '../../applicati
 import { markdownToPdf, type PdfTheme } from '../../application/office/pdfWriter';
 import { markdownToPptx } from '../../application/office/slidesRenderer';
 import { MAX_XLSX_COLUMNS, MAX_XLSX_ROWS, rowsToXlsx, type XlsxCell } from '../../application/office/xlsxWriter';
+import { toXlsxCell } from '../../application/export/exportSource';
 import { slugify } from '@builderforce/creation-canvas-contract';
+import { downloadResponse, DOWNLOAD_FORMATS } from '../../application/export/exportDownload';
+import { getExportSource, listExportSources } from '../../application/export/exportSources';
+import { canPullTenantSource, serveExportSource } from './exportSourceRoute';
+import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
 import { parseBody, z } from './requestBody';
 
-const DOCX_CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-const PPTX_CT = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-const XLSX_CT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const PDF_CT = 'application/pdf';
+const DOCX_CT = DOWNLOAD_FORMATS.docx.contentType;
+const PPTX_CT = DOWNLOAD_FORMATS.pptx.contentType;
+const XLSX_CT = DOWNLOAD_FORMATS.xlsx.contentType;
+const PDF_CT = DOWNLOAD_FORMATS.pdf.contentType;
 
 /** Cap the payload so one chat message can't turn into an unbounded render. */
 const MAX_MARKDOWN_CHARS = 200_000;
@@ -99,14 +116,6 @@ function readPdfTheme(value: unknown): PdfTheme {
   };
 }
 
-/** A cell the writer can represent. Anything else — an object, an array left in
- * a dataset row — becomes its JSON text rather than `[object Object]`. */
-function readCell(value: unknown): XlsxCell {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value === 'boolean' || typeof value === 'string') return value;
-  return JSON.stringify(value);
-}
 
 /** Validate + normalize a sheet payload into the writer's positional shape. */
 function readSheet(body: SheetBody): { error: string } | { columns: string[]; rows: XlsxCell[][]; title: string; name: string } {
@@ -114,7 +123,7 @@ function readSheet(body: SheetBody): { error: string } | { columns: string[]; ro
   if (!columns.length) return { error: 'columns are required' };
   const rawRows = Array.isArray(body.rows) ? body.rows : [];
   if (rawRows.length > MAX_XLSX_ROWS) return { error: 'too many rows' };
-  const rows = rawRows.map((row) => Array.isArray(row) ? row.map(readCell) : columns.map(() => null));
+  const rows = rawRows.map((row) => Array.isArray(row) ? row.map(toXlsxCell) : columns.map(() => null));
   const title = (body.title ?? '').trim().slice(0, 200);
   return { columns, rows, title, name: slugify(title || 'sheet', { maxLength: 60, fallback: 'sheet' }) };
 }
@@ -147,13 +156,7 @@ async function docxSourceBytes(c: Context<HonoEnv>, key: string | null | undefin
 }
 
 function fileResponse(bytes: Uint8Array, filename: string, contentType: string): Response {
-  return new Response(bytes as unknown as BodyInit, {
-    headers: {
-      'content-type': contentType,
-      'content-disposition': `attachment; filename="${filename.replace(/"/g, '')}"`,
-      'cache-control': 'no-store',
-    },
-  });
+  return downloadResponse(bytes, { filename, contentType });
 }
 
 /**
@@ -197,7 +200,33 @@ async function exportAccess(c: Context<HonoEnv>, next: Next): Promise<Response |
 
 export function createExportRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  router.use('*', exportAccess);
+
+  // ── Export sources — real sessions only, each source's own declared gate ──
+  // Registered BEFORE the guest-allowance middleware is attached to the render
+  // paths, and that middleware is scoped to those paths, so a source request
+  // never spends (or is refused by) a guest's daily download allowance.
+  router.get('/sources', authMiddleware, (c) => {
+    const role = c.get('role') as string | undefined;
+    const sources = listExportSources()
+      .filter((s) => s.scope === 'tenant' && canPullTenantSource(role, s))
+      .map((s) => ({ id: s.id, label: s.label, formats: s.formats }));
+    return c.json({ sources });
+  });
+
+  router.get('/sources/:id', async (c) => {
+    const source = getExportSource(c.req.param('id'));
+    if (!source) return c.json({ error: 'Unknown export source' }, 404);
+    // A platform source is the operator's (cross-tenant) and takes the superadmin
+    // gate; a tenant source takes the tenant session. Same gates as its
+    // historical path, chosen from the source's declared scope.
+    const gate = source.scope === 'platform' ? superAdminMiddleware : authMiddleware;
+    // A gate that refuses returns its own response (the terms-acceptance 428);
+    // otherwise the download lands on `c.res`.
+    const early = (await gate(c, async () => { c.res = await serveExportSource(c, source); })) as Response | undefined;
+    return early ?? c.res;
+  });
+
+  for (const path of ['/docx', '/pdf', '/pptx', '/xlsx']) router.use(path, exportAccess);
 
   /**
    * TWO PATHS, AND THE DIFFERENCE IS WHETHER THIS DOCUMENT EVER HAD A SOURCE.

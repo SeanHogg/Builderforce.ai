@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { useTranslations } from 'next-intl';
 import type { BrainDockPreferences, BrainDockSide } from '../brainDockPreferences';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/brain.module.css';
 import { SurfaceLauncher } from '@seanhogg/builderforce-brain-ui';
 
 export interface CanvasBrainLauncherProps {

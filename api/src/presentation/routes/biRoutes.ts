@@ -12,11 +12,10 @@ export function createBiRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
+  // The headline of the runway report's observed side (one reader, one cache entry)
+  // — finance facts are tenant-wide, so no segment narrows them.
   router.get('/burn-rate', async (c) => {
-    const tenantId = c.get('tenantId');
-    const segmentId = c.get('segmentId') as string;
-    const result = await fetchBurnRate(db, { tenantId, segmentId });
-    return c.json(result);
+    return c.json(await fetchBurnRate(db, c.env as Env, c.get('tenantId') as number));
   });
 
   // The CFO's runway and cashflow — observed facts and the founder's declared

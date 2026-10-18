@@ -1,0 +1,397 @@
+/* The command bar and its bar groups, menus, session pill and the phone actions sheet.
+   Split out of CreationCanvas.module.css, which keeps the board shell and the
+   canvas palette (`--canvas-*`, light and dark) that every rule here reads. */
+
+/* ══════════════════════════════════════════════════════════════════════════════════
+   THE FLOATING CHROME
+   ══════════════════════════════════════════════════════════════════════════════════
+   There is no chrome band. The canvas takes the whole shell and every control floats
+   over it in one of three regions, declared in `lib/canvasChrome.ts`:
+
+     .sessionPill    top left      is the work somewhere safe
+     .surfaceChips   top centre    how it is being READ (and which phase you are in)
+     .commandBar     bottom centre what you DO to it — including how work LEAVES it
+
+   `handoff` (Publish, the overflow) used to be a fourth region, `topRight`, and used
+   to carry Invite too. It is `bar`-placed now, drawn inside `.commandBar` behind its
+   own divider rather than in a card of its own — see `.handoffGroup` and
+   `CreationCanvas.tsx`'s `handoffChrome`. Invite itself sits with the roster now,
+   as `.rosterInvite` — see that rule.
+
+   Every one of them is the same card — one surface, one border, one shadow — so the
+   three read as one system floating at one height rather than three visitors. The
+   shared look is `.floatCard`; only placement differs below it.
+
+   They are all `position:absolute` against `.canvasShell`, which is why the shell is a
+   containing block and the board no longer subtracts a band from its own height. */
+.floatCard {
+  position:absolute;
+  z-index:20;
+  display:flex;
+  align-items:center;
+  box-sizing:border-box;
+  max-width:calc(100% - 28px);
+  border:1px solid var(--canvas-line);
+  border-radius:var(--radius-lg);
+  background:color-mix(in srgb, var(--canvas-panel) 92%, transparent);
+  backdrop-filter:blur(10px);
+  box-shadow:0 1px 2px var(--canvas-shadow), 0 14px 34px -14px var(--canvas-shadow);
+}
+.sessionPill, .surfaceChips { min-height:var(--canvas-top-card-h); }
+
+.sessionPill { top:14px; left:calc(14px + var(--brain-dock-left, 0px)); gap:7px; padding:6px 10px 6px 8px; min-width:0; }
+
+/* On the canvas, framing nothing. This is the piece the redesign is most often judged
+   by: the old switcher sat inside a band that drew a hard line across the window under
+   it, so the board began below the chrome instead of behind it. */
+/* Centred on the OPEN board, not on the window: with Brain docked to one edge, a card
+   centred on the viewport sits a third of the way under it. Same correction the minimap
+   and the prompt dock already make, from the same two variables. */
+/* Column, not row: the fused widget stacks the phase stepper over the (phase-narrowed)
+   modality tabs, so this card's own flex axis has to flip from `.floatCard`'s row —
+   see `PhaseModalitySelector`. */
+.surfaceChips {
+  top:14px; padding:6px; gap:0;
+  flex-direction:column; align-items:stretch;
+  left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2);
+  transform:translateX(-50%);
+}
+
+/* ── THE DOORS OUT, INSIDE THE BAR ─────────────────────────────────────────────────
+   `.handoffGroup` is a plain row, not a card — it has no border, no plate and no
+   shadow of its own, because `.commandBar` already draws one and a bordered card
+   inside a bar is the doubled chrome the floating-chrome redesign removed everywhere
+   else. What it keeps is `position:relative`, because the menus that hang off these
+   buttons anchor with `right:0` and that offset has to resolve against THIS group
+   rather than against the whole bar, which is wider than the buttons that open them. */
+.handoffGroup { position:relative; display:flex; align-items:center; gap:6px; }
+/* The menus keep their own plate, and it must sit ABOVE the bar's own stacking
+   context rather than inside it — a sheet that opens behind the row that spawned it
+   is worse than one that does not open. The invite sheet gets the same rule from
+   `.rosterInviteAnchor` now that Share opens beside the roster instead of here. */
+.handoffGroup > .moreMenu,
+.handoffGroup > .templateMenu,
+.rosterInviteAnchor > .shareMenu { z-index:60; }
+/* …and the CARD those sheets open out of has to rise WITH them, which the rule above
+   cannot do on its own. `.floatCard` gives the bar `position:absolute; z-index:20`, so
+   the bar is its own stacking context: a sheet inside it at 60 is 60 *within the bar*,
+   and the bar entire still paints under `.composerDock` (21). That is exactly what the
+   invite sheet hit on the conversation surface — the prompt is the tallest thing on
+   that board, so "Invite collaborators" opened behind it, which is the same "a sheet
+   that opens behind the row that spawned it" failure the rule above was written for.
+   Raised only WHILE a sheet is open, so a resting bar keeps the prompt on top of it,
+   which is what the composer's 21 was for. One rule for all three sheets rather than a
+   flag threaded down to the bar: whether a sheet is open is already stated by the sheet
+   being in the DOM. */
+.commandBar:has(.shareMenu, .moreMenu, .templateMenu) { z-index:22; }  /* 14px corner + a two-row widget + 6px clearance */
+
+/* ── THE ONE COMMAND BAR ──────────────────────────────────────────────────────────
+   Bottom centre, over the board rather than under it. It holds Run, whatever the
+   surface contributed, the glyph clusters, the team and the add-object circles — and
+   `data-surface` is published so a surface-specific rule has somewhere to hang without
+   this file needing to know which surfaces exist. */
+.commandBar {
+  bottom:14px; gap:7px; padding:6px 7px; flex-wrap:nowrap;
+  /* -- ONE HEIGHT FOR EVERY CONTROL ON THIS BAR ---------------------------------
+     The bar draws controls from six different places - the session-action registry,
+     the host's own contributions (Add, the prompt toggle, the green Run, the •••
+     trigger), the live roster, `TeamBar`, `CanvasHostActions` and whatever a vendor
+     panel puts in `extras` - and every one of them used to state its own size. The
+     census was 24, 26, 28, 30, 32, 33, 34 and 36 pixels IN ONE ROW: seven heights
+     across a strip 36px tall, which reads as a row that has not been laid out.
+
+     So it is declared here, once, and everything the bar draws takes it from here:
+
+       --canvas-bar-control  the height of any single control - a glyph button, an
+                             avatar, the green Run, a worded segment.
+       --canvas-bar-row      the height of a GROUP's row: the control plus the
+                             trough's own 3px padding and 1px border on each side.
+
+     They are custom properties rather than a shared class because the contributors
+     are in other modules (`TeamBar.module.css`, `TwilioCanvasSetup.module.css`) that
+     cannot compose from this one; a property inherits into them, and each states a
+     fallback for the surfaces where it renders outside this bar. */
+  --canvas-bar-control:28px;
+  --canvas-bar-row:calc(var(--canvas-bar-control) + 8px);
+  /* BOTTOM, not centre. Every group now carries a caption above it and the loose pieces
+     between them (the grip, the dividers, the green Run, the collapse chevron) do not, so
+     centring would leave the captioned groups' buttons sitting lower than their
+     uncaptioned neighbours' — one row of controls drawn on two baselines. */
+  align-items:flex-end;
+  left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2);
+  transform:translateX(-50%);
+  max-width:calc(100% - 28px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px));
+}
+
+/* The grip a floating chrome card (the command bar, the prompt) exposes so it can be
+   dragged off the position its own CSS computes — see `usePanelDragOffset`.
+   `touch-action:none` stops a press-and-drag on a touchscreen turning into a page
+   scroll before the pointer handlers ever see it move. */
+.dragHandle {
+  flex:none; display:grid; place-items:center; width:24px; height:24px; padding:0;
+  border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted);
+  cursor:grab; touch-action:none;
+}
+.dragHandle:hover, .dragHandle:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.dragHandle:active { cursor:grabbing; }
+/* ON THE BAR the grip is the one thing with no caption over it and no trough around it,
+   so at its own 24px it hung below the centre line every button on the bar shares - the
+   bar is `align-items:flex-end`, and a short ungrouped child bottoms out against the
+   trough's padding rather than against its buttons. Given the ROW's height it centres
+   with them. Scoped, because the prompt composer's grip has no row to match. */
+.commandBar > .dragHandle { width:var(--canvas-bar-control); height:var(--canvas-bar-row); }
+.dragHandle > svg { display:block; width:14px; height:14px; }
+
+/* Folded, the bar reports and does not act: who is here, and what the runtime is doing.
+   It gets SHORTER and NARROWER rather than merely emptier — a full-width bar holding
+   three small status marks reads as a bar that has lost its buttons, which is the exact
+   impression a collapse is supposed to remove. WHAT survives is decided in
+   `canvasChrome.ts`, never here; this only sizes what does. */
+.commandBar[data-collapsed='true'] { gap:5px; padding:4px 5px; align-items:center; }
+/* A folded bar keeps only STATUS (`canvasChrome.ts`), so what is left is the roster and
+   whatever the runtime is reporting — one row of faces that names itself. A caption over
+   it would be the fold spending the height it was pressed to reclaim. */
+.commandBar[data-collapsed='true'] .barGroupCaption { display:none; }
+/* Anchors the invite sheet to THIS button rather than to the bar as a whole — the
+   sheet is `position:absolute; right:0`, and its containing block has to be the
+   control that opened it or it opens off the button that spawned it. */
+.rosterInviteAnchor { position:relative; display:flex; align-items:center; }
+
+/* The ONE way a piece of canvas chrome names a group of controls — the ••• sheet's
+   section headings and the command bar's group captions are the same idea at the same
+   size, so they are the same declaration. Split into two the moment they were both
+   wanted and they drift into two typographies for one thing. */
+.chromeHeading { color:var(--canvas-muted); font-size:8px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
+
+/* ── A NAMED GROUP IN THE BAR ─────────────────────────────────────────────────────
+   The same argument the surface switcher makes, carried one step further. A trough says
+   "these belong together" — same shell, same radius and same lit state as `.surfaceTabs`,
+   so the bar reads as ONE language of controls left to right — and it stops there: it
+   cannot say WHAT they are for. So a bar of five troughs read as five anonymous huddles
+   whose only explanation was a tooltip you had to collect one icon at a time.
+
+   The caption is what closes that, and it is drawn by ONE component (`CanvasBarGroup`)
+   for every group on the bar, so the sets cannot end up half captioned. See that file,
+   and `lib/canvasBarGroups.ts` for the names themselves. */
+.barGroup { display:inline-flex; flex:none; flex-direction:column; align-items:center; gap:1px; min-width:0; }
+/* THE CAPTION IS A STAGE, so it wears that stage's dot in that stage's hue — the same
+   `--stage-*` tokens the left rail's `.nav-stage__dot` uses. Five rules rather than one
+   because a custom property cannot be built from an attribute value; the alternative was
+   an inline style per group, which puts the palette back into the component. */
+.barGroup[data-stage] .barGroupCaption::before {
+  /* INLINE, not a flex child: the caption keeps `text-overflow:ellipsis`, and a flex
+     container would make the text an anonymous item that ellipsis cannot reach. */
+  content:''; display:inline-block; width:5px; height:5px; margin-right:5px;
+  border-radius:50%; vertical-align:middle;
+  background:var(--bar-stage-hue,var(--canvas-muted));
+}
+.barGroup[data-stage='idea'] { --bar-stage-hue:var(--stage-idea); }
+.barGroup[data-stage='make'] { --bar-stage-hue:var(--stage-make); }
+.barGroup[data-stage='run'] { --bar-stage-hue:var(--stage-run); }
+.barGroup[data-stage='measure'] { --bar-stage-hue:var(--stage-measure); }
+.barGroup[data-stage='reach'] { --bar-stage-hue:var(--stage-reach); }
+.barGroupCaption {
+  /* `composes` MUST be the first declaration in a CSS-module rule. */
+  composes: chromeHeading;
+  /* Capped so a long word in a long language cannot set the width of the group beneath
+     it — a German "Hinzufügen" over a single 30px button would otherwise stretch the bar
+     by the length of its own caption. It ellipsises instead; the group's full name is
+     still on the group itself, where a screen reader and a hover both find it. */
+  max-width:96px; overflow:hidden; line-height:1.1; text-align:center; text-overflow:ellipsis; white-space:nowrap;
+  /* The caption is a label, not a target: a drag on the bar's own grip must not begin
+     with a text selection because the pointer landed on a word. */
+  user-select:none;
+}
+.barGroupRow { display:inline-flex; flex:none; align-items:center; gap:2px; }
+/* The segmented shell, for a set of glyphs. A group of ONE, or of members that carry
+   their own chrome (a worded button, an avatar), is `bare`: a lone button in a segmented
+   trough reads as a group with a member missing. */
+.barGroupRow[data-shell='trough'] { padding:3px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+/* A group whose members set their own spacing keeps room between them — 2px is the gap
+   BETWEEN segments of one control, not between a Run button and the switcher beside it. */
+.barGroupRow[data-shell='bare'] { gap:6px; padding:3px; border:1px solid transparent; }
+/* THE BARE SHELL CARRIES THE TROUGH'S BOX, invisibly. The bar is `align-items:flex-end`,
+   so a bare row 8px shorter than the troughs beside it put its own controls 4px lower
+   than theirs - one row of buttons drawn on two baselines, which is exactly what the
+   flex-end was chosen to prevent. Invisible box, identical box.
+   And whatever the shell, the row is ONE height, so a group holding an avatar or a
+   worded segment lines up with the group of glyphs next to it. */
+.barGroupRow { min-height:var(--canvas-bar-row,36px); }
+/* The one worded action. It opens a panel rather than acting on the board, and
+   "Share" is a promise a glyph cannot make. */
+.sessionActionLabelled {
+  display:inline-flex; flex:none; align-items:center; gap:6px; min-height:34px; padding:8px 11px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel);
+  color:var(--canvas-ink); font-family:inherit; font-size:12px; font-weight:650; cursor:pointer;
+}
+.sessionActionLabelled > svg { display:block; width:15px; height:15px; color:var(--canvas-muted); }
+.sessionActionLabelled i { display:block; color:var(--canvas-muted); }
+.sessionActionLabelled i > svg { display:block; width:12px; height:12px; transition:transform .15s ease; }
+.sessionActionLabelled:hover,.sessionActionLabelled:focus-visible { border-color:var(--canvas-accent); color:var(--canvas-accent); outline:none; }
+.sessionActionLabelled:hover > svg,.sessionActionLabelled:focus-visible > svg { color:var(--canvas-accent); }
+/* The disclosure marker points at the sheet it opened, so the button says "this is
+   mine" while the invite panel is on screen. */
+.sessionActionLabelled[aria-expanded='true'] { border-color:var(--canvas-accent); color:var(--canvas-accent); background:color-mix(in srgb,var(--canvas-accent) 10%,var(--canvas-panel)); }
+.sessionActionLabelled[aria-expanded='true'] > svg,.sessionActionLabelled[aria-expanded='true'] i { color:var(--canvas-accent); }
+.sessionActionLabelled[aria-expanded='true'] i > svg { transform:rotate(180deg); }
+@media (prefers-reduced-motion:reduce) { .sessionActionLabelled i > svg { transition:none; } }
+/* A worded action INSIDE a trough is a segment, not a button sitting in a box. Share and
+   Publish became a pair the moment Publish was declared beside it, and a pair of fully
+   chromed buttons inside a chromed shell draws three borders and stands 6px taller than
+   the icon troughs next to it. Same trade the surface tabs make: the trough carries the
+   shell, the segment carries only the word and its lit state. */
+/* Matched THROUGH `.handoffGroup` as well as directly. `Make it real` has to be wrapped
+   in a positioned anchor — its menu opens `right:0` against whatever box renders it — and
+   that wrapper was enough to miss this rule, so the one worded control on the bar drew
+   its own full border and read as a group of its own sitting beside Reach rather than as
+   the last segment IN it. */
+.barGroupRow[data-shell='trough'] > .sessionActionLabelled,
+.barGroupRow[data-shell='trough'] > .handoffGroup > .sessionActionLabelled {
+  height:var(--canvas-bar-control,28px); min-height:0; padding:0 9px; border:0; border-radius:var(--radius-sm);
+  background:transparent; color:var(--canvas-muted);
+}
+.barGroupRow[data-shell='trough'] > .sessionActionLabelled:hover,
+.barGroupRow[data-shell='trough'] > .sessionActionLabelled:focus-visible,
+.barGroupRow[data-shell='trough'] > .handoffGroup > .sessionActionLabelled:hover,
+.barGroupRow[data-shell='trough'] > .handoffGroup > .sessionActionLabelled:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); }
+.barGroupRow[data-shell='trough'] > .sessionActionLabelled[aria-expanded='true'],
+.barGroupRow[data-shell='trough'] > .handoffGroup > .sessionActionLabelled[aria-expanded='true'] {
+  background:var(--canvas-panel); color:var(--canvas-accent); box-shadow:0 1px 2px var(--canvas-shadow);
+}
+
+/* No `.iconAction` here any more. It sized a 34px bordered square and had exactly one
+   consumer left - the board menu's trigger - which sat in the Board trough at 34px beside
+   a 28px full-screen glyph and drew its own border inside a shell that already has one.
+   It wears `.sessionActionButton` now, the class every other glyph on this bar wears, so
+   the trigger's height, its hover and its lit state come from where theirs do. */
+/* Anchored to the END of the action row, not to a hard-coded offset from it. The two
+   menus used to sit at `right:76px` and `right:150px`, which were measurements of the
+   buttons that happened to follow them — so both drifted the moment the save button was
+   absent (every signed-in session) or the row was reordered. `.handoffGroup` is the
+   positioning context; right:0 is the answer that stays true.
+   `bottom:calc(100% + 10px)`, not `top`: the row that opens these lives in the bottom
+   command bar now, so a sheet that dropped DOWN from it would open off the bottom of
+   the window. It opens upward instead, clearing the row by the same gap the top-anchored
+   version used to leave below it. */
+.shareMenu {
+  position:absolute; right:0; bottom:calc(100% + 10px); width:300px; padding:15px; background:var(--canvas-panel);
+  color:var(--canvas-ink); border:1px solid var(--canvas-line); border-radius:var(--radius-lg); box-shadow:0 -18px 55px var(--canvas-shadow);
+}
+.shareMenu .shareMenuHeader { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.shareMenu .shareMenuClose { width:28px; height:28px; display:grid; flex:none; place-items:center; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font-size:20px; line-height:1; cursor:pointer; }
+.shareMenu .shareMenuClose:hover { background:var(--canvas-hover); color:var(--canvas-ink); }
+.shareMenu .shareMenuClose:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:2px; }
+.shareMenu p { margin:6px 0 12px; color:var(--canvas-muted); font-size:12px; line-height:1.45; }
+.shareMenu div { display:flex; gap:6px; }
+.shareMenu input { min-width:0; flex:1; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted); color:var(--canvas-ink); }
+.shareMenu button { padding:7px 10px; background:var(--canvas-accent); color:var(--text-on-accent); border:0; border-radius:var(--radius-sm); }
+.shareMenu small { display:block; margin-top:10px; color:var(--canvas-muted); }
+/* The menu is a fixed 300px popover anchored to the session bar; on a phone that
+   overflows a 360px viewport, so it becomes a full-width sheet under the bar. */
+@media (max-width:560px) {
+  .shareMenu { right:8px; left:8px; width:auto; }
+}
+/* Opens upward — see `.shareMenu` for why: its trigger lives in the bottom bar. */
+.moreMenu {
+  position:absolute; right:0; bottom:calc(100% + 10px); width:250px; display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:9px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 -20px 60px var(--canvas-shadow);
+}
+.moreMenu button,.moreMenu label { min-width:0; padding:7px 8px; border:0; border-radius:var(--radius-md); background:transparent; color:var(--canvas-ink); font:600 11px var(--font-sans); text-align:left; cursor:pointer; }
+.moreMenu button { display:flex; align-items:center; gap:8px; }.moreMenu button > span { width:22px; height:22px; flex:none; display:grid; place-items:center; border-radius:var(--radius-sm); font-size:12px; }
+/* One drawn size for every glyph in the sheet. Without it an icon with a viewBox and
+   no width fills its whole 22px chip while the `1em` ones sit at 11px beside it — the
+   same mismatch the phone rail had before the shared icon set. */
+.moreMenu button > span > svg,.moreMenu label i > svg { display:block; width:14px; height:14px; }
+/* A row whose label is a SENTENCE takes both columns rather than wrapping to three
+   lines inside a 113px half. Declared by the row itself (`data-wide`), not by an
+   nth-child rule here, so the sheet keeps working whichever rows the session offers. */
+.moreMenu button[data-wide='true'] { grid-column:1 / -1; }
+.moreMenu button:hover,.moreMenu button:focus-visible { outline:none; background:var(--canvas-hover); color:var(--canvas-accent); }.moreMenu button:hover > span,.moreMenu button:focus-visible > span { background:color-mix(in srgb,var(--canvas-accent) 24%,var(--canvas-panel)); color:var(--canvas-accent); }
+.moreMenuHeading { composes: chromeHeading; grid-column:1 / -1; margin:5px 5px 1px; }.moreMenuHeading:first-child { margin-top:1px; }
+.moreMenuSheetTitle { composes: chromeHeading; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.moreMenu label { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; margin-top:3px; border-top:1px solid var(--canvas-line); border-radius:0; cursor:default; }.moreMenu label > span { display:flex; align-items:center; gap:8px; }.moreMenu label i { width:22px; height:22px; display:grid; place-items:center; border-radius:var(--radius-sm); font-style:normal; }
+.moreMenu select { max-width:105px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); padding:4px; background:var(--canvas-panel); color:var(--canvas-ink); font:inherit; }
+/* Native option lists are painted by the OS and inherit nothing from the control,
+   so every select on the canvas states its own opaque pair. */
+.moreMenu select option { background:var(--canvas-panel); color:var(--canvas-ink); }
+/* Opens upward — see `.shareMenu` for why: its trigger lives in the bottom bar. */
+.templateMenu { position:absolute; z-index:18; right:0; bottom:calc(100% + 10px); width:330px; max-height:70vh; overflow:auto; padding:12px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:#fff; box-shadow:0 -18px 55px rgba(60,48,36,.18); }
+.templateMenu header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }.templateMenu header button { border:0;background:transparent;font-size:18px;cursor:pointer; }
+.templateMenu > button { display:grid; width:100%; gap:3px; margin:6px 0; padding:10px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fbfdff; color:var(--canvas-ink); text-align:left; cursor:pointer; }.templateMenu > button small { color:var(--canvas-muted); }
+.templateMenu > button i { color:var(--canvas-accent); font-size:8px; font-style:normal; }
+
+/* ── The surface switcher, in the session header ──────────────────────────────────
+   A segmented control rather than three separate buttons, because these three are one
+   decision with one answer: the shared trough is what says "pick one of these", and the
+   lit segment is what says which. It reads its colours from the canvas tokens, so it is
+   correct in both themes without a single theme-specific rule.
+   `flex:none` matters — the title input beside it is `flex:1` on narrow desktops and
+   would otherwise squeeze the labels out one character at a time. */
+.surfaceTabs { display:flex; flex:none; align-items:center; gap:2px; padding:3px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+
+/* Inside the floating chip card the trough IS the card — a second border and a second
+   fill one pixel apart is the "bar inside a bar" the redesign removed everywhere else. */
+.surfaceChips .surfaceTabs { padding:0; border:0; background:transparent; }
+
+/* ── THE PHONE'S ACTIONS SHEET ────────────────────────────────────────────────────
+   The command bar, as one scrolling sheet. It borrows `.moreMenu`'s box (that is what
+   `CanvasMenuSheet` draws) and re-lays its body: the captioned arc groups stacked down
+   the sheet, each a two-column grid of 44px worded tiles.
+
+   It STOPS under the canvas app bar and SITS ON the composer, both from the measured
+   bands, so the two things a reader must keep — which canvas this is, and the box they
+   type in — are never underneath it. */
+.actionsSheetBody { display:flex; flex-direction:column; gap:14px; grid-column:1 / -1; }
+.actionsSheetBody .barGroup { display:flex; align-items:stretch; width:100%; gap:6px; }
+.actionsSheetBody .barGroupCaption { align-self:flex-start; }
+.actionsSheetBody .barGroupRow {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px;
+  min-height:0; padding:0; border:0; background:transparent;
+}
+.actionsSheetBody .barGroupRow > * {
+  display:flex; align-items:center; gap:8px;
+  min-height:44px; width:100%; padding:0 12px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink);
+  font:650 13px var(--font-sans); text-align:left; cursor:pointer;
+}
+.actionsSheetBody .barGroupRow > *:disabled { opacity:.45; cursor:not-allowed; }
+/* The DOORS OUT wear the accent the desktop bar gives the one worded button they hang
+   under, so "Make it real" reads as the way out of the canvas here too rather than as
+   two more grey rows among fifteen. */
+.actionsSheetBody .barGroupRow > [data-chrome='door'] {
+  border-color:var(--canvas-accent); background:var(--canvas-accent); color:var(--text-on-accent);
+}
+.actionsSheetBody .barGroupRow > * > span { display:grid; place-items:center; width:22px; height:22px; flex:none; }
+.actionsSheetBody .barGroupRow > * > span > svg { display:block; width:16px; height:16px; }
+/* Positioned, because the invite sheet anchors `right:0` against whatever wraps the
+   chip that opens it — the same reason `.rosterInviteAnchor` exists on the bar. */
+.canvasAppBarRoster { position:relative; display:inline-flex; flex:none; align-items:center; }
+/* The invite panel anchors `bottom: calc(100% + 10px)` because every other host of it
+   is the bottom bar. This one is the TOP bar, so it opens downward — otherwise it would
+   be drawn off the top of the screen. */
+.canvasAppBarRoster > .shareMenu { top:calc(100% + 8px); right:0; bottom:auto; }
+.templateMenu {
+  border-color:var(--canvas-line);
+  background:var(--canvas-panel);
+  color:var(--canvas-ink);
+}
+.templateMenu > button {
+  border-color:var(--canvas-line);
+  background:var(--canvas-panel-muted);
+  color:var(--canvas-ink);
+}
+.moreMenu button > span,
+.moreMenu label i { background:color-mix(in srgb, var(--canvas-accent) 15%, var(--canvas-panel)); color:var(--canvas-accent-ink); }
+.templateMenu { box-shadow:0 14px 42px var(--canvas-shadow); }
+/* On the slate board a translucent card needs MORE fill, not less: at 92% over a
+   near-black canvas the border was the only thing separating a floating control from the
+   board behind it, and a blurred edge is not an edge. */
+:global(html:not([data-theme='light'])) .floatCard {
+  background:color-mix(in srgb,var(--canvas-panel) 96%,#172b48);
+  box-shadow:0 1px 2px rgba(0,0,0,.4), 0 18px 40px -16px rgba(0,0,0,.6);
+}
+
+/* THE BAR'S CURRENT GROUP — the phase this canvas is in, tinted in its own hue. */
+.barGroup[data-current='true'] .barGroupRow { background:color-mix(in srgb, var(--bar-stage-hue) 14%, var(--canvas-panel)); border-color:var(--bar-stage-hue); }
+.barGroup[data-current='true'] .barGroupCaption { font-weight:700; }

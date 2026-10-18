@@ -8,7 +8,8 @@ import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { CanvasMenuSheet } from './CanvasMenuSheet';
 import { PhaseModalitySelector } from './PhaseModalitySelector';
 import { memberAvatarClass, memberInitials } from './rosterAvatar';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/chrome.module.css';
+import commandBarStyles from './styles/commandBar.module.css';
 
 /**
  * `/create/<id>` ON A PHONE IS AN APP SCREEN, and this is its app bar.
@@ -126,7 +127,7 @@ export function CanvasPhoneAppBar({
         </span>
       </button>
 
-      {!!roster.length && <span className={styles.canvasAppBarRoster}>
+      {!!roster.length && <span className={commandBarStyles.canvasAppBarRoster}>
         <button
           type="button"
           className={styles.canvasAppBarFaces}

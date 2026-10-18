@@ -17,7 +17,8 @@
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/chrome.module.css';
+import bodiesStyles from './styles/bodies.module.css';
 import type { CreationNodeData } from './types';
 import { fieldsMayCross } from '@/lib/canvasConfidentiality';
 import { exportActionsFor, pdfExportStrategy, type CanvasExportAction } from '@/lib/canvasExports';
@@ -120,7 +121,7 @@ export function CanvasExportActions({ data, onExport, className }: CanvasExportA
     ? diagramNotation(canvasDiagram(data)?.format)?.name ?? t(action)
     : t(action);
 
-  return <div className={`${styles.cardActions} ${className ?? ''} nodrag nowheel`} role="group" aria-label={t('group')}>
+  return <div className={`${bodiesStyles.cardActions} ${className ?? ''} nodrag nowheel`} role="group" aria-label={t('group')}>
     {actions.map((action) => <button
       key={action}
       type="button"

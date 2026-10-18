@@ -46,7 +46,7 @@ import { normalizeSeeking, normalizeWorkMode } from '../../application/career/li
 import { parseJsonArray } from '../../domain/shared/json';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import {
-  createMilestone,
+  addScheduleMilestone,
   deleteDraftMilestone,
   milestoneTenantForFreelancer,
   moveMilestone,
@@ -1653,19 +1653,11 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const engagementId = c.req.param('id');
     const b = await parseBody(c, CreateMilestoneBody);
     const amountCents = b.amountCents ?? 0;
-    // The engagement must be this tenant's — otherwise a milestone could be attached to
-    // somebody else's engagement and would be funded out of the wrong pocket.
-    const [engagement] = await db.select({
-      id: freelancerEngagements.id,
-      freelancerUserId: freelancerEngagements.freelancerUserId,
-    }).from(freelancerEngagements)
-      .where(and(eq(freelancerEngagements.id, engagementId), eq(freelancerEngagements.tenantId, tenantId)))
-      .limit(1);
-    if (!engagement) return c.json({ error: 'Engagement not found' }, 404);
-    const milestone = await createMilestone(db, {
+    // The engagement must be this tenant's, and the line inherits its freelancer — the
+    // shared authoring use case owns that rule (milestones.ts `addScheduleMilestone`).
+    const milestone = await addScheduleMilestone(db, {
       tenantId,
-      engagementId,
-      freelancerUserId: engagement.freelancerUserId,
+      parent: { kind: 'engagement', engagementId },
       title: b.title,
       description: b.description ?? null,
       amountCents,
@@ -1674,6 +1666,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       dueAt: b.dueAt ? new Date(b.dueAt) : null,
       createdByUserId: c.get('userId') as string,
     });
+    if (!milestone) return c.json({ error: 'Engagement not found' }, 404);
     return c.json({ milestone }, 201);
   });
 

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
 import { atsApi, type DistributionBoard, type PostingDistribution } from '@/lib/hiringApi';
 import { distributionListingFromCard, distributionRowsFrom } from '@/lib/canvasHiringPostingTools';
 import { useFormat } from '@/i18n/useFormat';

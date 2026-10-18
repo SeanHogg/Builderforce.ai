@@ -13,7 +13,7 @@ import {
   type CanvasViewport,
 } from '@builderforce/creation-canvas-contract';
 import { captureCanvasScreenshot } from '@/lib/canvasImageAssets';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
 import { CanvasViewportSwitcher } from './CanvasViewportSwitcher';
 import { WebsiteBody, WebsiteFrame } from './WebsiteCanvas';

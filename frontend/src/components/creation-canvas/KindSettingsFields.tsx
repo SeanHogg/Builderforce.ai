@@ -17,7 +17,7 @@ import { canvasPersonOrigin, isCanvasPersonKind } from '@/lib/canvasNodeAffordan
 import { SettingsFieldControl } from './SettingsFieldControl';
 import { TimingFields } from './TimingFields';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/inspector.module.css';
 
 export function KindSettingsFields({
   data,

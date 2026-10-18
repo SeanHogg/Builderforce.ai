@@ -2,7 +2,7 @@
   "api/src": {
     "empty-catch": 0,
     "empty-promise-catch": 0,
-    "literal-promise-catch": 529,
+    "literal-promise-catch": 527,
     "console-only": 0,
     "durable-object-direct-report": 0
   },

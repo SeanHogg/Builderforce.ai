@@ -199,7 +199,10 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
   // roadmap CRUD). See components/pm/.
   'release-planning': {
     title: 'Release Planning',
-    apiBase: '/api/product/release-planning',
+    // The canonical release resource; `/api/product/release-planning` is only a
+    // legacy alias of it now, kept for deployed embeds.
+    apiBase: '/api/releases',
+    listKey: 'releases',
     fields: [
       { key: 'name', label: 'Release', required: true },
       { key: 'version', label: 'Version' },

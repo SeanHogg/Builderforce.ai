@@ -2,7 +2,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/brain.module.css';
 import {
   brainActivityPhase,
   brainActivityTokens,

@@ -70,6 +70,84 @@ function toTenantPlanEnum(ep: 'free' | 'pro' | 'teams'): TenantPlan {
   return TenantPlan.FREE;
 }
 
+/** The token caps a tenant is held to RIGHT NOW — plan defaults, the per-tenant
+ *  `tokenDailyLimitOverride`, redeemed AI-token credits and the superadmin bypass,
+ *  all applied. `-1` = unlimited. */
+export interface TenantTokenLimits {
+  dailyLimit: number;
+  monthlyLimit: number;
+  effectivePlan: 'free' | 'pro' | 'teams';
+}
+
+/** Options shared by {@link resolveTenantTokenLimits} and {@link getTenantTokenAvailability}. */
+export interface TenantTokenLimitOpts {
+  actingUserId?: string | null;
+  actingIsSuperadmin?: boolean;
+  /** A caller that ALREADY resolved the tenant's plan snapshot (the gateway holds
+   *  it on `access`) passes it here so this skips the tenant-row read — no redundant
+   *  query on the hot path. The DECISION still lives here; only the input is reused. */
+  planSnapshot?: { effectivePlan: 'free' | 'pro' | 'teams'; tokenDailyLimitOverride: number | null };
+}
+
+/**
+ * THE limit half of the token gate: the caps {@link getTenantTokenAvailability}
+ * enforces, without the usage scan. Every surface that DISPLAYS a token limit
+ * (dashboard overview, cost forecast) reads it here so the number shown is the
+ * number enforced — `getLimits(plan).tokenDailyLimit` alone ignores the override,
+ * credits and the superadmin bypass.
+ */
+export async function resolveTenantTokenLimits(
+  db: Db,
+  tenantId: number,
+  opts?: TenantTokenLimitOpts,
+  env?: Env,
+): Promise<TenantTokenLimits> {
+  let effectivePlanEnum: TenantPlan;
+  let tokenDailyLimitOverride: number | null;
+  if (opts?.planSnapshot) {
+    effectivePlanEnum = toTenantPlanEnum(opts.planSnapshot.effectivePlan);
+    tokenDailyLimitOverride = opts.planSnapshot.tokenDailyLimitOverride;
+  } else {
+    const row = await loadTenantPlanRow(env, tenantId, db);
+    effectivePlanEnum = effectivePlanOf(row);
+    tokenDailyLimitOverride = row?.tokenDailyLimitOverride ?? null;
+  }
+  const effectivePlan = planString(effectivePlanEnum);
+
+  // Redeemed AI-token credits lift both caps. Read BEFORE the plan resolve because
+  // it is an input to it, and cached 60s so the hot path pays a Map lookup rather
+  // than a scan. A tenant that has never redeemed has a 0 balance and the resolve
+  // behaves exactly as it did before credits existed.
+  const bonusTokens = env ? await aiCreditBalance(db, env, tenantId) : 0;
+
+  // Resolve the plan/override caps WITHOUT any superadmin lift first. A tenant that is
+  // already unlimited by plan (Teams / -1 override) is done here — no superadmin lookup.
+  const planLimits = resolveTokenLimits({
+    effectivePlan: effectivePlanEnum,
+    tokenDailyLimitOverride,
+    isSuperadmin: false,
+    bonusTokens,
+  });
+  if (planLimits.dailyLimit <= 0 && planLimits.monthlyLimit <= 0) {
+    return { ...planLimits, effectivePlan };
+  }
+
+  // The tenant IS capped by plan — but a superadmin OPERATOR is unlimited EVERYWHERE.
+  // Superadmin is resolved from BOTH sources so the bypass holds on every path:
+  //   (a) the acting user, when present (interactive Run-now / gateway), AND
+  //   (b) the tenant's OWN active membership — so an account OWNED/operated by a
+  //       superadmin is never frozen even on the cron sweeps, which call this with
+  //       `db` only (no acting user). This is THE single place the "superadmin ⇒
+  //       unlimited" rule lives; every caller (cron + interactive) inherits it.
+  // `users.isSuperadmin` is the sole, revocation-safe source of truth (fresh per
+  // call). Only consulted for a capped tenant, so unlimited tenants pay nothing.
+  if (await resolveSuperadminUnlimited(db, tenantId, opts, env)) {
+    const superLimits = resolveTokenLimits({ effectivePlan: effectivePlanEnum, tokenDailyLimitOverride, isSuperadmin: true });
+    return { ...superLimits, effectivePlan };
+  }
+  return { ...planLimits, effectivePlan };
+}
+
 /**
  * Resolve a tenant's live token availability. THE single entry every cap path calls
  * (cron sweeps, interactive Run-now, and the LLM gateway's `enforceTokenCaps`), so
@@ -94,67 +172,15 @@ function toTenantPlanEnum(ep: 'free' | 'pro' | 'teams'): TenantPlan {
 export async function getTenantTokenAvailability(
   db: Db,
   tenantId: number,
-  opts?: {
-    actingUserId?: string | null;
-    actingIsSuperadmin?: boolean;
-    /** A caller that ALREADY resolved the tenant's plan snapshot (the gateway holds
-     *  it on `access`) passes it here so this skips the tenant-row read — no redundant
-     *  query on the hot path. The DECISION still lives here; only the input is reused. */
-    planSnapshot?: { effectivePlan: 'free' | 'pro' | 'teams'; tokenDailyLimitOverride: number | null };
-  },
+  opts?: TenantTokenLimitOpts,
   env?: Env,
 ): Promise<TenantTokenAvailability> {
-  let effectivePlanEnum: TenantPlan;
-  let tokenDailyLimitOverride: number | null;
-  if (opts?.planSnapshot) {
-    effectivePlanEnum = toTenantPlanEnum(opts.planSnapshot.effectivePlan);
-    tokenDailyLimitOverride = opts.planSnapshot.tokenDailyLimitOverride;
-  } else {
-    const row = await loadTenantPlanRow(env, tenantId, db);
-    effectivePlanEnum = effectivePlanOf(row);
-    tokenDailyLimitOverride = row?.tokenDailyLimitOverride ?? null;
-  }
-  const effectivePlan = planString(effectivePlanEnum);
-
-  // Redeemed AI-token credits lift both caps. Read BEFORE the plan resolve because
-  // it is an input to it, and cached 60s so the hot path pays a Map lookup rather
-  // than a scan. A tenant that has never redeemed has a 0 balance and the resolve
-  // behaves exactly as it did before credits existed.
-  const bonusTokens = env ? await aiCreditBalance(db, env, tenantId) : 0;
-
-  // Resolve the plan/override caps WITHOUT any superadmin lift first. A tenant that is
-  // already unlimited by plan (Teams / -1 override) is done here — no superadmin
-  // lookup and no usage scan.
-  const planLimits = resolveTokenLimits({
-    effectivePlan: effectivePlanEnum,
-    tokenDailyLimitOverride,
-    isSuperadmin: false,
-    bonusTokens,
-  });
-  if (planLimits.dailyLimit <= 0 && planLimits.monthlyLimit <= 0) {
-    return { hasTokens: true, reason: null, dailyLimit: planLimits.dailyLimit, monthlyLimit: planLimits.monthlyLimit, usageToday: 0, usageMonth: 0, effectivePlan };
+  const { dailyLimit, monthlyLimit, effectivePlan } = await resolveTenantTokenLimits(db, tenantId, opts, env);
+  // Unlimited (plan, -1 override or superadmin) — no usage scan.
+  if (dailyLimit <= 0 && monthlyLimit <= 0) {
+    return { hasTokens: true, reason: null, dailyLimit, monthlyLimit, usageToday: 0, usageMonth: 0, effectivePlan };
   }
 
-  // The tenant IS capped by plan — but a superadmin OPERATOR is unlimited EVERYWHERE.
-  // Superadmin is resolved from BOTH sources so the bypass holds on every path:
-  //   (a) the acting user, when present (interactive Run-now / gateway), AND
-  //   (b) the tenant's OWN active membership — so an account OWNED/operated by a
-  //       superadmin is never frozen even on the cron sweeps, which call this with
-  //       `db` only (no acting user). This is THE single place the "superadmin ⇒
-  //       unlimited" rule lives; every caller (cron + interactive) inherits it.
-  // `users.isSuperadmin` is the sole, revocation-safe source of truth (fresh per
-  // call). Only consulted for a capped tenant, so unlimited tenants pay nothing.
-  const isSuperadmin = await resolveSuperadminUnlimited(db, tenantId, opts, env);
-  if (isSuperadmin) {
-    const superLimits = resolveTokenLimits({
-      effectivePlan: effectivePlanEnum,
-      tokenDailyLimitOverride,
-      isSuperadmin: true,
-    });
-    return { hasTokens: true, reason: null, dailyLimit: superLimits.dailyLimit, monthlyLimit: superLimits.monthlyLimit, usageToday: 0, usageMonth: 0, effectivePlan };
-  }
-
-  const { dailyLimit, monthlyLimit } = planLimits;
   const dailyCapped = dailyLimit > 0;
   const monthlyCapped = monthlyLimit > 0;
 

@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl';
 import { AnchoredPopover } from '@/components/ui/AnchoredPopover';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { usePhoneViewport } from '@/lib/usePhoneViewport';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/brain.module.css';
 import { useCanvasSurfaceDefinition } from './canvasSurfaceContext';
 import type { BrainSurfaceActionsProps } from './BrainSurfaceActions';
 

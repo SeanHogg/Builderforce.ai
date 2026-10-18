@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/marketing.module.css';
 import { mailboxFilterParts, type MailboxFilter } from '@/lib/mailboxApi';
 import { useFormat } from '@/i18n/useFormat';
 import type { CreationBodyProps } from './types';

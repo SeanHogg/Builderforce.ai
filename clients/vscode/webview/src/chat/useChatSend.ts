@@ -6,8 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import type { BrainMessage, DirectedRecipient, UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
-import { useQueuedTurns } from '@seanhogg/builderforce-brain-ui';
+import { useChatTurns, type BrainMessage, type DirectedRecipient, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { request } from '../vscodeBridge';
 import { childTarget, isWaitingOnSubagents, steerRun, type useChatChildren } from './chatChildren';
 import type { QueuedTurn } from './VsCodeComposer';
@@ -71,15 +70,32 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     setSendNonce((n) => n + 1);
   }, [setTurnLimbic]);
 
-  // Messages composed WHILE a run was in flight — the ONE shared queue: FIFO, one per
-  // completed run (each stays a distinct steerable turn), never flushed across a chat
-  // switch, and cleared with it.
-  const queued = useQueuedTurns<QueuedTurn>({
+  // THE ONE turn door (shared): steer → queue while a run is in flight → send. Calling
+  // `conv.send` directly is what lost answers — it refuses while the chat is running and
+  // says nothing (chat #133). The queue is FIFO, one per completed run (each stays a
+  // distinct steerable turn), never flushed across a chat switch, and cleared with it.
+  const turns = useChatTurns<QueuedTurn>({
     running: conv.sending,
-    send: (m) => void dispatchSend(m.text, m.recipient),
-    resetKey: chatId,
+    runKey: chatId,
+    send: (m) => dispatchSend(m.text, m.recipient),
     textOf: (m) => m.text,
+    // The editor's steer: a live sub-agent takes its message straight into its run, and
+    // a chat run waiting on its sub-agents is spoken to now (the wait gives way and its
+    // next turn answers) rather than queued behind a run that may hold for minutes.
+    steer: ({ text, recipient: to }) => {
+      const child = childTarget(text, to, liveChildren);
+      if (child) {
+        steerRun(child.key, text);
+        return true;
+      }
+      if (conv.sending && !to && chatId != null && isWaitingOnSubagents(conv.activity)) {
+        steerRun(chatId, text);
+        return true;
+      }
+      return false;
+    },
   });
+  const { submit: submitTurn } = turns;
 
   // A settled run moved what the chat row reports (its spend & savings, ticket counts),
   // and the host drives the run, so the in-page loop's `onActivity` never sees the end.
@@ -89,25 +105,9 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     wasSending.current = conv.sending;
   }, [conv.sending, reloadChats]);
 
-  // A run already in flight (or still settling in the host): queue instead of dropping.
-  // Calling `conv.send` directly is what lost answers — it refuses while the chat is
-  // running and says nothing (chat #133).
   const sendOrQueue = useCallback((text: string, to: DirectedRecipient | null) => {
-    // For a live sub-agent: straight into its run, never queued behind the chat's own.
-    const child = childTarget(text, to, liveChildren);
-    if (child) {
-      steerRun(child.key, text);
-      return;
-    }
-    // The chat's own run is waiting on its sub-agents: speak to it now (the wait gives
-    // way and its next turn answers) rather than queue behind a run that may hold for minutes.
-    if (conv.sending && !to && chatId != null && isWaitingOnSubagents(conv.activity)) {
-      steerRun(chatId, text);
-      return;
-    }
-    if (queued.submit({ text, recipient: to })) return;
-    void dispatchSend(text, to);
-  }, [conv.sending, conv.activity, chatId, dispatchSend, liveChildren, queued.submit]);
+    void submitTurn({ text, recipient: to });
+  }, [submitTurn]);
 
   const submit = useCallback(() => {
     const text = input.trim();
@@ -126,5 +126,6 @@ export function useChatSend({ conv, chatId, input, setInput, recipient, liveChil
     sendOrQueue(message.content, recipient);
   }, [recipient, sendOrQueue]);
 
-  return { queued, submit, answerQuestion, replayMessage };
+  // `stop` clears the held turns AND stops the chat's run — the composer's Stop.
+  return { queued: turns.queued, stop: turns.stop, submit, answerQuestion, replayMessage };
 }

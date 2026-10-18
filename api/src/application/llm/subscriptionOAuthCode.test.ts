@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fakeFetch } from '../../../test/fakeDb';
 import {
+  exchangeSubscriptionCode,
+  refreshSubscriptionToken,
+  subscriptionAuthorizeUrl,
+  type SubscriptionOAuthClient,
   parsePastedAuthorizationCode,
   isSpentAuthorizationCode,
   spentAuthorizationCodeError,
@@ -98,5 +103,56 @@ describe('throwTokenExchangeFailure', () => {
     } catch (e) {
       expect((e as Error).message.length).toBeLessThan(300);
     }
+  });
+});
+
+describe('subscription OAuth descriptor flow', () => {
+  const CLIENT: SubscriptionOAuthClient = {
+    label: 'Example',
+    clientId: 'public-client',
+    authUrl: 'https://auth.example/oauth/authorize',
+    tokenUrl: 'https://auth.example/oauth/token',
+    redirectUri: 'https://auth.example/oauth/code/callback',
+    scopes: ['user:inference', 'offline_access'],
+    extraAuthParams: { code: 'true' },
+    tokenBodyEncoding: 'json',
+    spentHint: 'Close the other CLI first.',
+  };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('builds the PKCE consent URL from the descriptor', () => {
+    const url = new URL(subscriptionAuthorizeUrl(CLIENT, { state: 'st', challenge: 'ch' }));
+    expect(url.origin + url.pathname).toBe('https://auth.example/oauth/authorize');
+    expect(url.searchParams.get('client_id')).toBe('public-client');
+    expect(url.searchParams.get('redirect_uri')).toBe(CLIENT.redirectUri);
+    expect(url.searchParams.get('scope')).toBe('user:inference offline_access');
+    expect(url.searchParams.get('code_challenge')).toBe('ch');
+    expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(url.searchParams.get('code')).toBe('true');
+  });
+
+  it('exchanges with the verifier in the descriptor encoding, without a client secret', async () => {
+    const fetchImpl = fakeFetch([{ match: '/oauth/token', json: { access_token: 'A', refresh_token: 'R', expires_in: 60 } }]);
+    vi.stubGlobal('fetch', fetchImpl);
+    const tokens = await exchangeSubscriptionCode(CLIENT, { code: 'c1', verifier: 'v1', extra: { state: 'st' } });
+    expect(tokens).toMatchObject({ access_token: 'A', refresh_token: 'R' });
+    const body = JSON.parse(fetchImpl.calls[0]?.body ?? '{}') as Record<string, string>;
+    expect(body).toMatchObject({ grant_type: 'authorization_code', code: 'c1', code_verifier: 'v1', state: 'st', redirect_uri: CLIENT.redirectUri });
+    expect(body).not.toHaveProperty('client_secret');
+  });
+
+  it('classifies a spent code once, with the provider hint', async () => {
+    vi.stubGlobal('fetch', fakeFetch([{ match: '/oauth/token', status: 400, json: { error: 'invalid_grant' } }]));
+    const error = await exchangeSubscriptionCode(CLIENT, { code: 'dead', verifier: 'v1' }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OAuthExchangeError);
+    expect((error as OAuthExchangeError).code).toBe(OAUTH_CODE_SPENT);
+    expect((error as Error).message).toContain('Close the other CLI first.');
+  });
+
+  it('refresh failures carry the UPSTREAM status the resolvers read to detect revocation', async () => {
+    vi.stubGlobal('fetch', fakeFetch([{ match: '/oauth/token', status: 401, json: { error: 'invalid_grant' } }]));
+    const error = await refreshSubscriptionToken(CLIENT, 'r1').catch((e: unknown) => e);
+    expect((error as { status?: number }).status).toBe(401);
   });
 });

@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/ads.module.css';
 import { adsApi, formatMoney, type AdInsightsRead } from '@/lib/adsApi';
 import { NETWORK_GLYPHS } from '@/lib/networkGlyph';
 import { useFormat } from '@/i18n/useFormat';

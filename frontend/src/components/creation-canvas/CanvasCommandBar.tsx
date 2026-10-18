@@ -12,7 +12,8 @@ import type { CreationObjectGroup } from './creationObjectRegistry';
 import { CanvasSessionActions, type CanvasBarGroupSlots, type CanvasSessionActionHandler } from './CanvasSessionActions';
 import { PanelDragHandle } from './PanelDragHandle';
 import { usePanelDragOffset } from './usePanelDragOffset';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/chrome.module.css';
+import commandBarStyles from './styles/commandBar.module.css';
 
 /**
  * THE bar. One floating card at the bottom of the canvas, holding everything you can do
@@ -228,7 +229,7 @@ export function CanvasCommandBar({
         {/* Bring someone into THIS group — drawn as the roster's trailing chip, not a
             worded button in the corner beside it. Its own positioned box, because
             `inviteMenu` anchors `right:0` against whatever wraps this button. */}
-        {showsActions && <span className={styles.rosterInviteAnchor} data-testid="canvas-roster-invite">
+        {showsActions && <span className={commandBarStyles.rosterInviteAnchor} data-testid="canvas-roster-invite">
           <CanvasSessionActions variant="roster" surface={surface} handlers={handlers} />
           {inviteMenu}
         </span>}
@@ -263,7 +264,7 @@ export function CanvasCommandBar({
   return (
     <div
       ref={mergeRefs(hostRef, drag.elementRef)}
-      className={`${styles.floatCard} ${styles.commandBar}`}
+      className={`${commandBarStyles.floatCard} ${commandBarStyles.commandBar}`}
       data-collapsed={collapsed ? 'true' : 'false'}
       data-surface={surface}
       data-testid="canvas-command-bar"

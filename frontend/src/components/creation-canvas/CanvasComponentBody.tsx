@@ -41,7 +41,7 @@ import { ComponentPicker } from '@/components/component-picker/ComponentPicker';
 import { ComponentChooseAction } from '@/components/component-picker/ComponentChooseAction';
 import type { ComponentDef } from '@/lib/components/types';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/bodies.module.css';
 
 /**
  * The window a board card reads over.

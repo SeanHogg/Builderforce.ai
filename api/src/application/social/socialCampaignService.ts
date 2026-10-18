@@ -30,6 +30,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { socialCampaignPosts, socialCampaigns } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
+import { CAMPAIGN_DELIVERY_MAX_ATTEMPTS, failedDeliveryStatus } from '../shared/campaignDelivery';
 import { uploadPercent } from '../youtube/youtubeResumableUpload';
 import { youtubeUploadsForPosts, type YouTubeUploadRow } from '../youtube/youtubeUploadJobs';
 import {
@@ -53,8 +54,9 @@ import {
   type SocialAccountView,
 } from './socialService';
 
-/** Attempts one post may take before it is written off. See the header note. */
-export const SOCIAL_PUBLISH_MAX_ATTEMPTS = 3;
+/** Attempts one post may take before it is written off — the ceiling every campaign
+ *  channel shares (`shared/campaignDelivery.ts`). See the header note. */
+export const SOCIAL_PUBLISH_MAX_ATTEMPTS = CAMPAIGN_DELIVERY_MAX_ATTEMPTS;
 
 /** How many accounts one invocation publishes to. A Worker invocation is bounded and
  *  each post is an outbound call, so a large campaign finishes on the cron sweep. */
@@ -577,8 +579,7 @@ export async function runSocialCampaignBatch(
       continue;
     }
 
-    const exhausted = attempts >= SOCIAL_PUBLISH_MAX_ATTEMPTS;
-    const requeue = outcome.retryable && !exhausted;
+    const requeue = failedDeliveryStatus(attempts, outcome.retryable) === 'queued';
     await markSocialPost(db, tenantId, post.id, {
       status: requeue ? 'queued' : 'failed',
       attempts,

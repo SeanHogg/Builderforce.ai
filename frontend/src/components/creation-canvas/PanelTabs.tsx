@@ -17,7 +17,7 @@
  */
 
 import { useRef } from 'react';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
 
 export interface PanelTab<T extends string> {
   id: T;

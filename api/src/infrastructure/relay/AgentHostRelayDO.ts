@@ -209,7 +209,10 @@ export class AgentHostRelayDO implements DurableObject {
    * query param for backward compat with older BuilderForce Agents versions.
    */
   private extractAgentHostMeta(url: URL, request?: Request) {
-    const match = url.pathname.match(/\/api\/agentHosts\/(\d+)\//);
+    // Every agent-host mount forwards here: the canonical kebab path plus the legacy
+    // aliases (legacyAlias.ts). Matching only `/api/agentHosts/` left agentHostId null
+    // for every real upstream, so callApi never persisted relayed chat.
+    const match = url.pathname.match(/\/api\/(?:agent-hosts|agentHosts|claws|agentNodes)\/(\d+)\//);
     if (match) this.agentHostId = Number(match[1]);
     const headerKey = request?.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
     const key = headerKey ?? url.searchParams.get("key");

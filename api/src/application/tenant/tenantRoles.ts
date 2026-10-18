@@ -58,8 +58,8 @@ export async function tenantRoleOf(db: Db, tenantId: number, userId: string): Pr
 /**
  * The role to report for a workspace in the caller's OWN workspace list.
  *
- * Both list projections (`AuthService.myTenants`, `TenantService.listTenantsForUser`)
- * used to write `member?.role ?? 'member'` — the same fallback, twice, naming a role
+ * The list projection (`TenantService.listTenantsForUser`, behind the one
+ * `listMyWorkspaces` use case) and its former twin `AuthService.myTenants` both used to write `member?.role ?? 'member'` — the same fallback, twice, naming a role
  * that does not exist on either side of the wire. `'member'` is not in
  * `ROLE_ORDER` and not in the frontend's mirror of it, so a row that
  * ever hit the fallback rendered with NO capabilities at all and no way to tell that

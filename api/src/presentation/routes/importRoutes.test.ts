@@ -99,6 +99,35 @@ describe('importRoutes — POST /:kind', () => {
   });
 });
 
+describe('importRoutes — POST /:kind serves every registered importer', () => {
+  it('refuses a rows payload that is not an array of objects (400) without writing', async () => {
+    const { db, inserts } = makeDb();
+    const res = await createImportRoutes(db).request('/uptime', post({ rows: 'serviceName,periodDay' }), ENV);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'rows must be an array of objects' });
+    expect(inserts).toHaveLength(0);
+  });
+
+  it('previews a document importer on dryRun (200) — the parsed workflow, nothing saved', async () => {
+    const { db, inserts } = makeDb();
+    const res = await createImportRoutes(db).request('/workflow-definition', post({
+      dryRun: true, name: 'Nightly', yaml: 'nodes:\n  - id: a\n    kind: agent\n',
+    }), ENV);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { name: string; definition: { nodes: Array<{ id: string }> } };
+    expect(body.name).toBe('Nightly');
+    expect(body.definition.nodes.map((n) => n.id)).toEqual(['a']);
+    expect(inserts).toHaveLength(0);
+  });
+
+  it('answers a document importer’s parse refusal as 400 with its reason', async () => {
+    const { db } = makeDb();
+    const res = await createImportRoutes(db).request('/workflow-definition', post({ yaml: '' }), ENV);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'yaml is required' });
+  });
+});
+
 /**
  * The /import page labels a column through `fieldLabelKey(column.name)` →
  * `import.field<Name>`, and a kind through `kindLabelKey(key)` → `import.kind<Key>`

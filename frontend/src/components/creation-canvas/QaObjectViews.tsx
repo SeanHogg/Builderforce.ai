@@ -19,7 +19,7 @@
 
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/dashboards.module.css';
 import type { CreationNodeData } from './types';
 import { VerdictStrip } from './DataArchitectureViews';
 import {

@@ -14,8 +14,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { prodIncidents } from '../../infrastructure/database/schema';
-import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { qualityVersionKey } from '../insights/versionKeys';
+import { bumpProdIncidentCaches } from '../incident/incidentCaches';
 import type { NormalizedWebhookTicket } from './webhookIngest';
 
 /** Map a provider state string onto our incident status vocabulary. */
@@ -74,6 +73,7 @@ export async function ingestIncidentWebhook(
     })
     .returning({ id: prodIncidents.id })) as Array<{ id: string }>;
 
-  await bumpCacheVersion(env, qualityVersionKey(conn.tenantId));
+  // Both incident readers (incident list + board Quality lens) — see incidentCaches.
+  await bumpProdIncidentCaches(env, conn.tenantId);
   return rows[0]?.id ?? '';
 }

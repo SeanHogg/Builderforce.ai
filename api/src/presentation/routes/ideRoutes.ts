@@ -35,7 +35,7 @@ import {
   getRepoStatus,
   enableGitHubDeploys,
 } from '../../application/ide/repoBridge';
-import { PUBLIC_LIST_CACHE_KEY } from './workforceRoutes';
+import { PUBLIC_LIST_CACHE_KEY } from '../../application/workforce/agentDirectory';
 import { publicAgentScope } from '../../application/marketplace/publicAgentScope';
 import { completeJson } from '../../application/llm/completeJson';
 import { parseBody, parseOptionalBody, z, zNonEmptyString, zOptionalString, zPositiveInt } from './requestBody';

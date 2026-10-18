@@ -1,21 +1,24 @@
 /**
  * Chat persistence routes
  *
- * POST /api/agent-hosts/:agentHostId/messages  — agentHost-key auth (Bearer or ?key=); upserts session + bulk inserts messages (also at /api/agentHosts/…)
+ * POST /api/agent-hosts/:agentHostId/messages  — agentHost-key auth (Bearer or ?key=); upserts session + bulk inserts messages
  * GET  /api/chats                         — JWT tenant auth; lists chat sessions across all agentHosts
  * GET  /api/chats/:sessionId/messages     — JWT tenant auth; messages for a session
  * GET  /api/agent-hosts/:agentHostId/sessions/:sessionKey/messages  — JWT tenant auth; messages by session key
+ *
+ * Both agent-host paths also answer at the deprecated camelCase `/api/agentHosts/…`
+ * (Deprecation + successor Link), never as a second handler.
  */
 import { Hono, type Context } from 'hono';
-import { eq, and, desc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { AGENT_HOST_BASE_PATH, legacyAliasNotice } from '../middleware/legacyAlias';
 import {
-  agentHosts,
-  chatSessions,
-  chatMessages,
-} from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
+  authenticateChatHost,
+  listChatMessagesBySessionKey,
+  listChatSessionMessages,
+  listTenantChatSessions,
+  persistHostChatMessages,
+} from '../../application/agentHost/hostChatSessions';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { limitParam, offsetParam } from './queryParams';
@@ -51,7 +54,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'invalid agentHostId' }, 400);
     }
 
-    const agentHost = await verifyAgentHostApiKey(db, agentHostId, key);
+    const agentHost = await authenticateChatHost(db, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     const { sessionKey, projectId, messages } = await parseBody(c, PersistMessagesBody);
@@ -59,73 +62,14 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ ok: true, inserted: 0 });
     }
 
-    // Upsert chat_sessions row
-    let session: { id: number } | undefined;
-    const [existing] = await db
-      .select({ id: chatSessions.id, msgCount: chatSessions.msgCount })
-      .from(chatSessions)
-      .where(and(
-        eq(chatSessions.agentHostId, agentHostId),
-        eq(chatSessions.tenantId, agentHost.tenantId),
-        eq(chatSessions.sessionKey, sessionKey),
-      ));
-
-    if (existing) {
-      session = existing;
-    } else {
-      const [inserted] = await db
-        .insert(chatSessions)
-        .values({
-          tenantId: agentHost.tenantId,
-          agentHostId,
-          sessionKey,
-          projectId: projectId ?? null,
-        })
-        .returning({ id: chatSessions.id });
-      session = inserted;
-    }
-
-    if (!session) throw new Error('chat_sessions insert returned no row');
-
-    // Insert messages — ONE multi-row insert (neon-http has no interactive tx).
-    // onConflictDoNothing keeps the idempotent "skip duplicates" behavior; the
-    // returned rows are exactly those actually inserted, so `inserted` is accurate.
-    let inserted = 0;
-    const rows = messages
-      .map((msg) => ({
-        tenantId: agentHost.tenantId,
-        agentHostId,
-        sessionId: session.id,
-        role: msg.role,
-        content: msg.content,
-        metadata: msg.metadata ?? null,
-        seq: msg.seq,
-      }));
-    if (rows.length > 0) {
-      const insertedRows = await db
-        .insert(chatMessages)
-        .values(rows)
-        .onConflictDoNothing()
-        .returning({ id: chatMessages.id });
-      inserted = insertedRows.length;
-    }
-
-    // Update session stats
-    const lastMsg = messages[messages.length - 1];
-    await db
-      .update(chatSessions)
-      .set({
-        msgCount: (existing?.msgCount ?? 0) + inserted,
-        lastMsgAt: new Date(),
-      })
-      .where(eq(chatSessions.id, session.id));
-
-    return c.json({ ok: true, inserted, sessionId: session.id });
+    const { inserted, sessionId } = await persistHostChatMessages(db, agentHost, { sessionKey, projectId, messages });
+    return c.json({ ok: true, inserted, sessionId });
   };
-  router.post('/agentHosts/:agentHostId/messages', persistMessages);
   // The canonical agent-host base path — where the relay DO's `callApi` posts. Without
   // it every relayed chat message 404'd and was never persisted.
   router.post('/agent-hosts/:agentHostId/messages', persistMessages);
+  // Pre-rebrand camelCase spelling, kept for already-deployed hosts.
+  router.post('/agentHosts/:agentHostId/messages', camelCaseAlias('messages'), persistMessages);
 
   // ---------------------------------------------------------------------------
   // GET /api/chats?limit=&offset=   — tenant JWT; all sessions across all agentHosts
@@ -135,24 +79,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
     const limit  = limitParam(c.req.query('limit'), 50, 100);
     const offset = offsetParam(c.req.query('offset'));
 
-    const rows = await db
-      .select({
-        id:         chatSessions.id,
-        agentHostId:     chatSessions.agentHostId,
-        agentHostName:   agentHosts.name,
-        sessionKey: chatSessions.sessionKey,
-        projectId:  chatSessions.projectId,
-        startedAt:  chatSessions.startedAt,
-        endedAt:    chatSessions.endedAt,
-        msgCount:   chatSessions.msgCount,
-        lastMsgAt:  chatSessions.lastMsgAt,
-      })
-      .from(chatSessions)
-      .innerJoin(agentHosts, eq(agentHosts.id, chatSessions.agentHostId))
-      .where(eq(chatSessions.tenantId, tenantId))
-      .orderBy(desc(chatSessions.lastMsgAt))
-      .limit(limit)
-      .offset(offset);
+    const rows = await listTenantChatSessions(db, tenantId, { limit, offset });
 
     return c.json({ sessions: rows });
   });
@@ -167,30 +94,9 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
 
     if (Number.isNaN(sessionId)) return c.json({ error: 'invalid sessionId' }, 400);
 
-    // Verify the session belongs to this tenant
-    const [session] = await db
-      .select({ id: chatSessions.id })
-      .from(chatSessions)
-      .where(and(
-        eq(chatSessions.id, sessionId),
-        eq(chatSessions.tenantId, tenantId),
-      ));
-
-    if (!session) return c.json({ error: 'not found' }, 404);
-
-    const msgs = await db
-      .select({
-        id:        chatMessages.id,
-        role:      chatMessages.role,
-        content:   chatMessages.content,
-        metadata:  chatMessages.metadata,
-        seq:       chatMessages.seq,
-        createdAt: chatMessages.createdAt,
-      })
-      .from(chatMessages)
-      .where(scopedToTenant(chatMessages, tenantId, eq(chatMessages.sessionId, sessionId)))
-      .orderBy(chatMessages.seq)
-      .limit(limit);
+    // null = the session is not this tenant's.
+    const msgs = await listChatSessionMessages(db, tenantId, sessionId, limit);
+    if (!msgs) return c.json({ error: 'not found' }, 404);
 
     return c.json({ messages: msgs });
   });
@@ -199,7 +105,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
   // GET /api/agent-hosts/:agentHostId/sessions/:sessionKey/messages?limit=   — JWT auth
   // Browser client fetches history for the active session by key.
   // ---------------------------------------------------------------------------
-  router.get('/agentHosts/:agentHostId/sessions/:sessionKey/messages', authMiddleware, async (c) => {
+  const sessionMessagesByKey = async (c: Context<HonoEnv>) => {
     const tenantId  = c.get('tenantId') as number;
     const agentHostId    = Number(c.req.param('agentHostId'));
     const sessionKey = c.req.param('sessionKey');
@@ -209,33 +115,27 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'invalid params' }, 400);
     }
 
-    const [session] = await db
-      .select({ id: chatSessions.id })
-      .from(chatSessions)
-      .where(and(
-        eq(chatSessions.agentHostId, agentHostId),
-        eq(chatSessions.tenantId, tenantId),
-        eq(chatSessions.sessionKey, sessionKey),
-      ));
-
-    if (!session) return c.json({ messages: [] });
-
-    const msgs = await db
-      .select({
-        id:        chatMessages.id,
-        role:      chatMessages.role,
-        content:   chatMessages.content,
-        metadata:  chatMessages.metadata,
-        seq:       chatMessages.seq,
-        createdAt: chatMessages.createdAt,
-      })
-      .from(chatMessages)
-      .where(scopedToTenant(chatMessages, tenantId, eq(chatMessages.sessionId, session.id)))
-      .orderBy(chatMessages.seq)
-      .limit(limit);
-
+    const msgs = await listChatMessagesBySessionKey(db, tenantId, agentHostId, sessionKey, limit);
     return c.json({ messages: msgs });
-  });
+  };
+  router.get('/agent-hosts/:agentHostId/sessions/:sessionKey/messages', authMiddleware, sessionMessagesByKey);
+  router.get(
+    '/agentHosts/:agentHostId/sessions/:sessionKey/messages',
+    camelCaseAlias((c) => `sessions/${encodeURIComponent(c.req.param('sessionKey') ?? '')}/messages`),
+    authMiddleware,
+    sessionMessagesByKey,
+  );
 
   return router;
+}
+
+/**
+ * `/api/agentHosts/:id/...` is the camelCase twin of the canonical kebab
+ * `/api/agent-hosts/:id/...`: same handler, stamped deprecated with the concrete successor.
+ */
+function camelCaseAlias(suffix: string | ((c: Context<HonoEnv>) => string)) {
+  return legacyAliasNotice((c) => {
+    const tail = typeof suffix === 'string' ? suffix : suffix(c);
+    return `${AGENT_HOST_BASE_PATH}/${c.req.param('agentHostId')}/${tail}`;
+  });
 }

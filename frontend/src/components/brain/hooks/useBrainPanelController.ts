@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createChatTicketsRestAdapter, useChatParticipants, useQueuedTurns, useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
+import { createChatTicketsRestAdapter, useChatParticipants, useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import {
   nextFallbackModel,
   effortProfile,
   reasoningForRun,
+  useChatTurns,
   useToolConfirmationGate,
 } from '@seanhogg/builderforce-brain-embedded';
 import {
@@ -140,6 +141,7 @@ export function useBrainPanelController({
     composerFocusToken,
     startNewChat,
     ensureChatId,
+    onFirstUserTurn,
     capabilityId,
     capabilityPrompt,
     selectCapability,
@@ -236,7 +238,7 @@ export function useBrainPanelController({
     needsConfirm,
     ensureChatId,
     onActivity: chats.touch,
-    onFirstUserTurn: chats.autoTitle,
+    onFirstUserTurn,
     evermind: memory.gatedEvermind,
     augmentSystemPrompt,
     chatMode,
@@ -281,19 +283,19 @@ export function useBrainPanelController({
 
   const rows = useBrainChatRowActions({ chats, isPage, showChatTab });
   const newProject = useBrainNewProject({ chats, setProjects });
-  // Messages the user typed while a run was still streaming. Held by the shared
-  // queueing primitive and flushed one at a time as each run completes, so the
-  // composer NEVER blocks typing while the AI is thinking — the same rule, and
-  // the same implementation, as the Creation Canvas composer.
-  const queuedTurns = useQueuedTurns({
+  // THE ONE turn door (shared with every composer host): a turn typed while a run is
+  // streaming is HELD and flushed one at a time as each run completes, so the composer
+  // NEVER blocks typing while the AI is thinking; Stop clears what is held. `addressedTo`
+  // routes the turn: a participant is talked to (no BRAIN run); null runs the BRAIN.
+  const turns = useChatTurns<string>({
     running: conv.sending,
-    send: (text) => { void conv.send(text, { addressedTo: recipient }); },
-    resetKey: chats.activeChat?.id ?? null,
+    runKey: chats.activeChatId,
+    send: (text) => conv.send(text, { addressedTo: recipient }),
   });
   // After the queue: an answered question or a replay is a turn like a typed one, and
   // queues behind a running turn the same way.
   const timeline = useBrainTimelineBindings({
-    conv, chats, recipient, toolSpecs, runTool, bumpParticipants, submitQueued: queuedTurns.submit,
+    conv, chats, recipient, toolSpecs, runTool, bumpParticipants, submitQueued: turns.queued.submit,
   });
 
   // The exam gate — the composer already refuses, and so must every other path into a
@@ -303,17 +305,16 @@ export function useBrainPanelController({
   // The panel that IS the page's chat (docked, no close) takes text a neighbouring
   // surface hands it: to finish and send (Studio's Media panel "use in app"), or to
   // send now (the preview's "Fix it for me" — the click is the person sending it).
-  // A send goes through the same gate and queue as a typed one.
-  const { submit: submitQueued } = queuedTurns;
+  // A send goes through the same gate and door as a typed one.
+  const { submit: submitTurn } = turns;
   const dockedComposer = useMemo(() => ({
     seed: (text: string) => { setInput(text); showChatTab(); },
     send: (text: string) => {
       if (!assistantGate.assistantAllowed) return;
       showChatTab();
-      if (submitQueued(text)) return;
-      void conv.send(text);
+      void submitTurn(text);
     },
-  }), [setInput, showChatTab, assistantGate.assistantAllowed, submitQueued, conv]);
+  }), [setInput, showChatTab, assistantGate.assistantAllowed, submitTurn]);
   useDockedComposer(!isPage && !onClose, dockedComposer);
 
   const handleSend = useCallback(async () => {
@@ -322,15 +323,11 @@ export function useBrainPanelController({
     setInput('');
     // Audited engagement signal: interacting with the AI agent is billable activity.
     trackActivity('agent_message', { weight: 2 });
-    // A run is already streaming — the queue holds this turn and sends it once
-    // the current run finishes, instead of disabling the composer.
-    if (queuedTurns.submit(text)) return;
     // Restore the text if the send fails before it's persisted (e.g. an expired
-    // session) so the user's message is never silently lost. `addressedTo` routes
-    // the turn: a participant is talked to (no BRAIN run); null runs the BRAIN.
-    const ok = await conv.send(text, { addressedTo: recipient });
+    // session) so the user's message is never silently lost.
+    const ok = await submitTurn(text);
     if (!ok) setInput((cur) => cur || text);
-  }, [assistantGate.assistantAllowed, input, setInput, conv, queuedTurns, recipient]);
+  }, [assistantGate.assistantAllowed, input, setInput, submitTurn]);
 
   const { captureExecution, captureState } = useBrainCaptureExecution({
     chats,
@@ -388,7 +385,9 @@ export function useBrainPanelController({
     setInput,
     handleSend,
     composerFocusToken,
-    queued: queuedTurns,
+    queued: turns.queued,
+    /** Stop the run AND drop the held turns — the composer's Stop. */
+    stopTurn: turns.stop,
     prefs,
     modelOptions,
     modelIdentity,

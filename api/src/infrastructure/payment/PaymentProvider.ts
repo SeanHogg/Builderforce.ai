@@ -173,36 +173,14 @@ export interface WebhookEvent {
     | 'extension.subscription.past_due'
     | 'extension.subscription.cancelled'
     /**
-     * A marketplace creation was paid for.
-     *
-     * The REDIRECT is the normal way that grant happens, and this is the reason
-     * it cannot be the only way: a buyer who pays and then closes the tab has
-     * been charged, and without this event they hold nothing until they think to
-     * revisit the link. The handler is idempotent against the redirect path —
-     * both end at the same licence, which the unique index makes one.
-     */
-    | 'listing.purchased'
-    /**
      * A TENANT's own invoice was paid by THEIR customer (FO-C4).
      *
-     * Same shape of event as `listing.purchased` and for the same reason: the
-     * redirect back from the hosted page is the normal way a payment is recorded,
-     * and it cannot be the only way — a customer who pays and closes the tab has
-     * been charged, and the invoice would sit unpaid until somebody reconciled a
-     * bank statement by hand. The handler re-reads the session from the processor
-     * and lands on a `ledger_entries` row whose unique reference makes the second
-     * arrival a no-op rather than a second payment.
+     * Settled exactly like `checkout.completed` — by the purchase registry, keyed
+     * on `purchaseKind` — but it keeps its own name because workspace
+     * `integration` triggers subscribe to `invoice.paid`, and because the tenant
+     * on it is the SELLER rather than a buyer.
      */
     | 'invoice.paid'
-    /**
-     * A KNOWLEDGE listing was paid for.
-     *
-     * Same event, same reason, third flow: a buyer who pays and closes the tab
-     * has been charged, and without this they hold nothing. The handler is
-     * idempotent against the redirect — both end at the same purchase row, which
-     * the unique index on `(listing, tenant)` makes one.
-     */
-    | 'knowledge.purchased'
     /**
      * A pay-once purchase of one of the platform's OWN flows — a credit pack, a
      * workforce agent — named by `purchaseKind` and settled through the purchase
@@ -246,19 +224,13 @@ export interface WebhookEvent {
    * workspace plan (`TenantService.handleWebhookEvent` returns early on it).
    */
   purchaseKind?: string;
-  /** `checkout.completed` — the session's signed metadata, for the settler to read. */
+  /** `checkout.completed` / `invoice.paid` — the session's signed metadata, for the settler to read. */
   metadata?: Record<string, string>;
   activationCents?: number;
   monthlyCents?: number;
   cartId?: string;
-  /** `listing.purchased` — the checkout session to settle, re-read on handling. */
+  /** A one-off settlement's checkout session — re-read from the processor on handling. */
   checkoutSessionId?: string;
-  /** `listing.purchased` — who bought it, from the session's signed metadata. */
-  buyerRef?: string;
-  /** `knowledge.purchased` — the buying USER, from the session's signed metadata. */
-  buyerUserId?: string;
-  /** `invoice.paid` — which receivable, from the session's signed metadata. */
-  invoiceRef?: string;
 
   /** Raw provider-specific data for logging/debugging */
   raw: unknown;

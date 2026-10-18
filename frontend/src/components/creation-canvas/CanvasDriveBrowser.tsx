@@ -29,7 +29,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
+import adsStyles from './styles/ads.module.css';
 import { driveApi, type DriveConnection, type DriveItem, type DriveProviderStatus } from '@/lib/driveApi';
 import { formatBytes } from '@/lib/formatBytes';
 import { faultMessage } from '@/lib/apiClient';
@@ -168,9 +169,9 @@ export function CanvasDriveBrowser({ onImport, onClose, returnTo }: CanvasDriveB
         >{connection.accountEmail || connection.displayName}</button>)}
       </div>}
 
-      {needsReconnect && <p className={styles.driveNotice} role="alert">{t('reconnectNeeded')}</p>}
+      {needsReconnect && <p className={adsStyles.driveNotice} role="alert">{t('reconnectNeeded')}</p>}
 
-      {connectable.length > 0 && <div className={styles.driveConnect}>
+      {connectable.length > 0 && <div className={adsStyles.driveConnect}>
         {connectable.map((provider) => <button
           key={provider.name}
           type="button"
@@ -190,18 +191,18 @@ export function CanvasDriveBrowser({ onImport, onClose, returnTo }: CanvasDriveB
         >{crumb.name}</button>)}
       </nav>}
 
-      {error && <p className={styles.driveNotice} role="alert">{error}</p>}
+      {error && <p className={adsStyles.driveNotice} role="alert">{error}</p>}
 
-      <div className={styles.driveList} role="list">
+      <div className={adsStyles.driveList} role="list">
         {items.map((item) => <div key={item.id} className={styles.driveRow} role="listitem">
           <button
             type="button"
-            className={styles.driveRowMain}
+            className={adsStyles.driveRowMain}
             disabled={busyId === item.id}
             onClick={() => item.kind === 'folder' ? enter(item) : void importItem(item)}
           >
             <span aria-hidden>{itemGlyph(item)}</span>
-            <span className={styles.driveRowName}>{item.name}</span>
+            <span className={adsStyles.driveRowName}>{item.name}</span>
             <small>{busyId === item.id
               ? t('opening')
               : item.kind === 'folder'
@@ -209,10 +210,10 @@ export function CanvasDriveBrowser({ onImport, onClose, returnTo }: CanvasDriveB
                 : item.sizeBytes ? formatBytes(item.sizeBytes) : ''}</small>
           </button>
         </div>)}
-        {loading && <p className={styles.driveEmpty}>{t('loading')}</p>}
-        {!loading && !items.length && activeId != null && <p className={styles.driveEmpty}>{t('emptyFolder')}</p>}
-        {!loading && activeId == null && !connectable.length && <p className={styles.driveEmpty}>{t('noAccounts')}</p>}
-        {!loading && activeId == null && connectable.length > 0 && <p className={styles.driveEmpty}>{t('connectPrompt')}</p>}
+        {loading && <p className={adsStyles.driveEmpty}>{t('loading')}</p>}
+        {!loading && !items.length && activeId != null && <p className={adsStyles.driveEmpty}>{t('emptyFolder')}</p>}
+        {!loading && activeId == null && !connectable.length && <p className={adsStyles.driveEmpty}>{t('noAccounts')}</p>}
+        {!loading && activeId == null && connectable.length > 0 && <p className={adsStyles.driveEmpty}>{t('connectPrompt')}</p>}
       </div>
 
       {cursor && !loading && activeId != null && <button

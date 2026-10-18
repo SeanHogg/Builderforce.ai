@@ -15,7 +15,7 @@
 
 import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/ads.module.css';
 import type { AdAccount, AdNetworkOption } from '@/lib/adsApi';
 import { authFieldsFor, connectorsApi, type ConnectorAuthField } from '@/lib/connectorsApi';
 import { NETWORK_GLYPHS } from '@/lib/networkGlyph';

@@ -14,10 +14,15 @@
  *
  * The rows themselves belong to `ProductReleaseService` — this file decides who
  * may call, parses the request, and picks a status code.
+ *
+ * `/api/product/release-planning` is a legacy alias of this surface (see
+ * {@link createReleasePlanningAliasRoutes}): same service, same rows, kept on the
+ * generic-tracker wire shape its embed callers already parse.
  */
 
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { legacyAliasNotice } from '../middleware/legacyAlias';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
 import { ProductReleaseService, type ReleaseInput } from '../../application/delivery/ProductReleaseService';
@@ -43,8 +48,12 @@ const ReleaseBody = z.looseObject({
   status: releaseText,
   targetDate: z.string().nullable().optional(),
   releasedAt: z.string().nullable().optional(),
+  releaseDate: z.string().nullable().optional(),
   notes: releaseText,
 }) satisfies z.ZodType<ReleaseInput>;
+
+/** The canonical path; the alias's successor `Link` names it. */
+export const RELEASES_BASE_PATH = '/api/releases';
 
 export function createReleasesRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -54,31 +63,64 @@ export function createReleasesRoutes(db: Db): Hono<HonoEnv> {
   // List releases, optionally scoped to a project (the picker's "releases for this
   // project" mode). Newest target/release date first.
   router.get('/', requireRole(TenantRole.DEVELOPER), async (c) => {
-    const { tenantId } = scope(c);
     const projectId = positiveIntParam(c.req.query('projectId'));
-    return c.json({ releases: await service.list(tenantId, projectId) });
+    return c.json({ releases: await service.list(scope(c), projectId) });
   });
 
   router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
-    const { tenantId } = scope(c);
     const body = await parseOptionalBody(c, ReleaseBody);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) return c.json({ error: 'name is required' }, 400);
-    return c.json(await service.create(tenantId, { ...body, name }), 201);
+    return c.json(await service.create(scope(c), { ...body, name }), 201);
   });
 
   router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
-    const { tenantId } = scope(c);
     const body = await parseOptionalBody(c, ReleaseBody);
-    const row = await service.update(tenantId, c.req.param('id'), body);
+    const row = await service.update(scope(c), c.req.param('id'), body);
     if (!row) return c.json({ error: 'release not found' }, 404);
     return c.json(row);
   });
 
   router.delete('/:id', requireRole(TenantRole.MANAGER), async (c) => {
-    const { tenantId } = scope(c);
     const id = c.req.param('id');
-    await service.remove(tenantId, id);
+    await service.remove(scope(c), id);
+    return c.json({ deleted: id });
+  });
+
+  return router;
+}
+
+/**
+ * `/api/product/release-planning` — the legacy alias, mounted by productRoutes
+ * (which already applies auth). It was a generic-tracker CRUD on the same table;
+ * it now calls the SAME service and keeps only the tracker WIRE shape (bare array
+ * list, `name is required`, 404 on a missing delete) so deployed embed callers
+ * keep parsing it. Every response names `/api/releases` as its successor.
+ */
+export function createReleasePlanningAliasRoutes(db: Db): Hono<HonoEnv> {
+  const router = new Hono<HonoEnv>();
+  router.use('*', legacyAliasNotice(RELEASES_BASE_PATH));
+  const service = new ProductReleaseService(db);
+
+  router.get('/', async (c) => c.json(await service.list(scope(c))));
+
+  router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
+    const body = await parseOptionalBody(c, ReleaseBody);
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) return c.json({ error: 'name is required' }, 400);
+    return c.json(await service.create(scope(c), { ...body, name }), 201);
+  });
+
+  router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const body = await parseOptionalBody(c, ReleaseBody);
+    const row = await service.update(scope(c), c.req.param('id'), body);
+    if (!row) return c.json({ error: 'not found' }, 404);
+    return c.json(row);
+  });
+
+  router.delete('/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const id = c.req.param('id');
+    if (!(await service.remove(scope(c), id))) return c.json({ error: 'not found' }, 404);
     return c.json({ deleted: id });
   });
 

@@ -1,7 +1,7 @@
 // No 'use client': rendered only inside `CreationNode.tsx`'s client boundary.
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/bodies.module.css';
 
 /**
  * WHAT A RUN WOULD DO — where it runs, and whether it may run unattended.

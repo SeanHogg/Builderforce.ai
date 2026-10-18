@@ -30,10 +30,11 @@
  */
 
 import {
+  buildAuthorizationUrl,
   exchangeCodeForTokens,
   refreshAccessToken,
   type TokenResponse,
-} from '../../../infrastructure/auth/oauthState';
+} from '../../shared/providerOAuthConnect';
 import { assertSafeUrl } from '../../../infrastructure/net/ssrfGuard';
 import { fetchPublic, withPublicHostGuard } from '../../../infrastructure/net/fetchPublic';
 import { createPkcePair } from '../../../infrastructure/crypto/pkce';
@@ -191,19 +192,16 @@ export function buildAuthorizeUrl(
   registration: McpOAuthRegistration,
   params: { redirectUri: string; state: string; codeChallenge: string },
 ): string {
-  const query = new URLSearchParams({
-    response_type: 'code',
-    client_id: registration.clientId,
-    redirect_uri: params.redirectUri,
+  return buildAuthorizationUrl(registration.authorizationEndpoint, {
+    clientId: registration.clientId,
+    redirectUri: params.redirectUri,
+    scopes: registration.scopes,
     state: params.state,
-    code_challenge: params.codeChallenge,
-    code_challenge_method: 'S256',
+    codeChallenge: params.codeChallenge,
     // Audience-binds the token to THIS server, so a token minted for one MCP
     // server cannot be replayed against another that trusts the same AS.
-    resource: registration.resource,
-    ...(registration.scopes.length ? { scope: registration.scopes.join(' ') } : {}),
+    extra: { resource: registration.resource },
   });
-  return `${registration.authorizationEndpoint}?${query}`;
 }
 
 /** Trade the authorization code for a grant, proving the PKCE verifier. */

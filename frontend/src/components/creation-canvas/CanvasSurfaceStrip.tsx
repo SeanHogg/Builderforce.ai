@@ -5,7 +5,7 @@ import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { surfacesForPhase } from '@/lib/canvasPhases';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { useCanvasPhase } from './phase/CanvasPhaseContext';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/chrome.module.css';
 
 /**
  * WHAT YOU ARE LOOKING AT, as a phone's tab strip.

@@ -92,12 +92,12 @@ export const dashboardFixtures: GuestFixture[] = [
   },
   {
     id: 'dashboards.list',
-    match: exact('/api/dashboards/dashboards'),
+    match: exact('/api/dashboards'),
     respond: ({ now }) => ({ dashboards: [executiveDashboard(now)] }),
   },
   {
     id: 'dashboards.data',
-    match: exact('/api/dashboards/dashboards/1/data'),
+    match: exact('/api/dashboards/1/data'),
     respond: ({ now }) => ({
       dashboard: executiveDashboard(now),
       values: executiveDashboard(now).widgets.map((widget) => ({

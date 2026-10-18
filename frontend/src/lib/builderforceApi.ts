@@ -1084,7 +1084,7 @@ export const workflowDefinitions = {
   },
   /** Create a definition from a hand-authored YAML/JSON document. */
   importYaml: (name: string, yaml: string) =>
-    request<WorkflowDefinitionSummary>('/api/workflow-definitions/import', {
+    request<WorkflowDefinitionSummary>('/api/import/workflow-definition', {
       method: 'POST',
       body: JSON.stringify({ name, yaml }),
     }),
@@ -3535,7 +3535,7 @@ export const empMetricsApi = {
   /** EMP-20 — download the member metrics as CSV/JSON (auth'd blob → browser save). */
   exportMetrics: async (days = 30, format: 'csv' | 'json' = 'csv', projectId?: number | null): Promise<void> => {
     const scope = projectId != null ? `&projectId=${projectId}` : '';
-    const res = await apiRequestStream(`/api/members/metrics/export?days=${days}&format=${format}${scope}`);
+    const res = await apiRequestStream(`/api/exports/sources/members.metrics?days=${days}&format=${format}${scope}`);
     if (!res.ok) throw new Error(`Export failed (${res.status})`);
     const blob = await res.blob();
     // The filename carries the scope too — a workspace export and a project export
@@ -4622,39 +4622,45 @@ export const channelsApi = {
 // AgentHost Skills (tenant + agentHost-scoped skill assignments)
 // ---------------------------------------------------------------------------
 
+/** One marketplace skill assigned at a scope, as `/api/skill-assignments` returns it. */
 export interface AgentHostSkillAssignment {
-  id: number;
-  agentHostId: number | null;
-  tenantId: number;
   skillSlug: string;
   scope: 'tenant' | 'host';
   assignedBy: string | null;
   assignedAt: string;
-  skill?: {
-    name: string;
-    description: string | null;
-    category: string | null;
-    version: string | null;
-    icon_url: string | null;
-  };
+  skillName: string | null;
+  skillDesc: string | null;
+  skillIcon: string | null;
+  skillVer: string | null;
 }
 
+type ScopedAssignmentRow = Omit<AgentHostSkillAssignment, 'scope'>;
+
+/**
+ * Skills on one host: the tenant-wide grants plus the host's own, from the two
+ * `/api/skill-assignments` scopes. (These paths replaced `?agentHostId=`,
+ * `/agentHost/:id` and `/:assignmentId`, which the API never served.)
+ */
 export const agentHostSkillsApi = {
-  list: (agentHostId: number): Promise<AgentHostSkillAssignment[]> => {
-    const q = new URLSearchParams({ agentHostId: String(agentHostId) });
-    return request<{ assignments: AgentHostSkillAssignment[] }>(`/api/skill-assignments?${q}`).then(
-      (r) => r.assignments ?? []
-    );
+  list: async (agentHostId: number): Promise<AgentHostSkillAssignment[]> => {
+    const [tenant, host] = await Promise.all([
+      request<{ assignments: ScopedAssignmentRow[] }>('/api/skill-assignments/tenant'),
+      request<{ assignments: ScopedAssignmentRow[] }>(`/api/skill-assignments/agent-hosts/${agentHostId}`),
+    ]);
+    return [
+      ...(tenant.assignments ?? []).map((a) => ({ ...a, scope: 'tenant' as const })),
+      ...(host.assignments ?? []).map((a) => ({ ...a, scope: 'host' as const })),
+    ];
   },
 
   assignToAgentHost: (agentHostId: number, skillSlug: string): Promise<void> =>
-    request<void>(`/api/skill-assignments/agentHost/${agentHostId}`, {
+    request<void>(`/api/skill-assignments/agent-hosts/${agentHostId}`, {
       method: 'POST',
       body: JSON.stringify({ skillSlug }),
     }),
 
-  revoke: (assignmentId: number): Promise<void> =>
-    request<void>(`/api/skill-assignments/${assignmentId}`, { method: 'DELETE' }),
+  revoke: (agentHostId: number, skillSlug: string): Promise<void> =>
+    request<void>(`/api/skill-assignments/agent-hosts/${agentHostId}/${encodeURIComponent(skillSlug)}`, { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------
@@ -5007,14 +5013,6 @@ async function mpRequest<T>(path: string, init?: RequestOptions): Promise<T> {
   });
 }
 
-export interface MarketplaceUser {
-  id: string;
-  email: string;
-  username: string;
-  displayName?: string;
-  avatarUrl?: string;
-}
-
 export interface MarketplaceSkillDraft {
   name: string;
   slug: string;
@@ -5047,21 +5045,10 @@ export const agentHostNodesApi = {
     request<void>(`/api/agent-hosts/${agentHostId}/nodes/${nodeId}`, { method: 'DELETE' }),
 };
 
+// Publishing only. Sign-in, sign-up and "who am I" are the ONE web auth client
+// (`/api/auth/web/*`, `/api/auth/me`); the old `/marketplace/auth/*` doors are
+// server-side aliases of those routes and had no caller here.
 export const marketplacePublisherApi = {
-  register: (body: { email: string; password: string; username?: string; display_name?: string }) =>
-    mpRequest<{ token: string; user: MarketplaceUser }>('/marketplace/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  login: (body: { email: string; password: string }) =>
-    mpRequest<{ token: string; user: MarketplaceUser }>('/marketplace/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  me: () => mpRequest<{ user: MarketplaceUser }>('/marketplace/auth/me'),
-
   publishSkill: (skill: MarketplaceSkillDraft) =>
     mpRequest<{ skill: MarketplaceSkill }>('/marketplace/skills', {
       method: 'POST',
@@ -5074,8 +5061,8 @@ export const marketplacePublisherApi = {
       body: JSON.stringify(updates),
     }),
 
-  likeSkill: (slug: string) =>
-    mpRequest<{ liked: boolean; likes: number }>(`/marketplace/skills/${slug}/like`, { method: 'POST' }),
+  // Likes are NOT here: every like button calls `marketplaceStats.toggleLike`
+  // (POST /api/marketplace-stats/like), the one like store.
 };
 
 // ---------------------------------------------------------------------------
@@ -5502,12 +5489,22 @@ export const governanceApi = {
 // (governance + product). `apiBase` is the full route, e.g. '/api/product/mvp'.
 export type TrackerRow = Record<string, unknown> & { id: string };
 
-export function segmentTrackerClient(apiBase: string) {
+export interface TrackerClientOptions {
+  /** The list response's envelope key, for a canonical resource route that answers
+   *  `{ <key>: rows }` rather than the generic tracker's bare array (e.g. `/api/releases`). */
+  listKey?: string;
+}
+
+export function segmentTrackerClient(apiBase: string, options: TrackerClientOptions = {}) {
+  const { listKey } = options;
   return {
     /** List rows. For project-scoped trackers (roadmap, feature-scoring), pass a
      *  projectId to get that project's rows; omit for the segment/portfolio view. */
-    list:   (projectId?: number) =>
-      request<TrackerRow[]>(projectId != null ? `${apiBase}?project=${projectId}` : apiBase),
+    list:   (projectId?: number): Promise<TrackerRow[]> => {
+      const url = projectId != null ? `${apiBase}?project=${projectId}` : apiBase;
+      if (!listKey) return request<TrackerRow[]>(url);
+      return request<Record<string, TrackerRow[] | undefined>>(url).then((body) => body[listKey] ?? []);
+    },
     create: (body: Record<string, unknown>) => request<TrackerRow>(apiBase, { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: Record<string, unknown>) => request<TrackerRow>(`${apiBase}/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     remove: (id: string) => request<{ deleted: string }>(`${apiBase}/${id}`, { method: 'DELETE' }),
@@ -5716,7 +5713,7 @@ export const pmoApi = {
     const q = new URLSearchParams();
     if (params.from && params.to) { q.set('from', params.from); q.set('to', params.to); }
     if (params.projectId != null) q.set('project', String(params.projectId));
-    return apiRequestText(`/api/pmo/spine/export.csv${q.toString() ? `?${q}` : ''}`);
+    return apiRequestText(`/api/exports/sources/pmo.capex-opex${q.toString() ? `?${q}` : ''}`);
   },
   /**
    * The tenant's WORKING CALENDAR — which weekdays this workspace works and the
@@ -8478,9 +8475,6 @@ export interface LifecycleInsights {
   byPhase: LifecyclePhaseStat[]; trend: LifecycleTrendPoint[];
 }
 
-export interface ProductRelease extends TrackerRow {
-  name: string; version: string | null; releaseDate: string | null; status: string; notes: string | null;
-}
 
 export type DeliverableUpdateStatus = 'on_track' | 'at_risk' | 'blocked' | 'done' | 'note';
 export interface DeliverableUpdate {
@@ -8514,12 +8508,6 @@ export interface InnovationIdea extends TrackerRow {
 const budgetTracker = segmentTrackerClient('/api/insights/budgets');
 const ideaTracker = segmentTrackerClient('/api/innovation/ideas');
 const allocationGoalTracker = segmentTrackerClient('/api/insights/allocation-goals');
-const releaseTracker = segmentTrackerClient('/api/product/release-planning');
-
-/** Product releases (the delivery deliverable). Reuses the product tracker. */
-export const releasesApi = {
-  list: () => releaseTracker.list() as unknown as Promise<ProductRelease[]>,
-};
 
 export interface AllocationQuery { days?: number; period?: string; projectId?: number; teamId?: number }
 export interface AllocationHistoryQuery { months?: number; projectId?: number; teamId?: number }
@@ -8566,7 +8554,7 @@ export const insightsApi = {
     if (q.months) p.set('months', String(q.months));
     if (q.projectId != null) p.set('projectId', String(q.projectId));
     p.set('format', q.format ?? DEFAULT_CAPITALIZATION_FORMAT);
-    const res = await apiRequestStream(`/api/insights/allocation/history/export?${p.toString()}`);
+    const res = await apiRequestStream(`/api/exports/sources/insights.capitalization?${p.toString()}`);
     if (!res.ok) throw new Error(`Export failed (${res.status})`);
     const blob = await res.blob();
     // The server names the file (it knows the scope + as-of date); the fallback
@@ -8607,13 +8595,6 @@ export const insightsApi = {
     update: (id: string, body: Partial<Omit<AllocationGoal, 'id'>>) => allocationGoalTracker.update(id, body) as unknown as Promise<AllocationGoal>,
     remove: (id: string) => allocationGoalTracker.remove(id),
   },
-  /** Bulk-import board-deck datasets (headcount/financials/quality/AI). Returns the
-   *  importable dataset → column spec. */
-  importDatasets: (): Promise<{ datasets: Record<string, Array<{ name: string; type: string; required: boolean }>> }> =>
-    request<{ datasets: Record<string, Array<{ name: string; type: string; required: boolean }>> }>('/api/insights/import/datasets'),
-  /** Bulk-insert rows for one dataset (CSV parsed to row objects client-side). */
-  importBoardData: (dataset: string, rows: Array<Record<string, unknown>>): Promise<{ inserted: number; skipped: number; errors: string[] }> =>
-    request(`/api/insights/import/${encodeURIComponent(dataset)}`, { method: 'POST', body: JSON.stringify({ rows }) }),
 };
 
 // ---------------------------------------------------------------------------

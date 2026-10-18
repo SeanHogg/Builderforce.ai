@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Edge } from '@xyflow/react';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
+import chromeStyles from './styles/chrome.module.css';
 import { CanvasPanelFilters } from './CanvasPanelFilters';
 import { filterOutlineNodes, outlineKindCounts } from '@/lib/canvasOutline';
 import { creationObjectName } from './creationObjectRegistry';
@@ -115,7 +116,7 @@ export function CanvasOutlinePanel({
         onFilterChange={setKind}
         chips={chips}
       />}
-      {(savedViews.length > 0 || hasActiveFilter) && <div className={styles.panelFilters} role="group" aria-label={t('outlineSavedViews')}>
+      {(savedViews.length > 0 || hasActiveFilter) && <div className={chromeStyles.panelFilters} role="group" aria-label={t('outlineSavedViews')}>
         {savedViews.map((view) => (
           <span key={view.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
             <button type="button" aria-pressed={view.search === search && view.kind === kind} onClick={() => applyView(view)}>{view.name}</button>
@@ -129,7 +130,7 @@ export function CanvasOutlinePanel({
             onKeyDown={(event) => { if (event.key === 'Enter') saveCurrentView(); }}
             placeholder={t('outlineSaveViewPlaceholder')}
             aria-label={t('outlineSaveViewPlaceholder')}
-            className={styles.panelSearch}
+            className={chromeStyles.panelSearch}
           />
           <button type="button" disabled={!newViewName.trim()} onClick={saveCurrentView}>{t('outlineSaveView')}</button>
         </span>}

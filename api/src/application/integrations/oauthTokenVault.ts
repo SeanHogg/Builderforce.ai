@@ -16,6 +16,7 @@
 
 import type { Env } from '../../env';
 import { credentialSecret, decryptCredentials, encryptCredentials } from './credentialCrypto';
+import { providerTokenClient, refreshAccessToken } from '../shared/providerOAuthConnect';
 
 /**
  * Refresh this far before the stamped expiry.
@@ -93,6 +94,20 @@ export async function unsealOAuthTokens(
   };
 }
 
+/**
+ * The sealable grant for a fresh token response (the end of a connect flow).
+ * `expires_in` is relative, so it is stamped absolute here — once — rather than
+ * by each callback.
+ */
+export function grantFromTokenResponse(tokens: RefreshedTokens): SealedOAuthTokens {
+  return {
+    accessToken: tokens.access_token,
+    ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+    ...(tokens.expires_in ? { expiresAtMs: Date.now() + tokens.expires_in * 1000 } : {}),
+    ...(tokens.scope ? { scope: tokens.scope } : {}),
+  };
+}
+
 /** Whether the access token should be refreshed before it is used. A grant with
  * no stamped expiry is taken at face value — some providers omit `expires_in`
  * and refreshing on every call would burn the rate limit. */
@@ -131,4 +146,63 @@ export function mergeRefreshedTokens(previous: SealedOAuthTokens, refreshed: Ref
  */
 export function isTerminalRefreshFailure(message: string): boolean {
   return /:\s*(400|401)\b/.test(message);
+}
+
+/** Re-mints an access token from a refresh token — one per grant kind. */
+export type GrantRefresher = (refreshToken: string) => Promise<RefreshedTokens>;
+
+/**
+ * The refresher for a deployment-configured descriptor, or `null` when this
+ * deployment has no client for it. MCP passes its own (a dynamically registered
+ * client behind the SSRF guard); everything else uses this.
+ */
+export function providerGrantRefresher(
+  env: Env,
+  provider: Parameters<typeof providerTokenClient>[1],
+): GrantRefresher | null {
+  const client = providerTokenClient(env as unknown as Record<string, unknown>, provider);
+  return client ? (refreshToken) => refreshAccessToken(client, refreshToken) : null;
+}
+
+/**
+ * What {@link refreshGrantIfStale} found. Each domain maps these onto its own
+ * row (status column, revoked marker, error text) — that write is the only part
+ * that differs, because each connection kind owns its own table.
+ */
+export type GrantRefreshResult =
+  /** Still good for the tail of a batch; nothing was called. */
+  | { ok: true; refreshed: false; tokens: SealedOAuthTokens }
+  /** Refreshed and merged — the caller seals and persists `tokens`. */
+  | { ok: true; refreshed: true; tokens: SealedOAuthTokens }
+  /** Stale, and there is nothing to refresh with. */
+  | { ok: false; reason: 'no_refresh_token' }
+  /** Stale, and this deployment has no client to refresh through. */
+  | { ok: false; reason: 'unconfigured' }
+  /** The provider refused the refresh token — the person must reconnect. */
+  | { ok: false; reason: 'revoked'; message: string; error: unknown }
+  /** Anything else (5xx, network). Worth retrying; NOT a withdrawn consent. */
+  | { ok: false; reason: 'failed'; message: string; error: unknown };
+
+/**
+ * The refresh lifecycle every per-user grant shares: stale check, refresh, merge
+ * (keeping a refresh token the provider did not rotate), and the terminal vs
+ * transient verdict. Six services carried their own copy of these steps; they
+ * now differ only in the row they write afterwards.
+ */
+export async function refreshGrantIfStale(
+  tokens: SealedOAuthTokens,
+  refresher: GrantRefresher | null,
+): Promise<GrantRefreshResult> {
+  if (!oauthTokensStale(tokens)) return { ok: true, refreshed: false, tokens };
+  if (!tokens.refreshToken) return { ok: false, reason: 'no_refresh_token' };
+  if (!refresher) return { ok: false, reason: 'unconfigured' };
+  try {
+    const refreshed = await refresher(tokens.refreshToken);
+    return { ok: true, refreshed: true, tokens: mergeRefreshedTokens(tokens, refreshed) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Token refresh failed';
+    return isTerminalRefreshFailure(message)
+      ? { ok: false, reason: 'revoked', message, error }
+      : { ok: false, reason: 'failed', message, error };
+  }
 }

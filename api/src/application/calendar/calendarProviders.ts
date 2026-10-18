@@ -5,7 +5,7 @@
  * and the meeting scheduler stay provider-agnostic.
  */
 import type { Env } from '../../env';
-import { isProviderOAuthConfigured } from '../shared/providerOAuthConnect';
+import { GOOGLE_OAUTH_ENDPOINTS, MICROSOFT_OAUTH_ENDPOINTS, isProviderOAuthConfigured } from '../shared/providerOAuthConnect';
 
 export type CalendarProviderName = 'google' | 'microsoft';
 
@@ -65,8 +65,7 @@ async function jsonFetch(url: string, init: RequestInit): Promise<Record<string,
 // ── Google Calendar v3 ──────────────────────────────────────────────────────
 const google: CalendarProvider = {
   name: 'google',
-  authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenUrl: 'https://oauth2.googleapis.com/token',
+  ...GOOGLE_OAUTH_ENDPOINTS,
   scopes: [
     'openid', 'email', 'profile',
     'https://www.googleapis.com/auth/calendar.events',
@@ -150,8 +149,7 @@ const google: CalendarProvider = {
 // ── Microsoft Graph ─────────────────────────────────────────────────────────
 const microsoft: CalendarProvider = {
   name: 'microsoft',
-  authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-  tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+  ...MICROSOFT_OAUTH_ENDPOINTS,
   scopes: ['openid', 'email', 'profile', 'offline_access', 'User.Read', 'Calendars.ReadWrite'],
   clientIdKey: 'MICROSOFT_CLIENT_ID',
   clientSecretKey: 'MICROSOFT_CLIENT_SECRET',

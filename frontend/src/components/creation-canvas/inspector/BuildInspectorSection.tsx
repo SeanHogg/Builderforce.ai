@@ -9,7 +9,7 @@ import { canvasAppLocalKey } from '@/lib/canvasSessionApp';
 import { useEffect, useState } from 'react';
 import { listIdeProjects } from '@/lib/ideProjectsApi';
 import type { ProjectModality } from '@/lib/modality';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/inspector.module.css';
 
 /**
  * Builder inspector — pick what to build, then open the workspace.

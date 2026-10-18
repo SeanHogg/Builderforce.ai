@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
-import { capitalizationTables, capitalizationToCsv, capitalizationToXlsx, type ReportTable } from './capitalizationReport';
+import { capitalizationFlatTable, capitalizationTables, type ReportTable } from './capitalizationReport';
+import { serializeExport } from '../export/exportSource';
 import type { AllocationHistory, AllocationInsights } from '../insights/allocationInsights';
+
+/** Both renders go through the ONE export serialiser, exactly as the route does:
+ *  CSV from the flat table, XLSX from the two report tables as sheets. */
+const render = (format: 'csv' | 'xlsx', h: AllocationHistory, c: AllocationInsights) =>
+  serializeExport({ filename: 'capitalization', table: capitalizationFlatTable(h, c), sheets: capitalizationTables(h, c) }, format, 0);
+const capitalizationToCsv = (h: AllocationHistory, c: AllocationInsights) => render('csv', h, c) as string;
+const capitalizationToXlsx = (h: AllocationHistory, c: AllocationInsights) => render('xlsx', h, c) as Uint8Array;
 
 const history: AllocationHistory = {
   dataAsOf: '2026-06-27T12:00:00.000Z',

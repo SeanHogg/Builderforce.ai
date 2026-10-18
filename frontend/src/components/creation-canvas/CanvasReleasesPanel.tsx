@@ -65,7 +65,8 @@ import {
   LAUNCH_STAGE_CSS,
   LaunchStage,
 } from '@/lib/creationListings.launch';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
+import inspectorStyles from './styles/inspector.module.css';
 import { useFormat } from "@/i18n/useFormat";
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { usePolledResource } from '@/hooks/usePolledResource';
@@ -370,7 +371,7 @@ export function CanvasReleasesPanel({
                 <div className={styles.publishActions}>
                   <button
                     type="button"
-                    className={styles.fullButton}
+                    className={inspectorStyles.fullButton}
                     onClick={publish}
                     disabled={!canPublish}
                   >
@@ -378,7 +379,7 @@ export function CanvasReleasesPanel({
                   </button>
                   <button
                     type="button"
-                    className={styles.secondaryFullButton}
+                    className={inspectorStyles.secondaryFullButton}
                     onClick={stage}
                     disabled={busy}
                   >
@@ -504,17 +505,17 @@ function ReleaseRow({
       </p>
       <div className={styles.releaseActions}>
         {onStage && (
-          <button type="button" className={styles.secondaryFullButton} onClick={onStage} disabled={busy}>
+          <button type="button" className={inspectorStyles.secondaryFullButton} onClick={onStage} disabled={busy}>
             {t('stageAction')}
           </button>
         )}
         {onRevert && (
-          <InlineConfirmButton block className={styles.secondaryFullButton} onConfirm={onRevert} disabled={busy} hint={revertHint} confirmLabel={t('revertConfirm')}>
+          <InlineConfirmButton block className={inspectorStyles.secondaryFullButton} onConfirm={onRevert} disabled={busy} hint={revertHint} confirmLabel={t('revertConfirm')}>
             {t('revertAction')}
           </InlineConfirmButton>
         )}
         {release.state === 'live' && slug && (
-          <a className={styles.secondaryFullButton} href={`/marketplace/listing/${slug}`} target="_blank" rel="noreferrer">
+          <a className={inspectorStyles.secondaryFullButton} href={`/marketplace/listing/${slug}`} target="_blank" rel="noreferrer">
             {t('viewListing')}
           </a>
         )}

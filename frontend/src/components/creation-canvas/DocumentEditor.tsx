@@ -38,7 +38,7 @@
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/documents.module.css';
 import { htmlToMarkdown, markdownToHtml } from '@/lib/richText';
 import {
   RICH_FONTS, RICH_SIZES, escapeHtml, richMarksCss, type RichAlign, type RichMarks,

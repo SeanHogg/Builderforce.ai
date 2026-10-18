@@ -32,13 +32,9 @@ import {
   taxProfileOptions,
   type TaxProfileInput,
 } from '../../application/finance/taxProfile';
-import {
-  buildTaxYearReport,
-  listTaxYears,
-  taxYearReportFilename,
-  taxYearReportToCsv,
-} from '../../application/finance/taxReport';
-import { exportContentMeta } from '../../application/export/tabularExport';
+import { buildTaxYearReport, listTaxYears } from '../../application/finance/taxReport';
+import { taxYearExportSource } from '../../application/finance/taxReportExport';
+import { exportSourceHandler } from './exportSourceRoute';
 import { parseOptionalBody, zJsonObject } from './requestBody';
 
 /** The fields a caller may set. Anything else in the body is ignored. */
@@ -89,25 +85,11 @@ export function createTaxRoutes(db: Db): Hono<HonoEnv> {
     years: await listTaxYears(db, c.env as Env, c.get('tenantId') as number),
   }));
 
-  /** The CSV download. Registered BEFORE `/report/:year` so the literal
-   *  `.csv` suffix cannot be swallowed by the JSON route's parameter. */
-  r.get('/report/:year/csv', managerOnly, async (c) => {
-    const year = Number(c.req.param('year'));
-    // `onlyReportable=false` is the reconciliation view — every recipient,
-    // including those under the threshold, with the audit reason for each.
-    const onlyReportable = c.req.query('all') !== 'true';
-    const report = await buildTaxYearReport(db, c.env as Env, c.get('tenantId') as number, year)
-      .catch(() => null);
-    if (!report) return c.json({ error: 'That is not a reportable tax year.' }, 400);
-
-    const { contentType } = exportContentMeta('csv');
-    return new Response(taxYearReportToCsv(report, { onlyReportable }), {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Disposition': `attachment; filename="${taxYearReportFilename(year, onlyReportable)}"`,
-      },
-    });
-  });
+  /** The filer-ready download — a registered export source (manager gate
+   *  declared on it; also at /api/exports/sources/tax.year-report). Registered
+   *  BEFORE `/report/:year` so the literal suffix cannot be swallowed by the
+   *  JSON route's parameter. */
+  r.get('/report/:year/csv', exportSourceHandler(taxYearExportSource, db));
 
   r.get('/report/:year', managerOnly, async (c) => {
     const year = Number(c.req.param('year'));

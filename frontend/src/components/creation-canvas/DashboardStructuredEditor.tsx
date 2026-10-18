@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/dashboards.module.css';
+import documentsStyles from './styles/documents.module.css';
 import { useDragReorder } from '@/lib/useDragReorder';
 import {
   DASHBOARD_CHART_DEFINITIONS,
@@ -100,7 +101,7 @@ export function DashboardStructuredEditor({
   return (
     <div className={styles.dashboardEditor}>
       {deleted && (
-        <div className={styles.resumeUndoDelete} role="status">
+        <div className={documentsStyles.resumeUndoDelete} role="status">
           <span>{t('widgetDeleted')}</span>
           <button type="button" onClick={undoDelete}>{t('undoDelete')}</button>
           <button type="button" aria-label={t('dismissUndo')} onClick={() => setDeleted(null)}>×</button>
@@ -113,20 +114,20 @@ export function DashboardStructuredEditor({
         return (
           <fieldset
             key={widget.id}
-            className={styles.dashboardWidgetRow}
+            className={documentsStyles.dashboardWidgetRow}
             {...drag.dropTargetProps(widget.id)}
             data-dragging={drag.draggingKey === widget.id || undefined}
             data-drop-target={drag.dropKey === widget.id || undefined}
           >
             <legend>{name}</legend>
-            <div className={styles.resumeEntryActions}>
-              <button type="button" className={styles.resumeSectionDragHandle} aria-label={t('dragWidget', { name })} {...drag.dragHandleProps(widget.id)}>⠿</button>
+            <div className={documentsStyles.resumeEntryActions}>
+              <button type="button" className={documentsStyles.resumeSectionDragHandle} aria-label={t('dragWidget', { name })} {...drag.dragHandleProps(widget.id)}>⠿</button>
               <button type="button" disabled={index === 0} aria-label={t('moveUp')} onClick={() => drag.nudge(widget.id, -1)}>↑</button>
               <button type="button" disabled={index === widgets.length - 1} aria-label={t('moveDown')} onClick={() => drag.nudge(widget.id, 1)}>↓</button>
               <button type="button" aria-label={t('removeWidget', { name })} onClick={() => remove(index)}>×</button>
             </div>
 
-            <div className={styles.resumeFieldGrid}>
+            <div className={documentsStyles.resumeFieldGrid}>
               <label>
                 <span>{t('chartType')}</span>
                 <select value={widget.chart} onChange={(event) => setChart(index, widget, event.target.value as DashboardChartKind)}>
@@ -177,7 +178,7 @@ export function DashboardStructuredEditor({
               )}
 
               {definition.categories && (
-                <label className={styles.resumeFieldWide}>
+                <label className={documentsStyles.resumeFieldWide}>
                   <span>{t('categories')}</span>
                   <textarea
                     value={widget.labels.join('\n')}
@@ -210,7 +211,7 @@ export function DashboardStructuredEditor({
               ))}
 
               {definition.series === 'multi' && (
-                <button type="button" className={styles.resumeAddEntry} onClick={() => addSeries(index, widget)}>{t('addSeries')}</button>
+                <button type="button" className={documentsStyles.resumeAddEntry} onClick={() => addSeries(index, widget)}>{t('addSeries')}</button>
               )}
             </div>
           </fieldset>

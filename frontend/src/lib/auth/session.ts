@@ -204,7 +204,7 @@ type TenantRow = { id: number; name: string; slug?: string };
 export const workspacesApi = {
   /** Create a new workspace. The caller becomes its owner. */
   async create(name: string): Promise<Tenant> {
-    const data = await apiRequest<TenantRow>('/api/tenants/create', {
+    const data = await apiRequest<TenantRow>('/api/tenants', {
       ...WEB, method: 'POST', body: JSON.stringify({ name: name.trim() }),
     });
     return { id: String(data.id), name: data.name, slug: data.slug, role: 'owner' };

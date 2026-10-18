@@ -6,7 +6,7 @@ import { SellInMarketplace } from './SellInMarketplace';
 import { useCanvasSessionFacts } from './chrome/canvasSessionContext';
 import type { CanvasSessionActionHandler } from './CanvasSessionActions';
 import type { CreationFlowNode } from './CreationNode';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 
 /**
  * The doors a board-scoped PLACE opens — every one of them a door the canvas already has.

@@ -11,11 +11,12 @@
 
 import { and, gte, sql } from 'drizzle-orm';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
-import { users, tenants, llmUsageLog, errorEvents } from '../../infrastructure/database/schema';
+import { users, tenants, errorEvents } from '../../infrastructure/database/schema';
 import { densifyDaily, type MetricPoint } from '../dashboards/dailySeries';
 import type { Db } from '../../infrastructure/database/connection';
 import { DAY_MS } from '../../domain/shared/time';
-import { usageDatabaseOf } from '../llm/usageLedger';
+import { readUsageBreakdown } from '../llm/usageQuery';
+import { millicentsToUsd } from '../../domain/shared/money';
 
 function windowStart(days: number, now: number): Date {
   const mid = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate());
@@ -34,16 +35,20 @@ async function platformCount(db: Db, table: PgTable, tsCol: AnyPgColumn, days: n
   return densifyDaily(byDay, days, now);
 }
 
-/** Platform-wide daily SUM of a numeric column (no tenant filter). */
-async function platformSum(db: Db, table: PgTable, tsCol: AnyPgColumn, valueCol: AnyPgColumn, days: number, now: number): Promise<MetricPoint[]> {
-  const rows = await db
-    .select({ day: sql<string>`to_char(date_trunc('day', ${tsCol}), 'YYYY-MM-DD')`, total: sql<number>`coalesce(sum(${valueCol}), 0)::float8` })
-    .from(table)
-    .where(gte(tsCol, windowStart(days, now)))
-    .groupBy(sql`1`);
-  const byDay = new Map<string, number>();
-  for (const r of rows) byDay.set(r.day, Number(r.total));
-  return densifyDaily(byDay, days, now);
+/**
+ * Platform-wide daily tokens + spend from THE usage query use case — the platform
+ * scope of the same day breakdown `/api/admin/llm-usage` charts, in ONE grouped scan
+ * (this used to be two full scans of the ledger, one per column).
+ */
+async function platformUsageSeries(db: Db, days: number, now: number): Promise<{ tokens: MetricPoint[]; spendMc: MetricPoint[] }> {
+  const rows = await readUsageBreakdown(db, { scope: { kind: 'platform' }, since: windowStart(days, now) }, 'day', { orderBy: 'key' });
+  const tokens = new Map<string, number>();
+  const spend = new Map<string, number>();
+  for (const r of rows) {
+    tokens.set(r.day, r.totalTokens);
+    spend.set(r.day, r.costMc);
+  }
+  return { tokens: densifyDaily(tokens, days, now), spendMc: densifyDaily(spend, days, now) };
 }
 
 const total = (pts: MetricPoint[]) => pts.reduce((a, p) => a + p.value, 0);
@@ -62,16 +67,14 @@ export interface PlatformRollup {
 
 export async function computePlatformRollup(db: Db, days: number): Promise<PlatformRollup> {
   const now = Date.now();
-  // The usage ledger lives in its own database (operational in production).
-  const usageDb = usageDatabaseOf(db);
-  const [newUsers, newTenants, tokens, spendMc, errs] = await Promise.all([
+  const [newUsers, newTenants, usage, errs] = await Promise.all([
     platformCount(db, users, users.createdAt, days, now),
     platformCount(db, tenants, tenants.createdAt, days, now),
-    platformSum(usageDb, llmUsageLog, llmUsageLog.createdAt, llmUsageLog.totalTokens, days, now),
-    platformSum(usageDb, llmUsageLog, llmUsageLog.createdAt, llmUsageLog.costUsdMillicents, days, now),
+    platformUsageSeries(db, days, now),
     platformCount(db, errorEvents, errorEvents.ts, days, now),
   ]);
-  const spendUsd = spendMc.map((p) => ({ day: p.day, value: p.value / 100_000 }));
+  const { tokens } = usage;
+  const spendUsd = usage.spendMc.map((p) => ({ day: p.day, value: millicentsToUsd(p.value) }));
 
   return {
     windowDays: days,

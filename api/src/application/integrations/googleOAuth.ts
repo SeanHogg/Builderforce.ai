@@ -11,6 +11,7 @@
 
 import { googleQueryValue } from '../drive/driveProviders';
 import { base64UrlEncode } from '../../domain/shared/bytes';
+import { GOOGLE_OAUTH_ENDPOINTS, refreshAccessToken, TokenEndpointError } from '../shared/providerOAuthConnect';
 
 export interface GoogleOAuthCreds {
   clientId?: unknown;
@@ -32,21 +33,27 @@ export async function googleAccessToken(creds: GoogleOAuthCreds): Promise<string
   if (!clientId || !clientSecret || !refreshToken) {
     throw new Error('Google credentials require clientId, clientSecret and refreshToken');
   }
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  });
-  const body = (await res.json().catch(() => ({}))) as { access_token?: string; error_description?: string; error?: string };
-  if (!res.ok || !body.access_token) {
-    throw new Error(body.error_description || body.error || `Token exchange failed (${res.status})`);
+  // The tenant brings its OWN OAuth client here (not the deployment's), so the
+  // client is built from the credential rather than a descriptor's env keys — but
+  // the refresh request itself is the shared one.
+  try {
+    const tokens = await refreshAccessToken({ tokenUrl: GOOGLE_OAUTH_ENDPOINTS.tokenUrl, clientId, clientSecret }, refreshToken);
+    return tokens.access_token;
+  } catch (error) {
+    // Google's `error_description` is what tells an operator WHICH half of the
+    // credential is wrong ("Bad Request" vs "Token has been expired or revoked").
+    if (error instanceof TokenEndpointError) throw new Error(googleErrorText(error.body) || error.message);
+    throw error;
   }
-  return body.access_token;
+}
+
+function googleErrorText(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { error_description?: unknown; error?: unknown };
+    return String(parsed.error_description || parsed.error || '');
+  } catch {
+    return '';
+  }
 }
 
 /** Base64url over UTF-8 (RFC 4648 §5, no padding) — the Gmail `raw` message encoding. */

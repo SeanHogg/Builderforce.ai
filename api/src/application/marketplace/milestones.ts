@@ -28,6 +28,7 @@ import type { Db, Tx } from '../../infrastructure/database/connection';
 import {
   engagementMilestones,
   freelancerEngagements,
+  jobPostings,
   ledgerEntries,
   tenants,
 } from '../../infrastructure/database/schema';
@@ -328,6 +329,46 @@ export async function createMilestone(db: Db, input: CreateMilestoneInput): Prom
     createdByUserId: input.createdByUserId ?? null,
   }).returning(columns);
   return row as Milestone;
+}
+
+/** Where an authored deliverable hangs: a posting's published schedule, or a live
+ *  engagement's. (A bidder's counter-proposal goes through `replaceProposalSchedule`.) */
+export type ScheduleParent = { kind: 'job'; jobId: string } | { kind: 'engagement'; engagementId: string };
+
+export type AddScheduleMilestoneInput =
+  Omit<CreateMilestoneInput, 'jobId' | 'engagementId' | 'proposalId' | 'freelancerUserId'> & { parent: ScheduleParent };
+
+/**
+ * THE authoring act for a schedule line — `POST /api/jobs/:id/milestones` and
+ * `POST /api/engagements/:id/milestones` both call this. The two routes used to
+ * each run their own parent lookup against the table before `createMilestone`; the
+ * ownership rule is the part that decides whose money a milestone can later move,
+ * so it lives here once:
+ *   • a JOB must be this tenant's and still `open` — adding deliverables to a filled
+ *     posting would change the agreement after somebody was hired against it;
+ *   • an ENGAGEMENT must be this tenant's, and the row inherits its freelancer, or a
+ *     milestone could be attached to somebody else's engagement and funded out of
+ *     the wrong pocket.
+ * `null` = no such parent in this tenant; each route keeps its own 404 wording.
+ */
+export async function addScheduleMilestone(db: Db, input: AddScheduleMilestoneInput): Promise<Milestone | null> {
+  const { parent, ...fields } = input;
+  if (parent.kind === 'job') {
+    const [job] = await db.select({ id: jobPostings.id })
+      .from(jobPostings)
+      .where(scopedToTenant(jobPostings, input.tenantId, eq(jobPostings.id, parent.jobId), eq(jobPostings.status, 'open')))
+      .limit(1);
+    if (!job) return null;
+    return createMilestone(db, { ...fields, jobId: job.id });
+  }
+  const [engagement] = await db.select({
+    id: freelancerEngagements.id,
+    freelancerUserId: freelancerEngagements.freelancerUserId,
+  }).from(freelancerEngagements)
+    .where(scopedToTenant(freelancerEngagements, input.tenantId, eq(freelancerEngagements.id, parent.engagementId)))
+    .limit(1);
+  if (!engagement) return null;
+  return createMilestone(db, { ...fields, engagementId: engagement.id, freelancerUserId: engagement.freelancerUserId });
 }
 
 /**

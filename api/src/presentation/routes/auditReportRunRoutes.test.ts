@@ -53,6 +53,8 @@ describe('GET /audit-report/export', () => {
     expect(res.headers.get('content-type')).toContain('text/csv');
     expect(res.headers.get('content-disposition')).toContain('audit-report-2026-08-');
     expect(await res.text()).toContain('"finance","spend_usd","10"');
+    // Still served, as a deprecated alias of the canonical export source door.
+    expect(res.headers.get('link')).toBe('</api/exports/sources/finops.audit-report>; rel="successor-version"');
     expect(runs.recordAuditReportRun).toHaveBeenCalledTimes(1);
     const [, , input] = runs.recordAuditReportRun.mock.calls[0]!;
     expect(input).toEqual({ tenantId: TENANT, periodMonth: '2026-08', generatedBy: USER, report, format: 'csv' });

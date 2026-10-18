@@ -2,12 +2,11 @@ import { IUserRepository } from '../../domain/user/IUserRepository';
 import { User } from '../../domain/user/User';
 import { AuditEventType, UserId, asTenantId } from '../../domain/shared/types';
 import { UnauthorizedError, ConflictError, ForbiddenError } from '../../domain/shared/errors';
-import { signJwt, signWebJwt } from '../../infrastructure/auth/JwtService';
-import { hashSecret, generateApiKey, hashPassword, verifyPassword } from '../../infrastructure/auth/HashService';
+import { signJwt } from '../../infrastructure/auth/JwtService';
+import { hashSecret, generateApiKey } from '../../infrastructure/auth/HashService';
 import { IAuditRepository } from '../../domain/audit/IAuditRepository';
 import { AuditEvent } from '../../domain/audit/AuditEvent';
 import { ITenantRepository } from '../../domain/tenant/ITenantRepository';
-import { tenantRoleForListing } from '../tenant/tenantRoles';
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -28,17 +27,6 @@ export interface LoginResult {
   expiresIn: number;
 }
 
-export interface WebRegisterDto {
-  email:    string;
-  username: string;
-  password: string;
-}
-
-export interface WebLoginDto {
-  email:    string;
-  password: string;
-}
-
 export interface WebLoginResult {
   token:     string;
   expiresIn: number;
@@ -51,22 +39,6 @@ export interface WebLoginResult {
     bio:          string | null;
     isSuperadmin: boolean;
   };
-}
-
-export interface MyTenantsResult {
-  tenants: Array<{
-    id: number;
-    name: string;
-    slug: string;
-    role: string;
-    status: string;
-    defaultAgentHostId: number | null;
-    plan: string;
-    effectivePlan: string;
-    billingStatus: string;
-  }>;
-  /** The workspace to open without asking — null when unset or no longer a member. */
-  defaultTenantId: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -139,37 +111,6 @@ export class AuthService {
   // -- Web / marketplace path ------------------------------------------------
 
   /**
-   * Pre-auth discovery: given a raw API key, return the tenants the user belongs to.
-   * No JWT is issued – the caller uses the result to pick a tenant and then calls /token.
-   */
-  async myTenants(userId: string): Promise<MyTenantsResult> {
-    const [userTenants, storedDefault] = await Promise.all([
-      this.tenants.findByUserId(userId),
-      this.users.getDefaultTenantId(userId as UserId),
-    ]);
-    // A default only counts while the person still belongs to it — leaving a
-    // workspace must not leave them auto-landed on a token exchange that fails.
-    const defaultTenantId = storedDefault !== null && userTenants.some(t => t.id === storedDefault) ? storedDefault : null;
-    return {
-      defaultTenantId,
-      tenants: userTenants.map(t => {
-        const member = t.getMember(userId);
-        return {
-          id: t.id,
-          name: t.name,
-          slug: t.slug,
-          role: tenantRoleForListing(member?.role),
-          status: t.status,
-          defaultAgentHostId: t.defaultAgentHostId,
-          plan: t.plan,
-          effectivePlan: t.effectivePlan(),
-          billingStatus: t.billingStatus,
-        };
-      }),
-    };
-  }
-
-  /**
    * Set (or clear, with null) the workspace this user opens automatically. Only a
    * workspace they belong to can be their default.
    */
@@ -201,77 +142,11 @@ export class AuthService {
     return { token, expiresIn };
   }
 
-  async registerWeb(dto: WebRegisterDto): Promise<WebLoginResult> {
-    const existing = await this.users.findByEmail(dto.email);
-    if (existing) throw new ConflictError(`Email '${dto.email}' is already registered`);
-
-    const existingUsername = await this.users.findByUsername(dto.username);
-    if (existingUsername) throw new ConflictError(`Username '${dto.username}' is already taken`);
-
-    const pwHash  = await hashPassword(dto.password);
-    const apiKey  = generateApiKey('clu');
-    const keyHash = await hashSecret(apiKey);
-
-    const user = await this.users.save(
-      User.createWeb(dto.email, dto.username, pwHash, keyHash),
-    );
-
-    const expiresIn = 86_400;
-    const token = await signWebJwt(
-      { sub: user.id, email: user.email, username: user.username! },
-      this.jwtSecret,
-      expiresIn,
-    );
-
-    return {
-      token,
-      expiresIn,
-      user: {
-        id:           user.id,
-        email:        user.email,
-        username:     user.username!,
-        displayName:  user.displayName,
-        avatarUrl:    user.avatarUrl,
-        bio:          user.bio,
-        isSuperadmin: user.isSuperadmin,
-      },
-    };
-  }
-
-  async loginWeb(dto: WebLoginDto): Promise<WebLoginResult> {
-    const user = await this.users.findByEmail(dto.email);
-    if (!user || !user.passwordHash) throw new UnauthorizedError('Invalid email or password');
-
-    const ok = await verifyPassword(dto.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedError('Invalid email or password');
-
-    const expiresIn = 86_400;
-    // Embed sa: true in the token if this is a superadmin
-    const token = await signWebJwt(
-      {
-        sub:      user.id,
-        email:    user.email,
-        username: user.username ?? '',
-        ...(user.isSuperadmin ? { sa: true } : {}),
-      },
-      this.jwtSecret,
-      expiresIn,
-    );
-
-    return {
-      token,
-      expiresIn,
-      user: {
-        id:           user.id,
-        email:        user.email,
-        username:     user.username ?? '',
-        displayName:  user.displayName,
-        avatarUrl:    user.avatarUrl,
-        bio:          user.bio,
-        isSuperadmin: user.isSuperadmin,
-      },
-    };
-  }
+  // Web register / login are NOT here. They live in ONE place —
+  // `POST /api/auth/web/{register,login}` — because the real flow needs terms
+  // acceptance, the 18+ attestation, email verification, suspension, MFA and a
+  // persisted session row. The weaker copies that used to sit here had none of
+  // that and no callers; `/marketplace/auth/*` now aliases the canonical routes.
 
   async getMe(userId: UserId): Promise<WebLoginResult['user'] | null> {
     const user = await this.users.findById(userId);

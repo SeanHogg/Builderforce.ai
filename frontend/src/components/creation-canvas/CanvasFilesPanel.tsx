@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { CanvasDriveIcon, CanvasFilesIcon } from '@/components/canvas/CanvasCommands';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
 import { CanvasPanelFilters } from './CanvasPanelFilters';
 import { CanvasDriveBrowser } from './CanvasDriveBrowser';
 import type { CanvasFile, CanvasFileCategory } from '@/lib/canvasDocuments';

@@ -1,0 +1,472 @@
+/* Dashboard widgets and editors, data architecture, QA and spec object views.
+   Split out of CreationCanvas.module.css, which keeps the board shell and the
+   canvas palette (`--canvas-*`, light and dark) that every rule here reads. */
+
+/* An UNSET donut is an empty ring, not a decorative four-slice gradient: the old
+   default drew a convincing pie for an object that held no data at all. */
+.donut { width: 63px; height: 63px; margin: 5px auto 0; border-radius: 50%; background: var(--canvas-widget-border); position: relative; }.donut:after { content:''; position:absolute; inset:14px; background:#fff; border-radius:50%; }
+.donutChart { display:grid; grid-template-columns:63px minmax(0,1fr); align-items:center; gap:8px; margin-top:5px; }.donutChart .donut { margin:0; }.donutLegend { display:grid; gap:3px; min-width:0; }.donutLegend span { display:grid; grid-template-columns:7px minmax(0,1fr) auto; align-items:center; gap:4px; min-width:0; font-size:8px; }.donutLegend span > i { width:7px; height:7px; border-radius:var(--radius-sm); }.donutLegend b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }.donutLegend em { font-style:normal; color:var(--canvas-muted); }
+
+/* ── Dashboard widgets ───────────────────────────────────────────────────────────
+   Drawn by DashboardWidgetView, which is mounted by BOTH the Object card and the
+   editor's live preview. Every hue is a board hue (`--canvas-*`): these marks sit on
+   the board's own paper, so inheriting the shell's chart tokens would flatten them —
+   see this file's palette header. */
+.dwGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:8px; margin-top:8px; }
+.dwWidget { display:flex; flex-direction:column; gap:5px; min-width:0; min-height:85px; margin:0; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
+.dwWidget[data-span='full'] { grid-column:1 / -1; }
+.dwWidget figcaption { color:var(--canvas-muted); font-size:9px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dwEmptyWidget { margin:0; color:var(--canvas-muted); font-size:9px; }
+/* What a single series IS — a one-row legend without the pointless swatch. */
+.dwSeriesName { color:var(--canvas-muted); font-size:8px; }
+
+.dwMetric strong { display:block; font-size:17px; line-height:1.2; }
+.dwMetric em { color:var(--canvas-trend-up); font-size:8px; font-style:normal; }
+
+.dwBars,.dwFunnel { display:grid; gap:5px; }
+.dwBars > div,.dwFunnel > div,.dwStackRow { display:grid; grid-template-columns:minmax(0,58px) minmax(0,1fr) minmax(0,34px); align-items:center; gap:5px; font-size:9px; }
+.dwBars span,.dwFunnel span,.dwStackRow > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dwBars b,.dwFunnel b,.dwStackRow b { text-align:right; font-weight:700; }
+.dwBars i { display:block; height:7px; border-radius:var(--radius-sm); }
+.dwFunnel i { display:block; height:12px; margin:0 auto; clip-path:polygon(6% 0,94% 0,86% 100%,14% 100%); }
+
+.dwColumns { display:flex; align-items:flex-end; gap:4px; }
+.dwColumns > div { display:flex; flex:1; flex-direction:column; justify-content:flex-end; align-items:center; gap:3px; min-width:0; height:76px; font-size:8px; }
+.dwColumns i { display:block; width:100%; border-radius:var(--radius-sm) var(--radius-sm) 0 0; }
+.dwColumns span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dwColumns b { font-weight:700; }
+
+.dwPlot { display:flex; flex-direction:column; gap:4px; }
+.dwPlot svg { display:block; width:100%; height:56px; }
+.dwAxis { display:flex; justify-content:space-between; gap:4px; min-width:0; color:var(--canvas-muted); font-size:8px; }
+.dwAxis span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dwLegend { display:flex; flex-wrap:wrap; gap:6px; font-size:8px; }
+.dwLegend span { display:inline-flex; align-items:center; gap:3px; }
+.dwLegend i { width:7px; height:7px; border-radius:var(--radius-sm); }
+
+.dwStack { display:grid; gap:5px; }
+.dwStackRow > div { display:flex; height:8px; overflow:hidden; border-radius:var(--radius-sm); background:var(--canvas-widget-border); }
+.dwStackRow i { display:block; height:100%; }
+
+.dwGauge { display:flex; flex-direction:column; align-items:center; }
+.dwGauge svg { width:100%; max-width:132px; height:auto; }
+.dwGauge strong { font-size:16px; }
+.dwGauge em { color:var(--canvas-muted); font-size:8px; font-style:normal; }
+
+.dwTable { overflow-x:auto; }
+.dwTable table { width:100%; border-collapse:collapse; font-size:9px; }
+.dwTable th,.dwTable td { padding:3px 5px; border-bottom:1px solid var(--canvas-line); text-align:right; white-space:nowrap; }
+.dwTable thead th { color:var(--canvas-muted); }
+.dwTable thead th:first-child,.dwTable tbody th { text-align:left; font-weight:600; }
+
+/* ── Dashboard editor ────────────────────────────────────────────────────────────
+   Panel chrome, not board marks — so it uses the SHELL's form tokens, exactly like
+   the resume editor whose field classes it reuses. */
+.dashboardEditor { display:flex; flex-direction:column; gap:8px; max-height:520px; margin-top:8px; overflow:auto; padding-right:4px; }
+.dashboardEditor select { width:100%; min-height:34px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:inherit; padding:6px 8px; font:inherit; }
+/* A native <option> paints on the OS menu, not on this panel, so it needs its own
+   opaque pair or it renders white-on-white in one of the two themes. */
+.dashboardEditor select option { background:var(--surface); color:var(--text-primary); }
+.dashboardSeriesRow { grid-column:1 / -1; display:flex; flex-wrap:wrap; align-items:flex-end; gap:9px; }
+.dashboardSeriesRow > label { flex:1 1 140px; min-width:0; }
+.dashboardSeriesRow > button { width:32px; min-height:32px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; cursor:pointer; }
+.dashboardAddWidget { display:flex; flex-direction:column; gap:6px; }
+.dashboardAddWidget > span { color:var(--text-muted); font-size:11px; font-weight:700; }
+.dashboardAddWidget > div { display:flex; flex-wrap:wrap; gap:5px; }
+.dashboardAddWidget button { display:inline-flex; align-items:center; gap:5px; min-height:32px; border:1px dashed var(--border); border-radius:6px; background:transparent; color:inherit; padding:5px 9px; font-size:11px; cursor:pointer; }
+.dashboardAddWidget button:hover:not(:disabled),.dashboardAddWidget button:focus-visible { background:var(--surface-raised); }
+.dashboardAddWidget button:disabled { opacity:.4; cursor:not-allowed; }
+.dashboardAddWidget i { font-style:normal; }
+/* ── FOUNDER OBJECTS ─────────────────────────────────────────────────────────
+   One stylesheet for all seventeen kinds, matching the one component that renders
+   them. Every colour comes from the canvas object palette declared at the top of
+   this file, which defines BOTH themes in one place — so these cards are correct
+   in dark mode without a second block here, and adding a founder kind needs no
+   CSS at all.
+
+   The tables scroll inside their own container rather than widening the card: a
+   cap table or an objections list is arbitrarily wide, and a node that grows to
+   fit its widest row drags the whole board's layout with it. */
+.founderBody { display:grid; gap:9px; }
+
+.founderStatRow { display:grid; grid-template-columns:repeat(auto-fit,minmax(84px,1fr)); gap:6px; }
+.founderStat { display:grid; gap:2px; min-width:0; padding:6px 7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); }
+.founderStat small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderStat b { overflow:hidden; color:var(--canvas-ink); font-size:11px; font-variant-numeric:tabular-nums; text-overflow:ellipsis; white-space:nowrap; }
+
+.founderText { display:grid; gap:3px; margin:0; color:var(--canvas-ink-soft); font-size:9px; line-height:1.5; }
+.founderText small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+
+.founderChips { display:grid; gap:4px; }
+.founderChips small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderChips div { display:flex; flex-wrap:wrap; gap:4px; }
+.founderChips span { padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-ink-soft); font-size:8px; }
+
+.founderList { display:grid; gap:4px; }
+.founderList small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderList ul { display:grid; gap:4px; margin:0; padding:0; list-style:none; }
+.founderList li { display:grid; gap:2px; padding:5px 7px; border-left:2px solid var(--canvas-accent); border-radius:var(--radius-sm); background:var(--canvas-panel); }
+.founderList b { color:var(--canvas-ink); font-size:9px; }
+.founderList span { color:var(--canvas-ink-soft); font-size:8px; line-height:1.45; }
+
+.founderTableWrap { display:grid; gap:4px; min-width:0; }
+.founderTableWrap small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderTableScroll { overflow-x:auto; max-width:100%; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); }
+.founderTable { width:100%; border-collapse:collapse; font-size:8px; }
+.founderTable th { position:sticky; top:0; padding:5px 6px; background:var(--canvas-panel); color:var(--canvas-muted); font-weight:700; letter-spacing:.03em; text-align:left; text-transform:uppercase; white-space:nowrap; }
+.founderTable td { padding:5px 6px; border-top:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); vertical-align:top; }
+
+.founderMeter { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:6px; }
+.founderMeter small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderMeter b { color:var(--canvas-ink); font-size:10px; font-variant-numeric:tabular-nums; }
+.founderMeterTrack { overflow:hidden; height:5px; border-radius:var(--radius-full); background:color-mix(in srgb, var(--canvas-line) 70%, transparent); }
+.founderMeterTrack i { display:block; height:100%; border-radius:var(--radius-full); background:var(--canvas-accent); }
+/* Tone is carried by the fill, and never by colour ALONE — the number sits beside
+   the bar and is what a colour-blind reader actually reads. */
+.founderMeter[data-tone='good'] .founderMeterTrack i { background:var(--success, #169566); }
+.founderMeter[data-tone='watch'] .founderMeterTrack i { background:var(--warning, #b7791f); }
+.founderMeter[data-tone='risk'] .founderMeterTrack i { background:var(--error, #d64545); }
+
+/* A `bars` distribution. Scaled to the LARGEST bar rather than to the total, so a
+   two-option split and a ten-option split read as the same kind of result — see the
+   note on `barValues`. The count sits beside every bar for the same reason the meter's
+   number does: length alone is not readable, and colour alone is not accessible. */
+.founderBars { display:grid; gap:4px; }
+.founderBars small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderBars ul { display:grid; gap:3px; margin:0; padding:0; list-style:none; }
+/* minmax(0,1fr) on the track, not 1fr: a long label must not be able to push the bar
+   past the card and start the board scrolling sideways. */
+.founderBars li { display:grid; grid-template-columns:minmax(0,4.5rem) minmax(0,1fr) auto; align-items:center; gap:5px; }
+.founderBars li span { overflow:hidden; color:var(--canvas-ink); font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.founderBars li i { display:block; min-width:2px; height:5px; border-radius:var(--radius-full); background:var(--canvas-accent); }
+.founderBars li b { color:var(--canvas-ink); font-size:9px; font-variant-numeric:tabular-nums; }
+
+.founderVerdict { display:grid; gap:3px; padding:7px 8px; border-left:3px solid var(--canvas-accent); border-radius:var(--radius-sm); background:color-mix(in srgb, var(--canvas-accent) 8%, var(--canvas-panel)); }
+.founderVerdict small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderVerdict strong { color:var(--canvas-ink); font-size:10px; line-height:1.45; }
+
+.founderEmpty { display:grid; gap:4px; padding:10px; border:1px dashed var(--canvas-line); border-radius:var(--radius-md); }
+.founderEmpty p { margin:0; color:var(--canvas-ink); font-size:9px; }
+.founderEmpty span { color:var(--canvas-muted); font-size:8px; }
+
+@media (max-width:520px) {
+  .founderStatRow { grid-template-columns:repeat(auto-fit,minmax(72px,1fr)); }
+}
+.dwWidget,
+/* The founder surfaces. They already read the palette directly, so this is
+   belt-and-braces for the three that sit on a tinted or dashed ground. */
+.founderStat,
+.founderList li,
+.founderTableScroll,
+.founderEmpty {
+  border-color:var(--canvas-line);
+  background:var(--canvas-panel);
+  color:var(--canvas-ink);
+}
+.dwWidget figcaption { color:var(--canvas-muted); }
+.donut:after { background:var(--canvas-widget-surface); }
+
+/* ── Data architecture ──────────────────────────────────────────────────────
+   ERD, data source, contract, quality, metric definition and lineage.
+
+   Every colour is a canvas or tone token, both of which `.canvasShell` declares
+   for light AND dark above — so there is not one literal hex in this block and
+   no card can read correctly in one theme only. Widths are fluid (minmax /
+   percentage / clamp) and the wide surfaces scroll inside themselves rather than
+   pushing the card past the viewport on a narrow screen. */
+
+.dataVerdict {
+  display:grid; gap:2px;
+  padding:6px 8px; border-radius:var(--radius-sm);
+  border-left:2px solid var(--tone-info-mark);
+  background:var(--tone-info-bg);
+}
+.dataVerdict strong { color:var(--canvas-ink); font-size:9px; font-weight:700; line-height:1.35; }
+.dataVerdict span { color:var(--canvas-muted); font-size:8px; line-height:1.35; }
+.dataVerdict[data-tone='success'] { border-left-color:var(--tone-success-mark); background:var(--tone-success-bg); }
+.dataVerdict[data-tone='warning'] { border-left-color:var(--tone-warning-mark); background:var(--tone-warning-bg); }
+.dataVerdict[data-tone='danger']  { border-left-color:var(--tone-danger-mark);  background:var(--tone-danger-bg); }
+
+.dataEmpty {
+  display:grid; gap:4px; align-content:center;
+  min-height:80px; padding:12px;
+  border:1px dashed var(--canvas-line); border-radius:var(--radius-sm);
+  text-align:center;
+}
+.dataEmpty strong { color:var(--canvas-ink); font-size:9px; font-weight:700; }
+.dataEmpty span { color:var(--canvas-muted); font-size:8px; line-height:1.4; }
+
+.dataNote { margin:0; color:var(--canvas-muted); font-size:8px; line-height:1.45; }
+.dataFooter { color:var(--canvas-muted); font-size:8px; }
+.dataSql {
+  margin:0; max-height:96px; overflow:auto;
+  padding:7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink);
+  font-family:var(--font-mono); font-size:8px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere;
+}
+
+/* Issue / violation lists — ONE shape for the ERD validator, the contract
+   evaluator and the lineage staleness report, because all three make the same
+   statement: which thing, and what is wrong with it. */
+.dataIssueList { display:grid; gap:0; margin:0; padding:0; list-style:none; }
+.dataIssueList li {
+  display:grid; grid-template-columns:minmax(60px,32%) 1fr; gap:8px; align-items:baseline;
+  padding:5px 7px; border-left:2px solid var(--canvas-line);
+}
+.dataIssueList li[data-severity='error']   { border-left-color:var(--tone-danger-mark); }
+.dataIssueList li[data-severity='warning'] { border-left-color:var(--tone-warning-mark); }
+.dataIssueList li[data-severity='info']    { border-left-color:var(--tone-info-mark); }
+.dataIssueList b { color:var(--canvas-ink); font-size:8px; font-weight:700; overflow-wrap:anywhere; }
+.dataIssueList span { color:var(--canvas-muted); font-size:8px; line-height:1.4; }
+
+/* ERD — positioned HTML entity cards over an SVG relationship underlay. */
+.erdBody { display:grid; gap:7px; min-height:0; }
+.erdCanvas {
+  overflow:auto; max-height:420px;
+  padding:10px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted);
+}
+.erdStage { position:relative; min-width:100%; }
+.erdLines { position:absolute; inset:0; overflow:visible; pointer-events:none; }
+.erdLine { fill:none; stroke:var(--canvas-accent); stroke-width:1.2; opacity:.6; }
+.erdLineEnd { fill:var(--canvas-accent); opacity:.8; }
+.erdEntity {
+  position:absolute;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel); box-shadow:0 1px 3px var(--canvas-shadow);
+  overflow:hidden;
+}
+.erdEntity > header {
+  padding:5px 7px;
+  background:var(--canvas-widget-header); color:var(--canvas-ink);
+  font-size:9px; font-weight:750; letter-spacing:.02em;
+  border-bottom:1px solid var(--canvas-line);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.erdEntity ul { display:grid; gap:0; margin:0; padding:0; list-style:none; }
+.erdEntity li {
+  display:flex; align-items:baseline; gap:5px;
+  padding:2px 7px;
+  font-size:8px; line-height:1.5;
+}
+.erdEntity li[data-key='pk'] { background:var(--tone-info-bg); }
+.erdEntity li b { flex:1 1 auto; color:var(--canvas-ink); font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.erdEntity li span { flex:none; color:var(--canvas-muted); font-size:7px; }
+.erdEntity li i {
+  flex:none; padding:0 3px; border-radius:var(--radius-full);
+  font-style:normal; font-size:7px; font-weight:750; letter-spacing:.04em;
+}
+.erdEntity li i[data-mark='pk']  { background:var(--tone-info-bg);    color:var(--tone-info-ink); }
+.erdEntity li i[data-mark='fk']  { background:var(--tone-success-bg); color:var(--tone-success-ink); }
+.erdEntity li i[data-mark='pii'] { background:var(--tone-danger-bg);  color:var(--tone-danger-ink); }
+.erdEntity li[data-more='true'] b { color:var(--canvas-muted); font-weight:600; font-style:italic; }
+
+/* Data source */
+.dataSourceBody { display:grid; gap:7px; min-height:0; }
+.dataTableList {
+  display:grid; gap:0; margin:0; padding:0; list-style:none;
+  max-height:180px; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+}
+.dataTableList li {
+  display:flex; align-items:baseline; justify-content:space-between; gap:8px;
+  padding:4px 7px; border-bottom:1px solid var(--canvas-line);
+}
+.dataTableList li:last-child { border-bottom:0; }
+.dataTableList b { color:var(--canvas-ink); font-size:8px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dataTableList span { flex:none; color:var(--canvas-muted); font-size:8px; }
+.dataTableList li[data-more='true'] b { color:var(--canvas-muted); font-style:italic; font-weight:600; }
+
+/* Contract */
+.dataContractBody { display:grid; gap:7px; min-height:0; }
+.dataColumnList {
+  display:grid; gap:0; margin:0; padding:0; list-style:none;
+  max-height:220px; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+}
+.dataColumnList li {
+  display:grid; grid-template-columns:minmax(0,1.4fr) auto minmax(0,1fr) auto; gap:6px; align-items:baseline;
+  padding:4px 7px; border-bottom:1px solid var(--canvas-line);
+}
+.dataColumnList li:last-child { border-bottom:0; }
+.dataColumnList b { color:var(--canvas-ink); font-size:8px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dataColumnList span { color:var(--canvas-muted); font-size:7px; font-family:var(--font-mono); }
+.dataColumnList em { color:var(--canvas-muted); font-size:7px; font-style:normal; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dataColumnList i[data-mark='pii'] {
+  padding:0 4px; border-radius:var(--radius-full);
+  background:var(--tone-danger-bg); color:var(--tone-danger-ink);
+  font-style:normal; font-size:7px; font-weight:700;
+}
+.dataColumnList li[data-more='true'] b { color:var(--canvas-muted); font-style:italic; font-weight:600; }
+
+/* Quality */
+.dataQualityBody { display:grid; gap:7px; min-height:0; }
+.dataCheckList {
+  display:grid; gap:0; margin:0; padding:0; list-style:none;
+  max-height:240px; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+}
+.dataCheckList li {
+  display:grid; grid-template-columns:auto minmax(0,1.2fr) minmax(0,1fr); gap:6px; align-items:baseline;
+  padding:4px 7px; border-bottom:1px solid var(--canvas-line);
+}
+.dataCheckList li:last-child { border-bottom:0; }
+.dataCheckList i {
+  width:6px; height:6px; border-radius:50%;
+  background:var(--canvas-line); align-self:center;
+}
+.dataCheckList li[data-status='pass'] i { background:var(--tone-success-mark); }
+.dataCheckList li[data-status='warn'] i { background:var(--tone-warning-mark); }
+.dataCheckList li[data-status='fail'] i { background:var(--tone-danger-mark); }
+.dataCheckList b { color:var(--canvas-ink); font-size:8px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dataCheckList span { color:var(--canvas-muted); font-size:8px; line-height:1.4; }
+.dataCheckList em {
+  grid-column:2 / -1;
+  color:var(--tone-danger-ink); font-size:7px; font-style:normal; font-family:var(--font-mono);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.dataCheckList li[data-more='true'] b { color:var(--canvas-muted); font-style:italic; font-weight:600; }
+/* A skipped case is neither pass nor fail: it did not run, and colouring it red
+   teaches everyone to ignore red. */
+.dataCheckList li[data-status='skip'] i { background:var(--canvas-muted); }
+
+/* QA — plan, case, run, defect, page audit.
+   Every one reuses .dataVerdict / .dataCheckList / .dataIssueList above, so a red
+   suite and a red run are the same red. Only the shapes those lists do NOT have
+   (a step list, a spec preview, an expected/actual pair) are declared here, and all
+   colour comes from the canvas palette + tone tokens the board declares for BOTH
+   themes. Widths are fluid so a card reflows rather than overflowing at 360px. */
+.qaPlanBody, .qaCaseBody, .qaRunBody, .qaDefectBody, .qaAuditBody { display:grid; gap:7px; min-height:0; }
+.qaPlanMeta { display:flex; flex-wrap:wrap; gap:6px 14px; }
+.qaPlanMeta span { display:grid; gap:1px; min-width:0; }
+.qaPlanMeta small { color:var(--canvas-muted); font-size:7px; text-transform:uppercase; letter-spacing:.04em; }
+.qaPlanMeta b { color:var(--canvas-ink); font-size:9px; font-weight:700; overflow-wrap:anywhere; }
+.qaRouteList {
+  display:flex; flex-wrap:wrap; gap:3px; margin:0; padding:0; list-style:none;
+}
+.qaRouteList li {
+  padding:1px 5px; border:1px solid var(--canvas-line); border-radius:var(--radius-full);
+  color:var(--canvas-muted); font-size:7px; font-family:var(--font-mono);
+}
+.qaRouteList li[data-more='true'] { border-style:dashed; font-style:italic; }
+.qaStepList {
+  display:grid; gap:0; margin:0; padding:0; list-style:none;
+  max-height:210px; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  counter-reset:qastep;
+}
+.qaStepList li {
+  display:grid; grid-template-columns:minmax(52px,auto) minmax(0,1fr); gap:4px 7px; align-items:baseline;
+  padding:3px 7px; border-bottom:1px solid var(--canvas-line);
+}
+.qaStepList li:last-child { border-bottom:0; }
+.qaStepList b {
+  color:var(--canvas-accent); font-size:7px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.04em;
+}
+.qaStepList span { color:var(--canvas-ink); font-size:8px; font-family:var(--font-mono); overflow-wrap:anywhere; }
+.qaStepList em { grid-column:2 / -1; color:var(--canvas-muted); font-size:7px; font-style:normal; line-height:1.4; }
+.qaStepList li[data-more='true'] b { color:var(--canvas-muted); font-style:italic; letter-spacing:0; text-transform:none; }
+.qaSpec {
+  margin:0; padding:6px 8px; max-height:220px; overflow:auto;
+  background:var(--canvas-panel); border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  color:var(--canvas-ink); font-family:var(--font-mono); font-size:7px; line-height:1.5;
+  white-space:pre; tab-size:2;
+}
+.qaExpectation {
+  display:grid; grid-template-columns:minmax(58px,auto) minmax(0,1fr); gap:2px 8px; margin:0;
+}
+.qaExpectation dt { color:var(--canvas-muted); font-size:7px; text-transform:uppercase; letter-spacing:.04em; }
+.qaExpectation dd { margin:0; color:var(--canvas-ink); font-size:8px; line-height:1.4; overflow-wrap:anywhere; }
+.qaJournalList { display:grid; gap:0; margin:0; padding:0; list-style:none; border-top:1px solid var(--canvas-line); }
+.qaJournalList li {
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:6px; align-items:baseline;
+  padding:2px 0; border-left:2px solid var(--canvas-line); padding-left:6px;
+}
+.qaJournalList li[data-ok='false'] { border-left-color:var(--tone-danger-mark); }
+.qaJournalList b { color:var(--canvas-ink); font-size:7px; font-weight:650; font-family:var(--font-mono); overflow-wrap:anywhere; }
+.qaJournalList span { color:var(--canvas-muted); font-size:7px; line-height:1.4; overflow-wrap:anywhere; }
+
+/* Metric definition */
+.metricDefinitionBody { display:grid; gap:7px; min-height:0; }
+.metricValueRow { display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.metricValueRow strong { color:var(--canvas-ink); font-size:clamp(16px,5vw,22px); font-weight:760; line-height:1.1; }
+.metricValueRow span { color:var(--canvas-muted); font-size:8px; }
+
+/* Lineage */
+.lineageBody { display:grid; gap:7px; min-height:0; }
+.lineageFlow {
+  display:grid; gap:0; margin:0; padding:0; list-style:none;
+  max-height:220px; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+}
+.lineageFlow li {
+  display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:6px; align-items:center;
+  padding:4px 7px; border-bottom:1px solid var(--canvas-line);
+}
+.lineageFlow li:last-child { border-bottom:0; }
+.lineageFlow b {
+  color:var(--canvas-ink); font-size:8px; font-weight:650;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.lineageFlow b[data-role='source'] { color:var(--canvas-accent-ink); }
+.lineageFlow b[data-stale='true'] { color:var(--tone-warning-ink); }
+.lineageFlow span {
+  padding:1px 5px; border-radius:var(--radius-full);
+  background:var(--canvas-panel-muted); color:var(--canvas-muted);
+  font-size:7px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; white-space:nowrap;
+}
+.lineageFlow li[data-more='true'] { grid-template-columns:1fr; }
+.lineageFlow li[data-more='true'] b { color:var(--canvas-muted); font-style:italic; font-weight:600; }
+
+@media (max-width:767px) {
+  .erdCanvas { max-height:300px; }
+  .dataIssueList li { grid-template-columns:1fr; gap:2px; }
+  .dataColumnList li { grid-template-columns:minmax(0,1fr) auto; }
+  .dataColumnList em { grid-column:1 / -1; }
+  .lineageFlow li { grid-template-columns:1fr; gap:2px; }
+}
+
+/* ── Spec-object render styles: matrix, bars, math, reference ──────────────────
+   Added for the academic vocabulary and available to every registered spec set.
+   All colour comes from the canvas palette variables, so both themes are covered
+   by construction; the two wide styles scroll inside their own container rather
+   than widening the node, which is what keeps a fourteen-column gradebook from
+   pushing a card off the board on a narrow viewport. */
+.specMatrix { width:100%; border-collapse:collapse; font-size:8px; }
+.specMatrix th { padding:5px 6px; background:var(--canvas-panel); color:var(--canvas-muted); font-weight:700; letter-spacing:.03em; text-align:left; text-transform:uppercase; }
+.specMatrix thead th { position:sticky; top:0; white-space:nowrap; }
+/* The row header is the criterion or the learner — it stays readable while the
+   value columns scroll, which is the whole reason a grid is not a plain table. */
+.specMatrix tbody th { position:sticky; left:0; z-index:1; min-width:96px; max-width:150px; border-top:1px solid var(--canvas-line); color:var(--canvas-ink); text-transform:none; }
+.specMatrix td { min-width:88px; max-width:190px; padding:5px 6px; border-top:1px solid var(--canvas-line); border-left:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); vertical-align:top; }
+
+.specBars { display:grid; gap:4px; min-width:0; }
+.specBars small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.specBars ul { display:grid; gap:3px; margin:0; padding:0; list-style:none; }
+.specBars li { display:grid; grid-template-columns:minmax(48px,28%) 1fr auto; align-items:center; gap:6px; font-size:8px; }
+.specBars li > span { overflow:hidden; color:var(--canvas-ink); text-overflow:ellipsis; white-space:nowrap; }
+.specBars li > i { display:block; min-width:2px; height:6px; border-radius:var(--radius-full); background:var(--canvas-accent); }
+.specBars li > b { color:var(--canvas-muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+.specMath { display:grid; gap:4px; min-width:0; }
+.specMath small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+/* MathML scales with the surrounding font, so the size is set here rather than
+   inside the generated markup — an equation must read at card size and at the
+   larger size a frame or present mode gives it. */
+.specMathRender { overflow-x:auto; max-width:100%; padding:6px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:13px; }
+.specMathRender math { color:inherit; }
+
+.specReference { display:grid; gap:4px; min-width:0; }
+.specReference small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+/* Hanging indent: the author-date styles are read by scanning the left edge for a
+   family name, which a wrapped second line destroys unless it is indented. */
+.specReference ol { display:grid; gap:5px; margin:0; padding:0; list-style:none; }
+.specReference li { padding-left:14px; color:var(--canvas-ink); font-size:8px; line-height:1.5; text-indent:-14px; overflow-wrap:anywhere; }
+.specReferenceMarker { margin-right:4px; color:var(--canvas-muted); font-variant-numeric:tabular-nums; }
+
+@media(max-width:767px){
+  .specMatrix tbody th { min-width:80px; }
+  .specMatrix td { min-width:72px; }
+  .specBars li { grid-template-columns:minmax(40px,34%) 1fr auto; }
+}

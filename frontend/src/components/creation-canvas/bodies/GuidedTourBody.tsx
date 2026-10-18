@@ -1,6 +1,6 @@
 import { useState, type MouseEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/practice.module.css';
 import { canvasTourDesignFromNode } from '@/lib/onboarding/canvasTourDesign';
 import type { CreationBodyProps } from './types';
 

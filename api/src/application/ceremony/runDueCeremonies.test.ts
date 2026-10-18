@@ -73,12 +73,11 @@ vi.mock('../../infrastructure/database/connection', async (importOriginal) => ({
 }));
 
 vi.mock('../metrics/workforceMetrics', () => ({
-  computeMemberMetrics: async () => [
+  // The ceremony roster reads through the ONE cached scorecard read.
+  readMemberMetrics: async () => [
     { memberKind: 'human', memberRef: 'u1', memberName: 'Ada', engagementScore: 90 },
     { memberKind: 'human', memberRef: 'u2', memberName: 'Grace', engagementScore: 10 },
   ],
-  memberMetricsCacheKey: (t: number, v: number, d: number, p?: number) => `mm:${t}:${v}:${d}:p:${p ?? 0}`,
-  readWorkforceMetricsVersion: async () => 1,
 }));
 
 vi.mock('../swimlane/laneEntryTrigger', () => ({ maybeAutoRunOnLaneEntry: async () => true }));

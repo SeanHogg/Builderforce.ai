@@ -20,7 +20,7 @@
 
 import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/ads.module.css';
 import { adSetsApi, type AdTargeting } from '@/lib/adSetsApi';
 import { AD_OBJECTIVES, type AdObjective } from '@/lib/adsApi';
 import { usePanelTask } from '@/hooks/usePanelTask';

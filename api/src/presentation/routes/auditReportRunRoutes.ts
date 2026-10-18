@@ -1,8 +1,8 @@
 /**
  * Audit-report export + run log — mounted under /api/finops/audit-report.
  *
- *   GET /audit-report/export   download the report as csv|json (NOT cached) and
- *                              log the run                                    [manager]
+ *   GET /audit-report/export   download the report as csv|json|xlsx (NOT cached)
+ *                              and log the run — export source              [manager]
  *   GET /audit-report/runs     the tenant's recent runs, newest first (cached) [manager]
  *
  * The export is the one honest logging moment: a deliberate point-in-time
@@ -16,30 +16,17 @@ import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { assembleAuditReport, auditReportToCsv } from '../../application/finops/auditReport';
-import { listAuditReportRuns, recordAuditReportRun } from '../../application/finops/auditReportRuns';
-import { limitParam, periodParam } from './queryParams';
+import { listAuditReportRuns } from '../../application/finops/auditReportRuns';
+import { auditReportExportSource } from '../../application/finops/auditReportExport';
+import { exportSourceHandler } from './exportSourceRoute';
+import { limitParam } from './queryParams';
 
 export function createAuditReportRunRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  router.get('/export', requireRole(TenantRole.MANAGER), async (c) => {
-    const { tenantId, segmentId } = scope(c);
-    const period = periodParam(c.req.query('period'), Date.now());
-    const format = c.req.query('format') === 'json' ? 'json' : 'csv';
-    const report = await assembleAuditReport(db, tenantId, segmentId, period);
-    await recordAuditReportRun(db, c.env as Env, {
-      tenantId, periodMonth: period, generatedBy: c.get('userId') ?? null, report, format,
-    });
-    if (format === 'json') return c.json(report);
-    const stamp = new Date().toISOString().slice(0, 10);
-    return new Response(auditReportToCsv(report), {
-      headers: {
-        'content-type': 'text/csv; charset=utf-8',
-        'content-disposition': `attachment; filename="audit-report-${period}-${stamp}.csv"`,
-      },
-    });
-  });
+  // A registered export source (also at /api/exports/sources/finops.audit-report);
+  // loading it records the run.
+  router.get('/export', exportSourceHandler(auditReportExportSource, db));
 
   router.get('/runs', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);

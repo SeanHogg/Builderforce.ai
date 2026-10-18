@@ -7,7 +7,7 @@ import {
   canvasComposerIntent,
   type CanvasComposerIntentId,
 } from '@/lib/canvasComposerIntents';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/composer.module.css';
 import { BrainMark } from '@seanhogg/builderforce-brain-ui';
 
 /**

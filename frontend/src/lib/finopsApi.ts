@@ -171,7 +171,7 @@ export function getAuditReport(period?: string): Promise<AuditReport> {
 export async function downloadAuditReport(format: 'csv' | 'json', period?: string): Promise<void> {
   const q = new URLSearchParams({ format });
   if (period) q.set('period', period);
-  const res = await apiRequestStream(`/api/finops/audit-report/export?${q.toString()}`);
+  const res = await apiRequestStream(`/api/exports/sources/finops.audit-report?${q.toString()}`);
   if (!res.ok) throw new Error(`Export failed (${res.status})`);
   const blob = await res.blob();
   downloadBlob(blob, `audit-report-${period ?? 'current'}.${format}`);

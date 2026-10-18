@@ -1,18 +1,22 @@
 /**
- * Tenant-local burn/runway reader.
+ * Tenant-local burn/runway snapshot — `GET /api/bi/burn-rate`, the sidebar card.
  *
- * BurnRateOS used to own these metrics and Builderforce called it over HTTP.
- * Consolidation moved derived finance series into kernel `metric_facts`; this
- * service now reads that owner directly. No host URL, token, fetch, or fallback
- * network path is permitted here.
+ * BurnRateOS used to own these metrics and Builderforce called it over HTTP; the
+ * derived finance series now live in kernel `metric_facts`. This is NOT a second
+ * reader of those facts: it is the headline of the runway report's OBSERVED side
+ * (`finance/runwayReport.ts`), the one place that decides which fact is "the" burn
+ * (`finance.monthly_burn` over `finance.burn`) and which bucket counts (tenant-wide
+ * monthly). It used to query the facts itself with its own rules — no bucket filter,
+ * the opposite burn precedence — so the card and the runway page could show two
+ * different monthly burns for the same tenant. Reading the report also shares its
+ * cache entry with the runway page's default view.
+ *
+ * No host URL, token, fetch, or fallback network path is permitted here.
  */
 
-import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { metricFacts } from '../../infrastructure/database/schema';
-
-const BURN_KEYS = ['finance.burn', 'finance.monthly_burn'] as const;
-const RUNWAY_KEY = 'finance.runway_months';
+import type { Env } from '../../env';
+import { runwayReport } from '../finance/runwayReport';
 
 export interface BurnRate {
   available: boolean;
@@ -23,52 +27,15 @@ export interface BurnRate {
   reason?: 'no_data';
 }
 
-export interface FetchBurnRateArgs {
-  tenantId: number;
-  segmentId: string;
-}
-
-/** Return the newest locally-computed value for each finance metric. */
-export async function fetchBurnRate(db: Db, args: FetchBurnRateArgs): Promise<BurnRate> {
-  const rows = await db
-    .select({
-      metric: metricFacts.metric,
-      value: metricFacts.value,
-      bucketAt: metricFacts.bucketAt,
-      computedAt: metricFacts.computedAt,
-    })
-    .from(metricFacts)
-    .where(and(
-      eq(metricFacts.tenantId, args.tenantId),
-      inArray(metricFacts.metric, [...BURN_KEYS, RUNWAY_KEY]),
-      // Consolidated facts may be tenant-wide (empty dimension key) or scoped
-      // to a segment. Never read a fact explicitly scoped to another segment.
-      or(
-        eq(metricFacts.dimensionKey, ''),
-        eq(metricFacts.dimensionKey, `segment:${args.segmentId}`),
-      ),
-    ))
-    .orderBy(desc(metricFacts.bucketAt), desc(metricFacts.computedAt))
-    .limit(24);
-
-  let monthlyBurn: number | undefined;
-  let runwayMonths: number | undefined;
-  let newest: Date | undefined;
-  for (const row of rows) {
-    const value = Number(row.value);
-    if (!Number.isFinite(value)) continue;
-    if (monthlyBurn === undefined && BURN_KEYS.includes(row.metric as typeof BURN_KEYS[number])) monthlyBurn = value;
-    if (runwayMonths === undefined && row.metric === RUNWAY_KEY) runwayMonths = value;
-    const at = row.computedAt ?? row.bucketAt;
-    if (!newest || at > newest) newest = at;
-  }
-
-  if (monthlyBurn === undefined && runwayMonths === undefined) return { available: false, reason: 'no_data' };
+/** The newest observed monthly burn and runway, or `no_data`. */
+export async function fetchBurnRate(db: Db, env: Env | undefined, tenantId: number): Promise<BurnRate> {
+  const { observed } = await runwayReport(db, env, tenantId, null);
+  if (observed.monthlyBurn == null && observed.runwayMonths == null) return { available: false, reason: 'no_data' };
   return {
     available: true,
     source: 'builderforce',
-    ...(monthlyBurn === undefined ? {} : { monthlyBurn }),
-    ...(runwayMonths === undefined ? {} : { runwayMonths }),
-    ...(newest ? { asOf: newest.toISOString() } : {}),
+    ...(observed.monthlyBurn == null ? {} : { monthlyBurn: observed.monthlyBurn }),
+    ...(observed.runwayMonths == null ? {} : { runwayMonths: observed.runwayMonths }),
+    ...(observed.asOf ? { asOf: observed.asOf } : {}),
   };
 }

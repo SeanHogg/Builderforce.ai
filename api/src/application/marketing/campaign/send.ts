@@ -21,22 +21,18 @@ import {
   type RenderContext,
 } from './render';
 import { loadTransportBinding } from './start';
+import { CAMPAIGN_DELIVERY_MAX_ATTEMPTS, failedDeliveryStatus } from '../../shared/campaignDelivery';
 
 /** How many recipients one batch attempts. Bounded by the Worker's subrequest
  *  budget, not by taste — each send is one outbound HTTP call. */
 export const SEND_BATCH_SIZE = 25;
 
 /**
- * How many times one recipient may be attempted before it is written off.
- *
- * A retryable failure (a 429, a provider 5xx) returns the send row to `queued`
- * so the next sweep picks it up — which means an error we MISCLASSIFIED as
- * retryable would requeue forever and the campaign would never reach `sent`.
- * This is the bound that makes the requeue safe. Three is enough to ride out a
- * rate limit and few enough that a genuinely broken transport surfaces within a
- * couple of sweeps.
+ * How many times one recipient may be attempted before it is written off — the
+ * ceiling every campaign channel shares (`shared/campaignDelivery.ts`). Re-exported
+ * under its historical name for the engine's public surface.
  */
-export const CAMPAIGN_SEND_MAX_ATTEMPTS = 3;
+export const CAMPAIGN_SEND_MAX_ATTEMPTS = CAMPAIGN_DELIVERY_MAX_ATTEMPTS;
 
 export interface BatchResult {
   sent: number;
@@ -203,8 +199,7 @@ export async function runCampaignBatch(
       // transient 429 is how a campaign silently under-delivers — and the
       // attempt ceiling is what stops the opposite failure, an unsendable
       // recipient requeued forever so the campaign never completes.
-      const exhausted = row.attempts + 1 >= CAMPAIGN_SEND_MAX_ATTEMPTS;
-      const requeue = error instanceof TransportError && error.retryable && !exhausted;
+      const requeue = failedDeliveryStatus(row.attempts + 1, error instanceof TransportError && error.retryable) === 'queued';
       await db
         .update(marketingCampaignSends)
         .set({ status: requeue ? 'queued' : 'failed', error: message.slice(0, 1_000) })

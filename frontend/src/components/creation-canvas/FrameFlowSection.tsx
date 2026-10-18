@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { stepKindOf } from '@/domains/workflow/domain/flowStepObject';
 import { hasBuildNodes, EVERMIND_BUILD_TEMPLATES } from '@/lib/evermindBuild';
 import type { CreationFlowNode } from './CreationNode';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/inspector.module.css';
 
 /**
  * WHAT A FRAME HOLDS, WHEN WHAT IT HOLDS IS A FLOW.

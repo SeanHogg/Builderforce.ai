@@ -5,7 +5,7 @@
 import { useTranslations } from 'next-intl';
 import { canvasBarGroup, type CanvasBarGroupId } from '@/lib/canvasBarGroups';
 import { useCanvasPhase } from './phase/CanvasPhaseContext';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/commandBar.module.css';
 
 /**
  * ONE captioned group in the canvas command bar.

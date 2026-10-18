@@ -16,16 +16,13 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  */
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
-import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { calendarConnections } from '../../infrastructure/database/schema';
+import { mountProviderOAuthConnect } from './providerOAuthConnectRoutes';
 import {
-  buildProviderConsentUrl,
-  completeProviderOAuthCallback,
-} from '../../application/shared/providerOAuthConnect';
-import {
-  getCalendarProvider, availableCalendarProviders, type CalendarProviderName, type CalendarEvent,
+  getCalendarProvider, availableCalendarProviders, type CalendarProvider, type CalendarProviderName, type CalendarEvent,
 } from '../../application/calendar/calendarProviders';
 import { freshAccessToken, upsertCalendarGrant } from '../../application/calendar/calendarService';
 import { daysParam } from './queryParams';
@@ -42,9 +39,6 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
     return authMiddleware(c, next);
   });
 
-  const callbackUrl = (c: { req: { url: string } }, provider: string) =>
-    `${new URL(c.req.url).origin}/api/calendar/callback/${provider}`;
-
   // GET /providers — which calendar providers are configured, + this user's connections.
   r.get('/providers', async (c) => {
     const env = c.env as Env;
@@ -58,74 +52,40 @@ export function createCalendarRoutes(db: Db): Hono<HonoEnv> {
     });
   });
 
-  // GET /connect/:provider — build the provider consent URL (returned as JSON so
-  // the client can `window.location = authUrl`; a top-nav GET can't carry Bearer).
-  r.get('/connect/:provider', async (c) => {
-    const env = c.env as Env;
-    const name = c.req.param('provider');
-    const provider = getCalendarProvider(name);
-    if (!provider) return c.json({ error: 'Unknown provider' }, 400);
-
-    const authUrl = await buildProviderConsentUrl(env, provider, {
-      providerName: name,
-      redirectUri: callbackUrl(c, name),
-      userId: c.get('userId') as string,
-      tenantId: c.get('tenantId') as number,
-      returnTo: c.req.query('returnTo'),
-      returnToFallback: DEFAULT_RETURN_TO,
-    });
-    if (!authUrl) return c.json({ error: `${name} calendar is not configured` }, 503);
-    return c.json({ authUrl });
-  });
-
-  // GET /callback/:provider — provider redirect (PUBLIC; authed by signed state).
-  r.get('/callback/:provider', async (c) => {
-    const env = c.env as Env;
-    const name = c.req.param('provider');
-    const provider = getCalendarProvider(name);
-    const base = resolveAppBaseUrl(env);
-    const code = c.req.query('code');
-    const rawState = c.req.query('state');
-    if (!provider || !code || !rawState) return c.redirect(`${base}${DEFAULT_RETURN_TO}?calendar=error`);
-
-    const result = await completeProviderOAuthCallback(env, provider, {
-      providerName: name, code, rawState, redirectUri: callbackUrl(c, name),
-    });
-    if (!result.ok) {
-      if (result.reason === 'exchange_failed') {
-        reportCaughtError(result.error, { source: 'presentation/routes/calendarRoutes.ts', operation: 'callback' });
-      }
-      const returnTo = result.returnTo ?? DEFAULT_RETURN_TO;
-      const outcome = result.reason === 'exchange_failed' ? 'error' : result.reason;
-      return c.redirect(`${base}${returnTo}?calendar=${outcome}`);
-    }
-    const { state, tokens: tok } = result;
-
-    try {
-      // Resolve the connected account email.
+  // GET /connect/:provider + GET /callback/:provider — the shared connect pair;
+  // only resolving the account email and storing the grant is the calendar's own.
+  mountProviderOAuthConnect<CalendarProvider>(r, {
+    callbackPath: (name) => `/api/calendar/callback/${name}`,
+    outcomeParam: 'calendar',
+    defaultReturnTo: DEFAULT_RETURN_TO,
+    source: 'presentation/routes/calendarRoutes.ts',
+    resolveConnect: (name) => {
+      const provider = getCalendarProvider(name);
+      return provider ? { provider, oauth: provider, label: `${name} calendar` } : { error: 'Unknown provider' };
+    },
+    onConnected: async (c, { provider, state, tokens }) => {
+      // The account email is best-effort for a calendar (unlike a mailbox, it is
+      // not the row's natural key), so a failed lookup still stores the grant.
       let accountEmail = '';
       try {
-        const info = await fetch(provider.accountInfoUrl, { headers: { Authorization: `Bearer ${tok.access_token}` } });
+        const info = await fetch(provider.accountInfoUrl, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
         if (info.ok) accountEmail = provider.parseAccountEmail(await info.json() as Record<string, unknown>);
-      } catch (error) { /* email is best-effort */ 
-        reportCaughtError(error, { source: "presentation/routes/calendarRoutes.ts", operation: "createCalendarRoutes" });
+      } catch (error) {
+        reportCaughtError(error, { source: 'presentation/routes/calendarRoutes.ts', operation: 'callback.accountInfo' });
       }
 
-      await upsertCalendarGrant(db, env, {
+      await upsertCalendarGrant(db, c.env as Env, {
         tenantId: state.tenantId,
         userId: state.userId,
         // `provider.name` rather than the raw path param: the provider was already
         // resolved from it, so this is the validated value and it carries the type.
         provider: provider.name,
         accountEmail: accountEmail || null,
-        tokens: tok,
+        tokens,
         defaultScope: provider.scopes.join(' '),
       });
-      return c.redirect(`${base}${state.returnTo}?calendar=connected`);
-    } catch (error) {
-      reportCaughtError(error, { source: 'presentation/routes/calendarRoutes.ts', operation: 'callback' });
-      return c.redirect(`${base}${state.returnTo}?calendar=error`);
-    }
+      return 'connected';
+    },
   });
 
   // DELETE /connections/:id — disconnect one of this user's calendars.

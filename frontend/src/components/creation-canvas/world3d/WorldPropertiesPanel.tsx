@@ -13,7 +13,7 @@ import {
   type CanvasWorldProp,
   type CanvasWorldScene,
 } from '@builderforce/creation-canvas-contract';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/world.module.css';
 
 /**
  * WorldPropertiesPanel — right-rail inspector for `world` surfaces.

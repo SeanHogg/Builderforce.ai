@@ -1,5 +1,6 @@
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/marketing.module.css';
+import bodiesStyles from '../styles/bodies.module.css';
 import type { CreationBodyProps } from './types';
 import { textValue } from './shared';
 
@@ -19,7 +20,7 @@ export function EmailTemplateBody({ data }: CreationBodyProps) {
     <div className={styles.taskContext}>
       <small>{t('templateMergeFields')}</small>
       {fields.length
-        ? <div className={styles.pills}>{fields.slice(0, 8).map((field) => <span key={field}>{`{{${field}}}`}</span>)}</div>
+        ? <div className={bodiesStyles.pills}>{fields.slice(0, 8).map((field) => <span key={field}>{`{{${field}}}`}</span>)}</div>
         : <p className={styles.taskEmpty}>{t('templateNoMergeFields')}</p>}
     </div>
   </div>;

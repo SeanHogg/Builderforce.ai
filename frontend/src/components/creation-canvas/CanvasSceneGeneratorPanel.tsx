@@ -9,7 +9,7 @@ import '@seanhogg/builderforce-studio-embedded/styles.css';
 import { getStoredTenantToken } from '@/lib/auth';
 import type { SceneMovieDraft } from '@/hooks/useCloudScene';
 import { useLatestRef } from './hooks/useLatestRef';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
 import sceneStyles from './scene/Scene.module.css';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
 import { SceneCloudBody } from './scene/SceneCloudBody';

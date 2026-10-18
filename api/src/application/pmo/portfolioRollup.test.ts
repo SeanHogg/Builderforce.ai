@@ -3,7 +3,6 @@ import {
   keyResultProgress,
   objectiveProgress,
   computeDependencyAnalysis,
-  wouldCreateCycle,
   foldPortfolioBreakdown,
 } from './portfolioRollup';
 
@@ -153,18 +152,5 @@ describe('foldPortfolioBreakdown', () => {
   });
 });
 
-describe('wouldCreateCycle', () => {
-  const edges = [
-    { fromInitiativeId: 'A', toInitiativeId: 'B' },
-    { fromInitiativeId: 'B', toInitiativeId: 'C' },
-  ];
-  it('rejects a self-loop', () => {
-    expect(wouldCreateCycle(edges, 'A', 'A')).toBe(true);
-  });
-  it('detects a back edge that closes a cycle (C → A)', () => {
-    expect(wouldCreateCycle(edges, 'C', 'A')).toBe(true);
-  });
-  it('allows an edge that keeps the graph acyclic (A → C)', () => {
-    expect(wouldCreateCycle(edges, 'A', 'C')).toBe(false);
-  });
-});
+// The cycle gate moved to domain/shared/dagEdges (shared with task precedence edges);
+// its cases live in dagEdges.test.ts.

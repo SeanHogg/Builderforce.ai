@@ -2,7 +2,7 @@ import { useTranslations } from 'next-intl';
 import { CARD_ACT_HANDLER, kindSettingsActions } from '@/lib/canvasKindSettings';
 import { useCanRunCardActs, useCardActRunner } from './cardActRunner';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/inspector.module.css';
 
 /**
  * A kind's declared actions, as buttons.

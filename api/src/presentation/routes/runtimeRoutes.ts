@@ -10,7 +10,7 @@ import { readRepoFile } from '../../application/repos/readRepoContents';
 import { importRepoContents } from '../../application/repos/importRepoContents';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { liveExecution } from '../../application/rehearsal/executionMode';
-import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
@@ -20,7 +20,7 @@ import { verifyContainerRunToken } from '../../application/runtime/containerRunT
 import { launchContainerRun, type ContainerRunTarget } from '../../application/runtime/containerRunLauncher';
 import { resumePausedExecution } from '../../application/runtime/executionResume';
 import { answerOpenExecutionQuestions, DEFAULT_RESUME_ANSWER } from '../../application/runtime/executionPause';
-import { synthesizeRunFailedEvent } from '../../application/runtime/toolAuditReadRepair';
+import { readToolAuditEvents } from '../../application/runtime/toolAuditRead';
 import {
   capacityMessage, handlePreviewOp, mintPreviewForExecution, mintPreviewForProject, previewEnabled,
 } from '../../application/runtime/previewDevServer';
@@ -29,14 +29,15 @@ import { agentHostOnlineCondition } from '../../infrastructure/database/agentHos
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { enqueueExecutionMessage, releasePendingSteers } from '../../application/runtime/executionSteering';
 import { markSteerRelayed } from '../../application/runtime/lateSteerStore';
-import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
 import { startFollowUpRun } from '../../application/runtime/followUpRun';
 import { readExecutionTrace } from '../../application/runtime/executionTraceRead';
-import { taskUsageCost } from '../../application/llm/usageCostSummary';
+import { listWorkforceAgents } from '../../application/workforce/agentDirectory';
+import { taskUsageCost } from '../../application/llm/usageQuery';
 import { auditedModelsByExecution, modelUsageByExecution } from '../../application/llm/executionModelUsage';
 import { invalidateAgentExecutionGate } from '../../application/runtime/agentExecutionGate';
 import { resolveUsageDatabase } from '../../application/llm/usageLedger';
 import { notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
+import { reportExecutionState } from '../../application/runtime/reportExecutionState';
 import { broadcastExecutionEvent, executionRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { readJsonBody } from '../../infrastructure/http/gzipBody';
 import { relayToRoom } from './realtimeRelay';
@@ -68,11 +69,11 @@ import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requireFeature } from '../middleware/featureGate';
 import type { Db } from '../../infrastructure/database/connection';
-import { executions, projectInsightEvents, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { executions, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../../application/shared/runTelemetryDatabase';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { approvals } from '../../infrastructure/database/schema';
-import { agentPurchases, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
+import { ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
 import { readDispatchFileChanges } from '../../application/task/taskFileChangeFeed';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
@@ -80,7 +81,7 @@ import { executionTokenGate } from './executionTokenGate';
 import { authorizeManagedTaskExecution } from '../../application/kanban/managedExecutionGuard';
 import { markLifecycleNeutral, describeAuthority, MANAGED_OVERRIDE_EVENT } from '../../application/runtime/executionAuthority';
 import { getTicketCoordination } from '../../application/coordination/coordinationCapability';
-import { executeGitProxy } from '../../application/repos/gitProxy';
+import { GIT_PROXY_SUBPATHS, proxyGitSmartHttp } from './gitProxyHandler';
 import { authorizeExecutionPrincipal } from '../../application/agentIdentity/agentRunIdentity';
 import type { ExecutionReadMemo } from '../../application/runtime/executionReadMemo';
 import { limitParam, positiveIntParam } from './queryParams';
@@ -134,10 +135,6 @@ export { parseApprovalReplay, evaluateExecutionApprovalGate } from '../../applic
  *  (mirrors cloudAgentEngine.AGENT_DEFAULT_MODEL_SENTINEL). */
 const AGENT_DEFAULT_MODEL_SENTINEL = 'builderforce-default';
 
-/** Read-through cache key for a tenant's hired-agents runtime registry. Invalidated
- *  from the workforce hire/unhire routes. Exported so those routes stay DRY. */
-export const runtimeHiredAgentsCacheKey = (tenantId: number): string => `rt:hired-agents:${tenantId}`;
-
 /** A stable role handle for a hired agent — a slug of its name, falling back to its
  *  id so the runtime always has a usable, collision-resistant role key. */
 function hiredAgentRoleKey(name: string | null | undefined, id: string): string {
@@ -146,9 +143,10 @@ function hiredAgentRoleKey(name: string | null | undefined, id: string): string 
 }
 
 /** Project a hired `ide_agents` row to the runtime's callable-role contract. */
-function projectHiredAgent(r: { id: string; name: string | null; bio: string | null; skills: unknown; base_model: string | null }): {
+function projectHiredAgent(row: Record<string, unknown>): {
   id: string; name: string; roleKey: string; systemPrompt: string; skills: string[]; model?: string;
 } {
+  const r = row as { id: string; name: string | null; bio: string | null; skills: unknown; base_model: string | null };
   const skills = parseJsonArray(r.skills).map(String);
   const rawModel = typeof r.base_model === 'string' ? r.base_model.trim() : '';
   const model = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
@@ -215,71 +213,10 @@ const ExecutionStateBody = z.object({
   status: z.enum(ExecutionStatus),
   result: z.string().optional(),
   errorMessage: z.string().optional(),
-  /** `normalizeCodeChanges` accepts a numeric string from older hosts. */
+  /** `reportExecutionState` accepts a numeric string from older hosts. */
   codeChanges: z.union([z.number(), z.string()]).optional(),
 });
 const BroadcastBody = z.object({ payload: z.string().optional() });
-
-function normalizeCodeChanges(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return Math.max(0, Math.floor(parsed));
-  }
-  return null;
-}
-
-function extractCodeChangesFromResult(result?: string): number | null {
-  if (!result?.trim()) return null;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(result);
-  } catch {
-    return null;
-  }
-
-  const queue: unknown[] = [parsed];
-  const visited = new Set<unknown>();
-  const keys = [
-    'codeChanges',
-    'code_changes',
-    'linesChanged',
-    'lines_changed',
-    'changedLines',
-    'totalChangedLines',
-    'total_changed_lines',
-  ] as const;
-
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current || typeof current !== 'object') continue;
-    if (visited.has(current)) continue;
-    visited.add(current);
-
-    if (Array.isArray(current)) {
-      for (const item of current) queue.push(item);
-      continue;
-    }
-
-    const record = current as Record<string, unknown>;
-    for (const key of keys) {
-      const direct = normalizeCodeChanges(record[key]);
-      if (direct != null) return direct;
-    }
-
-    const insertions = normalizeCodeChanges(record.insertions ?? record.additions ?? record.addedLines ?? record.added_lines);
-    const deletions = normalizeCodeChanges(record.deletions ?? record.removals ?? record.deletedLines ?? record.deleted_lines);
-    if (insertions != null || deletions != null) {
-      return (insertions ?? 0) + (deletions ?? 0);
-    }
-
-    for (const value of Object.values(record)) queue.push(value);
-  }
-
-  return null;
-}
-
 
 /**
  * Shared post-submit dispatch path for `/executions` and `/tasks/submit`.
@@ -434,16 +371,15 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!(await authorizeExecutionPrincipal(db, run.tenantId, executionId))) return c.json({ error: 'run credential expired or revoked' }, 403);
     const resolved = await resolveTicketRepoContext(db, integrationCredentialSecret(c.env as Env), run.tenantId, run.taskId);
     if (!resolved.ok) return c.json({ error: resolved.reason }, 400);
-    const proxied = await executeGitProxy({
-      repo: resolved.ctx, token: resolved.ctx.token, subPath, method,
-      query: method === 'GET' ? new URL(c.req.url).searchParams.toString() : undefined,
-      contentType: c.req.header('Content-Type'), body: method === 'POST' ? await c.req.arrayBuffer() : undefined,
-    });
-    return proxied.ok ? proxied.response : c.json({ error: proxied.error }, 400);
+    // Same forwarding body as /api/git-proxy and the agent-host mount; only this door
+    // (run-token auth, repo from the run's ticket) is container-specific.
+    return proxyGitSmartHttp(c, resolved.ctx, resolved.ctx.token, subPath, method);
   };
-  router.get('/internal/container-git/:executionId.git/info/refs', (c) => containerGitProxy(c, 'info/refs', 'GET'));
-  router.post('/internal/container-git/:executionId.git/git-upload-pack', (c) => containerGitProxy(c, 'git-upload-pack', 'POST'));
-  router.post('/internal/container-git/:executionId.git/git-receive-pack', (c) => containerGitProxy(c, 'git-receive-pack', 'POST'));
+  for (const { subPath, method } of GIT_PROXY_SUBPATHS) {
+    const path = `/internal/container-git/:executionId.git/${subPath}`;
+    if (method === 'GET') router.get(path, (c) => containerGitProxy(c, subPath, method));
+    else router.post(path, (c) => containerGitProxy(c, subPath, method));
+  }
 
   router.use('*', authMiddleware);
 
@@ -643,7 +579,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Tenant-level runtime dashboard aggregates derived from recent execution history —
-  // cached behind the execution-state version; see `runtimeDashboard.ts`.
+  // cached behind the execution-state version; see `runtimeDashboard.ts`. Distinct from
+  // `/api/dashboard` (manager home: approvals, tokens, workflows) — see the naming note
+  // in `dashboardsRoutes.ts`.
   router.get('/dashboard', async (c) => {
     const tenantId = c.get('tenantId');
     const limit = limitParam(c.req.query('limit'), 500, 2000);
@@ -727,36 +665,11 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // slug derived from the name (falling back to the id) so the runtime has a stable
   // role handle. `model` is the agent's base_model unless it's the
   // "use the default" sentinel, in which case it is omitted. Read-through cached;
-  // invalidated on hire/unhire (see workforceRoutes).
+  // invalidated on hire/unhire and personality edits (application/workforce/agentDirectory).
   router.get('/hired-agents', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const rows = await getOrSetCached(
-      c.env as Env,
-      runtimeHiredAgentsCacheKey(tenantId),
-      // Projected with the ORIGINAL snake_case `base_model` key: the contract above
-      // (and the KV-cached payload) is read by projectHiredAgent, so the shape must
-      // not drift to Drizzle's camelCase.
-      // `unhired_at` (migration 0101, the soft-delete marker) is not declared on the
-      // Drizzle `agentPurchases` table, so the predicate stays a raw fragment.
-      async () => db
-        .select({
-          id: ideAgents.id,
-          name: ideAgents.name,
-          bio: ideAgents.bio,
-          skills: ideAgents.skills,
-          base_model: ideAgents.baseModel,
-        })
-        .from(ideAgents)
-        .innerJoin(agentPurchases, eq(agentPurchases.agentId, ideAgents.id))
-        .where(and(
-          eq(agentPurchases.tenantId, tenantId),
-          sql`${agentPurchases}.unhired_at is null`,
-          eq(ideAgents.status, 'active'),
-        ))
-        .orderBy(desc(agentPurchases.createdAt))
-        .limit(200),
-    );
-
+    // The SAME cached hired-agents read as /api/workforce/agents/purchased — one
+    // query, one cache key, so a hire/unhire/personality edit refreshes both.
+    const rows = await listWorkforceAgents(c.env as Env, db, { scope: 'hired', tenantId: c.get('tenantId') as number });
     const agents = rows.map((r) => projectHiredAgent(r));
     return c.json({ agents });
   });
@@ -922,44 +835,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const execRaw = Number(c.req.query('executionId'));
     const executionId = Number.isFinite(execRaw) && execRaw > 0 ? execRaw : null;
 
-    // DEFAULT_CLOUD_REF = cloud runs with no named agent (cloud_agent_ref IS NULL);
-    // scope to cloud rows (agent_host_id IS NULL) so a host run never leaks in.
-    // An explicit executionId is authoritative (the events carry it directly), so
-    // it scopes regardless of which ref the run was attributed to.
-    const refCond = executionId != null
-      ? eq(toolAuditEvents.executionId, executionId)
-      : ref === DEFAULT_CLOUD_REF
-        ? and(isNull(toolAuditEvents.cloudAgentRef), isNull(toolAuditEvents.agentHostId))
-        : eq(toolAuditEvents.cloudAgentRef, ref);
-
-    const events = await runTelemetryDatabase(db)
-      .select({
-        id: toolAuditEvents.id,
-        runId: toolAuditEvents.runId,
-        sessionKey: toolAuditEvents.sessionKey,
-        toolCallId: toolAuditEvents.toolCallId,
-        toolName: toolAuditEvents.toolName,
-        category: toolAuditEvents.category,
-        args: toolAuditEvents.args,
-        result: toolAuditEvents.result,
-        durationMs: toolAuditEvents.durationMs,
-        executionId: toolAuditEvents.executionId,
-        ts: toolAuditEvents.ts,
-      })
-      .from(toolAuditEvents)
-      .where(and(eq(toolAuditEvents.tenantId, tenantId), refCond))
-      .orderBy(desc(toolAuditEvents.ts))
-      .limit(limit);
-
-    // Read-path repair (shared with the host tool-audit read): when scoped to one
-    // execution, surface a terminal `run.failed` synthesized from the execution row
-    // for a run that failed without emitting the telemetry event. Events are newest-
-    // first here, so the failure prepends.
-    if (executionId != null) {
-      const synthetic = await synthesizeRunFailedEvent(db, tenantId, executionId, events);
-      if (synthetic) events.unshift(synthetic);
-    }
-
+    // ONE read for cloud and host tool-audit (toolAuditRead.ts): projection, scope
+    // and the terminal-failure repair; this door only names the cloud agent.
+    const events = await readToolAuditEvents(db, tenantId, { kind: 'cloudAgent', ref }, { limit, order: 'newest', executionId });
     return c.json({ events });
   });
 
@@ -1301,63 +1179,17 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json({ ok: true, rerun: { executionId: followUp.executionId, dispatch: followUp.dispatch } });
   });
 
-  // Agent callback: update execution state (running / completed / failed)
+  // Agent callback: update execution state (running / completed / failed). An
+  // adapter: it proves the run is this tenant's, then hands the report to the ONE
+  // execution-state use case the host-key door shares (reportExecutionState.ts).
   router.patch('/executions/:id/state', requireRole(TenantRole.DEVELOPER), async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const body = await parseBody(c, ExecutionStateBody);
-    const execution = await runtimeService.update(id, body);
-
-    // On a terminal transition (this is the self-hosted host callback path), every
-    // steer still pending on the run is LATE: it starts a follow-up run under the
-    // person who sent it (a cancelled run's is released, visibly) — lateSteerFollowUp.ts.
-    if (body.status === ExecutionStatus.COMPLETED || body.status === ExecutionStatus.FAILED || body.status === ExecutionStatus.CANCELLED) {
-      c.executionCtx.waitUntil(settleLateSteersSafely({ env: c.env as Env, db, runtimeService }, { executionId: id, tenantId: c.get('tenantId') }));
-    }
-
-    notifyExecutionSubscribers(execution.id, {
-      type: (body.status === ExecutionStatus.COMPLETED || body.status === ExecutionStatus.FAILED || body.status === ExecutionStatus.CANCELLED)
-        ? 'done'
-        : 'status_change',
-      executionId: execution.id,
-      status: execution.status,
-      execution: execution.toPlain(),
-      ts: new Date().toISOString(),
-    });
-
-    if (body.status === ExecutionStatus.COMPLETED) {
-      const explicitCodeChanges = normalizeCodeChanges(body.codeChanges);
-      const inferredCodeChanges = extractCodeChangesFromResult(body.result);
-      const codeChanges = explicitCodeChanges ?? inferredCodeChanges;
-
-      if (codeChanges != null) {
-        const [taskRow] = await db
-          .select({
-            projectId: tasks.projectId,
-          })
-          .from(executions)
-          .innerJoin(tasks, eq(tasks.id, executions.taskId))
-          .innerJoin(projects, eq(projects.id, tasks.projectId))
-          .where(
-            and(
-              eq(executions.id, id),
-              eq(projects.tenantId, c.get('tenantId')),
-            ),
-          )
-          .limit(1);
-
-        if (taskRow) {
-          await db.insert(projectInsightEvents).values({
-            tenantId: c.get('tenantId'),
-            projectId: taskRow.projectId,
-            userId: c.get('userId') as string,
-            executionId: id,
-            codeChanges,
-          });
-        }
-      }
-    }
-
+    const execution = await reportExecutionState(
+      { env: c.env as Env, db, runtimeService, waitUntil: (task) => c.executionCtx.waitUntil(task) },
+      { executionId: id, tenantId: c.get('tenantId'), userId: c.get('userId') as string, ...body },
+    );
     return c.json(execution.toPlain());
   });
 
@@ -1379,11 +1211,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
   // GET /api/runtime/tasks/:taskId/cost
   // Ticket-level spend: the finest grain in the ticket → project → account
-  // rollup (0104). Sums the authoritative cost_usd_millicents stamped on every
-  // usage row for this task. Cached read-through (60s): an aggregate over the
-  // append-heavy usage log that doesn't need to be to-the-second — same rationale
-  // as /dashboard/usage; the short TTL bounds staleness without an
-  // invalidate-on-every-LLM-call hook.
+  // rollup (0104). A thin adapter over THE usage query use case (usageQuery.ts),
+  // which sums the authoritative cost_usd_millicents and caches it briefly.
   router.get('/tasks/:taskId/cost', async (c) => {
     const taskId = Number(c.req.param('taskId'));
     const tenantId = c.get('tenantId');

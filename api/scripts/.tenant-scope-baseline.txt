@@ -79,11 +79,9 @@ infrastructure/relay/AnalysisRunnerDO.ts:1
 infrastructure/relay/CloudRunnerDO.ts:1
 infrastructure/repositories/AgentHostRepository.ts:4
 presentation/routes/activityRoutes.ts:9
-presentation/routes/adminRoutes.ts:11
-presentation/routes/agentHostRoutes.ts:2
+presentation/routes/adminRoutes.ts:9
 presentation/routes/boardWebhookRoutes.ts:1
 presentation/routes/ceremonyRoutes.ts:2
-presentation/routes/chatRoutes.ts:1
 presentation/routes/freelancerMessagingRoutes.ts:3
 presentation/routes/freelancerRoutes.ts:1
 presentation/routes/githubActionsRoutes.ts:1
@@ -94,7 +92,6 @@ presentation/routes/personaRoutes.ts:4
 presentation/routes/projectRoutes.ts:1
 presentation/routes/promptLibraryRoutes.ts:5
 presentation/routes/qualityRoutes.ts:1
-presentation/routes/seamRoutes.ts:3
 presentation/routes/studioVoiceCloneRoutes.ts:1
 presentation/routes/taskRoutes.ts:1
 presentation/routes/workflowRoutes.ts:4

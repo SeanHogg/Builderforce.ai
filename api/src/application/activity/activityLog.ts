@@ -15,16 +15,19 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * 'hire' (cached — membership/identity changes rarely). Agent-initiated mutations
  * pass an explicit actor via the `*Actor` constructors.
  *
- * READ: `getActivityLog(env, db, tenantId, filter)` — version-token cached,
- * keyset-paginated timeline with actor/target/verb/project filters.
+ * READ: `getActivityLog(env, db, tenantId, filter)` — THE read: version-token
+ * cached, keyset- (or offset-) paginated, with actor/target/verb/event-type/
+ * project/object/domain filters. Every activity and audit feed over this table
+ * is a filter on it (see "Read path" below).
  */
-import { and, desc, eq, inArray, lt } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { Context } from 'hono';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
-import { activityLog, agentHosts, freelancerEngagements, ideAgents, tenantMembers, users } from '../../infrastructure/database/schema';
+import { activityLog, agentHosts, freelancerEngagements, ideAgents, objects, tenantMembers, users } from '../../infrastructure/database/schema';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { siblingDatabase } from '../../infrastructure/database/connection';
+import { boundedIntParam } from '../../domain/shared/boundedInt';
 
 /**
  * WHO acted. `visitor` is an ANONYMOUS one — no user row, no tenant, an opaque
@@ -331,6 +334,28 @@ export async function resolveActorByRef(env: Env, db: Db, tenantId: number, ref:
 }
 
 // ── Read path ───────────────────────────────────────────────────────────────
+//
+// THE read of `activity_log`. Every activity / audit feed in the api is a filter
+// over this one function:
+//
+//   GET /api/activity/log                   tenant timeline (actor/target/verb/project)
+//   GET /api/audit/events                   AuditService → AuditRepository (eventType,
+//   GET /api/audit/users/:userId/activity     resourceType, user; offset paging)
+//   GET /api/objects/:id/activity           ObjectRegistry  (objectId)
+//   GET /api/<domain>/activity              DomainService   (domain)
+//   the ceremony journal                    (targetType + targetId)
+//
+// Those used to be four separate queries with four cache policies, and two of
+// them (object + domain) read the CALLER's database while every writer appends
+// to `activityDatabase` — the exact split the note on that function describes,
+// so those two feeds could only ever show rows a pre-split writer had left on
+// the primary. One query, one database, one version-token cache.
+//
+// DISTINCT, deliberately not folded in here: `admin_audit_log` (the superadmin
+// forensic trail — application/audit/adminAuditLog.ts), `manager_actions` (the
+// manager's decision ledger, with its own decision schema), `activity_events`
+// (ingested repo commits/PRs per contributor — a signal table, not an audit
+// trail) and a canvas session's own event stream + comments.
 
 export interface ActivityLogFilter {
   actorType?: string;
@@ -339,8 +364,20 @@ export interface ActivityLogFilter {
   targetId?: string;
   projectId?: number;
   verb?: string;
+  /**
+   * The legacy audit event-type spelling: the verb with its dots underscored
+   * ('user.login' ↔ 'user_login'). Compared in that form on the SQL side so a
+   * verb with two dots still matches exactly.
+   */
+  eventType?: string;
+  /** The `objects` row the events belong to (one object's trail). */
+  objectId?: string;
+  /** Every event on an object in this seat/domain (a seat's landing timeline). */
+  domain?: string;
   /** Keyset cursor: return rows with id < beforeId (id is monotonic). */
   beforeId?: number;
+  /** Offset paging, for the audit readers that have always paged by offset. */
+  offset?: number;
   limit?: number;
 }
 
@@ -358,11 +395,26 @@ export interface ActivityLogRow {
   projectId: number | null;
   occurredAt: string;
   metadata: unknown;
+  /** The registry object the event belongs to, with its kind and title so a
+   *  timeline can name it without a second read. */
+  objectId: string | null;
+  objectKind: string | null;
+  objectTitle: string | null;
 }
 
 export interface ActivityLogPage {
   events: ActivityLogRow[];
   nextCursor: number | null;
+}
+
+/** Default and ceiling for one page of any activity feed. */
+const ACTIVITY_PAGE_DEFAULT = 50;
+// 500 is the largest page any feed has ever served (`/api/audit/events`); a
+// consolidated read must not shrink an existing contract.
+const ACTIVITY_PAGE_MAX = 500;
+
+function activityPageSize(limit: number | undefined): number {
+  return boundedIntParam(limit, { def: ACTIVITY_PAGE_DEFAULT, min: 1, max: ACTIVITY_PAGE_MAX });
 }
 
 async function queryActivityLog(db: Db, tenantId: number, filter: ActivityLogFilter, limit: number): Promise<ActivityLogPage> {
@@ -373,8 +425,15 @@ async function queryActivityLog(db: Db, tenantId: number, filter: ActivityLogFil
   if (filter.targetId) conds.push(eq(activityLog.targetId, filter.targetId));
   if (filter.projectId != null) conds.push(eq(activityLog.projectId, filter.projectId));
   if (filter.verb) conds.push(eq(activityLog.verb, filter.verb));
+  if (filter.eventType) conds.push(sql`replace(${activityLog.verb}, '.', '_') = ${filter.eventType}`);
+  if (filter.objectId) conds.push(eq(activityLog.objectId, filter.objectId));
+  if (filter.domain) conds.push(eq(objects.domain, filter.domain));
   if (filter.beforeId != null) conds.push(lt(activityLog.id, filter.beforeId));
 
+  // `objects` is joined on the SAME database as `activity_log`: the
+  // `activity_log.object_id → objects.id` foreign key means a row can only carry
+  // an object id where that object row exists, so the join is complete by
+  // construction. LEFT, so events that belong to no object still list.
   const rows = await db
     .select({
       id: activityLog.id,
@@ -390,11 +449,16 @@ async function queryActivityLog(db: Db, tenantId: number, filter: ActivityLogFil
       projectId: activityLog.projectId,
       occurredAt: activityLog.occurredAt,
       metadata: activityLog.metadata,
+      objectId: activityLog.objectId,
+      objectKind: objects.kind,
+      objectTitle: objects.title,
     })
     .from(activityLog)
+    .leftJoin(objects, eq(activityLog.objectId, objects.id))
     .where(and(...conds))
     .orderBy(desc(activityLog.id))
-    .limit(limit + 1);
+    .limit(limit + 1)
+    .offset(filter.offset ?? 0);
 
   const hasMore = rows.length > limit;
   const events: ActivityLogRow[] = rows.slice(0, limit).map((r) => ({
@@ -411,18 +475,22 @@ async function queryActivityLog(db: Db, tenantId: number, filter: ActivityLogFil
     projectId: r.projectId,
     occurredAt: (r.occurredAt as Date).toISOString(),
     metadata: r.metadata,
+    objectId: r.objectId ?? null,
+    objectKind: r.objectKind ?? null,
+    objectTitle: r.objectTitle ?? null,
   }));
   const last = events[events.length - 1];
   return { events, nextCursor: hasMore && last ? last.id : null };
 }
 
 /**
- * Read the tenant's activity/audit timeline — version-token cached (the day/filter
+ * Read the tenant's activity/audit timeline — THE activity read (see the block
+ * above for every feed served through it). Version-token cached (the filter
  * keyspace is unbounded) with a 120s KV backstop; the version bumps on every
- * `recordActivity` write so a new event shows on the next read.
+ * `recordActivity` write so a new event shows on the next read, on every feed.
  */
 export async function getActivityLog(env: Env, db: Db, tenantId: number, filter: ActivityLogFilter): Promise<ActivityLogPage> {
-  const limit = Math.min(100, Math.max(1, filter.limit ?? 50));
+  const limit = activityPageSize(filter.limit);
   const version = await getCacheVersion(env, activityLogVersionKey(tenantId));
   const key = `activity-log:list:tenant:${tenantId}:v:${version}:${JSON.stringify({ ...filter, limit })}`;
   return getOrSetCached(env, key, () => queryActivityLog(activityDatabase(env, db), tenantId, filter, limit), { kvTtlSeconds: 120 });

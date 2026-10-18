@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/practice.module.css';
 // One provenance line and one gate badge, rendered by every body that shows a derived
 // number — see the header there for why a truncated number is worse than a blank one.
 import { EvaluationGateBadge } from '../DerivedProvenance';

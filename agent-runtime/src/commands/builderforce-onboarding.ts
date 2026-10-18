@@ -239,7 +239,7 @@ export async function promptBuilderforceOnboarding(params: {
   try {
     const res = await builderforceApiFetch<{
       tenants: Array<{ id: number; name: string; slug: string }>;
-    }>(`${serverUrl}/api/auth/my-tenants`, { token: webToken });
+    }>(`${serverUrl}/api/tenants`, { token: webToken });
     tenants = res.tenants;
     tenantSpin.stop(`${tenants.length} workspace(s) found`);
   } catch (err) {
@@ -260,7 +260,7 @@ export async function promptBuilderforceOnboarding(params: {
     wsSpin.start("Creating workspace…");
     try {
       const created = await builderforceApiFetch<{ id: number; name: string }>(
-        `${serverUrl}/api/tenants/create`,
+        `${serverUrl}/api/tenants`,
         {
           method: "POST",
           token: webToken,

@@ -9,7 +9,8 @@ import { CREATION_OBJECT_REGISTRY } from './creationObjectRegistry';
 import { PhaseFocusToggle } from './phase/PhaseFocusToggle';
 import { usePhaseLensEdges } from './phase/usePhaseLensEdges';
 import { PhaseHarness, renderWithPhase } from './phase/testPhaseProvider';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/phase.module.css';
+import nodeStyles from './styles/node.module.css';
 
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations'))
   .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
@@ -106,7 +107,7 @@ describe('CreationNode under the lens', () => {
     board('make', node('picked', scribble, true));
     const card = document.querySelector('[data-node-id="picked"]')!;
     expect(card).toHaveAttribute('data-phase-focus', 'out');
-    if (styles.selected) expect(card.className).toContain(styles.selected);
+    if (nodeStyles.selected) expect(card.className).toContain(nodeStyles.selected);
   });
 
   it('never marks a frame', () => {

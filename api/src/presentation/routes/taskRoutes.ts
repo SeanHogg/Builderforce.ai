@@ -1,6 +1,6 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono, type Context } from 'hono';
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, eq, inArray } from 'drizzle-orm';
 import { TaskService } from '../../application/task/TaskService';
 import { TaskStatus, TaskType } from '../../domain/shared/types';
 import { ConflictError } from '../../domain/shared/errors';
@@ -10,8 +10,7 @@ import { idempotentReplay } from '../middleware/idempotentReplay';
 import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole } from '../../domain/shared/types';
-import { projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { projects, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from '../../application/reports/reportCache';
@@ -22,7 +21,8 @@ import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaul
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
 import { dispatchTaskFinalize } from '../../application/task/taskFinalize';
 import { loadTicketPullRequestSignals } from '../../application/repos/ticketBuildStatus';
-import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
+import { ensureTaskPrdRecord } from '../../application/prd/taskPrd';
+import { attachSpecToTask, detachSpecFromTask, listTaskSpecs } from '../../application/prd/specStore';
 import { recordStatusTransition } from '../../application/task/taskLifecycle';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
@@ -51,7 +51,6 @@ import { BrainService } from '../../application/brain/BrainService';
 import { resolveTicketViewer } from '../../application/security/resolveTicketViewer';
 import { executionTokenGate } from './executionTokenGate';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
-import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
 import { taskAssigneesCacheKey } from '../../application/task/taskAssigneeCache';
 import { getTaskCounts } from '../../application/task/taskCounts';
@@ -1063,22 +1062,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     return row ?? null;
   }
 
-  // GET /api/tasks/:id/specs — list the PRDs linked to this task.
+  // GET /api/tasks/:id/specs — list the PRDs linked to this task (task-filtered specStore view).
   router.get('/:id/specs', requirePermission(PERMISSIONS.TASK_READ), async (c) => {
     const taskId = Number(c.req.param('id'));
     const tenantId = c.get('tenantId');
     if (!(await loadTenantTask(taskId, tenantId))) return c.json({ error: 'Task not found' }, 404);
-    const rows = await db
-      .select({
-        id: specs.id, goal: specs.goal, status: specs.status, prd: specs.prd,
-        projectId: specs.projectId, isPrimary: taskSpecs.isPrimary,
-        createdAt: specs.createdAt, updatedAt: specs.updatedAt,
-      })
-      .from(taskSpecs)
-      .innerJoin(specs, eq(specs.id, taskSpecs.specId))
-      .where(scopedToTenant(taskSpecs, tenantId, eq(taskSpecs.taskId, taskId)))
-      .orderBy(desc(taskSpecs.isPrimary), desc(specs.updatedAt)).limit(LIST_ROW_CAP);
-    return c.json({ specs: rows });
+    return c.json({ specs: await listTaskSpecs(db, tenantId, taskId) });
   });
 
   // POST /api/tasks/:id/specs — attach an existing project PRD ({ specId, isPrimary? }).
@@ -1087,9 +1076,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const tenantId = c.get('tenantId');
     const body = await parseBody(c, LinkSpecBody);
     if (!(await loadTenantTask(taskId, tenantId))) return c.json({ error: 'Task not found' }, 404);
-    const [spec] = await db.select({ id: specs.id }).from(specs).where(and(eq(specs.id, body.specId), eq(specs.tenantId, tenantId)));
-    if (!spec) return c.json({ error: 'PRD not found' }, 404);
-    await linkSpecToTask(db, { taskId, specId: body.specId, tenantId, isPrimary: body.isPrimary ?? false });
+    const attached = await attachSpecToTask(db, { tenantId, taskId, specId: body.specId, isPrimary: body.isPrimary ?? false });
+    if (!attached) return c.json({ error: 'PRD not found' }, 404);
     return c.json({ ok: true }, 201);
   });
 
@@ -1114,7 +1102,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const specId = c.req.param('specId');
     const tenantId = c.get('tenantId');
     if (!(await loadTenantTask(taskId, tenantId))) return c.json({ error: 'Task not found' }, 404);
-    await linkSpecToTask(db, { taskId, specId, tenantId, isPrimary: true });
+    if (!(await attachSpecToTask(db, { tenantId, taskId, specId, isPrimary: true }))) return c.json({ error: 'PRD not found' }, 404);
     return c.json({ ok: true });
   });
 
@@ -1124,7 +1112,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const specId = c.req.param('specId');
     const tenantId = c.get('tenantId');
     if (!(await loadTenantTask(taskId, tenantId))) return c.json({ error: 'Task not found' }, 404);
-    await db.delete(taskSpecs).where(scopedToTenant(taskSpecs, tenantId, eq(taskSpecs.taskId, taskId), eq(taskSpecs.specId, specId)));
+    await detachSpecFromTask(db, { tenantId, taskId, specId });
     return c.body(null, 204);
   });
 

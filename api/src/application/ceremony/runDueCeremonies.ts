@@ -60,13 +60,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { nextCronTime } from '../../domain/workflowSchedule';
-import {
-  computeMemberMetrics,
-  memberMetricsCacheKey,
-  readWorkforceMetricsVersion,
-  type MemberScorecard,
-} from '../metrics/workforceMetrics';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { readMemberMetrics, type MemberScorecard } from '../metrics/workforceMetrics';
 import { getEffectiveManagerPolicy } from '../manager/ManagerService';
 import { concludeCeremonySession } from './concludeCeremony';
 import { notifyCeremonyOpened } from './ceremonyNotifier';
@@ -200,13 +194,7 @@ async function openScheduledCeremony(
   // Roster. Only the 'members' scope needs the metrics read.
   let cards: MemberScorecard[] = [];
   if (s.participantScope !== 'roster') {
-    const version = await readWorkforceMetricsVersion(env, s.tenantId);
-    cards = await getOrSetCached(
-      env,
-      memberMetricsCacheKey(s.tenantId, version, ROSTER_METRICS_DAYS, s.projectId),
-      () => computeMemberMetrics(db, s.tenantId, ROSTER_METRICS_DAYS, s.projectId),
-      { kvTtlSeconds: 300, l1TtlMs: 30_000 },
-    );
+    cards = await readMemberMetrics(db, env, s.tenantId, ROSTER_METRICS_DAYS, s.projectId);
   }
   const roster = buildRoster(s.participantScope, parseParticipants(s.participants), cards, s.maxParticipants);
   if (roster.length === 0) return { sessionId: null, status: 'no_participants' };

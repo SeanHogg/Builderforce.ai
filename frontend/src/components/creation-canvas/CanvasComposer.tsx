@@ -14,7 +14,7 @@ import {
 import { CanvasComposerIntent } from './CanvasComposerIntent';
 import { PanelDragHandle } from './PanelDragHandle';
 import { usePanelDragOffset } from './usePanelDragOffset';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/composer.module.css';
 import { REPLAY_MASK } from '@/lib/replaySensitive';
 
 /**

@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/marketing.module.css';
 // The consent state a send is gated on, read off the bound `audience` card rather than
 // copied onto the campaign — see `canvasMarketing.ts`.
 import { campaignSendReadiness } from '@/lib/canvasMarketing';

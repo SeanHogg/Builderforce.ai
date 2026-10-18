@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { DRAWING_TOOLS } from '@/lib/canvasDrawing';
 import { DEFAULT_DRAWING_PREFERENCES, writeDrawingPreferences, type DrawingPreferences } from '../drawingPreferences';
 import { DRAWING_FALLBACK_HEX, DRAWING_TOOL_GLYPH } from '../canvasNodeHelpers';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/stage.module.css';
 
 export interface CanvasDrawingToolbarProps {
   /** The pen in hand, or null while the pointer pans and selects. */

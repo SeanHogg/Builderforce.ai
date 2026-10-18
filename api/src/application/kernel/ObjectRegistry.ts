@@ -51,6 +51,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { sha256Hex } from '../../domain/shared/hash';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Env } from '../../env';
+import { activityDatabase, getActivityLog, type ActivityLogRow } from '../activity/activityLog';
 
 /**
  * The seats on the roster (PRD 20 §3). The schema's domain column, the permission
@@ -254,7 +255,9 @@ export async function getRecents(
       ];
       if (opts.domain) where.push(eq(objects.domain, opts.domain));
 
-      const rows = await db
+      // Read where the activity writers append (`activityDatabase`) — the
+      // caller's handle is the primary, which no activity writer targets.
+      const rows = await activityDatabase(env, db)
         .selectDistinctOn([objects.id], {
           id: objects.id,
           tenantId: objects.tenantId,
@@ -281,17 +284,14 @@ export async function getRecents(
 // The five relations
 // ---------------------------------------------------------------------------
 
-/** One timeline endpoint, instead of a per-subsystem feed (§7.1). */
-export async function getObjectActivity(db: Db, env: Env, tenantId: number, id: string, limit?: number) {
-  const take = pageSize(limit);
-  return getOrSetCached(env, `${relationCacheKey(tenantId, id, 'activity')}:${take}`, async () => {
-    return db
-      .select()
-      .from(activityLog)
-      .where(and(eq(activityLog.objectId, id), eq(activityLog.tenantId, tenantId)))
-      .orderBy(desc(activityLog.occurredAt))
-      .limit(take);
-  });
+/**
+ * One timeline endpoint, instead of a per-subsystem feed (§7.1) — an `objectId`
+ * filter over THE activity read (`activity/activityLog.getActivityLog`), so it
+ * reads the database the writers append to and shares its version-token cache.
+ */
+export async function getObjectActivity(db: Db, env: Env, tenantId: number, id: string, limit?: number): Promise<ActivityLogRow[]> {
+  const page = await getActivityLog(env, db, tenantId, { objectId: id, limit: pageSize(limit) });
+  return page.events;
 }
 
 /** One comment thread, mountable anywhere (§7.1). */

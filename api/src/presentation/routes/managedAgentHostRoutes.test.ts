@@ -105,3 +105,21 @@ describe('DELETE /api/managed-agent-hosts/:id', () => {
     expect(await res.json()).toEqual({ error: "Cannot cancel a request with status 'failed'" });
   });
 });
+
+describe('GET /api/managed-agent-hosts', () => {
+  it('lists the workspace requests through the shared list use case', async () => {
+    const rows = [{ id: 5, tenantId: 7, status: 'pending' }];
+    const db = fakeDb([rows]);
+    const { send } = harness(db);
+    const res = await send('/', 'GET');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ requests: rows });
+    expect(db.calls).toHaveLength(1);
+  });
+
+  it('404s a request that is not the workspace\'s own', async () => {
+    const { send } = harness(fakeDb([[]]));
+    const res = await send('/9', 'GET');
+    expect(res.status).toBe(404);
+  });
+});

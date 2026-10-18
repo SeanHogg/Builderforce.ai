@@ -17,9 +17,11 @@
  */
 import { DEFAULT_TIMELINE_LABELS, type BrainTimelineLabels } from './BrainTimeline';
 import { DEFAULT_LIVE_ACTIVITY_LABELS, type LiveActivityLabels } from './LiveActivity';
+import { stringsFrom, type LabelLookup } from './labelCatalog';
 
-/** A string for a canonical key path, or undefined when the catalog has none. */
-export type TimelineCatalogLookup = (path: string) => string | undefined;
+/** A string for a canonical key path, or undefined when the catalog has none — the
+ *  package-wide {@link LabelLookup} contract, read by key path. */
+export type TimelineCatalogLookup = LabelLookup;
 
 /** A lookup over a nested catalog object (`messages.brain.timeline`). */
 export function timelineCatalogLookup(namespace: unknown): TimelineCatalogLookup {
@@ -31,15 +33,6 @@ export function timelineCatalogLookup(namespace: unknown): TimelineCatalogLookup
     }
     return typeof node === 'string' && node.length > 0 ? node : undefined;
   };
-}
-
-/** Every string field of `defaults`, read at `prefix + field`. */
-function stringsFrom<T extends object>(defaults: T, lookup: TimelineCatalogLookup, prefix = ''): T {
-  const out = { ...defaults } as Record<string, unknown>;
-  for (const [key, fallback] of Object.entries(defaults)) {
-    if (typeof fallback === 'string') out[key] = lookup(`${prefix}${key}`) ?? fallback;
-  }
-  return out as T;
 }
 
 /** The animated in-flight row's copy (`live.*`). */

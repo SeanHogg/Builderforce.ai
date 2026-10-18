@@ -5,7 +5,7 @@ import { OperatePeopleSection } from './OperatePeopleSection';
 import { useOperateReading } from './hooks/useOperateReading';
 import { useCanvasPhase, useLetBrain } from './phase/CanvasPhaseContext';
 import type { CreationFlowNode } from './CreationNode';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 
 export interface CanvasOperateSurfaceProps {
   nodes: readonly CreationFlowNode[];

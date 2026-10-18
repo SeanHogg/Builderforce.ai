@@ -102,8 +102,9 @@ export const taxApi = {
    *  view with an audit reason on every row. Auth header is sent manually via
    *  `apiRequestStream` — a CSV response is not the JSON `apiRequest` path. */
   async downloadReportCsv(year: number, onlyFilings = true): Promise<void> {
-    const q = onlyFilings ? '' : '?all=true';
-    const res = await apiRequestStream(`/api/tax/report/${year}/csv${q}`);
+    const q = new URLSearchParams({ year: String(year) });
+    if (!onlyFilings) q.set('all', 'true');
+    const res = await apiRequestStream(`/api/exports/sources/tax.year-report?${q.toString()}`);
     if (!res.ok) throw new Error(`Export failed (${res.status})`);
     const blob = await res.blob();
     downloadBlob(blob, filenameFromResponse(res, `tax-${year}.csv`));

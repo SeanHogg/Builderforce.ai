@@ -23,11 +23,9 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { mailboxConnections } from '../../infrastructure/database/schema';
-import { refreshAccessToken } from '../../infrastructure/auth/oauthState';
 import {
-  isTerminalRefreshFailure,
-  mergeRefreshedTokens,
-  oauthTokensStale,
+  providerGrantRefresher,
+  refreshGrantIfStale,
   sealOAuthTokens,
   unsealOAuthTokens,
 } from '../integrations/oauthTokenVault';
@@ -238,57 +236,47 @@ export async function freshMailboxToken(
   const provider = getMailboxProvider(row.provider);
   if (!provider) return { ok: false, status: 'unavailable', error: `Unknown mailbox provider "${row.provider}".` };
 
-  const rec = env as unknown as Record<string, string | undefined>;
-  const clientId = rec[provider.clientIdKey];
-  const clientSecret = rec[provider.clientSecretKey];
-  if (!clientId || !clientSecret) {
-    return { ok: false, status: 'unavailable', error: `${provider.label} is not configured on this deployment.` };
-  }
-
   const tokens = await unsealOAuthTokens(env, tenantId, row.tokenEnc, row.tokenIv);
   if (!tokens) {
     return { ok: false, status: 'unavailable', error: 'Stored mailbox credentials could not be decrypted.' };
   }
 
-  if (!oauthTokensStale(tokens)) {
-    return { ok: true, accessToken: tokens.accessToken, provider, accountEmail: row.accountEmail };
-  }
-  if (!tokens.refreshToken) {
-    await markRevoked(db, tenantId, connectionId, 'No refresh token stored — reconnect this mailbox.');
-    return { ok: false, status: 'revoked', error: 'No refresh token stored — reconnect this mailbox.' };
-  }
-
-  try {
-    const refreshed = await refreshAccessToken(
-      { tokenUrl: provider.tokenUrl, clientId, clientSecret },
-      tokens.refreshToken,
-    );
-    const next = mergeRefreshedTokens(tokens, refreshed);
-    const sealed = await sealOAuthTokens(env, tenantId, next);
-    await db
-      .update(mailboxConnections)
-      .set({
-        tokenEnc: sealed.enc,
-        tokenIv: sealed.iv,
-        expiresAt: next.expiresAtMs ? new Date(next.expiresAtMs) : null,
-        status: 'connected',
-        lastError: null,
-        updatedAt: sql`NOW()`,
-      })
-      .where(and(eq(mailboxConnections.id, connectionId), eq(mailboxConnections.tenantId, tenantId)));
-    return { ok: true, accessToken: refreshed.access_token, provider, accountEmail: row.accountEmail };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Token refresh failed';
-    if (isTerminalRefreshFailure(message)) {
-      await markRevoked(db, tenantId, connectionId, message);
-      return { ok: false, status: 'revoked', error: 'This mailbox needs to be reconnected.' };
+  // The shared lifecycle decides; this function only writes the mailbox row.
+  const refresh = await refreshGrantIfStale(tokens, providerGrantRefresher(env, provider));
+  if (refresh.ok) {
+    if (refresh.refreshed) {
+      const next = refresh.tokens;
+      const sealed = await sealOAuthTokens(env, tenantId, next);
+      await db
+        .update(mailboxConnections)
+        .set({
+          tokenEnc: sealed.enc,
+          tokenIv: sealed.iv,
+          expiresAt: next.expiresAtMs ? new Date(next.expiresAtMs) : null,
+          status: 'connected',
+          lastError: null,
+          updatedAt: sql`NOW()`,
+        })
+        .where(and(eq(mailboxConnections.id, connectionId), eq(mailboxConnections.tenantId, tenantId)));
     }
-    await db
-      .update(mailboxConnections)
-      .set({ lastError: message.slice(0, 1_000), updatedAt: sql`NOW()` })
-      .where(and(eq(mailboxConnections.id, connectionId), eq(mailboxConnections.tenantId, tenantId)));
-    reportCaughtError(error, { source: 'application/mailbox/mailboxService.ts', operation: 'freshMailboxToken' });
-    return { ok: false, status: 'expired', error: message };
+    return { ok: true, accessToken: refresh.tokens.accessToken, provider, accountEmail: row.accountEmail };
+  }
+  switch (refresh.reason) {
+    case 'unconfigured':
+      return { ok: false, status: 'unavailable', error: `${provider.label} is not configured on this deployment.` };
+    case 'no_refresh_token':
+      await markRevoked(db, tenantId, connectionId, 'No refresh token stored — reconnect this mailbox.');
+      return { ok: false, status: 'revoked', error: 'No refresh token stored — reconnect this mailbox.' };
+    case 'revoked':
+      await markRevoked(db, tenantId, connectionId, refresh.message);
+      return { ok: false, status: 'revoked', error: 'This mailbox needs to be reconnected.' };
+    case 'failed':
+      await db
+        .update(mailboxConnections)
+        .set({ lastError: refresh.message.slice(0, 1_000), updatedAt: sql`NOW()` })
+        .where(and(eq(mailboxConnections.id, connectionId), eq(mailboxConnections.tenantId, tenantId)));
+      reportCaughtError(refresh.error, { source: 'application/mailbox/mailboxService.ts', operation: 'freshMailboxToken' });
+      return { ok: false, status: 'expired', error: refresh.message };
   }
 }
 

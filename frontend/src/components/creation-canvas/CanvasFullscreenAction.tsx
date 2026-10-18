@@ -6,7 +6,7 @@
 import type { RefObject } from 'react';
 import { useTranslations } from 'next-intl';
 import { useFullscreen } from '@/lib/useFullscreen';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 
 /**
  * "Fill the screen with this" — the one full-screen control on the canvas.

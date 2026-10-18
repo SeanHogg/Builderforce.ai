@@ -21,7 +21,9 @@ import type { FileEntry } from '@/lib/types';
 import { CanvasBarGroup } from './CanvasBarGroup';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
 import { useCanvasSessionFacts } from './chrome/canvasSessionContext';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
+import chromeStyles from './styles/chrome.module.css';
+import shellStyles from './CreationCanvas.module.css';
 
 const VIEW_ICON: Record<CenterView, () => React.ReactElement> = {
   preview: PreviewReadingIcon,
@@ -134,7 +136,7 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
 
           {/* The same board in Studio, in this tab; Studio's "Open on canvas" comes back. */}
           {studioHref && (
-            <Link className={styles.appStudioLink} href={studioHref} title={t('openInStudio')}>
+            <Link className={chromeStyles.appStudioLink} href={studioHref} title={t('openInStudio')}>
               <Icon name="external-link" size={14} />
               <span>{t('openInStudio')}</span>
             </Link>
@@ -155,7 +157,7 @@ export function CanvasAppWorkspace({ app, initialFiles, apps, onSelectApp }: Can
   }), [runner.phase, runLabel, ws.centerView, ws.centerViews, filesOpen, publishes, publishOpen, appChoices, app.nodeId, app.title, studioHref, store.id, ws.durable, livePreview, modalityDef.showRunButton, voiceState, runner.run, ws.selectView, ws.openRail, ws.setRailOpen, onSelectApp, t]);
 
   return (
-    <div className={styles.appWorkspace} data-testid="canvas-app-workspace">
+    <div className={shellStyles.appWorkspace} data-testid="canvas-app-workspace">
       <WorkspaceOverlays ws={ws} />
       <WorkspaceCenter ws={ws} hidden={ws.narrow && ws.railOpen} />
       <WorkspaceSidePanels ws={ws} visible />

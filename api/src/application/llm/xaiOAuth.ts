@@ -1,10 +1,17 @@
 /** xAI SuperGrok OAuth (OIDC discovery + authorization-code PKCE). */
-import { OAuthDiscoveryError, throwTokenExchangeFailure } from './subscriptionOAuthCode';
+import {
+  OAuthDiscoveryError,
+  exchangeSubscriptionCode,
+  refreshSubscriptionToken,
+  subscriptionAuthorizeUrl,
+  type SubscriptionOAuthClient,
+} from './subscriptionOAuthCode';
+import type { TokenResponse } from '../shared/providerOAuthConnect';
 
 const DISCOVERY_URL = 'https://auth.x.ai/.well-known/openid-configuration';
 const CLIENT_ID = 'b1a00492-073a-47ea-816f-4c329264a828';
 export const XAI_REDIRECT_URI = 'http://127.0.0.1:56121/callback';
-const SCOPE = 'openid profile email offline_access grok-cli:access api:access';
+const SCOPES = ['openid', 'profile', 'email', 'offline_access', 'grok-cli:access', 'api:access'];
 
 export interface XaiOAuthTokens { access: string; refresh: string; expires: number }
 interface Discovery { authorization_endpoint: string; token_endpoint: string }
@@ -28,28 +35,42 @@ export async function discoverXaiOAuth(): Promise<Discovery> {
   };
 }
 
-export async function buildXaiAuthorizeUrl(params: { state: string; challenge: string }): Promise<string> {
+/**
+ * The SuperGrok public client as a descriptor. Its endpoints come from OIDC
+ * discovery (and are pinned to *.x.ai by {@link trustedEndpoint}), so the
+ * descriptor is completed per call rather than declared with fixed URLs.
+ */
+async function xaiOAuthClient(): Promise<SubscriptionOAuthClient> {
   const discovery = await discoverXaiOAuth();
-  const url = new URL(discovery.authorization_endpoint);
-  for (const [key, value] of Object.entries({ response_type: 'code', client_id: CLIENT_ID, redirect_uri: XAI_REDIRECT_URI, scope: SCOPE, code_challenge: params.challenge, code_challenge_method: 'S256', state: params.state })) url.searchParams.set(key, value);
-  return url.toString();
+  return {
+    label: 'xAI',
+    clientId: CLIENT_ID,
+    authUrl: discovery.authorization_endpoint,
+    tokenUrl: discovery.token_endpoint,
+    redirectUri: XAI_REDIRECT_URI,
+    scopes: SCOPES,
+  };
 }
 
-async function tokenRequest(body: URLSearchParams): Promise<XaiOAuthTokens> {
-  const { token_endpoint } = await discoverXaiOAuth();
-  const response = await fetch(token_endpoint, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body });
-  if (!response.ok) {
-    throwTokenExchangeFailure({ status: response.status, body: await response.text(), label: 'xAI' });
-  }
-  const data = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
-  if (!data.access_token || !data.refresh_token) throw new Error('xAI OAuth token response was incomplete');
+export async function buildXaiAuthorizeUrl(params: { state: string; challenge: string }): Promise<string> {
+  return subscriptionAuthorizeUrl(await xaiOAuthClient(), params);
+}
+
+/** xAI's token parsing — `expires_in` is optional, so an hour is assumed. */
+function toTokens(data: TokenResponse): XaiOAuthTokens {
+  if (!data.refresh_token) throw new Error('xAI OAuth token response was incomplete');
   return { access: data.access_token, refresh: data.refresh_token, expires: Date.now() + (data.expires_in ?? 3600) * 1000 - 120_000 };
 }
 
-export function exchangeXaiCode(params: { code: string; verifier: string; challenge: string }): Promise<XaiOAuthTokens> {
-  return tokenRequest(new URLSearchParams({ grant_type: 'authorization_code', code: params.code, redirect_uri: XAI_REDIRECT_URI, client_id: CLIENT_ID, code_verifier: params.verifier, code_challenge: params.challenge, code_challenge_method: 'S256' }));
+export async function exchangeXaiCode(params: { code: string; verifier: string; challenge: string }): Promise<XaiOAuthTokens> {
+  // xAI's token endpoint also wants the challenge re-sent beside the verifier.
+  return toTokens(await exchangeSubscriptionCode(await xaiOAuthClient(), {
+    code: params.code,
+    verifier: params.verifier,
+    extra: { code_challenge: params.challenge, code_challenge_method: 'S256' },
+  }));
 }
 
-export function refreshXaiToken(refreshToken: string): Promise<XaiOAuthTokens> {
-  return tokenRequest(new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken, client_id: CLIENT_ID }));
+export async function refreshXaiToken(refreshToken: string): Promise<XaiOAuthTokens> {
+  return toTokens(await refreshSubscriptionToken(await xaiOAuthClient(), refreshToken));
 }

@@ -23,18 +23,19 @@ import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { readWorkforceMetricsVersion, computeMemberMetrics } from '../../application/metrics/workforceMetrics';
+import { readWorkforceMetricsVersion } from '../../application/metrics/workforceMetrics';
 import { computeAllocationHealth } from '../../application/metrics/allocationHealth';
 import { computeCollaborationMetrics } from '../../application/metrics/collaboration';
 import { computeDocActivity } from '../../application/metrics/docActivity';
 import { computeLaborCost } from '../../application/metrics/laborCost';
 import { computePerformerTiers } from '../../application/metrics/performerTiers';
 import { computeMemberInitiativeAllocation } from '../../application/metrics/memberInitiativeAlloc';
-import { memberMetricsToCsv } from '../../application/metrics/metricsCsv';
+import { memberMetricsExportSource } from '../../application/metrics/memberMetricsExport';
+import { exportSourceHandler } from './exportSourceRoute';
 import { coachingNotes } from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { positiveIntParam, daysParam } from './queryParams';
+import { daysParam } from './queryParams';
 import { parseOptionalBody, z } from './requestBody';
 
 /** `POST /coaching-notes` — the handler answers its own required-field messages. */
@@ -140,29 +141,10 @@ export function createEmpMetricsRoutes(db: Db): Hono<HonoEnv> {
     return c.json(await cachedByVersion(c, tenantId, `init-alloc:${days}`, () => computeMemberInitiativeAllocation(db, tenantId, days)));
   });
 
-  // ── EMP-20 — export member metrics (CSV | JSON) ────────────────────────────
-  // A download / point-in-time snapshot: not cached (mirrors the compliance export).
-  router.get('/metrics/export', MANAGER, async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const days = daysParam(c.req.query('days'), 30, 180);
-    const format = c.req.query('format') === 'json' ? 'json' : 'csv';
-    // The export has to honour the SAME project scope the page it was clicked from
-    // is showing, or a manager downloads a workspace file believing it is the
-    // project they were looking at. The filename says which, for the same reason.
-    const projectId = positiveIntParam(c.req.query('projectId'));
-    const members = await computeMemberMetrics(db, tenantId, days, projectId);
-    const stamp = new Date().toISOString().slice(0, 10);
-    if (format === 'json') {
-      return c.json({ generatedAt: new Date().toISOString(), windowDays: days, projectId: projectId ?? null, members });
-    }
-    const scopeTag = projectId == null ? '' : `-project-${projectId}`;
-    return new Response(memberMetricsToCsv(members), {
-      headers: {
-        'content-type': 'text/csv; charset=utf-8',
-        'content-disposition': `attachment; filename="member-metrics-${days}d${scopeTag}-${stamp}.csv"`,
-      },
-    });
-  });
+  // ── EMP-20 — export member metrics (csv | json | xlsx) ───────────────────
+  // A registered export source (also at /api/exports/sources/members.metrics):
+  // a point-in-time snapshot, not cached, honouring the page's project scope.
+  router.get('/metrics/export', exportSourceHandler(memberMetricsExportSource, db));
 
   return router;
 }

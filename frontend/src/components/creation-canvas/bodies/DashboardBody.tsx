@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from '../types';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/bodies.module.css';
 import { dashboardWidgetsPatch, readDashboardWidgets } from '@/lib/canvasDashboard';
 import { DashboardWidgetGrid } from '../DashboardWidgetView';
 import { DashboardStructuredEditor } from '../DashboardStructuredEditor';

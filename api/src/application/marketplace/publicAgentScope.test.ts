@@ -53,6 +53,7 @@ describe('publicAgentScope', () => {
 describe('no second definition of "a public agent"', () => {
   const FILES = [
     'presentation/routes/workforceRoutes.ts',
+    'application/workforce/agentDirectory.ts',
     'presentation/routes/ideRoutes.ts',
     'application/marketplace/agentCommerce.ts',
     'application/llm/builtinMcpService.ts',

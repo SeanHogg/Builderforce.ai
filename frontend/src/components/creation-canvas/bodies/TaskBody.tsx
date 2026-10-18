@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/marketing.module.css';
 import type { CreationBodyProps } from './types';
 import { textValue, AuthoredContent } from './shared';
 

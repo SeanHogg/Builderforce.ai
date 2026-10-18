@@ -2,7 +2,9 @@ import { useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { CreationNodeData } from '../types';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/brain.module.css';
+import bodiesStyles from '../styles/bodies.module.css';
+import nodeStyles from '../styles/node.module.css';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from '../BrainActivityView';
 import { BrainSurface } from '../BrainSurface';
 import { BrainSurfaceActions } from '../BrainSurfaceActions';
@@ -82,7 +84,7 @@ export function BrainObjectBody({ id: nodeId, data }: CreationBodyProps) {
     // header is outside this section and still selects the node normally.
     <BrainSurfaceViewProvider>
     <section
-      className={`${styles.brainObjectChat} nodrag nowheel`}
+      className={`${nodeStyles.brainObjectChat} nodrag nowheel`}
       aria-label={t('brainDock')}
       onClick={(event) => event.stopPropagation()}
     >
@@ -151,7 +153,7 @@ function BrainMarkerBody({ data, onOpen }: { data: CreationNodeData; onOpen: () 
 
   return <button
     type="button"
-    className={styles.brainMarker}
+    className={nodeStyles.brainMarker}
     data-state={activity.live ? 'running' : 'idle'}
     aria-label={label}
     title={label}
@@ -204,6 +206,6 @@ function BrainAnchorBody({ data, unread = 0, onOpen }: { data: CreationNodeData;
     {/* The way in NAMES what is waiting when something is. "Open Brain chat" beside a
         badge would be the control naming itself twice, so the count replaces the word —
         exactly as the docked launcher pill does it, from the same string. */}
-    {onOpen && <div className={`${styles.nodeActionBar} nodrag nowheel`}><button type="button" data-unread={unread > 0 ? 'true' : 'false'} onClick={(event) => { event.stopPropagation(); onOpen(); }}>{unread > 0 ? tCanvas('brainLauncher.unread', { count: unread }) : t('openBrainChat')}</button></div>}
+    {onOpen && <div className={`${bodiesStyles.nodeActionBar} nodrag nowheel`}><button type="button" data-unread={unread > 0 ? 'true' : 'false'} onClick={(event) => { event.stopPropagation(); onOpen(); }}>{unread > 0 ? tCanvas('brainLauncher.unread', { count: unread }) : t('openBrainChat')}</button></div>}
   </div>;
 }

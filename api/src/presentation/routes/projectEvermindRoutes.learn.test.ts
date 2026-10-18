@@ -25,6 +25,7 @@ vi.mock('../middleware/authMiddleware', () => ({
 }));
 vi.mock('../middleware/featureGate', () => ({ requireFrontierAccess: vi.fn(async () => null) }));
 vi.mock('../../infrastructure/auth/agentHostAuth', () => ({ resolveHostAuth: mocks.hostAuth }));
+vi.mock('../../infrastructure/auth/segmentResolver', () => ({ resolveSegment: async () => 'seg-1' }));
 vi.mock('../../application/project/projectOwnership', () => ({ projectInTenantCached: mocks.owned }));
 vi.mock('../../application/llm/evermindDeltaDispatch', () => ({ dispatchProjectEvermindLearn: mocks.dispatch }));
 vi.mock('../../application/llm/projectEvermind', () => ({
@@ -35,9 +36,12 @@ vi.mock('../../application/llm/evermindRuntime', () => ({}));
 vi.mock('../../application/llm/evermindAnalyzer', () => ({}));
 vi.mock('../../application/llm/projectFacts', () => ({}));
 
-const { createProjectEvermindAgentRoutes, createProjectEvermindRoutes } = await import('./projectEvermindRoutes');
+const { createProjectEvermindRoutes } = await import('./projectEvermindRoutes');
+const { agentHostDoor } = await import('../middleware/frontDoor');
 
 const db = {} as never;
+/** The agent-host door: the SAME router factory, built with the host-key door. */
+const createProjectEvermindAgentRoutes = (d: never) => createProjectEvermindRoutes(d, agentHostDoor(d));
 const post = (body: unknown) => ({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 const DELTA = { diff: 'AAAA', baseVersion: 7, weight: 0.7, label: 'ticket 12' };
 
@@ -111,5 +115,18 @@ describe('JWT front door — POST /:projectId/evermind/learn', () => {
     const res = await createProjectEvermindRoutes(db).request('/42/evermind/learn', post(DELTA), {});
     expect(res.status).toBe(200);
     expect(mocks.dispatch.mock.calls[0]![1]).toBe(TENANT);
+  });
+});
+
+describe('agent-host door scope', () => {
+  it('serves only the replica-sync + learn subset — manager writes stay JWT-only', async () => {
+    const res = await createProjectEvermindAgentRoutes(db).request('/42/evermind/seed', post({}), {});
+    expect(res.status).toBe(404);
+  });
+
+  it('does not gate paths outside evermind that share the /api/agent/projects mount', async () => {
+    mocks.hostAuth.mockResolvedValue(null);
+    const res = await createProjectEvermindAgentRoutes(db).request('/42/run-context', {}, {});
+    expect(res.status).toBe(404);
   });
 });

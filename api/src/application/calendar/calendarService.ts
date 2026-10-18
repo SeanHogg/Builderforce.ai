@@ -9,10 +9,10 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { calendarConnections } from '../../infrastructure/database/schema';
-import { refreshAccessToken } from '../../infrastructure/auth/oauthState';
 import {
   mergeRefreshedTokens,
-  oauthTokensStale,
+  providerGrantRefresher,
+  refreshGrantIfStale,
   sealOAuthTokens,
   unsealOAuthTokens,
   type RefreshedTokens,
@@ -57,41 +57,28 @@ export async function persistGrant(
     .where(eq(calendarConnections.id, conn.id));
 }
 
-function providerCreds(env: Env, provider: CalendarProviderName) {
-  const p = getCalendarProvider(provider);
-  if (!p) return null;
-  const rec = env as unknown as Record<string, string | undefined>;
-  const clientId = rec[p.clientIdKey as string];
-  const clientSecret = rec[p.clientSecretKey as string];
-  if (!clientId || !clientSecret) return null;
-  return { provider: p, clientId, clientSecret };
-}
-
 /**
  * Return a connection with a guaranteed-fresh access token, refreshing +
- * persisting when it is within 60s of expiry. Returns null if it cannot be
- * refreshed (revoked / no refresh token).
+ * persisting when it is stale. Returns null if it cannot be refreshed (revoked /
+ * unconfigured / transient failure).
  */
 export async function freshAccessToken(db: Db, env: Env, conn: Connection): Promise<string | null> {
   const grant = await readGrant(env, conn);
   if (!grant) return null;
 
-  // `oauthTokensStale` carries the shared refresh margin, so a calendar grant and
-  // a Drive grant answer "is this token good enough for the tail of a batch" the
-  // same way instead of with two hand-rolled expiry checks.
-  if (!oauthTokensStale(grant)) return grant.accessToken;
-
-  if (!grant.refreshToken) return grant.accessToken; // best-effort; may already be valid
-  const creds = providerCreds(env, conn.provider as CalendarProviderName);
-  if (!creds) return null;
+  // The shared lifecycle carries the refresh margin and the merge rule, so a
+  // calendar grant and a Drive grant answer "is this token good enough for the
+  // tail of a batch" the same way.
+  const provider = getCalendarProvider(conn.provider as CalendarProviderName);
+  const refresh = await refreshGrantIfStale(grant, provider ? providerGrantRefresher(env, provider) : null);
+  if (!refresh.ok) {
+    // Best-effort: with no refresh token the stored access token may still be valid.
+    return refresh.reason === 'no_refresh_token' ? grant.accessToken : null;
+  }
+  if (!refresh.refreshed) return refresh.tokens.accessToken;
   try {
-    const tok = await refreshAccessToken(
-      { tokenUrl: creds.provider.tokenUrl, clientId: creds.clientId, clientSecret: creds.clientSecret },
-      grant.refreshToken,
-    );
-    const next = mergeRefreshedTokens(grant, tok);
-    await persistGrant(db, env, conn, next);
-    return next.accessToken;
+    await persistGrant(db, env, conn, refresh.tokens);
+    return refresh.tokens.accessToken;
   } catch {
     return null;
   }

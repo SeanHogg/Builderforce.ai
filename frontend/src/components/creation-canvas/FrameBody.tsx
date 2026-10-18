@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { isFrameCollapsed } from '@/domains/canvas/domain/canvasFrame';
 import { FlowExecutionSettings } from './FlowExecutionSettings';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/node.module.css';
 
 /**
  * THE BOUNDING BOX — a section of the board, as a thing you can put away.

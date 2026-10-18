@@ -17,18 +17,7 @@
  * field, a nullable column) — same predicate, one conversion, stated once.
  */
 
-/**
- * An optional positive-integer parameter (a project id, a team id, a row id).
- *
- * Strict on purpose. `Number('')` is 0 and `Number(undefined)` is NaN, both of
- * which fail `isInteger && > 0`, so a missing parameter and a junk one produce
- * the same `undefined` — and an id of `0`, which no serial column ever issues,
- * is rejected rather than quietly filtering on a row that cannot exist.
- */
-export function positiveIntParam(raw: unknown): number | undefined {
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : undefined;
-}
+import { positiveIntParam } from '../../domain/shared/boundedInt';
 
 /** {@link positiveIntParam} for callers that model absence as `null`. */
 export function positiveIntOrNull(raw: unknown): number | null {
@@ -67,5 +56,5 @@ export function nullableDateParam(raw: unknown): Date | null | undefined {
 // The bounded readers live in the domain layer (`domain/shared/boundedInt.ts`)
 // because application code reads query bounds too and must not import a route
 // module. Re-exported here so every route file keeps ONE import for its params.
-export { boundedIntParam, daysParam, limitParam, offsetParam } from '../../domain/shared/boundedInt';
+export { boundedIntParam, daysParam, limitParam, offsetParam, positiveIntParam } from '../../domain/shared/boundedInt';
 export { fiscalYearParam, periodParam } from '../../domain/shared/period';

@@ -1,0 +1,607 @@
+/* Object bodies drawn inside a board node (data grid, pipeline, map, documents, clock, workflow, game, files).
+   Split out of CreationCanvas.module.css, which keeps the board shell and the
+   canvas palette (`--canvas-*`, light and dark) that every rule here reads. */
+
+/* auto-fit, not a fixed 4 columns:a workflow has as many steps as it has, and
+   a hardcoded 4-track grid stretched 1 step across the card and clipped the 5th. */
+.workflowSteps { display:grid; grid-template-columns:repeat(auto-fit, minmax(96px, 1fr)); gap:8px; }
+.workflowStep { min-height:72px; display:flex; flex-direction:column; align-items:flex-start; gap:6px; padding:9px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fbfdff; }
+.workflowStep strong { font-size:10px; overflow-wrap:anywhere; }
+.workflowStep small { color:var(--canvas-muted); font-size:8px; overflow-wrap:anywhere; }
+.workflowStep code { max-width:100%; overflow:hidden; color:var(--canvas-muted); font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.doneDot,.liveDot,.idleDot,.failDot,.presence { width:7px; height:7px; border-radius:50%; display:inline-block; }.doneDot,.presence { background:#2bb879; }.liveDot { background:var(--canvas-accent); }.idleDot { background:var(--canvas-muted); }
+/* A step that failed reads as a failure. Uses the shared tone marks, which are
+   already restated for dark at the end of this file. */
+.failDot { background:var(--tone-danger-mark); }
+/* Empty + blocked states. An unconfigured workflow says so here instead of
+   rendering placeholder stages that read as real configuration. */
+.workflowEmpty { display:grid; gap:4px; padding:10px; border:1px dashed var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+.workflowEmpty strong { color:var(--canvas-ink); font-size:10px; }
+.workflowEmpty small { color:var(--canvas-ink-soft); font-size:8px; overflow-wrap:anywhere; }
+.configurableBody { display:grid; gap:8px; }
+.widgetSettings,.widgetContext { display:flex; flex-wrap:wrap; gap:6px; }
+.widgetSettings > span,.widgetContext > span { min-width:0; padding:5px 7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:#fafcff; }
+.widgetSettings small,.widgetContext small { display:block; color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.widgetSettings b,.widgetContext b { display:block; overflow:hidden; margin-top:2px; color:var(--canvas-ink); font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.drawingBody { display:grid; gap:7px; height:100%; }
+
+/* Map Object. Every colour here is a canvas theme token, so light and dark are ONE
+   definition — a map is mostly thin lines on a large plate, which is exactly the kind of
+   surface a hardcoded hex leaves invisible in the other theme. The SVG is viewBox-driven
+   with width:100%, so the plot scales with the card instead of overflowing a narrow one. */
+.mapBody { display:grid; align-content:start; gap:7px; min-width:0; height:100%; }
+.mapSurface { display:block; width:100%; height:auto; min-height:120px; }
+.mapPlate { fill:var(--canvas-panel-muted); stroke:var(--canvas-line); stroke-width:1; }
+.mapGraticule line { stroke:var(--canvas-line); stroke-width:.5; }
+.mapOutline path { fill:color-mix(in srgb,var(--canvas-accent-ink) 9%,transparent); stroke:color-mix(in srgb,var(--canvas-accent-ink) 55%,transparent); stroke-width:.8; stroke-linejoin:round; }
+.mapMarkers circle { fill:color-mix(in srgb,var(--canvas-accent) 72%,transparent); stroke:var(--canvas-panel); stroke-width:.9; }
+.mapMarkers circle[data-tone='success'] { fill:color-mix(in srgb,var(--tone-success-mark) 78%,transparent); }
+.mapMarkers circle[data-tone='warning'] { fill:color-mix(in srgb,var(--tone-warning-mark) 78%,transparent); }
+.mapMarkers circle[data-tone='danger'] { fill:color-mix(in srgb,var(--tone-danger-mark) 78%,transparent); }
+.mapMarkers circle[data-tone='info'] { fill:color-mix(in srgb,var(--tone-info-mark) 78%,transparent); }
+/* Paint-order puts the halo BEHIND the glyph, so a name stays readable where it crosses
+   a marker or an outline instead of needing an opaque plate that hides the map. */
+.mapLabels text { fill:var(--canvas-ink); stroke:var(--canvas-panel-muted); stroke-width:2.4px; paint-order:stroke fill; font:7px var(--font-sans); font-weight:650; }
+.mapEmpty { margin:0; color:var(--canvas-ink-soft); font-size:9px; line-height:1.45; }
+/* A map that can be interrogated says so with the cursor before anything is
+   clicked; a static one keeps the default arrow so it does not promise a
+   gesture it will not honour. `touch-action:none` is what makes a one-finger
+   drag pan the MAP instead of scrolling the board on a phone. */
+.mapSurfaceLive { cursor:grab; touch-action:none; }
+.mapSurfaceLive:active { cursor:grabbing; }
+.mapMarkers circle[data-selected='true'] { stroke:var(--canvas-accent-ink); stroke-width:1.8; }
+.mapSurfaceLive .mapMarkers circle { cursor:pointer; }
+.mapControls { display:flex; gap:4px; margin-top:4px; }
+.mapControls button {
+  min-width:20px; height:20px; padding:0 6px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel); color:var(--canvas-ink);
+  font:8px var(--font-sans); font-weight:650; cursor:pointer;
+}
+.mapControls button:disabled { opacity:.45; cursor:default; }
+.mapControls button:not(:disabled):hover { border-color:var(--canvas-accent-ink); }
+/* What the reader clicked, spelled out — a marker's `<title>` is a hover tooltip
+   and a phone has no hover, so the selection needs somewhere to live on screen. */
+.mapSelection {
+  display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin-top:4px;
+  padding:4px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); font-size:7px; color:var(--canvas-muted);
+}
+.mapSelection b { color:var(--canvas-ink); font-size:8px; }
+.mapSelection button {
+  margin-left:auto; padding:2px 6px;
+  border:1px solid var(--canvas-accent-ink); border-radius:var(--radius-sm);
+  background:transparent; color:var(--canvas-accent-ink);
+  font:7px var(--font-sans); font-weight:650; cursor:pointer;
+}
+.mapFooter { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 10px; }
+.mapFooter small { color:var(--canvas-muted); font-size:6px; }
+
+/* Builder tile — a Canvas object bound to a real build record. Palette comes from
+   the board's own --canvas-* tokens, so it reads correctly in light AND dark. */
+.buildBody { display:flex; flex:1; min-height:0; flex-direction:column; gap:7px; }
+.buildType { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.buildType > span { width:22px; height:22px; flex:none; display:grid; place-items:center; border-radius:var(--radius-sm); background:color-mix(in srgb,var(--canvas-accent) 15%,var(--canvas-panel)); color:var(--canvas-accent-ink); font-size:12px; }
+.buildType strong { color:var(--canvas-ink); font-size:11px; }
+.buildType em { padding:2px 6px; border-radius:var(--radius-full); background:var(--canvas-panel-muted); color:var(--canvas-muted); font:650 8px var(--font-sans); font-style:normal; white-space:nowrap; }
+.buildType em[data-bound='true'] { background:var(--tone-success-bg); color:var(--tone-success-ink); }
+.buildBody > p { margin:0; color:var(--canvas-ink-soft); font-size:9px; line-height:1.5; }
+.buildLink { margin-top:auto; color:var(--canvas-accent-ink); font-size:9px; overflow-wrap:anywhere; }
+
+/* The Builder surface opened from a Builder object. Fills the focus overlay; it
+   owns its own chrome, so this only supplies the box it lives in.
+   The builder is a genuinely wide surface (file tree + editor + preview + right
+   rail). Below its working width it SCROLLS inside this box rather than crushing
+   its panes — the page itself never scrolls sideways. */
+
+.kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }.kpis div { display:grid; gap:3px; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }.kpis small { color:var(--canvas-muted); }.kpis strong { font-size:17px; }.kpis em { color:var(--canvas-trend-up); font-size:8px; font-style:normal; }
+.axisLabel { display:block; margin-top:6px; text-align:center; font-size:8px; }
+.dwEmpty { margin:10px 0 0; padding:14px; border:1px dashed var(--canvas-line); border-radius:var(--radius-md); color:var(--canvas-muted); font-size:10px; text-align:center; }
+.canvasDiagnosticsBody { display:grid; min-height:0; gap:9px; }
+.diagnosticOverview { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+.diagnosticOverview span { display:grid; grid-template-columns:1fr auto; gap:6px; align-items:center; padding:6px 8px; border:1px solid #eadfce; border-radius:var(--radius-sm); background:#fffaf2; }
+.diagnosticOverview small { color:#8b7355; font-size:7px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }.diagnosticOverview b { color:#654719; font-size:12px; }
+.diagnosticColumns { display:grid; grid-template-columns:1.3fr 1fr 1fr; min-height:0; border:1px solid var(--canvas-line); border-radius:var(--radius-md); overflow:hidden; }
+.diagnosticColumns > section { min-width:0; min-height:150px; padding:8px; background:#fff; }.diagnosticColumns > section + section { border-left:1px solid var(--canvas-line); }
+.diagnosticColumns h4 { margin:0 0 7px; color:var(--canvas-muted); font-size:8px; letter-spacing:.07em; text-transform:uppercase; }
+.diagnosticList,.diagnosticSteps { display:grid; max-height:210px; gap:6px; margin:0; padding:0; overflow:auto; }
+.diagnosticList article { display:grid; grid-template-columns:18px minmax(0,1fr); gap:6px; padding:6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:#fafcff; }
+.diagnosticList article > span { display:grid; place-items:center; width:18px; height:18px; border-radius:50%; background:var(--canvas-hover); color:var(--canvas-muted); font-size:9px; font-weight:800; }
+.diagnosticList article[data-severity='error'] > span,.diagnosticList article[data-severity='critical'] > span,.diagnosticList article[data-severity='high'] > span { background:#fde8e7; color:#c43b34; }
+.diagnosticList article[data-severity='warning'] > span,.diagnosticList article[data-severity='warn'] > span,.diagnosticList article[data-severity='medium'] > span { background:#fff0cf; color:#a76500; }
+.diagnosticList article[data-severity='result'] > span,.diagnosticList article[data-severity='passed'] > span,.diagnosticList article[data-severity='success'] > span { background:#def5e9; color:#137a52; }
+.diagnosticList b { display:block; color:var(--canvas-ink); font-size:8px; line-height:1.35; overflow-wrap:anywhere; }.diagnosticList p { margin:2px 0 0; color:var(--canvas-muted); font-size:7px; line-height:1.4; overflow-wrap:anywhere; }.diagnosticList small { display:block; margin-top:3px; color:var(--canvas-muted); font-size:6px; overflow-wrap:anywhere; }
+.diagnosticSteps { list-style:none; }.diagnosticSteps li { display:grid; grid-template-columns:18px minmax(0,1fr); gap:6px; align-items:start; }.diagnosticSteps li > span { display:grid; place-items:center; width:18px; height:18px; border-radius:var(--radius-sm); background:#efeafd; color:#6848cf; font-size:8px; font-weight:800; }.diagnosticSteps p { margin:1px 0 0; color:var(--canvas-muted); font-size:8px; line-height:1.4; overflow-wrap:anywhere; }
+.diagnosticEmpty { margin:0!important; padding:7px; color:var(--canvas-muted)!important; font-size:8px!important; font-style:italic; list-style:none; }
+.personRow { display:flex; align-items:center; gap:7px; font-size:9px; }.personRow > span:last-child:not(.presence) { margin-left:auto; padding:3px 6px; border-radius:var(--radius-full); background:var(--canvas-panel-muted); }.avatar { display:grid!important; place-items:center; width:25px!important; height:25px!important; color:var(--text-on-accent); font-weight:700; }
+.agentIdentity { display:grid; grid-template-columns:34px minmax(0,1fr) auto; align-items:center; gap:8px; }
+.agentIdentity > span { display:grid; min-width:0; gap:2px; }.agentIdentity b { overflow:hidden; color:var(--canvas-ink); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }.agentIdentity small { overflow:hidden; color:var(--canvas-muted); font-size:7px; text-overflow:ellipsis; white-space:nowrap; }
+.agentIdentity em { max-width:88px; padding:4px 6px; overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel-muted); color:var(--canvas-muted); font-size:7px; font-style:normal; text-overflow:ellipsis; white-space:nowrap; }
+.agentLatestReply { display:grid; grid-template-columns:auto minmax(0,1fr); gap:2px 7px; margin-top:9px; padding:8px; border:1px solid color-mix(in srgb,var(--canvas-accent) 30%,var(--canvas-line)); border-radius:var(--radius-md); background:color-mix(in srgb,var(--canvas-accent) 8%,var(--canvas-panel)); }
+.agentLatestReply { display:block; }.agentLatestReply small { color:var(--canvas-accent); font-size:7px; font-weight:750; letter-spacing:.06em; text-transform:uppercase; }.agentLatestReply p { display:-webkit-box; overflow:hidden; margin:3px 0 0; color:var(--canvas-ink); font-size:8px; line-height:1.45; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
+.pills { display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; }.pills span { padding:4px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:#fafcff; color:var(--canvas-muted); font-size:8px; }.fileMeta { font-weight:600; }.miniTable { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:0; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); overflow:hidden; }.miniTable > * { padding:5px; border-bottom:1px solid var(--canvas-line); font-size:8px; }.waveform { color:#7757e8; font-size:18px; letter-spacing:2px; white-space:nowrap; overflow:hidden; }
+.projectHealth { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }.projectHealth div { display:grid; gap:3px; padding:7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); }.projectHealth small { color:var(--canvas-muted); font-size:8px; }.projectHealth b { font-size:11px; }.healthy { color:#169566; }
+.projectLensBody { display:grid; gap:8px; }
+.projectLensBody > p { margin:0; }
+.projectOverview { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.projectOverview span,.projectFeedback { display:grid; gap:3px; padding:7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); }
+.projectOverview small,.projectFeedback small { color:var(--canvas-muted); font-size:8px; }
+.projectOverview b { overflow:hidden; font-size:11px; text-overflow:ellipsis; text-transform:capitalize; white-space:nowrap; }
+.projectFeedback { gap:5px; }
+.projectFeedback > small { font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+.projectFeedback > span { overflow:hidden; padding:5px 6px; border-left:2px solid #7b61e8; border-radius:var(--radius-sm); background:#f5f2ff; font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.projectFeedback > p { margin:2px 0 0; }
+.roadmap { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }.roadmap > div { display:grid; gap:6px; min-height:76px; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fbfdff; }.roadmap b { color:var(--canvas-accent); font-size:9px; text-transform:uppercase; }.roadmap span { padding:5px; border-left:2px solid #7b61e8; border-radius:var(--radius-sm); background:#f5f2ff; font-size:8px; }
+.mockupGrid { display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:5px; height:72px; }.mockupGrid i { display:block; border:1px solid #ccd9e9; border-radius:var(--radius-sm); background:linear-gradient(155deg,#edf4ff 0 45%,#3978f6 46% 55%,#fff 56%); }.mockupGrid i:nth-child(2){background:linear-gradient(155deg,#f7efff 0 45%,#7b5be7 46% 55%,#fff 56%)}.mockupGrid i:nth-child(3){background:linear-gradient(155deg,#eafaf5 0 45%,#22ad81 46% 55%,#fff 56%)}
+.featureGrid { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }.featureGrid span { display:flex; align-items:center; gap:5px; padding:7px 5px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:#fbfdff; font-size:7px; }.featureGrid b { width:17px; height:17px; display:grid; place-items:center; flex:none; border-radius:var(--radius-sm); color:var(--text-on-accent); background:var(--canvas-accent); font-size:8px; }
+.creativeStudioBody { display:grid; gap:9px; }
+.creativeStudioBody > img,.creativeStudioPreview { width:100%; height:118px; object-fit:cover; border-radius:var(--radius-md); border:1px solid var(--canvas-line); background:linear-gradient(135deg,#172b49,#7657df); }
+.creativeStudioPreview { position:relative; display:grid; place-items:center; overflow:hidden; }
+.creativeStudioPreview span { color:white; font-size:34px; z-index:1; }
+.creativeStudioPreview i { position:absolute; width:90px; height:90px; border:1px solid rgba(255,255,255,.22); border-radius:var(--radius-xl); transform:rotate(28deg); }
+.creativeStudioPreview i:nth-of-type(2) { width:150px; height:150px; transform:rotate(48deg); }
+.creativeStudioPreview i:nth-of-type(3) { width:220px; height:220px; transform:rotate(68deg); }
+
+/* ---- game:the artifact is playable, so the body plays it ---- */
+/* The stage keeps a game-shaped aspect whatever the object is resized to, so a
+   canvas game does not letterbox itself into a strip. */
+.gameStage { position:relative; width:100%; aspect-ratio:16/10; min-height:150px; border-radius:var(--radius-md); overflow:hidden; border:1px solid var(--canvas-line); background:#0b0e1a; }
+.gameFrame { position:absolute; inset:0; width:100%; height:100%; border:0; display:block; background:#0b0e1a; }
+.gamePoster { position:absolute; inset:0; width:100%; height:100%; padding:0; border:0; cursor:pointer; display:grid; place-items:center; background-color:#0b0e1a; background-size:cover; background-position:center; }
+/* THE control on a game card. It was a 52px badge with a screen-reader-only label,
+   which reads as a decoration on a thumbnail rather than as the thing to press —
+   the one action a game has should look like the one action a game has. */
+.gamePoster { grid-auto-flow:row; gap:8px; align-content:center; }
+.gamePlayBadge { width:66px; height:66px; border-radius:50%; display:grid; place-items:center; font-size:26px; color:var(--text-on-accent); background:rgba(11,14,26,.62); border:2px solid rgba(255,255,255,.85); backdrop-filter:blur(4px); transition:transform .12s ease, background .12s ease; }
+.gamePlayLabel { padding:4px 12px; border-radius:var(--radius-full); background:rgba(11,14,26,.62); color:#fff; font:650 11px var(--font-sans); }
+.gamePoster:hover .gamePlayBadge,.gamePoster:focus-visible .gamePlayBadge { transform:scale(1.08); background:rgba(11,14,26,.8); }
+.gamePoster:disabled { cursor:default; opacity:.72; }
+.gamePoster:disabled .gamePlayBadge { transform:none; }
+/* Everything that is not the game, behind the button that is. */
+.gameDetails { display:grid; gap:6px; }
+/* The stop control sits in the same pill row as the state chips, so it inherits
+   their theming rather than declaring a second one. */
+.creativeStudioBody .pills button { padding:4px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted,#fafcff); color:var(--canvas-ink); font-size:8px; cursor:pointer; }
+@media (prefers-reduced-motion:reduce) { .gamePlayBadge { transition:none; } }
+
+.creativeStudioBody .widgetSettings { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.creativeStudioBody .widgetSettings b { text-transform:capitalize; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.projectQuality { --quality-accent:#94a3b8; display:grid; grid-template-columns:52px minmax(0,1fr) auto auto; gap:8px; align-items:center; padding:8px; border:1px solid color-mix(in srgb,var(--quality-accent) 35%,var(--canvas-line)); border-radius:var(--radius-md); background:color-mix(in srgb,var(--quality-accent) 7%,var(--canvas-panel)); }.projectQuality[data-tone='good'] { --quality-accent:#159669; }.projectQuality[data-tone='watch'] { --quality-accent:#d28a13; }.projectQuality[data-tone='risk'] { --quality-accent:#d34b4b; }.qualityGauge { display:grid; place-items:center; align-content:center; width:48px; height:48px; border-radius:50%; background:radial-gradient(circle at center,var(--canvas-panel) 58%,transparent 60%),conic-gradient(var(--quality-accent) calc(var(--quality-score) * 1%),color-mix(in srgb,var(--quality-accent) 14%,var(--canvas-panel)) 0); color:var(--canvas-ink); }.qualityGauge strong { font-size:13px; }.qualityGauge small { margin-top:-3px; color:var(--canvas-muted); font-size:5px; }.projectQuality > div:nth-child(2) { min-width:0; }.projectQuality > div:nth-child(2) > small { color:var(--quality-accent); font-size:6px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }.projectQuality > div:nth-child(2) > b { display:block; margin:1px 0; color:var(--canvas-ink); font-size:9px; }.projectQuality > div:nth-child(2) > p { display:-webkit-box; overflow:hidden; margin:0; color:var(--canvas-muted); font-size:6px; line-height:1.35; -webkit-box-orient:vertical; -webkit-line-clamp:2; }.projectQuality > span { display:grid; min-width:40px; justify-items:center; padding-left:7px; border-left:1px solid var(--canvas-line); }.projectQuality > span b { color:var(--canvas-ink); font-size:10px; }.projectQuality > span small { color:var(--canvas-muted); font-size:5px; white-space:nowrap; }
+.comparisonBody { display:grid; gap:8px; }.comparisonBody > small { color:var(--canvas-muted); font-size:8px; }
+.portfolioQuality { --quality-accent:#94a3b8; display:grid; grid-template-columns:1.4fr 1fr 1fr; overflow:hidden; border:1px solid color-mix(in srgb,var(--quality-accent) 35%,var(--canvas-line)); border-radius:var(--radius-md); background:color-mix(in srgb,var(--quality-accent) 6%,var(--canvas-panel)); }.portfolioQuality[data-tone='good'] { --quality-accent:#159669; }.portfolioQuality[data-tone='watch'] { --quality-accent:#d28a13; }.portfolioQuality[data-tone='risk'] { --quality-accent:#d34b4b; }.portfolioQuality > div { display:grid; gap:2px; padding:9px 11px; }.portfolioQuality > div + div { border-left:1px solid var(--canvas-line); }.portfolioQuality small { color:var(--quality-accent); font-size:6px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }.portfolioQuality strong { color:var(--canvas-ink); font-size:18px; line-height:1; }.portfolioQuality strong em { color:var(--canvas-muted); font-size:7px; font-style:normal; }.portfolioQuality span { color:var(--canvas-muted); font-size:6px; }
+.comparisonTable { display:grid; grid-template-columns:1.5fr repeat(4,1fr); border:1px solid #dce6e8; border-radius:var(--radius-md); overflow:hidden; }
+.comparisonTable > * { display:grid; align-content:center; gap:2px; padding:7px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); font-size:8px; }.comparisonTable > strong { position:relative; grid-template-columns:7px 1fr; }.comparisonTable > strong > i { grid-row:1/3; align-self:center; width:6px; height:6px; border-radius:50%; background:var(--canvas-muted); }.comparisonTable [data-tone='good'] { color:#137a52; }.comparisonTable > strong > i[data-tone='good'] { background:#159669; }.comparisonTable [data-tone='watch'] { color:#9a6408; }.comparisonTable > strong > i[data-tone='watch'] { background:#d28a13; }.comparisonTable [data-tone='risk'] { color:#b83a3a; }.comparisonTable > strong > i[data-tone='risk'] { background:#d34b4b; }.comparisonTable > * small { color:var(--canvas-muted); font-size:6px; font-weight:500; }
+.comparisonTable > b { color:var(--canvas-muted); background:#f2faf8; text-transform:uppercase; letter-spacing:.04em; }
+.comparisonTable strong { color:var(--canvas-ink); }.comparisonScore > i { display:block; width:100%; height:4px; overflow:hidden; border-radius:var(--radius-sm); background:var(--canvas-line); }.comparisonScore > i em { display:block; height:100%; border-radius:inherit; background:#17a391; }.diagnosticMatrix { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:7px; }.diagnosticMatrix > section { overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); }.diagnosticMatrix header { display:flex; justify-content:space-between; gap:6px; padding:6px 7px; background:color-mix(in srgb,#17a391 8%,var(--canvas-panel)); font-size:7px; }.diagnosticMatrix header span { color:#8a6a31; }.diagnosticMatrix section > div { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:5px; padding:5px 7px; border-top:1px solid var(--canvas-line); font-size:6px; }.diagnosticMatrix section > div > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.diagnosticMatrix section > div > small { color:var(--canvas-muted); }.diagnosticMatrix section > p,.qualityRecommendations > p { margin:0; padding:8px; color:var(--canvas-muted); font-size:7px; }.qualityRecommendations { overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); }.qualityRecommendations > header { display:flex; justify-content:space-between; padding:7px 9px; background:color-mix(in srgb,#d28a13 8%,var(--canvas-panel)); font-size:7px; }.qualityRecommendations > header span { color:#8d7b5d; }.qualityRecommendations article { display:grid; grid-template-columns:18px minmax(0,1fr) auto; gap:7px; align-items:start; padding:7px 9px; border-top:1px solid var(--canvas-line); }.qualityRecommendations article > i { display:grid; place-items:center; width:18px; height:18px; border-radius:var(--radius-sm); background:color-mix(in srgb,#d28a13 16%,var(--canvas-panel)); color:#9a6408; font-size:7px; font-style:normal; font-weight:800; }.qualityRecommendations article b { display:block; color:var(--canvas-ink); font-size:7px; }.qualityRecommendations article p { margin:2px 0 0; color:var(--canvas-muted); font-size:6px; line-height:1.35; }.qualityRecommendations article > span { display:grid; justify-items:end; color:var(--canvas-ink); font-size:6px; }.qualityRecommendations article > span small { color:var(--canvas-muted); font-size:5px; }
+
+.standupBody { display:grid; gap:9px; }.standupRoster { display:flex; flex-wrap:wrap; gap:7px; }.standupRoster > p { width:100%; }
+.standupRoster span { display:grid; grid-template-columns:24px 1fr; column-gap:6px; align-items:center; min-width:115px; padding:6px; border:1px solid #eadfce; border-radius:var(--radius-md); background:#fff; }
+.standupRoster i { grid-row:1/3; display:grid; place-items:center; width:24px; height:24px; border-radius:50%; background:#f5a94c; color:var(--text-on-accent); font-style:normal; font-weight:700; }.standupRoster b { font-size:9px; }.standupRoster small { color:#8a7c69; font-size:7px; }
+.standupSummary { padding:8px; border-left:3px solid #f5a94c; border-radius:var(--radius-sm); background:#fff6e8; }.standupSummary b { color:#a85e08; font-size:8px; }.standupSummary p { margin:3px 0 0; font-size:9px; }
+.drawingSurface { display:block; width:100%; min-height:120px; overflow:visible; }
+.drawingSurface text { fill:var(--canvas-muted); font:11px var(--font-sans); }
+
+/* ── ONE EXECUTABLE STEP ─────────────────────────────────────────────────────
+   The card body for a `flowStep`. Everything is a `--canvas-*` token, which is
+   what makes the same card legible on the light board and the dark one without a
+   second rule set restating it. */
+.flowStep { display:grid; align-content:start; gap:6px; min-width:0; }
+.flowStepFamily { font-size:8px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--canvas-accent); }
+.flowStepRunStatus { display:flex; align-items:center; gap:6px; min-height:7px; }
+.flowStepSummary { margin:0; overflow-wrap:anywhere; font-size:10px; line-height:1.45; color:var(--canvas-muted); }
+.flowStepChip { justify-self:start; padding:2px 7px; border-radius:999px; background:color-mix(in srgb, var(--canvas-accent) 14%, var(--canvas-panel)); color:var(--canvas-accent-ink); font-size:8px; font-weight:700; }
+.flowStepContract { display:grid; gap:4px; margin:0; }
+.flowStepContract > div { display:flex; gap:6px; min-width:0; }
+.flowStepContract dt { flex:none; font-size:8px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--canvas-muted); }
+.flowStepContract dd { margin:0; overflow-wrap:anywhere; font-size:9px; color:var(--canvas-ink); }
+
+/* The decision, drawn. One connection point per outlet, along the bottom, in the
+   order the executor evaluates them — see `FlowStepBody` for why the bottom and
+   why such a step draws no right-hand handle at all. `auto-fit` rather than a
+   fixed track count for the same reason `.workflowSteps` uses it:a switch has as
+   many cases as it has. */
+.flowStepOutlets { display:grid; grid-template-columns:repeat(auto-fit, minmax(74px, 1fr)); gap:6px; margin-top:2px; }
+.flowStepOutlet { position:relative; display:grid; gap:2px; padding:5px 6px 11px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted); }
+.flowStepOutlet b { overflow-wrap:anywhere; font-size:9px; color:var(--canvas-ink); }
+.flowStepOutlet small { overflow-wrap:anywhere; font-size:8px; color:var(--canvas-muted); }
+.flowStepOutlet[data-fallback="true"] { border-style:dashed; }
+.flowStepOutletHandle { position:absolute!important; left:50%!important; bottom:-5px!important; width:9px!important; height:9px!important; border:2px solid var(--canvas-panel)!important; background:var(--canvas-accent)!important; transform:translateX(-50%); }
+.nodeActionBar { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.nodeActionBar button { flex:1 1 auto; min-width:92px; padding:7px 9px; border:1px solid color-mix(in srgb, var(--canvas-accent) 55%, var(--canvas-line)); border-radius:var(--radius-sm); background:color-mix(in srgb, var(--canvas-accent) 10%, transparent); color:var(--canvas-accent); font:inherit; font-size:10px; font-weight:700; cursor:pointer; }
+.nodeActionBar button:hover { background:color-mix(in srgb, var(--canvas-accent) 18%, transparent); }
+.releaseBody p { margin:0; color:var(--canvas-muted); font-size:11px; line-height:1.5; }
+.workflowStep,
+.kpis div,
+.projectHealth div,
+.roadmap > div,
+.featureGrid span,
+.comparisonTable > *,
+.standupRoster span,
+.widgetSettings > span,
+.widgetContext > span,
+.projectOverview span,
+.projectFeedback,
+.pipelineStageHead,
+.pipelineLaneHead,
+.pipelineCard {
+  border-color:var(--canvas-line);
+  background:var(--canvas-panel);
+  color:var(--canvas-ink);
+}
+.pills span {
+  border-color:var(--canvas-line);
+  background:var(--canvas-panel-muted);
+  color:var(--canvas-ink);
+}
+.releaseBody p { color:var(--canvas-muted); }
+.widgetSettings small, .widgetContext small, .projectOverview small, .projectFeedback small { color:var(--canvas-muted); }
+.widgetSettings b, .widgetContext b, .projectOverview b { color:var(--canvas-ink); }
+.workflowStep small,
+.workflowStep code,
+.kpis small,
+.projectHealth small,
+.comparisonBody > small { color:var(--canvas-muted); }
+.personRow > span:last-child:not(.presence),
+.roadmap span,
+.comparisonTable > b,
+.comparisonBody p,
+.standupSummary { background:var(--canvas-panel-muted); color:var(--canvas-ink); }
+
+/* ── Tabular data cards ───────────────────────────────────────────────────────
+   Dataset, Table, and Spreadsheet objects render real imported rows, so the
+   grid scrolls inside the card instead of truncating to a four-row teaser.
+   Colours come from the canvas tokens above so both themes are covered. */
+.dataGridBody { display:grid; gap:6px; min-height:0; }
+.dataGridScroll { overflow:auto; max-height:320px; border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm); }
+.dataGridScroll .miniTable { border:0; border-radius:0; }
+.dataGridScroll .miniTable > b {
+  position:sticky; top:0; z-index:1;
+  background:var(--canvas-panel-muted,#f5f8fc); color:var(--canvas-ink,#0f1b2d);
+  font-weight:700; white-space:nowrap;
+}
+.dataGridScroll .miniTable > span {
+  overflow:hidden; color:var(--canvas-ink,#243247);
+  text-overflow:ellipsis; white-space:nowrap;
+}
+.dataGridScroll .miniTable > span[data-tone='success'] { background:var(--tone-success-bg); color:var(--tone-success-ink); }
+.dataGridScroll .miniTable > span[data-tone='warning'] { background:var(--tone-warning-bg); color:var(--tone-warning-ink); }
+.dataGridScroll .miniTable > span[data-tone='danger'] { background:var(--tone-danger-bg); color:var(--tone-danger-ink); }
+.dataGridScroll .miniTable > span[data-tone='info'] { background:var(--tone-info-bg); color:var(--tone-info-ink); }
+/* A failed formula, reported on the card. Canonical `--danger-*` tokens only — they
+   are declared in both themes, so this reads in light and dark without a second rule. */
+.dataGridFormulaErrors {
+  margin: 4px 0 0;
+  padding: 4px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+}
+/* A computed cell is read-only, and says so before someone tries to type in it. */
+.miniTable span[data-computed='true'] {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary, #1a1a1a);
+  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+}
+.dataGridTones { display:flex; flex-wrap:wrap; gap:5px; }
+.dataGridTones span {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:2px 7px; border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-full);
+  color:var(--canvas-muted,#63748c); font-size:8px;
+}
+.dataGridTones span b { color:var(--canvas-ink,#1c2b40); font-size:9px; }
+.dataGridTones span i { width:7px; height:7px; border-radius:50%; }
+.dataGridTones span[data-tone='success'] i { background:var(--tone-success-mark); }
+.dataGridTones span[data-tone='warning'] i { background:var(--tone-warning-mark); }
+.dataGridTones span[data-tone='danger'] i { background:var(--tone-danger-mark); }
+.dataGridTones span[data-tone='info'] i { background:var(--tone-info-mark); }
+.dataGridFooter { color:var(--canvas-muted,#63748c); font-size:8px; }
+
+/* ── File card ───────────────────────────────────────────────────────────────
+   An attached file shows what it actually contains. Tabular uploads become
+   Dataset objects instead, so this is the non-tabular preview. */
+.fileBody { display:grid; gap:7px; min-height:0; }
+.filePreview {
+  overflow:auto; max-height:220px; margin:0; padding:7px;
+  border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted,#f7f9fc); color:var(--canvas-ink,#243247);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:8px; line-height:1.5;
+  white-space:pre-wrap; overflow-wrap:anywhere;
+}
+.filePreviewImage { width:100%; max-height:220px; border-radius:var(--radius-sm); object-fit:contain; }
+.filePreviewEmpty { color:var(--canvas-muted,#63748c); font-size:9px; }
+
+/* ── Editable sheet ──────────────────────────────────────────────────────────
+   A Table or Spreadsheet object takes edits on the card. The cell button fills
+   its grid cell so the whole cell is the target, not just the text inside it. */
+.dataGridCellButton {
+  width:100%; min-height:15px; padding:0; border:0;
+  background:none; color:inherit; font:inherit; text-align:left; cursor:text;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.dataGridCellButton:focus-visible { outline:2px solid var(--canvas-accent-ink,#0b5f58); outline-offset:-2px; border-radius:var(--radius-sm); }
+.miniTable[data-editable='true'] > span:hover { background:var(--canvas-hover,#efeae1); }
+.dataGridEditor {
+  width:100%; min-width:0; box-sizing:border-box; padding:1px 3px;
+  border:1px solid var(--canvas-accent-ink,#0b5f58); border-radius:var(--radius-sm);
+  background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,var(--text-primary));
+  font:inherit;
+}
+.dataGridActions { display:flex; flex-wrap:wrap; gap:5px; }
+.dataGridActions button {
+  padding:3px 8px; border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-full);
+  background:var(--canvas-panel,#fff); color:var(--canvas-ink,var(--text-primary)); font-size:9px; cursor:pointer;
+}
+.dataGridActions button:hover,.dataGridActions button:focus-visible { background:var(--canvas-hover,#efeae1); outline:none; }
+
+/* ── Document, deck, and diagram cards ───────────────────────────────────────
+   A document object renders the DOCUMENT, a deck renders SLIDES, and a diagram
+   renders the drawing — the artifact itself, on the board, not a one-line
+   description of it. All three share the meta strip and the canvas palette, so
+   both themes and a phone-width board are covered by one definition. */
+.documentBody,.slidesBody,.diagramBody { display:grid; gap:6px; min-height:0; }
+.documentMeta { display:flex; flex-wrap:wrap; gap:5px; }
+.documentMeta span {
+  padding:2px 7px; border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-full);
+  background:var(--canvas-panel-muted,#faf8f4); color:var(--canvas-muted,var(--text-muted)); font-size:8px; white-space:nowrap;
+}
+.documentSheet {
+  overflow:auto; max-height:340px; padding:12px 14px;
+  border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm);
+  background:var(--canvas-widget-surface,#fff);
+  box-shadow:inset 0 1px 0 var(--canvas-panel-muted,#faf8f4);
+}
+
+/* ── A file that has landed but has not been read yet ────────────────────────
+   The card is the receipt for the drop. Reading a document is synchronous CPU
+   that can hold the thread for seconds, so this stands in for the artifact and
+   names the file it is waiting on. */
+.importPending { display:grid; gap:8px; align-content:start; }
+.importPending > div { display:grid; gap:2px; min-width:0; }
+.importPending b { color:var(--canvas-ink,var(--text-primary)); font-size:10px; }
+.importPending small { overflow:hidden; color:var(--canvas-muted,var(--text-muted)); font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.importSpinner {
+  width:15px; height:15px; border-radius:50%;
+  border:2px solid var(--canvas-line,#e3ddd3); border-top-color:var(--canvas-accent-ink,#0b5f58);
+  animation:importSpin .8s linear infinite;
+}
+@keyframes importSpin { to { transform:rotate(360deg); } }
+.importSkeleton { display:grid; gap:5px; }
+.importSkeleton i {
+  height:6px; border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted,#faf8f4);
+  animation:importPulse 1.4s ease-in-out infinite;
+}
+.importSkeleton i:nth-child(2) { width:88%; animation-delay:.16s; }
+.importSkeleton i:nth-child(3) { width:64%; animation-delay:.32s; }
+@keyframes importPulse { 0%,100% { opacity:.55; } 50% { opacity:1; } }
+/* A spinner that never stops is a problem for vestibular sensitivity, and a
+   pulse that never stops is noise. Both hold still when the viewer asks. */
+@media (prefers-reduced-motion:reduce) {
+  .importSpinner { animation:none; border-top-color:var(--canvas-accent-ink,#0b5f58); }
+  .importSkeleton i { animation:none; opacity:.7; }
+}
+
+/* ── Working on the document, on the card ────────────────────────────────────
+   Edit it here, take it away from here. Everything below draws from the canvas
+   palette, so both themes and a phone-width board come from one definition. */
+/* One action row, worn by the document card's Edit toggle AND by the shared
+   export row every artifact card carries — so a deck, a sheet and a diagram all
+   present their downloads the same way a document does. */
+.cardActions { display:flex; flex-wrap:wrap; gap:4px; }
+.cardActions button {
+  display:inline-flex; align-items:center; gap:4px;
+  min-height:22px; padding:3px 9px;
+  border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm);
+  background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,var(--text-primary));
+  font:650 8px inherit; font-family:inherit; line-height:1.2; white-space:nowrap; cursor:pointer;
+}
+.cardActions button:hover,.cardActions button:focus-visible { background:var(--canvas-hover,#efeae1); outline:none; }
+.cardActions button[data-active='true'] {
+  border-color:var(--canvas-accent-ink,#0b5f58); background:var(--canvas-hover,#efeae1); color:var(--canvas-accent-ink,#0b5f58);
+}
+
+/* One page of a document, turned rather than scrolled. A file imported from
+   Word or PDF keeps the breaks its author declared, so the page on the card is
+   the page in the source file. */
+.documentPage { position:relative; min-height:0; }
+.documentPage[data-paginated='true'] { padding-bottom:14px; }
+.documentPageNumber {
+  position:absolute; right:0; bottom:0;
+  color:var(--canvas-muted,var(--text-muted)); font-size:8px; font-variant-numeric:tabular-nums;
+}
+.documentPager { display:flex; align-items:center; justify-content:center; gap:6px; }
+.documentPager span {
+  min-width:74px; color:var(--canvas-muted,var(--text-muted));
+  font-size:8px; font-variant-numeric:tabular-nums; text-align:center;
+}
+.documentPager button {
+  display:grid; place-items:center; min-width:22px; min-height:22px; padding:0 6px;
+  border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm);
+  background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,var(--text-primary));
+  font-size:12px; line-height:1; cursor:pointer;
+}
+.documentPager button:hover:not(:disabled),
+.documentPager button:focus-visible { background:var(--canvas-hover,#efeae1); outline:none; }
+.documentPager button:disabled { opacity:.4; cursor:default; }
+
+/* Workbook tabs. An imported .xlsx carries every sheet on one object, so moving
+   between them is a tab, not a second import of the same file. */
+.sheetTabs { display:flex; flex-wrap:wrap; gap:3px; }
+.sheetTabs button {
+  max-width:120px; padding:2px 8px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-full);
+  background:var(--canvas-panel-muted,#faf8f4); color:var(--canvas-muted,var(--text-muted));
+  font-size:8px; cursor:pointer;
+}
+.sheetTabs button[aria-selected='true'] {
+  border-color:var(--canvas-accent-ink,#0b5f58);
+  background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,var(--text-primary)); font-weight:700;
+}
+.sheetTabs button:hover:not(:disabled),
+.sheetTabs button:focus-visible { background:var(--canvas-hover,#efeae1); outline:none; }
+.sheetTabs button:disabled { cursor:default; opacity:.6; }
+
+.slideDeck {
+  display:grid; gap:8px; grid-template-columns:repeat(auto-fill,minmax(126px,1fr));
+  overflow:auto; max-height:340px; padding:4px;
+}
+.slideThumb {
+  position:relative; display:grid; gap:3px; align-content:start;
+  min-height:74px; padding:9px 9px 9px 10px;
+  border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm);
+  background:var(--canvas-widget-surface,#fff); box-shadow:0 1px 3px var(--canvas-shadow,rgba(24,43,74,.12));
+  aspect-ratio:16/9;
+}
+.slideThumb b { color:var(--canvas-ink,var(--text-primary)); font-size:9px; line-height:1.25; overflow-wrap:anywhere; }
+.slideThumb ul { margin:0; padding-left:11px; color:var(--canvas-muted,var(--text-muted)); font-size:7px; line-height:1.4; }
+.slideThumb li { margin:1px 0; overflow:hidden; text-overflow:ellipsis; }
+.slideNumber {
+  position:absolute; top:5px; right:6px;
+  color:var(--canvas-muted,var(--text-muted)); font-size:7px; font-variant-numeric:tabular-nums;
+}
+
+.diagramSurface {
+  display:grid; place-items:center; overflow:auto; max-height:360px; padding:8px;
+  border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm);
+  background:var(--canvas-widget-surface,#fff);
+}
+.diagramCanvas { width:100%; max-height:340px; font-family:var(--font-sans); }
+
+@media (max-width:767px) {
+  .documentSheet,.slideDeck,.diagramSurface { max-height:220px; }
+  .slideDeck { grid-template-columns:repeat(auto-fill,minmax(108px,1fr)); }
+}
+
+:global(html:not([data-theme='light'])) .dataGridScroll .miniTable > span[data-tone='success'] { background:rgba(45,212,160,.16); color:#7ceac4; }
+:global(html:not([data-theme='light'])) .dataGridScroll .miniTable > span[data-tone='warning'] { background:rgba(245,183,49,.16); color:#f6cd75; }
+:global(html:not([data-theme='light'])) .dataGridScroll .miniTable > span[data-tone='danger'] { background:rgba(255,107,124,.16); color:#ff9aa7; }
+:global(html:not([data-theme='light'])) .dataGridScroll .miniTable > span[data-tone='info'] { background:rgba(107,155,255,.16); color:#a6c4ff; }
+:global(html:not([data-theme='light'])) .dataGridTones span[data-tone='success'] i { background:#2dd4a0; }
+:global(html:not([data-theme='light'])) .dataGridTones span[data-tone='warning'] i { background:#f5b731; }
+:global(html:not([data-theme='light'])) .dataGridTones span[data-tone='danger'] i { background:#ff6b7c; }
+:global(html:not([data-theme='light'])) .dataGridTones span[data-tone='info'] i { background:#6b9bff; }
+
+@media (max-width:767px) {
+  .dataGridScroll { max-height:220px; }
+  .filePreview { max-height:160px; }
+}
+
+/* ── The sales pipeline, as a kanban with swimlanes ─────────────────────────
+   Stages across (columns), segments down (lanes), a deal at the intersection.
+   The grid is declared once with `--pipeline-stages` so a pipeline with five
+   stages and one with ten lay out from the same rule rather than from two.
+   The whole board scrolls horizontally inside its own card — the node never
+   grows to fit ten stages, because a card wider than the viewport is a card
+   nobody can place. */
+.pipelineBoard {
+  display:grid;
+  gap:6px;
+  max-height:340px;
+  overflow:auto;
+  overscroll-behavior:contain;
+  padding-bottom:2px;
+}
+.pipelineHead,
+.pipelineLane {
+  display:grid;
+  grid-template-columns:132px repeat(var(--pipeline-stages, 7), minmax(120px, 1fr));
+  gap:6px;
+  align-items:stretch;
+}
+.pipelineStageHead {
+  display:grid; gap:2px; align-content:center;
+  padding:6px 7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:#f3f7ff;
+}
+.pipelineStageHead b { color:var(--canvas-accent); font-size:8px; text-transform:uppercase; letter-spacing:.05em; }
+.pipelineStageHead small { color:var(--canvas-muted); font-size:8px; }
+.pipelineLaneHead {
+  display:grid; gap:3px; align-content:start;
+  padding:7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:#fbfdff;
+}
+.pipelineLaneHead b { font-size:9px; color:var(--canvas-ink); }
+.pipelineLaneHead small { color:var(--canvas-muted); font-size:7px; line-height:1.35; }
+.pipelineCell {
+  display:grid; gap:4px; align-content:start;
+  min-height:44px; padding:4px;
+  border:1px dashed var(--canvas-line); border-radius:var(--radius-sm);
+}
+.pipelineCell > small { color:var(--canvas-muted); font-size:7px; }
+.pipelineCard {
+  display:grid; gap:3px;
+  padding:6px; border:1px solid var(--canvas-line); border-left:2px solid var(--canvas-accent);
+  border-radius:var(--radius-sm); background:#fff;
+}
+.pipelineCard b { font-size:8px; line-height:1.3; color:var(--canvas-ink); }
+.pipelineCard p { margin:0; font-size:7px; line-height:1.35; color:var(--canvas-muted); }
+.pipelineCard em { font-size:8px; font-style:normal; font-weight:700; color:var(--canvas-accent); }
+
+/* A deal you can actually drag (FO-F1's own title, finally true). Only a card with a
+   `dealId` gets the affordance — a hand-authored card has no row behind it to move,
+   and a grab cursor over one would promise a write that cannot happen. */
+.pipelineCard[data-draggable="true"] { cursor:grab; }
+.pipelineCard[data-draggable="true"]:active { cursor:grabbing; }
+.pipelineCard[data-dragging="true"] { opacity:.45; border-left-color:var(--canvas-muted); }
+/* The column under the pointer. Solid rather than dashed so the target reads as a
+   place the card will land, not as one more empty cell. */
+.pipelineCell[data-drop="true"] {
+  border-style:solid; border-color:var(--canvas-accent); background:#eef4ff;
+}
+
+/* The one line a pipeline is actually read for: weighted open value. Wraps rather than
+   truncates, because on a narrow board the unpriced count is the part that matters most
+   and dropping it off the end would hide the reason the number is low. */
+.pipelineTotals {
+  margin:0; display:flex; flex-wrap:wrap; gap:2px 12px;
+  padding:5px 7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:#f3f7ff; font-size:8px; color:var(--canvas-muted);
+}
+.pipelineTotals span:first-child { color:var(--canvas-accent); font-weight:700; }
+
+/* A masked cell reads as data that is deliberately withheld, not as missing data:
+   the same ink at reduced emphasis, in the mono face the mask characters belong to. */
+.dataGridScroll .miniTable > span[data-masked='true'] {
+  color:var(--canvas-muted); font-family:var(--font-mono); letter-spacing:.02em;
+}
+.drawingTexts{display:grid;gap:4px;margin-top:6px}
+.drawingTexts input{width:100%;padding:5px 8px;min-height:30px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-primary);font-size:12px}
+
+/* --- The clocks ----------------------------------------------------------
+   `timer` counts a timebox down and `stopwatch` counts up; ONE body draws both
+   (`CanvasClockBody`), because they are the same machine read from opposite
+   ends. The number is the card, so it is the only large thing on it, and it is
+   tabular so the seconds digit does not shuffle the layout every second.
+
+   Every colour is a canvas token: this is read in both themes, on whatever
+   machine is plugged into the room's projector. */
+.clockBody { display:grid; gap:6px; justify-items:center; padding:6px 0 2px; }
+.clockValue {
+  font-size:34px; font-variant-numeric:tabular-nums; letter-spacing:.02em;
+  color:var(--canvas-ink); line-height:1.05;
+}
+.clockCaption { color:var(--canvas-muted); font-size:10px; text-align:center; }
+/* A timebox that has run out. The colour is a signal and the caption says
+   "finished" beside it, so it is never colour alone. */
+.clockBody[data-expired='true'] .clockValue { color:var(--tone-danger-ink); }
+.clockActions { display:flex; gap:6px; margin-top:2px; }
+.clockActions button {
+  min-height:28px; padding:0 12px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel, #fff); color:var(--canvas-ink); font:inherit; font-size:11px; cursor:pointer;
+}
+.clockActions button:hover:not(:disabled) { border-color:var(--canvas-accent); }
+.clockActions button:disabled { opacity:.45; cursor:not-allowed; }
+
+/* --- The transclusion ----------------------------------------------------
+   Another document, shown here, live. It scrolls inside its own box rather than
+   growing the card: a transcluded SOP is somebody else's length, and letting it
+   set this card's height would let one reference push a board off the screen. */
+.transclusionBody { display:grid; gap:6px; max-height:260px; overflow:auto; }
+.transclusionBody > strong { color:var(--canvas-ink); font-size:12px; }
+.transclusionNotice { margin:0; color:var(--canvas-muted); font-size:11px; line-height:1.5; }
+.transclusionLink { color:var(--canvas-accent); font-size:11px; text-decoration:underline; }

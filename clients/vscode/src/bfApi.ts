@@ -336,7 +336,7 @@ export async function getCurrentWorkspace(
   try {
     name = (await listWorkspaces(secrets)).find((w) => w.id === id)?.name;
   } catch {
-    /* /api/vscode/tenants not deployed — fall back below */
+    /* workspace list unavailable — fall back below */
   }
   if (!name) {
     try {
@@ -628,11 +628,12 @@ export interface BfWorkspace {
 }
 
 /**
- * The user's workspaces (GET /api/vscode/tenants). Throws if the endpoint isn't
- * deployed (404) — the caller falls back to the web onboarding deep-link.
+ * The user's workspaces (GET /api/tenants — person-level, accepts this editor's
+ * workspace token). Throws on failure — the caller falls back to the web
+ * onboarding deep-link.
  */
 export async function listWorkspaces(secrets: vscode.SecretStorage): Promise<BfWorkspace[]> {
-  const r = await authed<{ tenants: BfWorkspace[] }>(secrets, "/api/vscode/tenants");
+  const r = await authed<{ tenants: BfWorkspace[] }>(secrets, "/api/tenants");
   return r?.tenants ?? [];
 }
 
@@ -641,7 +642,7 @@ export async function createWorkspace(
   secrets: vscode.SecretStorage,
   name: string,
 ): Promise<BfWorkspace> {
-  const t = await authed<BfWorkspace>(secrets, "/api/vscode/tenants", {
+  const t = await authed<BfWorkspace>(secrets, "/api/tenants", {
     method: "POST",
     body: JSON.stringify({ name }),
   });

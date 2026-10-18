@@ -67,6 +67,9 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { accountHistoryCacheKey, documentLineTotal, setDocumentLines, type BilledLine } from './payables';
 import { chargeableMerchantId } from './merchantAccount';
 
+/** The `purchaseKind` a tenant-invoice payment link stamps; the purchase registry settles it by this name. */
+export const TENANT_INVOICE_KIND = 'tenant_invoice';
+
 export class ReceivableError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -482,7 +485,7 @@ async function mintPaymentLink(
     successUrl: `${input.documentUrl}&paid={CHECKOUT_SESSION_ID}`,
     cancelUrl: `${input.documentUrl}&paid=cancelled`,
     metadata: {
-      purchaseKind: 'tenant_invoice',
+      purchaseKind: TENANT_INVOICE_KIND,
       invoiceRef: input.reference,
       invoiceTenantId: String(tenantId),
     },
@@ -697,7 +700,7 @@ export async function settleInvoiceCheckout(
 ): Promise<RecordPaymentResult> {
   const verified = await verifyPaidCheckout(env, {
     checkoutSessionId: input.checkoutSessionId,
-    purchaseKind: 'tenant_invoice',
+    purchaseKind: TENANT_INVOICE_KIND,
     owner: { invoiceRef: input.invoiceRef, invoiceTenantId: input.tenantId },
     messages: {
       notConfigured: 'Card payments are not configured on this deployment.',

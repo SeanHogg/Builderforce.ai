@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
 import { DOCUMENT_REMARK_PLUGINS, MARKDOWN_REHYPE_PLUGINS } from '@/lib/markdownPipeline';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/bodies.module.css';
+import documentsStyles from '../styles/documents.module.css';
 import { authoredMarkdown, canvasDocument } from '@/lib/canvasDocuments';
 import { DocumentEditor } from '../DocumentEditor';
 import type { CreationBodyProps } from './types';
@@ -71,7 +72,7 @@ export function DocumentBody({ data }: CreationBodyProps) {
     {actions}
     <div className={`${styles.documentSheet} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
       <div className={styles.documentPage} data-paginated={paginated ? 'true' : undefined}>
-        <div className={styles.documentMarkdown}><ReactMarkdown remarkPlugins={DOCUMENT_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{pages[page] ?? document.markdown}</ReactMarkdown></div>
+        <div className={documentsStyles.documentMarkdown}><ReactMarkdown remarkPlugins={DOCUMENT_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{pages[page] ?? document.markdown}</ReactMarkdown></div>
         {paginated && <span className={styles.documentPageNumber} aria-hidden>{page + 1}</span>}
       </div>
     </div>

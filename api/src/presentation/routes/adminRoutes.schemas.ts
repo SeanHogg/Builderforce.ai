@@ -133,8 +133,9 @@ export const CronForceRunBody = z.object({
 
 // ── Impersonation / personas / governance ────────────────────────────────────
 
-export const ImpersonateBody = z.object({ userId: text, tenantId: z.number().nullish() });
-
+/** Both start doors — `/impersonation/start` and the deprecated `/impersonate`, whose
+ *  older callers send only `userId` + `tenantId` (the use case refuses a blank reason;
+ *  the legacy adapter supplies one). */
 export const ImpersonationStartBody = z.object({
   userId: text,
   tenantId: z.number().nullish(),
@@ -214,10 +215,7 @@ export const UserPermissionOverridesBody = z.object({
 
 export const MemberRoleBody = z.object({ role: z.string() });
 
-// ── Tenant API keys / feedback / publishers ──────────────────────────────────
-
-/** `normalizeOrigins` shapes the list; `null` = server-only key. */
-export const AdminTenantApiKeyBody = z.object({ name: text, allowedOrigins: z.array(z.string()).nullish() });
+// ── Feedback / publishers ──────────────────────────────────────────────────
 
 export const FeedbackReviewBody = z.object({ decision: text, tenantId: z.number().nullish() });
 

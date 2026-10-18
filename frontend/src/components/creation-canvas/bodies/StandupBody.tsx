@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/bodies.module.css';
 import { resourceIdOfType } from '@builderforce/creation-canvas-contract';
 import { CeremonyOutcome } from '@/components/ceremony/CeremonyOutcome';
 import type { CreationBodyProps } from './types';

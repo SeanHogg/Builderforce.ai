@@ -1,0 +1,73 @@
+/* The 3D world properties, prop palette and scene bodies.
+   Split out of CreationCanvas.module.css, which keeps the board shell and the
+   canvas palette (`--canvas-*`, light and dark) that every rule here reads. */
+
+.sceneGeneratorControls,.sceneGeneratorPreview { display:flex; flex-direction:column; gap:12px; flex:1; min-width:0; }
+.sceneGeneratorField { display:flex; flex-direction:column; gap:6px; color:var(--canvas-ink); font-size:12px; }
+.sceneGeneratorField > span { color:var(--canvas-muted); font:650 10px var(--font-sans); letter-spacing:.04em; text-transform:uppercase; }
+.sceneGeneratorPrompt,.sceneGeneratorNumber {
+  background:var(--canvas-panel); color:var(--canvas-ink); border:1px solid var(--canvas-line);
+  border-radius:var(--radius-sm); padding:8px 10px; font:400 13px var(--font-sans); resize:vertical;
+}
+.sceneGeneratorPrompt:focus,.sceneGeneratorNumber:focus { border-color:var(--bf-accent); outline:none; }
+.sceneGeneratorRow { display:flex; gap:12px; }
+.sceneGeneratorRow .sceneGeneratorField { flex:1; }
+.worldPalette { flex:none; width:168px; overflow-y:auto; border-right:1px solid var(--canvas-line); background:var(--canvas-panel); }
+.worldPaletteHint { margin:0; padding:10px 10px 6px; color:var(--canvas-muted); font-size:10px; }
+.worldPaletteGroup { padding:0 8px 10px; }
+.worldPaletteGroupTitle { margin:0 0 6px; padding:0 2px; color:var(--canvas-muted); font:650 9px var(--font-sans); letter-spacing:.08em; text-transform:uppercase; }
+.worldPaletteTiles { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.worldPaletteTile {
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  aspect-ratio:1; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); font-size:9px; font-weight:600;
+  cursor:grab; user-select:none;
+}
+.worldPaletteTile:active { cursor:grabbing; }
+.worldPaletteTile span:first-child { font-size:16px; line-height:1; }
+.worldViewport { position:relative; min-width:0; flex:1; background:var(--canvas-board-background); }
+.worldViewport canvas { display:block; width:100%; height:100%; }
+.worldBanner,.worldBannerTop {
+  position:absolute; left:0; right:0; z-index:1; display:flex; align-items:center; justify-content:center;
+  padding:8px 12px; color:var(--text-on-accent); font-size:11px; font-weight:600; text-align:center; pointer-events:none;
+}
+.worldBanner { bottom:0; background:linear-gradient(to top,var(--canvas-shadow),transparent); }
+.worldBannerTop { top:0; background:linear-gradient(to bottom,var(--canvas-shadow),transparent); }
+.worldRespawnAction,.worldCameraAction {
+  position:absolute; z-index:2; bottom:10px; min-height:30px; padding:6px 12px;
+  border:0; border-radius:var(--radius-full); background:var(--canvas-accent);
+  color:var(--text-on-accent); font:650 11px var(--font-sans); cursor:pointer;
+}
+.worldRespawnAction { left:10px; }
+.worldCameraAction { right:10px; }
+/* The scoreboard. Top-centre because in first-person the player is looking at the
+   middle of the screen, and a number in a corner is a number nobody reads. */
+.worldScore {
+  position:absolute; z-index:2; top:34px; left:50%; transform:translateX(-50%);
+  display:flex; align-items:center; gap:8px; padding:5px 12px;
+  border-radius:var(--radius-full); background:var(--canvas-shadow); color:var(--text-on-accent);
+  font:650 12px var(--font-sans); pointer-events:none; white-space:nowrap;
+}
+.worldScore strong { color:var(--text-on-accent); }
+.worldRespawnAction:hover,.worldCameraAction:hover,.worldRespawnAction:focus-visible,.worldCameraAction:focus-visible { filter:brightness(1.08); outline:none; }
+.worldProperties { flex:none; width:220px; overflow-y:auto; border-left:1px solid var(--canvas-line); background:var(--canvas-panel); padding:4px 0; }
+.worldPropertiesSection { padding:8px 10px; border-bottom:1px solid var(--canvas-line); }
+.worldPropertiesSection h4 { margin:0 0 6px; color:var(--canvas-muted); font:650 9px var(--font-sans); letter-spacing:.08em; text-transform:uppercase; }
+.worldFieldRow { display:flex; align-items:center; gap:6px; margin-bottom:6px; color:var(--canvas-ink); font-size:11px; }
+.worldFieldRow span:first-child { flex:none; width:64px; color:var(--canvas-muted); }
+.worldFieldRow code { color:var(--canvas-muted); font-size:10px; }
+.worldColorInput { width:34px; height:22px; padding:0; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); cursor:pointer; }
+.worldNumberInput { width:70px; padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
+.worldSelect { flex:1; padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
+.worldSelect option { background:var(--canvas-panel); color:var(--canvas-ink); }
+/* A texture URL is long and a rail is narrow: it takes the row's spare width and
+   its own minimum stays small enough that the label never gets pushed out. */
+.worldTextInput { flex:1; min-width:0; padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
+.worldTextInput::placeholder { color:var(--canvas-ink-dim, var(--canvas-ink)); opacity:.55; }
+.worldDeleteAction { width:100%; padding:6px 10px; border:1px solid var(--danger-border); border-radius:var(--radius-sm); background:transparent; color:var(--danger-text); font:650 11px var(--font-sans); cursor:pointer; }
+.worldDeleteAction:hover,.worldDeleteAction:focus-visible { background:var(--danger-bg); outline:none; }
+.worldVec3Label { margin-bottom:3px; color:var(--canvas-muted); font-size:10px; }
+.worldVec3Row { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
+.worldVec3Axis { display:flex; align-items:center; gap:3px; }
+.worldVec3Axis span { flex:none; width:9px; color:var(--canvas-muted); font-size:10px; }
+.worldVec3Axis input { width:100%; min-width:0; padding:3px 4px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:10px; }

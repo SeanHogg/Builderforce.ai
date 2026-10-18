@@ -13,9 +13,11 @@
  * route seeds the register on first write so the table stays authoritative.
  */
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { finopsSocControls } from '../../infrastructure/database/schema';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import type { Env } from '../../env';
 
 export type SocControlStatus = 'implemented' | 'partial' | 'gap';
 
@@ -58,7 +60,8 @@ export interface ControlCoverage {
   controls: SocControl[];
 }
 
-function normalizeStatus(s: string | null | undefined): SocControlStatus {
+/** Normalize a stored or asserted control status, defaulting to 'gap'. */
+export function normalizeSocStatus(s: unknown): SocControlStatus {
   return s === 'implemented' || s === 'partial' || s === 'gap' ? s : 'gap';
 }
 
@@ -121,11 +124,85 @@ export async function computeControlCoverage(db: Db, tenantId: number): Promise<
       controlRef: r.controlRef,
       objective: r.objective,
       category: r.category,
-      status: normalizeStatus(r.status),
+      status: normalizeSocStatus(r.status),
       owner: r.owner ?? null,
       note: r.note ?? '',
       lastReviewed: r.lastReviewed ? new Date(r.lastReviewed).toISOString() : null,
     }))
     .sort((a, b) => a.controlRef.localeCompare(b.controlRef));
   return summarizeCoverage(controls, false);
+}
+
+// ── The ONE cached reader + its writes ───────────────────────────────────────
+// `GET /api/finops/soc/controls` and its alias `/soc/coverage` both read through here,
+// so there is one cache key and every write below invalidates exactly that key.
+
+const SOC_COVERAGE_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
+
+function socCoverageCacheKey(tenantId: number): string {
+  return `finops:soc:t:${tenantId}`;
+}
+
+/** Coverage for a tenant through the read-through cache. */
+export function readControlCoverage(env: Env, db: Db, tenantId: number): Promise<ControlCoverage> {
+  return getOrSetCached(env, socCoverageCacheKey(tenantId), () => computeControlCoverage(db, tenantId), SOC_COVERAGE_TTL);
+}
+
+export interface NewSocControl {
+  controlRef: string;
+  objective: string;
+  category: string;
+  status: SocControlStatus;
+  owner: string | null;
+  note: string;
+}
+
+/**
+ * Add a control. On the first write for a tenant that still shows seeded defaults,
+ * persist the default register first so the table becomes authoritative. `control`
+ * null only materialises the defaults. Returns fresh (uncached) coverage.
+ */
+export async function addSocControl(env: Env, db: Db, tenantId: number, control: NewSocControl | null): Promise<ControlCoverage> {
+  const existing = await db
+    .select({ id: finopsSocControls.id })
+    .from(finopsSocControls)
+    .where(eq(finopsSocControls.tenantId, tenantId))
+    .limit(1);
+  if (existing.length === 0) {
+    await db.insert(finopsSocControls).values(
+      DEFAULT_SOC_CONTROLS.map((d) => ({
+        tenantId,
+        controlRef: d.controlRef,
+        objective: d.objective,
+        category: d.category,
+        status: 'gap' as const,
+      })),
+    ).onConflictDoNothing();
+  }
+  if (control) {
+    await db.insert(finopsSocControls).values({ tenantId, ...control }).onConflictDoNothing();
+  }
+  await invalidateCached(env, socCoverageCacheKey(tenantId));
+  return computeControlCoverage(db, tenantId);
+}
+
+export interface SocControlPatch {
+  status?: SocControlStatus;
+  owner?: string;
+  note?: string;
+  objective?: string;
+  category?: string;
+  lastReviewed?: Date;
+}
+
+/** Update one control's assertion. Null when the control is not this tenant's. */
+export async function updateSocControl(env: Env, db: Db, tenantId: number, id: number, patch: SocControlPatch): Promise<ControlCoverage | null> {
+  const updated = await db
+    .update(finopsSocControls)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(and(eq(finopsSocControls.id, id), eq(finopsSocControls.tenantId, tenantId)))
+    .returning({ id: finopsSocControls.id });
+  if (updated.length === 0) return null;
+  await invalidateCached(env, socCoverageCacheKey(tenantId));
+  return computeControlCoverage(db, tenantId);
 }

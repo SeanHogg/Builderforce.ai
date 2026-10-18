@@ -2,7 +2,7 @@ import type { CreationFlowNode } from '../CreationNode';
 import type { CreationNodeData } from '../types';
 import { useTranslations } from 'next-intl';
 import { formatPitchDuration, PITCH_COMPETITIONS, PITCH_MAX_SCORE, pitchApplicationAnswers, pitchApplicationReadiness, pitchBeats, pitchCompetitionFor, pitchCriteria, pitchEligibility, type PitchLabelled, pitchQaCoverage, pitchQaItems, pitchReadiness, pitchRuntimeSeconds, pitchSpokenSeconds, pitchTimingTone } from '@/lib/pitchCompetition';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/inspector.module.css';
 
 /**
  * Pitch inspector — one panel for all four pitch objects.

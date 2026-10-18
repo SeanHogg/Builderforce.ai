@@ -14,6 +14,13 @@ export const peopleVersionKey = (tenantId: number): string => `insights-people-v
 export const aiProgramVersionKey = (tenantId: number): string => `insights-ai-program-version:tenant:${tenantId}`;
 export const rdFinancialsVersionKey = (tenantId: number): string => `insights-rd-financials-version:tenant:${tenantId}`;
 export const incidentVersionKey = (tenantId: number): string => `incidents-version:tenant:${tenantId}`;
+/**
+ * `prod_incidents` is read under TWO tokens: the incident-management surface
+ * (`/api/incidents`, incidentVersionKey) and the board Quality slide / MTTR lens
+ * (qualityVersionKey). Every writer of that table bumps BOTH, through this list,
+ * so a write on one surface can never leave the other serving a stale cache.
+ */
+export const prodIncidentVersionKeys = (tenantId: number): string[] => [incidentVersionKey(tenantId), qualityVersionKey(tenantId)];
 export const knowledgeVersionKey = (tenantId: number): string => `knowledge:${tenantId}`;
 export const monitoringVersionKey = (tenantId: number): string => `monitoring-version:tenant:${tenantId}`;
 

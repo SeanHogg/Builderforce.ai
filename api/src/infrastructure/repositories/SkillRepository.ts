@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm';
+import { scopedToTenant } from '../database/tenantScope';
 import { ISkillRepository } from '../../domain/skill/ISkillRepository';
 import { Skill, SkillProps } from '../../domain/skill/Skill';
-import { SkillId, AgentId, asSkillId, asAgentId } from '../../domain/shared/types';
-import { skills as skillsTable } from '../database/schema';
+import { SkillId, AgentId, TenantId, asSkillId, asAgentId } from '../../domain/shared/types';
+import { agents as agentsTable, skills as skillsTable } from '../database/schema';
 import type { Db } from '../database/connection';
 
 export class SkillRepository implements ISkillRepository {
@@ -22,9 +23,14 @@ export class SkillRepository implements ISkillRepository {
     return rows.map(toDomain);
   }
 
-  async findAll(): Promise<Skill[]> {
-    const rows = await this.db.select().from(skillsTable);
-    return rows.map(toDomain);
+  async findAllByTenant(tenantId: TenantId): Promise<Skill[]> {
+    // `skills` has no tenant column; ownership is the agent's.
+    const rows = await this.db
+      .select({ skill: skillsTable })
+      .from(skillsTable)
+      .innerJoin(agentsTable, eq(skillsTable.agentId, agentsTable.id))
+      .where(scopedToTenant(agentsTable, tenantId));
+    return rows.map((r) => toDomain(r.skill));
   }
 
   async save(skill: Skill): Promise<Skill> {

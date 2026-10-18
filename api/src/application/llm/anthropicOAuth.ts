@@ -17,21 +17,33 @@
  */
 import { createPkcePair } from '../../infrastructure/crypto/pkce';
 import { randomBase64Url } from '../../domain/shared/bytes';
-import { throwTokenExchangeFailure } from './subscriptionOAuthCode';
+import {
+  exchangeSubscriptionCode,
+  refreshSubscriptionToken,
+  subscriptionAuthorizeUrl,
+  type SubscriptionOAuthClient,
+} from './subscriptionOAuthCode';
 
-// The public Claude Code OAuth client id (base64 of the uuid, matching
-// agent-runtime's encoding so the two never drift on a copy-paste).
-const ANTHROPIC_CLIENT_ID = atob('OWQxYzI1MGEtZTYxYi00NGQ5LTg4ZWQtNTk0NGQxOTYyZjVl');
-/** Where the user authorizes — Claude.ai's OAuth consent page. */
-const ANTHROPIC_AUTHORIZE_URL = 'https://claude.ai/oauth/authorize';
-/** Token mint + refresh endpoint (authorization_code and refresh_token grants). */
-const ANTHROPIC_TOKEN_URL = 'https://console.anthropic.com/v1/oauth/token';
-/** Console "manual code" redirect — the only redirect the public client allows;
- *  the consent page renders the resulting `code#state` for the user to copy. */
-const ANTHROPIC_REDIRECT_URI = 'https://console.anthropic.com/oauth/code/callback';
-/** Scopes Claude Code requests. `user:inference` is the one that lets the token
- *  drive Messages calls under the subscription. */
-const ANTHROPIC_SCOPES = 'org:create_api_key user:profile user:inference';
+/** The Claude Code public client, as a descriptor for the shared subscription flow. */
+const ANTHROPIC_OAUTH_CLIENT: SubscriptionOAuthClient = {
+  label: 'Anthropic',
+  // The public Claude Code OAuth client id (base64 of the uuid, matching
+  // agent-runtime's encoding so the two never drift on a copy-paste).
+  clientId: atob('OWQxYzI1MGEtZTYxYi00NGQ5LTg4ZWQtNTk0NGQxOTYyZjVl'),
+  /** Where the user authorizes — Claude.ai's OAuth consent page. */
+  authUrl: 'https://claude.ai/oauth/authorize',
+  /** Token mint + refresh endpoint (authorization_code and refresh_token grants). */
+  tokenUrl: 'https://console.anthropic.com/v1/oauth/token',
+  /** Console "manual code" redirect — the only redirect the public client allows;
+   *  the consent page renders the resulting `code#state` for the user to copy. */
+  redirectUri: 'https://console.anthropic.com/oauth/code/callback',
+  /** `user:inference` is the scope that lets the token drive Messages calls. */
+  scopes: ['org:create_api_key', 'user:profile', 'user:inference'],
+  // `code=true` makes the consent page render the manual code for copy/paste.
+  extraAuthParams: { code: 'true' },
+  // The console token endpoint takes JSON, not RFC 6749 form encoding.
+  tokenBodyEncoding: 'json',
+};
 
 /** Beta header REQUIRED on every Messages call made with a subscription OAuth
  *  token (an API key uses `x-api-key` and must NOT send this). */
@@ -75,76 +87,58 @@ export function generateState(): string {
 
 /** Build the Claude.ai authorize URL the user opens to grant access. */
 export function buildAuthorizeUrl(params: { state: string; challenge: string }): string {
-  const url = new URL(ANTHROPIC_AUTHORIZE_URL);
-  url.searchParams.set('code', 'true'); // render the manual code for copy/paste
-  url.searchParams.set('client_id', ANTHROPIC_CLIENT_ID);
-  url.searchParams.set('response_type', 'code');
-  url.searchParams.set('redirect_uri', ANTHROPIC_REDIRECT_URI);
-  url.searchParams.set('scope', ANTHROPIC_SCOPES);
-  url.searchParams.set('code_challenge', params.challenge);
-  url.searchParams.set('code_challenge_method', 'S256');
-  url.searchParams.set('state', params.state);
-  return url.toString();
+  return subscriptionAuthorizeUrl(ANTHROPIC_OAUTH_CLIENT, params);
 }
 
-function toTokens(data: { access_token: string; refresh_token: string; expires_in: number }): AnthropicOAuthTokens {
+/**
+ * Anthropic's token parsing — the one per-provider part of the exchange.
+ * `previousRefresh` is kept when a refresh response does not rotate the token,
+ * so a non-rotating reply can never strand the grant without one.
+ */
+function toTokens(
+  data: { access_token: string; refresh_token?: string; expires_in?: number },
+  previousRefresh?: string,
+): AnthropicOAuthTokens {
+  const refresh = data.refresh_token ?? previousRefresh;
+  if (!refresh || typeof data.expires_in !== 'number') {
+    throw new Error('Anthropic OAuth token response was incomplete');
+  }
   return {
     access: data.access_token,
-    refresh: data.refresh_token,
+    refresh,
     // 5-minute safety margin so a token never expires mid-call (matches agent-runtime).
     expires: Date.now() + data.expires_in * 1000 - OAUTH_SAFETY_MARGIN_MS,
   };
 }
 
-/** Exchange the authorization code (+ PKCE verifier) for subscription tokens. */
+/**
+ * Exchange the authorization code (+ PKCE verifier) for subscription tokens.
+ *
+ * A dead code is the ordinary failure here, not an outage: the consent page is on
+ * a domain we do not own, so there is always a gap between approving and pasting.
+ * The shared exchange gives it a 400 and an instruction instead of a 502 with
+ * Anthropic's raw JSON. Anthropic also wants the `state` echoed in the body.
+ */
 export async function exchangeAnthropicCode(params: {
   code: string;
   state: string;
   verifier: string;
 }): Promise<AnthropicOAuthTokens> {
-  const resp = await fetch(ANTHROPIC_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'authorization_code',
-      code: params.code,
-      state: params.state,
-      client_id: ANTHROPIC_CLIENT_ID,
-      redirect_uri: ANTHROPIC_REDIRECT_URI,
-      code_verifier: params.verifier,
-    }),
-  });
-  if (!resp.ok) {
-    // A dead code is the ordinary failure here, not an outage: the consent page
-    // is on a domain we do not own, so there is always a gap between approving
-    // and pasting. `throwTokenExchangeFailure` gives it a 400 and an instruction
-    // instead of a 502 with Anthropic's raw JSON. See subscriptionOAuthCode.
-    throwTokenExchangeFailure({ status: resp.status, body: await resp.text(), label: 'Anthropic' });
-  }
-  return toTokens((await resp.json()) as { access_token: string; refresh_token: string; expires_in: number });
+  return toTokens(await exchangeSubscriptionCode(ANTHROPIC_OAUTH_CLIENT, {
+    code: params.code,
+    verifier: params.verifier,
+    extra: { state: params.state },
+  }));
 }
 
-/** Refresh an expired subscription access token. Returns fresh tokens (the
- *  refresh token may itself rotate, so persist whatever comes back). */
+/**
+ * Refresh an expired subscription access token. Returns fresh tokens (the
+ * refresh token may itself rotate, so persist whatever comes back). A refusal
+ * carries the upstream HTTP `status` so the resolver can tell a REVOKED refresh
+ * token (401/403) from a transient failure (5xx/429).
+ */
 export async function refreshAnthropicToken(refreshToken: string): Promise<AnthropicOAuthTokens> {
-  const resp = await fetch(ANTHROPIC_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'refresh_token',
-      client_id: ANTHROPIC_CLIENT_ID,
-      refresh_token: refreshToken,
-    }),
-  });
-  if (!resp.ok) {
-    // Carry the HTTP status on the error so the resolver can tell a REVOKED refresh
-    // token (401/403 — the user must reconnect) from a transient failure (5xx/429 —
-    // retryable, don't force the tenant off their own account permanently).
-    const err = new Error(`Anthropic OAuth token refresh failed (${resp.status}): ${(await resp.text()).slice(0, 240)}`) as Error & { status?: number };
-    err.status = resp.status;
-    throw err;
-  }
-  return toTokens((await resp.json()) as { access_token: string; refresh_token: string; expires_in: number });
+  return toTokens(await refreshSubscriptionToken(ANTHROPIC_OAUTH_CLIENT, refreshToken), refreshToken);
 }
 
 /**

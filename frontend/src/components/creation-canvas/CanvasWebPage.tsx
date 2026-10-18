@@ -2,7 +2,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 import { brain } from '@/lib/builderforceApi';
 import { canvasViewport } from '@builderforce/creation-canvas-contract';
 import {

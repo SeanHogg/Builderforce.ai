@@ -8,7 +8,8 @@ import {
   type CalendarEvent,
   type UndatedEntry,
 } from '@builderforce/creation-canvas-contract';
-import { calendarApi, meetingsApi, pmoApi, releasesApi, tasksApi } from '@/lib/builderforceApi';
+import { calendarApi, meetingsApi, pmoApi, tasksApi } from '@/lib/builderforceApi';
+import { releasesApi } from '@/lib/releasesApi';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 
 /**
@@ -325,7 +326,7 @@ const RELEASES_SOURCE: CalendarSourceDefinition = {
   read: async () => {
     const releases = await getOrSetClientCached(
       `${CACHE_PREFIX}releases`,
-      () => releasesApi.list(),
+      () => releasesApi.list().then((r) => r.releases),
       { ttlMs: READ_TTL_MS, staleWhileRevalidate: true },
     );
     return releases

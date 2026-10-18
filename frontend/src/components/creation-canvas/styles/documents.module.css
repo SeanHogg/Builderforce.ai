@@ -1,0 +1,334 @@
+/* The document, resume and email editors.
+   Split out of CreationCanvas.module.css, which keeps the board shell and the
+   canvas palette (`--canvas-*`, light and dark) that every rule here reads. */
+
+.dashboardWidgetRow { position:relative; margin:10px 0 0; border:1px solid var(--border); border-radius:8px; padding:12px; }
+.dashboardWidgetRow legend { max-width:70%; overflow:hidden; padding:0 5px; font-size:12px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+.dashboardWidgetRow .resumeFieldGrid { grid-template-columns:repeat(auto-fit,minmax(148px,1fr)); padding:0; }
+.dashboardWidgetRow .resumeAddEntry { grid-column:1 / -1; margin:0; }
+.dashboardWidgetRow[data-dragging] { opacity:.5; }
+.dashboardWidgetRow[data-drop-target] { outline:2px solid var(--bf-accent); outline-offset:2px; }
+
+.resumeEmpty,
+.resumeStudio { display:flex; flex-direction:column; gap:10px; }
+/* Document / Details / Tools — the three groups the résumé's controls collapse into.
+   Same shape as `.inspectorTabs` (equal-width, bottom-border-lit) so a person who has
+   already used the details panel recognises this as the same kind of control, but
+   scoped to the résumé's own purple rather than the canvas accent, matching every
+   other résumé-local accent in this file (`.resumeControls [role="tab"]`, the ATS
+   button, the template gallery's selected ring). */
+.resumeSectionTabs { display:flex; flex:none; gap:2px; border-bottom:1px solid var(--border); }
+.resumeSectionTabs button { flex:1; padding:8px 4px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--text-muted); font:700 11px var(--font-sans); cursor:pointer; }
+.resumeSectionTabs button:hover { color:inherit; }
+.resumeSectionTabs button[aria-selected="true"] { border-bottom-color:#7c3aed; color:#6d28d9; }
+.resumeSectionBody { display:flex; flex-direction:column; gap:10px; }
+.resumeSharePanel { display:grid; gap:8px; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+.resumeSharePanel > p { margin:0; color:var(--text-muted); font-size:11px; }
+.resumeSharePanel > div { display:flex; flex-wrap:wrap; gap:7px; }
+.resumeSharePanel button { border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:7px 10px; cursor:pointer; }
+.resumeSharePanel ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+.resumeSharePanel li { display:flex; justify-content:space-between; gap:10px; align-items:center; color:var(--text-muted); font-size:11px; }
+.resumeLifecycleDialog { display:grid; gap:9px; margin:0 10px; padding:12px; border:1px solid color-mix(in srgb, var(--coral-bright) 55%, var(--border)); border-radius:var(--radius-md); background:var(--surface); box-shadow:var(--shadow-sm); }
+.resumeLifecycleDialog p { margin:0; color:var(--text-muted); font-size:12px; line-height:1.45; }
+.resumeLifecycleDialog > div { display:flex; justify-content:flex-end; gap:8px; }
+.resumeLifecycleDialog button { border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:7px 10px; cursor:pointer; }
+.resumeLifecycleDialog button:last-child { border-color:var(--coral-bright); color:var(--coral-bright); font-weight:700; }
+.resumeImportReview { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:10px; align-items:center; padding:10px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface); }
+.resumeImportReview > div { display:grid; gap:4px; min-width:0; }
+.resumeImportReview > div:last-child { display:flex; flex-wrap:wrap; gap:6px; }
+.resumeImportReview strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.resumeImportReview small { color:var(--text-muted); font-size:10px; }
+.resumeImportReview progress { width:100%; accent-color:#7c3aed; }
+.resumeImportReview button { border:1px solid var(--border); border-radius:var(--radius-sm); padding:7px 9px; background:var(--surface); color:inherit; cursor:pointer; }
+.resumeFileIcon { display:grid; place-items:center; width:42px; height:42px; border-radius:8px; background:rgba(124,58,237,.12); color:#7c3aed; font-size:9px; font-weight:850; }
+.resumeEmpty { align-items:flex-start; padding:22px; border:1px dashed var(--border); border-radius:12px; background:var(--canvas-panel-muted); }
+.resumeEmpty p { margin:0; color:var(--text-muted); }
+.resumeEmpty button,
+.resumeSourceBar button,
+.resumeVersionCreator button,
+.resumeControls button { border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:7px 10px; cursor:pointer; }
+.resumeEmpty button:disabled,
+.resumeSourceBar button:disabled,
+.resumeVersionCreator button:disabled,
+.resumeControls button:disabled { cursor:not-allowed; opacity:.48; }
+.resumeError { color:var(--danger, #b91c1c) !important; }
+.resumeSourceBar,
+.resumeVersionCreator,
+.resumeControls { display:flex; align-items:flex-end; gap:8px; flex-wrap:wrap; }
+.resumeSourceBar label,
+.resumeControls label { display:flex; flex-direction:column; gap:4px; min-width:180px; }
+.resumeSourceBar label span,
+.resumeControls label span { color:var(--text-muted); font-size:11px; font-weight:700; text-transform:uppercase; }
+.resumeSourceBar select,
+.resumeControls select,
+.resumeVersionCreator input { min-height:34px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:6px 9px; }
+.resumeSourceBar select { min-width:230px; }
+.resumeVersionCreator input { flex:1; min-width:190px; }
+.resumeVersionCreator .resumeRename { display:flex; min-width:180px; flex:1; flex-direction:column; gap:3px; }
+.resumeVersionCreator .resumeRename span { color:var(--text-muted); font-size:10px; font-weight:700; text-transform:uppercase; }
+.resumeImmutable { align-self:center; border-radius:var(--radius-full); background:color-mix(in srgb, var(--resume-accent, #7c3aed) 12%, transparent); color:var(--text-muted); font-size:11px; font-weight:700; padding:5px 8px; }
+.resumeImmutable[data-original] { color:#7c3aed; }
+.resumeControls { justify-content:space-between; border-top:1px solid var(--border); padding-top:10px; }
+.resumeControls [role="tablist"] { display:flex; gap:4px; }
+.resumeControls [role="tab"][aria-selected="true"] { border-color:#7c3aed; background:color-mix(in srgb, #7c3aed 12%, var(--surface)); color:#6d28d9; }
+.resumeControls input[type="range"] { width:140px; accent-color:#7c3aed; }
+.resumeTemplateGallery { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; max-height:520px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--canvas-panel-muted); padding:9px; }
+.resumeTemplateGallery > button { position:relative; display:flex; min-width:0; flex-direction:column; gap:4px; border:2px solid transparent; border-radius:8px; background:var(--surface); color:inherit; padding:6px; text-align:left; cursor:pointer; }
+.resumeTemplateGallery > button[aria-pressed="true"] { border-color:#7c3aed; box-shadow:0 0 0 2px color-mix(in srgb,#7c3aed 15%,transparent); }
+.resumeTemplateGallery > button:disabled { cursor:not-allowed; opacity:.6; }
+.resumeTemplateGallery strong { overflow:hidden; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.resumeTemplateGallery small { color:var(--text-muted); font-size:9px; }
+.resumeTemplateGallery em { color:#7c3aed; font-size:8px; font-style:normal; font-weight:750; text-transform:uppercase; }
+.resumeTemplateGallery i { position:absolute; top:9px; right:9px; border-radius:var(--radius-full); background:#7c3aed; color:#fff; padding:2px 5px; font-size:8px; font-style:normal; }
+.resumeTemplateThumbnail { display:block; height:138px; overflow:hidden; border:1px solid var(--border); background:#dbe1e8; pointer-events:none; }
+.resumeTemplateThumbnail > span { display:block; width:210mm; transform:scale(.155); transform-origin:top left; }
+.resumeTemplateThumbnail :global(.canvasResumeDocument) { min-height:297mm; }
+.resumePaper { --resume-accent:#7c3aed; --resume-paper:#fff; --resume-ink:#172033; min-height:520px; max-height:700px; overflow:auto; border:1px solid color-mix(in srgb, var(--resume-accent) 28%, #d1d5db); border-top:6px solid var(--resume-accent); border-radius:var(--radius-sm); background:var(--resume-paper); color:var(--resume-ink); padding:34px 40px; box-shadow:0 8px 24px rgb(15 23 42 / 10%); line-height:1.45; }
+.resumePaper[data-font="serif"] { font-family:Georgia, 'Times New Roman', serif; }
+.resumePaper[data-font="mono"] { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; }
+.resumePaper[data-density="compact"] { padding:25px 30px; font-size:12px; line-height:1.32; }
+.resumePaper[data-density="spacious"] { padding:45px 50px; line-height:1.65; }
+.resumePaper[data-columns="2"] > ul { columns:2; column-gap:30px; }
+.resumePaper h1 { margin:0 0 4px; color:var(--resume-accent); font-size:30px; }
+.resumePaper h2 { margin:22px 0 8px; border-bottom:1px solid color-mix(in srgb, var(--resume-accent) 35%, transparent); color:var(--resume-accent); font-size:15px; letter-spacing:.06em; text-transform:uppercase; }
+.resumePaper h3 { margin:14px 0 3px; font-size:14px; }
+.resumePaper p,
+.resumePaper ul { margin:6px 0; }
+.resumePreviewViewport { max-height:700px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius-sm); background:#e5e7eb; padding:16px; }
+.resumePreviewShell { position:relative; min-width:0; }
+.resumePreviewClose { position:absolute; z-index:2; top:8px; right:8px; width:32px; height:32px; border-radius:var(--radius-full); font-size:20px; line-height:1; }
+.resumePreviewCanvas { margin:0 auto; overflow:hidden; background:#fff; box-shadow:0 8px 24px rgb(15 23 42 / 12%); }
+.resumePreviewViewport[data-page-view="paged"] .resumePreviewCanvas,
+.resumePreviewViewport[data-page-view="spread"] .resumePreviewCanvas { background:repeating-linear-gradient(to bottom,#fff 0,#fff calc(var(--resume-page-height) - 2px),#94a3b8 calc(var(--resume-page-height) - 2px),#94a3b8 var(--resume-page-height)); }
+.resumePreviewViewport[data-page-view="spread"] .resumePreviewCanvas { margin-left:0; }
+.resumePageModes { display:flex; gap:4px; }
+.resumePageNumber { position:absolute; right:8px; z-index:1; padding:2px 5px; border-radius:var(--radius-sm); background:rgb(15 23 42 / 72%); color:#fff; font-size:9px; pointer-events:none; }
+.resumePreviewCanvas { position:relative; }
+.resumeSectionLayout > div { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:5px; }
+.resumeSectionLayout > div[data-dragging="true"] { opacity:.45; }
+.resumeSectionLayout > div[data-drop-target="true"] { outline:2px solid var(--canvas-accent); outline-offset:2px; }
+.resumeSectionDragHandle { border:0; background:transparent; color:var(--canvas-muted); cursor:grab; }
+.resumeFieldDiffs { display:grid; gap:3px; margin:5px 0 0; padding:0; list-style:none; font-size:11px; }
+.resumeFieldDiffs li { display:grid; grid-template-columns:minmax(80px,.7fr) 1fr 1fr; gap:5px; align-items:start; }
+.resumeFieldDiffs del,.resumeFieldDiffs ins { overflow-wrap:anywhere; padding:2px 4px; border-radius:var(--radius-sm); }
+.resumeFieldDiffs del { background:rgb(239 68 68 / 10%); }
+.resumeFieldDiffs ins { background:rgb(34 197 94 / 12%); text-decoration:none; }
+.resumeUndoDelete { position:sticky; z-index:3; top:0; display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface-raised); box-shadow:var(--shadow-sm); }
+.resumeUndoDelete span { flex:1; }
+@media (max-width: 480px) {
+  .resumePreviewViewport { max-width:100%; padding:8px; }
+  .resumePreviewCanvas { margin-left:0; }
+  .resumePageModes { width:100%; overflow-x:auto; }
+}
+.resumePreviewViewport :global(.canvasResumeDocument) { box-shadow:0 8px 24px rgb(15 23 42 / 12%); }
+@media(max-width:767px){.resumeTemplateGallery{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.resumeCompare { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.resumeCompareShell { display:flex; flex-direction:column; gap:10px; }
+.resumeDiffSummary { display:flex; align-items:center; gap:8px; flex-wrap:wrap; border:1px solid var(--border); border-radius:8px; padding:9px; }
+.resumeDiffSummary > strong { width:100%; }
+.resumeDiffSummary label { display:flex; align-items:center; gap:5px; border:1px solid var(--border); border-radius:var(--radius-full); padding:4px 7px; font-size:11px; }
+.resumeDiffSummary label small { color:var(--text-muted); }
+.resumeDiffSummary p { margin:0; color:var(--text-muted); font-size:12px; }
+.resumeDiffSummary button { margin-left:auto; border:1px solid #7c3aed; border-radius:var(--radius-sm); background:#7c3aed; color:#fff; padding:7px 10px; cursor:pointer; }
+.resumeDiffSummary button:disabled { cursor:not-allowed; opacity:.45; }
+.resumeAtsPanel { border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+.resumeAtsPanel summary { cursor:pointer; padding:10px 12px; font-weight:750; }
+.resumeAtsPanel > label { display:flex; flex-direction:column; gap:5px; padding:0 10px 10px; }
+.resumeAtsPanel > label span { color:var(--text-muted); font-size:11px; font-weight:700; }
+.resumeAtsPanel select { min-height:34px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:6px 8px; }
+.resumeAtsPanel textarea { min-height:130px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:8px; resize:vertical; font:inherit; }
+.resumeAtsPanel > button { margin:0 10px 10px; border:1px solid #7c3aed; border-radius:var(--radius-sm); background:#7c3aed; color:#fff; padding:8px 11px; cursor:pointer; }
+.resumeAtsPanel > button:disabled { cursor:not-allowed; opacity:.45; }
+.resumeBulletSuggestions { display:grid; gap:7px; padding:0 10px 10px; }
+.resumeBulletSuggestions article { display:grid; gap:3px; padding:8px; border:1px solid var(--border); border-radius:var(--radius-sm); }
+.resumeBulletSuggestions small,.resumeBulletSuggestions del,.resumeEmptyAnalysis { color:var(--text-muted); font-size:10px; }
+.resumeEmptyAnalysis { margin:0; padding:0 10px 10px; }
+.resumeAtsResults { display:grid; gap:7px; padding:0 10px 10px; }
+.resumeAtsResults > strong { color:#7c3aed; font-size:18px; }
+.resumeAtsResults > div { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+.resumeAtsResults > div > span { width:100%; color:var(--text-muted); font-size:11px; font-weight:700; }
+.resumeAtsResults i { border-radius:var(--radius-full); background:color-mix(in srgb, #dc2626 12%, transparent); color:#b91c1c; padding:3px 6px; font-size:10px; font-style:normal; }
+.resumeAtsResults i[data-match] { background:color-mix(in srgb, #059669 12%, transparent); color:#047857; }
+.resumeCompare section { min-width:0; }
+.resumeCompare section > strong { display:block; margin-bottom:6px; font-size:12px; }
+.resumeCompare .resumePaper { min-height:380px; max-height:560px; padding:22px; font-size:11px; }
+.resumeCompareViewport { max-height:560px; overflow:auto; border:1px solid var(--border); background:#e5e7eb; }
+.resumeCompareViewport :global(.canvasResumeDocument) { min-height:160mm; padding:8mm; font-size:8pt; }
+.resumeEditStack { display:flex; flex-direction:column; gap:10px; }
+.resumeStructuredEditor { display:flex; flex-direction:column; gap:8px; max-height:680px; overflow:auto; padding-right:4px; }
+.resumeStructuredEditor details,
+.resumeRawEditor { border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+.resumeStructuredEditor summary,
+.resumeRawEditor > summary { cursor:pointer; padding:10px 12px; font-weight:750; }
+.resumeStructuredEditor fieldset { position:relative; margin:0 10px 10px; border:1px solid var(--border); border-radius:8px; padding:12px; }
+.resumeStructuredEditor legend { max-width:70%; overflow:hidden; padding:0 5px; font-size:12px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+.resumeFieldGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:9px; padding:0 10px 10px; }
+.resumeStructuredEditor fieldset .resumeFieldGrid { padding:0; }
+.resumeFieldGrid label { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.resumeFieldGrid label > span { color:var(--text-muted); font-size:11px; font-weight:700; }
+.resumeFieldGrid input,
+.resumeFieldGrid textarea { width:100%; min-height:34px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:inherit; padding:6px 8px; font:inherit; }
+.resumeFieldGrid textarea { min-height:72px; resize:vertical; }
+.resumeFieldWide { grid-column:1 / -1; }
+.resumeEntryActions { position:absolute; top:-13px; right:7px; display:flex; gap:3px; background:var(--surface); padding:2px; }
+.resumeEntryActions button { width:25px; height:25px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; cursor:pointer; }
+.resumeEntryActions button:disabled { opacity:.35; cursor:not-allowed; }
+.resumeAddEntry { margin:0 10px 10px; border:1px dashed var(--border); border-radius:6px; background:transparent; color:inherit; padding:7px 10px; cursor:pointer; }
+.resumeSectionLayout { display:grid; gap:5px; padding:0 10px 10px; }
+.resumeSectionLayout > div { position:relative; display:flex; align-items:center; justify-content:space-between; min-height:34px; border:1px solid var(--border); border-radius:6px; padding:4px 7px; }
+.resumeSectionLayout label { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:650; }
+.resumeSectionLayout .resumeEntryActions { position:static; background:transparent; }
+.resumeRawEditor > .docEditor { border:0; border-top:1px solid var(--border); border-radius:0 0 8px 8px; }
+.resumeStaleWarning { margin:0; border-radius:var(--radius-sm); background:color-mix(in srgb, #d97706 12%, transparent); color:#92400e; padding:8px 10px; font-size:12px; }
+@media (max-width:800px) { .resumeCompare { grid-template-columns:1fr; } }
+/* A quiet trailing link out of a section — integration settings, the provider's own
+   copy of a message. Sized as body text so it stays a tap target on a phone. */
+.inspectorSettingsLink { justify-self:start; padding:6px 0; color:var(--canvas-accent); font-size:11px; font-weight:650; text-decoration:none; }
+.inspectorSettingsLink:hover,.inspectorSettingsLink:focus-visible { text-decoration:underline; }
+/* The document's own type scale, driven by ONE number.
+   `--document-font-size` is the base and every measure below is `em` off it, so the
+   SAME rules draw the 9px preview on a card and the 15px page in the page runtime —
+   one definition at two scales, rather than a second stylesheet for the big one.
+   Sizes are `em` rather than `rem` for exactly that reason: a `rem` here would be
+   the app's root, which is not the document's measure and does not change when the
+   document is opened at page size. */
+.documentMarkdown {
+  color:var(--canvas-ink,var(--text-primary));
+  font-size:var(--document-font-size,9px); line-height:var(--document-line-height,1.55); overflow-wrap:anywhere;
+}
+.documentMarkdown > :first-child { margin-top:0; }
+.documentMarkdown > :last-child { margin-bottom:0; }
+.documentMarkdown h1 { margin:0 0 .4em; font-size:1.67em; line-height:1.25; letter-spacing:-.02em; }
+.documentMarkdown h2 { margin:.84em 0 .34em; font-size:1.33em; line-height:1.3; }
+.documentMarkdown h3,.documentMarkdown h4 { margin:.8em 0 .3em; font-size:1.11em; line-height:1.35; }
+.documentMarkdown p { margin:.55em 0; }
+.documentMarkdown ul,.documentMarkdown ol { margin:.55em 0; padding-left:1.8em; }
+.documentMarkdown li { margin:.22em 0; }
+.documentMarkdown blockquote {
+  margin:.66em 0; padding:.22em 0 .22em .9em;
+  border-left:2px solid var(--canvas-line,#e3ddd3); color:var(--canvas-muted,var(--text-muted));
+}
+.documentMarkdown code {
+  padding:.12em .37em; border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted,#faf8f4); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em;
+}
+.documentMarkdown pre { overflow:auto; margin:.66em 0; padding:.78em; border-radius:var(--radius-sm); background:var(--canvas-panel-muted,#faf8f4); }
+.documentMarkdown pre code { padding:0; background:none; }
+.documentMarkdown table { width:100%; border-collapse:collapse; margin:.66em 0; font-size:.9em; }
+.documentMarkdown th,.documentMarkdown td { padding:.38em .62em; border:1px solid var(--canvas-line,#e3ddd3); text-align:left; }
+.documentMarkdown th { background:var(--canvas-panel-muted,#faf8f4); }
+.documentMarkdown a { color:var(--canvas-accent-ink,#0b5f58); text-decoration:underline; }
+.documentMarkdown hr { margin:.9em 0; border:0; border-top:1px solid var(--canvas-line,#e3ddd3); }
+.documentMarkdown img { max-width:100%; height:auto; border-radius:var(--radius-sm); }
+
+.docEditor { display:grid; gap:5px; min-height:0; }
+.docToolbar {
+  display:flex; flex-wrap:wrap; align-items:center; gap:4px;
+  padding:4px; border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted,#faf8f4);
+}
+.docToolGroup { display:inline-flex; gap:0; overflow:hidden; border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm); }
+.docToolGroup button {
+  display:grid; place-items:center; min-width:24px; min-height:24px; padding:0 5px;
+  border:0; background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,var(--text-primary));
+  font-size:10px; line-height:1; cursor:pointer;
+}
+.docToolGroup button + button { border-left:1px solid var(--canvas-line,#e3ddd3); }
+.docToolGroup button:hover,.docToolGroup button:focus-visible { z-index:1; background:var(--canvas-hover,#efeae1); outline:none; }
+.docToolGroup button[aria-pressed='true'] { background:var(--canvas-hover,#efeae1); color:var(--canvas-accent-ink,#0b5f58); }
+.docToolGroup button[data-mark='bold'] { font-weight:800; }
+.docToolGroup button[data-mark='italic'] { font-style:italic; }
+.docToolGroup button[data-mark='strikethrough'] { text-decoration:line-through; }
+.docBlockSelect {
+  min-height:24px; max-width:104px; padding:0 5px;
+  border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm);
+  background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,var(--text-primary));
+  font-family:inherit; font-size:9px; cursor:pointer;
+}
+/* A native <option> renders on the OS menu surface, not this one, so it has to
+   carry its own opaque pair or dark mode drops it to unreadable. */
+.docBlockSelect option { background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,var(--text-primary)); }
+.docLinkRow { display:flex; flex-wrap:wrap; gap:4px; }
+.docLinkRow input {
+  min-width:0; flex:1 1 130px; min-height:24px; padding:0 7px;
+  border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm);
+  background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,var(--text-primary)); font-family:inherit; font-size:9px;
+}
+.docLinkRow input:focus-visible { border-color:var(--canvas-accent-ink,#0b5f58); outline:none; }
+.docLinkRow button {
+  min-height:24px; padding:0 9px;
+  border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted,#faf8f4); color:var(--canvas-ink,var(--text-primary));
+  font:650 9px inherit; font-family:inherit; cursor:pointer;
+}
+.docLinkRow button:hover,.docLinkRow button:focus-visible { background:var(--canvas-hover,#efeae1); outline:none; }
+/* The writing surface reuses `.documentMarkdown` for its typography, so what a
+   person edits looks exactly like what the card renders when they are done. */
+.docSurface {
+  overflow:auto; min-height:150px; max-height:340px; padding:12px 14px;
+  border:1px solid var(--canvas-line,#e3ddd3); border-radius:var(--radius-sm);
+  background:var(--canvas-widget-surface,#fff);
+  cursor:text;
+}
+.docSurface:focus-visible { border-color:var(--canvas-accent-ink,#0b5f58); outline:none; }
+.docToolGroup button:disabled { opacity:.38; cursor:not-allowed; }
+
+/* ── The same editor at PAGE scale ───────────────────────────────────────────
+   Everything here is a MEASURE, never a different control: the base type, the
+   sheet's margins, the height of the writing area, and which box does the
+   scrolling. That last one is the difference a writer actually feels — on a card
+   the body is a 340px box with its own scrollbar, and a person writing a page
+   inside a 340px box is reading four lines at a time. Here the surface has no
+   height cap at all and the PAGE scrolls, with the toolbar stuck to the top of
+   that scroll the way a ribbon is. */
+.docEditor[data-scale='page'] {
+  --document-font-size:15px; --document-line-height:1.7;
+  display:flex; flex-direction:column; flex:1 0 auto; gap:0; min-height:0;
+}
+.docEditor[data-scale='page'] .docToolbar {
+  position:sticky; top:0; z-index:3; flex:none;
+  gap:7px; padding:8px 12px;
+  border-radius:var(--radius-md) var(--radius-md) 0 0; border-bottom:0;
+  background:var(--canvas-panel,#faf8f4);
+}
+.docEditor[data-scale='page'] .docToolGroup button { min-width:34px; min-height:32px; padding:0 8px; font-size:14px; }
+.docEditor[data-scale='page'] .docBlockSelect { min-height:32px; max-width:170px; padding:0 8px; font-size:13px; }
+.docEditor[data-scale='page'] .docLinkRow {
+  flex:none;
+  gap:6px; padding:8px 12px;
+  border-inline:1px solid var(--canvas-line,#e3ddd3); background:var(--canvas-panel-muted,#faf8f4);
+}
+.docEditor[data-scale='page'] .docLinkRow input { min-height:32px; padding:0 10px; font-size:13px; }
+.docEditor[data-scale='page'] .docLinkRow button { min-height:32px; padding:0 12px; font-size:12px; }
+/* `overflow:visible` is the point of this rule, not a tidy-up: it hands the
+   scroll back to the surface the page sits in, which is what makes a long
+   document one continuous page instead of a box inside a box. */
+.docEditor[data-scale='page'] .docSurface {
+  overflow:visible; flex:1 0 auto; min-height:min(1040px,66vh); max-height:none;
+  padding:clamp(28px,5vw,64px); border-radius:0 0 var(--radius-md) var(--radius-md);
+  box-shadow:0 8px 30px var(--canvas-shadow);
+}
+/* What a word processor keeps in its status bar, in the one place there is room
+   for it. The card has no such bar: at 9px a word count is chrome competing with
+   the document it is counting. */
+.docStatus {
+  flex:none;
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:16px;
+  margin:0; padding:8px 4px 0;
+  color:var(--canvas-muted,var(--text-muted)); font-size:11px; font-variant-numeric:tabular-nums;
+}
+
+@media (max-width:767px) {
+  /* The writing surface shrinks with the reading surface, and the toolbar wraps
+     rather than pushing the card past a phone-width board. */
+  .docSurface { min-height:120px; max-height:220px; }
+  .docBlockSelect { max-width:88px; }
+  /* The page keeps its own measures on a phone — the point of page scale is that
+     the document is being written, and a 220px box is the thing this fixes. Type
+     comes down a step and the sheet's margins collapse to what a 360px viewport
+     can spare, which is where a printed gutter would be if it could. */
+  .docEditor[data-scale='page'] { --document-font-size:14px; }
+  .docEditor[data-scale='page'] .docSurface { min-height:70vh; max-height:none; padding:18px 14px; }
+  .docEditor[data-scale='page'] .docToolbar { gap:5px; padding:6px 8px; }
+  .docEditor[data-scale='page'] .docBlockSelect { max-width:112px; }
+}

@@ -3,7 +3,7 @@ import type { CanvasSceneSpec } from '@builderforce/creation-canvas-contract';
 import { ModelPicker, ProgressFeedback, VideoPreview } from '@seanhogg/builderforce-studio-embedded';
 import type { DiffusionModelId } from '@seanhogg/builderforce-studio';
 import { useSceneGeneration } from '@/hooks/useSceneGeneration';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/world.module.css';
 import sceneStyles from './Scene.module.css';
 
 /**

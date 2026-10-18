@@ -15,6 +15,7 @@
  */
 import { InternalError } from '../../domain/shared/errors';
 import { Hono } from 'hono';
+import { downloadResponse } from '../../application/export/exportDownload';
 import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
@@ -369,23 +370,20 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
       // Single-file formats stream directly; the multi-file HF repo is zipped.
       const [single] = result.files;
       if (result.files.length === 1 && single) {
-        return new Response(toBytes(single.data) as BodyInit, {
-          headers: {
-            'Content-Type': single.contentType,
-            'Content-Disposition': `attachment; filename="${safeSlug}${formatDef.ext}"`,
-            'Cache-Control': 'private, max-age=3600',
-          },
+        return downloadResponse(toBytes(single.data), {
+          filename: `${safeSlug}${formatDef.ext}`,
+          contentType: single.contentType,
+          // Immutable per published ref, so the browser may keep it for an hour.
+          cacheControl: 'private, max-age=3600',
         });
       }
       const zippable: Zippable = {};
       for (const file of result.files) zippable[file.path] = toBytes(file.data);
       const zipped = zipSync(zippable);
-      return new Response(zipped as BodyInit, {
-        headers: {
-          'Content-Type': 'application/zip',
-          'Content-Disposition': `attachment; filename="${safeSlug}-evermind-hf.zip"`,
-          'Cache-Control': 'private, max-age=3600',
-        },
+      return downloadResponse(zipped, {
+        filename: `${safeSlug}-evermind-hf.zip`,
+        contentType: 'zip',
+        cacheControl: 'private, max-age=3600',
       });
     } catch (err) {
       return c.json({ error: 'Evermind export failed', detail: err instanceof Error ? err.message : String(err) }, 502);

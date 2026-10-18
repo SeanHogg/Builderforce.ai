@@ -7,17 +7,24 @@
  *   DELETE /api/skill-assignments/tenant/:slug – remove tenant-level assignment
  *
  * AgentHost-level:
- *   GET  /api/skill-assignments/agentHosts/:agentHostId         – list skills assigned to a specific agentHost
- *   POST /api/skill-assignments/agentHosts/:agentHostId         – assign a skill to a specific agentHost
- *   DELETE /api/skill-assignments/agentHosts/:agentHostId/:slug – remove agentHost-level assignment
+ *   GET  /api/skill-assignments/agent-hosts/:agentHostId         – list skills assigned to a specific agentHost
+ *   POST /api/skill-assignments/agent-hosts/:agentHostId         – assign a skill to a specific agentHost
+ *   DELETE /api/skill-assignments/agent-hosts/:agentHostId/:slug – remove agentHost-level assignment
+ *
+ *   The camelCase `/agentHosts/*` paths are a deprecated alias of the SAME handlers
+ *   (Deprecation + successor Link via legacyAliasNotice) for already-shipped clients.
  *
  * All routes require a tenant-scoped JWT.
  * Write routes require at least MANAGER role.
+ *
+ * These list assignments AT one scope (the management view). The EFFECTIVE set a
+ * host runs with (tenant + host, host winning) is `GET /api/agent-hosts/:id/skills`;
+ * both read through `skillAssignmentPort`.
  */
 import { Hono } from 'hono';
-import { eq, and } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
-import { agentHosts } from '../../infrastructure/database/schema';
+import { legacyAliasNotice } from '../middleware/legacyAlias';
+import { agentHostInTenant } from '../../application/agentHost/agentHostDirectory';
 import {
   assignSkill,
   listAssignedSkills,
@@ -68,38 +75,30 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── AgentHost-level ────────────────────────────────────────────────────────────
+  // ONE sub-router, mounted at the canonical kebab `/agent-hosts` and at the legacy
+  // camelCase `/agentHosts` alias.
+  const hosts = new Hono<HonoEnv>();
 
-  // GET /api/skill-assignments/agentHosts/:agentHostId
-  router.get('/agentHosts/:agentHostId', async (c) => {
+  // GET /api/skill-assignments/agent-hosts/:agentHostId
+  hosts.get('/:agentHostId', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const agentHostId   = Number(c.req.param('agentHostId'));
 
-    // Ensure agentHost belongs to this tenant
-    const [agentHost] = await db
-      .select({ id: agentHosts.id })
-      .from(agentHosts)
-      .where(and(eq(agentHosts.id, agentHostId), eq(agentHosts.tenantId, tenantId)))
-      .limit(1);
-    if (!agentHost) return c.json({ error: 'AgentHost not found' }, 404);
+    if (!await agentHostInTenant(db, tenantId, agentHostId)) return c.json({ error: 'AgentHost not found' }, 404);
 
     const rows = await listAssignedSkills(db, tenantId, { scope: 'host', agentHostId });
     return c.json({ agentHostId, assignments: rows });
   });
 
-  // POST /api/skill-assignments/agentHosts/:agentHostId  body: { skillSlug }
-  router.post('/agentHosts/:agentHostId', requireRole(TenantRole.MANAGER), async (c) => {
+  // POST /api/skill-assignments/agent-hosts/:agentHostId  body: { skillSlug }
+  hosts.post('/:agentHostId', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId   = c.get('userId') as string;
     const agentHostId   = Number(c.req.param('agentHostId'));
     const body     = await parseBody(c, SkillAssignmentBody);
     if (!body.skillSlug) return c.json({ error: 'skillSlug is required' }, 400);
 
-    const [agentHost] = await db
-      .select({ id: agentHosts.id })
-      .from(agentHosts)
-      .where(and(eq(agentHosts.id, agentHostId), eq(agentHosts.tenantId, tenantId)))
-      .limit(1);
-    if (!agentHost) return c.json({ error: 'AgentHost not found' }, 404);
+    if (!await agentHostInTenant(db, tenantId, agentHostId)) return c.json({ error: 'AgentHost not found' }, 404);
 
     if (!await marketplaceSkillExists(db, body.skillSlug)) return c.json({ error: 'Skill not found' }, 404);
 
@@ -108,14 +107,18 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ ok: true, agentHostId, skillSlug: body.skillSlug }, 201);
   });
 
-  // DELETE /api/skill-assignments/agentHosts/:agentHostId/:slug
-  router.delete('/agentHosts/:agentHostId/:slug', requireRole(TenantRole.MANAGER), async (c) => {
+  // DELETE /api/skill-assignments/agent-hosts/:agentHostId/:slug
+  hosts.delete('/:agentHostId/:slug', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const agentHostId    = Number(c.req.param('agentHostId'));
     const skillSlug = c.req.param('slug');
     await unassignSkill(db, tenantId, { scope: 'host', agentHostId }, skillSlug);
     return c.body(null, 204);
   });
+
+  router.route('/agent-hosts', hosts);
+  router.use('/agentHosts/*', legacyAliasNotice((c) => c.req.path.replace(/\/agentHosts(?=\/|$)/, '/agent-hosts')));
+  router.route('/agentHosts', hosts);
 
   return router;
 }

@@ -59,12 +59,11 @@ import { resolveTicketRepoContext, commitAgentFile, deleteAgentFile, type Ticket
 import { resolveTaskRepoRouter, recordRepoWrite, type TaskRepoRouter } from '../repos/taskRepoSet';
 import { commitPrdAsPendingChange, taskPrdRepoPath } from '../repos/commitPrdToRepo';
 import { resolveRepoRefSha } from '../repos/commitFileToRepo';
-import { createPullRequest } from '../repos/createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../repos/mergeBranchToBase';
 import { recordPullRequestRow, markPullRequestMergedById } from '../repos/recordPullRequestRow';
 import { publishAgentRunVerdict } from '../checks/publishTaskVerdict';
 import { postRepoPrComment } from '../repos/postPrComment';
-import { claimTaskPrOpen, releaseTaskPrClaim, openTaskRepoSetPullRequests } from '../repos/openTaskPullRequest';
+import { openClaimedPullRequest, openTaskRepoSetPullRequests } from '../repos/openTaskPullRequest';
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../repos/readRepoContents';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { pollBranchCi, ciFinishDecision } from '../ci/pollCommitCiStatus';
@@ -1828,28 +1827,25 @@ export async function finalizeCloudRun(
   let openedPrNumber: number | null = null;
   let openedPrUrl: string | null = null;
   let openedPrRowId: string | null = null;
-  // Atomic single-PR claim (0140): take it BEFORE the external create so this inline
-  // run-end finalize can't open a duplicate PR alongside a concurrent human Done-drag
-  // (which finalizes via openTaskPullRequest, taking the same claim). Lost claim =>
-  // another path is opening the PR; skip the create here and treat it as "PR exists".
-  const claimedInlinePr = repoCtx && writtenPaths.size > 0 && !cancelled
-    ? await claimTaskPrOpen(db, tenantId, taskRow.id).catch(() => false)
-    : false;
-  if (repoCtx && writtenPaths.size > 0 && !cancelled && claimedInlinePr) {
-    const pr = await createPullRequest({
+  // Atomic single-PR claim (0140), via the ONE task PR-open step the Done-drag path
+  // also uses (`openClaimedPullRequest`): claim BEFORE the external create so this
+  // inline run-end finalize can't open a duplicate PR alongside a concurrent human
+  // Done-drag. Lost claim => another path is opening the PR; skip everything below
+  // and treat it as "PR exists". A failed create has already released the claim.
+  const opened = repoCtx && writtenPaths.size > 0 && !cancelled
+    ? await openClaimedPullRequest(db, tenantId, taskRow.id, {
       provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
       token: repoCtx.token, head: repoCtx.branch, base: repoCtx.base,
       title: `Task #${taskRow.id}: ${taskRow.title}`,
       body: `Changes for task #${taskRow.id}, by ${agentLabel}. Files: ${[...writtenPaths].join(', ')}.\n\n${ciVerified
         ? '> ✅ **CI was green in-run** on the ticket-branch HEAD (combined commit status / check-runs). Re-check CI on this PR before merge — opening it or a later push can still go red.'
         : '> ⚠ **Not verified in-agent.** This serverless executor has no shell and ran no local build, type-check, lint, or tests. CI on this PR is the source of truth — do not merge on the agent\'s summary alone.'}`,
-    }).catch(() => ({ ok: false as const, code: 'provider_error' as const, reason: 'pr failed' }));
+    }).catch(() => ({ ok: false as const, claimLost: true as const }))
+    : null;
+  if (repoCtx && opened && !('claimLost' in opened)) {
+    const pr = opened;
     prOpened = pr.ok;
-    // Release the claim on a failed create so a later finalize can re-attempt.
-    if (!pr.ok) {
-      noPrReason = pr.reason;
-      await releaseTaskPrClaim(db, tenantId, taskRow.id).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] failed PR-claim release failed', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
-    }
+    if (!pr.ok) noPrReason = pr.reason;
 
     const autoMerge = cloudAutoMergeEnabled(env);
 

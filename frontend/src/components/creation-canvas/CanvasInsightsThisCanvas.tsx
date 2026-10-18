@@ -5,7 +5,7 @@ import { boardMetricReadings, orderMetricReadings, summarizeMetricReadings } fro
 import { BoardMetricReadingList } from './BoardMetricReadingList';
 import { useCanvasBoardBridge } from './canvasBoardBridge';
 import { useLetBrain } from './phase/CanvasPhaseContext';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 
 /**
  * "THIS CANVAS" — the board's own metrics, ahead of the workspace's pinned widgets.

@@ -1,6 +1,9 @@
 /**
  * `/api/workspace-skills` — the workspace's own skills and their review queue.
- * (`/api/skills` is the built-in catalogue's read surface and stays that.)
+ * Distinct from `/api/skills` (skills reported by legacy registered agents), the
+ * published marketplace catalogue (`/marketplace/skills`, `/api/v1/skills`) and
+ * marketplace skill ASSIGNMENTS (`/api/skill-assignments`): these are skills the
+ * workspace itself authored, with a review state.
  *
  * Reads are member-level (a skill is an instruction every agent here follows, so
  * anyone on the workspace may see what is in force). Writes are MANAGER: approving

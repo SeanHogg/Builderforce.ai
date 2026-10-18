@@ -11,7 +11,7 @@ import { diagramConvertSource, diagramConvertTargets } from '@/lib/canvasDiagram
 import { canvasDiagram } from '@/lib/canvasDocuments';
 import type { DiagramNotation } from '@/lib/diagramNotations';
 import type { CreationFlowNode } from './CreationNode';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/inspector.module.css';
 
 /**
  * "Convert this to…" — the destinations THIS object can actually reach.

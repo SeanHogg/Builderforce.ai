@@ -76,7 +76,7 @@ export const empInsightsApi = {
 
   /** Fetch an export as text (CSV or HTML) so the caller can trigger a download. */
   exportDataset: (dataset: ExportDataset, format: ExportFormat, days = 30, projectId?: number | null): Promise<string> =>
-    apiRequestText(`/api/insights/export?dataset=${dataset}&format=${format}&days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
+    apiRequestText(`/api/exports/sources/insights.dataset?dataset=${dataset}&format=${format}&days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
 };
 
 /** Trigger a browser download of an already-fetched export string. */

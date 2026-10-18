@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreationFlowNode } from '../CreationNode';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/stage.module.css';
 
 /** A file is being dragged over the board from outside the browser. */
 export const CanvasFileDropOverlay = memo(function CanvasFileDropOverlay({ active }: { active: boolean }) {

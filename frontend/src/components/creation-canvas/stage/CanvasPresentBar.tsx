@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { useTranslations } from 'next-intl';
 import { presentationStepAt, type PresentationStep } from '@/lib/canvasPresentation';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/stage.module.css';
 
 export interface CanvasPresentBarProps {
   presentMode: boolean;

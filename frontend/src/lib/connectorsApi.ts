@@ -218,7 +218,7 @@ export const connectorsApi = {
   importOpenApi: (body: {
     key: string; specUrl?: string; spec?: unknown; name?: string; icon?: string; category?: string;
   }): Promise<OpenApiImportResult> =>
-    apiRequest('/api/connectors/import/openapi', { method: 'POST', body: JSON.stringify(body) }),
+    apiRequest('/api/import/connector-openapi', { method: 'POST', body: JSON.stringify(body) }),
 
   listConnections: (connectorKey?: string): Promise<ConnectorConnection[]> =>
     apiRequest<{ connections: ConnectorConnection[] }>(

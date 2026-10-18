@@ -119,20 +119,6 @@ export class TenantService {
     } as const;
   }
 
-  async listTenants(): Promise<Tenant[]> {
-    return this.tenants.findAll();
-  }
-
-  /**
-   * Full Tenant aggregates for the workspaces this user is a member of. Backs the
-   * membership-scoped GET /api/tenants so a caller can never enumerate another
-   * tenant's billing PII / roster by hitting the unscoped list. Reuses the same
-   * repository query that powers the tenant picker (listTenantsForUser).
-   */
-  async listTenantsForUserFull(userId: string): Promise<Tenant[]> {
-    return this.tenants.findByUserId(userId);
-  }
-
   async listTenantsForUser(userId: string): Promise<Array<{
     id: number;
     name: string;

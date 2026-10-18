@@ -6,7 +6,8 @@
  *   - SOC 1 control coverage (% implemented + per-status counts),
  *   - compliance evidence counts (immutable tool-audit trail volume + sensitivity).
  *
- * Every leg reuses an existing engine — this module is pure composition + CSV.
+ * Every leg reuses an existing engine — this module is pure composition plus the
+ * report's export table (serialised by `export/exportSource`, like every export).
  */
 
 import type { Db } from '../../infrastructure/database/connection';
@@ -15,7 +16,7 @@ import { computeAllocationInsights } from '../insights/allocationInsights';
 import { computeComplianceSummary } from '../insights/complianceInsights';
 import { computeRdTaxCredit } from './rdTaxCredit';
 import { computeControlCoverage } from './socControls';
-import { csvMatrix } from '../export/tabularExport';
+import type { ExportTable } from '../export/exportSource';
 
 /** Trailing window (days) used for the allocation / R&D / compliance legs. */
 const REPORT_WINDOW_DAYS = 30;
@@ -114,9 +115,9 @@ export async function assembleAuditReport(
   };
 }
 
-/** Flatten the report into a section/metric/value CSV. The columns are this
- *  module's; the escaping is `csvMatrix`, the api's one CSV writer. */
-export function auditReportToCsv(report: AuditReport): string {
+/** Flatten the report into a section/metric/value table. The columns are this
+ *  module's; CSV/XLSX/HTML are rendered from it by `export/exportSource`. */
+export function auditReportTable(report: AuditReport): ExportTable {
   const round = (n: number) => Math.round(n * 100) / 100;
   const rows: Array<[string, string, string | number]> = [
     ['meta', 'period', report.period],
@@ -145,5 +146,5 @@ export function auditReportToCsv(report: AuditReport): string {
     ['compliance', 'distinct_executions', report.compliance.distinctExecutions],
     ['compliance', 'distinct_agents', report.compliance.distinctAgents],
   ];
-  return csvMatrix(['section', 'metric', 'value'], rows);
+  return { columns: ['section', 'metric', 'value'], rows };
 }

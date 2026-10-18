@@ -16,7 +16,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/practice.module.css';
 import {
   isPracticeResponseCorrect, nextPracticeQuestion, practiceProgress,
   type CanvasPracticeAttempt, type CanvasPracticeMode, type CanvasPracticeQuestion,

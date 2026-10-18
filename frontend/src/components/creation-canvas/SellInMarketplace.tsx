@@ -45,7 +45,7 @@ import {
   resolveDelivery,
   resolveListingHarness,
 } from '@builderforce/creation-canvas-contract';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/inspector.module.css';
 
 export function SellInMarketplace({
   kind,

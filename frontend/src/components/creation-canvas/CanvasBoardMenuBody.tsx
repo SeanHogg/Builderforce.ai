@@ -28,7 +28,8 @@ import {
   type ConnectionStyle,
 } from '@/lib/canvasConnectionStyle';
 import { CREATION_CONNECTION_KINDS, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/chrome.module.css';
+import commandBarStyles from './styles/commandBar.module.css';
 import { PhaseFocusToggle } from './phase/PhaseFocusToggle';
 
 /**
@@ -145,7 +146,7 @@ export function CanvasBoardMenuBody({
 
   return <>
     {/* HOW YOU ARE LOOKING AT IT. */}
-    <span className={styles.moreMenuHeading}>{t('barGroup.view')}</span>
+    <span className={commandBarStyles.moreMenuHeading}>{t('barGroup.view')}</span>
     <div className={styles.moreMenuTools} role="group" aria-label={t('canvasViewControls')}>
       <button type="button" className={styles.sessionActionButton} onClick={view.onZoomIn} aria-label={t('zoomIn')} title={t('zoomIn')}><ZoomInIcon /></button>
       <button type="button" className={styles.sessionActionButton} onClick={view.onZoomOut} aria-label={t('zoomOut')} title={t('zoomOut')}><ZoomOutIcon /></button>
@@ -171,19 +172,19 @@ export function CanvasBoardMenuBody({
       <button type="button" className={styles.sessionActionButton} onClick={() => panels.onToggle('outline')} aria-pressed={panels.open === 'outline'} aria-label={t('canvasOutline')} title={t('canvasOutline')}><AccessibleOutlineIcon /></button>
     </div>
 
-    <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
+    <span className={commandBarStyles.moreMenuHeading}>{t('createAndView')}</span>
     <button onClick={() => { create.onTemplates(); onDismiss(); }}><span aria-hidden><Icon source="▦" size="1em" /></span>{t('templates')}</button>
     <button onClick={() => { create.onConversation(); onDismiss(); }}><span aria-hidden><Icon source="◌" size="1em" /></span>{t('conversation')}</button>
 
     {/* Errands against a connected account, kept off the rail. Each one opens the SAME
         dock panel its rail button used to, drawn with the same glyph, so this is a move
         rather than a second entry point. */}
-    <span className={styles.moreMenuHeading}>{t('connectedSources')}</span>
+    <span className={commandBarStyles.moreMenuHeading}>{t('connectedSources')}</span>
     <button aria-pressed={panels.open === 'miro'} onClick={() => { if (panels.allow(tMiro('title'))) panels.onToggle('miro'); onDismiss(); }}><span aria-hidden><CanvasMiroIcon /></span>{tMiro('title')}</button>
     <button aria-pressed={panels.open === 'social'} onClick={() => { if (panels.allow(tSocial('title'))) panels.onToggle('social'); onDismiss(); }}><span aria-hidden><CanvasSocialIcon /></span>{tSocial('title')}</button>
     <button aria-pressed={panels.open === 'ads'} onClick={() => { if (panels.allow(tAds('title'))) panels.onToggle('ads'); onDismiss(); }}><span aria-hidden><CanvasAdsIcon /></span>{tAds('title')}</button>
 
-    <span className={styles.moreMenuHeading}>{t('sessionTools')}</span>
+    <span className={commandBarStyles.moreMenuHeading}>{t('sessionTools')}</span>
     <button onClick={() => { session.onHistory(); onDismiss(); }}><span aria-hidden>↶</span>{t('history')}</button>
     <button onClick={() => { session.onTutorial(); onDismiss(); }}><span aria-hidden>?</span>{t('tutorial')}</button>
     <button onClick={() => { session.onToggleHidden(); onDismiss(); }}><span aria-hidden>◉</span>{session.hiddenShown ? t('hideHidden') : t('showHidden')}</button>

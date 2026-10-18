@@ -2,11 +2,15 @@
  * Marketplace routes – /marketplace/*
  *
  * Provides the public skills registry and user profiles for the builderforce.ai
- * marketing/community site. These routes own the `marketplace_skills`,
- * `marketplace_skill_likes` tables and the optional profile columns on `users`.
+ * marketing/community site. These routes own the `marketplace_skills` table and
+ * the optional profile columns on `users`. Likes live in `artifact_likes`
+ * (application/marketplace/artifactLikes.ts); `marketplace_skill_likes` is retired.
  *
- * Auth model: email + password → JWT  (separate from the API-key auth used
- * by the orchestration API). Marketplace JWTs carry { sub, tid: 0 }.
+ * Auth: writes take the ordinary web JWT. `/marketplace/auth/{register,login,me}`
+ * are NOT served here any more — they are legacy aliases of `/api/auth/web/*` and
+ * `/api/auth/me`, wired in `index.ts` with `forwardToCanonical`, so a marketplace
+ * signup gets the same terms, 18+, email-verification, suspension and MFA gates as
+ * every other door instead of a weaker copy of them.
  */
 import { InternalError } from '../../domain/shared/errors';
 import { failResponse } from '../middleware/errorResponse';
@@ -14,18 +18,18 @@ import { Hono } from 'hono';
 import { eq, and, sql, desc, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
-import { signWebJwt } from '../../infrastructure/auth/JwtService';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
-import { hashPassword, verifyPassword } from '../../infrastructure/auth/HashService';
+import { legacyAliasNotice } from '../middleware/legacyAlias';
+import { toggleArtifactLike } from '../../application/marketplace/artifactLikes';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
-import { skillSearchMatches } from '../../application/marketplace/skillSearch';
-import { ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
-import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
-import { sendWelcomeEmail } from '../../infrastructure/email/EmailService';
-import { sendTransactionalEmail } from '../../application/email/sendEmail';
-import { headerHints } from '../../application/email/emailLocaleResolver';
-import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
+import {
+  invalidateSkillsList,
+  listPublishedSkills,
+  loadPublishedSkill,
+  skillSeoCacheKey,
+} from '../../application/marketplace/marketplaceSkillCatalog';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import type { Env, HonoEnv } from '../../env';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { parseBody, z, zNumberLike, zNonEmptyString } from './requestBody';
 import { startSkillCheckout, completeSkillCheckout, ListingError } from '../../application/marketplace/skillCommerce';
@@ -34,18 +38,6 @@ import { startSkillCheckout, completeSkillCheckout, ListingError } from '../../a
 // Request bodies. Fields a handler answers "X is required" for stay optional so
 // that message still wins; the schema's job is the SHAPE.
 // ---------------------------------------------------------------------------
-
-const RegisterBody = z.object({
-  email: z.string().nullish(),
-  username: z.string().nullish(),
-  password: z.string().nullish(),
-  display_name: z.string().nullish(),
-});
-
-const LoginBody = z.object({
-  email: z.string().nullish(),
-  password: z.string().nullish(),
-});
 
 /** All three columns are nullable, so an explicit `null` still clears one. */
 const ProfileBody = z.object({
@@ -103,205 +95,12 @@ const CheckoutStartBody = z.object({
 });
 const CheckoutCompleteBody = z.object({ checkoutSessionId: zNonEmptyString });
 
-/** Read-through cache key for a single published skill's SEO/SSR payload. */
-const skillSeoCacheKey = (slug: string): string => `mp:skill:seo:${slug}`;
-
-/** Version token for the public skills-list keyspace. The list is searchable +
- *  paginated (q/category/page/limit) → an unbounded keyspace, so we fold this
- *  token into each cache key and bump it on any publish/update/delete; every
- *  cached query variant orphans at once (mirrors personaRoutes.ts / 'personas:public'). */
-const SKILLS_LIST_VERSION_KEY = 'marketplace:skills:list';
-const SKILLS_LIST_CACHE_TTL_SECONDS = 120;
-
-/** Drop every cached skills-list variant by bumping the version token. Called
- *  from every skill write (create / update / publish toggle). */
-async function invalidateSkillsList(env: Env): Promise<void> {
-  await bumpCacheVersion(env, SKILLS_LIST_VERSION_KEY);
-}
-
-// Password hashing (PBKDF2 via Web Crypto) uses the canonical HashService — the
-// SAME salt:hash format + params as every other web/marketplace user hash, so the
-// two must never drift. `hashPassword` / `verifyPassword` are imported above.
-
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
 export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-
-  /** Load one published skill + its author for the public detail/SSR surface. */
-  async function loadPublishedSkill(slug: string) {
-    const [row] = await db
-      .select({
-        id:              schema.marketplaceSkills.id,
-        name:            schema.marketplaceSkills.name,
-        slug:            schema.marketplaceSkills.slug,
-        description:     schema.marketplaceSkills.description,
-        category:        schema.marketplaceSkills.category,
-        tags:            schema.marketplaceSkills.tags,
-        version:         schema.marketplaceSkills.version,
-        readme:          schema.marketplaceSkills.readme,
-        icon_url:        schema.marketplaceSkills.iconUrl,
-        repo_url:        schema.marketplaceSkills.repoUrl,
-        downloads:       schema.marketplaceSkills.downloads,
-        likes:           schema.marketplaceSkills.likes,
-        created_at:      schema.marketplaceSkills.createdAt,
-        updated_at:      schema.marketplaceSkills.updatedAt,
-        author_username: schema.users.username,
-        author_display_name: schema.users.displayName,
-        author_avatar_url:   schema.users.avatarUrl,
-      })
-      .from(schema.marketplaceSkills)
-      .innerJoin(schema.users, eq(schema.marketplaceSkills.authorId, schema.users.id))
-      .where(
-        and(
-          eq(schema.marketplaceSkills.slug, slug),
-          eq(schema.marketplaceSkills.published, true),
-        ),
-      )
-      .limit(1);
-    return row ?? null;
-  }
-
-  // ── Auth ────────────────────────────────────────────────────────────────
-
-  /**
-   * POST /marketplace/auth/register
-   * Body: { email, password, username?, display_name? } — username defaults to email
-   */
-  router.post('/auth/register', async (c) => {
-    const body = await parseBody(c, RegisterBody);
-    const email = (body.email ?? '').toLowerCase().trim();
-    const username = (body.username && body.username.trim())
-      ? body.username.trim().toLowerCase()
-      : email;
-    const password = body.password;
-    const display_name = body.display_name;
-    if (!email || !password) {
-      return c.json({ error: 'email and password are required' }, 400);
-    }
-
-    // Check for duplicates
-    const existing = await db
-      .select({ id: schema.users.id })
-      .from(schema.users)
-      .where(eq(schema.users.email, email))
-      .limit(1);
-    if (existing.length) return c.json({ error: 'Email already registered' }, 409);
-
-    const existingUsername = await db
-      .select({ id: schema.users.id })
-      .from(schema.users)
-      .where(eq(schema.users.username, username))
-      .limit(1);
-    if (existingUsername.length) return c.json({ error: 'Username already taken' }, 409);
-
-    const passwordHash = await hashPassword(password);
-
-    const userId = crypto.randomUUID();
-    // Capture the language this signup happened in so the welcome — and every
-    // later mail — is written in it.
-    const locale = localeFromHeaders(headerHints(c.req));
-
-    await db.insert(schema.users).values({
-      id:           userId,
-      email,
-      username,
-      displayName:  display_name ?? username,
-      passwordHash,
-      locale,
-    });
-
-    // This path never creates a gig account, so the new user is a builder and gets
-    // the same zero-setup workspace + starter project every other signup door
-    // provisions. Never throws — see the use case.
-    await ensureStarterWorkspace(c.env as Env, db, { id: userId, email, username, displayName: display_name ?? username });
-
-    // Fire-and-forget: a mail failure must not fail the registration. This path
-    // never creates a gig account, so the builder next steps apply.
-    void sendTransactionalEmail(
-      c.env,
-      db,
-      email,
-      (ctx) => sendWelcomeEmail(
-        c.env,
-        email,
-        display_name ?? username,
-        resolveAppBaseUrl(c.env),
-        'standard',
-        ctx.locale,
-      ),
-      { storedLocale: locale, headers: headerHints(c.req) },
-    );
-
-    const token = await signWebJwt(
-      { sub: userId, email, username },
-      c.env.JWT_SECRET,
-      86400, // 24 h
-    );
-    return c.json({ token, user: { id: userId, email, username } }, 201);
-  });
-
-  /**
-   * POST /marketplace/auth/login
-   * Body: { email, password }
-   */
-  router.post('/auth/login', async (c) => {
-    const { email, password } = await parseBody(c, LoginBody);
-    if (!email || !password) {
-      return c.json({ error: 'email and password are required' }, 400);
-    }
-
-    const [user] = await db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.email, email))
-      .limit(1);
-    if (!user || !user.passwordHash) {
-      return c.json({ error: 'Invalid email or password' }, 401);
-    }
-
-    const ok = await verifyPassword(password, user.passwordHash);
-    if (!ok) return c.json({ error: 'Invalid email or password' }, 401);
-
-    const token = await signWebJwt(
-      { sub: user.id, email: user.email, username: user.username ?? '' },
-      c.env.JWT_SECRET,
-      86400,
-    );
-    return c.json({
-      token,
-      user: {
-        id:           user.id,
-        email:        user.email,
-        username:     user.username,
-        display_name: user.displayName,
-        avatar_url:   user.avatarUrl,
-      },
-    });
-  });
-
-  /**
-   * GET /marketplace/auth/me – return current user profile (auth required)
-   */
-  router.get('/auth/me', webAuthMiddleware, async (c) => {
-    const userId = c.get('userId') as string;
-    const [user] = await db
-      .select({
-        id:           schema.users.id,
-        email:        schema.users.email,
-        username:     schema.users.username,
-        display_name: schema.users.displayName,
-        avatar_url:   schema.users.avatarUrl,
-        bio:          schema.users.bio,
-      })
-      .from(schema.users)
-      .where(eq(schema.users.id, userId))
-      .limit(1);
-    if (!user) return c.json({ error: 'User not found' }, 404);
-    return c.json({ user });
-  });
 
   // ── Users ───────────────────────────────────────────────────────────────
 
@@ -381,114 +180,9 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
    * Query: ?category=&q=&page=1&limit=24
    */
   router.get('/skills', async (c) => {
-    const { category, q, page = '1', limit = '24' } = c.req.query();
-    const pageNum  = Math.max(1, Number(page));
-    const limitNum = Math.min(100, Math.max(1, Number(limit)));
-    const offset   = (pageNum - 1) * limitNum;
-
-    // World-readable + read-heavy over a searchable/paginated (unbounded) keyspace
-    // → served through the read-through cache, keyed by a version token that any
-    // skill write bumps (see invalidateSkillsList). [perf]
-    const version = await getCacheVersion(c.env as Env, SKILLS_LIST_VERSION_KEY);
-    const cacheKey = `mp:skills:list:v:${version}:c=${category ?? ''}:q=${q ?? ''}:p=${pageNum}:l=${limitNum}`;
-
-    const payload = await getOrSetCached(
-      c.env as Env,
-      cacheKey,
-      () => loadSkillsList({ category, q, limitNum, offset, pageNum }),
-      { kvTtlSeconds: SKILLS_LIST_CACHE_TTL_SECONDS },
-    );
-
-    return c.json(payload);
+    // World-readable + read-heavy; the catalogue owns the query and its cache.
+    return c.json(await listPublishedSkills(c.env as Env, db, c.req.query()));
   });
-
-  /** The live skills-list query, factored out so the route body just wraps it in
-   *  the read-through cache. */
-  async function loadSkillsList(args: {
-    category?: string;
-    q?: string;
-    limitNum: number;
-    offset: number;
-    pageNum: number;
-  }): Promise<{ skills: unknown[]; total: number; page: number; limit: number }> {
-    const { category, q, limitNum, offset, pageNum } = args;
-
-    // Build base conditions
-    const conditions = [eq(schema.marketplaceSkills.published, true)];
-    if (category) {
-      conditions.push(eq(schema.marketplaceSkills.category, category));
-    }
-
-    let rows;
-    if (q) {
-      // Full-text search via raw SQL (tsvector column)
-      rows = await db
-        .select({
-          id:              schema.marketplaceSkills.id,
-          name:            schema.marketplaceSkills.name,
-          slug:            schema.marketplaceSkills.slug,
-          description:     schema.marketplaceSkills.description,
-          category:        schema.marketplaceSkills.category,
-          tags:            schema.marketplaceSkills.tags,
-          version:         schema.marketplaceSkills.version,
-          icon_url:        schema.marketplaceSkills.iconUrl,
-          repo_url:        schema.marketplaceSkills.repoUrl,
-          downloads:       schema.marketplaceSkills.downloads,
-          likes:           schema.marketplaceSkills.likes,
-          price_cents:     schema.marketplaceSkills.priceCents,
-          pricing_model:   schema.marketplaceSkills.pricingModel,
-          price_unit:      schema.marketplaceSkills.priceUnit,
-          created_at:      schema.marketplaceSkills.createdAt,
-          author_username: schema.users.username,
-          author_display_name: schema.users.displayName,
-          author_avatar_url:   schema.users.avatarUrl,
-        })
-        .from(schema.marketplaceSkills)
-        .innerJoin(schema.users, eq(schema.marketplaceSkills.authorId, schema.users.id))
-        .where(
-          and(...conditions, skillSearchMatches(q)),
-        )
-        .orderBy(desc(schema.marketplaceSkills.downloads), desc(schema.marketplaceSkills.likes))
-        .limit(limitNum)
-        .offset(offset);
-    } else {
-      rows = await db
-        .select({
-          id:              schema.marketplaceSkills.id,
-          name:            schema.marketplaceSkills.name,
-          slug:            schema.marketplaceSkills.slug,
-          description:     schema.marketplaceSkills.description,
-          category:        schema.marketplaceSkills.category,
-          tags:            schema.marketplaceSkills.tags,
-          version:         schema.marketplaceSkills.version,
-          icon_url:        schema.marketplaceSkills.iconUrl,
-          repo_url:        schema.marketplaceSkills.repoUrl,
-          downloads:       schema.marketplaceSkills.downloads,
-          likes:           schema.marketplaceSkills.likes,
-          price_cents:     schema.marketplaceSkills.priceCents,
-          pricing_model:   schema.marketplaceSkills.pricingModel,
-          price_unit:      schema.marketplaceSkills.priceUnit,
-          created_at:      schema.marketplaceSkills.createdAt,
-          author_username: schema.users.username,
-          author_display_name: schema.users.displayName,
-          author_avatar_url:   schema.users.avatarUrl,
-        })
-        .from(schema.marketplaceSkills)
-        .innerJoin(schema.users, eq(schema.marketplaceSkills.authorId, schema.users.id))
-        .where(and(...conditions))
-        .orderBy(desc(schema.marketplaceSkills.downloads), desc(schema.marketplaceSkills.likes))
-        .limit(limitNum)
-        .offset(offset);
-    }
-
-    const [countRow] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(schema.marketplaceSkills)
-      .where(and(...conditions));
-    const count = countRow?.count ?? 0;
-
-    return { skills: rows, total: Number(count), page: pageNum, limit: limitNum };
-  }
 
   /**
    * GET /marketplace/skills/:slug
@@ -501,13 +195,13 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     const seo = c.req.query('seo') === '1';
     if (seo) {
       const skill = await getOrSetCached(c.env as Env, skillSeoCacheKey(slug), () =>
-        loadPublishedSkill(slug),
+        loadPublishedSkill(db, slug),
       );
       if (!skill) return c.json({ error: 'Skill not found' }, 404);
       return c.json({ skill });
     }
 
-    const row = await loadPublishedSkill(slug);
+    const row = await loadPublishedSkill(db, slug);
     if (!row) return c.json({ error: 'Skill not found' }, 404);
 
     // Fire-and-forget download counter increment
@@ -610,50 +304,18 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   });
 
   /**
-   * POST /marketplace/skills/:slug/like – toggle like (auth required)
+   * POST /marketplace/skills/:slug/like – toggle like (auth required). DEPRECATED.
+   * Successor: POST /api/marketplace-stats/like { artifactType: 'skill', artifactSlug }.
+   * It kept its own like table and a ±1 counter, so likes from here never showed on a
+   * like button and likes from there never moved the catalogue sort. It is a thin
+   * adapter onto THE like use case now; it keeps the web-JWT auth its callers send.
    */
-  router.post('/skills/:slug/like', webAuthMiddleware, async (c) => {
-    const userId = c.get('userId') as string;
-    const slug   = c.req.param('slug');
-
-    const existing = await db
-      .select()
-      .from(schema.marketplaceSkillLikes)
-      .where(
-        and(
-          eq(schema.marketplaceSkillLikes.userId, userId),
-          eq(schema.marketplaceSkillLikes.skillSlug, slug),
-        ),
-      )
-      .limit(1);
-
-    if (existing.length) {
-      // Unlike
-      await db
-        .delete(schema.marketplaceSkillLikes)
-        .where(
-          and(
-            eq(schema.marketplaceSkillLikes.userId, userId),
-            eq(schema.marketplaceSkillLikes.skillSlug, slug),
-          ),
-        );
-      await db
-        .update(schema.marketplaceSkills)
-        .set({ likes: sql`${schema.marketplaceSkills.likes} - 1` })
-        .where(eq(schema.marketplaceSkills.slug, slug));
-      return c.json({ liked: false });
-    }
-
-    // Like
-    await db
-      .insert(schema.marketplaceSkillLikes)
-      .values({ userId, skillSlug: slug });
-    await db
-      .update(schema.marketplaceSkills)
-      .set({ likes: sql`${schema.marketplaceSkills.likes} + 1` })
-      .where(eq(schema.marketplaceSkills.slug, slug));
-    return c.json({ liked: true });
-  });
+  router.post(
+    '/skills/:slug/like',
+    legacyAliasNotice('/api/marketplace-stats/like'),
+    webAuthMiddleware,
+    async (c) => c.json(await toggleArtifactLike(db, { userId: c.get('userId') as string, type: 'skill', slug: c.req.param('slug') })),
+  );
 
   /**
    * POST /marketplace/purchase – record a FREE marketplace purchase (auth required)

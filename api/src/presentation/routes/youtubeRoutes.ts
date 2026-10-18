@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
-import { buildProviderConsentUrl, completeProviderOAuthCallback } from '../../application/shared/providerOAuthConnect';
+import { isProviderOAuthConfigured } from '../../application/shared/providerOAuthConnect';
+import { grantFromTokenResponse } from '../../application/integrations/oauthTokenVault';
+import { mountProviderOAuthConnect } from './providerOAuthConnectRoutes';
 import {
   deleteYouTubeConnection,
   listYouTubeConnections,
@@ -37,43 +39,32 @@ const UPLOAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 export function createYouTubeRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', async (c, next) => c.req.path.includes('/callback') ? next() : authMiddleware(c, next));
-  const callbackUrl = (url: string) => `${new URL(url).origin}/api/youtube/callback`;
 
   router.get('/connections', async (c) => c.json({
-    configured: !!(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
+    configured: isProviderOAuthConfigured(c.env as unknown as Record<string, unknown>, YOUTUBE_PROVIDER),
     connections: await listYouTubeConnections(db, c.get('tenantId') as number, c.get('userId') as string),
   }));
 
-  router.get('/connect', async (c) => {
-    const authUrl = await buildProviderConsentUrl(c.env, YOUTUBE_PROVIDER, {
-      providerName: 'youtube', redirectUri: callbackUrl(c.req.url),
-      userId: c.get('userId') as string, tenantId: c.get('tenantId') as number,
-      returnTo: c.req.query('returnTo'), returnToFallback: DEFAULT_RETURN_TO,
-    });
-    return authUrl ? c.json({ authUrl }) : c.json({ error: 'YouTube OAuth is not configured on this deployment.' }, 503);
-  });
-
-  router.get('/callback', async (c) => {
-    const base = resolveAppBaseUrl(c.env);
-    const code = c.req.query('code'); const rawState = c.req.query('state');
-    if (c.req.query('error')) return c.redirect(`${base}${DEFAULT_RETURN_TO}?youtube=declined`);
-    if (!code || !rawState) return c.redirect(`${base}${DEFAULT_RETURN_TO}?youtube=error`);
-    const completed = await completeProviderOAuthCallback(c.env, YOUTUBE_PROVIDER, { providerName: 'youtube', code, rawState, redirectUri: callbackUrl(c.req.url) });
-    if (!completed.ok) return c.redirect(`${base}${completed.returnTo ?? DEFAULT_RETURN_TO}?youtube=${completed.reason}`);
-    try {
-      const profile = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${completed.tokens.access_token}` } });
+  // GET /connect + GET /callback — the shared connect pair (one provider, so no
+  // `:provider` segment); only naming the channel and storing the grant is YouTube's.
+  mountProviderOAuthConnect<typeof YOUTUBE_PROVIDER>(router, {
+    callbackPath: () => '/api/youtube/callback',
+    fixedProvider: 'youtube',
+    outcomeParam: 'youtube',
+    defaultReturnTo: DEFAULT_RETURN_TO,
+    source: 'presentation/routes/youtubeRoutes.ts',
+    resolveConnect: () => ({ provider: YOUTUBE_PROVIDER, oauth: YOUTUBE_PROVIDER, label: YOUTUBE_PROVIDER.label }),
+    onConnected: async (c, { state, tokens }) => {
+      const profile = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${tokens.access_token}` } });
       const account = await profile.json() as { email?: string; name?: string };
-      if (!profile.ok || !account.email) return c.redirect(`${base}${completed.state.returnTo}?youtube=no_account`);
-      await saveYouTubeConnection(db, c.env, {
-        tenantId: completed.state.tenantId, userId: completed.state.userId, accountEmail: account.email,
+      if (!profile.ok || !account.email) return 'no_account';
+      await saveYouTubeConnection(db, c.env as Env, {
+        tenantId: state.tenantId, userId: state.userId, accountEmail: account.email,
         displayName: account.name ?? account.email,
-        tokens: { accessToken: completed.tokens.access_token, refreshToken: completed.tokens.refresh_token, expiresAtMs: completed.tokens.expires_in ? Date.now() + completed.tokens.expires_in * 1000 : undefined, scope: completed.tokens.scope },
+        tokens: grantFromTokenResponse(tokens),
       });
-      return c.redirect(`${base}${completed.state.returnTo}?youtube=connected`);
-    } catch (error) {
-      reportCaughtError(error, { source: 'presentation/routes/youtubeRoutes.ts', operation: 'callback' });
-      return c.redirect(`${base}${completed.state.returnTo}?youtube=error`);
-    }
+      return 'connected';
+    },
   });
 
   router.delete('/connections/:id', async (c) => {

@@ -113,7 +113,7 @@ export async function login(): Promise<BfSession> {
   const webToken = loginRes.token;
   const user = loginRes.user ?? { id: 'qa', email };
 
-  const tenantsRes = await getJson<Tenant[] | { tenants: Tenant[] }>('/api/auth/my-tenants', webToken);
+  const tenantsRes = await getJson<Tenant[] | { tenants: Tenant[] }>('/api/tenants', webToken);
   const tenants = Array.isArray(tenantsRes) ? tenantsRes : (tenantsRes.tenants ?? []);
   if (tenants.length === 0) throw new Error('QA user belongs to no workspace.');
 

@@ -3,7 +3,6 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
-import { revokeSessionTokens } from '../../application/auth/sessionRevocation';
 import {
   acceptInvitation,
   acceptInvitationStatement,
@@ -28,7 +27,6 @@ import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
-import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { resolveCanvasCapabilities } from '../middleware/featureGate';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
@@ -40,12 +38,16 @@ import {
   clearCardValidation,
 } from '../../application/tenant/cardValidationService';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
+import { personAuthMiddleware } from '../middleware/personAuthMiddleware';
+import { AGENT_HOST_BASE_PATH, legacyAliasNotice } from '../middleware/legacyAlias';
+import { agentHostInTenant, listAgentHostDirectory } from '../../application/agentHost/agentHostDirectory';
+import { WORKSPACES_PATH, workspaceHandlers } from './workspaceHandlers';
+import { registerMemberCredentialRevocation } from './memberCredentialRevocationRoutes';
+import { changeMemberRole } from '../../application/tenant/memberRoleChange';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   authTokens,
   authUserSessions,
-  agentHosts,
-  agentHostProjects,
   sourceControlIntegrations,
   creationSessionMembers,
   tenantMembers,
@@ -58,9 +60,7 @@ import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailServic
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { headerHints } from '../../application/email/emailLocaleResolver';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
-import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
-import { tenantHasSuperadminMember } from '../../application/llm/tenantTokenAvailability';
 import { getTeamSpendOverview, invalidateTeamSpendCaches, usdToMillicents } from '../../application/consumption/memberSpend';
 import {
   attachDiscountCheckout,
@@ -152,37 +152,17 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json(contract);
   });
 
-  // GET /api/tenants/mine  – WebJWT required; returns tenants the caller belongs to
-  // Used by the tenant picker immediately after login (before a tenant JWT exists)
-  router.get('/mine', webAuthMiddleware, async (c) => {
-    const userId = c.get('userId') as string;
-    // Land any invitations sent to this user's email before they had an account
-    // (or before they last returned) — they convert to memberships and show up
-    // in the list below on this very request.
-    const [account] = await db
-      .select({ email: users.email })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-    if (account?.email) {
-      await landPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
-    }
-    const result = await tenantService.listTenantsForUser(userId);
-    return c.json({ tenants: result });
-  });
-
-  // POST /api/tenants/create  – WebJWT required; creates tenant + makes caller owner
-  // Used from the tenant picker before the user has selected a tenant
-  router.post('/create', webAuthMiddleware, async (c) => {
-    const userId = c.get('userId') as string;
-    const body   = await parseBody(c, TenantNameBody);
-    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
-    const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
-    await provisionBuiltinAgents(db, tenant.id).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
-    });   // seed Validator + Security
-    return c.json(tenant.toPlain(), 201);
-  });
+  // GET/POST /api/tenants — THE "my workspaces" list and create. Person-level: a
+  // web token (the picker, before a workspace token exists) or a workspace token
+  // (editor, mobile). Registered BEFORE the `authMiddleware` wall below so a web
+  // token is not refused. The superadmin all-tenants view lives at
+  // /api/admin/tenants, not here.
+  const workspaces = workspaceHandlers(db, tenantService);
+  router.get('/', personAuthMiddleware, workspaces.list);
+  router.post('/', personAuthMiddleware, workspaces.create);
+  // Legacy aliases kept for deployed callers; same handlers, same auth as before.
+  router.get('/mine', legacyAliasNotice(WORKSPACES_PATH), webAuthMiddleware, workspaces.list);
+  router.post('/create', legacyAliasNotice(WORKSPACES_PATH), webAuthMiddleware, workspaces.create);
 
   // Accept a Creation Session invitation with the person-level web token. The
   // invite itself identifies the destination workspace, so this must not depend
@@ -273,19 +253,6 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   // All routes below require a tenant-scoped JWT
   router.use('*', authMiddleware);
 
-  // GET /api/tenants — membership-scoped: returns only the workspaces the caller
-  // belongs to (billing PII + roster live on toPlain, so an unscoped list would
-  // leak every tenant's data). A superadmin-operated tenant keeps the full,
-  // unscoped view via the same check the token/run caps use.
-  router.get('/', async (c) => {
-    const userId = c.get('userId') as string;
-    const isSuperadmin = await tenantHasSuperadminMember(db, c.get('tenantId') as number, c.env as Env);
-    const tenants = isSuperadmin
-      ? await tenantService.listTenants()
-      : await tenantService.listTenantsForUserFull(userId);
-    return c.json({ tenants: tenants.map(t => t.toPlain()) });
-  });
-
   // GET /api/tenants/:id — self-scoped (a caller can only read its own workspace).
   // Surfaces the trial state (effectivePlan + days left) so the UI can render
   // "Pro trial — N days left" without re-deriving the entitlement rules.
@@ -319,18 +286,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body = await parseBody(c, DefaultAgentHostBody);
     const agentHostId = body.agentHostId ?? null;
 
-    if (agentHostId !== null) {
-      const [agentHost] = await db
-        .select({ id: agentHosts.id })
-        .from(agentHosts)
-        .where(
-          and(
-            eq(agentHosts.id, agentHostId),
-            eq(agentHosts.tenantId, id),
-          ),
-        )
-        .limit(1);
-      if (!agentHost) return c.json({ error: 'AgentHost not found in workspace' }, 404);
+    if (agentHostId !== null && !await agentHostInTenant(db, id, agentHostId)) {
+      return c.json({ error: 'AgentHost not found in workspace' }, 404);
     }
 
     const tenant = await tenantService.setDefaultAgentHost(id, agentHostId);
@@ -813,69 +770,13 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     });
   });
 
-  // GET /api/tenants/:id/agentHosts?status=online
-  router.get('/:id/agentHosts', async (c) => {
+  // GET /api/tenants/:id/agentHosts?status=online — legacy alias of
+  // GET /api/agent-hosts (same directory read, same row shape plus extras).
+  router.get('/:id/agentHosts', legacyAliasNotice(AGENT_HOST_BASE_PATH), async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
-
-    const status = (c.req.query('status') ?? '').trim().toLowerCase();
-    const rows = await db
-      .select({
-        id:           agentHosts.id,
-        name:         agentHosts.name,
-        slug:         agentHosts.slug,
-        status:       agentHosts.status,
-        connectedAt:  agentHosts.connectedAt,
-        lastSeenAt:   agentHosts.lastSeenAt,
-        capabilities: agentHosts.capabilities,
-      })
-      .from(agentHosts)
-      .where(eq(agentHosts.tenantId, tenantId));
-
-    const filtered = status === 'online'
-      ? rows.filter((row) => isAgentHostOnline(row))
-      : rows;
-
-    // Fetch every host's project links in ONE query (grouped in JS) instead of an
-    // N+1 per-host round-trip.
-    const hostIds = filtered.map((row) => row.id);
-    const projectLinks = hostIds.length
-      ? await db
-          .select({ agentHostId: agentHostProjects.agentHostId, projectId: agentHostProjects.projectId })
-          .from(agentHostProjects)
-          .where(and(
-            eq(agentHostProjects.tenantId, tenantId),
-            inArray(agentHostProjects.agentHostId, hostIds),
-          ))
-      : [];
-    const projectsByHost = new Map<number, number[]>();
-    for (const link of projectLinks) {
-      const list = projectsByHost.get(link.agentHostId) ?? [];
-      list.push(link.projectId);
-      projectsByHost.set(link.agentHostId, list);
-    }
-
-    const hostRows = filtered.map((row) => {
-      const associatedProjects = projectsByHost.get(row.id) ?? [];
-      const capabilities: string[] = row.capabilities
-        ? (JSON.parse(row.capabilities) as string[])
-        : [];
-      const online = isAgentHostOnline(row);
-      return {
-        ...row,
-        online,
-        capabilities,
-        capabilitySummary: {
-          distributed: online && associatedProjects.length > 1,
-          remoteDispatch: online && capabilities.includes('remote-dispatch'),
-          projectCount: associatedProjects.length,
-        },
-        projectIds: associatedProjects,
-      };
-    });
-
-    return c.json({ agentHosts: hostRows });
+    return c.json({ agentHosts: await listAgentHostDirectory(db, { tenantId, status: c.req.query('status') }) });
   });
 
   // GET /api/tenants/:id/source-control-integrations
@@ -1004,18 +905,6 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       );
 
     return c.body(null, 204);
-  });
-
-  // POST /api/tenants – create another tenant (caller must have a valid tenant JWT already)
-  router.post('/', async (c) => {
-    const userId = c.get('userId') as string;
-    const body   = await parseBody(c, TenantNameBody);
-    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
-    const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
-    await provisionBuiltinAgents(db, tenant.id).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
-    });   // seed Validator + Security
-    return c.json(tenant.toPlain(), 201);
   });
 
   // POST /api/tenants/:id/members
@@ -1192,13 +1081,14 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       return c.json({ error: 'role must be one of: ' + Object.values(TenantRole).join(', ') }, 400);
     }
 
-    const tenant = await tenantService.changeMemberRole(id, actorUserId, targetUserId, body.role);
-    await invalidateTaskAssignees(c.env as Env, id);
-    // The role rides in the member's next JWT mint; clear the cached membership now.
-    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
+    // Same use case as the superadmin override (adminRoutes), in the manager scope:
+    // the aggregate's member rules apply and the membership change is announced
+    // (which clears the cached JWT membership, so the role bites on the next request).
+    const result = await changeMemberRole(db, c.env as Env, { kind: 'tenant_manager', tenantService }, {
+      tenantId: id, actorUserId, targetUserId, role: body.role,
     });
-    return c.json(tenant.toPlain());
+    if (!result.ok || !result.tenant) return c.json({ error: 'Member not found in tenant' }, 404);
+    return c.json(result.tenant.toPlain());
   });
 
   // ── Per-seat AI spend limits (Teams) ──────────────────────────────────────
@@ -1436,57 +1326,16 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     });
   });
 
-  // POST /api/tenants/:id/security/users/:userId/sessions/:sessionId/revoke
-  router.post('/:id/security/users/:userId/sessions/:sessionId/revoke', requireRole(TenantRole.MANAGER), async (c) => {
-    const tenantId = Number(c.req.param('id'));
-    const callerTenantId = c.get('tenantId') as number;
-    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
-
-    const userId = c.req.param('userId');
-    const sessionId = c.req.param('sessionId');
-    if (!userId || !sessionId) return c.json({ error: 'userId and sessionId are required' }, 400);
-
-    const isMember = await assertTenantMember(db, tenantId, userId);
-    if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
-
-    await revokeSessionTokens(db, c.env, { userId, sessionId, tenantId });
-
-    return c.json({ ok: true });
-  });
-
-  // POST /api/tenants/:id/security/users/:userId/sessions/revoke-all
-  router.post('/:id/security/users/:userId/sessions/revoke-all', requireRole(TenantRole.MANAGER), async (c) => {
-    const tenantId = Number(c.req.param('id'));
-    const callerTenantId = c.get('tenantId') as number;
-    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
-
-    const userId = c.req.param('userId');
-    if (!userId) return c.json({ error: 'userId is required' }, 400);
-
-    const isMember = await assertTenantMember(db, tenantId, userId);
-    if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
-
-    await revokeSessionTokens(db, c.env, { userId, tenantId });
-
-    return c.json({ ok: true });
-  });
-
-  // POST /api/tenants/:id/security/users/:userId/tokens/:jti/revoke
-  router.post('/:id/security/users/:userId/tokens/:jti/revoke', requireRole(TenantRole.MANAGER), async (c) => {
-    const tenantId = Number(c.req.param('id'));
-    const callerTenantId = c.get('tenantId') as number;
-    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
-
-    const userId = c.req.param('userId');
-    const jti = c.req.param('jti');
-    if (!userId || !jti) return c.json({ error: 'userId and jti are required' }, 400);
-
-    const isMember = await assertTenantMember(db, tenantId, userId);
-    if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
-
-    await revokeSessionTokens(db, c.env, { userId, jti, tenantId });
-
-    return c.json({ ok: true });
+  // POST /api/tenants/:id/security/users/:userId/{sessions/:sessionId/revoke,
+  // sessions/revoke-all, tokens/:jti/revoke} — a manager, in their OWN workspace.
+  // Same use case as the superadmin console's twin (adminRoutes).
+  registerMemberCredentialRevocation(router, '/:id/security/users/:userId', {
+    guard: requireRole(TenantRole.MANAGER),
+    dbOf: () => db,
+    tenantOf: (c) => {
+      const tenantId = Number(c.req.param('id'));
+      return tenantId === (c.get('tenantId') as number) ? tenantId : c.json({ error: 'Forbidden' }, 403);
+    },
   });
 
   // DELETE /api/tenants/:id

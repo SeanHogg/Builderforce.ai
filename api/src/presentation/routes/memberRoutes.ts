@@ -26,15 +26,12 @@ import { TenantRole } from '../../domain/shared/types';
 import { deploymentEvents, integrationCredentials, memberMetricsPeriod, memberProfiles, users } from '../../infrastructure/database/schema';
 import { decryptCredentials } from '../../application/integrations/credentialCrypto';
 import { syncMemberCalendar, type CalendarCredential } from '../../application/integrations/googleCalendarSync';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { memberProfilesCacheKey as profilesCacheKey, readMemberProfiles } from '../../application/member/memberProfiles';
 import { parseBody, parseOptionalBody, z } from './requestBody';
 import {
-  computeDora,
-  computeMemberMetrics,
-  doraCacheKey,
-  memberMetricsCacheKey,
-  readWorkforceMetricsVersion,
+  readDora,
+  readMemberMetrics,
   bumpWorkforceMetricsVersion,
   rollupByDiscipline,
   type MemberScorecard,
@@ -249,10 +246,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     const discipline = (c.req.query('discipline') ?? '').trim() || null;
     const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
-    const version = await readWorkforceMetricsVersion(env, tenantId);
-    const scorecards = await getOrSetCached(env, memberMetricsCacheKey(tenantId, version, days, projectId), () =>
-      computeMemberMetrics(db, tenantId, days, projectId),
-    );
+    const scorecards = await readMemberMetrics(db, env, tenantId, days, projectId);
     // Snapshot into member_metrics_period (best-effort) so the table is the
     // queryable history behind sprint retros, not just an on-the-fly read.
     //
@@ -279,11 +273,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const days = clampDays(parseInt(c.req.query('days') ?? '7', 10), 7, 180);
     const projectId = positiveIntParam(c.req.query('projectId'));
-    const env = c.env as Env;
-    const version = await readWorkforceMetricsVersion(env, tenantId);
-    const all = await getOrSetCached(env, memberMetricsCacheKey(tenantId, version, days, projectId), () =>
-      computeMemberMetrics(db, tenantId, days, projectId),
-    );
+    const all = await readMemberMetrics(db, c.env as Env, tenantId, days, projectId);
     const one = all.find((m) => m.memberKind === kind && m.memberRef === ref) ?? null;
     return c.json({ windowDays: days, member: one });
   });
@@ -293,12 +283,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const days = clampDays(parseInt(c.req.query('days') ?? '30', 10), 30, 365);
     const projectId = positiveIntParam(c.req.query('projectId'));
-    const env = c.env as Env;
-    const version = await readWorkforceMetricsVersion(env, tenantId);
-    const dora = await getOrSetCached(env, doraCacheKey(tenantId, version, days, projectId), () =>
-      computeDora(db, tenantId, days, projectId),
-    );
-    return c.json(dora);
+    return c.json(await readDora(db, c.env as Env, tenantId, days, projectId));
   });
 
   // ── GET /api/members/engagement?days=30 — unified engagement (MANAGER+) ────

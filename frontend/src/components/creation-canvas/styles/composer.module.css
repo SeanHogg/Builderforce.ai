@@ -1,0 +1,221 @@
+/* THE canvas prompt: the composer dock, its card, intent segment, resize grip and scope chip.
+   Split out of CreationCanvas.module.css, which keeps the board shell and the
+   canvas palette (`--canvas-*`, light and dark) that every rule here reads. */
+
+.scopeChip select option { background:var(--canvas-panel); color:var(--canvas-ink); }
+
+/* The run receipt, above the floating card. */
+.composerUtilities { display:flex; width:100%; min-width:0; align-items:flex-end; gap:12px; margin-bottom:8px; }
+
+/* THE ONE COMPOSER CARD. One border, one surface, and every control that changes what
+   Enter does inside it, placed by area:
+     intent — the top row: what Enter means;
+     input  — the field and its tool row (+, scope, mode/model, mic, send). Starting
+              points and next-step chips are the shared `ChatInput`'s, drawn inside
+              the field's own box, the same as on every other prompt.
+   A row with nothing in it collapses to zero, so a one-verb surface mid-conversation is
+   just the field. The inner PromptPanel stands its own surface down (below): two
+   borders one inside the other is the "box in a box" this replaced. */
+.composerCard {
+  position:relative; box-sizing:border-box; width:100%; min-width:0;
+  display:grid; grid-template-columns:minmax(0,1fr);
+  grid-template-areas:"intent" "input";
+  border:1px solid var(--bf-border); border-radius:14px;
+  background:var(--composer-card-bg, var(--bf-surface));
+  box-shadow:0 10px 30px var(--canvas-shadow);
+  transition:border-color 120ms ease, box-shadow 120ms ease;
+}
+.composerCard:focus-within { border-color:var(--bf-accent); box-shadow:0 0 0 1px var(--bf-accent), 0 10px 30px var(--canvas-shadow); }
+:global(html:not([data-theme='light'])) .composerCard { --composer-card-bg:var(--canvas-widget-surface); backdrop-filter:blur(14px); }
+.composerCard :global(.bf-prompt-panel) {
+  --prompt-panel-bg:transparent; --prompt-panel-border:transparent; --prompt-panel-active-border:transparent;
+  --prompt-panel-active-ring:0 0 0 0 transparent; --prompt-panel-shadow:none; --prompt-panel-radius:0 0 14px 14px;
+}
+.composerCard > .composerIntent { grid-area:intent; justify-self:start; margin:8px 0 0 8px; }
+.composerCard > .composerInputRow { grid-area:input; }
+/* Scope is a chip in the card's tool row (the shell's `context`). The palette's
+   generic surface rules paint `.scopeChip` as a panel tile; inside the card it is a pill
+   on the card's own ground, in both themes. */
+.composerCard .scopeChip { border-color:var(--bf-border); background:transparent; color:var(--canvas-ink); }
+:global(html:not([data-theme='light'])) .composerCard .scopeChip { background:transparent; }
+
+/* The prompt is a page fixture, not part of the Brain surface:centred on the board
+   and bottom-aligned, which is where every chat product people already use puts it.
+   It shifts by exactly the width a docked Brain reserved, so it stays centred on
+   whatever board is left — and it never moves when Brain floats, docks, or closes.
+   The 300px reserve keeps it clear of the zoom rail and the minimap. */
+/* z-index ABOVE the floating chrome (`.floatCard`, 20): the prompt is the board's primary
+   input, and its own popovers — the model menu, the starting-point picker, the attachment
+   list — open upward out of it. Below the chrome, any of those that reached a card's band
+   was painted through by it. It no longer OVERLAPS the command bar (that band is measured
+   now), but "we calculated that they cannot touch" is not a reason to leave the more
+   important of the two underneath. */
+.composerDock { position:absolute; z-index:21; right:calc(300px + var(--brain-dock-right, 0px)); bottom:var(--canvas-command-bar-space, 66px); left:calc(300px + var(--brain-dock-left, 0px)); box-sizing:border-box; width:auto; max-width:700px; margin-inline:auto; display:flex; flex-direction:column; align-items:center; --prompt-panel-bg:var(--bf-surface); --prompt-panel-border:var(--bf-border); }
+/* The height grip: a full-width strip straddling the card's top edge, with a short
+   bar that shows only on hover or focus. It used to be a knob sitting ON the border,
+   over the first line of whatever was being typed. */
+.promptResizeHandle { position:absolute; z-index:2; top:-5px; right:16px; left:16px; height:10px; padding:0; touch-action:none; user-select:none; cursor:ns-resize; }
+.promptResizeHandle::after { content:''; position:absolute; top:3px; left:50%; width:36px; height:4px; border-radius:var(--radius-full); background:var(--bf-accent); opacity:0; transform:translateX(-50%); transition:opacity 120ms ease; }
+.promptResizeHandle:hover::after,.promptResizeHandle:focus-visible::after { opacity:1; }
+.promptResizeHandle:focus-visible { outline:none; }
+.composer { width:100%; --bf-ctl-size:32px; --prompt-panel-gap:4px; --prompt-panel-action-gap:6px; --prompt-panel-pad-y:8px; --prompt-panel-pad-x:10px; --prompt-panel-radius:14px; --prompt-panel-bg:var(--bf-surface); --prompt-panel-border:var(--bf-border); --prompt-panel-shadow:none; --bf-text-secondary:var(--canvas-muted); --bf-field:color-mix(in srgb,var(--bf-accent-soft) 50%,var(--bf-surface)); }
+.composer textarea { box-sizing:border-box; height:var(--canvas-prompt-height, 34px); min-height:34px; max-height:240px; padding:4px 2px; overflow-y:auto; font-size:14px; line-height:1.35; }
+.composer:global(.bf-prompt-panel__actions) { flex-wrap:nowrap!important; width:100%; overflow:visible; }
+.composer:global(.bf-chat-auto-mode) { width:32px; min-width:32px; padding:0!important; justify-content:center; }
+.composer:global(.bf-chat-auto-mode) > span { display:none; }.scopeChip { display:inline-flex; min-width:0; max-width:180px; flex:0 1 auto; align-items:center; gap:4px; overflow:hidden; height:30px; box-sizing:border-box; padding:0 10px; border:1px solid var(--bf-border); border-radius:var(--radius-full); color:var(--canvas-muted); background:transparent; font-size:12px; font-weight:600; white-space:nowrap; }.scopeChip select { width:100%; min-width:0; max-width:none; border:0; outline:0; background:transparent; color:inherit; font:inherit; text-overflow:ellipsis; }
+
+/* ── THE COMPOSER'S INTENT SEGMENT ────────────────────────────────────────────────
+   WHAT ENTER MEANS, drawn beside the box it means it in. It is only ever drawn when a
+   surface offers two or more verbs (`CanvasComposerIntent` returns null below that), so
+   nothing here has to cope with a one-segment control.
+
+   A trough with one lit segment — the same shape the surface switcher and the bar's
+   groups use, because it is the same kind of decision: one of these, exactly one. */
+.composerIntent {
+  display:inline-flex; align-self:flex-start; align-items:center; gap:2px;
+  margin-bottom:6px; padding:2px;
+  border:1px solid var(--bf-border); border-radius:var(--radius-full);
+  background:color-mix(in srgb,var(--bf-accent-soft) 50%,var(--bf-surface));
+}
+.composerIntentSegment {
+  display:inline-flex; align-items:center; gap:6px;
+  height:28px; padding:0 10px 0 8px;
+  border:0; border-radius:var(--radius-full);
+  background:transparent; color:var(--canvas-muted);
+  font:650 12px var(--font-sans); white-space:nowrap; cursor:pointer;
+}
+.composerIntentSegment:hover,.composerIntentSegment:focus-visible { color:var(--canvas-ink); outline:none; }
+.composerIntentSegment[aria-checked='true'] {
+  background:var(--canvas-panel); color:var(--canvas-ink); font-weight:700;
+  box-shadow:0 1px 2px var(--canvas-shadow);
+}
+/* The arc's hue for a staged verb, exactly as `.barGroup[data-stage]` does it, so
+   "Idea" is one colour on this canvas and not two. */
+.composerIntentDot { width:7px; height:7px; flex:none; border-radius:var(--radius-full); background:var(--intent-stage,var(--canvas-muted)); }
+.composerIntentSegment[data-stage='idea'] { --intent-stage:var(--stage-idea); }
+.composerIntentSegment[data-stage='make'] { --intent-stage:var(--stage-make); }
+.composerIntentSegment[data-stage='run'] { --intent-stage:var(--stage-run); }
+.composerIntentSegment[data-stage='measure'] { --intent-stage:var(--stage-measure); }
+.composerIntentSegment[data-stage='reach'] { --intent-stage:var(--stage-reach); }
+.composerIntentSpark { display:inline-grid; place-items:center; flex:none; color:var(--bf-accent); }
+
+/* The row a finger uses: the phone's "+" then the field. On a desktop the trigger is
+   `display:none` and this is a one-child flex row, which is what the field always was. */
+.composerInputRow { display:flex; align-items:flex-end; gap:6px; width:100%; min-width:0; }
+.composerInputRow > .composer { flex:1; min-width:0; }
+/* THE "+" THAT IS THE COMMAND BAR. Hidden above the phone breakpoint, where the bar
+   itself is drawn — see the media query below for why it is a CSS decision and the bar's
+   own presence is a render decision. */
+.composerActionsTrigger {
+  display:none; place-items:center; flex:none;
+  width:44px; height:44px; margin-bottom:2px; padding:0;
+  border:1px solid var(--bf-border); border-radius:var(--radius-full);
+  background:var(--canvas-panel); color:var(--canvas-ink); cursor:pointer;
+}
+.composerActionsTrigger > svg { display:block; width:18px; height:18px; }
+.composerActionsTrigger:hover,.composerActionsTrigger:focus-visible { border-color:var(--canvas-accent); color:var(--canvas-accent); outline:none; }
+
+@media (max-width:1100px) {
+  /* Narrower side panels leave a narrower centre; the prompt stays centred but
+     stops short of the object panel rather than sliding under it. */
+  .composerDock { right:calc(260px + var(--brain-dock-right, 0px)); left:calc(260px + var(--brain-dock-left, 0px)); max-width:520px; }
+}
+.composer,
+.scopeChip {
+  border-color:var(--canvas-line);
+  background:var(--canvas-panel);
+  color:var(--canvas-ink);
+}
+.composer textarea,
+.scopeChip { color:var(--canvas-muted); }
+.composer { box-shadow:0 14px 42px var(--canvas-shadow); }
+:global(html:not([data-theme='light'])) .scopeChip {
+  background:#142238;
+}
+:global(html:not([data-theme='light'])) .composer {
+  background:transparent!important;
+  --prompt-panel-bg:var(--canvas-widget-surface);
+  --prompt-panel-border:var(--bf-border);
+  /* The shared composer's field (`--bf-*`): text, border and send colours inherit the
+     canvas's Brain palette; only the field plate and the disabled send differ in dark. */
+  --bf-text-secondary:var(--canvas-muted);
+  --bf-field:var(--canvas-panel-muted);
+  --bf-surface-2:var(--canvas-hover);
+  --text-primary:var(--canvas-ink);
+  --text-secondary:var(--canvas-muted);
+  --text-muted:var(--canvas-muted);
+  --bg-elevated:var(--canvas-panel);
+  --bg-base:var(--canvas-panel-muted);
+  --border-subtle:var(--canvas-line);
+  backdrop-filter:blur(14px);
+}
+
+/* The reusable PromptPanel owns the visible surface; this class only docks it. */
+.composer { background:transparent!important; border:0!important; box-shadow:none!important; padding:0!important; }
+
+/* Move-around-the-board, folded out of the left rail and into the one bar. It has no
+   rules of its own any more: the buttons wear `.sessionActionButton` and the group wears
+   `.barGroup`, which is the whole point — this used to be a near-copy of the session
+   button (28px vs 30px, its own hover, its own lit state) that a reader could tell apart
+   from the glyphs beside it without being able to say why. */
+
+/* ── THE PROMPT'S THREE PLACEMENTS ────────────────────────────────────────────────
+   `closed` is not styled: the composer is not rendered at all, which is the point — a
+   hidden-but-mounted prompt still steals the board's pointer events at its edges. */
+.promptChrome { display: flex; align-items: center; gap: 6px; width: 100%; padding: 0 4px 4px; }
+.promptChromeName {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--canvas-muted);
+}
+.promptChrome button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--canvas-muted);
+  cursor: pointer;
+}
+.promptChrome button:hover, .promptChrome button:focus-visible { background: var(--canvas-hover); color: var(--canvas-ink); outline: none; }
+
+/* DOCKED — the prompt is a ROW INSIDE the Brain panel, not a card under it.
+   `BrainDock` renders the same node as its last child (see that file's header), so there
+   is nothing to position: it is in normal flow, full width, and the transcript above it
+   flexes to whatever is left. The panel's own padding and border are the prompt's, which
+   is what makes the column read as one chat rather than as a panel with something stuck
+   to its underside.
+
+   It used to be an absolutely positioned card at the dock's edge, with the dock shortened
+   by `--composer-space` to make room for it. That is two boxes claiming one edge, each
+   with its own border and its own header, and it needed a measurement to stop the panel
+   painting over the prompt entirely. Both went away with the positioning. */
+.composerDock[data-placement='docked'] {
+  position: static;
+  z-index: auto;
+  flex: none;
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  padding: 8px 10px 10px;
+  align-items: stretch;
+}
+/* The panel is already a raised surface. Inside it the card is a FILLED box with no
+   outline and no shadow — panel edge, rule, card border and pill borders stacked up
+   made a chat box read as a form. The fill alone separates it from the transcript;
+   focus still draws the accent ring. */
+.composerDock[data-placement='docked'] .composerCard {
+  border-color: transparent;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--canvas-ink) 7%, var(--bf-surface));
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.composerDock[data-placement='docked'] .composerCard:focus-within { border-color: var(--bf-accent); box-shadow: 0 0 0 1px var(--bf-accent); }

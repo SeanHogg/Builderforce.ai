@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { addProp, canvasWorldSceneFrom, deleteProp, type CanvasWorldPropKind, type CanvasWorldScene } from '@builderforce/creation-canvas-contract';
 import { isTypingTarget } from '@/lib/keyboardTarget';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 import { CanvasFullscreenAction } from './CanvasFullscreenAction';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
 import DropPlacer, { type DropPlacerHandler } from './world3d/DropPlacer';

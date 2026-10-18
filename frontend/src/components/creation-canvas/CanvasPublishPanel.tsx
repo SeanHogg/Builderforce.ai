@@ -39,7 +39,8 @@ import {
   type CreationListing,
   type PublishCandidate,
 } from '@/lib/creationListings';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
+import inspectorStyles from './styles/inspector.module.css';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface CanvasPublishPanelProps {
   open: boolean;
@@ -284,7 +285,7 @@ export function CanvasPublishPanel({
             </label>
 
             <div className={styles.publishActions}>
-              <button type="button" className={styles.fullButton} onClick={submit} disabled={!canSubmit}>
+              <button type="button" className={inspectorStyles.fullButton} onClick={submit} disabled={!canSubmit}>
                 {busy
                   ? t('publishing')
                   : selected?.existingListingId ? t('update') : t('publishAction')}
@@ -292,7 +293,7 @@ export function CanvasPublishPanel({
               {selected?.existingListingId && (
                 <button
                   type="button"
-                  className={styles.secondaryFullButton}
+                  className={inspectorStyles.secondaryFullButton}
                   onClick={withdraw}
                   disabled={busy}
                 >

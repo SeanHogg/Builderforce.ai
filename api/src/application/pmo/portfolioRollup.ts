@@ -23,12 +23,11 @@
 import { and, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import { analyzeDependencies } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
-import { usageDatabaseOf } from '../llm/usageLedger';
+import { ALL_TIME, readUsageBreakdown, tenantScope } from '../llm/usageQuery';
 import {
   deploymentEvents,
   initiatives,
   keyResults,
-  llmUsageLog,
   objectiveLinks,
   objectives,
   pmoDependencies,
@@ -495,20 +494,13 @@ export async function computePortfolioRollup(
   const throughputPerWeek = completed.filter((t) => now - new Date(t.completedAt!).getTime() <= WEEK_MS).length;
 
   // ── spend (per-project LLM cost, grouped so byInitiative can reuse it) ──────
+  // THE usage query use case — the same per-project reader the ROI rollup uses, so a
+  // portfolio's spend and the ROI page's spend for the same projects cannot differ.
   const llmByProject = projectIds.length
-    ? await usageDatabaseOf(db)
-        .select({
-          projectId: llmUsageLog.projectId,
-          millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)`,
-        })
-        .from(llmUsageLog)
-        .where(and(eq(llmUsageLog.tenantId, tenantId), inArray(llmUsageLog.projectId, projectIds)))
-        .groupBy(llmUsageLog.projectId)
+    ? await readUsageBreakdown(db, { scope: tenantScope(tenantId), since: ALL_TIME, projectIds }, 'project')
     : [];
   const costUsdByProject = new Map<number, number>(
-    llmByProject
-      .filter((r) => r.projectId != null)
-      .map((r) => [r.projectId as number, num(r.millicents) / MILLICENTS_PER_USD]),
+    llmByProject.map((r) => [r.projectId, r.costMc / MILLICENTS_PER_USD]),
   );
   const agentLlmCostUsd = [...costUsdByProject.values()].reduce((a, b) => a + b, 0);
 
@@ -717,29 +709,4 @@ export async function loadPmoTree(db: Db, tenantId: number, segmentId: string): 
     projects: projRows.map((p) => ({ id: p.id, name: p.name, key: p.key, status: p.status, initiativeId: p.initiativeId ?? null })),
     dependencies: depRows,
   };
-}
-
-/**
- * Would adding edge from→to close a cycle (i.e. is `from` already reachable from
- * `to`)? Used by the route to reject cycle-creating dependency edges. Pure.
- */
-export function wouldCreateCycle(edges: DepEdge[], from: string, to: string): boolean {
-  if (from === to) return true;
-  const adj = new Map<string, string[]>();
-  for (const e of edges) {
-    const list = adj.get(e.fromInitiativeId) ?? [];
-    list.push(e.toInitiativeId);
-    adj.set(e.fromInitiativeId, list);
-  }
-  // DFS from `to`; if we reach `from`, the new edge from→to would form a cycle.
-  const seen = new Set<string>();
-  const stack = [to];
-  while (stack.length) {
-    const cur = stack.pop()!;
-    if (cur === from) return true;
-    if (seen.has(cur)) continue;
-    seen.add(cur);
-    for (const n of adj.get(cur) ?? []) stack.push(n);
-  }
-  return false;
 }

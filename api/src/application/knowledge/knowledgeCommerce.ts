@@ -136,6 +136,9 @@ export async function startKnowledgeCheckout(
       purchaseKind: KNOWLEDGE_PURCHASE_KIND,
       listingId: listing.id,
       buyerTenantId: String(input.tenantId),
+      // `tenantId` too, so the webhook parser fills `event.tenantId` and the
+      // integration trigger fires for the buyer's workspace like every other flow.
+      tenantId: String(input.tenantId),
       // Carried because the WEBHOOK leg has no session to read it from, and the
       // purchase row records who bought it. The redirect leg has both and agrees.
       buyerUserId: input.buyerUserId,

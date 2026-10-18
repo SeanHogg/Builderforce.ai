@@ -57,8 +57,7 @@ import {
   bumpCacheVersion,
   invalidateCached,
 } from '../../infrastructure/cache/readThroughCache';
-import { PUBLIC_LIST_CACHE_KEY } from './workforceRoutes';
-import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
+import { PUBLIC_LIST_CACHE_KEY, hiredAgentsCacheKey } from '../../application/workforce/agentDirectory';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import {
   sanitizePsychometricProfile,
@@ -555,7 +554,7 @@ async function invalidateAfterWrite(env: Env, tenantId: number, agentRef: string
     invalidateCached(env, assigneeProfilesCacheKey(tenantId)).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/personalityRoutes.ts", operation: "invalidateAfterWrite" });
     }),
-    invalidateCached(env, runtimeHiredAgentsCacheKey(tenantId)).catch((error) => {
+    invalidateCached(env, hiredAgentsCacheKey(tenantId)).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/personalityRoutes.ts", operation: "invalidateAfterWrite" });
     }),
   ]);

@@ -6,7 +6,7 @@
 import { useTranslations } from 'next-intl';
 import { ViewportDesktopIcon, ViewportMobileIcon, ViewportTabletIcon } from '@/components/canvas/CanvasCommands';
 import { CANVAS_VIEWPORTS, type CanvasViewport } from '@builderforce/creation-canvas-contract';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 
 /**
  * THE width switcher — "which width is the reader checking?" — drawn once.

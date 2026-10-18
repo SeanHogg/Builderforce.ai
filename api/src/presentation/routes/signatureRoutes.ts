@@ -14,6 +14,7 @@
  */
 
 import { Hono, type Context } from 'hono';
+import { downloadResponse } from '../../application/export/exportDownload';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -158,13 +159,7 @@ export function createPublicSignatureRoutes(db: Db): Hono<HonoEnv> {
     if (!view) return Response.json({ error: 'That signing link is not valid.' }, { status: 404 });
     if (!view.documentArtifactId) return Response.json({ error: 'This request has no bound file — read documentBody instead.' }, { status: 404 });
     const file = await loadAndDecryptArtifact(db, c.env as Env, view.tenantId, view.documentArtifactId);
-    return new Response(file.bytes, {
-      headers: {
-        'content-type': file.mime || 'application/octet-stream',
-        'content-disposition': `inline; filename="${file.title.replace(/"/g, '')}"`,
-        'cache-control': 'no-store',
-      },
-    });
+    return downloadResponse(file.bytes, { filename: file.title, contentType: file.mime || 'application/octet-stream', disposition: 'inline' });
   }));
 
   router.post('/:token', (c) => handle(async () => {

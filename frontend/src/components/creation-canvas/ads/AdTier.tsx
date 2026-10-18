@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/ads.module.css';
 import { adSetsApi, type AdCreative } from '@/lib/adSetsApi';
 import { usePanelTask } from '@/hooks/usePanelTask';
 import { useAdAccount } from '@/lib/ads/useAdAccounts';

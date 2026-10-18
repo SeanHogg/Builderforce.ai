@@ -8,6 +8,7 @@
  * `{tokens}` (a formatted token count), `{pct}` (0–100), `{count}`, `{days}`.
  */
 import type { SavingsSourceKey } from '@seanhogg/builderforce-brain-embedded';
+import { stringsFrom, type LabelLookup } from '../labelCatalog';
 
 export interface SpendLabels {
   /** Pill: "{amount} spent". */
@@ -91,5 +92,20 @@ export function spendLabels(overrides?: Partial<SpendLabels>): SpendLabels {
     ...overrides,
     sources: { ...DEFAULT_SPEND_LABELS.sources, ...overrides.sources },
     sourceHints: { ...DEFAULT_SPEND_LABELS.sourceHints, ...overrides.sourceHints },
+  };
+}
+
+/**
+ * THE spend & savings copy from a host catalog — the ONE key table every host reads it
+ * through: each field by name, and `sources.<source>` / `sourceHints.<source>` by the
+ * server's saving-source key. A key the catalog lacks keeps the English default;
+ * `{amount}`/`{tokens}`/`{pct}`/`{count}`/`{days}` must come back literal.
+ */
+export function spendLabelsFrom(lookup: LabelLookup): SpendLabels {
+  const d = DEFAULT_SPEND_LABELS;
+  return {
+    ...stringsFrom(d, lookup),
+    sources: stringsFrom(d.sources, lookup, 'sources.'),
+    sourceHints: stringsFrom(d.sourceHints, lookup, 'sourceHints.'),
   };
 }

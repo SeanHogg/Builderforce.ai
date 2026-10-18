@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { summarizeOutcomes, type OutcomeRow } from './engineeringInsights';
 import { projectMonthlyBurn, budgetStatus, daysInMonth } from './financeInsights';
-import { classifyToolRisk, summarizeAudit, evidencePackToCsv, type AuditRow, type EvidenceRow } from './complianceInsights';
+import { classifyToolRisk, summarizeAudit, evidencePackTable, type AuditRow, type EvidenceRow } from './complianceInsights';
+import { csvMatrix } from '../export/tabularExport';
 import { computeFunnelMetrics, type IdeaRow } from './funnelInsights';
+
+/** The evidence pack serialised the way every export is: its table through the one CSV writer. */
+const evidencePackToCsv = (rows: EvidenceRow[]) => { const t = evidencePackTable(rows); return csvMatrix(t.columns, t.rows); };
 
 // ── Engineering (AI effectiveness) ───────────────────────────────────────────
 describe('summarizeOutcomes', () => {

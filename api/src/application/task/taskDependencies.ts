@@ -13,6 +13,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { taskDependencies, tasks, projects } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { wouldCloseCycle } from '../../domain/shared/dagEdges';
 
 export interface DependencyEdge {
   id: number;
@@ -55,37 +56,9 @@ export async function listProjectDependencies(db: Db, projectId: number): Promis
     .where(eq(taskDependencies.projectId, projectId));
 }
 
-/**
- * Would adding `predecessor → successor` create a cycle? It does iff `successor`
- * can already reach `predecessor` along existing precedence edges. BFS forward
- * (predecessor → successor) from `successor`; if we arrive at `predecessor`, the
- * new edge would close a loop. O(V+E) over the project's edges, loaded once.
- */
-export function hasPathReachingTarget(
-  edges: DependencyEdge[],
-  fromTaskId: number,
-  targetTaskId: number,
-): boolean {
-  const adjacency = new Map<number, number[]>();
-  for (const e of edges) {
-    const list = adjacency.get(e.predecessorTaskId);
-    if (list) list.push(e.successorTaskId);
-    else adjacency.set(e.predecessorTaskId, [e.successorTaskId]);
-  }
-  const queue: number[] = [fromTaskId];
-  const seen = new Set<number>([fromTaskId]);
-  while (queue.length) {
-    const current = queue.shift() as number;
-    if (current === targetTaskId) return true;
-    for (const next of adjacency.get(current) ?? []) {
-      if (!seen.has(next)) {
-        seen.add(next);
-        queue.push(next);
-      }
-    }
-  }
-  return false;
-}
+/** The project's edges as `[predecessor, successor]` pairs for the shared cycle gate. */
+const precedencePairs = (edges: DependencyEdge[]) =>
+  edges.map((e) => [e.predecessorTaskId, e.successorTaskId] as const);
 
 /** Dependency edge semantics. finish_to_start (default) = predecessor must finish
  *  before successor starts; the rest mirror standard PM scheduling relations. */
@@ -128,8 +101,8 @@ export async function addDependency(
   if (edges.some((e) => e.predecessorTaskId === predecessorTaskId && e.successorTaskId === successorTaskId)) {
     return { ok: false, status: 409, error: 'dependency already exists' };
   }
-  // Cycle gate: reject if successor already reaches predecessor.
-  if (hasPathReachingTarget(edges, successorTaskId, predecessorTaskId)) {
+  // Cycle gate (domain/shared/dagEdges): reject if successor already reaches predecessor.
+  if (wouldCloseCycle(precedencePairs(edges), predecessorTaskId, successorTaskId)) {
     return { ok: false, status: 400, error: 'would create a dependency cycle' };
   }
 
@@ -146,7 +119,7 @@ export async function addDependency(
   // deleting our edge if so. (Our P→S edge can't itself create an S→P path, so a
   // positive result means a genuine concurrent reverse path exists.)
   const after = await listProjectDependencies(db, projectId);
-  if (hasPathReachingTarget(after, successorTaskId, predecessorTaskId)) {
+  if (wouldCloseCycle(precedencePairs(after), predecessorTaskId, successorTaskId)) {
     await db.delete(taskDependencies).where(scopedToTenant(taskDependencies, tenantId, eq(taskDependencies.id, edge.id)));
     return { ok: false, status: 400, error: 'would create a dependency cycle' };
   }

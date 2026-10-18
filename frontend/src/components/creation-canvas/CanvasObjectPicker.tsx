@@ -15,7 +15,8 @@ import {
 } from '@/domains/workflow/domain/stepIntegrations';
 import { integrationDescription } from '@/domains/workflow/domain/stepCatalogI18n';
 import { integrationStepChoice, stepChoice } from '@/domains/workflow/domain/flowStepObject';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
+import inspectorStyles from './styles/inspector.module.css';
 
 /**
  * ONE picker, two doors.
@@ -89,7 +90,7 @@ const PICKER_CLASS_NAMES = {
   rail: styles.objectPickerRail,
   list: styles.objectPickerList,
   icon: styles.objectPickerIcon,
-  empty: styles.anchoredPanelEmpty,
+  empty: inspectorStyles.anchoredPanelEmpty,
 };
 
 export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onDragStart, onClose }: CanvasObjectPickerProps) {

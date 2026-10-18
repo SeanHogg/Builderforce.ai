@@ -19,10 +19,9 @@ export interface UserProps {
 /**
  * User aggregate root.
  *
- * Supports two registration paths:
- *  • API key path: `User.create()` – generates an API key hash, no password.
- *  • Web path: `User.createWeb()` – email + username + password hash, generates a
- *    placeholder API key hash the user never sees.
+ * `User.create()` is the API-key (SDK / CLI) registration path. Password
+ * accounts are created by the ONE web register flow (`POST /api/auth/web/register`),
+ * which writes the row directly alongside terms, verification and provisioning.
  */
 export class User {
   private constructor(private readonly props: UserProps) {}
@@ -41,32 +40,6 @@ export class User {
       avatarUrl: null,
       bio: null,
       passwordHash: null,
-      isSuperadmin: false,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-
-  /** Create a new web / marketplace user (email + username + password). */
-  static createWeb(
-    email:        string,
-    username:     string,
-    passwordHash: string,
-    apiKeyHash:   string,   // placeholder – web users get a key but it's not shown
-  ): User {
-    const e = email.toLowerCase().trim();
-    if (!e.includes('@')) throw new ValidationError('Invalid email address');
-    if (!username.trim())  throw new ValidationError('Username is required');
-    const now = new Date();
-    return new User({
-      id: crypto.randomUUID() as UserId,
-      email: e,
-      apiKeyHash,
-      username: username.toLowerCase().trim(),
-      displayName: null,
-      avatarUrl: null,
-      bio: null,
-      passwordHash,
       isSuperadmin: false,
       createdAt: now,
       updatedAt: now,

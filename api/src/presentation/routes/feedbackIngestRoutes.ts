@@ -16,11 +16,9 @@
  */
 
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
-import { feedbackCollectors, projects } from '../../infrastructure/database/schema';
-import { hashSecret } from '../../infrastructure/auth/HashService';
 import { normalizeFeedback, FEEDBACK_KINDS } from '../../application/feedback/feedbackSpec';
-import { submitFeedback, type FeedbackTarget } from '../../application/feedback/feedbackEngine';
+import { submitFeedback } from '../../application/feedback/feedbackEngine';
+import { collectorOriginAllowed, resolveCollectorByKey } from '../../application/feedback/feedbackCollectors';
 import { respondToFeedbackSubmit } from './feedbackHttp';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -33,55 +31,6 @@ function readIngestKey(c: { req: { header: (n: string) => string | undefined; qu
   return c.req.query('key')?.trim() || null;
 }
 
-interface ResolvedCollector extends FeedbackTarget {
-  projectName: string;
-  allowedOrigins: string;
-}
-
-/** Resolve a collector (and its project label) from a raw ingest key. */
-async function resolveCollectorByKey(db: Db, key: string): Promise<ResolvedCollector | null> {
-  const keyHash = await hashSecret(key);
-  const [row] = await db
-    .select({
-      id: feedbackCollectors.id,
-      tenantId: feedbackCollectors.tenantId,
-      projectId: feedbackCollectors.projectId,
-      enabled: feedbackCollectors.enabled,
-      autoCreateTask: feedbackCollectors.autoCreateTask,
-      dailyLimit: feedbackCollectors.dailyLimit,
-      allowedOrigins: feedbackCollectors.allowedOrigins,
-      projectName: projects.name,
-    })
-    .from(feedbackCollectors)
-    .innerJoin(projects, eq(projects.id, feedbackCollectors.projectId))
-    .where(eq(feedbackCollectors.keyHash, keyHash))
-    .limit(1);
-  if (!row || !row.enabled) return null;
-  return {
-    collectorId: row.id,
-    tenantId: row.tenantId,
-    projectId: row.projectId,
-    autoCreateTask: row.autoCreateTask,
-    dailyLimit: row.dailyLimit,
-    projectName: row.projectName,
-    allowedOrigins: row.allowedOrigins,
-  };
-}
-
-/**
- * Per-collector origin policy, layered ON TOP of the CORS allowance that lets any
- * origin reach an ingest path. '*' (the default) accepts anywhere; otherwise the
- * posting Origin must be listed, so a leaked key cannot be driven from a site the
- * owner never authorized. A same-origin/serverless post sends no Origin at all
- * and is allowed — the key is the credential there.
- */
-function originAllowed(allowedOrigins: string, origin: string | undefined): boolean {
-  const policy = allowedOrigins.trim();
-  if (!policy || policy === '*') return true;
-  if (!origin) return true;
-  return policy.split(',').map((s) => s.trim()).filter(Boolean).includes(origin);
-}
-
 export function createFeedbackIngestRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -91,7 +40,7 @@ export function createFeedbackIngestRoutes(db: Db): Hono<HonoEnv> {
     if (!key) return c.json({ error: 'Missing ingest key' }, 401);
     const collector = await resolveCollectorByKey(db, key);
     if (!collector) return c.json({ error: 'Invalid ingest key' }, 401);
-    if (!originAllowed(collector.allowedOrigins, c.req.header('Origin'))) {
+    if (!collectorOriginAllowed(collector.allowedOrigins, c.req.header('Origin'))) {
       return c.json({ error: 'Origin not allowed for this collector' }, 403);
     }
     return c.json({ projectName: collector.projectName, kinds: FEEDBACK_KINDS });
@@ -103,7 +52,7 @@ export function createFeedbackIngestRoutes(db: Db): Hono<HonoEnv> {
     if (!key) return c.json({ error: 'Missing ingest key' }, 401);
     const collector = await resolveCollectorByKey(db, key);
     if (!collector) return c.json({ error: 'Invalid ingest key' }, 401);
-    if (!originAllowed(collector.allowedOrigins, c.req.header('Origin'))) {
+    if (!collectorOriginAllowed(collector.allowedOrigins, c.req.header('Origin'))) {
       return c.json({ error: 'Origin not allowed for this collector' }, 403);
     }
 

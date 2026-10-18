@@ -11,17 +11,14 @@
  */
 
 import { Hono } from 'hono';
-import { and, eq, gte, sum } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { llmUsageLog } from '../../infrastructure/database/schema';
 import { effectivePlanOf, loadTenantPlanRow } from '../../application/tenant/tenantPlanSnapshot';
-import { getLimits } from '../../domain/tenant/PlanLimits';
 import { TenantPlan } from '../../domain/shared/types';
 import { perMillionToPerToken } from '@builderforce/model-catalog';
-import { estimateTokensFromText } from '../../application/llm/tokenUsage';
-import { usageDatabaseOf } from '../../application/llm/usageLedger';
-import type { HonoEnv } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
+import { estimateTokensFromText, sumTenantTextTokens, utcDayStart } from '../../application/llm/tokenUsage';
+import { resolveTenantTokenLimits } from '../../application/llm/tenantTokenAvailability';
+import type { Env, HonoEnv } from '../../env';
+import type { DbHandle as Db } from '../../application/shared/dbHandle';
 import { parseBody, z } from './requestBody';
 
 /** The handler answers its own "context array is required" and clamps the steps. */
@@ -93,26 +90,19 @@ export function createCostForecastRoutes(db: Db): Hono<HonoEnv> {
     const billingStatus = tenantRow?.billingStatus ?? 'none';
     const effectivePlan: TenantPlan = effectivePlanOf(tenantRow);
 
-    const limits = getLimits(effectivePlan);
+    // The daily cap the gateway ENFORCES — override, credits and the superadmin
+    // bypass applied (getLimits(plan) alone ignores all three). -1 = unlimited.
+    const { dailyLimit } = await resolveTenantTokenLimits(db, tenantId, { actingUserId: c.get('userId') ?? null }, c.env as Env);
+    const unlimited = dailyLimit <= 0;
 
-    // Fetch today's token usage for this tenant
-    const todayStart = new Date();
-    todayStart.setUTCHours(0, 0, 0, 0);
-
-    const [usageRow] = await usageDatabaseOf(db)
-      .select({ used: sum(llmUsageLog.totalTokens) })
-      .from(llmUsageLog)
-      .where(
-        and(
-          eq(llmUsageLog.tenantId, tenantId),
-          gte(llmUsageLog.createdAt, todayStart),
-        ),
-      );
-
-    const tokensUsedToday = Number(usageRow?.used ?? 0);
-    const dailyLimit = limits.tokenDailyLimit;
-    const remainingBudget = Math.max(0, dailyLimit - tokensUsedToday);
-    const fitsInBudget = totalTokens <= remainingBudget;
+    // Today's usage from THE plan-allowance counter — the same cache-weighted,
+    // billable-only sum the gateway's daily gate enforces — so "fits in budget" /
+    // "will be rejected" predicts the gate instead of a raw token total that counts
+    // rows (images, own-machine BYO) the gate exempts.
+    const tokensUsedToday = await sumTenantTextTokens(db, tenantId, utcDayStart());
+    // -1 mirrors the limit's own "unlimited" sentinel.
+    const remainingBudget = unlimited ? -1 : Math.max(0, dailyLimit - tokensUsedToday);
+    const fitsInBudget = unlimited || totalTokens <= remainingBudget;
 
     // Estimate cost
     const costPerToken = estimateCostPerToken(effectivePlan);
@@ -124,7 +114,7 @@ export function createCostForecastRoutes(db: Db): Hono<HonoEnv> {
       advice = `This request (~${totalTokens.toLocaleString()} tokens) exceeds your free daily budget (${remainingBudget.toLocaleString()} remaining). Upgrade to Pro for a 1M token/day limit.`;
     } else if (!fitsInBudget) {
       advice = `This request (~${totalTokens.toLocaleString()} tokens) exceeds your remaining daily budget (${remainingBudget.toLocaleString()} tokens). It will be rejected. Upgrade to Teams for a 5M token/day limit.`;
-    } else if (remainingBudget - totalTokens < totalTokens) {
+    } else if (!unlimited && remainingBudget - totalTokens < totalTokens) {
       advice = `You have ${remainingBudget.toLocaleString()} tokens remaining today. This request will use about ${Math.round((totalTokens / remainingBudget) * 100)}% of your remaining budget.`;
     }
 
@@ -140,6 +130,7 @@ export function createCostForecastRoutes(db: Db): Hono<HonoEnv> {
       },
       budget: {
         dailyLimit,
+        unlimited,
         tokensUsedToday,
         remainingBudget,
         fitsInBudget,

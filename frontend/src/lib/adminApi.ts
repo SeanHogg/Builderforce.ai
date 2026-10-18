@@ -1271,19 +1271,6 @@ export const adminApi = {
     return adminRequest<AdminPlatformRollup>(`/api/admin/platform-rollup?days=${days}`);
   },
 
-  async impersonate(userId: string, tenantId: number): Promise<{
-    token: string;
-    email: string;
-    tenantId: number;
-    role: string;
-    expiresIn?: number;
-  }> {
-    return adminRequest('/api/admin/impersonate', {
-      method: 'POST',
-      body: JSON.stringify({ userId, tenantId }),
-    });
-  },
-
   // Legal
   async legalCurrent(): Promise<AdminLegalCurrent> {
     return adminRequest<AdminLegalCurrent>('/api/admin/legal/current');
@@ -1585,7 +1572,9 @@ export const adminApi = {
   ): Promise<ImpersonationStartResult> {
     return adminRequest('/api/admin/impersonation/start', {
       method: 'POST',
-      body: JSON.stringify({ userId, tenantId, reason, debuggerEnabled }),
+      // The server's field is `enableDebugger`; sending `debuggerEnabled` silently
+      // started every session with the debugger off.
+      body: JSON.stringify({ userId, tenantId, reason, enableDebugger: debuggerEnabled }),
     });
   },
 
@@ -1652,7 +1641,7 @@ export const adminApi = {
 
   async permissionsMatrixExport(): Promise<string> {
     if (!getStoredWebToken()) throw new Error('Not authenticated.');
-    return apiRequestText('/api/admin/permissions/matrix/export', { auth: 'web' });
+    return apiRequestText('/api/exports/sources/admin.permission-matrix', { auth: 'web' });
   },
 
   // Modules
@@ -1794,7 +1783,7 @@ export const adminApi = {
     if (params?.tenantId) q.set('tenantId', String(params.tenantId));
     const suffix = q.toString();
     return apiRequestText(
-      `/api/admin/audit-log/export${suffix ? `?${suffix}` : ''}`,
+      `/api/exports/sources/admin.audit-log${suffix ? `?${suffix}` : ''}`,
       { auth: 'web' },
     );
   },

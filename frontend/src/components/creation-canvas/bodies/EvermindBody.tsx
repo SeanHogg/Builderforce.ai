@@ -1,6 +1,6 @@
 import { useTranslations } from 'next-intl';
 import { evermindLearnedStatus, evermindNextAction } from '@seanhogg/builderforce-brain-ui';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/evermind.module.css';
 import { Icon } from '@/components/ui/Icon';
 import { useFormat } from '@/i18n/useFormat';
 import type { CreationBodyProps } from './types';

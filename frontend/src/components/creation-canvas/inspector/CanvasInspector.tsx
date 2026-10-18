@@ -13,7 +13,8 @@ import { frameMemberIds } from '@/domains/canvas/domain/canvasFrame';
 import { useInspectorBindings } from './inspectorContext';
 import { KIND_DETAIL_SECTIONS, type KindSectionProps } from './kindDetailSections';
 import { kindSettingsManifest, kindSettingsSellable } from '@/lib/canvasKindSettings';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/inspector.module.css';
+import chromeStyles from '../styles/chrome.module.css';
 import { canvasPersonOrigin, isCanvasPersonKind } from '@/lib/canvasNodeAffordances';
 import { KindDetailsFields } from './KindDetailsFields';
 import { TimingFields } from '../TimingFields';
@@ -296,7 +297,7 @@ export function Inspector({ node }: { node: CreationFlowNode }) {
       )}
       {tab === 'details' && canvasExportActionsFor(node.data).length > 0 && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 'var(--font-size-small)' }}>{t('copyAndDownload')}</strong>
-        <CanvasExportActions data={node.data} onExport={(action) => void runArtifactAction(action)} className={styles.panelActions} />
+        <CanvasExportActions data={node.data} onExport={(action) => void runArtifactAction(action)} className={chromeStyles.panelActions} />
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </section>}
       {tab === 'details' && deliverables.length > 0 && <section aria-label={t('deliverables')} style={{ display: 'grid', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}><strong style={{ fontSize: 'var(--font-size-small)' }}>{t('deliveredOutputs')}</strong>{deliverables.slice(0, 6).map((deliverable) => <div key={deliverable.id} style={{ display: 'grid', gap: 2, fontSize: 'var(--font-size-small)' }}><span><b>{deliverable.artifactKind}</b> · {deliverable.status}</span><small>{deliverable.provider || 'Builderforce'} · {fmt.dateTime(deliverable.completedAt || deliverable.createdAt)}</small>{deliverable.url && !deliverable.url.startsWith('data:') && <a href={deliverable.url} target="_blank" rel="noreferrer">{t('openDeliverable')}</a>}{deliverable.error && <small style={{ color: 'var(--error-text)' }}>{deliverable.error}</small>}</div>)}</section>}

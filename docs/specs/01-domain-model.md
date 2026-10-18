@@ -216,7 +216,7 @@ the spec's `actorKind = AGENT`.
 | `ABTest`, `ABTestVariant`, `ABTestSegment` | `ab_tests`, `ab_test_variants`, `ab_test_segments` (Growth) | |
 | RICE feature scoring | `feature_scores` | `/api/agile/feature-scoring` |
 | Roadmap | `roadmap_items` (project- or segment-scoped) | `/api/product/roadmap`; `status → shipped` emits `roadmap.published` |
-| Release planning | `product_releases` | `/api/releases`, `/api/product/release-planning`. BurnRateOS `release_plans` was folded here by 1160. |
+| Release planning | `product_releases` | `/api/releases` (canonical; `/api/product/release-planning` is a legacy alias over the same `ProductReleaseService`). BurnRateOS `release_plans` was folded here by 1160. |
 | PRD / spec documents | `specs` (+ `spec_versions`, `spec_audit_records`, `task_specs`) | `/api/specs` |
 | OKRs, initiatives, portfolios | `objectives`, `key_results`, `objective_links`, `initiatives`, `portfolios` | `/api/pmo`. An OKR is never an Epic (`work_items.convert_type` promotes one to the other). |
 

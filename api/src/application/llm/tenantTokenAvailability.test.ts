@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getTenantTokenAvailability, checkTenantTokenGate } from './tenantTokenAvailability';
+import { getTenantTokenAvailability, checkTenantTokenGate, resolveTenantTokenLimits } from './tenantTokenAvailability';
 import type { Db } from '../../infrastructure/database/connection';
 
 /**
@@ -167,5 +167,40 @@ describe('checkTenantTokenGate', () => {
   it('fails OPEN (returns null) when the availability lookup throws', async () => {
     const throwingDb = { select: () => { throw new Error('db down'); } } as unknown as Db;
     expect(await checkTenantTokenGate(throwingDb, 1)).toBeNull();
+  });
+});
+
+describe('resolveTenantTokenLimits (the limit the dashboard + cost forecast DISPLAY)', () => {
+  it('applies the per-tenant daily override instead of the plan default', async () => {
+    // Pro plan default is 1M/day; the override (2500) is what the gate enforces.
+    const db = fakeDb([[{ ...activePro, tokenDailyLimitOverride: 2500 }], []]);
+    const l = await resolveTenantTokenLimits(db, 1);
+    expect(l.dailyLimit).toBe(2500);
+    expect(l.monthlyLimit).toBe(-1);
+    expect(l.effectivePlan).toBe('pro');
+  });
+
+  it('falls back to the plan default when no override is set', async () => {
+    const db = fakeDb([[{ plan: 'free', billingStatus: 'none', trialEndsAt: null, tokenDailyLimitOverride: null }], []]);
+    const l = await resolveTenantTokenLimits(db, 1);
+    expect(l.dailyLimit).toBe(10_000);
+  });
+
+  it('a superadmin acting user reads unlimited (-1), matching the gate', async () => {
+    const db = fakeDb([
+      [{ plan: 'free', billingStatus: 'none', trialEndsAt: null, tokenDailyLimitOverride: null }],
+      [{ isSuperadmin: true }],
+    ]);
+    const l = await resolveTenantTokenLimits(db, 1, { actingUserId: 'u1' });
+    expect(l.dailyLimit).toBe(-1);
+    expect(l.monthlyLimit).toBe(-1);
+  });
+
+  it('issues no usage scan (limits only)', async () => {
+    // Only the tenant row + tenant-superadmin lookup are queued; a usage scan would
+    // consume a third result set, which the gate (not this) performs.
+    const db = fakeDb([[{ ...activePro, tokenDailyLimitOverride: 1000 }], [], [{ day: 999999, month: 999999 }]]);
+    const l = await resolveTenantTokenLimits(db, 1);
+    expect(l.dailyLimit).toBe(1000);
   });
 });

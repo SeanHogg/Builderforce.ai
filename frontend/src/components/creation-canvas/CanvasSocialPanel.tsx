@@ -19,7 +19,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
+import adsStyles from './styles/ads.module.css';
 import {
   socialApi,
   type SocialAccount,
@@ -257,17 +258,17 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
         ]}
       />
 
-      {error && <p className={styles.driveNotice} role="alert">{error}</p>}
-      {notice && <p className={styles.driveNotice} role="status">{notice}</p>}
+      {error && <p className={adsStyles.driveNotice} role="alert">{error}</p>}
+      {notice && <p className={adsStyles.driveNotice} role="status">{notice}</p>}
 
       {mode === 'accounts' && <>
-        <div className={styles.driveList} role="list">
-          {loading && <p className={styles.driveEmpty}>{t('loading')}</p>}
-          {!loading && accounts.length === 0 && <p className={styles.driveEmpty}>{t('noAccounts')}</p>}
-          {accounts.map((account) => <div key={account.id} className={styles.socialAccountRow} role="listitem">
-            <span className={styles.driveRowMain}>
+        <div className={adsStyles.driveList} role="list">
+          {loading && <p className={adsStyles.driveEmpty}>{t('loading')}</p>}
+          {!loading && accounts.length === 0 && <p className={adsStyles.driveEmpty}>{t('noAccounts')}</p>}
+          {accounts.map((account) => <div key={account.id} className={adsStyles.socialAccountRow} role="listitem">
+            <span className={adsStyles.driveRowMain}>
               <span aria-hidden>{NETWORK_GLYPHS[account.network]}</span>
-              <span className={styles.driveRowName}>{`${account.networkLabel} · ${account.name}`}</span>
+              <span className={adsStyles.driveRowName}>{`${account.networkLabel} · ${account.name}`}</span>
               <small>{account.ready
                 ? t('ready')
                 : t('missing', { fields: account.missingFields.map((f) => f.label).join(', ') })}</small>
@@ -276,14 +277,14 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
           </div>)}
         </div>
 
-        {!connecting && <div className={styles.driveConnect}>
+        {!connecting && <div className={adsStyles.driveConnect}>
           {networks.map((option) => <button key={option.network} type="button" disabled={busy} onClick={() => void beginConnect(option)}>
             {t('connect', { network: option.label })}
           </button>)}
         </div>}
 
         {connecting && <form
-          className={styles.socialForm}
+          className={adsStyles.socialForm}
           onSubmit={(event) => { event.preventDefault(); void submitConnect(); }}
         >
           <label>
@@ -301,7 +302,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
             />
             {field.help && <small>{field.help}</small>}
           </label>)}
-          <div className={styles.socialFormActions}>
+          <div className={adsStyles.socialFormActions}>
             <button type="submit" disabled={busy}>{busy ? t('connecting') : t('saveConnection')}</button>
             <button type="button" disabled={busy} onClick={() => setConnecting(null)}>{t('cancel')}</button>
           </div>
@@ -313,7 +314,7 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
       </>}
 
       {mode === 'compose' && <form
-        className={styles.socialForm}
+        className={adsStyles.socialForm}
         onSubmit={(event) => { event.preventDefault(); void publish(); }}
       >
         <label>
@@ -348,19 +349,19 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClos
         </label>
         <fieldset className={styles.socialTargetPicker}>
           <legend>{t('targets')}</legend>
-          {ready.length === 0 && <p className={styles.driveEmpty}>{t('noReadyAccounts')}</p>}
+          {ready.length === 0 && <p className={adsStyles.driveEmpty}>{t('noReadyAccounts')}</p>}
           {ready.map((account) => <label key={account.id}>
             <input type="checkbox" checked={selected.includes(account.id)} onChange={() => toggleAccount(account.id)} />
             <span>{`${NETWORK_GLYPHS[account.network]} ${account.networkLabel} · ${account.name}`}</span>
           </label>)}
         </fieldset>
-        {mediaBlocked.length > 0 && <p className={styles.driveNotice} role="status">
+        {mediaBlocked.length > 0 && <p className={adsStyles.driveNotice} role="status">
           {t('mediaRequired', { networks: mediaBlocked.map((a) => a.networkLabel).join(', ') })}
         </p>}
-        {publishBlocked.length > 0 && <p className={styles.driveNotice} role="status">
+        {publishBlocked.length > 0 && <p className={adsStyles.driveNotice} role="status">
           {t('cannotPublish', { networks: publishBlocked.map((a) => a.networkLabel).join(', ') })}
         </p>}
-        <div className={styles.socialFormActions}>
+        <div className={adsStyles.socialFormActions}>
           <button type="submit" disabled={busy || ready.length === 0 || publishBlocked.length > 0}>
             {busy ? t('publishing') : scheduledAt ? t('scheduleAction') : selected.length > 1 ? t('publishAll', { count: selected.length }) : t('publishAction')}
           </button>

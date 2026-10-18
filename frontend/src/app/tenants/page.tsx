@@ -106,7 +106,7 @@ export default function TenantsPage() {
     }
   };
 
-  // The default lives on the ACCOUNT (`/my-tenants` marks it), so it survives
+  // The default lives on the ACCOUNT (`GET /api/tenants` marks it), so it survives
   // sign-out and follows the person to every device. Applied optimistically and
   // rolled back if the save fails.
   const defaultTenantId = tenants.find((x) => x.isDefault)?.id ?? null;

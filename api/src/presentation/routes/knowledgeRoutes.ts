@@ -15,6 +15,8 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, eq, desc, inArray, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole, isManager } from '../middleware/authMiddleware';
+import { legacyAliasNotice } from '../middleware/legacyAlias';
+import { KNOWLEDGE_LISTINGS_PATH, browseListingsHandler } from './knowledgeMarketRoutes';
 import { TenantRole } from '../../domain/shared/types';
 import {
   knowledgeDocuments,
@@ -36,7 +38,6 @@ import {
 import {
   MARKET_VERSION_KEY,
   parseListingTags,
-  browsePublicListings,
 } from '../../application/knowledge/knowledgeMarket';
 import {
   completeKnowledgeCheckout,
@@ -1101,14 +1102,10 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     return c.body(null, 204);
   });
 
-  // ---- BROWSE PUBLIC LISTINGS (cross-tenant, cached) -------------------
-  // Delegates to the shared browse used by the PUBLIC /api/knowledge-market
-  // router — one query, one cache. Kept authed here for in-app callers that
-  // already hold a tenant token; logged-out browse uses the public router.
-  router.get('/listings', async (c) => {
-    const listings = await browsePublicListings(c.env as Env, db);
-    return c.json({ listings });
-  });
+  // ---- BROWSE PUBLIC LISTINGS — deprecated alias ------------------------
+  // The authed copy added nothing over the PUBLIC `/api/knowledge-market/listings`,
+  // so it is that same handler, stamped with the successor path for old callers.
+  router.get('/listings', legacyAliasNotice(KNOWLEDGE_LISTINGS_PATH), browseListingsHandler(db));
 
   // ---- CHECKOUT A PAID LISTING (records a purchase that unlocks install) ----
   // Free listings need no checkout. A PAID one goes to the processor's hosted page

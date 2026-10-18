@@ -1,12 +1,13 @@
 import { InternalError } from '../../domain/shared/errors';
-import { ROLE_ORDER, isTenantRole } from '../../domain/shared/types';
+import { isTenantRole } from '../../domain/shared/types';
 import { resolveImpersonationRole } from '../../application/admin/impersonationRole';
+import { IMPERSONATION_TTL_SECONDS, startImpersonation } from '../../application/admin/impersonationStart';
+import { legacyAliasNotice } from '../middleware/legacyAlias';
 import { invalidateEmulationSession } from '../../application/admin/emulationSessions';
 import { failResponse, statusResponse } from '../middleware/errorResponse';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { parseBody, parseOptionalBody } from './requestBody';
 import {
-  AdminTenantApiKeyBody,
   BroadcastBody,
   CronControlBody,
   CronForceRunBody,
@@ -14,7 +15,6 @@ import {
   DiscountCodePatchBody,
   FeedbackReviewBody,
   ImageCreditsLimitBody,
-  ImpersonateBody,
   ImpersonationStartBody,
   LegalDocBody,
   LegalEnhanceBody,
@@ -64,7 +64,7 @@ import {
  * GET  /api/admin/health               — system health (DB ping, model pool, counts)
  * GET  /api/admin/errors               — recent API error log (last 200 entries)
  * GET  /api/admin/feedback             — cross-tenant product feedback roll-up
- * POST /api/admin/impersonate          — issue a tenant JWT for any user+tenant pair
+ * POST /api/admin/impersonate          — DEPRECATED alias of /impersonation/start (same use case)
  * GET  /api/admin/cron                 — scheduled sweeps + live KV work-gate state
  * POST /api/admin/cron/signal          — set the pending-work flag for the next tick
  * PATCH /api/admin/cron/:target        — enable/disable one scheduled sweep
@@ -75,7 +75,6 @@ import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { invalidateTenantPlan } from '../../application/tenant/tenantPlanCache';
 import { invalidateSessionVersion, revokeSessionTokens } from '../../application/auth/sessionRevocation';
-import { screenshotConfigured } from '../../application/web/webScreenshot';
 import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
 import {
@@ -88,11 +87,9 @@ import { invalidatePublicCatalog } from '../../application/developer/extensionRe
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import { requestDb } from '../../application/shared/dbHandle';
 import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';
-import { parseJsonArray } from '../../domain/shared/json';
 import { reviewFeedbackSubmission } from '../../application/feedback/feedbackEngine';
-import {
-  listFeedbackSubmissions, countFeedbackByStatus, parseFeedbackStatus,
-} from '../../application/feedback/feedbackQueries';
+import { loadFeedbackQueue } from '../../application/feedback/feedbackQueries';
+import { FEEDBACK_DECISION_ERROR, feedbackQueueFilter, isFeedbackDecision } from './feedbackHttp';
 import { slugify } from '@builderforce/creation-canvas-contract';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -116,7 +113,6 @@ import {
 import {
   authTokens,
   authUserSessions,
-  privacyRequests,
   newsletterEvents,
   newsletterSubscribers,
   newsletterTemplates,
@@ -127,17 +123,15 @@ import {
   llmUsageLog,
   userMfaRecoveryCodes,
   projects,
-  platformPersonas,
   discountCodes,
   emailDeliveryFailures,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { normalizeDiscountCode } from '../../application/tenant/discountCodeService';
-import { decodeJwtPayload, signJwt, signEmulationJwt } from '../../infrastructure/auth/JwtService';
+import { decodeJwtPayload, signEmulationJwt } from '../../infrastructure/auth/JwtService';
 import {
   adminImpersonationSessions,
   adminImpersonationRoleSwitches,
-  adminAuditLog,
   rolePermissionOverrides,
   tenantCustomRoles,
   platformModules,
@@ -155,29 +149,24 @@ import {
   invalidateMemberPermissions,
   invalidateRolePermissions,
 } from '../../application/rbac/effectivePermissions';
-import {
-  adminPoolProxy,
-  FREE_MODEL_POOL,
-  PRO_PAID_MODEL_POOL,
-  PREMIUM_FALLBACK_MODELS,
-  type ProductName,
-  type ProxyEnv,
-} from '../../application/llm/LlmProxyService';
-import { getAllVendorIds, vendorForModel, type VendorId } from '../../application/llm/vendors';
+import { adminHealthReport, systemHealthReport, vendorProbesSection } from '../../application/health/platformHealth';
+import { getAllVendorIds, type VendorId } from '../../application/llm/vendors';
 import { summarizeActionRatings } from '../../application/llm/actionRatings';
 import { llmFailoverLog, llmHealthProbes, llmTraces } from '../../infrastructure/database/schema';
 import { probeVendor, tryAcquireProbeSlot, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
 import { persistProbe } from '../../application/llm/vendorProbeStore';
-import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
-import { membershipChanged } from '../../application/tenant/membershipChanged';
 import {
-  mintTenantApiKey,
-  listTenantApiKeys,
-  queryTenantApiKeyUsage,
-  revokeTenantApiKey,
-  updateTenantApiKey,
-} from '../../application/llm/tenantApiKeyService';
-import { normalizeOrigins } from './tenantApiKeyRoutes';
+  createPlatformPersona,
+  deletePlatformPersona,
+  listPlatformPersonas,
+  platformPersonaView,
+  updatePlatformPersona,
+} from '../../application/persona/platformPersonaCatalog';
+import { tenantRoleOf } from '../../application/tenant/tenantRoles';
+import { listPrivacyRequests, updatePrivacyRequest } from '../../application/legal/privacyRequests';
+import { createPlatformTenantApiKeyRoutes } from './tenantApiKeyRoutes';
+import { registerMemberCredentialRevocation } from './memberCredentialRevocationRoutes';
+import { changeMemberRole } from '../../application/tenant/memberRoleChange';
 import {
   applyCronControls,
   cronSweepEnabled,
@@ -216,7 +205,6 @@ import {
 } from '../../application/runtime/cronSweepRunner';
 import { evaluateCronGate, readScheduleStall, signalPendingWork } from '../../application/runtime/cronWorkSignal';
 import { createTickDispatchBudget } from '../../application/runtime/tickDispatchBudget';
-import { API_VERSION } from '../../version';
 import { getPricingDraft, publishPricing, savePricingDraft } from '../../application/tenant/pricingConfiguration';
 import {
   listManagedAgentHostRequests,
@@ -224,42 +212,15 @@ import {
   type ManagedAgentHostRequestStatus,
 } from '../../application/tenant/managedAgentHostSubscription';
 import { coerceStringArray } from '../../domain/shared/jsonColumn';
-import { daysParam, limitParam } from './queryParams';
+import { daysParam } from './queryParams';
+import { adminAuditFilterFrom, listAdminAuditLog } from '../../application/audit/adminAuditLog';
+import { loadPermissionMatrix } from '../../application/admin/permissionMatrix';
+import { adminAuditLogExportSource, permissionMatrixExportSource } from '../../application/admin/adminExportSources';
+import { exportSourceHandler } from './exportSourceRoute';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { randomHex } from '../../domain/shared/bytes';
 import { excluded } from '../../infrastructure/database/upsert';
-import { usageRequestCountSql } from '../../application/llm/usageLedger';
-import { storageCeilingBytes, tierFor } from '../../application/maintenance/storagePressure';
-
-/** Defensive coercion for `models_json` (now `jsonb` [1449]): the pg driver
- *  decodes JSONB to an array, but legacy rows written while the column was
- *  mis-handled as text may still come back as a JSON string. Accept both. */
-function coerceProbeModels(value: unknown): unknown[] {
-  return parseJsonArray(value);
-}
-
-/** Status entry for one model in the admin LLM panel. Delegates to the proxy
- *  service so per-model cooldown, per-vendor cooldown, and per-vendor key
- *  binding are evaluated with one source of truth — see
- *  [LlmProxyService.status()](../../application/llm/LlmProxyService.ts). */
-async function poolStatus(
-  env: ProxyEnv,
-  pool: readonly string[],
-  productName: ProductName,
-): ReturnType<ReturnType<typeof adminPoolProxy>['status']> {
-  return adminPoolProxy(env, pool, productName).status();
-}
-
-type PrivacyRequestStatus = 'pending' | 'completed' | 'closed';
-type PrivacyRequestType = 'ccpa' | 'gdpr';
-
-function isPrivacyRequestStatus(value: string): value is PrivacyRequestStatus {
-  return value === 'pending' || value === 'completed' || value === 'closed';
-}
-
-function isPrivacyRequestType(value: string): value is PrivacyRequestType {
-  return value === 'ccpa' || value === 'gdpr';
-}
+import { platformUsageReport } from '../../application/llm/usageReports';
 
 function parseTenantId(raw: string | undefined): number | null {
   if (!raw) return null;
@@ -277,19 +238,9 @@ function slugifyName(input: string): string {
   return slugify(input, { maxLength: 180 });
 }
 
+/** Active member of the workspace? Delegates to the ONE membership read. */
 async function assertTenantMember(db: Db, tenantId: number, userId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: tenantMembers.id })
-    .from(tenantMembers)
-    .where(
-      and(
-        eq(tenantMembers.tenantId, tenantId),
-        eq(tenantMembers.userId, userId),
-        eq(tenantMembers.isActive, true),
-      ),
-    )
-    .limit(1);
-  return Boolean(row);
+  return (await tenantRoleOf(db, tenantId, userId)) !== null;
 }
 
 async function assertMfa(
@@ -347,57 +298,6 @@ async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
   await db.insert(userMfaRecoveryCodes).values(hashed);
 }
 
-type DatabaseTarget = 'primary' | 'transactional';
-
-/**
- * Inspect one endpoint: its total size, the plan headroom that size is judged against,
- * and its hundred largest relations.
- *
- * `ceilingBytes` / `ratio` / `tier` come from the SAME functions the storage-pressure
- * sweep acts on ({@link storageCeilingBytes}, {@link tierFor}) rather than a second
- * threshold defined here. An operator looking at this panel and a sweep deciding to
- * compress a retention window must be reading one number; two would be a console that
- * says "fine" on the morning the nightly tick started deleting history.
- */
-async function inspectDatabase(db: Db, name: DatabaseTarget, env: Env) {
-  const started = Date.now();
-  const ceilingBytes = storageCeilingBytes(env);
-  try {
-    const [database] = (await db.execute(sql`
-      SELECT current_database() AS "databaseName", pg_database_size(current_database())::bigint AS "totalBytes"
-    `)).rows as Array<{ databaseName: string; totalBytes: number | string }>;
-    const tables = (await db.execute(sql`
-      SELECT relname AS name,
-        pg_total_relation_size(relid)::bigint AS "totalBytes",
-        COALESCE(n_live_tup, 0)::bigint AS "estimatedRows",
-        COALESCE(n_tup_ins, 0)::bigint AS "insertsSinceStatsReset",
-        COALESCE(n_tup_upd, 0)::bigint AS "updatesSinceStatsReset",
-        COALESCE(n_tup_del, 0)::bigint AS "deletesSinceStatsReset",
-        last_autovacuum AS "lastAutovacuum",
-        last_analyze AS "lastAnalyze"
-      FROM pg_stat_user_tables
-      ORDER BY pg_total_relation_size(relid) DESC
-      LIMIT 100
-    `)).rows;
-    const totalBytes = Number(database?.totalBytes ?? 0);
-    return {
-      name, ok: true, latencyMs: Date.now() - started,
-      databaseName: database?.databaseName ?? null,
-      totalBytes,
-      ceilingBytes,
-      ratio: ceilingBytes > 0 ? totalBytes / ceilingBytes : 0,
-      tier: tierFor(ceilingBytes > 0 ? totalBytes / ceilingBytes : 0).tier,
-      tables,
-    };
-  } catch (error) {
-    return {
-      name, ok: false, latencyMs: Date.now() - started, databaseName: null,
-      totalBytes: 0, ceilingBytes, ratio: 0, tier: 'ok' as const,
-      tables: [], error: error instanceof Error ? error.message : 'Database inspection failed',
-    };
-  }
-}
-
 /**
  * Throwaway-mail domains, for the pre-OTP account review.
  *
@@ -423,7 +323,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.get('/pricing', async (c) => c.json(await getPricingDraft(requestDb(c))));
 
   router.get('/managed-agent-hosts', async (c) => {
-    return c.json({ requests: await listManagedAgentHostRequests(requestDb(c), c.req.query('status')) });
+    return c.json({ requests: await listManagedAgentHostRequests(requestDb(c), 'platform', c.req.query('status')) });
   });
 
   router.patch('/managed-agent-hosts/:id', async (c) => {
@@ -785,94 +685,30 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/privacy-requests
   // -------------------------------------------------------------------------
   router.get('/privacy-requests', async (c) => {
-    const db = requestDb(c);
-    const statusRaw = c.req.query('status')?.trim();
-    const typeRaw = c.req.query('type')?.trim();
-    const status = statusRaw && isPrivacyRequestStatus(statusRaw) ? statusRaw : undefined;
-    const type = typeRaw && isPrivacyRequestType(typeRaw) ? typeRaw : undefined;
-    const q = c.req.query('q')?.trim();
-    const limit = Math.min(parsePositiveInt(c.req.query('limit'), 200), 1000);
-
-    const filters = [
-      status ? eq(privacyRequests.status, status) : null,
-      type ? eq(privacyRequests.requestType, type) : null,
-      q ? ilike(privacyRequests.email, `%${q}%`) : null,
-    ].filter(Boolean) as Array<ReturnType<typeof eq>>;
-
-    const rows = await db
-      .select({
-        id: privacyRequests.id,
-        userId: privacyRequests.userId,
-        email: privacyRequests.email,
-        requestType: privacyRequests.requestType,
-        status: privacyRequests.status,
-        details: privacyRequests.details,
-        resolution: privacyRequests.resolution,
-        createdAt: privacyRequests.createdAt,
-        updatedAt: privacyRequests.updatedAt,
-        closedAt: privacyRequests.closedAt,
-      })
-      .from(privacyRequests)
-      .where(filters.length ? and(...filters) : undefined)
-      .orderBy(desc(privacyRequests.updatedAt))
-      .limit(limit);
-
-    return c.json({
-      requests: rows.map((row) => ({
-        id: row.id,
-        userId: row.userId,
-        email: row.email,
-        requestType: row.requestType,
-        status: row.status,
-        details: row.details,
-        resolution: row.resolution,
-        createdAt: row.createdAt?.toISOString() ?? null,
-        updatedAt: row.updatedAt?.toISOString() ?? null,
-        closedAt: row.closedAt?.toISOString() ?? null,
-      })),
+    // The operator scope of THE privacy-request list (the subject's own list is
+    // the same use case at /api/auth/me/privacy-requests).
+    const requests = await listPrivacyRequests(requestDb(c), {
+      kind: 'platform_admin',
+      status: c.req.query('status')?.trim(),
+      type: c.req.query('type')?.trim(),
+      q: c.req.query('q'),
+      limit: parsePositiveInt(c.req.query('limit'), 200),
     });
+    return c.json({ requests });
   });
 
   // -------------------------------------------------------------------------
-  // PATCH /api/admin/privacy-requests/:id
+  // PATCH /api/admin/privacy-requests/:id — the fulfilment step
   // -------------------------------------------------------------------------
   router.patch('/privacy-requests/:id', async (c) => {
-    const db = requestDb(c);
     const requestId = Number(c.req.param('id'));
     if (!Number.isFinite(requestId) || requestId <= 0) {
       return c.json({ error: 'Invalid request id' }, 400);
     }
-
     const body = await parseBody(c, PrivacyRequestPatchBody);
-
-    const patch: Partial<typeof privacyRequests.$inferInsert> = {
-      updatedAt: new Date(),
-    };
-    if (typeof body.status === 'string' && isPrivacyRequestStatus(body.status)) {
-      patch.status = body.status;
-    }
-    if (typeof body.resolution === 'string') patch.resolution = body.resolution.trim() || null;
-    if (body.resolution === null) patch.resolution = null;
-    if (body.status && body.status !== 'pending') {
-      patch.closedAt = new Date();
-    }
-
-    const [updated] = await db
-      .update(privacyRequests)
-      .set(patch)
-      .where(eq(privacyRequests.id, requestId))
-      .returning();
-
-    if (!updated) return c.json({ error: 'Privacy request not found' }, 404);
-
-    return c.json({
-      request: {
-        ...updated,
-        createdAt: updated.createdAt?.toISOString() ?? null,
-        updatedAt: updated.updatedAt?.toISOString() ?? null,
-        closedAt: updated.closedAt?.toISOString() ?? null,
-      },
-    });
+    const request = await updatePrivacyRequest(requestDb(c), requestId, { status: body.status, resolution: body.resolution });
+    if (!request) return c.json({ error: 'Privacy request not found' }, 404);
+    return c.json({ request });
   });
 
   // -------------------------------------------------------------------------
@@ -1241,59 +1077,13 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
-  // POST /api/admin/security/users/:userId/sessions/:sessionId/revoke?tenantId=123
+  // POST /api/admin/security/users/:userId/{sessions/:sessionId/revoke,
+  // sessions/revoke-all, tokens/:jti/revoke}?tenantId=123 — cross-tenant, behind
+  // the superadmin gate above. Same use case as the workspace security page's twin.
   // -------------------------------------------------------------------------
-  router.post('/security/users/:userId/sessions/:sessionId/revoke', async (c) => {
-    const db = requestDb(c);
-    const tenantId = parseTenantId(c.req.query('tenantId'));
-    const userId = c.req.param('userId');
-    const sessionId = c.req.param('sessionId');
-    if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
-    if (!userId || !sessionId) return c.json({ error: 'userId and sessionId are required' }, 400);
-
-    const isMember = await assertTenantMember(db, tenantId, userId);
-    if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
-
-    await revokeSessionTokens(db, c.env, { userId, sessionId, tenantId });
-
-    return c.json({ ok: true });
-  });
-
-  // -------------------------------------------------------------------------
-  // POST /api/admin/security/users/:userId/sessions/revoke-all?tenantId=123
-  // -------------------------------------------------------------------------
-  router.post('/security/users/:userId/sessions/revoke-all', async (c) => {
-    const db = requestDb(c);
-    const tenantId = parseTenantId(c.req.query('tenantId'));
-    const userId = c.req.param('userId');
-    if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
-    if (!userId) return c.json({ error: 'userId is required' }, 400);
-
-    const isMember = await assertTenantMember(db, tenantId, userId);
-    if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
-
-    await revokeSessionTokens(db, c.env, { userId, tenantId });
-
-    return c.json({ ok: true });
-  });
-
-  // -------------------------------------------------------------------------
-  // POST /api/admin/security/users/:userId/tokens/:jti/revoke?tenantId=123
-  // -------------------------------------------------------------------------
-  router.post('/security/users/:userId/tokens/:jti/revoke', async (c) => {
-    const db = requestDb(c);
-    const tenantId = parseTenantId(c.req.query('tenantId'));
-    const userId = c.req.param('userId');
-    const jti = c.req.param('jti');
-    if (!tenantId) return c.json({ error: 'tenantId is required' }, 400);
-    if (!userId || !jti) return c.json({ error: 'userId and jti are required' }, 400);
-
-    const isMember = await assertTenantMember(db, tenantId, userId);
-    if (!isMember) return c.json({ error: 'User is not an active member of this tenant' }, 404);
-
-    await revokeSessionTokens(db, c.env, { userId, jti, tenantId });
-
-    return c.json({ ok: true });
+  registerMemberCredentialRevocation(router, '/security/users/:userId', {
+    dbOf: requestDb,
+    tenantOf: (c) => parseTenantId(c.req.query('tenantId')) ?? c.json({ error: 'tenantId is required' }, 400),
   });
 
   // -------------------------------------------------------------------------
@@ -2027,123 +1817,16 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     return c.json(rollup);
   });
 
-  router.get('/health', async (c) => {
-    const db = requestDb(c);
-
-    let dbOk = false;
-    let dbLatencyMs = 0;
-    try {
-      const t0 = Date.now();
-      await db.execute(sql`SELECT 1`);
-      dbLatencyMs = Date.now() - t0;
-      dbOk = true;
-    } catch (error) { /* dbOk stays false */ 
-      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
-    }
-
-    // Platform counts
-    const [counts] = (await db.execute(sql`
-      SELECT
-        (SELECT COUNT(*)::int FROM users)                   AS "userCount",
-        (SELECT COUNT(*)::int FROM tenants)                 AS "tenantCount",
-        (SELECT COUNT(*)::int FROM agent_hosts)     AS "agentHostCount",
-        (SELECT COUNT(*)::int FROM executions)              AS "executionCount",
-        (SELECT COUNT(*)::int FROM tenants WHERE plan = 'pro' AND billing_status = 'active') AS "paidTenantCount"
-    `)).rows as Array<{
-      userCount: number; tenantCount: number; agentHostCount: number;
-      executionCount: number; paidTenantCount: number;
-    }>;
-
-    // api_error_log lives in the operational database, not the primary one.
-    let errorCount = 0;
-    try {
-      const [row] = (await buildTransactionalDatabase(c.env)
-        .execute(sql`SELECT COUNT(*)::int AS "errorCount" FROM api_error_log`))
-        .rows as Array<{ errorCount: number }>;
-      errorCount = row?.errorCount ?? 0;
-    } catch (error) {
-      reportCaughtError(error, {
-        source: 'presentation/routes/adminRoutes.ts',
-        operation: 'health.errorCount',
-      });
-    }
-
-    // LLM model pool — include both Free + Pro pools. Per-model availability
-    // (cooldown / vendor-key / vendor-cooldown) is resolved inside the proxy
-    // service so this call doesn't need to know which vendor owns each model.
-    // The premium-fallback tail is appended to EVERY chain (Free included) as the
-    // always-on backstop, but it isn't part of the Free/Pro pools — surface it as
-    // its own row so superadmins can see its cooldown/key-bound state too [1430].
-    const [freeModelPool, proModelPool, premiumFallbackPool] = await Promise.all([
-      poolStatus(c.env, FREE_MODEL_POOL,            'builderforceLLM'),
-      poolStatus(c.env, PRO_PAID_MODEL_POOL,        'builderforceLLMPro'),
-      poolStatus(c.env, PREMIUM_FALLBACK_MODELS,    'builderforceLLMPro'),
-    ]);
-
-    const modelPool = [...freeModelPool, ...proModelPool];
-
-    return c.json({
-      status:       dbOk ? 'ok' : 'degraded',
-      db:           { ok: dbOk, latencyMs: dbLatencyMs },
-      platform:     { ...counts, errorCount },
-      llm:          {
-        pool:   modelPool.length,
-        models: modelPool,
-        free:   freeModelPool,
-        pro:    proModelPool,
-        premiumFallback: premiumFallbackPool,
-      },
-      timestamp:    new Date().toISOString(),
-    });
-  });
+  // The operator's platform health: DB ping, platform counts and the raw LLM pool
+  // partition — sections of THE health use case (application/health/platformHealth).
+  router.get('/health', async (c) => c.json(await adminHealthReport(requestDb(c), c.env as Env)));
 
   // -------------------------------------------------------------------------
   // GET /api/admin/system-health — operational infrastructure + both Neon DBs.
   // Table mutation counters are PostgreSQL counters since the last stats reset;
   // they make sustained growth visible without retaining a second metrics table.
   // -------------------------------------------------------------------------
-  router.get('/system-health', async (c) => {
-    const primary = requestDb(c);
-    const transactional = buildTransactionalDatabase(c.env);
-    const [primaryDb, transactionalDb, runtime] = await Promise.all([
-      inspectDatabase(primary, 'primary', c.env as Env),
-      inspectDatabase(transactional, 'transactional', c.env as Env),
-      primary.execute(sql`
-        SELECT
-          (SELECT COUNT(*)::int FROM agent_hosts) AS "agentHosts",
-          (SELECT COUNT(*)::int FROM agent_hosts WHERE connected_at IS NOT NULL AND last_seen_at > now() - interval '5 minutes') AS "onlineAgentHosts",
-          (SELECT COUNT(*)::int FROM executions WHERE status IN ('pending', 'running')) AS "activeExecutions",
-          (SELECT COUNT(*)::int FROM executions WHERE status = 'failed' AND updated_at > now() - interval '24 hours') AS "failedExecutions24h"
-      `).catch(() => ({ rows: [] })),
-    ]);
-    const row = (runtime.rows[0] ?? {}) as Record<string, number>;
-    return c.json({
-      timestamp: new Date().toISOString(),
-      worker: {
-        version: API_VERSION,
-        environment: c.env.ENVIRONMENT ?? 'unknown',
-        bindings: {
-          analysisRunner: Boolean(c.env.ANALYSIS_RUNNER),
-          agentContainer: Boolean(c.env.AGENT_CONTAINER),
-          qaRunnerContainer: Boolean(c.env.QA_RUNNER_CONTAINER),
-          cloudRunner: Boolean(c.env.CLOUD_RUNNER),
-          cloudflareAi: Boolean(c.env.CLOUDFLARE_AI_API_TOKEN && c.env.CLOUDFLARE_ACCOUNT_ID),
-          // Live-page capture (a redesign's "before" screenshot). Reported here because
-          // its absence is an OPERATOR fact the canvas relays to users verbatim. Asks the
-          // service rather than restating its token list — a health report claiming
-          // "configured" while a capture reports "unconfigured" is worse than no report.
-          browserCapture: screenshotConfigured(c.env as Env),
-        },
-      },
-      runtime: {
-        agentHosts: Number(row.agentHosts ?? 0),
-        onlineAgentHosts: Number(row.onlineAgentHosts ?? 0),
-        activeExecutions: Number(row.activeExecutions ?? 0),
-        failedExecutions24h: Number(row.failedExecutions24h ?? 0),
-      },
-      databases: [primaryDb, transactionalDb],
-    });
-  });
+  router.get('/system-health', async (c) => c.json(await systemHealthReport(requestDb(c), c.env as Env)));
 
   // POST /api/admin/system-health/maintenance
   // { action: 'purge_expired' } runs only the existing retention policy.
@@ -2458,48 +2141,37 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
-  // POST /api/admin/impersonate   { userId, tenantId }
-  // Issue a 1-hour tenant-scoped JWT for any user+tenant pair.
+  // POST /api/admin/impersonate   { userId, tenantId, reason? }   — DEPRECATED
+  // Kept for already-written callers; successor is POST /api/admin/impersonation/start.
+  // It used to sign a writable tenant JWT with no session and no audit row. It now
+  // runs THE start use case, so it gets the same refusals, the read-only emulation
+  // token and the audit trail. A caller that predates `reason` still works: the
+  // session records that the legacy door was used, which is itself the audit fact.
   // -------------------------------------------------------------------------
-  router.post('/impersonate', async (c) => {
-    const { userId, tenantId } = await parseBody(c, ImpersonateBody);
-    if (!userId || !tenantId) {
-      return c.json({ error: 'userId and tenantId are required' }, 400);
+  router.post('/impersonate', legacyAliasNotice('/api/admin/impersonation/start'), async (c) => {
+    const body = await parseBody(c, ImpersonationStartBody);
+    const result = await startImpersonation(c.env, requestDb(c), {
+      adminId:   c.get('userId') as string,
+      userId:    body.userId ?? '',
+      tenantId:  body.tenantId ?? 0,
+      role:      body.role,
+      reason:    body.reason?.trim() || 'Legacy POST /api/admin/impersonate (no reason supplied)',
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+      userAgent: c.req.header('User-Agent') ?? null,
+    });
+    if (!result.ok) {
+      return c.json({ error: result.error, ...(result.sessionId ? { sessionId: result.sessionId } : {}) }, result.status);
     }
-
-    const db = requestDb(c);
-
-    // Verify the user exists
-    const [userRow] = await db
-      .select({ id: users.id, email: users.email })
-      .from(users)
-      .where(sql`${users.id} = ${userId}`)
-      .limit(1);
-    if (!userRow) return c.json({ error: 'User not found' }, 404);
-
-    // Verify the tenant exists and get the user's role
-    const [memberRow] = await db
-      .select({ role: tenantMembers.role })
-      .from(tenantMembers)
-      .where(sql`${tenantMembers.userId} = ${userId} AND ${tenantMembers.tenantId} = ${tenantId} AND ${tenantMembers.isActive} = true`)
-      .limit(1);
-
-    // Use the user's actual role if a member, otherwise default to 'viewer'
-    const role = memberRow?.role ?? 'viewer';
-
-    const token = await signJwt(
-      { sub: userId, tid: tenantId, role: role as Parameters<typeof signJwt>[0]['role'] },
-      c.env.JWT_SECRET,
-      3600,
-    );
-
+    const s = result.started;
+    // The legacy response shape, plus the session id so the caller can end it.
     return c.json({
-      token,
-      expiresIn:    3600,
-      userId:       userRow.id,
-      email:        userRow.email,
-      tenantId,
-      role,
+      token:              s.token,
+      expiresIn:          IMPERSONATION_TTL_SECONDS,
+      userId:             s.user.id,
+      email:              s.user.email,
+      tenantId:           s.tenant.id,
+      role:               s.role,
+      emulationSessionId: s.sessionId,
     });
   });
 
@@ -2509,119 +2181,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.get('/llm-usage', async (c) => {
     const days = daysParam(c.req.query('days'), 30, 90);
-    // The SAME database `recordUsageRow` writes to. This read used to be
-    // `buildDatabase` (primary) while the writer routes rows to the operational
-    // account whenever NEON_TRANSACTIONAL_DATABASE_URL is bound — so in exactly the
-    // deployment that has one, this page summed an empty table and reported zero.
-    const db = buildTransactionalDatabase(c.env);
-
-    // Per-model totals
-    const byModel = await db.execute(sql`
-      SELECT
-        model,
-        ${sql.raw(usageRequestCountSql())} AS requests,
-        SUM(prompt_tokens)::bigint       AS prompt_tokens,
-        SUM(completion_tokens)::bigint   AS completion_tokens,
-        SUM(total_tokens)::bigint        AS total_tokens,
-        SUM(retries)::int                AS retries,
-        COALESCE(SUM(calls) FILTER (WHERE streamed), 0)::int AS streamed_requests
-      FROM llm_usage_log
-      WHERE created_at >= NOW() - (${days} || ' days')::interval
-      GROUP BY model
-      ORDER BY requests DESC
-    `);
-
-    // Daily time series (requests + tokens)
-    const daily = await db.execute(sql`
-      SELECT
-        DATE_TRUNC('day', created_at)::date::text AS day,
-        ${sql.raw(usageRequestCountSql())}        AS requests,
-        SUM(total_tokens)::bigint                 AS total_tokens
-      FROM llm_usage_log
-      WHERE created_at >= NOW() - (${days} || ' days')::interval
-      GROUP BY DATE_TRUNC('day', created_at)
-      ORDER BY DATE_TRUNC('day', created_at)
-    `);
-
-    // Platform totals — windowed to the same `days` range as the per-model
-    // table + daily series, so the totals card and the table never disagree
-    // (previously the card was all-time, reading e.g. "515k tokens" while the
-    // windowed table said "No usage in this period").
-    const [totals] = (await db.execute(sql`
-      SELECT
-        ${sql.raw(usageRequestCountSql())} AS total_requests,
-        SUM(total_tokens)::bigint AS total_tokens,
-        SUM(prompt_tokens)::bigint AS total_prompt_tokens,
-        SUM(completion_tokens)::bigint AS total_completion_tokens,
-        COUNT(DISTINCT model)::int AS model_count
-      FROM llm_usage_log
-      WHERE created_at >= NOW() - (${days} || ' days')::interval
-    `)).rows as Array<{
-      total_requests: number; total_tokens: bigint;
-      total_prompt_tokens: bigint; total_completion_tokens: bigint;
-      model_count: number;
-    }>;
-
-    // ORPHANED ROWS — the reconciliation that stops admin and tenant totals from
-    // silently disagreeing.
-    //
-    // `llm_usage_log.tenant_id` is nullable with ON DELETE SET NULL, so usage
-    // SURVIVES tenant deletion but matches no `tenant_id = ?` filter. Those rows are
-    // therefore invisible on every tenant surface while still counting in this
-    // untenanted rollup — which is why the sum of all tenants has never equalled the
-    // platform total, with nothing anywhere naming the difference. Reporting the
-    // orphan bucket explicitly makes the two reconcile BY CONSTRUCTION:
-    //   platform total = Σ(tenant totals) + orphaned.
-    // Deleting the rows instead would destroy the record of spend that really
-    // happened; hiding them would keep the discrepancy.
-    const [orphaned] = (await db.execute(sql`
-      SELECT
-        ${sql.raw(usageRequestCountSql())}     AS requests,
-        COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
-        COALESCE(SUM(cost_usd_millicents), 0)::bigint AS cost_millicents
-      FROM llm_usage_log
-      WHERE created_at >= NOW() - (${days} || ' days')::interval
-        AND tenant_id IS NULL
-    `)).rows as Array<{ requests: number; total_tokens: bigint; cost_millicents: bigint }>;
-
-    // Per-model failover counts (errors that triggered a fallback)
-    const failovers = await db.execute(sql`
-      SELECT
-        model,
-        error_code  AS "errorCode",
-        COUNT(*)::int AS count
-      FROM llm_failover_log
-      WHERE created_at >= NOW() - (${days} || ' days')::interval
-      GROUP BY model, error_code
-      ORDER BY count DESC
-    `);
-
-    // Enrich per-model and per-failover rows with `vendor` so the admin UI
-    // can group by vendor without re-deriving prefix→vendor mappings client-side.
-    const enrichVendor = <T extends { model: string }>(rows: ReadonlyArray<T>) =>
-      rows.map((r) => ({ ...r, vendor: vendorForModel(r.model) }));
-
-    return c.json({
-      days,
-      totals: {
-        requests:          Number(totals?.total_requests          ?? 0),
-        totalTokens:       Number(totals?.total_tokens            ?? 0),
-        promptTokens:      Number(totals?.total_prompt_tokens     ?? 0),
-        completionTokens:  Number(totals?.total_completion_tokens ?? 0),
-        modelCount:        Number(totals?.model_count             ?? 0),
-      },
-      /** Usage whose tenant was deleted (`tenant_id IS NULL`). Counted in `totals`
-       *  above and in NO tenant's own view — surfaced separately so the platform
-       *  total and the sum of tenant totals reconcile instead of quietly differing. */
-      orphaned: {
-        requests:        Number(orphaned?.requests        ?? 0),
-        totalTokens:     Number(orphaned?.total_tokens    ?? 0),
-        costMillicents:  Number(orphaned?.cost_millicents ?? 0),
-      },
-      byModel:    enrichVendor(byModel.rows as Array<{ model: string }>),
-      daily:      daily.rows,
-      failovers:  enrichVendor(failovers.rows as Array<{ model: string }>),
-    });
+    // A thin adapter over THE usage query use case: the platform scope of the same
+    // aggregates the tenant `/llm/v1/usage` report reads, on the ledger's own database
+    // (this handler once read the primary while the writer used the operational one,
+    // and summed an empty table). Includes the orphaned bucket that makes
+    // platform total = Σ(tenant totals) + orphaned reconcile by construction.
+    return c.json(await platformUsageReport(c.env, requestDb(c), days));
   });
 
   // -------------------------------------------------------------------------
@@ -2755,35 +2320,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   // GET /api/admin/llm-health — latest probe per vendor, for the admin UI
   // -------------------------------------------------------------------------
-  router.get('/llm-health', async (c) => {
-    const db = buildTransactionalDatabase(c.env);
-    const rows = (await db.execute(sql`
-      SELECT DISTINCT ON (vendor)
-        vendor, status, probed_count AS "probedCount", ok_count AS "okCount",
-        failed_count AS "failedCount", latency_ms AS "latencyMs",
-        models_json AS "modelsJson", trigger,
-        created_at AS "createdAt"
-      FROM llm_health_probes
-      ORDER BY vendor, created_at DESC
-    `)).rows as Array<{
-      vendor: string; status: string;
-      probedCount: number; okCount: number; failedCount: number; latencyMs: number;
-      modelsJson: unknown; trigger: string; createdAt: Date | string;
-    }>;
-    return c.json({
-      vendors: rows.map((r) => ({
-        vendor:       r.vendor,
-        status:       r.status,
-        probedCount:  r.probedCount,
-        okCount:      r.okCount,
-        failedCount:  r.failedCount,
-        latencyMs:    r.latencyMs,
-        models:       coerceProbeModels(r.modelsJson),
-        trigger:      r.trigger,
-        createdAt:    r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
-      })),
-    });
-  });
+  router.get('/llm-health', async (c) => c.json({ vendors: await vendorProbesSection(c.env as Env) }));
 
   // -------------------------------------------------------------------------
   // GET /api/admin/llm-ratings?days=30 — platform-wide human ratings of model
@@ -2802,145 +2339,36 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
-  // GET /api/admin/personas   — list platform personas (admin CRUD)
+  // /api/admin/personas — platform persona CRUD. The catalogue owns the table and
+  // its invalidation; admin differs from the public readers only by scope.
   // -------------------------------------------------------------------------
   router.get('/personas', async (c) => {
-    const db = requestDb(c);
-    const rows = await db.select().from(platformPersonas).orderBy(platformPersonas.name);
-    const list = rows.map((r) => ({
-      id:         r.id,
-      name:       r.name,
-      slug:       r.slug,
-      description: r.description ?? null,
-      voice:      r.voice ?? null,
-      perspective: r.perspective ?? null,
-      decisionStyle: r.decisionStyle ?? null,
-      outputPrefix: r.outputPrefix ?? null,
-      capabilities: r.capabilities ? (JSON.parse(r.capabilities) as string[]) : [],
-      tags:       r.tags ? (JSON.parse(r.tags) as string[]) : [],
-      psychometric: r.psychometric ? JSON.parse(r.psychometric) : null,
-      source:     r.source ?? 'builtin',
-      author:     r.author ?? null,
-      active:     r.active,
-      createdAt:  r.createdAt?.toISOString() ?? null,
-      updatedAt:  r.updatedAt?.toISOString() ?? null,
-    }));
-    return c.json({ personas: list });
+    const rows = await listPlatformPersonas(c.env, requestDb(c), 'admin');
+    return c.json({ personas: rows.map(platformPersonaView) });
   });
 
-  // -------------------------------------------------------------------------
-  // POST /api/admin/personas   — create platform persona
-  // -------------------------------------------------------------------------
   router.post('/personas', async (c) => {
-    const db = requestDb(c);
     const body = await parseBody(c, PersonaCreateBody);
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
-    const slug = (body.slug ?? name).trim().toLowerCase().replace(/\s+/g, '-');
-    const [inserted] = await db
-      .insert(platformPersonas)
-      .values({
-        name,
-        slug,
-        description: body.description ?? null,
-        voice: body.voice ?? null,
-        perspective: body.perspective ?? null,
-        decisionStyle: body.decisionStyle ?? null,
-        outputPrefix: body.outputPrefix ?? null,
-        capabilities: body.capabilities?.length ? JSON.stringify(body.capabilities) : null,
-        tags: body.tags?.length ? JSON.stringify(body.tags) : null,
-        psychometric: body.psychometric ? JSON.stringify(body.psychometric) : null,
-        source: body.source ?? 'builtin',
-        author: body.author ?? null,
-        active: body.active ?? true,
-      })
-      .returning();
+    const inserted = await createPlatformPersona(c.env, requestDb(c), { ...body, name });
     if (!inserted) throw new InternalError('Insert failed');
-    return c.json({
-      persona: {
-        id:         inserted.id,
-        name:       inserted.name,
-        slug:       inserted.slug,
-        description: inserted.description ?? null,
-        voice:      inserted.voice ?? null,
-        perspective: inserted.perspective ?? null,
-        decisionStyle: inserted.decisionStyle ?? null,
-        outputPrefix: inserted.outputPrefix ?? null,
-        capabilities: inserted.capabilities ? (JSON.parse(inserted.capabilities) as string[]) : [],
-        tags:        inserted.tags ? (JSON.parse(inserted.tags) as string[]) : [],
-        psychometric: inserted.psychometric ? JSON.parse(inserted.psychometric) : null,
-        source:      inserted.source ?? 'builtin',
-        author:      inserted.author ?? null,
-        active:      inserted.active,
-        createdAt:   inserted.createdAt?.toISOString() ?? null,
-        updatedAt:   inserted.updatedAt?.toISOString() ?? null,
-      },
-    }, 201);
+    return c.json({ persona: platformPersonaView(inserted) }, 201);
   });
 
-  // -------------------------------------------------------------------------
-  // PATCH /api/admin/personas/:id   — update platform persona
-  // -------------------------------------------------------------------------
   router.patch('/personas/:id', async (c) => {
-    const db = requestDb(c);
     const id = Number(c.req.param('id'));
     if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
     const body = await parseBody(c, PersonaPatchBody);
-    const [existing] = await db.select().from(platformPersonas).where(eq(platformPersonas.id, id)).limit(1);
-    if (!existing) return c.json({ error: 'Persona not found' }, 404);
-    const updates: Record<string, unknown> = { updatedAt: new Date() };
-    if (body.name !== undefined) updates.name = body.name.trim();
-    if (body.slug !== undefined) updates.slug = body.slug.trim().toLowerCase().replace(/\s+/g, '-');
-    if (body.description !== undefined) updates.description = body.description;
-    if (body.voice !== undefined) updates.voice = body.voice;
-    if (body.perspective !== undefined) updates.perspective = body.perspective;
-    if (body.decisionStyle !== undefined) updates.decisionStyle = body.decisionStyle;
-    if (body.outputPrefix !== undefined) updates.outputPrefix = body.outputPrefix;
-    if (body.capabilities !== undefined) updates.capabilities = body.capabilities?.length ? JSON.stringify(body.capabilities) : null;
-    if (body.tags !== undefined) updates.tags = body.tags?.length ? JSON.stringify(body.tags) : null;
-    if (body.psychometric !== undefined) updates.psychometric = body.psychometric ? JSON.stringify(body.psychometric) : null;
-    if (body.source !== undefined) updates.source = body.source;
-    if (body.author !== undefined) updates.author = body.author;
-    if (body.active !== undefined) updates.active = body.active;
-    const [updated] = await db.update(platformPersonas).set(updates as Record<string, unknown>).where(eq(platformPersonas.id, id)).returning();
-    if (!updated) throw new InternalError('Update failed');
-    // Invalidate the cloud capability cache for both old + new slug so the next
-    // cloud run re-reads the edited persona body.
-    await invalidateCapabilityCache(c.env, 'persona', existing.slug);
-    if (updated.slug !== existing.slug) await invalidateCapabilityCache(c.env, 'persona', updated.slug);
-    return c.json({
-      persona: {
-        id:         updated.id,
-        name:       updated.name,
-        slug:       updated.slug,
-        description: updated.description ?? null,
-        voice:      updated.voice ?? null,
-        perspective: updated.perspective ?? null,
-        decisionStyle: updated.decisionStyle ?? null,
-        outputPrefix: updated.outputPrefix ?? null,
-        capabilities: updated.capabilities ? (JSON.parse(updated.capabilities) as string[]) : [],
-        tags:        updated.tags ? (JSON.parse(updated.tags) as string[]) : [],
-        psychometric: updated.psychometric ? JSON.parse(updated.psychometric) : null,
-        source:      updated.source ?? 'builtin',
-        author:      updated.author ?? null,
-        active:      updated.active,
-        createdAt:   updated.createdAt?.toISOString() ?? null,
-        updatedAt:   updated.updatedAt?.toISOString() ?? null,
-      },
-    });
+    const updated = await updatePlatformPersona(c.env, requestDb(c), id, body);
+    if (!updated) return c.json({ error: 'Persona not found' }, 404);
+    return c.json({ persona: platformPersonaView(updated) });
   });
 
-  // -------------------------------------------------------------------------
-  // DELETE /api/admin/personas/:id
-  // -------------------------------------------------------------------------
   router.delete('/personas/:id', async (c) => {
-    const db = requestDb(c);
     const id = Number(c.req.param('id'));
     if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
-    const result = await db.delete(platformPersonas).where(eq(platformPersonas.id, id)).returning({ id: platformPersonas.id, slug: platformPersonas.slug });
-    const deleted = result[0];
-    if (!deleted) return c.json({ error: 'Persona not found' }, 404);
-    await invalidateCapabilityCache(c.env, 'persona', deleted.slug);
+    if (!(await deletePlatformPersona(c.env, requestDb(c), id))) return c.json({ error: 'Persona not found' }, 404);
     return c.json({ ok: true });
   });
 
@@ -3007,113 +2435,22 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // Begin an impersonation session and return an emulation token.
   // -------------------------------------------------------------------------
   router.post('/impersonation/start', async (c) => {
-    const adminId = c.get('userId') as string;
-    const db = requestDb(c);
-    const ip = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null;
-    const ua = c.req.header('User-Agent') ?? null;
-
     const body = await parseBody(c, ImpersonationStartBody);
-
-    if (!body.userId || !body.tenantId || !body.reason?.trim()) {
-      return c.json({ error: 'userId, tenantId, and reason are required' }, 400);
-    }
-
-    // Reject if target is a Super Admin
-    const [targetRow] = await db
-      .select({ id: users.id, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, isSuperadmin: users.isSuperadmin })
-      .from(users)
-      .where(eq(users.id, body.userId))
-      .limit(1);
-
-    if (!targetRow) return c.json({ error: 'User not found' }, 404);
-    if (targetRow.isSuperadmin) {
-      return c.json({ error: 'Cannot impersonate a Super Admin account' }, 403);
-    }
-
-    // Reject if the admin already has an active session
-    const [existingSession] = await db
-      .select({ id: adminImpersonationSessions.id })
-      .from(adminImpersonationSessions)
-      .where(scopedToTenant(adminImpersonationSessions, body.tenantId, eq(adminImpersonationSessions.adminUserId, adminId),
-        isNull(adminImpersonationSessions.endedAt)))
-      .limit(1);
-
-    if (existingSession) {
-      return c.json({ error: 'You already have an active impersonation session. End it before starting a new one.', sessionId: existingSession.id }, 409);
-    }
-
-    // Resolve the tenant + role
-    const [tenantRow] = await db
-      .select({ id: tenants.id, name: tenants.name, slug: tenants.slug })
-      .from(tenants)
-      .where(eq(tenants.id, body.tenantId))
-      .limit(1);
-
-    if (!tenantRow) return c.json({ error: 'Tenant not found' }, 404);
-
-    // A known role, never above the target's own (application/admin/impersonationRole).
-    const roleDecision = await resolveImpersonationRole(db, body.tenantId, body.userId, body.role);
-    if (!roleDecision.ok) return c.json({ error: roleDecision.error }, roleDecision.status);
-    const resolvedRole = roleDecision.role;
-    const expiresAt = new Date(Date.now() + 3600_000); // 1 hour
-
-    // Create session record
-    const [session] = await db
-      .insert(adminImpersonationSessions)
-      .values({
-        adminUserId:     adminId,
-        targetUserId:    body.userId,
-        tenantId:        body.tenantId,
-        roleOverride:    resolvedRole,
-        reason:          body.reason.trim(),
-        expiresAt,
-        ipAddress:       ip,
-        userAgent:       ua,
-        debuggerEnabled: body.enableDebugger ?? false,
-      })
-      .returning();
-
-    if (!session) throw new InternalError('Failed to create impersonation session');
-
-    // Sign emulation JWT
-    const token = await signEmulationJwt(
-      { sub: body.userId, tid: body.tenantId, role: resolvedRole, emuBy: adminId, emuSid: session.id },
-      c.env.JWT_SECRET,
-    );
-
-    // Store the JTI back on the session for revocation
-    {
-      const tokenPayload = decodeJwtPayload<{ jti?: string }>(token);
-      if (tokenPayload.jti) {
-        await db
-          .update(adminImpersonationSessions)
-          .set({ tokenJti: tokenPayload.jti })
-          .where(scopedToTenant(adminImpersonationSessions, body.tenantId, eq(adminImpersonationSessions.id, session.id)));
-      }
-    }
-
-    await writeAudit(db, 'IMPERSONATION_STARTED', adminId, {
-      targetUserId: body.userId,
-      tenantId:     body.tenantId,
-      metadata:     { sessionId: session.id, role: resolvedRole, reason: body.reason.trim(), debugger: body.enableDebugger ?? false },
-      ipAddress:    ip,
+    const result = await startImpersonation(c.env, requestDb(c), {
+      adminId:        c.get('userId') as string,
+      userId:         body.userId ?? '',
+      tenantId:       body.tenantId ?? 0,
+      role:           body.role,
+      reason:         body.reason ?? '',
+      enableDebugger: body.enableDebugger ?? false,
+      ipAddress:      c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+      userAgent:      c.req.header('User-Agent') ?? null,
     });
-
-    return c.json({
-      emulationSessionId: session.id,
-      token,
-      user: {
-        id:          targetRow.id,
-        email:       targetRow.email,
-        displayName: targetRow.displayName,
-        avatarUrl:   targetRow.avatarUrl,
-      },
-      tenant: { id: tenantRow.id, name: tenantRow.name, slug: tenantRow.slug },
-      role:        resolvedRole,
-      startedAt:   session.startedAt?.toISOString() ?? new Date().toISOString(),
-      expiresAt:   expiresAt.toISOString(),
-      debugger:    body.enableDebugger ?? false,
-    });
+    if (!result.ok) {
+      return c.json({ error: result.error, ...(result.sessionId ? { sessionId: result.sessionId } : {}) }, result.status);
+    }
+    const { sessionId, ...started } = result.started;
+    return c.json({ emulationSessionId: sessionId, ...started });
   });
 
   // -------------------------------------------------------------------------
@@ -3353,30 +2690,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // Paginated, filterable audit log.
   // -------------------------------------------------------------------------
   router.get('/audit-log', async (c) => {
-    const db = requestDb(c);
-    const limit  = Math.min(parsePositiveInt(c.req.query('limit'), 50), 200);
-    const offset = parsePositiveInt(c.req.query('offset'), 0);
-    const event  = c.req.query('event') ?? null;
-    const actor  = c.req.query('actor') ?? null;
-    const target = c.req.query('target') ?? null;
-
-    const conditions = [];
-    if (event)  conditions.push(eq(adminAuditLog.event, event));
-    if (actor)  conditions.push(eq(adminAuditLog.actorId, actor));
-    if (target) conditions.push(eq(adminAuditLog.targetUserId, target));
-
-    const rows = await db
-      .select()
-      .from(adminAuditLog)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(adminAuditLog.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    return c.json({ entries: rows.map((r) => ({
-      ...r,
-      createdAt: r.createdAt?.toISOString() ?? null,
-    })) });
+    // The ONE operator-audit read, shared with the CSV download below.
+    const entries = await listAdminAuditLog(requestDb(c), adminAuditFilterFrom((name) => c.req.query(name)), {
+      limit: Math.min(parsePositiveInt(c.req.query('limit'), 50), 200),
+      offset: parsePositiveInt(c.req.query('offset'), 0),
+    });
+    return c.json({ entries });
   });
 
   // =========================================================================
@@ -3390,17 +2709,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // GET /api/admin/permissions/matrix — current effective role × permission matrix
   router.get('/permissions/matrix', async (c) => {
-    const db = requestDb(c);
-    const overrides = await db.select().from(rolePermissionOverrides);
-    const roles = ROLE_ORDER;
-    const matrix: Record<string, string[]> = {};
-    for (const role of roles) {
-      const roleOverrides = overrides.filter((o) => o.role === role);
-      matrix[role] = resolveRolePermissions(role, roleOverrides);
-    }
+    const { roles, permissions, matrix, overrides } = await loadPermissionMatrix(requestDb(c));
     return c.json({
       roles,
-      permissions: ALL_PERMISSIONS,
+      permissions,
       matrix,
       // Which rows are backed by a real request-time gate. Without this the
       // screen implied every override took effect; most are still advisory
@@ -3445,28 +2757,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     return c.json({ role, permissions: resolveRolePermissions(role, updated) });
   });
 
-  // GET /api/admin/permissions/matrix/export — CSV export
-  router.get('/permissions/matrix/export', async (c) => {
-    const db = requestDb(c);
-    const overrides = await db.select().from(rolePermissionOverrides);
-    const roles = ROLE_ORDER;
-    const header = ['permission', ...roles].join(',');
-    const rows = ALL_PERMISSIONS.map((perm) => {
-      const cols = roles.map((role) => {
-        const roleOverrides = overrides.filter((o) => o.role === role);
-        const perms = resolveRolePermissions(role, roleOverrides);
-        return (perms as string[]).includes(perm as string) ? '1' : '0';
-      });
-      return [perm, ...cols].join(',');
-    });
-    const csv = [header, ...rows].join('\n');
-    return new Response(csv, {
-      headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': 'attachment; filename="permission-matrix.csv"',
-      },
-    });
-  });
+  // GET /api/admin/permissions/matrix/export — a registered export source
+  // (csv | xlsx | json; also at /api/exports/sources/admin.permission-matrix).
+  router.get('/permissions/matrix/export', exportSourceHandler(permissionMatrixExportSource));
 
   // =========================================================================
   // MODULES ROUTES
@@ -3709,20 +3002,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const body = await parseBody(c, MemberRoleBody);
     const nextRole = body.role;
     if (!isTenantRole(nextRole)) return c.json({ error: 'Invalid role' }, 400);
-    const [row] = await db.select({ id: tenantMembers.id }).from(tenantMembers).where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId))).limit(1);
-    if (!row) return c.json({ error: 'Member not found in tenant' }, 404);
-    await db.update(tenantMembers).set({ role: nextRole }).where(scopedToTenant(tenantMembers, tenantId, eq(tenantMembers.id, row.id)));
-    // The role is the label the footer roster renders beside the person (PRD 21
-    // §4.1) AND the claim the gateway caches, so one announcement clears both —
-    // this handler used to name each cache itself, which is precisely the drift
-    // `membershipChanged` exists to end.
-    await membershipChanged(c.env as Env, tenantId, [userId]);
-    await writeAudit(db, 'USER_PERSONA_CHANGED', actorId, {
-      targetUserId: userId,
-      tenantId,
-      metadata: { newRole: body.role },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+    // Same use case as the workspace manager's role change, in the platform-admin
+    // scope: a cross-tenant override past the member rules, audited.
+    const result = await changeMemberRole(db, c.env as Env, { kind: 'platform_admin', ipAddress: c.req.header('CF-Connecting-IP') ?? null }, {
+      tenantId, actorUserId: actorId, targetUserId: userId, role: nextRole,
     });
+    if (!result.ok) return c.json({ error: 'Member not found in tenant' }, 404);
     return c.json({ ok: true });
   });
 
@@ -3775,38 +3060,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     });
   });
 
-  // GET /api/admin/audit-log/export — CSV export
-  router.get('/audit-log/export', async (c) => {
-    const db = requestDb(c);
-    const event  = c.req.query('event') ?? null;
-    const actor  = c.req.query('actor') ?? null;
-    const target = c.req.query('target') ?? null;
-    const conditions = [];
-    if (event)  conditions.push(eq(adminAuditLog.event, event));
-    if (actor)  conditions.push(eq(adminAuditLog.actorId, actor));
-    if (target) conditions.push(eq(adminAuditLog.targetUserId, target));
-
-    const rows = await db
-      .select()
-      .from(adminAuditLog)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(adminAuditLog.createdAt))
-      .limit(10000);
-
-    const header = 'id,event,actorId,targetUserId,tenantId,ipAddress,createdAt,metadata';
-    const csv = [
-      header,
-      ...rows.map((r) =>
-        [r.id, r.event, r.actorId ?? '', r.targetUserId ?? '', r.tenantId ?? '', r.ipAddress ?? '', r.createdAt?.toISOString() ?? '', JSON.stringify(r.metadata ?? {}).replace(/"/g, '""')].map((v) => `"${v}"`).join(',')
-      ),
-    ].join('\n');
-    return new Response(csv, {
-      headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': 'attachment; filename="audit-log.csv"',
-      },
-    });
-  });
+  // GET /api/admin/audit-log/export — a registered export source
+  // (csv | json | xlsx; also at /api/exports/sources/admin.audit-log).
+  router.get('/audit-log/export', exportSourceHandler(adminAuditLogExportSource));
 
   // GET /api/admin/users/:id/workspaces — workspace memberships for a user (tenantId, name, slug, role)
   router.get('/users/:id/workspaces', async (c) => {
@@ -3866,89 +3122,22 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     });
   });
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Tenant API keys (bfk_*) — superadmin mint-on-behalf for any tenant.
-  // The owner self-service flow lives at /api/tenants/:id/api-keys; the
-  // shared service module dedupes the mint/list/revoke logic.
-  // ─────────────────────────────────────────────────────────────────────
-
-  router.get('/tenants/:tenantId/api-keys', async (c) => {
-    const db = requestDb(c);
-    const tenantId = Number(c.req.param('tenantId'));
-    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
-    const keys = await listTenantApiKeys(db, tenantId);
-    return c.json({ keys });
-  });
-
-  router.post('/tenants/:tenantId/api-keys', async (c) => {
-    const db = requestDb(c);
-    const tenantId = Number(c.req.param('tenantId'));
-    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
-    const adminUserId = c.get('userId') as string | undefined;
-    const body = await parseOptionalBody(c, AdminTenantApiKeyBody);
-    const name = (body.name ?? '').trim() || 'Admin-issued tenant API key';
-    const minted = await mintTenantApiKey(db, {
-      tenantId,
-      name,
-      createdByUserId: adminUserId ?? null,
-      allowedOrigins: normalizeOrigins(body.allowedOrigins),
-    });
-    return c.json(minted, 201);
-  });
-
-  router.get('/tenants/:tenantId/api-keys/:keyId/usage', async (c) => {
-    const db = requestDb(c);
-    const tenantId = Number(c.req.param('tenantId'));
-    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
-    const keyId  = c.req.param('keyId');
-    const days   = Number(c.req.query('days')  ?? '30');
-    const page   = Number(c.req.query('page')  ?? '1');
-    const limit  = limitParam(c.req.query('limit'), 100, 500);
-    const result = await queryTenantApiKeyUsage(db, { tenantId, keyId, days, page, limit });
-    return c.json(result);
-  });
-
-  router.patch('/tenants/:tenantId/api-keys/:keyId', async (c) => {
-    const db = requestDb(c);
-    const tenantId = Number(c.req.param('tenantId'));
-    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
-    const keyId = c.req.param('keyId');
-    const body = await parseOptionalBody(c, AdminTenantApiKeyBody);
-
-    const updated = await updateTenantApiKey(db, {
-      tenantId,
-      keyId,
-      ...(typeof body.name === 'string' ? { name: body.name } : {}),
-      ...(body.allowedOrigins !== undefined ? { allowedOrigins: normalizeOrigins(body.allowedOrigins) } : {}),
-      env: c.env,
-    });
-    if (!updated) return c.json({ error: 'Key not found, revoked, or no fields to update' }, 404);
-    return c.json({ key: updated });
-  });
+  // Tenant API keys (bfk_*) — superadmin mint-on-behalf for any tenant. The SAME
+  // router as the owner's /api/tenants/:tenantId/api-keys, in its platform-admin
+  // scope (authorized by the superadmin gate above).
+  router.route('/tenants/:tenantId/api-keys', createPlatformTenantApiKeyRoutes());
 
   /**
    * Cross-tenant product feedback roll-up — the dogfooding inbox. Every external
    * request gathered by any tenant's feedback collector, newest first. Shares the
-   * exact loader the per-tenant triage queue uses (`listFeedbackSubmissions`);
+   * ONE queue read the per-tenant triage queue uses (`loadFeedbackQueue`);
    * passing `tenantId: null` is what widens it to every workspace.
    */
   router.get('/feedback', async (c) => {
-    const db = requestDb(c);
     const tenantParam = c.req.query('tenantId');
     const tenantId = tenantParam ? Number(tenantParam) : null;
     if (tenantId != null && !Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
-
-    const filter = {
-      tenantId,
-      status: parseFeedbackStatus(c.req.query('status')),
-      limit: c.req.query('limit') ? limitParam(c.req.query('limit'), 50, 500) : undefined,
-      before: c.req.query('before') ?? null,
-    };
-    const [submissions, counts] = await Promise.all([
-      listFeedbackSubmissions(db, c.env, filter),
-      countFeedbackByStatus(db, c.env, { tenantId, projectId: null }),
-    ]);
-    return c.json({ submissions, counts });
+    return c.json(await loadFeedbackQueue(requestDb(c), c.env, feedbackQueueFilter(c, { tenantId })));
   });
 
   /**
@@ -3959,30 +3148,17 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   router.post('/feedback/:id/review', async (c) => {
     const db = requestDb(c);
     const body = await parseOptionalBody(c, FeedbackReviewBody);
-    const decision = body.decision;
-    if (decision !== 'approved' && decision !== 'declined') {
-      return c.json({ error: "decision must be 'approved' or 'declined'" }, 400);
-    }
+    if (!isFeedbackDecision(body.decision)) return c.json({ error: FEEDBACK_DECISION_ERROR }, 400);
     if (typeof body.tenantId !== 'number') return c.json({ error: 'tenantId is required' }, 400);
 
     const result = await reviewFeedbackSubmission(db, c.env, {
       tenantId: body.tenantId,
       submissionId: c.req.param('id'),
-      decision,
+      decision: body.decision,
       reviewerUserId: (c.get('userId') as string | undefined) ?? null,
     });
     if (!result.ok) return c.json({ error: 'Submission not found' }, 404);
     return c.json({ ok: true, taskId: result.taskId });
-  });
-
-  router.delete('/tenants/:tenantId/api-keys/:keyId', async (c) => {
-    const db = requestDb(c);
-    const tenantId = Number(c.req.param('tenantId'));
-    if (!Number.isFinite(tenantId)) return c.json({ error: 'Invalid tenantId' }, 400);
-    const keyId = c.req.param('keyId');
-    const ok = await revokeTenantApiKey(db, { tenantId, keyId, env: c.env });
-    if (!ok) return c.json({ error: 'Key not found' }, 404);
-    return c.json({ ok: true });
   });
 
   // ═══ PUBLISHERS — the decisions only an operator may make (PRD 24) ════════

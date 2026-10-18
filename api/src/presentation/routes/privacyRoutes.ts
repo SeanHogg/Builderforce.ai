@@ -8,7 +8,7 @@ import {
   fileAccountPrivacyRequest,
   filePublicPrivacyRequest,
   isAccountPrivacyRequestType,
-  listAccountPrivacyRequests,
+  listPrivacyRequests,
   publicPrivacyRequestType,
 } from '../../application/legal/privacyRequests';
 import { normalizeEmail } from '../../application/shared/dnsVerification';
@@ -24,7 +24,8 @@ import { parseBody, parseOptionalBody, z } from './requestBody';
  *   GET  /api/auth/me/privacy-requests    — WebJWT; the person's own requests
  *
  * Its own module because privacy is not authentication; the SQL lives in
- * `application/legal/privacyRequests`.
+ * `application/legal/privacyRequests`, which the operator console
+ * (`/api/admin/privacy-requests`) lists and fulfils through as well.
  */
 const RequestDetails = {
   details: z.string().optional(),
@@ -83,7 +84,7 @@ export function createPrivacyRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/me/privacy-requests', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    return c.json({ requests: await listAccountPrivacyRequests(db, userId) });
+    return c.json({ requests: await listPrivacyRequests(db, { kind: 'subject', userId }) });
   });
 
   return router;

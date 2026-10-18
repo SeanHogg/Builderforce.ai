@@ -33,7 +33,7 @@ import {
   type GameTargetState,
   type GameTargetsView,
 } from '@/lib/gameTargets';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/panels.module.css';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface CanvasGamePanelProps {
   open: boolean;

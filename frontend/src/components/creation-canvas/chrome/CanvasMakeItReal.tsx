@@ -7,7 +7,7 @@ import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
 import { CanvasMenuSheet } from '../CanvasMenuSheet';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from '../CanvasSessionActions';
 import { useCanvasSessionFacts } from './canvasSessionContext';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/commandBar.module.css';
 
 export interface CanvasMakeItRealProps {
   open: boolean;

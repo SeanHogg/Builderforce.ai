@@ -152,24 +152,24 @@ export const dashboardsApi = {
 
   // ── Dashboards CRUD ──────────────────────────────────────────────────────────
   list: (): Promise<{ dashboards: SavedDashboard[] }> =>
-    apiRequest('/api/dashboards/dashboards'),
+    apiRequest('/api/dashboards'),
 
   create: (name: string, isDefault = false): Promise<SavedDashboard> =>
-    apiRequest('/api/dashboards/dashboards', {
+    apiRequest('/api/dashboards', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, isDefault }),
     }),
 
   update: (id: number, patch: { name?: string; isDefault?: boolean }): Promise<SavedDashboard> =>
-    apiRequest(`/api/dashboards/dashboards/${id}`, {
+    apiRequest(`/api/dashboards/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     }),
 
   remove: (id: number): Promise<{ deleted: number }> =>
-    apiRequest(`/api/dashboards/dashboards/${id}`, { method: 'DELETE' }),
+    apiRequest(`/api/dashboards/${id}`, { method: 'DELETE' }),
 
   /**
    * Materialise a declared preset (manager-gated). Idempotent on the server, so
@@ -177,14 +177,14 @@ export const dashboardsApi = {
    * re-apply returns the same `dashboardId` with `addedWidgets: 0`.
    */
   applyPreset: (preset: DashboardPresetKey): Promise<ApplyPresetResult> =>
-    apiRequest(`/api/dashboards/dashboards/presets/${preset}`, { method: 'POST' }),
+    apiRequest(`/api/dashboards/presets/${preset}`, { method: 'POST' }),
 
   // ── Widget CRUD ──────────────────────────────────────────────────────────────
   addWidget: (
     dashboardId: number,
     widget: { metricKey?: string; widgetKey?: string; viz?: WidgetViz; title?: string; config?: Record<string, unknown>; position?: number },
   ): Promise<DashboardWidget> =>
-    apiRequest(`/api/dashboards/dashboards/${dashboardId}/widgets`, {
+    apiRequest(`/api/dashboards/${dashboardId}/widgets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(widget),
@@ -195,18 +195,18 @@ export const dashboardsApi = {
     widgetId: number,
     patch: { metricKey?: string; viz?: WidgetViz; title?: string; config?: Record<string, unknown>; position?: number },
   ): Promise<DashboardWidget> =>
-    apiRequest(`/api/dashboards/dashboards/${dashboardId}/widgets/${widgetId}`, {
+    apiRequest(`/api/dashboards/${dashboardId}/widgets/${widgetId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     }),
 
   removeWidget: (dashboardId: number, widgetId: number): Promise<{ deleted: number }> =>
-    apiRequest(`/api/dashboards/dashboards/${dashboardId}/widgets/${widgetId}`, { method: 'DELETE' }),
+    apiRequest(`/api/dashboards/${dashboardId}/widgets/${widgetId}`, { method: 'DELETE' }),
 
   // ── Resolved widget values ───────────────────────────────────────────────────
   data: (dashboardId: number): Promise<DashboardData> =>
-    apiRequest(`/api/dashboards/dashboards/${dashboardId}/data`),
+    apiRequest(`/api/dashboards/${dashboardId}/data`),
 
   // ── Workforce health (the three cohorts, one read) ───────────────────────────
   workforceHealth: (days = 30): Promise<WorkforceHealthResult> =>

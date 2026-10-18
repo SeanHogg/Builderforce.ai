@@ -8,7 +8,7 @@ import { Icon } from '@/components/ui/Icon';
 import { hasCodeWorkspace } from '@/lib/canvasBuildTools';
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import type { ProjectModality } from '@/lib/modality';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 
 /**
  * The App surface before the session has an app: pick what you are making, and a real

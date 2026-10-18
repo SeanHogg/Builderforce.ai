@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/ads.module.css';
 import { adSetsApi, type AdSet } from '@/lib/adSetsApi';
 import type { AdObjective } from '@/lib/adsApi';
 import { usePanelTask } from '@/hooks/usePanelTask';

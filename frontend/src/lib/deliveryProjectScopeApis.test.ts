@@ -30,7 +30,7 @@ describe('delivery insight API project scope', () => {
 
     expect(apiRequest).toHaveBeenNthCalledWith(1, '/api/insights/benchmarking/cross-team?days=30&projectId=42');
     expect(apiRequest).toHaveBeenNthCalledWith(2, '/api/insights/delay-taxonomy?days=90&projectId=42');
-    expect(apiRequestText).toHaveBeenCalledWith('/api/insights/export?dataset=dora&format=csv&days=30&projectId=42');
+    expect(apiRequestText).toHaveBeenCalledWith('/api/exports/sources/insights.dataset?dataset=dora&format=csv&days=30&projectId=42');
   });
 
   it('preserves tenant-wide URLs when All Projects is selected', async () => {

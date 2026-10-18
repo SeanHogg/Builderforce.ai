@@ -1,0 +1,622 @@
+/* The board node: card frame, header, affordances, density, orb, per-kind accents and badges.
+   Split out of CreationCanvas.module.css, which keeps the board shell and the
+   canvas palette (`--canvas-*`, light and dark) that every rule here reads. */
+
+.node { box-sizing:border-box; width:260px; display:flex; flex-direction:column; container-type:inline-size; border:1px solid var(--canvas-widget-border); border-radius:var(--radius-lg); background:var(--canvas-widget-surface); color:var(--canvas-ink); box-shadow:0 7px 24px rgba(60,48,36,.1); overflow:hidden; transition:border-color .15s, box-shadow .15s; }
+.wideNode { width:455px; }
+.selected { border-color:var(--canvas-accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--canvas-accent) 15%,transparent), 0 9px 28px rgba(60,48,36,.14); }
+.nodeHeader { height:42px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--canvas-widget-border); background:var(--canvas-widget-header); font-size:12px; }
+.nodeHeader strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nodeIcon { display:grid; place-items:center; width:20px; height:20px; border-radius:var(--radius-sm); color:var(--canvas-widget-icon); background:var(--canvas-widget-icon-bg); }
+.status { margin-left:auto; padding:3px 7px; border-radius:var(--radius-full); color:#16835a; background:#eaf8f2; font-size:9px; }
+.moreButton { margin-left:auto; border:0; background:transparent; color:var(--canvas-muted); cursor:pointer; letter-spacing:1px; }
+/* It opens the wide inspector now rather than being decoration with an accessible name,
+   so it answers a hover and a keyboard focus the way every other control in the row does. */
+.moreButton:hover, .moreButton:focus-visible { color:var(--canvas-ink); outline:none; }
+.status + .moreButton { margin-left:0; }
+.workflowRunButton { margin-left:auto; padding:5px 9px; border:1px solid var(--canvas-accent); border-radius:var(--radius-sm); background:var(--canvas-accent); color:var(--text-on-accent); font:650 9px var(--font-sans); cursor:pointer; white-space:nowrap; }
+.workflowRunButton:hover,.workflowRunButton:focus-visible { outline:none; filter:brightness(1.08); box-shadow:0 0 0 2px color-mix(in srgb,var(--canvas-accent) 24%,transparent); }
+.workflowRunButton:disabled { opacity:.45; cursor:not-allowed; filter:none; box-shadow:none; }
+.status + .workflowRunButton { margin-left:0; }
+.workflowRunButton + .moreButton { margin-left:0; }
+.nodeBody { min-height:0; flex:1; overflow:auto; padding:11px; font-size:11px; }
+.nodeBody p { margin:6px 0; color:var(--canvas-muted); line-height:1.45; }
+.handle { width:8px !important; height:8px !important; background:var(--canvas-muted) !important; border:2px solid #fff !important; }
+.pipelineStepBadge { display:grid; place-items:center; width:18px; height:18px; flex:none; border-radius:50%; background:#7657df; color:var(--text-on-accent); font-size:8px; font-weight:800; }
+.pipelineNodeGuide { display:grid; grid-template-columns:auto 1fr; gap:3px 7px; align-items:center; padding:7px 8px; border:1px solid color-mix(in srgb,#7657df 38%,var(--canvas-line)); border-radius:var(--radius-md); background:color-mix(in srgb,#7657df 9%,var(--canvas-panel)); }.pipelineNodeGuide b { color:#7657df; font-size:8px; text-transform:uppercase; }.pipelineNodeGuide span { grid-column:1 / -1; color:var(--canvas-muted); font-size:7px; line-height:1.4; }.pipelineNodeGuide[data-start="true"] { border-color:#26a879; background:color-mix(in srgb,#26a879 11%,var(--canvas-panel)); box-shadow:0 0 0 2px color-mix(in srgb,#26a879 12%,transparent); }.pipelineNodeGuide[data-start="true"] b { color:#16835e; }
+.node_map { width:340px; }
+@media (max-width:767px) { .node_map { width:100%; max-width:340px; } }
+
+.node_website .nodeBody,.node_prototype .nodeBody { display:flex; }
+/* A framed page reports no height of its own, so a card whose body IS one collapses to
+   the wrapper's floor — the React preview it replaced grew with its sections. A thumbnail
+   of a page is a page-shaped rectangle, so the card gives it one; this is only a floor, so
+   the node resizer still owns the card's real height. */
+.node_website .deviceFrameWrap,.node_prototype .deviceFrameWrap { min-height:270px; }
+
+/* THE framed document — see `CanvasDeviceFrame`. The live page panel, the app runtime,
+   the site surface and the website card all wear this pair; it used to be the panel's
+   alone while the two surfaces sized their frames with `min(100%,…)` caps that the
+   framed page then laid itself out against, which is why "Desktop" and "Phone" looked
+   the same. The WIDTH is set inline by the component, in real device pixels, and the
+   `scale()` puts it back in the box — so nothing here may cap it.
+   `background:#fff` and not a token on purpose: this is the browser's own default
+   canvas for a document, and a themed one would tint any page that paints transparently
+   with the app's light/dark choice — the leak the frame exists to stop. */
+.deviceFrameWrap { position:relative; flex:1; min-width:0; min-height:110px; overflow:hidden; border:1px solid var(--canvas-widget-border); border-radius:var(--radius-md); background:var(--canvas-widget-surface); }
+.node_evaluation { width:650px; }.node_agent { width:285px; }.node_staff { width:245px; }.node_chat { width:290px; height:auto; min-height:180px; border-color:var(--bf-border); background:var(--bf-surface); }
+.node_chat .nodeHeader { border-color:var(--bf-border); background:color-mix(in srgb,var(--bf-accent-soft) 50%,var(--bf-surface)); }
+.node_chat .nodeIcon { color:var(--bf-accent); background:var(--bf-accent-soft); }
+/* The anchor owns its own scrolling:the exchange scrolls to the newest turn while
+   the activity bar and the "Open Brain chat" button stay pinned in view. Letting the
+   node body scroll instead pushed the button off the card the moment a reply landed. */
+.node_chat .nodeBody { display:flex; flex-direction:column; overflow:hidden; }
+/* Inline placement:the Object IS the Brain surface. It needs the room a conversation
+   actually takes, so the Object grows past its anchor size — unless the user has
+   dragged it, in which case their inline width/height wins (React Flow writes those
+   as element styles, which beat these rules). :has keeps the decision in CSS so
+   CreationNode never has to read the placement and re-render every Object with it. */
+.node_chat:has(.brainObjectChat) { width:390px; height:clamp(420px,58vh,600px); min-height:420px; }
+.node_chat .nodeBody:has(.brainObjectChat) { padding:0; }
+.brainObjectChat { display:flex; flex-direction:column; flex:1; min-height:0; }
+
+/* Docked placement:the Object collapses to Brain's mark. A card repeating the latest
+   exchange next to a full-height dock showing that same exchange is two frames of
+   reference for one Brain, so the board keeps only what the dock cannot show — where
+   Brain sits in the graph, and that it is working. Same:has() decision as inline, so
+   CreationNode never reads the placement and re-renders every Object with it.
+   !important because React Flow writes a user's resize as an element style, and a
+   dragged-out Brain card must still collapse to the same mark as every other. */
+.node_chat:has(.brainMarker) { width:74px!important; min-width:0; height:74px!important; min-height:0; border-radius:50%; overflow:visible; }
+.node_chat:has(.brainMarker) .nodeHeader { display:none; }
+.node_chat:has(.brainMarker) .nodeBody { display:flex; padding:0; overflow:visible; }
+/* Resize handles on a mark would offer a size the placement does not have. */
+.node_chat:has(.brainMarker) .resizeLine,
+.node_chat:has(.brainMarker) .resizeHandle { display:none!important; }
+/* The Object's own disc is the mark's background — a second filled circle inside it
+   reads as two rings rather than one Brain. */
+.brainMarker { position:relative; display:grid; flex:1; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; color:var(--bf-accent); cursor:pointer; }
+.brainMarker:hover,.brainMarker:focus-visible { outline:none; background:var(--bf-accent-soft); }
+.brainMarker:focus-visible { box-shadow:0 0 0 2px var(--bf-accent); }
+/* The working signal lives in `BrainMark`, which every Brain surface shares. */
+.node_diagnostics { width:720px; min-height:260px; }
+
+/* The founder cards that carry a table need room for it; the rest stay at the
+   default card width. `.wideNode` already handles the flexible sizing, so this is
+   only the resting width. */
+.node_competitor,.node_customerSegment,.node_gtmPlan,.node_battlecard,.node_decision,
+.node_objective,.node_pricing,.node_capTable,.node_fundingRound,.node_investorUpdate,
+.node_dataRoom,.node_contract,.node_experiment { width:430px; }
+.node_company,.node_interview { width:330px; }
+.node_liveMetric,.node_trigger { width:250px; }
+
+/* Narrow viewports: a 430px card overflows a 360px phone, and the stat grid has to
+   collapse before the card does. */
+@media (max-width:520px) {
+  .node_competitor,.node_customerSegment,.node_gtmPlan,.node_battlecard,.node_decision,
+  .node_objective,.node_pricing,.node_capTable,.node_fundingRound,.node_investorUpdate,
+  .node_dataRoom,.node_contract,.node_experiment,
+  .node_company,.node_interview { width:min(430px, calc(100vw - 48px)); }
+}
+
+.node_project,.node_mockup,.node_task { width:290px; }.node_roadmap,.node_featureSummary { width:500px; }
+.node_image,.node_animation,.node_podcast,.node_comic,.node_game,.node_cad,.node_model3d,.node_resume,.node_template { width:360px; }
+.node_resume { width:700px; }
+.node_guidedTour { width:520px; }
+.node_evermind { width:560px; }
+.node_projectComparison { width:610px; }
+.node_standup { width:455px; }
+/* Pitch objects — the timed story, its rubric, its judge Q&A, and the written
+   entry. Every colour is a canvas token or a tone mixed into one, so the same
+   markup reads in light and dark; every grid is auto-fit so a card that is
+   resized narrow reflows instead of overflowing the board. */
+.node_pitch,.node_pitchScorecard,.node_pitchQa,.node_pitchApplication { width:455px; }
+
+.node_drawing { width:280px; background:transparent; border-color:transparent; box-shadow:none; }
+.node_drawing .nodeHeader { background:rgba(255,255,255,.88); border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
+.node_drawing .nodeBody { padding:2px; }
+.node_frame { width:520px; min-height:300px; border-width:2px; border-style:dashed; box-shadow:none; }
+.node_frame .nodeHeader { background:rgba(255,255,255,.72); }
+
+/* --- Sticky notes --------------------------------------------------------
+   A sticky is the one card that draws NO chrome:no icon, no title bar, no
+   status pill, no ••• button. That is what makes it a sticky rather than a
+   Note with a colour — the whole object is its text.
+
+   The header is hidden here rather than branched around in CreationNode so
+   the card keeps ONE structure; only the sticky declines to paint it. The
+   ••• affordance is not lost — the node's own context menu still opens on
+   right-click, which is where a person reaches for it on a board anyway.
+
+   The pigment is author-chosen and arrives as an inline background (see
+   `authoredColors.ts`), and every value in STICKY_COLORS is pale, so the ink
+   is `--canvas-ink-on-light` in BOTH themes: the surface is the author's, not
+   the theme's, so it does not flip when the board does. */
+.node_sticky { width:190px; min-height:170px; border:0; border-radius:var(--radius-sm); box-shadow:0 2px 6px rgba(16,32,58,.18); }
+.node_sticky .nodeHeader { display:none; }
+.node_sticky .nodeBody { padding:12px; }
+.stickyText,
+.stickyInput {
+  width:100%; min-height:132px; margin:0; padding:0; border:0; background:transparent;
+  color:var(--canvas-ink-on-light); font-family:inherit; font-size:13px; line-height:1.4;
+  overflow:auto; overflow-wrap:anywhere; white-space:pre-wrap; resize:none;
+}
+.stickyInput::placeholder { color:var(--canvas-ink-on-light); opacity:.45; }
+.stickyInput:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:3px; }
+
+/* --- Imported geometry ---------------------------------------------------
+   A Miro `shape` imports as a sticky that REMEMBERS what it was (`stickyShape`,
+   written by `miroImport.ts`). Until these rules existed the field was a fact
+   nothing acted on: an ellipse in the original became a square note, so a
+   migrated diagram looked like a wall of stickies and a reader could not see
+   that the ellipse had never been a note at all.
+
+   Drawn here rather than in a branch in `CreationNode` because a shape is a
+   TREATMENT of the one card structure, not a different component — the same
+   argument that hides the sticky's chrome in CSS. Every rule is additive: a
+   geometry with no rule below keeps the square card, which is the right
+   degradation for an import from a board with shapes we do not model.
+
+   `clip-path` rather than an SVG background: it clips the real element, so the
+   text inside stays selectable, the resizer still measures the node React Flow
+   thinks it has, and the author's pigment is still the element's own
+   background. The padding compensation on the clipped shapes keeps the text
+   inside the visible area rather than under a cut corner. */
+.node_sticky[data-sticky-shape='circle'],
+.node_sticky[data-sticky-shape='ellipse'] { border-radius:50%; }
+.node_sticky[data-sticky-shape='circle'] .nodeBody,
+.node_sticky[data-sticky-shape='ellipse'] .nodeBody { padding:30px 26px; }
+
+.node_sticky[data-sticky-shape='round_rectangle'],
+/* `round` is the value the sticky picker has written since it shipped, and it means
+   rounded CORNERS rather than a circle — a note, softened. It is listed beside Miro's
+   own spelling rather than translated at the import boundary, because a value a person
+   chose and a value an importer read are two facts and only one of them may be rewritten. */
+.node_sticky[data-sticky-shape='round'] { border-radius:22px; }
+
+/* A rectangle is what the card already is; the rule exists so the SQUARE case is
+   deliberate rather than the fallthrough, and so a re-export can tell the two apart. */
+.node_sticky[data-sticky-shape='rectangle'],
+.node_sticky[data-sticky-shape='square'] { border-radius:2px; }
+
+.node_sticky[data-sticky-shape='rhombus'] { clip-path:polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+.node_sticky[data-sticky-shape='rhombus'] .nodeBody { padding:44px 34px; }
+
+.node_sticky[data-sticky-shape='triangle'] { clip-path:polygon(50% 0%, 100% 100%, 0% 100%); }
+.node_sticky[data-sticky-shape='triangle'] .nodeBody { padding:70px 22px 12px; }
+
+.node_sticky[data-sticky-shape='parallelogram'] { clip-path:polygon(14% 0%, 100% 0%, 86% 100%, 0% 100%); }
+.node_sticky[data-sticky-shape='parallelogram'] .nodeBody { padding:12px 30px; }
+
+.node_sticky[data-sticky-shape='star'] { clip-path:polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+.node_sticky[data-sticky-shape='star'] .nodeBody { padding:60px 40px 20px; }
+
+.node_sticky[data-sticky-shape='right_arrow'] { clip-path:polygon(0% 25%, 68% 25%, 68% 0%, 100% 50%, 68% 100%, 68% 75%, 0% 75%); }
+.node_sticky[data-sticky-shape='right_arrow'] .nodeBody { padding:48px 56px 48px 16px; }
+
+/* --- The stencil geometries ----------------------------------------------
+   Everything above shipped with the shape RENDERER; these came with the shape
+   LIBRARY (`lib/canvasStencils.ts`), which is what the palette reads. Same rules
+   as above, for the same reasons: `clip-path` over an SVG background so the text
+   stays selectable and the author's pigment stays the element's own background,
+   and a padding compensation so the label sits inside the visible area rather
+   than under a cut corner.
+
+   Every value here has an entry in `STENCIL_SHAPES` and every entry there has a
+   rule here. That is not a coincidence to be maintained by memory — the sticky
+   inspector's shape select is GENERATED from that list, so a value with no rule
+   would silently degrade to the square card and read as a bug in the card. */
+
+/* A stadium. The flowchart terminator, and the wireframe button. */
+.node_sticky[data-sticky-shape='pill'] { border-radius:999px; }
+.node_sticky[data-sticky-shape='pill'] .nodeBody { padding:12px 26px; }
+
+.node_sticky[data-sticky-shape='hexagon'] { clip-path:polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); }
+.node_sticky[data-sticky-shape='hexagon'] .nodeBody { padding:20px 42px; }
+
+.node_sticky[data-sticky-shape='pentagon'] { clip-path:polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
+.node_sticky[data-sticky-shape='pentagon'] .nodeBody { padding:42px 30px 16px; }
+
+.node_sticky[data-sticky-shape='octagon'] { clip-path:polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%); }
+.node_sticky[data-sticky-shape='octagon'] .nodeBody { padding:22px 24px; }
+
+.node_sticky[data-sticky-shape='trapezoid'] { clip-path:polygon(18% 0%, 82% 0%, 100% 100%, 0% 100%); }
+.node_sticky[data-sticky-shape='trapezoid'] .nodeBody { padding:14px 38px; }
+
+.node_sticky[data-sticky-shape='cross'] {
+  clip-path:polygon(35% 0%, 65% 0%, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0% 65%, 0% 35%, 35% 35%);
+}
+.node_sticky[data-sticky-shape='cross'] .nodeBody { padding:12px 6px; }
+
+.node_sticky[data-sticky-shape='left_arrow'] { clip-path:polygon(0% 50%, 32% 0%, 32% 25%, 100% 25%, 100% 75%, 32% 75%, 32% 100%); }
+.node_sticky[data-sticky-shape='left_arrow'] .nodeBody { padding:48px 16px 48px 56px; }
+
+.node_sticky[data-sticky-shape='left_right_arrow'] {
+  clip-path:polygon(0% 50%, 18% 0%, 18% 25%, 82% 25%, 82% 0%, 100% 50%, 82% 100%, 82% 75%, 18% 75%, 18% 100%);
+}
+.node_sticky[data-sticky-shape='left_right_arrow'] .nodeBody { padding:34px 46px; }
+
+/* An approximation, deliberately. A cloud's real outline is arcs, which
+   `clip-path: polygon()` cannot express — and `path()` would bake one fixed
+   coordinate space into a card that resizes. Nineteen points read as a cloud at
+   every size, which is what the shape is for. */
+.node_sticky[data-sticky-shape='cloud'] {
+  clip-path:polygon(
+    22% 88%, 10% 82%, 4% 70%, 8% 58%, 18% 52%, 16% 40%, 24% 28%, 38% 24%, 48% 12%,
+    64% 10%, 76% 18%, 84% 30%, 94% 38%, 97% 52%, 92% 66%, 84% 76%, 72% 84%, 56% 90%, 38% 92%
+  );
+}
+.node_sticky[data-sticky-shape='cloud'] .nodeBody { padding:34px 30px; }
+
+/* The stored-data cylinder. Elliptical top and bottom edges from an asymmetric
+   border-radius rather than a clip: a clip cannot draw a curve at all, and this
+   keeps the drop shadow every clipped shape has to give up. */
+.node_sticky[data-sticky-shape='cylinder'] { border-radius:50% / 16%; }
+.node_sticky[data-sticky-shape='cylinder'] .nodeBody { padding:26px 20px; }
+
+/* A page with a torn bottom edge — the flowchart document, and the UML note. */
+.node_sticky[data-sticky-shape='document'] {
+  clip-path:polygon(0% 0%, 100% 0%, 100% 86%, 75% 100%, 50% 86%, 25% 100%, 0% 86%);
+}
+.node_sticky[data-sticky-shape='document'] .nodeBody { padding:12px 14px 30px; }
+
+/* A CLIPPED card cannot carry a drop shadow — the shadow is painted outside the
+   clip and is cut away with it, leaving a shape that floats differently from
+   every other card. A hairline of the ink colour restores the edge instead.
+
+   Listed per shape rather than as "anything with a clip-path", because CSS has
+   no such selector — and the two shapes that curve instead of clipping
+   (`ellipse`, `cylinder`) deliberately keep their real shadow, since a rule that
+   swept them in would trade a correct shadow for a filter that costs a
+   compositing layer. */
+.node_sticky[data-sticky-shape='rhombus'],
+.node_sticky[data-sticky-shape='triangle'],
+.node_sticky[data-sticky-shape='parallelogram'],
+.node_sticky[data-sticky-shape='star'],
+.node_sticky[data-sticky-shape='right_arrow'],
+.node_sticky[data-sticky-shape='hexagon'],
+.node_sticky[data-sticky-shape='pentagon'],
+.node_sticky[data-sticky-shape='octagon'],
+.node_sticky[data-sticky-shape='trapezoid'],
+.node_sticky[data-sticky-shape='cross'],
+.node_sticky[data-sticky-shape='left_arrow'],
+.node_sticky[data-sticky-shape='left_right_arrow'],
+.node_sticky[data-sticky-shape='cloud'],
+.node_sticky[data-sticky-shape='document'] {
+  box-shadow:none; filter:drop-shadow(0 2px 5px rgba(16,32,58,.22));
+}
+
+/* The text a shape holds is centred, because a shape is a diagram node and a
+   diagram node's label sits in the middle of it — unlike a note, whose text
+   starts at the top-left because it is prose somebody is still writing. */
+.node_sticky:not([data-sticky-shape]) .stickyText,
+.node_sticky:not([data-sticky-shape]) .stickyInput { min-height:132px; }
+.node_sticky[data-sticky-shape] .stickyText,
+.node_sticky[data-sticky-shape] .stickyInput {
+  display:flex; align-items:center; justify-content:center;
+  min-height:0; height:100%; text-align:center;
+}
+.frameBody { min-height:220px; display:grid; align-content:start; gap:5px; padding:4px; color:#5d527d; }
+/* A frame is a CONTAINER now, not a rectangle with a caption:it counts what it
+   holds, it can be put away, and it can be opened on its own. Collapsed it drops
+   the caption entirely — a chip that still reserved 220px of height would defeat
+   the point of collapsing it. */
+.frameBody[data-collapsed="true"] { min-height:0; }
+.frameActions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:auto; padding-top:4px; }
+.frameActions button { padding:3px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font:inherit; font-size:9px; font-weight:600; cursor:pointer; }
+.frameActions button:hover,.frameActions button:focus-visible { background:var(--canvas-hover); }
+.frameCount { font-size:9px; font-weight:600; color:var(--canvas-muted); }
+.objectSurfaceOpen:hover,
+.objectSurfaceOpen:focus-visible { border-color:var(--bf-accent); background:var(--canvas-hover); outline:none; }
+.resizeLine { border-color:var(--canvas-accent) !important; }
+.resizeHandle { width:9px !important; height:9px !important; border-radius:var(--radius-sm) !important; border:2px solid white !important; background:var(--canvas-accent) !important; }
+
+/* ---------------------------------------------------------------------------
+   Touch targets.
+
+   A 9px resize grip and an 8px connection dot are fine for a mouse and
+   unusable with a finger:WCAG 2.2 asks for 44px, and `COARSE_TARGET_MIN_PX`
+   in `canvasPointerMode.ts` is the same number.
+
+   The grips are expanded with a transparent `::before` rather than by growing
+   the visible dot, so the board looks identical on every device and only the
+   HIT AREA changes — a 44px blue square at each corner of every selected node
+   would bury the node itself. `(pointer:coarse)` is the right query, not a
+   width breakpoint:a touchscreen laptop is wide and still has fingers.
+   --------------------------------------------------------------------------- */
+@media (pointer:coarse) {
+  .resizeHandle::before,
+  .handle::before {
+    content:'';
+    position:absolute;
+    top:50%;
+    left:50%;
+    width:44px;
+    height:44px;
+    transform:translate(-50%, -50%);
+    /* Purely a hit target — never paints, and must not eat the node's own taps
+       beyond its own centre. */
+    background:transparent;
+  }
+  .resizeHandle,
+  .handle { position:relative !important; }
+  /* A connection dot is also the drag origin for a new edge, so it needs to be
+     findable as well as tappable — slightly larger ink on touch, still small
+     enough not to crowd the card. */
+  .handle { width:14px !important; height:14px !important; }
+}
+.nodeBody p { color:var(--canvas-muted); }
+.node_drawing .nodeHeader,
+.node_frame .nodeHeader { background:color-mix(in srgb, var(--canvas-panel) 88%, transparent); }
+.handle { border-color:var(--canvas-panel)!important; }
+:global(html:not([data-theme='light'])) .node {
+  box-shadow:0 14px 38px rgba(0,0,0,.28);
+}
+:global(html:not([data-theme='light'])) .selected {
+  box-shadow:0 0 0 2px #4b8cff,0 16px 42px rgba(0,0,0,.36);
+}
+:global(html:not([data-theme='light'])) .status {
+  background:#12382f;
+  color:#80e4c3;
+}
+:global(html:not([data-theme='light'])) .nodeIcon {
+  background:#272048;
+  color:#a991ff;
+}
+
+/* A kanban needs the room a 290px card does not have. */
+.node_salesPipeline { width:980px; }
+
+/* A model needs room to be read. On a phone it is the same card, scrolled —
+   never a fixed width that pushes the board past the viewport. */
+.node_erd { width:760px; }
+.node_lineage, .node_dataQuality, .node_dataContract, .node_datasource { width:420px; }
+@media (max-width:767px) {
+  .node_erd,
+  .node_lineage,
+  .node_dataQuality,
+  .node_dataContract,
+  .node_datasource { width:100%; max-width:92vw; }
+}
+.readAloudButton{display:inline-flex;gap:6px;align-items:center;align-self:flex-start;padding:6px 10px;min-height:32px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-secondary);font-size:12px}
+/* An annotation is a mark ON something, so its own card gets out of the way. */
+.card:has([data-annotation]){background:transparent;border-color:transparent;box-shadow:none}
+.card:has([data-annotation]) .nodeHeader{display:none}
+
+/* ── Derived-number provenance and the evaluation gate ──────────────────────────
+   Both answer "can I trust this number". The basis notice is deliberately quiet —
+   it appears only when there IS a caveat, so it reads as information rather than
+   as chrome. The gate badge is loud, because it is a decision.
+
+   Every colour is a semantic tone token, so both themes resolve; the layout wraps
+   and the badge's reason text is allowed to run to several lines on a narrow card
+   rather than being clipped, since a truncated reason is a reason nobody acts on. */
+.basisNotice {
+  grid-column:1/-1; margin:4px 0 0; padding:4px 7px;
+  border-radius:var(--radius-sm);
+  background:var(--tone-warning-bg); color:var(--tone-warning-ink);
+  font-size:8px; line-height:1.4; font-variant-numeric:tabular-nums;
+}
+.gateBadge {
+  display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px;
+  margin:5px 0; padding:5px 8px; border-radius:var(--radius-sm);
+  background:var(--tone-info-bg); color:var(--tone-info-ink);
+  border-left:2px solid var(--tone-info-mark);
+  font-size:8px; line-height:1.45;
+}
+.gateBadge strong { font-size:9px; font-weight:700; }
+.gateBadge span { opacity:.9; }
+.gateBadge[data-gate-status='pass'] { background:var(--tone-success-bg); color:var(--tone-success-ink); border-left-color:var(--tone-success-mark); }
+.gateBadge[data-gate-status='warn'] { background:var(--tone-warning-bg); color:var(--tone-warning-ink); border-left-color:var(--tone-warning-mark); }
+.gateBadge[data-gate-status='block'] { background:var(--tone-danger-bg); color:var(--tone-danger-ink); border-left-color:var(--tone-danger-mark); }
+
+@media(max-width:767px){
+  .gateBadge { flex-direction:column; gap:2px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════
+   NODE DENSITY — how much of an object its card draws
+   ══════════════════════════════════════════════════════════════════════════════════
+   Three readings, decided by `lib/canvasNodeDensity.ts` and published as `data-density`.
+   A board of fifteen cards each rendering four hundred words is a wall of documents with
+   the shape of the work invisible underneath it; `minimized` is what turns it back into
+   a graph you can read at a glance. */
+
+.densityToggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--canvas-muted);
+  cursor: pointer;
+}
+.densityToggle:hover, .densityToggle:focus-visible { background: var(--canvas-hover); color: var(--canvas-ink); outline: none; }
+.densityToggle > svg { display: block; width: 14px; height: 14px; }
+
+/* ── THE TRASH ────────────────────────────────────────────────────────────────────
+   Same 22px icon slot as the density toggle — it is one of the card's own controls, not
+   a special one — with the canonical danger tokens on hover so the one control that
+   REMOVES something does not look identical to the four that only change a view.
+
+   It takes the auto margin that used to sit on `•••`, which puts the pair together at
+   the right end of the header rather than leaving the trash buried in the left-hand
+   icon group where nothing distinguishes it from the badges. */
+.nodeDelete { margin-left: auto; }
+.nodeDelete + .moreButton { margin-left: 0; }
+.nodeDelete:hover:not(:disabled), .nodeDelete:focus-visible:not(:disabled) { background: var(--danger-bg); color: var(--danger-text); outline: none; }
+/* Locked: present and explained (its title says so) rather than absent, which is the
+   difference between "you cannot do this yet" and "this object is not deletable". */
+.nodeDelete:disabled { opacity: .38; cursor: not-allowed; }
+
+/* PREVIEW — the header plus a few lines, so the object is recognisable without claiming
+   a screen. The body is clamped rather than truncated at a character count: a document,
+   a chart and a data grid have nothing in common to count, and every one of them reads
+   correctly when it is simply given less room and told to fade out. */
+.node[data-density='preview'] .nodeBody {
+  max-height: 108px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+}
+/* Nothing inside a clamped body may be interactive: a half-visible button under a fade
+   is a target nobody can see they are pressing. */
+.node[data-density='preview'] .nodeBody { pointer-events: none; }
+
+/* MINIMIZED — the orb. A circle carrying the object's mark, its name underneath, and its
+   two connectors. Its own element rather than a CSS treatment of the card, because the
+   header row, the resizer and the body have to be ABSENT: React Flow measures what is
+   rendered, and a hidden card still reserves a card's worth of graph. */
+.nodeOrb {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  width: 120px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.nodeOrbMark {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 2px solid var(--canvas-widget-border);
+  background: var(--canvas-widget-icon-bg);
+  color: var(--canvas-widget-icon);
+  box-shadow: 0 10px 26px var(--canvas-shadow);
+}
+.nodeOrb .densityToggle {
+  position: absolute;
+  top: 58px;
+  right: 12px;
+  border: 2px solid var(--canvas-panel);
+  background: var(--canvas-panel);
+  box-shadow: 0 2px 8px var(--canvas-shadow);
+}
+/* The orb's controls are placed by hand rather than laid out in a row, so the trash
+   needs its own slot beside the density toggle instead of the auto margin it takes in
+   the card header. */
+.nodeOrb .nodeDelete { right: 40px; margin-left: 0; }
+.nodeOrbName { display: grid; gap: 1px; text-align: center; max-width: 120px; }
+.nodeOrbName b { font-size: 12px; font-weight: 650; color: var(--canvas-ink); overflow-wrap: anywhere; }
+.nodeOrbName small { font-size: 10px; color: var(--canvas-ink-soft); }
+.nodeOrb.selected { box-shadow: none; }
+.nodeOrb.selected .nodeOrbMark { border-color: var(--canvas-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--canvas-accent) 22%, transparent), 0 10px 26px var(--canvas-shadow); }
+
+/* ── CONNECTORS, MADE PROMINENT ───────────────────────────────────────────────────
+   8px dots the colour of muted text were the least visible thing on a card that also
+   drew a title, a status chip and a body — so "drag from here to connect" was an
+   affordance you had to already know about. They are capsules now: a real target at the
+   card's edge, and they LIGHT UP on approach so the gesture announces itself.
+
+   `!important` throughout because React Flow writes its handle geometry inline — the
+   same reason the existing rule above carries it. */
+.handle {
+  width: 11px !important;
+  height: 26px !important;
+  border-radius: var(--radius-full) !important;
+  border: 2px solid var(--canvas-panel) !important;
+  background: var(--canvas-edge) !important;
+  transition: background .14s ease, width .14s ease, height .14s ease;
+}
+.node:hover .handle,
+.nodeOrb:hover .handle { background: var(--canvas-accent) !important; width: 13px !important; }
+.handle:hover, .handle:focus-visible {
+  width: 15px !important;
+  height: 32px !important;
+  background: var(--canvas-accent) !important;
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) { .handle { transition: none; } }
+
+/* ══════════════════════════════════════════════════════════════════════════════════
+   NODE AFFORDANCES — the badges, the insert, and the panels they open
+   ══════════════════════════════════════════════════════════════════════════════════ */
+
+.nodeAffordances { display: flex; align-items: center; gap: 3px; flex: none; }
+.nodeBadge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--canvas-widget-icon-bg);
+  color: var(--canvas-widget-icon);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.nodeBadge > svg { display: block; width: 14px; height: 14px; }
+.nodeBadge:hover, .nodeBadge:focus-visible { background: var(--canvas-hover); color: var(--canvas-ink); outline: none; }
+.nodeBadge:focus-visible { box-shadow: 0 0 0 2px var(--canvas-panel), 0 0 0 4px var(--canvas-accent); }
+/* An armed schedule is a STATE, so it is tinted rather than merely pressed — a clock that
+   looks the same armed and idle is a clock nobody trusts. */
+.nodeBadge[data-kind='schedule'][data-on='true'] { background: var(--tone-success-bg); color: var(--tone-success-ink); }
+/* Severity is the tint, and the count is the label. A badge that says "2" without saying
+   how bad is a badge you have to open to triage, which defeats putting it on the card. */
+.nodeBadge[data-severity='error'] { background: var(--tone-danger-bg); color: var(--tone-danger-ink); }
+.nodeBadge[data-severity='warning'] { background: var(--tone-warning-bg); color: var(--tone-warning-ink); }
+.nodeBadge[data-severity='info'] { background: var(--tone-info-bg); color: var(--tone-info-ink); }
+
+/* The `+` — what comes AFTER this object. On the card's right edge, where the connector
+   it will create leaves from, but ABOVE the connector rather than on top of it.
+
+   It used to sit at exactly 50%, which is exactly where React Flow puts the source
+   handle: a 28px button with `z-index: 4` covering a 26px capsule (32px on hover) meant
+   the only way to START A CONNECTION was blocked by the button that inserts a new object.
+   You could add a step after a card and never join two cards you already had.
+
+   The offset is derived from the two heights it has to clear rather than eyeballed:
+   half the handle at its HOVER size (32/2) + an 8px gap + the button's own 28px. */
+.nodeInsert {
+  position: absolute;
+  right: -17px;
+  top: 50%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: calc(-1 * (16px + 8px + 28px));
+  padding: 0;
+  border: 1px solid var(--canvas-line);
+  border-radius: var(--radius-full);
+  background: var(--canvas-panel);
+  color: var(--canvas-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .14s ease, color .14s ease, border-color .14s ease;
+}
+/* Revealed on approach and always reachable by keyboard: a control that only exists on
+   hover is a control a keyboard user does not have. */
+.node:hover .nodeInsert,
+.nodeOrb:hover .nodeInsert,
+.nodeInsert:focus-visible { opacity: 1; }
+.nodeInsert:hover, .nodeInsert:focus-visible { border-color: var(--canvas-accent); color: var(--canvas-accent); outline: none; }
+/* Same rule on a mark: its handles are centred on the orb's own box, so the insert sits
+   clear above them instead of over the source capsule. */
+.nodeOrb .nodeInsert { right: -8px; top: 4px; margin-top: 0; }
+.nodeOrb .nodeAffordances { position: absolute; top: 58px; left: 8px; }
+@media (prefers-reduced-motion: reduce) { .nodeInsert { transition: none; } }
+
+/* Dimmed, never hidden. .5 rather than .42: a card title at .42 over the paper board
+   falls under 3:1; at .5 it holds in both themes. A SELECTED card is always full strength. */
+.node[data-phase-focus='out']:not(.selected), .nodeOrb[data-phase-focus='out']:not(.selected) { opacity:.5; transition:opacity .2s; }
+.node[data-phase-focus='in'] { box-shadow:0 0 0 2px var(--canvas-phase-ring), 0 7px 24px var(--canvas-shadow, rgba(60,48,36,.1)); }
+.nodeOrb[data-phase-focus='in'] { outline:2px solid var(--canvas-phase-ring); outline-offset:2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .node[data-phase-focus='out'], .nodeOrb[data-phase-focus='out'] { transition:none; }
+}

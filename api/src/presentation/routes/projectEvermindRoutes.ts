@@ -2,9 +2,9 @@
  * Project Evermind routes — the surface-agnostic seam for the per-project
  * self-learning model ([[evermind-learning-architecture]]).
  *
- * Two auth front doors share ONE set of core handlers (DRY): the web UI and any
- * JWT caller reach `/api/projects/:projectId/evermind/*`; on-prem agents (which
- * authenticate with their agentHost key, not a JWT) reach the read/learn subset
+ * Two auth front doors are ONE router built with a different {@link FrontDoor}: the
+ * web UI and any JWT caller reach `/api/projects/:projectId/evermind/*`; on-prem agents
+ * (which authenticate with their agentHost key, not a JWT) reach the read/learn subset
  * at `/api/agent/projects/:projectId/evermind/*`. Both resolve to the same
  * tenant-scoped service functions, so the replica-sync logic is defined once.
  *
@@ -19,13 +19,11 @@
 import { statusResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { and } from 'drizzle-orm';
 import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
-import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requireRole } from '../middleware/authMiddleware';
+import { tenantDoor, type FrontDoor } from '../middleware/frontDoor';
 import { requireFrontierAccess } from '../middleware/featureGate';
-import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import { TenantRole } from '../../domain/shared/types';
-import { projects } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { seedProjectEvermindFromPublished } from '../../application/llm/evermindRecipes';
@@ -368,28 +366,36 @@ async function extractMemoriesCore(env: Env, db: Db, tenantId: number, projectId
 
 const pid = (c: Context): number => Number(c.req.param('projectId'));
 
-// ── JWT front door (web UI + internal JWT callers) ───────────────────────────
-
 /** Wall-clock budget for one test-bench generation. Well inside a Worker's CPU
  *  allowance, so an over-long run returns a flagged partial rather than being killed
  *  mid-request with a 5xx the operator cannot interpret. */
 const PROBE_DEADLINE_MS = 8000;
 
-export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
+/**
+ * ONE router for both front doors. The JWT door (`/api/projects`) serves everything;
+ * the agent-host door (`/api/agent/projects`) serves only the replica-sync + learn
+ * subset, and its learn-text fans out (an on-prem RUN contributes to the whole set).
+ */
+export function createProjectEvermindRoutes(db: Db, door: FrontDoor = tenantDoor): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  router.use('*', authMiddleware);
+  // Scoped to the evermind paths: a catch-all `use('*')` would also gate the other
+  // routers sharing this mount (run-context accepts a JWT on the agent prefix too).
+  router.use('/:projectId/evermind/*', door.auth);
   const t = (c: Context) => c.get('tenantId') as number;
 
   router.get('/:projectId/evermind/head', (c) => headCore(c.env as Env, db, t(c), pid(c)));
   router.get('/:projectId/evermind/targets', (c) => targetsCore(c.env as Env, db, t(c), pid(c)));
+  router.get('/:projectId/evermind/model', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'model.evermind'));
+  router.get('/:projectId/evermind/tokenizer', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'tokenizer.json'));
+  // On-prem RUNNER delta push (the host ran the fit itself) — see learnCore.
+  router.post('/:projectId/evermind/learn', (c) => learnCore(c.env as Env, db, t(c), pid(c), c));
+  router.post('/:projectId/evermind/learn-text', (c) => learnTextCore(c.env as Env, db, t(c), pid(c), c, door.agentHost));
+  if (door.agentHost) return router;
+
   router.get('/:projectId/evermind/contributions', (c) => contributionsCore(c.env as Env, db, t(c), pid(c)));
   router.get('/:projectId/evermind/contribution/:contributionId', (c) => contributionStatusCore(c.env as Env, db, t(c), pid(c), Number(c.req.param('contributionId'))));
   router.post('/:projectId/evermind/validate', (c) => validateCore(c.env as Env, db, t(c), pid(c), c));
   router.post('/:projectId/evermind/recall', (c) => recallCore(c.env as Env, db, t(c), pid(c), c));
-  router.get('/:projectId/evermind/model', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'model.evermind'));
-  router.get('/:projectId/evermind/tokenizer', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'tokenizer.json'));
-  router.post('/:projectId/evermind/learn', (c) => learnCore(c.env as Env, db, t(c), pid(c), c));
-  router.post('/:projectId/evermind/learn-text', (c) => learnTextCore(c.env as Env, db, t(c), pid(c), c));
   /** Import a batch of raw memories (VS Code "Import from builderforce-memory") + flush. */
   router.post('/:projectId/evermind/extract-memories', requireRole(TenantRole.MANAGER), (c) => extractMemoriesCore(c.env as Env, db, t(c), pid(c), c));
 
@@ -784,53 +790,6 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     if (inheritedBlock) return inheritedBlock;
     const result = await flushProjectEvermind(c.env as Env, tenantId, projectId);
     return statusResponse(c, result.body, result.status, { source: 'presentation/routes/projectEvermindRoutes.ts', operation: 'flush' });
-  });
-
-  return router;
-}
-
-// ── Agent (on-prem host key) front door — read + learn subset ─────────────────
-
-export function createProjectEvermindAgentRoutes(db: Db): Hono<HonoEnv> {
-  const router = new Hono<HonoEnv>();
-  // Each handler authenticates the agentHost key itself (Bearer + X-AgentHost-Id),
-  // then scopes strictly to that host's tenant.
-  const auth = async (c: Context): Promise<number | null> => {
-    const host = await resolveHostAuth(db, c);
-    return host?.tenantId ?? null;
-  };
-
-  router.get('/:projectId/evermind/head', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return headCore(c.env as Env, db, tenantId, pid(c));
-  });
-  router.get('/:projectId/evermind/targets', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return targetsCore(c.env as Env, db, tenantId, pid(c));
-  });
-  router.get('/:projectId/evermind/model', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return artifactCore(c.env as Env, db, tenantId, pid(c), c.req.query('version'), 'model.evermind');
-  });
-  router.get('/:projectId/evermind/tokenizer', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return artifactCore(c.env as Env, db, tenantId, pid(c), c.req.query('version'), 'tokenizer.json');
-  });
-  // On-prem RUNNER delta push (the host ran the fit itself) — see learnCore.
-  router.post('/:projectId/evermind/learn', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return learnCore(c.env as Env, db, tenantId, pid(c), c);
-  });
-  router.post('/:projectId/evermind/learn-text', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    // On-prem RUN contribution → fan out to the project's whole Evermind set.
-    return learnTextCore(c.env as Env, db, tenantId, pid(c), c, true);
   });
 
   return router;

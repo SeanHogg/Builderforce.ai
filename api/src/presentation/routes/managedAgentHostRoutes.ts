@@ -5,6 +5,8 @@
  * POST accepts the request as pending and kicks off async provision against
  * AGENT_CONTAINER; DELETE cancels pending rows and deprovisions occupying ones.
  *
+ * `/api/managed-claws` is the pre-rebrand alias of this router (see legacyAlias.ts).
+ *
  * Routes:
  *   POST /api/managed-agent-hosts          — submit a managed AgentHost request
  *   GET  /api/managed-agent-hosts          — list requests for the current tenant
@@ -13,19 +15,18 @@
  */
 
 import { Hono, type MiddlewareHandler } from 'hono';
-import { desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { background } from '../middleware/background';
-import { managedAgentHostRequests } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { TenantRole } from '../../domain/shared/types';
-import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import {
+  createManagedAgentHostRequest,
+  getManagedAgentHostRequest,
   getManagedAgentHostSubscription,
+  listManagedAgentHostRequests,
   managedAgentHostRequestBlock,
   occupyingManagedAgentHostCount,
 } from '../../application/tenant/managedAgentHostSubscription';
@@ -58,18 +59,12 @@ export function createManagedAgentHostRoutes(
     const blocked = managedAgentHostRequestBlock(entitlement, occupying);
     if (blocked) return c.json({ error: blocked.error }, blocked.status);
 
-    const [inserted] = await db
-      .insert(managedAgentHostRequests)
-      .values({
-        tenantId,
-        agentHostName: body.agentHostName,
-        region: body.region ?? 'us-east',
-        notes: body.notes ?? null,
-        status: 'pending',
-      })
-      .returning();
-
-    if (!inserted) throw new Error('managed_agent_host_requests insert returned no row');
+    const inserted = await createManagedAgentHostRequest(db, {
+      tenantId,
+      agentHostName: body.agentHostName,
+      region: body.region,
+      notes: body.notes,
+    });
 
     const deps = {
       runtime: managedAgentHostContainerRuntime(c.env),
@@ -106,27 +101,14 @@ export function createManagedAgentHostRoutes(
   // GET /api/managed-agent-hosts — list all managed AgentHost requests for the tenant
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-
-    const rows = await db
-      .select()
-      .from(managedAgentHostRequests)
-      .where(scopedToTenant(managedAgentHostRequests, tenantId))
-      .orderBy(desc(managedAgentHostRequests.createdAt)).limit(LIST_ROW_CAP);
-
-    return c.json({ requests: rows });
+    return c.json({ requests: await listManagedAgentHostRequests(db, { tenantId }, c.req.query('status')) });
   });
 
   // GET /api/managed-agent-hosts/:id — get a single request
   router.get('/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = Number(c.req.param('id'));
-
-    const [row] = await db
-      .select()
-      .from(managedAgentHostRequests)
-      .where(scopedToTenant(managedAgentHostRequests, tenantId, eq(managedAgentHostRequests.id, id)))
-      .limit(1);
-
+    const row = await getManagedAgentHostRequest(db, tenantId, id);
     if (!row) return c.json({ error: 'Not found' }, 404);
     return c.json({ request: row });
   });

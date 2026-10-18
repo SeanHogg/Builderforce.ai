@@ -12,7 +12,8 @@
 import { describe, expect, it } from 'vitest';
 import { fakeDb } from '../../../test/fakeDb';
 import type { Db } from '../../infrastructure/database/connection';
-import { buildTaxYearReport, taxYearReportToCsv } from './taxReport';
+import { buildTaxYearReport, taxYearReportTable } from './taxReport';
+import { csvMatrix } from '../export/tabularExport';
 
 const TENANT = 3;
 
@@ -88,7 +89,12 @@ describe('buildTaxYearReport', () => {
   });
 });
 
-describe('taxYearReportToCsv', () => {
+describe('taxYearReportTable', () => {
+  // Serialised through the one CSV writer, exactly as the export renderer does.
+  const taxYearReportToCsv = (...args: Parameters<typeof taxYearReportTable>) => {
+    const t = taxYearReportTable(...args);
+    return csvMatrix(t.columns, t.rows);
+  };
   const report = {
     year: 2025, periodStart: '2025-01-01T00:00:00.000Z', periodEnd: '2026-01-01T00:00:00.000Z',
     totalRecipients: 2, reportableRecipients: 1, reportableCents: 100000, blockedRecipients: 0,

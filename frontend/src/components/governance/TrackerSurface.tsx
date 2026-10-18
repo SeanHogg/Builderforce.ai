@@ -41,6 +41,9 @@ export interface TrackerSurfaceProps {
   title: string;
   /** Full API route for this tracker, e.g. '/api/product/mvp'. */
   apiBase: string;
+  /** Envelope key of the list response when `apiBase` is a canonical resource route
+   *  (`{ releases: [...] }`) rather than a bare-array tracker. */
+  listKey?: string;
   fields: TrackerField[];
   rowAction?: TrackerRowAction;
 }
@@ -59,14 +62,14 @@ function cellText(fmt: Formatter, t: (key: string) => string, field: TrackerFiel
   return String(value);
 }
 
-export function TrackerSurface({ title, apiBase, fields, rowAction }: TrackerSurfaceProps) {
+export function TrackerSurface({ title, apiBase, listKey, fields, rowAction }: TrackerSurfaceProps) {
   const fmt = useFormat();
   const tCommon = useTranslations('common');
   const tTracker = useTranslations('governance.tracker');
   // Root-namespace translator: `rowAction.labelKey` is a FULL key, so a tracker's
   // detail action can live in whatever namespace owns that surface.
   const tRoot = useTranslations();
-  const api = useMemo(() => segmentTrackerClient(apiBase), [apiBase]);
+  const api = useMemo(() => segmentTrackerClient(apiBase, { listKey }), [apiBase, listKey]);
   const listFields = fields.filter((f) => f.inList !== false && f.type !== 'textarea').slice(0, 5);
 
   const [rows, setRows] = useState<TrackerRow[]>([]);

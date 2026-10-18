@@ -2,7 +2,7 @@ import type { CreationNodeData } from '../types';
 import { useTranslations } from 'next-intl';
 import { kindSettingsFields, kindSettingsManifest } from '@/lib/canvasKindSettings';
 import { SettingsFieldControl } from '../SettingsFieldControl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/inspector.module.css';
 
 /** The full-surface fields a kind's manifest declares, plus its one hint paragraph.
  *  Declaration order is the render order — see `SettingsFieldControl`. */

@@ -25,6 +25,7 @@
  */
 
 import { Hono, type Context } from 'hono';
+import { downloadResponse } from '../../application/export/exportDownload';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -196,15 +197,14 @@ const handle = async (run: () => Promise<Response>): Promise<Response> => {
  * rides along for when they take it.
  */
 const pdfResponse = (rendered: { bytes: Uint8Array; filename: string }): Response =>
-  new Response(rendered.bytes as unknown as BodyInit, {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${rendered.filename}"`,
-      // Never cached by a shared cache: the outstanding amount changes the moment a
-      // payment lands, and an intermediary holding yesterday's copy would show a
-      // customer a balance they have already settled.
-      'Cache-Control': 'private, no-store',
-    },
+  downloadResponse(rendered.bytes, {
+    filename: rendered.filename,
+    contentType: 'pdf',
+    disposition: 'inline',
+    // Never cached by a shared cache: the outstanding amount changes the moment a
+    // payment lands, and an intermediary holding yesterday's copy would show a
+    // customer a balance they have already settled.
+    cacheControl: 'private, no-store',
   });
 
 const NO_SUCH_INVOICE = () => Response.json({ error: 'No invoice with that reference in this workspace.' }, { status: 404 });

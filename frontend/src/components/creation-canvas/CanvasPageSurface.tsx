@@ -5,7 +5,7 @@
  * header says it: the directive is sometimes the bug.
  */
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/surfaces.module.css';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
 import { CanvasResumeEditor, type ResumeShareActions } from './CanvasResumeEditor';
 import { DocumentEditor } from './DocumentEditor';

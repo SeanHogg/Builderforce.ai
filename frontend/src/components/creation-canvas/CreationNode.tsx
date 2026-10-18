@@ -5,7 +5,8 @@ import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
 import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL, STICKY_COLORS } from '@/domains/canvas/domain/authoredColors';
 import { FlowStepOutletRail, flowStepHasNamedOutlets } from './FlowStepBody';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/node.module.css';
+import bodiesStyles from './styles/bodies.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
 import { emptyShellProblem } from './creationObjectAuthorship';
 import {
@@ -372,7 +373,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {/* All seventeen founder kinds, from the one spec that declares their fields.
             See SpecObjectBody for why this is one branch and not forty-seven. */}
         <SpecObjectBody data={data} board={specBoard} />
-        {showsGenericFallback && <><AuthoredContent data={data} fallback={t('objectReady', { label: creationObjectDefinition(data.kind).label })} /><div className={styles.pills}><span>{data.status || t('canvasObject')}</span><span>{t('liveSessionContext')}</span></div></>}
+        {showsGenericFallback && <><AuthoredContent data={data} fallback={t('objectReady', { label: creationObjectDefinition(data.kind).label })} /><div className={bodiesStyles.pills}><span>{data.status || t('canvasObject')}</span><span>{t('liveSessionContext')}</span></div></>}
         {/* Every artifact leaves the board from the same place, in its own
             native formats. The row renders nothing for an object that is not a
             file — an agent, a frame, a timer — so it is safe to place once here

@@ -24,7 +24,7 @@ import { toolAuditDaily, toolAuditEvents } from '../../infrastructure/database/s
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { auditWindowDays, readAuditWindow, type AuditRow } from '../audit/toolAuditTrail';
 import { TOOL_AUDIT_ROLLUP_AFTER_DAYS } from '../maintenance/toolAuditRollup';
-import { csvMatrix } from '../export/tabularExport';
+import type { ExportTable } from '../export/exportSource';
 import { HOUR_MS } from '../../domain/shared/time';
 
 const EVIDENCE_PACK_LIMIT = 5_000;
@@ -208,11 +208,11 @@ export async function buildEvidencePack(db: Db, tenantId: number, days: number):
     .slice(0, EVIDENCE_PACK_LIMIT);
 }
 
-/** Serialise an evidence pack to CSV. The columns are this module's; the escaping
- *  is `csvMatrix`, the api's one CSV writer. */
-export function evidencePackToCsv(rows: EvidenceRow[]): string {
-  return csvMatrix(
-    ['ts', 'grain', 'events', 'tool', 'risk', 'category', 'agent', 'execution_id', 'duration_ms'],
-    rows.map((r) => [r.ts, r.grain, r.events, r.toolName, r.risk, r.category, r.agent, r.executionId, r.durationMs]),
-  );
+/** The evidence pack as an export table. The columns are this module's; every
+ *  format (CSV, XLSX, HTML) is serialised from it by `export/exportSource`. */
+export function evidencePackTable(rows: EvidenceRow[]): ExportTable {
+  return {
+    columns: ['ts', 'grain', 'events', 'tool', 'risk', 'category', 'agent', 'execution_id', 'duration_ms'],
+    rows: rows.map((r) => [r.ts, r.grain, r.events, r.toolName, r.risk, r.category, r.agent, r.executionId, r.durationMs]),
+  };
 }

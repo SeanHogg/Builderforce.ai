@@ -9,7 +9,8 @@ import {
   type CanvasBarGroupSlots,
   type CanvasSessionActionHandler,
 } from './CanvasSessionActions';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/brain.module.css';
+import commandBarStyles from './styles/commandBar.module.css';
 
 /**
  * THE PHONE'S COMMAND BAR, as one sheet.
@@ -70,7 +71,7 @@ export function CanvasActionsSheet({ surface, handlers, slots, onClose }: Canvas
         onClick={onClose}
       />
       <CanvasMenuSheet title={t('actions')} testId="canvas-actions-sheet" placement="sheet" onClose={onClose}>
-      <div className={styles.actionsSheetBody}>
+      <div className={commandBarStyles.actionsSheetBody}>
         <CanvasSessionActions
           variant="tiles"
           surface={surface}

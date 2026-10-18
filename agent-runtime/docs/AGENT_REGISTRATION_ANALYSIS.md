@@ -61,8 +61,8 @@ around agent domain modeling and agent-scoped skill resolution.
                                 │
          ┌──────────────────────▼──────────────────────────┐
    5     │ Pick or create tenant                            │
-         │   GET  /api/auth/my-tenants  (Bearer: webToken)  │
-         │   → 0 tenants: POST /api/tenants/create          │
+         │   GET  /api/tenants          (Bearer: webToken)  │
+         │   → 0 tenants: POST /api/tenants                 │
          │   → 1 tenant:  auto-select                       │
          │   → N tenants: pick from list                    │
          │   Result: tenantId                               │

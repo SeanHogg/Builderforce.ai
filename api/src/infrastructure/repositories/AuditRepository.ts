@@ -1,10 +1,8 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
-import { and, desc, eq, sql } from 'drizzle-orm';
 import { IAuditRepository, AuditQueryOptions } from '../../domain/audit/IAuditRepository';
 import { AuditEvent, AuditEventProps } from '../../domain/audit/AuditEvent';
 import { AuditEventType, asTenantId } from '../../domain/shared/types';
-import { activityLog } from '../database/schema';
-import { recordActivity, resolveHumanActor, SYSTEM_ACTOR, type ActorIdentity } from '../../application/activity/activityLog';
+import { getActivityLog, recordActivity, resolveHumanActor, SYSTEM_ACTOR, type ActorIdentity } from '../../application/activity/activityLog';
 import type { Env } from '../../env';
 import type { Db } from '../database/connection';
 import { drainExecutionLifecycleOutbox } from '../../application/runtime/executionLifecycleOutbox';
@@ -75,33 +73,32 @@ export class AuditRepository implements IAuditRepository {
     return event;
   }
 
+  /**
+   * The audit view of the tenant's activity — a filter over THE activity read
+   * (`getActivityLog`), so `/api/audit/*` reads the same database the writers
+   * append to (this used to query `this.db`, the primary, which no activity
+   * writer targets) and shares the timeline's version-token cache.
+   */
   async query(opts: AuditQueryOptions): Promise<AuditEvent[]> {
-    const conditions = [];
-    if (opts.tenantId !== undefined) conditions.push(eq(activityLog.tenantId, Number(opts.tenantId)));
-    if (opts.userId !== undefined) conditions.push(eq(activityLog.actorRef, opts.userId));
-    // The event type is the verb with dots underscored (see eventTypeForVerb); compare
-    // in that form on the SQL side so a verb with two dots still matches exactly.
-    if (opts.eventType) conditions.push(sql`replace(${activityLog.verb}, '.', '_') = ${opts.eventType}`);
-    if (opts.resourceType) conditions.push(eq(activityLog.targetType, opts.resourceType));
+    const tenantId = Number(opts.tenantId);
+    const page = await getActivityLog(this.env as Env, this.db, tenantId, {
+      ...(opts.userId !== undefined ? { actorRef: opts.userId } : {}),
+      ...(opts.eventType ? { eventType: opts.eventType } : {}),
+      ...(opts.resourceType ? { targetType: opts.resourceType } : {}),
+      limit: opts.limit ?? 100,
+      offset: opts.offset ?? 0,
+    });
 
-    const rows = await this.db
-      .select()
-      .from(activityLog)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(activityLog.id))
-      .limit(opts.limit ?? 100)
-      .offset(opts.offset ?? 0);
-
-    return rows.map((r) => AuditEvent.reconstitute({
-      id:           Number(r.id),
-      tenantId:     r.tenantId != null ? asTenantId(r.tenantId) : null,
+    return page.events.map((r) => AuditEvent.reconstitute({
+      id:           r.id,
+      tenantId:     asTenantId(tenantId),
       // Only human/hire actors are a "user"; agents/system have no users.id.
       userId:       (r.actorType === 'human' || r.actorType === 'hire') ? r.actorRef : null,
       eventType:    eventTypeForVerb(r.verb),
       resourceType: r.targetType,
       resourceId:   r.targetId,
       metadata:     r.metadata != null ? JSON.stringify(r.metadata) : null,
-      createdAt:    r.occurredAt,
+      createdAt:    new Date(r.occurredAt),
     } as AuditEventProps));
   }
 }

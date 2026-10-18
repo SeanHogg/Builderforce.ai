@@ -24,7 +24,7 @@
  */
 
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { isProviderOAuthConfigured } from '../shared/providerOAuthConnect';
+import { GOOGLE_OAUTH_ENDPOINTS, MICROSOFT_OAUTH_ENDPOINTS, isProviderOAuthConfigured } from '../shared/providerOAuthConnect';
 import { base64UrlDecode, base64UrlEncode, base64UrlToBytes } from '../../domain/shared/bytes';
 
 // ---------------------------------------------------------------------------
@@ -605,8 +605,7 @@ function gmailToMessage(raw: Record<string, unknown>): MailboxMessage {
 const googleMailbox: MailboxProvider = {
   name: 'google',
   label: 'Gmail',
-  authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenUrl: 'https://oauth2.googleapis.com/token',
+  ...GOOGLE_OAUTH_ENDPOINTS,
   // Modify permits read/unread + labels without granting permanent deletion.
   scopes: [
     'https://www.googleapis.com/auth/gmail.modify',
@@ -994,8 +993,7 @@ const microsoftMailbox: MailboxProvider = {
   label: 'Microsoft 365',
   // `common` rather than a tenant id: a Builderforce customer's Microsoft tenant
   // is not ours, and pinning our own would make every external mailbox unconnectable.
-  authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-  tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+  ...MICROSOFT_OAUTH_ENDPOINTS,
   // Mail.ReadWrite enables read/unread state; delete is never exposed. `offline_access` is what yields the
   // refresh token; without it Graph returns a 1-hour token and nothing else.
   scopes: ['offline_access', 'openid', 'email', 'profile', 'Mail.ReadWrite', 'Mail.Send', 'User.Read'],

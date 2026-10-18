@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { MathAwareText } from '@/components/academic/MathAwareText';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/practice.module.css';
 import { COURSE_EXPORT_STANDARDS, courseAssessmentQuestions, courseFromNode, courseProgress, courseScore } from '@/lib/courseLms';
 import { practiceAttempts, recordPracticeAttempt } from '@/lib/canvasPractice';
 import { PracticeRunner } from '../PracticeRunner';

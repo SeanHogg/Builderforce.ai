@@ -24,9 +24,6 @@ import { requestDb } from '../../application/shared/dbHandle';
 import type { Db } from '../../infrastructure/database/connection';
 import { recordReferralConversion } from '../../application/sales/recordReferralConversion';
 import { addonRecorderFor, oneOffSettlerFor } from '../../application/billing/purchaseRegistry';
-import { completeListingCheckout } from '../../application/marketplace/listingCommerce';
-import { settleInvoiceCheckout } from '../../application/finance/receivables';
-import { completeKnowledgeCheckout } from '../../application/knowledge/knowledgeCommerce';
 import { setSubscriptionState } from '../../application/developer/extensionBilling';
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
 import { invalidateContainerRunContexts } from '../../application/runtime/cloudAgentEngine';
@@ -34,12 +31,13 @@ import { invalidateContainerRunContexts } from '../../application/runtime/cloudA
 /**
  * SETTLE A ONE-OFF PURCHASE THAT ARRIVED BY WEBHOOK.
  *
- * Three flows — a creation listing, a knowledge listing and a tenant's own
- * invoice — reach this file for the same reason: the redirect back from the
- * hosted page is the NORMAL way a payment is recorded, and it cannot be the only
- * way, because a buyer who pays and then closes the tab has been charged. Each
- * one was written out longhand with the same three moves, which is three places
- * for the acknowledgement contract to drift.
+ * Every pay-once flow — a creation listing, a knowledge listing, a skill, a
+ * workforce agent, a credit pack, a tenant's own invoice — reaches this file for
+ * the same reason: the redirect back from the hosted page is the NORMAL way a
+ * payment is recorded, and it cannot be the only way, because a buyer who pays
+ * and then closes the tab has been charged. WHO settles is the purchase
+ * registry's business (dispatched by `purchaseKind`); this helper owns only the
+ * acknowledgement contract, so it cannot drift between flows.
  *
  * That contract is the part worth stating once:
  *
@@ -214,17 +212,6 @@ export function createWebhookRoutes(
     }
 
     /**
-     * A marketplace creation was paid for.
-     *
-     * The redirect back to the listing page is the normal way this grant happens.
-     * This is the path for the buyer who paid and then closed the tab — without
-     * it they have been charged and hold nothing until they think to revisit the
-     * link. Both routes end at `completeListingCheckout`, which re-reads the
-     * session from the processor and lands on the same licence; the unique index
-     * on `(tenant, catalog item, licensee)` makes the second arrival a no-op
-     * rather than a second sale.
-     */
-    /**
      * A MARKETPLACE EXTENSION's subscription changed (PRD 24 §5.4).
      *
      * Addressed by the PROCESSOR's subscription id, which is what the install
@@ -264,82 +251,14 @@ export function createWebhookRoutes(
       }
     }
 
-    if (event.type === 'listing.purchased') {
-      return settleOneOff(c, {
-        operation: 'listingPurchase',
-        noun: 'listing purchase',
-        complete: async (db, env) => {
-          if (!event.checkoutSessionId || !event.buyerRef || !event.tenantId) return null;
-          await completeListingCheckout(db, env, {
-            tenantId: event.tenantId,
-            buyerRef: event.buyerRef,
-            buyerEmail: event.billingEmail ?? null,
-            checkoutSessionId: event.checkoutSessionId,
-          });
-          return true;
-        },
-      });
-    }
-
     /**
-     * A KNOWLEDGE listing was paid for — the third flow through the same door.
-     *
-     * Without this, knowledge would be the one paid product on the platform where
-     * closing the tab after paying loses the purchase. `completeKnowledgeCheckout`
-     * re-reads the session from the processor and lands on the same purchase row
-     * the redirect would; the unique index on `(listing, tenant)` makes the second
-     * arrival a no-op rather than a second charge.
+     * A pay-once purchase — a credit pack, a workforce agent, a listing, a
+     * knowledge listing, a tenant's own invoice (`invoice.paid` keeps its name for
+     * integration triggers but settles the same way). Dispatched by `purchaseKind`
+     * to the purchase registry, which re-reads the session from the processor; a
+     * kind with no settler is settled only by its redirect and is acknowledged here.
      */
-    if (event.type === 'knowledge.purchased') {
-      return settleOneOff(c, {
-        operation: 'knowledgePurchase',
-        noun: 'knowledge purchase',
-        complete: async (db, env) => {
-          if (!event.checkoutSessionId || !event.buyerUserId || !event.tenantId) return null;
-          await completeKnowledgeCheckout(db, env, {
-            tenantId: event.tenantId,
-            buyerUserId: event.buyerUserId,
-            checkoutSessionId: event.checkoutSessionId,
-          });
-          return true;
-        },
-      });
-    }
-
-    /**
-     * A TENANT's own invoice was paid by THEIR customer (FO-C4).
-     *
-     * The redirect back to the invoice page is the normal way this is recorded,
-     * and this is the path for the customer who paid and then closed the tab —
-     * without it they have been charged and the invoice stays open until somebody
-     * reconciles a bank statement by hand. Both routes end at
-     * `settleInvoiceCheckout`, which re-reads the session from the processor and
-     * lands on one `ledger_entries` row; the unique reference makes the second
-     * arrival a no-op rather than a second payment.
-     */
-    if (event.type === 'invoice.paid') {
-      return settleOneOff(c, {
-        operation: 'invoicePaid',
-        noun: 'invoice payment',
-        complete: async (db, env) => {
-          if (!event.checkoutSessionId || !event.invoiceRef || !event.tenantId) return null;
-          const settled = await settleInvoiceCheckout(db, env, {
-            tenantId: event.tenantId,
-            invoiceRef: event.invoiceRef,
-            checkoutSessionId: event.checkoutSessionId,
-          });
-          return settled.applied;
-        },
-      });
-    }
-
-    /**
-     * A pay-once purchase of one of the platform's own flows — a credit pack, a
-     * workforce agent. Settled through the purchase registry, which re-reads the
-     * session from the processor; a kind with no settler is settled only by its
-     * redirect and is acknowledged here.
-     */
-    if (event.type === 'checkout.completed') {
+    if (event.type === 'checkout.completed' || event.type === 'invoice.paid') {
       const settle = oneOffSettlerFor(event.purchaseKind);
       const checkoutSessionId = event.checkoutSessionId;
       if (!settle || !checkoutSessionId) return c.json({ received: true, processed: false });

@@ -745,7 +745,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
         break;
       }
       // A completion the HOST performs for the webview against a runtime on this
-      // machine. See `hostFetch` in vscodeBridge.ts for why it cannot be done in the
+      // machine. See `hostFetch` in webview/src/hostFetch.ts for why it cannot be done in the
       // webview (plain-HTTP localhost is CSP-blocked there, and the runtime would have
       // to allow the `vscode-webview://` origin by CORS besides).
       case "llm.fetch": {

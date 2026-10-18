@@ -23,19 +23,17 @@
 import { statusResponse } from '../middleware/errorResponse';
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
-import {
-  buildProviderConsentUrl,
-  completeProviderOAuthCallback,
-  verifyProviderConnectState,
-} from '../../application/shared/providerOAuthConnect';
+import { verifyProviderConnectState } from '../../application/shared/providerOAuthConnect';
+import { mountProviderOAuthConnect } from './providerOAuthConnectRoutes';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import {
   accountingProvider,
   describeAccountingProviders,
   isAccountingProviderName,
   AccountingProviderError,
+  type AccountingProvider,
 } from '../../application/finance/accountingProviders';
 import { exchangePlaidPublicToken } from '../../application/finance/accountingAdapters';
 import {
@@ -63,9 +61,6 @@ export function createLedgerRoutes(db: Db): Hono<HonoEnv> {
     return authMiddleware(c, next);
   });
 
-  const callbackUrl = (c: { req: { url: string } }, provider: string) =>
-    `${new URL(c.req.url).origin}/api/ledger/callback/${provider}`;
-
   // GET /providers — the catalog AND what is already connected, in one call. Two
   // calls would let a UI render a "Connect" button beside a connected account for
   // as long as the second request was in flight.
@@ -74,52 +69,26 @@ export function createLedgerRoutes(db: Db): Hono<HonoEnv> {
     connections: await listLedgerConnections(db, c.get('tenantId') as number),
   }));
 
-  /**
-   * GET /connect/:provider — build the consent URL.
-   *
-   * Returned as JSON for the client to navigate to rather than as a 302 from here:
-   * a top-level navigation cannot carry the bearer token, so the browser has to
-   * make the jump itself after an authenticated fetch.
-   */
-  r.get('/connect/:provider', async (c) => {
-    const env = c.env as Env;
-    const name = c.req.param('provider');
-    if (!isAccountingProviderName(name)) return c.json({ error: 'Unknown accounting provider.' }, 400);
-    const provider = accountingProvider(name);
-    if (provider.connect !== 'oauth' || !provider.oauth) {
-      return c.json({ error: `${provider.label} is connected with typed fields, not a consent screen.` }, 400);
-    }
-
-    const authUrl = await buildProviderConsentUrl(env, provider.oauth, {
-      providerName: name,
-      redirectUri: callbackUrl(c, name),
-      userId: c.get('userId') as string,
-      tenantId: c.get('tenantId') as number,
-      returnTo: c.req.query('returnTo'),
-      returnToFallback: DEFAULT_RETURN_TO,
-    });
-    if (!authUrl) {
-      return c.json({ error: `${provider.label} is not configured on this deployment.` }, 503);
-    }
-    return c.json({ authUrl });
-  });
-
-  // GET /callback/:provider — provider redirect (PUBLIC; authed by signed state).
-  r.get('/callback/:provider', async (c) => {
-    const env = c.env as Env;
-    const name = c.req.param('provider');
-    const base = resolveAppBaseUrl(env);
-    const rawState = c.req.query('state');
-    const code = c.req.query('code');
-
-    // Declining consent is a normal outcome, not an error — say so.
-    if (c.req.query('error')) return c.redirect(`${base}${DEFAULT_RETURN_TO}?ledger=declined`);
-    if (!isAccountingProviderName(name) || !rawState) {
-      return c.redirect(`${base}${DEFAULT_RETURN_TO}?ledger=error`);
-    }
-    const provider = accountingProvider(name);
-    if (!provider.oauth) return c.redirect(`${base}${DEFAULT_RETURN_TO}?ledger=error`);
-
+  // GET /connect/:provider + GET /callback/:provider — the shared connect pair.
+  // Ledger keeps two things of its own: naming the BOOK, and Plaid's wire format.
+  mountProviderOAuthConnect<AccountingProvider>(r, {
+    callbackPath: (name) => `/api/ledger/callback/${name}`,
+    outcomeParam: 'ledger',
+    defaultReturnTo: DEFAULT_RETURN_TO,
+    source: 'presentation/routes/ledgerRoutes.ts',
+    resolveConnect: (name) => {
+      if (!isAccountingProviderName(name)) return { error: 'Unknown accounting provider.' };
+      const provider = accountingProvider(name);
+      if (provider.connect !== 'oauth' || !provider.oauth) {
+        return { error: `${provider.label} is connected with typed fields, not a consent screen.` };
+      }
+      return { provider, oauth: provider.oauth, label: provider.label };
+    },
+    resolveCallback: (name) => {
+      if (!isAccountingProviderName(name)) return null;
+      const provider = accountingProvider(name);
+      return provider.oauth ? { provider, oauth: provider.oauth, label: provider.label } : null;
+    },
     /*
      * PLAID IS THE ONE EXCEPTION, and it is a wire-format difference rather than a
      * different security story. Link hands back a `public_token` instead of an
@@ -128,70 +97,53 @@ export function createLedgerRoutes(db: Db): Hono<HonoEnv> {
      * vault and the same `credentials` row as the other four — one storage path is
      * the invariant that matters, not one exchange.
      */
-    if (name === 'plaid') {
+    interceptCallback: async (c, { name, resolved, rawState, back }) => {
+      if (name !== 'plaid') return null;
+      const env = c.env as Env;
+      if (!rawState) return back(DEFAULT_RETURN_TO, 'error');
       const publicToken = c.req.query('public_token');
       const bag = env as unknown as Record<string, string | undefined>;
       const clientId = bag.PLAID_CLIENT_ID;
       const secret = bag.PLAID_SECRET;
-      if (!publicToken || !clientId || !secret) {
-        return c.redirect(`${base}${DEFAULT_RETURN_TO}?ledger=unavailable`);
-      }
-      // The state carries the tenant and where to return; verifying it through the
-      // shared callback with no code is not possible, so it is verified directly.
+      if (!publicToken || !clientId || !secret) return back(DEFAULT_RETURN_TO, 'unavailable');
       const verified = await verifyProviderConnectState(env, name, rawState, DEFAULT_RETURN_TO);
-      if (!verified) return c.redirect(`${base}${DEFAULT_RETURN_TO}?ledger=invalid_state`);
+      if (!verified) return back(DEFAULT_RETURN_TO, 'invalid_state');
       try {
         const exchanged = await exchangePlaidPublicToken(
           { clientId, secret, environment: bag.PLAID_ENV }, publicToken,
         );
         await saveLedgerConnection(db, env, {
           tenantId: verified.tenantId,
-          provider: name,
+          provider: resolved.provider.name,
           externalAccount: exchanged.itemId,
-          displayName: provider.label,
+          displayName: resolved.label,
           accessToken: exchanged.accessToken,
-          scope: provider.oauth.scopes.join(' '),
+          scope: resolved.oauth.scopes.join(' '),
         });
-        return c.redirect(`${base}${verified.returnTo}?ledger=connected`);
+        return back(verified.returnTo, 'connected');
       } catch (error) {
         reportCaughtError(error, { source: 'presentation/routes/ledgerRoutes.ts', operation: 'plaidCallback' });
-        return c.redirect(`${base}${verified.returnTo}?ledger=error`);
+        return back(verified.returnTo, 'error');
       }
-    }
+    },
+    onConnected: async (c, { provider, oauth, state, tokens }) => {
+      const name = provider.name;
+      /*
+       * The BOOK's own id, which every one of these providers needs in the request
+       * and none of them carries in the token: QuickBooks returns `realmId` as a
+       * query parameter on the redirect, Xero requires a second call to
+       * `/connections`, and Stripe returns `stripe_user_id` in the token response.
+       * A grant we cannot name is refused rather than stored half-identified — it
+       * would authenticate and then be unable to say whose books it was reading.
+       */
+      const externalAccount = name === 'quickbooks'
+        ? (c.req.query('realmId') ?? '')
+        : name === 'stripe-revenue'
+          ? String((tokens as unknown as { stripe_user_id?: string }).stripe_user_id ?? '')
+          : await firstXeroTenantId(tokens.access_token);
+      if (!externalAccount) return 'no_account';
 
-    if (!code) return c.redirect(`${base}${DEFAULT_RETURN_TO}?ledger=error`);
-    const result = await completeProviderOAuthCallback(env, provider.oauth, {
-      providerName: name, code, rawState, redirectUri: callbackUrl(c, name),
-    });
-    if (!result.ok) {
-      if (result.reason === 'exchange_failed') {
-        reportCaughtError(result.error, { source: 'presentation/routes/ledgerRoutes.ts', operation: 'callback' });
-      }
-      const returnTo = result.returnTo ?? DEFAULT_RETURN_TO;
-      const outcome = result.reason === 'exchange_failed' ? 'error' : result.reason;
-      return c.redirect(`${base}${returnTo}?ledger=${outcome}`);
-    }
-
-    const { state, tokens } = result;
-    /*
-     * The BOOK's own id, which every one of these providers needs in the request
-     * and none of them carries in the token: QuickBooks returns `realmId` as a
-     * query parameter on the redirect, Xero requires a second call to
-     * `/connections`, and Stripe returns `stripe_user_id` in the token response.
-     * A grant we cannot name is refused rather than stored half-identified — it
-     * would authenticate and then be unable to say whose books it was reading.
-     */
-    const externalAccount = name === 'quickbooks'
-      ? (c.req.query('realmId') ?? '')
-      : name === 'stripe-revenue'
-        ? String((tokens as unknown as { stripe_user_id?: string }).stripe_user_id ?? '')
-        : await firstXeroTenantId(tokens.access_token);
-    if (!externalAccount) {
-      return c.redirect(`${base}${state.returnTo}?ledger=no_account`);
-    }
-
-    try {
-      await saveLedgerConnection(db, env, {
+      await saveLedgerConnection(db, c.env as Env, {
         tenantId: state.tenantId,
         provider: name,
         externalAccount,
@@ -199,13 +151,10 @@ export function createLedgerRoutes(db: Db): Hono<HonoEnv> {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         expiresInSeconds: tokens.expires_in,
-        scope: tokens.scope ?? provider.oauth.scopes.join(' '),
+        scope: tokens.scope ?? oauth.scopes.join(' '),
       });
-      return c.redirect(`${base}${state.returnTo}?ledger=connected`);
-    } catch (error) {
-      reportCaughtError(error, { source: 'presentation/routes/ledgerRoutes.ts', operation: 'callback' });
-      return c.redirect(`${base}${state.returnTo}?ledger=error`);
-    }
+      return 'connected';
+    },
   });
 
   /**

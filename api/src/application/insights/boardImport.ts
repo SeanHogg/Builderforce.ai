@@ -22,7 +22,7 @@ import {
   aiToolAdoption, aiProgramInitiatives, rdFinancialsQuarterly, rdRevenueQuarterly, rdFteAllocationQuarterly,
 } from '../../infrastructure/database/schema';
 import {
-  qualityVersionKey, peopleVersionKey, aiProgramVersionKey, rdFinancialsVersionKey,
+  qualityVersionKey, peopleVersionKey, aiProgramVersionKey, rdFinancialsVersionKey, prodIncidentVersionKeys,
 } from './versionKeys';
 
 export type ImportColumnType = 'string' | 'number' | 'bool' | 'dateString' | 'timestamp';
@@ -40,7 +40,8 @@ interface DatasetDef {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   table: any;
   columns: ColDef[];
-  versionKey: (tenantId: number) => string;
+  /** One token, or several when the table has more than one cached reader (prod_incidents). */
+  versionKey: (tenantId: number) => string | string[];
 }
 
 /** The single source of truth for every importable dataset (name → spec). */
@@ -116,7 +117,7 @@ export const IMPORT_DATASETS: Record<string, DatasetDef> = {
     ],
   },
   'incidents': {
-    table: prodIncidents, versionKey: qualityVersionKey,
+    table: prodIncidents, versionKey: prodIncidentVersionKeys,
     columns: [
       { name: 'title', type: 'string', required: true, example: 'API latency spike' },
       { name: 'severity', type: 'string', example: 'sev2' },
@@ -327,7 +328,7 @@ export async function importBoardRows(
   if (values.length === 0 || dryRun) return { inserted: values.length, skipped, errors, dryRun };
 
   await db.insert(def.table).values(values);
-  await bumpCacheVersion(env, def.versionKey(tenantId));
+  for (const key of [def.versionKey(tenantId)].flat()) await bumpCacheVersion(env, key);
 
   return { inserted: values.length, skipped, errors, dryRun };
 }

@@ -786,8 +786,8 @@ async function createProject(
 
 /**
  * In-editor workspace (tenant) picker: list the user's workspaces, switch between them,
- * or create one — all via the userId-scoped /api/vscode/tenants endpoints. Degrades to
- * the web onboarding deep-link if those aren't deployed yet (older API).
+ * or create one — list/create via the person-level /api/tenants, switch via
+ * /api/vscode/tenants/:id/token. Degrades to the web onboarding deep-link on failure.
  */
 async function manageWorkspace(
   context: vscode.ExtensionContext,

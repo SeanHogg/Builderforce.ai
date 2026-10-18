@@ -26,9 +26,7 @@ presentation/routes/brainFilesRoutes.ts
 presentation/routes/brainRoutes.ts
 presentation/routes/calendarRoutes.ts
 presentation/routes/ceremonyRoutes.ts
-presentation/routes/chatRoutes.ts
 presentation/routes/contributorRoutes.ts
-presentation/routes/costForecastRoutes.ts
 presentation/routes/creationSessionFolderRoutes.ts
 presentation/routes/creationSessionRoutes.ts
 presentation/routes/dashboardRoutes.ts
@@ -44,8 +42,6 @@ presentation/routes/empFeatureRoutes.ts
 presentation/routes/empMetricsRoutes.ts
 presentation/routes/evermindModelRoutes.ts
 presentation/routes/factsRoutes.ts
-presentation/routes/feedbackIngestRoutes.ts
-presentation/routes/feedbackRoutes.ts
 presentation/routes/finopsRoutes.ts
 presentation/routes/forecastRoutes.ts
 presentation/routes/freelancerMessagingRoutes.ts
@@ -63,10 +59,8 @@ presentation/routes/integrationRoutes.ts
 presentation/routes/jobRoutes.ts
 presentation/routes/kanbanRoutes.ts
 presentation/routes/knowledgeRoutes.ts
-presentation/routes/managedAgentHostRoutes.ts
 presentation/routes/managerRoutes.ts
 presentation/routes/marketplaceRoutes.ts
-presentation/routes/marketplaceStatsRoutes.ts
 presentation/routes/meetingRoutes.ts
 presentation/routes/memberRoutes.ts
 presentation/routes/oauthRoutes.ts
@@ -77,12 +71,9 @@ presentation/routes/pokerRetroRoutes.ts
 presentation/routes/prdRoutes.ts
 presentation/routes/productRoutes.ts
 presentation/routes/projectAgentRoutes.ts
-presentation/routes/projectEvermindRoutes.ts
-presentation/routes/projectFactsRoutes.ts
 presentation/routes/projectRoutes.ts
 presentation/routes/promptAnalyzerRoutes.ts
 presentation/routes/promptLibraryRoutes.ts
-presentation/routes/publicApiRoutes.ts
 presentation/routes/pulseRoutes.ts
 presentation/routes/qaRoutes.ts
 presentation/routes/qualityIngestRoutes.ts
@@ -92,11 +83,8 @@ presentation/routes/repoRoutes.ts
 presentation/routes/rfpRoutes.ts
 presentation/routes/roiRoutes.ts
 presentation/routes/runtimeRoutes.ts
-presentation/routes/seamRoutes.ts
 presentation/routes/segmentRoutes.ts
 presentation/routes/segmentTrackerRoutes.ts
-presentation/routes/skillAssignmentRoutes.ts
-presentation/routes/specRoutes.ts
 presentation/routes/studioVoiceCloneRoutes.ts
 presentation/routes/taskRoutes.ts
 presentation/routes/teamMemoryRoutes.ts

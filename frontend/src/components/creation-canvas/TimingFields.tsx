@@ -16,7 +16,7 @@ import {
   type CanvasNodeSchedule,
 } from '@/lib/canvasNodeAffordances';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/inspector.module.css';
 
 export function TimingFields({
   data,

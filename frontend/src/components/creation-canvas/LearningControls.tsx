@@ -10,7 +10,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/inspector.module.css';
 import type { CreationNodeData } from './types';
 import { canRelevelCanvasObject } from '@/lib/canvasProse';
 import { creationObjectContentFields } from './creationObjectRegistry';

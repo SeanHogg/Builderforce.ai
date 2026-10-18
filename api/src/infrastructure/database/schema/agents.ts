@@ -100,6 +100,8 @@ export const marketplaceSkills = pgTable('marketplace_skills', {
 });
 
 
+/** RETIRED — no code reads or writes it. Migration 1236 folded its rows into
+ *  `artifact_likes`, THE like store (application/marketplace/artifactLikes.ts). */
 export const marketplaceSkillLikes = pgTable('marketplace_skill_likes', {
   userId:    varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   skillSlug: varchar('skill_slug', { length: 255 }).notNull(),

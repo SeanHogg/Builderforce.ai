@@ -1,10 +1,13 @@
 /** OpenAI Codex / ChatGPT subscription OAuth for tenant-owned credentials. */
-import { throwTokenExchangeFailure } from './subscriptionOAuthCode';
+import {
+  exchangeSubscriptionCode,
+  refreshSubscriptionToken,
+  subscriptionAuthorizeUrl,
+  type SubscriptionOAuthClient,
+} from './subscriptionOAuthCode';
+import type { TokenResponse } from '../shared/providerOAuthConnect';
 import { tryDecodeJwtPayload } from '@builderforce/hs256-jwt';
 
-const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
-const AUTHORIZE_URL = 'https://auth.openai.com/oauth/authorize';
-const TOKEN_URL = 'https://auth.openai.com/oauth/token';
 export const OPENAI_CODEX_REDIRECT_URI = 'http://localhost:1455/auth/callback';
 const JWT_AUTH_CLAIM = 'https://api.openai.com/auth';
 
@@ -25,17 +28,6 @@ function accountIdFromToken(token: string): string {
   return auth.chatgpt_account_id;
 }
 
-export function buildOpenAICodexAuthorizeUrl(params: { state: string; challenge: string }): string {
-  const url = new URL(AUTHORIZE_URL);
-  for (const [key, value] of Object.entries({
-    response_type: 'code', client_id: CLIENT_ID, redirect_uri: OPENAI_CODEX_REDIRECT_URI,
-    scope: 'openid profile email offline_access', code_challenge: params.challenge,
-    code_challenge_method: 'S256', state: params.state, id_token_add_organizations: 'true',
-    codex_cli_simplified_flow: 'true', originator: 'builderforce',
-  })) url.searchParams.set(key, value);
-  return url.toString();
-}
-
 /**
  * The extra way an OpenAI code dies, which no other provider shares.
  *
@@ -52,20 +44,32 @@ export function buildOpenAICodexAuthorizeUrl(params: { state: string; challenge:
 const CODEX_CLI_ATE_THE_CODE =
   'If the Codex CLI is running a `codex login` on this machine it owns http://localhost:1455 and consumed the code first — quit it before starting again.';
 
-async function requestTokens(body: URLSearchParams): Promise<OpenAICodexOAuthTokens> {
-  const response = await fetch(TOKEN_URL, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
-  if (!response.ok) {
-    throwTokenExchangeFailure({ status: response.status, body: await response.text(), label: 'OpenAI', spentHint: CODEX_CLI_ATE_THE_CODE });
-  }
-  const data = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
-  if (!data.access_token || !data.refresh_token || typeof data.expires_in !== 'number') throw new Error('OpenAI OAuth token response was incomplete');
+/** The Codex CLI public client, as a descriptor for the shared subscription flow. */
+const OPENAI_CODEX_OAUTH_CLIENT: SubscriptionOAuthClient = {
+  label: 'OpenAI',
+  clientId: 'app_EMoamEEZ73f0CkXaXp7hrann',
+  authUrl: 'https://auth.openai.com/oauth/authorize',
+  tokenUrl: 'https://auth.openai.com/oauth/token',
+  redirectUri: OPENAI_CODEX_REDIRECT_URI,
+  scopes: ['openid', 'profile', 'email', 'offline_access'],
+  extraAuthParams: { id_token_add_organizations: 'true', codex_cli_simplified_flow: 'true', originator: 'builderforce' },
+  spentHint: CODEX_CLI_ATE_THE_CODE,
+};
+
+export function buildOpenAICodexAuthorizeUrl(params: { state: string; challenge: string }): string {
+  return subscriptionAuthorizeUrl(OPENAI_CODEX_OAUTH_CLIENT, params);
+}
+
+/** OpenAI's token parsing — the ChatGPT account id rides in the access token. */
+function toTokens(data: TokenResponse): OpenAICodexOAuthTokens {
+  if (!data.refresh_token || typeof data.expires_in !== 'number') throw new Error('OpenAI OAuth token response was incomplete');
   return { access: data.access_token, refresh: data.refresh_token, expires: Date.now() + data.expires_in * 1000 - 300_000, accountId: accountIdFromToken(data.access_token) };
 }
 
-export function exchangeOpenAICodexCode(params: { code: string; verifier: string }): Promise<OpenAICodexOAuthTokens> {
-  return requestTokens(new URLSearchParams({ grant_type: 'authorization_code', client_id: CLIENT_ID, code: params.code, code_verifier: params.verifier, redirect_uri: OPENAI_CODEX_REDIRECT_URI }));
+export async function exchangeOpenAICodexCode(params: { code: string; verifier: string }): Promise<OpenAICodexOAuthTokens> {
+  return toTokens(await exchangeSubscriptionCode(OPENAI_CODEX_OAUTH_CLIENT, params));
 }
 
-export function refreshOpenAICodexToken(refreshToken: string): Promise<OpenAICodexOAuthTokens> {
-  return requestTokens(new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken, client_id: CLIENT_ID }));
+export async function refreshOpenAICodexToken(refreshToken: string): Promise<OpenAICodexOAuthTokens> {
+  return toTokens(await refreshSubscriptionToken(OPENAI_CODEX_OAUTH_CLIENT, refreshToken));
 }

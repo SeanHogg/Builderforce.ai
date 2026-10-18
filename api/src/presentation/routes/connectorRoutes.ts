@@ -45,7 +45,7 @@ import {
   updateConnector,
 } from '../../application/connectors/connectorService';
 import { executeConnectorAction } from '../../application/connectors/connectorRuntime';
-import { manifestFromOpenApi, fetchOpenApiSpec } from '../../application/connectors/openapiImport';
+import { importHandler } from './importRoutes';
 import { CONNECTOR_CATEGORIES } from '../../application/connectors/connectorManifest';
 import { connectorActionCatalog } from '../../application/connectors/connectorActionCatalog';
 import { limitParam } from './queryParams';
@@ -62,15 +62,6 @@ const CreateConnectorBody = z.object({
 const UpdateConnectorBody = z.object({
   manifest: zJsonObject.optional(),
   status: z.enum(['published', 'draft']).optional(),
-});
-
-const ImportOpenApiBody = z.object({
-  key: zNonEmptyString,
-  specUrl: zOptionalString,
-  spec: zJsonObject.optional(),
-  name: zOptionalString,
-  icon: zOptionalString,
-  category: zOptionalString,
 });
 
 const CreateConnectionBody = z.object({
@@ -179,32 +170,9 @@ export function createConnectorRoutes(db: Db): Hono<HonoEnv> {
   // Returns the manifest WITHOUT saving it. The importer gets you ~90% of the way;
   // the remaining decisions (which actions matter, whether `mutates` is right for
   // this API) belong to a human, and a silent save would skip that review.
-  router.post('/import/openapi', async (c) => {
-    const body = await parseBody(c, ImportOpenApiBody);
-    const key = body.key.toLowerCase();
-
-    let spec: unknown = body.spec;
-    let fallbackBaseUrl: string | undefined;
-
-    if (!spec) {
-      if (!body.specUrl) return c.json({ error: 'Provide either specUrl or spec' }, 400);
-      // The spec URL is tenant-supplied and fetched SERVER-SIDE, so the fetch lives
-      // in the application layer beside the connector runtime's — same SSRF guard,
-      // written once.
-      const fetched = await fetchOpenApiSpec(body.specUrl);
-      spec = fetched.spec;
-      fallbackBaseUrl = fetched.baseUrl;
-    }
-
-    const result = manifestFromOpenApi(spec, {
-      key,
-      ...(body.name ? { name: body.name } : {}),
-      ...(body.icon ? { icon: body.icon } : {}),
-      ...(body.category ? { category: body.category } : {}),
-      ...(fallbackBaseUrl ? { fallbackBaseUrl } : {}),
-    });
-    return c.json(result);
-  });
+  // The registered `connector-openapi` DRAFT importer (preview only) through the
+  // one import sequence — also at /api/import/connector-openapi.
+  router.post('/import/openapi', importHandler('connector-openapi', db));
 
   // ── Connections ────────────────────────────────────────────────────────
   router.get('/connections/list', async (c) => {

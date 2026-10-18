@@ -1,0 +1,76 @@
+/* Marketing object bodies: email, inbox and social bodies.
+   Split out of CreationCanvas.module.css, which keeps the board shell and the
+   canvas palette (`--canvas-*`, light and dark) that every rule here reads. */
+
+.authoredContent { max-height:210px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
+.taskBody { display:grid; gap:9px; }
+.taskFacts { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.65fr); gap:7px; }
+.taskFacts span,.taskContext { min-width:0; padding:7px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:#fafcff; }
+.taskFacts small,.taskContext small { display:block; margin-bottom:3px; color:var(--canvas-muted); font-size:7px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.taskFacts b,.taskContext b { display:block; overflow:hidden; color:var(--canvas-ink); font-size:9px; text-overflow:ellipsis; white-space:nowrap; text-transform:capitalize; }
+.taskContext p { max-height:44px; margin:3px 0 0; overflow:hidden; color:var(--canvas-muted); font-size:8px; line-height:1.45; }
+.taskContext .taskEmpty { color:var(--canvas-muted); font-style:italic; }
+.taskBody > .authoredContent { max-height:72px; margin:0; }
+
+/* --- Mailbox tiles -------------------------------------------------------
+   The inbox list scrolls INSIDE the node rather than growing it:a node's
+   height is a board-layout decision the user made by resizing it, and a
+   mailbox with 100 messages must not silently become a 4,000px tile that
+   overlaps everything beneath it. */
+.inboxBody { display:grid; gap:7px; min-height:0; grid-template-rows:auto minmax(0,1fr) auto; }
+.inboxMeta { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; }
+.inboxMeta > span { overflow:hidden; flex:1 1 6rem; min-width:0; color:var(--canvas-muted); font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.inboxMeta small { color:var(--canvas-ink-soft); font-size:7px; white-space:nowrap; }
+.inboxUnreadBadge { padding:1px 6px; border-radius:var(--radius-full); background:var(--canvas-accent); color:var(--text-on-accent); font-size:7px; font-weight:700; white-space:nowrap; }
+.inboxList { display:grid; align-content:start; gap:5px; margin:0; padding:0; overflow-y:auto; min-height:0; list-style:none; }
+.inboxList li { padding:6px 8px; border:1px solid var(--canvas-line); border-left-width:3px; border-radius:var(--radius-sm); background:#fafcff; }
+/* Unread is carried by the accent BAR and the bold subject, not by background
+   colour alone — an unread marker that exists only as a hue is invisible to a
+   colour-blind reader and disappears in high-contrast mode. The tint rides a
+   theme token so it reads in dark mode too. */
+/* `.inboxList li.inboxUnread`, not `.inboxUnread`: the base rule is (0,1,1) and
+   the dark-theme block re-states it, so a single-class selector would lose both
+   times and unread would look identical to read. */
+.inboxList li.inboxUnread { border-left-color:var(--canvas-accent); background:var(--canvas-hover); }
+.inboxUnread .inboxSubject { font-weight:700; }
+.inboxRowTop { display:flex; align-items:baseline; justify-content:space-between; gap:6px; min-width:0; }
+.inboxRowTop b { overflow:hidden; color:var(--canvas-ink); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.inboxRowTop small { color:var(--canvas-ink-soft); font-size:7px; white-space:nowrap; }
+.inboxSubject { display:block; overflow:hidden; margin-top:1px; color:var(--canvas-ink); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.inboxList p { max-height:26px; margin:2px 0 0; overflow:hidden; color:var(--canvas-muted); font-size:8px; line-height:1.4; }
+.inboxMore { color:var(--canvas-ink-soft); font-size:7px; font-style:italic; }
+.inboxOpenLink { color:var(--canvas-accent-ink); font-size:8px; text-decoration:underline; }
+.emailBodyText { max-height:150px !important; overflow-y:auto !important; white-space:pre-wrap; }
+.campaignStats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+.campaignStats span { min-width:0; padding:6px 7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:#fafcff; text-align:center; }
+.campaignStats small { display:block; margin-bottom:2px; color:var(--canvas-ink-soft); font-size:7px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+.campaignStats b { color:var(--canvas-ink); font-size:11px; }
+.templateLogo { max-width:100%; max-height:34px; object-fit:contain; object-position:left center; }
+/* Social tiles. Colours come from the canvas palette vars (declared for BOTH themes
+   at the top of this file and again in the dark block), so these need no entry in the
+   theme override list below — unlike the literal-backed classes above them. */
+.socialGlyph { display:inline-block; min-width:12px; margin-right:5px; color:var(--canvas-accent-ink); font-size:9px; }
+.socialMetrics { display:flex; flex-wrap:wrap; gap:8px; margin-top:3px; color:var(--canvas-ink-soft); font-size:7px; }
+.socialMedia { display:block; width:100%; max-height:120px; margin:6px 0; border-radius:var(--radius-sm); object-fit:cover; }
+.socialTargets { display:grid; gap:4px; margin:7px 0 0; padding:0; list-style:none; }
+.socialTargets li { display:flex; align-items:center; gap:6px; min-width:0; padding:5px 7px; border:1px solid var(--canvas-line); border-left-width:3px; border-radius:var(--radius-sm); background:var(--canvas-panel); }
+.socialTargets li b { overflow:hidden; flex:1 1 auto; min-width:0; color:var(--canvas-ink); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.socialTargets li small,.socialTargets li a { color:var(--canvas-muted); font-size:7px; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
+.socialTargets li a { color:var(--canvas-accent-ink); text-decoration:underline; }
+/* Outcome is carried by the left edge, so a half-published campaign is readable at a
+   glance without reading five status words. */
+.socialTargets li[data-status="published"] { border-left-color:var(--canvas-positive-ink); }
+.socialTargets li[data-status="pending"] { border-left-color:var(--canvas-accent); }
+.socialTargets li[data-status="failed"] { border-left-color:var(--tone-danger-mark); }
+.socialTargets li[data-status="skipped"] { border-left-color:var(--canvas-line); }
+.taskFacts span,
+.taskContext,
+.inboxList li,
+.campaignStats span {
+  border-color:var(--canvas-line);
+  background:var(--canvas-panel);
+  color:var(--canvas-ink);
+}
+.taskContext p { color:var(--canvas-muted); }
+.taskFacts small, .taskContext small { color:var(--canvas-muted); }
+.taskFacts b, .taskContext b { color:var(--canvas-ink); }

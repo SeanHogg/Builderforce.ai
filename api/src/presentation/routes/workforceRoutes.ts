@@ -30,12 +30,19 @@ import {
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
+import {
+  PUBLIC_LIST_CACHE_KEY,
+  agentRowColumns,
+  getPublicAgent,
+  hiredAgentsCacheKey,
+  listWorkforceAgents,
+  mapAgentRow,
+  mapPublicAgentRow,
+} from '../../application/workforce/agentDirectory';
 import { tenantHasFeature } from '../middleware/featureGate';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { invalidateTeamCaches } from '../../application/kernel/TeamRoster';
-import { parseJsonArray } from '../../domain/shared/json';
 import { CLOUD_SURFACES } from '../../application/runtime/cloudDispatch';
 import {
   completeAgentCheckout,
@@ -82,16 +89,6 @@ const FeedbackBody = z.object({
   comment: z.string().nullable().optional(),
 });
 
-/** Cache key for a tenant's purchased (marketplace-acquired) agents. */
-const purchasedCacheKey = (tenantId: number): string => `wf:purchased:${tenantId}`;
-
-/** Cache key for the PUBLIC marketplace agent listing (no tenant scope — it is the
- *  same world-readable registry for everyone). Read-heavy + open to the world →
- *  served through getOrSetCached; invalidated on any write that changes a row that
- *  could appear in it (create/update/hire/delete), including an eval-score change. */
-export const PUBLIC_LIST_CACHE_KEY = 'wf:public:agents';
-const PUBLIC_LIST_CACHE_TTL_SECONDS = 120;
-
 /** Every cached read an agent create/update/delete can stale: the public listing,
  *  this tenant's assignee-hovercard profiles, and — through `invalidateTeamCaches`
  *  — both projections of "who is on this team" (the footer roster and the
@@ -124,99 +121,12 @@ async function invalidateAgentCaches(env: Env, tenantId: number): Promise<void> 
  */
 export async function invalidateHireCaches(env: Env, tenantId: number, opts: { publicListing: boolean }): Promise<void> {
   await Promise.all([
-    invalidateCached(env, purchasedCacheKey(tenantId)),
-    invalidateCached(env, runtimeHiredAgentsCacheKey(tenantId)),
+    // ONE key behind both the purchased list and the runtime registry.
+    invalidateCached(env, hiredAgentsCacheKey(tenantId)),
     invalidateTeamCaches(env, tenantId),
     invalidateCached(env, assigneeProfilesCacheKey(tenantId)),
     opts.publicListing ? invalidateCached(env, PUBLIC_LIST_CACHE_KEY) : Promise.resolve(),
   ]);
-}
-
-/**
- * The `SELECT ide_agents.*` projection, key-for-key.
- *
- * Every workforce/marketplace response in this file ships the agent row with its
- * RAW snake_case column names (the frontend `PublishedAgent` contract reads
- * `base_model` / `hire_count` / `runtime_support` / `created_at` / …). Drizzle
- * returns camelCase, so each column is aliased back to its physical name here and
- * this ONE object is reused by every read/insert/update — key drift in a single
- * hand-written selection would silently blank a field on the Workforce card.
- *
- * It covers EVERY declared `ide_agents` column, including the training/inference
- * ones (`job_id`, `lora_rank`, `r2_artifact_key`, `resume_md`, `package_version`,
- * `mamba_state`, `inference_mode`, `request_count`, `last_used_at`) that no
- * workforce handler reads but that `SELECT *` shipped — `PublishedAgent` declares
- * several of them, so narrowing the projection would change the response.
- */
-const agentRowColumns = {
-  id:                ideAgents.id,
-  project_id:        ideAgents.projectId,
-  job_id:            ideAgents.jobId,
-  name:              ideAgents.name,
-  title:             ideAgents.title,
-  bio:               ideAgents.bio,
-  skills:            ideAgents.skills,
-  base_model:        ideAgents.baseModel,
-  lora_rank:         ideAgents.loraRank,
-  r2_artifact_key:   ideAgents.r2ArtifactKey,
-  resume_md:         ideAgents.resumeMd,
-  status:            ideAgents.status,
-  hire_count:        ideAgents.hireCount,
-  eval_score:        ideAgents.evalScore,
-  created_at:        ideAgents.createdAt,
-  updated_at:        ideAgents.updatedAt,
-  package_version:   ideAgents.packageVersion,
-  mamba_state:       ideAgents.mambaState,
-  inference_mode:    ideAgents.inferenceMode,
-  request_count:     ideAgents.requestCount,
-  last_used_at:      ideAgents.lastUsedAt,
-  tenant_id:         ideAgents.tenantId,
-  price_cents:       ideAgents.priceCents,
-  pricing_model:     ideAgents.pricingModel,
-  price_unit:        ideAgents.priceUnit,
-  runtime_support:   ideAgents.runtimeSupport,
-  preferred_runtime: ideAgents.preferredRuntime,
-  published:         ideAgents.published,
-  runtime_surface:   ideAgents.runtimeSurface,
-  psychometric:      ideAgents.psychometric,
-  builtin_kind:      ideAgents.builtinKind,
-  role_keys:         ideAgents.roleKeys,
-};
-
-/**
- * The PUBLIC projection of a marketplace agent. Marketing promises agents listed
- * "with evaluation scores", so a single non-sensitive `evalScore` (the agent's
- * 0..1 evaluation/quality score from training — `ide_agents.eval_score`) ships
- * here. The owner-only perf rollup (successRate / latency / per-tenant feedback)
- * NEVER appears on a public route — only this one aggregate quality number.
- */
-function mapPublicAgentRow(row: Record<string, unknown>): Record<string, unknown> {
-  const raw = row.eval_score;
-  const score = typeof raw === 'number' ? raw : raw == null ? null : Number(raw);
-  // EXPLICIT allowlist — never spread the raw row onto a world-readable route.
-  // Excludes tenant_id, project_id, role_keys (internal config/dispatch) and
-  // psychometric (unpublished persona internals). Only marketplace-facing fields ship.
-  return {
-    id: row.id,
-    name: row.name,
-    title: row.title,
-    bio: row.bio,
-    skills: parseJsonArray(row.skills),
-    base_model: row.base_model,
-    builtin_kind: row.builtin_kind ?? null,
-    status: row.status,
-    hire_count: row.hire_count,
-    runtime_support: row.runtime_support,
-    preferred_runtime: row.preferred_runtime ?? null,
-    runtime_surface: row.runtime_surface ?? null,
-    price_cents: row.price_cents,
-    pricing_model: row.pricing_model,
-    price_unit: row.price_unit ?? null,
-    published: row.published,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    evalScore: score != null && Number.isFinite(score) ? score : null,
-  };
 }
 
 /** Cache key for an agent's owner-only performance + feedback rollup (gap [1247]).
@@ -239,24 +149,6 @@ const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
  * One list, one place.
  */
 const RUNTIME_SURFACES = CLOUD_SURFACES;
-
-/**
- * `ide_agents.skills` is a `text` column holding a JSON string. The
- * `PublishedAgent` contract (and the /workforce edit form) expects a real
- * `string[]`, so normalize every row on the way out. Mirrors the parse in
- * ideRoutes — kept here so all workforce responses honor the contract.
- */
-function mapAgentRow<T extends Record<string, unknown>>(row: T | null | undefined): T | null | undefined {
-  if (row == null) return row;
-  const parsed = parseJsonArray(row.skills);
-  // Parse the agent's own personality JSON so the editor round-trips it as an object
-  // (stored as text; mirrors how `skills` is parsed). null when unset.
-  const psy = row.psychometric;
-  const psychometric = typeof psy === 'string'
-    ? (() => { try { return JSON.parse(psy) as unknown; } catch { return null; } })()
-    : (psy ?? null);
-  return { ...row, skills: parsed, psychometric };
-}
 
 /**
  * Owner-only performance + buyer-feedback rollup for one agent (gap [1247]).
@@ -362,27 +254,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // ----- Authenticated: the tenant's own agents --------------------------
   // Registered BEFORE GET /agents/:id so "mine" isn't swallowed by the :id route.
   router.get('/agents/mine', authMiddleware, async (c) => {
-    const db = requestDb(c);
-    const tenantId = c.get('tenantId') as number;
-    // active_hires = tenants CURRENTLY holding the agent (owner-only "in use"
-    // metric). Distinct from the cumulative hire_count. Owner-scoped, so it ships
-    // only on /mine, never on the public marketplace list.
-    const rows = await db
-      .select({
-        ...agentRowColumns,
-        // `ide_agents.id` is spelled out rather than interpolated: in a
-        // single-table select Drizzle renders `${ideAgents.id}` UNQUALIFIED, and
-        // inside this subquery a bare "id" binds to `agent_purchases.id` (the
-        // inner scope wins), which would silently make every count 0.
-        active_hires: sql<number>`(
-          SELECT COUNT(*) FROM agent_purchases
-          WHERE agent_purchases.agent_id = ide_agents.id AND agent_purchases.unhired_at IS NULL
-        )::int`,
-      })
-      .from(ideAgents)
-      .where(eq(ideAgents.tenantId, tenantId))
-      .orderBy(desc(ideAgents.createdAt))
-      .limit(200);
+    const rows = await listWorkforceAgents(c.env as Env, requestDb(c), { scope: 'owned', tenantId: c.get('tenantId') as number });
     return c.json(rows.map(mapAgentRow));
   });
 
@@ -390,21 +262,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // (distinct from /agents/mine, which is the tenant's OWN created agents).
   // Read-through cached; invalidated on hire.
   router.get('/agents/purchased', authMiddleware, async (c) => {
-    const db = requestDb(c);
-    const tenantId = c.get('tenantId') as number;
-    const rows = await getOrSetCached(c.env as Env, purchasedCacheKey(tenantId), () =>
-      db
-        .select(agentRowColumns)
-        .from(ideAgents)
-        .innerJoin(agentPurchases, eq(agentPurchases.agentId, ideAgents.id))
-        .where(and(
-          eq(agentPurchases.tenantId, tenantId),
-          isNull(agentPurchases.unhiredAt),
-          eq(ideAgents.status, 'active'),
-        ))
-        .orderBy(desc(agentPurchases.createdAt))
-        .limit(200),
-    );
+    const rows = await listWorkforceAgents(c.env as Env, requestDb(c), { scope: 'hired', tenantId: c.get('tenantId') as number });
     return c.json(rows.map(mapAgentRow));
   });
 
@@ -826,22 +684,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   // Read-heavy + world-readable → served through the read-through cache; the
   // listing is invalidated by every write below that can change a listed row.
   router.get('/agents', async (c) => {
-    const db = requestDb(c);
-    const rows = await getOrSetCached(
-      c.env as Env,
-      PUBLIC_LIST_CACHE_KEY,
-      // The world-readable registry: the same listing for every visitor, signed
-      // in or not. `publicAgentScope` IS the access control — and it is the one
-      // definition of "public", shared with the detail read, the IDE registry,
-      // checkout and the marketplace MCP tools.
-      () => db
-        .select(agentRowColumns)
-        .from(ideAgents)
-        .where(publicAgentScope())
-        .orderBy(desc(ideAgents.hireCount), desc(ideAgents.createdAt))
-        .limit(200),
-      { kvTtlSeconds: PUBLIC_LIST_CACHE_TTL_SECONDS },
-    );
+    const rows = await listWorkforceAgents(c.env as Env, requestDb(c), { scope: 'public' });
     return c.json(rows.map(mapPublicAgentRow));
   });
 
@@ -856,11 +699,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
 
   // GET /api/workforce/agents/:id — public agent detail (with evalScore).
   router.get('/agents/:id', async (c) => {
-    const db = requestDb(c);
-    const [row] = await db
-      .select(agentRowColumns)
-      .from(ideAgents)
-      .where(publicAgentScope(eq(ideAgents.id, c.req.param('id'))));
+    const row = await getPublicAgent(requestDb(c), c.req.param('id'));
     if (!row) return c.json({ error: 'Agent not found' }, 404);
     return c.json(mapPublicAgentRow(row));
   });

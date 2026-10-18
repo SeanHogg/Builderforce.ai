@@ -14,7 +14,7 @@
  * fetch, create, rename), which had drifted from the web's.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_CHAT_TITLE, useArmedNewChat, useBrainChats, type BrainChat, type ChatMode } from '@seanhogg/builderforce-brain-embedded';
+import { DEFAULT_CHAT_TITLE, useArmedNewChat, useBrainChats, useChatCreation, type BrainChat, type ChatMode } from '@seanhogg/builderforce-brain-embedded';
 import { onHostMessage, onRefresh, post, request, type InitData } from '../vscodeBridge';
 import { useGlobalRunState } from './useGlobalRunState';
 
@@ -28,7 +28,9 @@ export interface VsCodeChats {
   chatOptions: BrainChat[];
   activeChat: BrainChat | null;
   reloadChats: () => void;
-  autoTitleChat: (id: number, firstUserText: string) => void;
+  /** Name a still-untitled chat from its first user turn (the conversation's `onFirstUserTurn`). */
+  onFirstUserTurn: (id: number, firstUserText: string) => Promise<void>;
+  /** The open chat, or the one the first send creates (shared single-flight `useChatCreation`); throws when it cannot. */
   ensureChatId: () => Promise<number>;
   /** Whether a chat's run is waiting on an answer, running, or idle (null) — drawn as a marker. */
   runStatus: (id: number) => ChatRunStatus;
@@ -100,7 +102,6 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
 
   const setChatId = useCallback((id: number | null) => { void select(id); }, [select]);
   const reloadChats = useCallback(() => { void reload(); }, [reload]);
-  const autoTitleChat = useCallback((id: number, text: string) => { void autoTitle(id, text); }, [autoTitle]);
 
   const activeChat = brainChats.activeChat;
   const chatOptions = useMemo(
@@ -120,14 +121,20 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
     [newChatLabel],
   );
 
+  // The first send creates the chat — ONE creation even if a second send lands while it
+  // is in flight — scoped to the sidebar's active project (the hook's pin), in the armed
+  // mode; its first user turn names it.
+  const { ensureChatId: ensureCreated, onFirstUserTurn } = useChatCreation({
+    chatId,
+    create: async () => (await createArmed())?.id ?? null,
+    autoTitle,
+  });
   const ensureChatId = useCallback(async () => {
-    if (chatId != null) return chatId;
-    // Scoped to the sidebar's active project (the hook's pin), in the armed mode.
-    const created = await createArmed();
+    const id = await ensureCreated();
     // The send cannot proceed without a conversation — surface why, as the old path did.
-    if (!created) throw new Error(brainChats.error || 'Could not create the chat');
-    return created.id;
-  }, [chatId, createArmed, brainChats.error]);
+    if (id == null) throw new Error(brainChats.error || 'Could not create the chat');
+    return id;
+  }, [ensureCreated, brainChats.error]);
 
   // Bind the host tab to the open conversation (title undefined while it loads).
   const sessionTitle = activeChat ? titleOf(activeChat) : (chatId == null ? newChatLabel : undefined);
@@ -138,7 +145,7 @@ export function useVsCodeChats(init: InitData, newChatLabel: string): VsCodeChat
   const selectMode = useCallback((mode: ChatMode) => { void selectArmedMode(mode); }, [selectArmedMode]);
 
   return {
-    chatId, setChatId, chats, chatOptions, activeChat, reloadChats, autoTitleChat, ensureChatId,
+    chatId, setChatId, chats, chatOptions, activeChat, reloadChats, onFirstUserTurn, ensureChatId,
     runStatus, titleOf, chatMode, selectMode, setMemoryEnabled, armMemory, rename, summarize, confirmDelete, remove,
     loading: brainChats.loading, error: brainChats.error, clearError,
   };

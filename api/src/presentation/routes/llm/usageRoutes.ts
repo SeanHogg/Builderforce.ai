@@ -9,7 +9,7 @@ import type { Hono } from 'hono';
 import type { Env, HonoEnv } from '../../../env';
 import { reportCaughtError } from '../../../application/observability/caughtErrorReporter';
 import { requestDb } from '../../../application/shared/dbHandle';
-import { tenantUsageDetail, tenantUsageSummary } from '../../../application/llm/gatewayUsageReport';
+import { tenantUsageDetail, tenantUsageSummary } from '../../../application/llm/usageReports';
 import { getCachedBuilderInsightsSnapshot } from '../../../application/insights/builderInsights';
 import { positiveIntOrNull, boundedIntParam, daysParam, limitParam } from '../queryParams';
 import { requireTenantAccess, respondToAccessError, type TenantAccess } from './access';
@@ -24,9 +24,8 @@ export function mountUsageRoutes(router: Hono<HonoEnv>): void {
     }
 
     const days = daysParam(c.req.query('days'), 30, 90);
-    // Every figure is read from the database that owns the usage ledger — the
-    // operational one in production. The core copy stopped receiving rows at the split,
-    // so reading it here reported frozen totals. Only API-key names come from `core`.
+    // A thin adapter over THE usage query use case (application/llm/usageQuery), which
+    // resolves the ledger's own database — the operational one in production.
     const core = requestDb(c);
 
     // ── Detail mode — row-level pageable per-call ledger for reconciliation
@@ -34,7 +33,7 @@ export function mountUsageRoutes(router: Hono<HonoEnv>): void {
     if (c.req.query('detail') === 'true') {
       const limit = limitParam(c.req.query('limit'), 100, 500);
       const page  = boundedIntParam(c.req.query('page'), { def: 1, min: 1 });
-      return c.json(await tenantUsageDetail(c.env as Env, core, access.tenantId, { days, limit, page }));
+      return c.json(await tenantUsageDetail(core, access.tenantId, { days, limit, page }));
     }
 
     const summary = await tenantUsageSummary(c.env as Env, core, access.tenantId, access.userId, days);

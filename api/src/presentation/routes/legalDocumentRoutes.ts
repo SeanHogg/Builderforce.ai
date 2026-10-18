@@ -19,6 +19,7 @@
  */
 
 import { Hono } from 'hono';
+import { downloadResponse } from '../../application/export/exportDownload';
 import {
   DOCUMENT_KINDS,
   acceptanceHistory,
@@ -83,13 +84,7 @@ const BindBody = ConsentDocumentBody.extend({
 });
 
 function fileResponse(bytes: Uint8Array, filename: string, mime: string | null, disposition: 'attachment' | 'inline' = 'attachment'): Response {
-  return new Response(bytes, {
-    headers: {
-      'content-type': mime || 'application/octet-stream',
-      'content-disposition': `${disposition}; filename="${filename.replace(/"/g, '')}"`,
-      'cache-control': 'no-store',
-    },
-  });
+  return downloadResponse(bytes, { filename, contentType: mime || 'application/octet-stream', disposition });
 }
 
 export function createLegalDocumentRoutes(db: Db): Hono<HonoEnv> {

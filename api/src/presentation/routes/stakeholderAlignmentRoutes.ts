@@ -156,6 +156,8 @@ export function createStakeholderAlignmentRoutes(db: Db): Hono<HonoEnv> {
     }
   });
 
+  // One project's stakeholder-alignment summary — not one of the tenant dashboards
+  // (see the naming note in `dashboardsRoutes.ts`).
   router.get('/projects/:projectId/dashboard', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const projectId = projectIdOf(c.req.param('projectId'));

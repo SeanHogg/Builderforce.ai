@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/bodies.module.css';
 import { MAP_ZOOM_RANGE, boundsCenter, geoBoundsFor, mapViewportBounds, outlinePaths, panCenter, projectMap, sanitizeGeoBounds, sanitizeMapCenter, sanitizeMapPoints, sanitizeMapZoom } from '@/lib/canvasGeo';
 import { useFormat } from '@/i18n/useFormat';
 import type { CreationBodyProps } from './types';

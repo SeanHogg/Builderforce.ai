@@ -9,7 +9,8 @@ import { faultText } from '@/lib/apiClient';
 import type { SharedCanvasRoom } from '@/domains/canvas/presentation/useSharedCanvasRoom';
 import { CanvasInviteLinkPanel } from '../CanvasInviteLinkPanel';
 import { useCanvasSessionFacts } from './canvasSessionContext';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/chrome.module.css';
+import commandBarStyles from '../styles/commandBar.module.css';
 
 type SessionRole = CreationSessionSummary['role'];
 type SessionMember = CreationSessionDetail['members'][number];
@@ -71,10 +72,10 @@ export function CanvasInviteSheet({ open, onClose, inRoom, sharedRoom, draft, cu
   const changeRole = (member: SessionMember, role: SessionRole) => { void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => notify(faultText(error, t('roleUpdateFailed')))); };
   const removeMember = (member: SessionMember) => { void creationSessionsApi.members.remove(sessionId, member.userId).then(() => setAllMembers((current) => current.filter((item) => item.userId !== member.userId))).catch((error) => notify(faultText(error, t('memberRemovalFailed')))); };
   const revokeInvitation = (invitation: CreationSessionInvitation) => { void creationSessionsApi.invitations.revoke(sessionId, invitation.id).then(() => { setPendingInvitations((current) => current.filter((item) => item.id !== invitation.id)); notify(t('invitationRevoked')); }).catch((error) => notify(faultText(error, t('invitationRevokeFailed')))); };
-  return <div className={styles.shareMenu} role="dialog" aria-label={t('inviteCollaborators')}>
-    <div className={styles.shareMenuHeader}>
+  return <div className={commandBarStyles.shareMenu} role="dialog" aria-label={t('inviteCollaborators')}>
+    <div className={commandBarStyles.shareMenuHeader}>
       <strong>{t('inviteCollaborators')}</strong>
-      <button type="button" className={styles.shareMenuClose} aria-label={t('closeInvitationPanel')} onClick={onClose}>×</button>
+      <button type="button" className={commandBarStyles.shareMenuClose} aria-label={t('closeInvitationPanel')} onClick={onClose}>×</button>
     </div>
     <p>{persistence === 'local' ? (inRoom ? t('sharedLiveHint') : t('sharedInviteHint')) : t('invitedCanBuild')}</p>
     {/* NO ACCOUNT: invite by link into a shared free session. Everyone edits

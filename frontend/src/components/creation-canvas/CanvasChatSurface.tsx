@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/brain.module.css';
+import chromeStyles from './styles/chrome.module.css';
 import { BrainSurface, type BrainSurfaceBodyProps } from './BrainSurface';
 import { BrainSurfaceViewProvider } from './brainSurfaceView';
 import { BrainSurfaceActions } from './BrainSurfaceActions';
@@ -90,7 +91,7 @@ export function CanvasChatSurface({
           {participants.slice(0, 4).map((member, index) => (
             <span
               key={member.userId}
-              className={memberAvatarClass(index, { pink: styles.avatarPink, orange: styles.avatarOrange, green: styles.avatarGreen })}
+              className={memberAvatarClass(index, { pink: chromeStyles.avatarPink, orange: chromeStyles.avatarOrange, green: chromeStyles.avatarGreen })}
               title={member.displayName ?? undefined}
             >{memberInitials(member.displayName)}</span>
           ))}

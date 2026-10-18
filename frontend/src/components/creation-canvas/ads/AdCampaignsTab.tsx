@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/ads.module.css';
 import {
   adsApi, formatMoney,
   type AdCampaign, type AdObjective,

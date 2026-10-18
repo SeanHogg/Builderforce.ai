@@ -7,7 +7,7 @@ import { stepConfigOf, stepInputsOf, stepKindOf, stepOutputsOf } from '@/domains
 import { isMultiOutletKind, stepOutlets } from '@/domains/workflow/domain/stepOutlets';
 import { integrationForConfig } from '@/domains/workflow/domain/stepIntegrations';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/bodies.module.css';
 import { liveStepDotClass, normalizeLiveStepStatus } from './liveGraphStatus';
 
 /**

@@ -5,7 +5,7 @@ import { AITrainingPanel } from '../canvasLazyPanels';
 import type { CreationFlowNode } from '../CreationNode';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
 import type { useCanvasFlowBuild } from '../hooks/useCanvasFlowBuild';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/stage.module.css';
 
 type FlowBuild = ReturnType<typeof useCanvasFlowBuild>;
 

@@ -2,7 +2,7 @@
 // `CreationCanvas` client boundary — the same reason its neighbours state at their tops.
 import { useTranslations } from 'next-intl';
 import { AddObjectIcon, ClosePaletteIcon } from '@/components/canvas/CanvasCommands';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/composer.module.css';
 
 /**
  * THE "+" THAT IS THE COMMAND BAR.

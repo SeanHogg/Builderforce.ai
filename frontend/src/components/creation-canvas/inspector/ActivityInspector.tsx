@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
 import { activeResumeRevision, resumeFamilyFromNode } from '@/lib/canvasResume';
 import { faultText } from '@/lib/apiClient';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/inspector.module.css';
 
 export function ActivityInspector({ sessionId, objectId, data, persistence, role, members }: { sessionId: string; objectId: string; data: CreationNodeData; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; members: Array<{ userId: string; displayName: string | null; role: string }> }) {
   const fmt = useFormat();

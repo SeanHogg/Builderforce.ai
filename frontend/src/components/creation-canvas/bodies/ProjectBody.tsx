@@ -1,6 +1,6 @@
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from '../types';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/bodies.module.css';
 import type { CreationBodyProps } from './types';
 import { textValue, scoreTone } from './shared';
 

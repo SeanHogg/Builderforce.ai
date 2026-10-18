@@ -24,6 +24,7 @@
 import { InternalError } from '../../domain/shared/errors';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { Hono } from 'hono';
+import { downloadResponse } from '../../application/export/exportDownload';
 import { and, eq, desc } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
@@ -266,23 +267,9 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
     };
     const name = (request?.title ?? 'proposal').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'proposal';
     if (format === 'pptx') {
-      const bytes = await renderRfpDocPptx(opts);
-      return new Response(bytes as unknown as BodyInit, {
-        headers: {
-          'content-type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-          'content-disposition': `attachment; filename="${name}-proposal.pptx"`,
-          'cache-control': 'no-store',
-        },
-      });
+      return downloadResponse(await renderRfpDocPptx(opts), { filename: `${name}-proposal.pptx`, contentType: 'pptx' });
     }
-    const bytes = renderRfpDocPdf(opts);
-    return new Response(bytes as unknown as BodyInit, {
-      headers: {
-        'content-type': 'application/pdf',
-        'content-disposition': `attachment; filename="${name}-proposal.pdf"`,
-        'cache-control': 'no-store',
-      },
-    });
+    return downloadResponse(renderRfpDocPdf(opts), { filename: `${name}-proposal.pdf`, contentType: 'pdf' });
   });
 
   // Poll the deep `architecture-analysis` run the freshness gate fired, and

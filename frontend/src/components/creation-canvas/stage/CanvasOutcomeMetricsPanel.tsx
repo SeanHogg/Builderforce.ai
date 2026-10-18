@@ -16,7 +16,8 @@ import {
 import { CanvasAttributedOutcomes } from '../CanvasAttributedOutcomes';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
 import type { useCanvasDiagnostics } from '../hooks/useCanvasDiagnostics';
-import styles from '../CreationCanvas.module.css';
+import styles from '../styles/stage.module.css';
+import shellStyles from '../CreationCanvas.module.css';
 
 export interface CanvasOutcomeMetricsPanelProps {
   open: boolean;
@@ -68,7 +69,7 @@ export function CanvasOutcomeMetricsPanel({ open, setOpen, metrics, loading, err
   if (!open) return null;
   return <aside className={`${styles.historyPanel} ${styles.outcomeMetricsPanel}`} aria-label={t('sessionOutcomeMetrics')}>
           <header><div><strong>{t('ideaToDelivery')}</strong><small>{metrics ? t('sessionVsTenant', { count: metrics.sampleSize }) : t('valueGenerated')}</small></div><span className={styles.panelHeaderActions}>{persistence === 'server' && <CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyProofJourneyDiagnostics')} getText={buildProofJourneyDiagnostics} />}<button onClick={() => setOpen(false)} aria-label={t('closeOutcomeMetrics')}>×</button></span></header>
-          {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden><Icon source="↗" size="1em" /></span><strong>{t('saveForBaseline')}</strong><p>{t('saveForBaselineHint')}</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', t('gateMetricsTitle'), t('gateMetricsBody'))}>{t('saveAndMeasure')}</button></div> : loading ? <p role="status">{t('calculatingValue')}</p> : error ? <div className={styles.outcomeEmpty}><strong>{t('metricsUnavailable')}</strong><p>{error}</p><button className={styles.secondaryButton} onClick={onRetry}>{t('retry')}</button></div> : metrics ? <OutcomeMetricList metrics={metrics} /> : null}
+          {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden><Icon source="↗" size="1em" /></span><strong>{t('saveForBaseline')}</strong><p>{t('saveForBaselineHint')}</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', t('gateMetricsTitle'), t('gateMetricsBody'))}>{t('saveAndMeasure')}</button></div> : loading ? <p role="status">{t('calculatingValue')}</p> : error ? <div className={styles.outcomeEmpty}><strong>{t('metricsUnavailable')}</strong><p>{error}</p><button className={shellStyles.secondaryButton} onClick={onRetry}>{t('retry')}</button></div> : metrics ? <OutcomeMetricList metrics={metrics} /> : null}
           {/* The OTHER half. Everything above measures the PROCESS — how fast and
               how reliably this board produced something — which on its own is a
               productivity report. This reads the ATTRIBUTED facts beside it (the

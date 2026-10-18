@@ -3,7 +3,7 @@
  * ([[evermind-learning-architecture]]). Two auth front doors share ONE set of core
  * handlers (DRY): the web UI / VS Code reach `/api/projects/:projectId/facts`; on-prem
  * agents (agentHost key, not a JWT) reach `/api/agent/projects/:projectId/facts`. Both
- * resolve to the same tenant-scoped `projectFacts` service, so every surface reads +
+ * are the SAME router built with a different {@link FrontDoor}, so every surface reads +
  * writes the SAME facts.
  *
  *   GET  /facts?query=&limit=  — recall (read-through cached)
@@ -12,10 +12,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { and } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
-import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
-import { projects } from '../../infrastructure/database/schema';
+import { tenantDoor, type FrontDoor } from '../middleware/frontDoor';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { deleteProjectFact, recallProjectFacts, upsertProjectFact } from '../../application/llm/projectFacts';
@@ -146,53 +143,21 @@ async function cacheAnswerCore(env: Env, db: Db, tenantId: number, projectId: nu
   return json({ ok: true });
 }
 
-// ── JWT front door (web UI + VS Code + internal JWT callers) ──────────────────
-export function createProjectFactsRoutes(db: Db): Hono<HonoEnv> {
+// ── ONE router, two front doors (JWT at /api/projects, host key at /api/agent/projects) ──
+export function createProjectFactsRoutes(db: Db, door: FrontDoor = tenantDoor): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  router.use('*', authMiddleware);
+  // Scoped to this surface's own paths: a catch-all `use('*')` would also gate every
+  // other router sharing the mount (run-context accepts JWT on the agent prefix too).
+  for (const path of ['/:projectId/facts', '/:projectId/facts/*', '/:projectId/answer']) router.use(path, door.auth);
   const t = (c: Context) => c.get('tenantId') as number;
+  // A host key acts for the agent host, not a person: no user to attribute savings to.
+  const person = (c: Context) => (door.agentHost ? null : (c.get('userId') as string | undefined) ?? null);
 
   router.get('/:projectId/facts', (c) => recallCore(c.env as Env, db, t(c), pid(c), c));
   router.post('/:projectId/facts', (c) => rememberCore(c.env as Env, db, t(c), pid(c), c));
   router.delete('/:projectId/facts/:key', (c) => forgetCore(c.env as Env, db, t(c), pid(c), c));
   // Memory-first: resolve an answer from memory (skip the LLM) / cache a Q&A pair.
-  router.get('/:projectId/answer', (c) => resolveAnswerCore(c.env as Env, db, t(c), pid(c), c, (c.get('userId') as string | undefined) ?? null));
+  router.get('/:projectId/answer', (c) => resolveAnswerCore(c.env as Env, db, t(c), pid(c), c, person(c)));
   router.post('/:projectId/answer', (c) => cacheAnswerCore(c.env as Env, db, t(c), pid(c), c));
-  return router;
-}
-
-// ── Agent (on-prem host key) front door ───────────────────────────────────────
-export function createProjectFactsAgentRoutes(db: Db): Hono<HonoEnv> {
-  const router = new Hono<HonoEnv>();
-  const auth = async (c: Context): Promise<number | null> => {
-    const host = await resolveHostAuth(db, c);
-    return host?.tenantId ?? null;
-  };
-  router.get('/:projectId/facts', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return recallCore(c.env as Env, db, tenantId, pid(c), c);
-  });
-  router.post('/:projectId/facts', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return rememberCore(c.env as Env, db, tenantId, pid(c), c);
-  });
-  router.delete('/:projectId/facts/:key', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return forgetCore(c.env as Env, db, tenantId, pid(c), c);
-  });
-  router.get('/:projectId/answer', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    // A host key acts for the agent host, not a person: no user to attribute to.
-    return resolveAnswerCore(c.env as Env, db, tenantId, pid(c), c, null);
-  });
-  router.post('/:projectId/answer', async (c) => {
-    const tenantId = await auth(c);
-    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return cacheAnswerCore(c.env as Env, db, tenantId, pid(c), c);
-  });
   return router;
 }

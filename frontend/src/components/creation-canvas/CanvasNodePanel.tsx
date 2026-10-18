@@ -14,7 +14,7 @@ import { CanvasObjectSurfaceButton } from './CanvasObjectSurfaceButton';
 import { KindSettingsFields } from './KindSettingsFields';
 import { TimingFields } from './TimingFields';
 import type { CreationNodeData } from './types';
-import styles from './CreationCanvas.module.css';
+import styles from './styles/inspector.module.css';
 
 /**
  * The panel that opens BESIDE the card it configures.

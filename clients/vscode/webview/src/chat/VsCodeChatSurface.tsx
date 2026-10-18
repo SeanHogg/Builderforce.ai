@@ -84,7 +84,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // The conversation list — the shared `useBrainChats` plus the editor's own bindings.
   const vsChats = useVsCodeChats(init, t('app.newChat', 'New chat'));
   const {
-    chatId, setChatId, chats, chatOptions, activeChat, reloadChats, autoTitleChat, ensureChatId,
+    chatId, setChatId, chats, chatOptions, activeChat, reloadChats, onFirstUserTurn, ensureChatId,
     runStatus, titleOf, chatMode, selectMode, setMemoryEnabled: persistMemory, armMemory,
   } = vsChats;
   // The header's History lever swaps the body to the chat list; opening a chat closes it.
@@ -164,7 +164,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     extraSystem,
     ensureChatId,
     onActivity: reloadChats,
-    onFirstUserTurn: autoTitleChat,
+    onFirstUserTurn,
     evermind,
     // The conversation's own mode decides which directive rides the turn (`chatModeDirective`).
     chatMode,

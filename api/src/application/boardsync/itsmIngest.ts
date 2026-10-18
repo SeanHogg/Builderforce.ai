@@ -15,9 +15,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { supportTickets } from '../../infrastructure/database/schema';
-import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { qualityVersionKey } from '../insights/versionKeys';
-import { incidentVersionKey } from '../insights/versionKeys';
+import { bumpProdIncidentCaches } from '../incident/incidentCaches';
 import { IncidentService } from '../incident/IncidentService';
 import { EscalationService } from '../incident/EscalationService';
 import { findTenantIncidentManagerRef, dispatchIncidentTriage } from '../incident/incidentDispatch';
@@ -196,8 +194,7 @@ export async function syncItsmConnection(
       durationMs: Date.now() - start,
     });
     if (page.tickets.length > 0) {
-      await bumpCacheVersion(env, qualityVersionKey(conn.tenantId));
-      await bumpCacheVersion(env, incidentVersionKey(conn.tenantId));
+      await bumpProdIncidentCaches(env, conn.tenantId);
     }
 
     return { processed: page.tickets.length, cursorAfter: page.nextCursor };

@@ -1,0 +1,417 @@
+/* Side panels: files, drive, game, Miro, publish, releases, social, outline, object picker.
+   Split out of CreationCanvas.module.css, which keeps the board shell and the
+   canvas palette (`--canvas-*`, light and dark) that every rule here reads. */
+
+/* The `legalDocument` card's upload control. Flex-wrap rather than a fixed grid so
+   the category select and the upload button stack cleanly on a ~360px card instead
+   of forcing the card wider — the same rule `.resumeSourceBar` follows above. */
+.legalUpload { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; padding:10px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface); max-width:100%; }
+.legalUpload label { display:flex; flex-direction:column; gap:4px; min-width:0; flex:1 1 120px; max-width:100%; }
+.legalUpload label span { color:var(--text-muted); font-size:11px; font-weight:700; text-transform:uppercase; }
+.legalUpload select { min-height:34px; width:100%; max-width:100%; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:6px 9px; }
+.legalUpload button { border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:7px 10px; cursor:pointer; white-space:nowrap; }
+.legalUpload button:disabled { cursor:not-allowed; opacity:.48; }
+.legalUpload small { flex-basis:100%; color:var(--text-muted); font-size:10px; }
+.legalUploadError { flex-basis:100%; margin:0; color:var(--danger, #b91c1c) !important; font-size:11px; }
+/* The jobPosting Distribute control (FO-B4). Wraps at 360px: the board list and the
+   status chips flow onto their own lines rather than pushing the card wider. */
+.jobDistribution { display:flex; flex-direction:column; gap:8px; padding:10px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); color:var(--canvas-ink); max-width:100%; min-width:0; }
+.jobDistributionHint { margin:0; color:var(--canvas-muted); font-size:12px; }
+.jobDistributionTitle { font-size:11px; font-weight:700; text-transform:uppercase; color:var(--canvas-muted); }
+.jobDistributionList { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.jobDistributionList li { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; min-width:0; }
+.jobDistributionBoard { font-weight:600; overflow-wrap:anywhere; }
+.jobDistributionStatus { border-radius:var(--radius-full); padding:1px 8px; font-size:11px; border:1px solid var(--canvas-line); }
+.jobDistributionStatus[data-status="posted"] { color:var(--tone-success-ink); background:var(--tone-success-bg); border-color:var(--tone-success-mark); }
+.jobDistributionStatus[data-status="failed"] { color:var(--tone-danger-ink); background:var(--tone-danger-bg); border-color:var(--tone-danger-mark); }
+.jobDistribution small { color:var(--canvas-muted); font-size:11px; overflow-wrap:anywhere; }
+.jobDistribution a { color:var(--canvas-accent); font-size:12px; }
+.jobDistributionBoards { display:flex; flex-wrap:wrap; gap:6px 12px; margin:0; padding:0; border:0; min-width:0; }
+.jobDistributionBoards legend { padding:0; margin-bottom:4px; color:var(--canvas-muted); font-size:11px; }
+.jobDistributionBoards label { display:inline-flex; align-items:center; gap:6px; font-size:12px; min-width:0; }
+.jobDistribution button { align-self:flex-start; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:inherit; padding:7px 10px; cursor:pointer; max-width:100%; }
+.jobDistribution button:disabled { cursor:not-allowed; opacity:.48; }
+.jobDistributionError { margin:0; color:var(--tone-danger-ink) !important; font-size:11px; }
+/* ---- game:the ship-to-device panel ---- */
+/* All colours are theme tokens with literal fallbacks, so the panel reads in
+   both themes; the layout collapses to one column well above 360px. */
+.gamePanel { display:grid; gap:16px; }
+.gamePanelNotice { margin:0; padding:10px 12px; border-radius:var(--radius-md); border:1px solid var(--border,var(--canvas-line)); background:var(--surface-muted,var(--canvas-panel-muted)); color:var(--text-secondary,var(--canvas-muted)); font-size:13px; }
+.gamePanelError { margin:0; padding:10px 12px; border-radius:var(--radius-md); border:1px solid color-mix(in srgb,#e5484d 40%,var(--border,var(--canvas-line))); background:color-mix(in srgb,#e5484d 10%,var(--surface)); color:var(--text-primary,var(--canvas-ink)); font-size:13px; }
+.gamePhoneLead { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; padding:16px; border-radius:var(--radius-lg); border:1px solid var(--border,var(--canvas-line)); background:var(--surface-muted,var(--canvas-panel-muted)); }
+.gamePhoneLead > div:first-child { flex:1 1 260px; min-width:0; }
+.gamePhoneLead h3 { margin:0 0 4px; font-size:15px; color:var(--text-primary,var(--canvas-ink)); }
+.gamePhoneLead p { margin:0 0 8px; font-size:13px; color:var(--text-secondary,var(--canvas-muted)); }
+.gamePhoneLead a { font-size:13px; color:var(--canvas-accent); word-break:break-all; }
+.gameQr { flex:0 0 auto; padding:8px; border-radius:var(--radius-lg); background:#fff; line-height:0; }
+.gameQr svg { display:block; width:176px; height:176px; max-width:40vw; }
+.gameInstallHints { margin:10px 0 0; padding-left:18px; display:grid; gap:4px; font-size:12px; color:var(--text-secondary,var(--canvas-muted)); }
+.gameTargetList { display:grid; gap:12px; }
+.gameTargetCard { padding:14px; border-radius:var(--radius-lg); border:1px solid var(--border,var(--canvas-line)); background:var(--surface); display:grid; gap:10px; }
+.gameTargetCard header { display:flex; gap:10px; align-items:flex-start; }
+.gameTargetCard header > span[aria-hidden] { font-size:18px; color:var(--canvas-accent); line-height:1.2; }
+.gameTargetCard header strong { display:block; font-size:14px; color:var(--text-primary,var(--canvas-ink)); }
+.gameTargetCard header p { margin:2px 0 0; font-size:12px; color:var(--text-secondary,var(--canvas-muted)); }
+.gameZeroSetup { flex:0 0 auto; padding:3px 8px; border-radius:var(--radius-full); font-size:10px; font-weight:650; color:var(--canvas-accent); background:color-mix(in srgb,var(--canvas-accent) 12%,transparent); }
+.gameTargetDetail { margin:0; font-size:12px; color:var(--text-primary,var(--canvas-ink)); }
+.gameTargetFiles { margin:0; font-size:11px; color:var(--text-secondary,var(--canvas-muted)); word-break:break-word; }
+.gameSetupSteps { margin:0; padding-left:16px; display:grid; gap:8px; font-size:12px; }
+.gameSetupSteps strong { display:block; color:var(--text-primary,var(--canvas-ink)); }
+.gameSetupSteps span { color:var(--text-secondary,var(--canvas-muted)); }
+.gameSetupSteps a,.gamePlayLink { color:var(--canvas-accent); font-size:12px; }
+.gamePanelActions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.gamePanelActions button { padding:8px 14px; min-height:36px; border-radius:var(--radius-md); border:1px solid var(--border,var(--canvas-line)); background:var(--surface-muted,var(--canvas-panel-muted)); color:var(--text-primary,var(--canvas-ink)); font-size:13px; font-weight:600; cursor:pointer; }
+.gamePanelActions button:disabled { opacity:.55; cursor:not-allowed; }
+.gameRoblox { display:grid; gap:8px; padding-top:10px; border-top:1px solid var(--border,var(--canvas-line)); }
+.gameRoblox label { display:grid; gap:4px; font-size:12px; color:var(--text-secondary,var(--canvas-muted)); }
+.gameRoblox input { padding:8px 10px; min-height:36px; border-radius:var(--radius-md); border:1px solid var(--border,var(--canvas-line)); background:var(--surface); color:var(--text-primary,var(--canvas-ink)); font-size:13px; }
+@media (max-width:520px) { .gamePhoneLead { flex-direction:column; } .gameQr svg { width:60vw; height:60vw; max-width:none; } }
+/* The accessible outline is opened from the command rail and closes like any other
+   panel, instead of living permanently on the board with no way to dismiss it. */
+.canvasOutline { position:absolute; z-index:16; left:calc(62px + var(--brain-dock-left, 0px)); bottom:calc(var(--composer-space) + 8px); box-sizing:border-box; width:270px; max-height:46%; overflow:auto; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); color:var(--canvas-muted); box-shadow:0 12px 34px var(--canvas-shadow); font-size:12px; }
+.canvasOutline header { position:sticky; top:0; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 10px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
+.canvasOutline header strong { color:var(--canvas-ink); font-size:11px; }
+.canvasOutline header button { width:24px; height:24px; display:grid; place-items:center; padding:0; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font-size:17px; line-height:1; cursor:pointer; }
+.canvasOutline header button:hover,.canvasOutline header button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+/* ── Files library ───────────────────────────────────────────────────────────
+   Everything the session produced, in one dismissible panel that sits where the
+   outline sits. Colours are canvas tokens, so light, dark, and a phone-width
+   board are one definition. */
+.filesPanel {
+  position:absolute; z-index:16;
+  left:calc(62px + var(--brain-dock-left, 0px)); bottom:calc(var(--composer-space) + 8px);
+  /* Wide enough for a drive row — the cloud source lives in this frame too. */
+  box-sizing:border-box; width:312px; max-width:calc(100vw - 96px); max-height:56%; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-lg);
+  background:var(--canvas-panel); color:var(--canvas-muted);
+  box-shadow:0 12px 34px var(--canvas-shadow); font-size:12px;
+}
+.filesPanel header {
+  position:sticky; top:0; z-index:1; display:flex; align-items:center; gap:8px;
+  padding:9px 10px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel);
+}
+.filesPanel header strong { flex:1; color:var(--canvas-ink); font-size:11px; }
+.filesPanel header small { color:var(--canvas-muted); font-size:10px; }
+.filesPanel header button {
+  width:24px; height:24px; display:grid; place-items:center; padding:0;
+  border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font-size:17px; line-height:1; cursor:pointer;
+}
+.filesPanel header button:hover,.filesPanel header button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.filesEmpty { margin:0; padding:14px 12px; color:var(--canvas-ink-soft); font-size:11px; line-height:1.5; }
+
+/* Which source the Files panel is reading — this board, or a connected drive.
+   A segmented pair rather than two chips: these are mutually exclusive views of
+   the same panel, not filters that stack. */
+.panelSources { display:flex; gap:4px; padding:8px 10px 0; }
+.panelSources button {
+  flex:1; min-width:0; min-height:26px; display:flex; align-items:center; justify-content:center; gap:5px;
+  padding:3px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:transparent; color:var(--canvas-muted);
+  font:600 10px inherit; font-family:inherit; white-space:nowrap; cursor:pointer;
+}
+.panelSources button svg { width:13px; height:13px; flex:none; }
+.panelSources button:hover,.panelSources button:focus-visible { color:var(--canvas-ink); border-color:var(--canvas-accent-ink); outline:none; }
+.panelSources button[aria-pressed='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
+
+/* ── Connected-source panels (Miro, social, paid media) ──────────────────────
+   Composes the Files panel's frame rather than restating it: they are all "a
+   thing this workspace is connected to, listed so you can pull it onto the
+   board", and a second visual language would read as a second feature. The two
+   frames were duplicated declaration-for-declaration, which is how one of them
+   ended up without the phone-width override the other has. */
+.drivePanel { composes: filesPanel; }
+
+.driveAccounts { display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px 0; }
+.driveAccounts button {
+  max-width:100%; overflow:hidden; padding:2px 9px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-full);
+  background:transparent; color:var(--canvas-muted);
+  font-size:10px; text-overflow:ellipsis; white-space:nowrap; cursor:pointer;
+}
+/* BOTH attributes, deliberately. `aria-pressed` is what a toggle in a `role="group"`
+   sets (the drive and Miro account switchers) and `aria-selected` is what a `role="tab"`
+   sets (the ads and social panels' tab strips, now via `PanelTabs`). Only the first was
+   here, so every tab strip in the app rendered with no visible selection — three
+   identical pills and no way to tell which one you were on. */
+.driveAccounts button[aria-pressed='true'],
+.driveAccounts button[aria-selected='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
+.driveAccounts button:focus-visible { outline:2px solid var(--canvas-accent-ink); outline-offset:1px; }
+
+/* The walk, not a tree:a drive is arbitrarily deep, so a breadcrumb says where
+   you are and every step back is one tap. Scrolls sideways rather than wrapping
+   into a growing block on a narrow board. */
+.driveCrumbs { display:flex; gap:2px; overflow-x:auto; padding:8px 10px 0; }
+.driveCrumbs button {
+  padding:2px 6px; border:0; border-radius:var(--radius-sm);
+  background:transparent; color:var(--canvas-muted);
+  font-size:10px; white-space:nowrap; cursor:pointer;
+}
+.driveCrumbs button:hover,.driveCrumbs button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.driveCrumbs button[aria-current='page'] { color:var(--canvas-ink); font-weight:650; }
+.driveRow { min-width:0; }
+.driveMore {
+  width:calc(100% - 20px); min-height:30px; margin:0 10px 10px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); font:650 11px inherit; font-family:inherit; cursor:pointer;
+}
+.driveMore:hover,.driveMore:focus-visible { background:var(--canvas-hover); outline:none; }
+
+.socialTargetPicker { display:grid; gap:5px; margin:0; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
+.socialTargetPicker legend { padding:0 4px; color:var(--canvas-ink-soft); font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+.socialTargetPicker label { display:flex; align-items:center; gap:6px; color:var(--canvas-ink); font-size:11px; }
+.socialTargetPicker input { width:auto; min-height:0; }
+.socialTargetPicker small { color:var(--canvas-muted); font-size:10px; }
+/* The picker's whole point is seeing WHICH picture. Sized so a row stays one
+   line at the panel's narrowest, and `object-fit` so a wide render is cropped
+   rather than squashed into something that no longer looks like itself. */
+.socialMediaThumb {
+  width:26px; height:26px; flex:none; object-fit:cover;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel);
+}
+
+.filesList { margin:0; padding:6px; list-style:none; display:grid; gap:3px; }
+.fileRow { display:flex; align-items:center; gap:4px; border-radius:var(--radius-md); }
+.fileRow:hover { background:var(--canvas-hover); }
+.fileOpen {
+  flex:1; min-width:0; display:flex; align-items:center; gap:8px;
+  padding:6px; border:0; border-radius:var(--radius-md); background:none; color:inherit; font:inherit; text-align:left; cursor:pointer;
+}
+.fileOpen:focus-visible,.fileDownload:focus-visible { outline:2px solid var(--canvas-accent-ink); outline-offset:-2px; }
+.fileOpen img { width:30px; height:30px; border-radius:var(--radius-sm); object-fit:cover; }
+.fileIcon {
+  width:30px; height:30px; display:grid; place-items:center; flex:none;
+  border-radius:var(--radius-sm); background:var(--canvas-widget-icon-bg); color:var(--canvas-widget-icon); font-size:13px;
+}
+.fileText { min-width:0; display:grid; gap:1px; }
+.fileText b { color:var(--canvas-ink); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fileText small { color:var(--canvas-muted); font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fileDownload {
+  width:28px; height:28px; flex:none; display:grid; place-items:center;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel); color:var(--canvas-ink); font-size:13px; cursor:pointer;
+}
+.fileDownload:hover { background:var(--canvas-hover); }
+
+@media (max-width:767px) {
+  .filesPanel { left:12px; right:12px; width:auto; max-width:none; max-height:56%; }
+}
+
+.canvasOutline ol { margin:0; padding:8px 10px 10px 26px; }
+.canvasOutline li { margin-bottom:5px; }
+.canvasOutline button { padding:2px 0; border:0; background:none; color:var(--canvas-ink); font:inherit; font-weight:650; text-align:left; cursor:pointer; }
+.canvasOutline span { display:block; font-size:11px; }
+.canvasOutline ul { padding-left:14px; }
+.canvasOutlineEmpty { margin:0; padding:12px 10px; font-size:11px; }
+.canvasOutlineCount { margin:0; padding:7px 10px 0; color:var(--canvas-ink-soft); font-size:10px; }
+
+/* The `scene3d` surface — a prompt/model column beside a preview column,
+   same two-pane shape `studio-embedded`'s own `.bfs-grid` uses, rebuilt here in canvas
+   tokens so it sits beside `.timelineStage`/`.worldStage` as one more object surface
+   rather than a visually foreign panel. */
+.sceneGeneratorStage { min-height:0; flex:1; display:flex; gap:20px; width:min(100%,1200px); margin:0 auto; padding:14px 16px 20px; overflow:auto; }
+
+/* ── Publish to marketplace ──────────────────────────────────────────────────
+   The panel that turns a card on this board into something a stranger can buy
+   and run. Every colour is a canvas token, so the form reads in both themes the
+   same way the board it was opened from does; the fields are a single fluid
+   column so the panel survives its narrow width on a phone. */
+.publishPanel { display:flex; flex-direction:column; gap:14px; padding:4px 2px 18px; }
+.publishField { display:flex; flex-direction:column; gap:5px; font:600 12px inherit; color:var(--canvas-ink); }
+.publishField > span { color:var(--canvas-muted); letter-spacing:.02em; }
+.publishField input,
+.publishField select,
+.publishField textarea {
+  width:100%; box-sizing:border-box; padding:9px 11px; font:inherit; font-size:13px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink);
+}
+/* A native option list paints itself from the UA palette unless it is told not
+   to, which is how a themed select ends up with unreadable rows in one theme. */
+.publishField option { background:var(--canvas-panel); color:var(--canvas-ink); }
+.publishField textarea { resize:vertical; min-height:64px; }
+.publishField input:disabled,
+.publishField select:disabled,
+.publishField textarea:disabled { opacity:.55; cursor:not-allowed; }
+.publishHint { margin:0; font:500 11px inherit; line-height:1.45; color:var(--canvas-muted); }
+.publishSplit {
+  display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px;
+  padding:10px 12px; border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel-muted); font:650 13px inherit; color:var(--canvas-ink);
+}
+.publishActions { display:flex; flex-wrap:wrap; gap:8px; margin-top:2px; }
+.publishActions > button { flex:1 1 160px; }
+.publishError {
+  margin:0; padding:9px 12px; border-radius:var(--radius-md);
+  background:var(--tone-danger-bg); color:var(--tone-danger-ink);
+  border-left:3px solid var(--tone-danger-mark); font:600 12px inherit;
+}
+.publishSuccess {
+  margin:0; padding:9px 12px; border-radius:var(--radius-md);
+  background:var(--tone-success-bg); color:var(--tone-success-ink);
+  border-left:3px solid var(--tone-success-mark); font:600 12px inherit; word-break:break-all;
+}
+.publishSuccess a { color:inherit; }
+
+/* ── Build / Stage / Live ──────────────────────────────────────────────────────
+   The release rail and the staging surface. Every colour is a canvas token, so
+   the panel reads in both themes exactly as the board it sits over does, and the
+   layout is fluid rather than fixed-width because this panel is resizable and is
+   opened on a phone. */
+.releasePanel { display:flex; flex-direction:column; gap:14px; padding:4px 2px 18px; }
+.releaseRail { display:flex; flex-direction:column; gap:8px; }
+.releaseItem {
+  display:flex; flex-direction:column; gap:6px; padding:10px 12px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel-muted);
+}
+.releaseItem[data-current='true'] {
+  border-color:var(--canvas-accent); background:var(--info-bg);
+}
+.releaseTop { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.releaseVersion { font:700 12px var(--font-mono); letter-spacing:.02em; color:var(--canvas-ink); }
+.releaseWhen { margin-left:auto; font:500 10px var(--font-mono); color:var(--canvas-muted); }
+.releaseNote { margin:0; font:500 11px inherit; line-height:1.45; color:var(--canvas-muted); }
+.releaseActions { display:flex; flex-wrap:wrap; gap:6px; }
+.releaseActions > button { flex:0 1 auto; }
+
+.releaseState {
+  display:inline-flex; align-items:center; gap:5px; padding:2px 8px;
+  border-radius:var(--radius-full); font:700 10px var(--font-mono);
+  letter-spacing:.06em; text-transform:uppercase;
+  border:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-muted);
+}
+.releaseState[data-state='live']       { color:var(--success-text, var(--success)); background:var(--success-bg); border-color:transparent; }
+.releaseState[data-state='staged']     { color:var(--warning-text, var(--warning)); background:var(--warning-bg); border-color:transparent; }
+.releaseState[data-state='draft']      { color:var(--info-text, var(--info)); background:var(--info-bg); border-color:transparent; }
+.releaseState[data-state='superseded'] { color:var(--canvas-muted); }
+
+.checkGroup { display:flex; flex-direction:column; gap:2px; }
+.checkGroupHead {
+  display:flex; align-items:center; gap:8px; padding-bottom:4px;
+  font:600 10px var(--font-mono); letter-spacing:.13em;
+  text-transform:uppercase; color:var(--canvas-muted);
+}
+.checkGroupHead > span:last-child { margin-left:auto; }
+.checkRow {
+  display:grid; grid-template-columns:16px minmax(0, 1fr); gap:9px;
+  padding:8px 0; border-bottom:1px solid var(--canvas-line); align-items:start;
+}
+.checkRow:last-child { border-bottom:0; }
+.checkMark { font:800 12px inherit; line-height:1.4; color:var(--canvas-muted); }
+.checkMark[data-severity='pass']  { color:var(--success); }
+.checkMark[data-severity='warn']  { color:var(--warning); }
+.checkMark[data-severity='block'] { color:var(--error); }
+.checkLabel { display:block; font:600 12px inherit; color:var(--canvas-ink); }
+.checkDetail { display:block; margin-top:2px; font:500 11px inherit; line-height:1.45; color:var(--canvas-muted); }
+
+.releaseVerdict {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  padding:10px 12px; border-radius:var(--radius-md);
+  border-left:3px solid var(--canvas-accent); background:var(--canvas-panel-muted);
+  font:500 12px inherit; line-height:1.45; color:var(--canvas-ink);
+}
+.releaseVerdict[data-blocked='true'] { border-left-color:var(--error); }
+
+.releaseHarness {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  font:500 11px inherit; color:var(--canvas-muted);
+}
+.releaseStripped {
+  margin:0; font:500 11px var(--font-mono); line-height:1.6;
+  color:var(--canvas-muted); word-break:break-word;
+}
+
+/* ── THE OBJECT PICKER ────────────────────────────────────────────────────────────
+   One component behind the node's `+` and the bar's category circles. Fixed for
+   the same reason the panel is. */
+.objectPicker {
+  position: fixed;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  width: min(400px, calc(100vw - 24px));
+  max-height: min(360px, calc(100vh - 120px));
+  overflow: hidden;
+  border: 1px solid var(--canvas-line);
+  border-radius: var(--radius-lg);
+  background: var(--canvas-panel);
+  color: var(--canvas-ink);
+  box-shadow: 0 22px 60px var(--canvas-shadow);
+}
+.objectPickerSearch { display: flex; align-items: center; gap: 7px; padding: 9px 10px; border-bottom: 1px solid var(--canvas-line); }
+.objectPickerSearch input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--canvas-line);
+  border-radius: var(--radius-sm);
+  background: var(--canvas-panel-muted);
+  color: var(--canvas-ink);
+  font-family: inherit;
+  font-size: 12px;
+}
+.objectPickerClose {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--canvas-muted);
+  cursor: pointer;
+}
+.objectPickerClose:hover, .objectPickerClose:focus-visible { background: var(--canvas-hover); color: var(--canvas-ink); outline: none; }
+.objectPickerRows { display: grid; grid-template-columns: 128px minmax(0, 1fr); min-height: 0; }
+.objectPickerRail {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 6px 0;
+  border-right: 1px solid var(--canvas-line);
+  background: var(--canvas-panel-muted);
+}
+.objectPickerRail button {
+  display: block;
+  width: 100%;
+  padding: 6px 11px;
+  border: 0;
+  background: transparent;
+  color: var(--canvas-ink-soft);
+  font-family: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.objectPickerRail button:hover { background: var(--canvas-hover); color: var(--canvas-ink); }
+.objectPickerRail button[aria-pressed='true'] { background: var(--canvas-panel); color: var(--canvas-accent-ink); font-weight: 650; }
+.objectPickerList { display: flex; flex-direction: column; overflow-y: auto; padding: 5px 0; }
+.objectPickerList button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 11px;
+  border: 0;
+  background: transparent;
+  color: var(--canvas-ink);
+  font-family: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.objectPickerList button:hover, .objectPickerList button:focus-visible { background: var(--canvas-hover); outline: none; }
+.objectPickerList b { font-weight: 600; }
+.objectPickerList small { display: block; color: var(--canvas-ink-soft); font-size: 10px; }
+.objectPickerIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--canvas-widget-icon-bg);
+  color: var(--canvas-widget-icon);
+}

@@ -34,6 +34,7 @@ import type {
   InvoicePaymentLinkOpts,
   MarketplaceListingCheckoutOpts,
   OneTimeCheckoutOpts,
+  SubscriptionCheckoutOpts,
   PaymentProvider,
   CheckoutSessionOpts,
   CheckoutSessionResult,
@@ -42,6 +43,7 @@ import type {
   WebhookEvent,
 } from './PaymentProvider';
 import { PaymentNotConfiguredError } from './PaymentProvider';
+import { checkoutSessionParams, type CheckoutLineItem, type HostedCheckoutDescriptor } from './stripeCheckoutSession';
 import { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 import { timingSafeEqual } from '../crypto/constantTime';
 import { hmacHex } from '../crypto/hmac';
@@ -80,32 +82,37 @@ export class StripeProvider implements PaymentProvider {
     if (!this.config.webhookSecret) throw new PaymentNotConfiguredError('STRIPE_WEBHOOK_SECRET');
   }
 
+  /**
+   * Open a hosted checkout from a descriptor — the ONE way every flow in this
+   * class reaches `POST /v1/checkout/sessions`. Each public method below is only
+   * the description of its session; the encoding lives in `checkoutSessionParams`.
+   */
+  private async openCheckout(
+    descriptor: HostedCheckoutDescriptor,
+    failure: string,
+  ): Promise<{ id: string; url: string; customer?: string | null }> {
+    this.requireConfigured();
+    return this.stripePost<{ id: string; url: string; customer?: string | null }>(
+      'https://api.stripe.com/v1/checkout/sessions',
+      checkoutSessionParams(descriptor),
+      failure,
+      descriptor.idempotencyKey,
+    );
+  }
+
   async createCheckoutSession(opts: CheckoutSessionOpts): Promise<CheckoutSessionResult> {
     this.requireConfigured();
     const isTeams = opts.targetPlan === TenantPlan.TEAMS;
     const seats = isTeams ? (opts.seats ?? 1) : 1;
+    const targetPlan = opts.targetPlan ?? TenantPlan.PRO;
 
     const priceId = (isTeams
       ? (opts.billingCycle === 'yearly' ? this.config.priceTeamsYearly : this.config.priceTeamsMonthly)
       : (opts.billingCycle === 'yearly' ? this.config.priceProYearly : this.config.priceProMonthly)).trim();
 
-    const params = new URLSearchParams({
-      mode: 'subscription',
-      'line_items[0][quantity]': String(seats),
-      customer_email: opts.billingEmail,
-      success_url: opts.successUrl,
-      cancel_url: opts.cancelUrl,
-      'metadata[tenantId]': String(opts.tenantId),
-      'metadata[billingCycle]': opts.billingCycle,
-      'metadata[targetPlan]': opts.targetPlan ?? TenantPlan.PRO,
-      'metadata[seats]': String(seats),
-      'subscription_data[metadata][tenantId]': String(opts.tenantId),
-      'subscription_data[metadata][targetPlan]': opts.targetPlan ?? TenantPlan.PRO,
-      'subscription_data[metadata][seats]': String(seats),
-    });
-
+    let line: CheckoutLineItem;
     if (priceId) {
-      params.set('line_items[0][price]', priceId);
+      line = { quantity: seats, priceId };
     } else {
       const currency = opts.currency?.trim().toLowerCase();
       if (!currency || !Number.isInteger(opts.unitAmountCents) || (opts.unitAmountCents ?? 0) <= 0 || !opts.productName?.trim()) {
@@ -115,44 +122,38 @@ export class StripeProvider implements PaymentProvider {
             : (opts.billingCycle === 'yearly' ? 'STRIPE_PRICE_PRO_YEARLY or published Pro yearly pricing' : 'STRIPE_PRICE_PRO_MONTHLY or published Pro monthly pricing'),
         );
       }
-      params.set('line_items[0][price_data][currency]', currency);
-      params.set('line_items[0][price_data][unit_amount]', String(opts.unitAmountCents));
-      params.set('line_items[0][price_data][recurring][interval]', opts.billingCycle === 'yearly' ? 'year' : 'month');
-      params.set('line_items[0][price_data][product_data][name]', opts.productName.trim());
+      line = {
+        quantity: seats,
+        currency,
+        unitAmountCents: opts.unitAmountCents,
+        interval: opts.billingCycle === 'yearly' ? 'year' : 'month',
+        name: opts.productName.trim(),
+      };
     }
 
-    if (opts.discount) {
-      const couponId = await this.ensureDiscountCoupon(opts.discount);
-      params.set('discounts[0][coupon]', couponId);
-      params.set('metadata[discountRedemptionId]', opts.discount.redemptionId);
-      params.set('metadata[discountCode]', opts.discount.code);
-      params.set('subscription_data[metadata][discountRedemptionId]', opts.discount.redemptionId);
-      params.set('subscription_data[metadata][discountCode]', opts.discount.code);
-    }
-    if (opts.salesReferralId) {
-      params.set('metadata[salesReferralId]', opts.salesReferralId);
-      params.set('subscription_data[metadata][salesReferralId]', opts.salesReferralId);
-    }
-
-    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.config.secretKey}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: params.toString(),
-    });
-
-    if (!res.ok) {
-      const err = await res.json() as { error?: { message?: string } };
-      throw new Error(`Stripe checkout error: ${err?.error?.message ?? res.status}`);
-    }
-
-    const session = await res.json() as {
-      id: string;
-      url: string;
-      customer: string | null;
+    const metadata: Record<string, string> = {
+      tenantId: String(opts.tenantId),
+      billingCycle: opts.billingCycle,
+      targetPlan,
+      seats: String(seats),
     };
+    const extraParams: Record<string, string> = {};
+    if (opts.discount) {
+      extraParams['discounts[0][coupon]'] = await this.ensureDiscountCoupon(opts.discount);
+      metadata.discountRedemptionId = opts.discount.redemptionId;
+      metadata.discountCode = opts.discount.code;
+    }
+    if (opts.salesReferralId) metadata.salesReferralId = opts.salesReferralId;
+
+    const session = await this.openCheckout({
+      mode: 'subscription',
+      lineItems: [line],
+      customerEmail: opts.billingEmail,
+      successUrl: opts.successUrl,
+      cancelUrl: opts.cancelUrl,
+      metadata,
+      extraParams,
+    }, 'Stripe checkout error');
 
     return {
       sessionId: session.id,
@@ -163,64 +164,43 @@ export class StripeProvider implements PaymentProvider {
   }
 
   async createBusinessPhoneCheckoutSession(opts: BusinessPhoneCheckoutOpts): Promise<CheckoutSessionResult> {
-    this.requireConfigured();
-    const currency = opts.currency.toLowerCase();
-    const params = new URLSearchParams({
-      mode: 'subscription', customer_email: opts.billingEmail, success_url: opts.successUrl, cancel_url: opts.cancelUrl,
-      'line_items[0][quantity]': '1', 'line_items[0][price_data][currency]': currency,
-      'line_items[0][price_data][unit_amount]': String(opts.activationCents),
-      'line_items[0][price_data][product_data][name]': 'BuilderForce Business Phone activation',
-      'line_items[1][quantity]': '1', 'line_items[1][price_data][currency]': currency,
-      'line_items[1][price_data][unit_amount]': String(opts.monthlyCents),
-      'line_items[1][price_data][recurring][interval]': 'month',
-      'line_items[1][price_data][product_data][name]': 'BuilderForce Business Phone',
-      'metadata[tenantId]': String(opts.tenantId), 'metadata[purchaseKind]': 'business_phone',
-      'metadata[cartId]': opts.cartId,
-      'metadata[activationCents]': String(opts.activationCents), 'metadata[monthlyCents]': String(opts.monthlyCents),
-      'subscription_data[metadata][tenantId]': String(opts.tenantId),
-      'subscription_data[metadata][purchaseKind]': 'business_phone',
-      'subscription_data[metadata][cartId]': opts.cartId,
-      'subscription_data[metadata][activationCents]': String(opts.activationCents),
-      'subscription_data[metadata][monthlyCents]': String(opts.monthlyCents),
-    });
-    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-      method: 'POST', headers: { Authorization: `Bearer ${this.config.secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(),
-    });
-    if (!res.ok) {
-      const err = await res.json() as { error?: { message?: string } };
-      throw new Error(`Stripe business-phone checkout error: ${err.error?.message ?? res.status}`);
-    }
-    const session = await res.json() as { id: string; url: string; customer: string | null };
+    const session = await this.openCheckout({
+      mode: 'subscription',
+      customerEmail: opts.billingEmail,
+      successUrl: opts.successUrl,
+      cancelUrl: opts.cancelUrl,
+      // Activation is charged once (no interval); the service itself bills monthly.
+      lineItems: [
+        { quantity: 1, currency: opts.currency, unitAmountCents: opts.activationCents, name: 'BuilderForce Business Phone activation' },
+        { quantity: 1, currency: opts.currency, unitAmountCents: opts.monthlyCents, interval: 'month', name: 'BuilderForce Business Phone' },
+      ],
+      metadata: {
+        tenantId: String(opts.tenantId),
+        purchaseKind: 'business_phone',
+        cartId: opts.cartId,
+        activationCents: String(opts.activationCents),
+        monthlyCents: String(opts.monthlyCents),
+      },
+    }, 'Stripe business-phone checkout error');
     return { sessionId: session.id, checkoutUrl: session.url, externalCustomerId: session.customer ?? null, externalSubscriptionId: null };
   }
 
   async createManagedAgentHostCheckoutSession(opts: ManagedAgentHostCheckoutOpts): Promise<CheckoutSessionResult> {
-    this.requireConfigured();
-    const currency = opts.currency.toLowerCase();
     const quantity = billingQuantity(opts.quantity);
-    const params = new URLSearchParams({
-      mode: 'subscription', customer_email: opts.billingEmail, success_url: opts.successUrl, cancel_url: opts.cancelUrl,
-      'line_items[0][quantity]': String(quantity), 'line_items[0][price_data][currency]': currency,
-      'line_items[0][price_data][unit_amount]': String(opts.monthlyCents),
-      'line_items[0][price_data][recurring][interval]': 'month',
-      'line_items[0][price_data][product_data][name]': 'BuilderForce Managed AgentHost',
-      'metadata[tenantId]': String(opts.tenantId), 'metadata[purchaseKind]': 'managed_agent_host',
-      'metadata[cartId]': opts.cartId,
-      'metadata[monthlyCents]': String(opts.monthlyCents), 'metadata[quantity]': String(quantity),
-      'subscription_data[metadata][tenantId]': String(opts.tenantId),
-      'subscription_data[metadata][purchaseKind]': 'managed_agent_host',
-      'subscription_data[metadata][cartId]': opts.cartId,
-      'subscription_data[metadata][monthlyCents]': String(opts.monthlyCents),
-      'subscription_data[metadata][quantity]': String(quantity),
-    });
-    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-      method: 'POST', headers: { Authorization: `Bearer ${this.config.secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(),
-    });
-    if (!res.ok) {
-      const err = await res.json() as { error?: { message?: string } };
-      throw new Error(`Stripe managed-agent-host checkout error: ${err.error?.message ?? res.status}`);
-    }
-    const session = await res.json() as { id: string; url: string; customer: string | null };
+    const session = await this.openCheckout({
+      mode: 'subscription',
+      customerEmail: opts.billingEmail,
+      successUrl: opts.successUrl,
+      cancelUrl: opts.cancelUrl,
+      lineItems: [{ quantity, currency: opts.currency, unitAmountCents: opts.monthlyCents, interval: 'month', name: 'BuilderForce Managed AgentHost' }],
+      metadata: {
+        tenantId: String(opts.tenantId),
+        purchaseKind: 'managed_agent_host',
+        cartId: opts.cartId,
+        monthlyCents: String(opts.monthlyCents),
+        quantity: String(quantity),
+      },
+    }, 'Stripe managed-agent-host checkout error');
     return { sessionId: session.id, checkoutUrl: session.url, externalCustomerId: session.customer ?? null, externalSubscriptionId: null };
   }
 
@@ -253,47 +233,24 @@ export class StripeProvider implements PaymentProvider {
   /**
    * A ONE-OFF payment — the marketplace's shape, not a subscription.
    *
-   * The two methods above both create recurring sessions; a creation someone
-   * bought once is `mode: 'payment'`, and the difference is not cosmetic: a
-   * subscription session produces no `payment_status` to verify against and would
-   * bill the buyer again next month for a thing they already own.
+   * A creation someone bought once is `mode: 'payment'`, and the difference is not
+   * cosmetic: a subscription session produces no `payment_status` to verify against
+   * and would bill the buyer again next month for a thing they already own.
    *
    * Everything the grant needs is stamped into `metadata`, because the redirect
    * back to our site proves nothing on its own. `retrieveCheckoutSession` reads it
    * back FROM STRIPE, which is the only party that knows whether money moved.
    */
   async createOneTimeCheckoutSession(opts: OneTimeCheckoutOpts): Promise<{ sessionId: string; checkoutUrl: string }> {
-    this.requireConfigured();
-    const quantity = billingQuantity(opts.quantity);
-    const params = new URLSearchParams({
+    const session = await this.openCheckout({
       mode: 'payment',
-      success_url: opts.successUrl,
-      cancel_url: opts.cancelUrl,
-      'line_items[0][quantity]': String(quantity),
-      'line_items[0][price_data][currency]': opts.currency.toLowerCase(),
-      'line_items[0][price_data][unit_amount]': String(opts.amountCents),
-      'line_items[0][price_data][product_data][name]': opts.productName.slice(0, 250),
-    });
-    if (opts.billingEmail) params.set('customer_email', opts.billingEmail);
-    for (const [key, value] of Object.entries(opts.metadata)) {
-      params.set(`metadata[${key}]`, value);
-      params.set(`payment_intent_data[metadata][${key}]`, value);
-    }
-
-    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.config.secretKey}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Idempotency-Key': opts.idempotencyKey,
-      },
-      body: params.toString(),
-    });
-    if (!res.ok) {
-      const err = await res.json() as { error?: { message?: string } };
-      throw new Error(`Stripe checkout error: ${err.error?.message ?? res.status}`);
-    }
-    const session = await res.json() as { id: string; url: string };
+      customerEmail: opts.billingEmail ?? null,
+      successUrl: opts.successUrl,
+      cancelUrl: opts.cancelUrl,
+      lineItems: [{ quantity: billingQuantity(opts.quantity), currency: opts.currency, unitAmountCents: opts.amountCents, name: opts.productName }],
+      metadata: opts.metadata,
+      idempotencyKey: opts.idempotencyKey,
+    }, 'Stripe checkout error');
     return { sessionId: session.id, checkoutUrl: session.url };
   }
 
@@ -303,57 +260,20 @@ export class StripeProvider implements PaymentProvider {
    * `mode=subscription` with inline `price_data` carrying a `recurring[interval]`
    * — no pre-created Price object, because the seller sets the price on their
    * listing and changes it whenever they like; a Price per listing per change is
-   * a catalogue we would then have to reconcile.
-   *
-   * The metadata is stamped on the SESSION and on the `subscription_data`, so it
-   * survives onto the subscription object itself: the renewal invoices arrive
-   * months later carrying no session, and without it there is nothing on them
-   * saying which app or which subscriber they belong to.
+   * a catalogue we would then have to reconcile. The descriptor mirrors the
+   * metadata onto the subscription, so a renewal invoice — which arrives months
+   * later with no session — still says which app and which subscriber it is for.
    */
-  async createSubscriptionCheckoutSession(opts: {
-    amountCents: number;
-    currency: string;
-    productName: string;
-    billingEmail?: string | null;
-    interval: 'month' | 'year';
-    successUrl: string;
-    cancelUrl: string;
-    metadata: Record<string, string>;
-    idempotencyKey: string;
-  }): Promise<{ sessionId: string; checkoutUrl: string }> {
-    this.requireConfigured();
-    const params = new URLSearchParams({
+  async createSubscriptionCheckoutSession(opts: SubscriptionCheckoutOpts): Promise<{ sessionId: string; checkoutUrl: string }> {
+    const session = await this.openCheckout({
       mode: 'subscription',
-      success_url: opts.successUrl,
-      cancel_url: opts.cancelUrl,
-      'line_items[0][quantity]': '1',
-      'line_items[0][price_data][currency]': opts.currency.toLowerCase(),
-      'line_items[0][price_data][unit_amount]': String(opts.amountCents),
-      'line_items[0][price_data][recurring][interval]': opts.interval,
-      'line_items[0][price_data][product_data][name]': opts.productName.slice(0, 250),
-    });
-    if (opts.billingEmail) params.set('customer_email', opts.billingEmail);
-    for (const [key, value] of Object.entries(opts.metadata)) {
-      params.set(`metadata[${key}]`, value);
-      // Carried onto the subscription so a renewal invoice — which arrives with
-      // no session id at all — still says what it is for.
-      params.set(`subscription_data[metadata][${key}]`, value);
-    }
-
-    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.config.secretKey}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Idempotency-Key': opts.idempotencyKey,
-      },
-      body: params.toString(),
-    });
-    if (!res.ok) {
-      const err = await res.json() as { error?: { message?: string } };
-      throw new Error(`Stripe subscription checkout error: ${err.error?.message ?? res.status}`);
-    }
-    const session = await res.json() as { id: string; url: string };
+      customerEmail: opts.billingEmail ?? null,
+      successUrl: opts.successUrl,
+      cancelUrl: opts.cancelUrl,
+      lineItems: [{ quantity: 1, currency: opts.currency, unitAmountCents: opts.amountCents, interval: opts.interval, name: opts.productName }],
+      metadata: opts.metadata,
+      idempotencyKey: opts.idempotencyKey,
+    }, 'Stripe subscription checkout error');
     return { sessionId: session.id, checkoutUrl: session.url };
   }
 
@@ -452,29 +372,19 @@ export class StripeProvider implements PaymentProvider {
    * thing to add without saying so on a pricing page.
    */
   async createInvoicePaymentLink(opts: InvoicePaymentLinkOpts): Promise<{ sessionId: string; checkoutUrl: string }> {
-    this.requireConfigured();
-    const params = new URLSearchParams({
+    const session = await this.openCheckout({
       mode: 'payment',
-      success_url: opts.successUrl,
-      cancel_url: opts.cancelUrl,
-      'line_items[0][quantity]': '1',
-      'line_items[0][price_data][currency]': opts.currency.toLowerCase(),
-      'line_items[0][price_data][unit_amount]': String(opts.amountCents),
-      'line_items[0][price_data][product_data][name]': opts.productName.slice(0, 250),
-      'payment_intent_data[transfer_data][destination]': opts.merchantAccountId,
-      'payment_intent_data[on_behalf_of]': opts.merchantAccountId,
-    });
-    if (opts.billingEmail) params.set('customer_email', opts.billingEmail);
-    for (const [key, value] of Object.entries(opts.metadata)) {
-      params.set(`metadata[${key}]`, value);
-      params.set(`payment_intent_data[metadata][${key}]`, value);
-    }
-    const session = await this.stripePost<{ id: string; url: string }>(
-      'https://api.stripe.com/v1/checkout/sessions',
-      params,
-      'Stripe invoice payment link error',
-      opts.idempotencyKey,
-    );
+      customerEmail: opts.billingEmail ?? null,
+      successUrl: opts.successUrl,
+      cancelUrl: opts.cancelUrl,
+      lineItems: [{ quantity: 1, currency: opts.currency, unitAmountCents: opts.amountCents, name: opts.productName }],
+      metadata: opts.metadata,
+      extraParams: {
+        'payment_intent_data[transfer_data][destination]': opts.merchantAccountId,
+        'payment_intent_data[on_behalf_of]': opts.merchantAccountId,
+      },
+      idempotencyKey: opts.idempotencyKey,
+    }, 'Stripe invoice payment link error');
     return { sessionId: session.id, checkoutUrl: session.url };
   }
 
@@ -790,34 +700,21 @@ export class StripeProvider implements PaymentProvider {
         // `tenantId` (in addition to `buyerTenantId`) on the session is what
         // lets ownFlow fill `event.tenantId`.
 
-        // A KNOWLEDGE listing sale. Branched here with the other two `mode: 'payment'`
-        // purchases and for the same structural reason: the subscription mapping
-        // below would otherwise read a plan activation out of a one-off sale.
-        if (meta['purchaseKind'] === 'knowledge_listing') {
-          const buyerTenantId = Number(meta['buyerTenantId']);
-          return {
-            type: 'knowledge.purchased',
-            purchaseKind: 'knowledge_listing',
-            checkoutSessionId: obj['id'] as string,
-            buyerUserId: meta['buyerUserId'],
-            ...(Number.isInteger(buyerTenantId) && buyerTenantId > 0 ? { tenantId: buyerTenantId } : {}),
-            externalCustomerId: customer ?? '',
-            externalSubscriptionId: '',
-            billingEmail: (obj['customer_email'] as string | undefined) ?? customerDetails?.['email'],
-            raw: event,
-          };
-        }
+        // A knowledge listing (`knowledge_listing`) is no longer branched here: it
+        // falls through to the self-named ownFlow below and the purchase registry
+        // settles it by kind, like every other pay-once flow.
 
-        // A TENANT's own invoice, paid by THEIR customer (FO-C4). Branched with the
-        // marketplace sale and for the same structural reason: it is `mode: 'payment'`
-        // with no subscription, so the plan mapping below would otherwise read a
-        // Builderforce plan activation out of somebody else's receivable.
+        // A TENANT's own invoice, paid by THEIR customer (FO-C4). Settled by the
+        // purchase registry like any self-named purchase, but it keeps its OWN event
+        // name: `invoice.paid` is what workspace `integration` triggers subscribe to,
+        // and the tenant on it is the SELLER (`invoiceTenantId`), not a buyer.
         if (meta['purchaseKind'] === 'tenant_invoice') {
           const sellerTenantId = Number(meta['invoiceTenantId']);
           return {
             type: 'invoice.paid',
+            purchaseKind: 'tenant_invoice',
             checkoutSessionId: obj['id'] as string,
-            invoiceRef: meta['invoiceRef'],
+            metadata: meta,
             ...(Number.isInteger(sellerTenantId) && sellerTenantId > 0 ? { tenantId: sellerTenantId } : {}),
             externalCustomerId: customer ?? '',
             externalSubscriptionId: '',
