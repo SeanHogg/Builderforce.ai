@@ -97,7 +97,7 @@ import {
   assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey,
 } from './cloudAgentTools';
 import {
-  CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, filterByGlob, applyStringEdit, editFacts,
+  CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, filterByGlobInScope, applyStringEdit, editFacts,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type PolicyGate, type AgentExecParams, type Capability,
   type PrdWriteCapability, type PrdUpdateResult,
 } from '@builderforce/agent-tools';

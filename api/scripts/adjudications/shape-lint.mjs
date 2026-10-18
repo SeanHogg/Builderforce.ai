@@ -21,6 +21,16 @@
  * belongs in the baseline as work. If no, the argument goes here.
  */
 export default {
+  "evermind_learning_runs":
+    'a ledger entry for one text-learn, not an execution the platform queues or ' +
+      'retries: it is written once, synchronously, after the weight update already ' +
+      'succeeded, and has no status, attempt or duration. What it does carry is ' +
+      '`project_id` as a cascading foreign key and an indexed (tenant, project) scope ' +
+      'that the extraction-rate key result counts over, plus `produced`, the boolean that ' +
+      'count filters on. `runs` has no project key, so folding it in would orphan rows ' +
+      'on project delete and push `produced` into an `output` blob the aggregate cannot ' +
+      'index. `evermind_learning_candidates.run_id` also cascades from it.',
+
   "pay_runs":
     'the kernel `runs` primitive is an EXECUTION — it has an attempt number, a parent ' +
       'run, a queued/running/succeeded status and jsonb input/output, because it models ' +

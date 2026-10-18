@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { ApiRequestError } from '@/lib/apiClient';
@@ -122,23 +120,23 @@ const panel: CSSProperties = {
   overflow: 'auto',
   borderBottom: '1px solid var(--border, rgba(255,255,255,0.08))',
   padding: '8px 10px',
-  fontSize: 12,
+  fontSize: 'var(--font-size-small)',
 };
 const head: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 };
 const title: CSSProperties = { fontWeight: 600 };
 const meta: CSSProperties = { margin: '4px 0', opacity: 0.75 };
-const errLine: CSSProperties = { margin: '4px 0', color: 'var(--danger, #e55)' };
+const errLine: CSSProperties = { margin: '4px 0', color: 'var(--danger)' };
 const list: CSSProperties = { listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 };
 const item: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 };
 const statement: CSSProperties = { lineHeight: 1.35 };
-const warn: CSSProperties = { color: 'var(--warning, #c90)', fontSize: 11 };
+const warn: CSSProperties = { color: 'var(--warning)', fontSize: 'var(--font-size-eyebrow)' };
 const actions: CSSProperties = { display: 'flex', gap: 6, flexWrap: 'wrap' };
 const chip: CSSProperties = {
   border: '1px solid var(--border, rgba(255,255,255,0.16))',
   background: 'transparent',
   color: 'inherit',
-  borderRadius: 999,
+  borderRadius: 'var(--radius-full)',
   padding: '2px 8px',
-  fontSize: 11,
+  fontSize: 'var(--font-size-eyebrow)',
   cursor: 'pointer',
 };

@@ -28,6 +28,7 @@ import { isExpired } from '../../domain/memory/memoryScope';
 import { queryTerms } from '../../domain/shared/queryTerms';
 import { sha256Hex } from '../../domain/shared/hash';
 import { clamp01 } from '../../domain/shared/numbers';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 const RECALL_DEFAULT = 6;
 const RECALL_MAX = 20;
@@ -217,7 +218,10 @@ export async function upsertProjectFact(
   // embedding outage is the worse failure of the two; the vector is a cache.
   const now = new Date();
   const vector = toVectorLiteral(
-    await embedMemoryText(env, memoryEmbeddingText(k, c)).catch(() => null) ?? [],
+    await embedMemoryText(env, memoryEmbeddingText(k, c)).catch((err: unknown) => {
+      reportCaughtError(err, { source: 'project-facts', operation: 'embed-on-write', level: 'warning', context: { tenantId, projectId } });
+      return null;
+    }) ?? [],
   );
   const embeddingFields = vector
     ? { embedding: vector, embeddingModel: MEMORY_EMBEDDING_MODEL, embeddedAt: now }
@@ -254,7 +258,9 @@ export async function upsertProjectFact(
           // cannot use an index.
           sql`lower(${projectFacts.fileAnchors}->0->>'path') IN (${sql.join(anchors.map((p) => sql`${p}`), sql`, `)})`,
         ))
-        .catch(() => undefined);
+        .catch((err: unknown) => {
+          reportCaughtError(err, { source: 'project-facts', operation: 'supersede-by-anchor', level: 'warning', context: { tenantId, projectId } });
+        });
     }
   }
 
@@ -412,7 +418,10 @@ export async function recallProjectFacts(
           projectId,
           query,
           pull,
-        ).catch(() => [] as SemanticFactRow[]);
+        ).catch((err: unknown): SemanticFactRow[] => {
+          reportCaughtError(err, { source: 'project-facts', operation: 'semantic-recall', level: 'warning', context: { tenantId, projectId } });
+          return [];
+        });
 
         // Fused ranking, identical weights to `memoryService`'s union recall (0.7
         // semantic / 0.3 lexical) so a fact means the same score wherever it is read.

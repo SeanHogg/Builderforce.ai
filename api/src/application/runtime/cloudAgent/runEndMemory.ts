@@ -36,7 +36,9 @@ export type RunVerifySurface = 'durable' | 'container' | 'github_actions' | 'on-
 
 /** Surfaces with a real shell — the ones that may RUN a check rather than only
  *  record one. A chat reply and a DO worker have none, and must never fake one. */
-const SHELL_SURFACES: ReadonlySet<RunVerifySurface> = new Set<RunVerifySurface>(['container', 'github_actions', 'on-prem']);
+type ShellSurface = Exclude<RunVerifySurface, 'durable' | 'brain-reply'>;
+const SHELL_SURFACES: ReadonlySet<RunVerifySurface> = new Set<ShellSurface>(['container', 'github_actions', 'on-prem']);
+const hasShell = (surface: RunVerifySurface): surface is ShellSurface => SHELL_SURFACES.has(surface);
 
 export interface RunVerifyInput {
   /** WHICH runtime ran it — the surface is part of the recorded verdict. */
@@ -63,7 +65,7 @@ export interface RunVerifyInput {
 export function runVerifyPhase(input: RunVerifyInput): InRunVerifyOutcome {
   // A shell-less surface can only RECORD checks its caller already ran; handing it a
   // runner would let a chat reply claim a test run that never happened.
-  if (!SHELL_SURFACES.has(input.surface)) {
+  if (!hasShell(input.surface)) {
     return inRunVerifyOutcome({
       surface: 'durable',
       writtenPaths: input.writtenPaths ?? [],
