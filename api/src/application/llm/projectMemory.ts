@@ -24,7 +24,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getProjectEvermindHead, resolveEffectiveEvermindProjectId, recordEvermindServeOutcome } from './projectEvermind';
-import { getProjectFactRecordByKey, upsertProjectFact, QA_CACHE_SOURCE, type FactOriginCost } from './projectFacts';
+import { anchorsAreStale, getProjectFactRecordByKey, hostDirectoryHashReader, upsertProjectFact, QA_CACHE_SOURCE, QA_CACHE_TTL_MS, type FactFileAnchor, type FactOriginCost } from './projectFacts';
 import { EVERMIND_ANSWER_MIN_CHARS, isServableText } from '@seanhogg/builderforce-memory/evermind';
 import { memoryReplayable, promisesUnfinishedWork } from '@builderforce/agent-stall';
 
@@ -148,7 +148,12 @@ export async function resolveMemoryAnswer(
   // 1) Exact-repeat Q&A cache.
   const cached = await getProjectFactRecordByKey(env, db, tenantId, projectId, qaCacheKey(q)).catch(() => null);
   if (cached && cached.content.trim().length > 0) {
-    return { text: cached.content.trim(), source: 'qa-cache', ...(cached.origin ? { costBasis: cached.origin } : {}) };
+    // Requirement 5: a cached answer about a file that has since changed is not an
+    // answer. Unanchored rows are not stale. A reader miss is not stale either.
+    const stale = await anchorsAreStale(cached.fileAnchors, hostDirectoryHashReader(db, tenantId)).catch(() => false);
+    if (!stale) {
+      return { text: cached.content.trim(), source: 'qa-cache', ...(cached.origin ? { costBasis: cached.origin } : {}) };
+    }
   }
 
   // 2) Evermind-first (opt-in), from the chat's OWN head only.
@@ -213,6 +218,10 @@ export async function cacheProjectAnswer(
   /** What producing `answer` cost (the writing turn's model + tokens), so a later replay
    *  is priced from a recorded figure. Optional: an unknown cost replays as an estimate. */
   origin?: FactOriginCost | null,
+  /** Files the answer was about. Their write-time hashes are what later make it stale. */
+  fileAnchors?: FactFileAnchor[],
+  /** The run that produced the answer, when the caller has one. */
+  originExecutionId?: number | null,
 ): Promise<void> {
   const q = (question ?? '').trim();
   const a = (answer ?? '').trim();
@@ -228,7 +237,18 @@ export async function cacheProjectAnswer(
   // Nothing resolveMemoryAnswer would refuse to serve (a work order, a status question,
   // a bare continuation) is worth writing — it would only ever be a row that is never read.
   if (!memoryReplayable(q)) return;
-  await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE, { origin: origin ?? null }).catch((error) => {
+  await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE, {
+    origin: origin ?? null,
+    ...(originExecutionId != null ? { originExecutionId } : {}),
+    // A cached answer replays verbatim on an exact repeat, so without a TTL it
+    // outlives the knowledge it was computed from: the file it was "about" gets
+    // edited and the stale answer keeps short-circuiting forever. The `expires_at`
+    // column already exists (0371) — nothing here was ever writing it. This is the
+    // clock half of requirement 5; the anchor half (drop on a changed file hash)
+    // is `anchorsAreStale`, which the caller threads in via `fileAnchors`.
+    expiresAt: new Date(Date.now() + QA_CACHE_TTL_MS),
+    ...(fileAnchors?.length ? { fileAnchors } : {}),
+  }).catch((error) => {
     /* best-effort — caching never breaks a reply */
   
     reportCaughtError(error, { source: "application/llm/projectMemory.ts", operation: "cacheProjectAnswer" });

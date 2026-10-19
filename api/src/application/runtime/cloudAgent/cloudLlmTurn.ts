@@ -46,6 +46,8 @@ export async function recordCloudUsage(
     /** What kind of call this turn was — the parent loop's own turn is `code`, a
      *  `spawn_agent` child carries its delegation role. Stamped onto the usage row. */
     role?: string | null;
+    /** Run phase this turn was billed under — a verify pass is its own ledger line. */
+    phase?: string | null;
     /** The run's effective plan + premium override — used ONLY to price a PREMIUM
      *  (any-paid-OpenRouter) turn, which adds the flat per-request surcharge on top of
      *  the metered token cost. Omit and a premium cloud turn would be billed at plain
@@ -67,7 +69,7 @@ export async function recordCloudUsage(
     llmProduct: 'builderforceLLM',
     model:      args.model,
     usage:      { promptTokens: inputTokens, completionTokens: outputTokens, totalTokens: inputTokens + outputTokens },
-    metadata:   { engine: 'cloud', executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null },
+    metadata:   { engine: 'cloud', executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null, phase: args.phase ?? null },
     useCase:    'task_execution',
     // Attribute the spend to the run's cloud agent + ticket + project so cost
     // rolls up ticket → project → account (0104 / 0103).
@@ -117,6 +119,8 @@ interface CloudLlmTurnCtx {
   premiumOverride?: boolean;
   /** What kind of call this turn was, for the usage row (see {@link recordCloudUsage}). */
   role?: ModelRole;
+  /** Policy phase of this turn, stamped on the usage row so verify is its own line. */
+  phase?: string | null;
 }
 
 /**
@@ -174,6 +178,7 @@ export async function recordCloudLlmTurn(
     await recordCloudUsage(rc.env, rc.db, {
       ...evtBase, taskId: rc.taskId, projectId: rc.projectId, model: resolvedModel,
       ...(rc.role ? { role: rc.role } : {}),
+      ...(rc.phase ? { phase: rc.phase } : {}),
       ...(rc.effectivePlan ? { effectivePlan: rc.effectivePlan, premiumOverride: rc.premiumOverride ?? false } : {}),
       inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
       byo: result.byoFunded ?? false,
@@ -321,7 +326,7 @@ export async function imageRunTurn(
       byoSelectedModels: creds.byoSelectedModels,
       // Parity with the durable loop: a PREMIUM pin needs a validated billing card.
       premiumEntitled: ctx.premiumEntitled,
-    }), role);
+    }), role, { verify: requestedModelForRole(env, 'verify') ?? undefined });
   }
   const requestedModel = modelState.policy.model ?? model;
   const proxy = llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, {
@@ -350,6 +355,7 @@ export async function imageRunTurn(
         }) ?? {}
       : {}),
     useCase: 'task_execution',
+    prompt_cache_key: `cloud:${executionId}`,
   }, undefined, undefined, args.signal), (outcome) => recordModelCascade(db, { tenantId, cloudAgentRef, executionId }, outcome));
   // Shared post-`complete` processing (metering + telemetry) — identical to the
   // in-Worker loop, so a child's tokens are the tenant's tokens and a delegation that
@@ -359,6 +365,7 @@ export async function imageRunTurn(
     requestedModel, fallbackModel: turnRun.state.policy.model,
     effectivePlan: ctx.effectivePlan, premiumOverride: ctx.premiumOverride,
     role: cloudRunRole(role),
+    phase: turnRun.state.policy.phase,
   }, { tGen0, notify: args.notify });
   if (!turn.ok) return { ok: false, error: turn.error, modelState: turnRun.state };
   return {

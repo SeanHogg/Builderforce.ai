@@ -9,7 +9,7 @@
  * `searchRepoCode`/`compare` remain GitHub-only (no cross-provider code-search /
  * compare equivalent yet). Never throws.
  */
-import { normalizeScopeDir, isUnderScopeDir } from '@builderforce/agent-tools';
+import { normalizeScopeDir, isUnderScopeDir, selectPathsWithinCap } from '@builderforce/agent-tools';
 import { buildGitApiBaseUrl } from './gitProxy';
 import { bitbucketServerPathString, resolveRepoApiTarget } from './repoApiTarget';
 import { createRepoSource, makeRepoFetch } from './sources/RepoSource';
@@ -325,21 +325,46 @@ export async function listBranchDiff(ctx: RepoReadContext, base: string, branch:
   return { ok: true, files, truncated };
 }
 
-export async function listRepoFiles(ctx: RepoReadContext, subPath?: string): Promise<ListFilesResult> {
+/**
+ * Slice a tree listing. A glob is applied BEFORE the cap so a match past the
+ * first {@link MAX_TREE_ENTRIES} paths is not dropped. Without a glob the
+ * previous slice is unchanged — unscoped callers (audit, import) must not
+ * start seeing a provider `truncated` flag they previously ignored.
+ */
+function finishTreeListing(
+  paths: string[],
+  subPath: string | undefined,
+  glob: string | undefined,
+  sourceTruncated: boolean,
+): { paths: string[]; truncated: boolean } {
+  if (glob && glob.trim()) {
+    return selectPathsWithinCap(paths, {
+      glob,
+      scopeDir: subPath,
+      cap: MAX_TREE_ENTRIES,
+      sourceTruncated,
+    });
+  }
+  const overCap = paths.length > MAX_TREE_ENTRIES;
+  // A provider tree that GitHub/GitLab already cut off is incomplete even when
+  // the surviving paths fit the cap. Callers (import, audit) already treat
+  // `truncated` as "this is not the whole tree".
+  return { paths: overCap ? paths.slice(0, MAX_TREE_ENTRIES) : paths, truncated: overCap || sourceTruncated };
+}
+
+export async function listRepoFiles(ctx: RepoReadContext, subPath?: string, glob?: string): Promise<ListFilesResult> {
   // GitLab/Bitbucket via the shared RepoSource.getTree (which also recovers
   // truncated GitHub trees); GitHub keeps its inline path below (no-regression). [1248]
   if (ctx.provider !== 'github') {
     try {
       const src = createRepoSource(ctx.provider, { owner: ctx.owner, repo: ctx.repo, host: ctx.host, token: ctx.token }, makeRepoFetch());
-      const { entries } = await src.getTree(ctx.ref);
+      const { entries, truncated: sourceTruncated } = await src.getTree(ctx.ref);
       const prefix = normalizeScopeDir(subPath);
-      let paths = entries
+      const paths = entries
         .filter((e) => e.type === 'file')
         .map((e) => e.path)
         .filter((p) => isUnderScopeDir(p, prefix));
-      const truncated = paths.length > MAX_TREE_ENTRIES;
-      if (truncated) paths = paths.slice(0, MAX_TREE_ENTRIES);
-      return { ok: true, paths, truncated };
+      return { ok: true, ...finishTreeListing(paths, subPath, glob, sourceTruncated === true) };
     } catch (e) {
       return { ok: false, reason: e instanceof Error ? e.message : `list not implemented for provider '${ctx.provider}'` };
     }
@@ -352,13 +377,11 @@ export async function listRepoFiles(ctx: RepoReadContext, subPath?: string): Pro
   const res = await fetch(url, { headers: ghHeaders(ctx.token) }).catch(() => null);
   if (!res) return { ok: false, reason: 'list request failed (network)' };
   if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, reason: `GitHub ${res.status}: ${t.slice(0, 160)}` }; }
-  const json = (await res.json().catch(() => null)) as { tree?: Array<{ path?: string; type?: string }> } | null;
+  const json = (await res.json().catch(() => null)) as { tree?: Array<{ path?: string; type?: string }>; truncated?: boolean } | null;
   const prefix = normalizeScopeDir(subPath);
-  let paths = (json?.tree ?? [])
+  const paths = (json?.tree ?? [])
     .filter((n) => n.type === 'blob' && typeof n.path === 'string')
     .map((n) => n.path as string)
     .filter((p) => isUnderScopeDir(p, prefix));
-  const truncated = paths.length > MAX_TREE_ENTRIES;
-  if (truncated) paths = paths.slice(0, MAX_TREE_ENTRIES);
-  return { ok: true, paths, truncated };
+  return { ok: true, ...finishTreeListing(paths, subPath, glob, json?.truncated === true) };
 }

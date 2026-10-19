@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { __clearL1CacheForTests } from '../../infrastructure/cache/readThroughCache';
 import {
   qaCacheKey,
   resolveMemoryAnswer,
@@ -9,6 +10,12 @@ import type { Env } from '../../env';
 
 // No AUTH_CACHE_KV → getCacheVersion/getOrSetCached fall through to the loader.
 const env = {} as Env;
+
+beforeEach(() => {
+  // getProjectFactRecordByKey is L1-cached on the question key. Without this, the
+  // first exact-repeat test poisons every later miss/staleness assertion.
+  __clearL1CacheForTests();
+});
 
 /** db mock whose `.select().from().where()[.limit()]` returns queued result sets in
  *  order. Sequence for an Evermind-first resolve: 1) getProjectFactRecordByKey (cache, limit),
@@ -29,8 +36,16 @@ function memoryDb(resultQueue: Array<Array<Record<string, unknown>>>) {
       from: () => ({
         where: () => {
           const rows = next();
-          const thenable = Promise.resolve(rows) as Promise<unknown> & { limit: () => Promise<unknown> };
-          thenable.limit = async () => rows;
+          // hostDirectoryHashReader is `.where().orderBy().limit(1).catch(...)`.
+          // orderBy must not consume another queued result, and limit must be a
+          // real promise so the reader's `.catch` attaches.
+          const limited = { limit: (_n?: number) => Promise.resolve(rows) };
+          const thenable = Promise.resolve(rows) as Promise<unknown> & {
+            limit: (n?: number) => Promise<unknown>;
+            orderBy: () => typeof limited;
+          };
+          thenable.limit = limited.limit;
+          thenable.orderBy = () => limited;
           return thenable;
         },
       }),
@@ -97,6 +112,26 @@ describe('resolveMemoryAnswer', () => {
     const runEvermind = vi.fn(async () => 'a substantive answer that would otherwise qualify');
     expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', { runEvermind })).toBeNull();
     expect(runEvermind).not.toHaveBeenCalled();
+  });
+
+  it('does not replay a qa-cache answer whose anchored file changed', async () => {
+    const { db } = memoryDb([
+      [{ content: 'Auth uses PKCE OAuth via the gateway.', fileAnchors: [{ path: 'auth.ts', contentHash: 'old' }] }],
+      [{ contentHash: 'new' }],
+    ]);
+    const runEvermind = vi.fn(async () => 'should not be called');
+    const ans = await resolveMemoryAnswer(env, db, 7, 42, 'How does auth work?', { runEvermind, toolsAvailable: true });
+    expect(ans).toBeNull();
+    expect(runEvermind).not.toHaveBeenCalled();
+  });
+
+  it('replays a qa-cache answer whose anchored file has not changed', async () => {
+    const { db } = memoryDb([
+      [{ content: 'Auth uses PKCE OAuth via the gateway.', fileAnchors: [{ path: 'auth.ts', contentHash: 'same' }] }],
+      [{ contentHash: 'same' }],
+    ]);
+    const ans = await resolveMemoryAnswer(env, db, 7, 42, 'How does auth work?', { runEvermind: vi.fn(async () => 'no'), toolsAvailable: true });
+    expect(ans).toEqual({ text: 'Auth uses PKCE OAuth via the gateway.', source: 'qa-cache' });
   });
 
   it('still replays the Q&A cache for a TOOL-CAPABLE caller (a real model produced it)', async () => {

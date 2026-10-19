@@ -8,7 +8,7 @@
  *
  *   brainChatShapes       — DTOs + column projections
  *   brainChatGuards       — owner / shared-access gates, membership, tenant checks
- *   brainChats            — list / create / open / update / archive
+ *   brainChats            — list / create / open / update (archive is re-exported from brainMemory)
  *   brainScopedChats      — the team chat (0294) + manager chat (0376) singletons
  *   brainMessages         — transcript reads, mark-read, append, execution posts, feedback
  *   brainMessageStore     — THE transcript write path (`appendRaw`)

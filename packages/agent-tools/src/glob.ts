@@ -128,3 +128,109 @@ export function isUnderScopeDir(pathPosix: string, scopeDir: string): boolean {
   const p = pathPosix.split("\\").join("/");
   return p === scopeDir || p.startsWith(`${scopeDir}/`);
 }
+
+export interface CappedPathSelection {
+  paths: string[];
+  /** True when the cap dropped matches, or the source listing itself was incomplete. */
+  truncated: boolean;
+}
+
+/**
+ * Apply a scope-aware glob BEFORE a size cap.
+ *
+ * Cloud `list_files` used to slice the provider tree to 400 paths and only then
+ * filter. A match sitting past that slice disappeared, and the zero-match note
+ * then reported a real file as missing. Filter first so the cap counts matches.
+ * `sourceTruncated` means the input list itself was cut off (GitHub `truncated`,
+ * an R2 page left unread) — an empty result is then not proof of absence.
+ */
+export function selectPathsWithinCap(
+  paths: readonly string[],
+  opts: {
+    glob?: string | null;
+    scopeDir?: string | null;
+    cap: number;
+    sourceTruncated?: boolean;
+  },
+): CappedPathSelection {
+  const glob = opts.glob?.trim() ? opts.glob.trim() : undefined;
+  const matched = glob ? filterByGlobInScope(paths, glob, opts.scopeDir) : [...paths];
+  const overCap = matched.length > opts.cap;
+  return {
+    paths: overCap ? matched.slice(0, opts.cap) : matched,
+    truncated: overCap || opts.sourceTruncated === true,
+  };
+}
+
+/**
+ * What to tell the model when a glob matched nothing.
+ *
+ * A zero-match glob is proof of absence only when the walk covered the tree.
+ * A truncated empty result means the search stopped early — never "no such file".
+ */
+export function emptyGlobListingNote(
+  glob: string,
+  scopeDir: string | null | undefined,
+  truncated: boolean,
+): string {
+  const scope = normalizeScopeDir(scopeDir);
+  const base = `No file matches glob "${glob}"${scope ? ` under "${scope}"` : ""}.`;
+  if (truncated) {
+    return `${base} This is NOT proof the file does not exist: the search was cut off before the tree was fully scanned, so this only means "not among the paths scanned so far". Narrow \`path\` to a smaller folder and re-run, or use \`search_code\`/\`find_symbol\` for a specific name, before concluding anything is missing.`;
+  }
+  return `${base} Try a broader pattern (e.g. "*${glob.replace(/[*?/]/g, "")}*"), or list_files without a glob to see the tree. 0 matches means no such file exists in the paths scanned — do not claim one is missing without trying a broader glob first.`;
+}
+
+/** Literal directory prefix a slash-anchored glob must sit under, or null when the
+ *  pattern can match anywhere (no slash, or it starts with a glob metacharacter).
+ *  `frontend/src/lib/**\/*.test.ts` → `frontend/src/lib/`. */
+function literalGlobDirPrefix(pattern: string): string | null {
+  const p = pattern.split("\\").join("/");
+  if (!p.includes("/")) return null;
+  const meta = p.search(/[*?\[]/);
+  if (meta === 0) return null;
+  const head = meta < 0 ? p : p.slice(0, meta);
+  const slash = head.lastIndexOf("/");
+  if (slash < 0) return null;
+  return head.slice(0, slash + 1);
+}
+
+function prefixCanReach(dir: string, prefix: string): boolean {
+  if (dir === "") return true;
+  const dirSlash = `${dir}/`;
+  return prefix.startsWith(dirSlash) || dirSlash.startsWith(prefix);
+}
+
+/**
+ * Whether a directory walk should descend into `dirPosix`.
+ *
+ * A glob is applied during the walk so the file cap counts matches, but that
+ * still visits every directory. Pruning directories the pattern cannot reach
+ * keeps a `frontend/src/lib/**\/*.test.ts` search from exhausting its budget
+ * inside unrelated trees — and from reporting a truncated miss for a file that
+ * was simply never visited. A slash-free pattern, or one that starts with a
+ * glob metacharacter, does not prune. A scope-relative pattern is also read
+ * under `scopeDir`, so `{ path: "frontend/src", glob: "lib/**\/*.ts" }` still
+ * descends into `frontend/src/lib`.
+ */
+export function dirMayContainGlobMatch(dirPosix: string, pattern: string, scopeDir?: string | null): boolean {
+  const dir = normalizeScopeDir(dirPosix);
+  const scope = normalizeScopeDir(scopeDir);
+  const pat = pattern.split("\\").join("/");
+  if (scope && dir && dir !== scope && !dir.startsWith(`${scope}/`) && !scope.startsWith(`${dir}/`)) {
+    return false;
+  }
+  const readings: Array<string | null> = [literalGlobDirPrefix(pat)];
+  if (scope) {
+    const rel = literalGlobDirPrefix(pat);
+    readings.push(rel == null ? `${scope}/` : `${scope}/${rel}`);
+  }
+  for (const prefix of readings) {
+    if (prefix == null) {
+      if (!scope || dir === "" || dir === scope || dir.startsWith(`${scope}/`) || scope.startsWith(`${dir}/`)) return true;
+      continue;
+    }
+    if (prefixCanReach(dir, prefix)) return true;
+  }
+  return false;
+}

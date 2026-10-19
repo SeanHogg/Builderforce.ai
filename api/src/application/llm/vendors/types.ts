@@ -1143,6 +1143,11 @@ export function buildOpenAIChatBody(params: VendorCallParams, opts?: OpenAIChatB
     ...(temperature != null ? { temperature } : {}),
     ...(topP != null ? { top_p: topP } : {}),
     ...extra,
+    // After extra: a vendor transform must not drop the cache key, and must not
+    // be able to clobber the caller's key with a different one.
+    ...(typeof extraBody?.prompt_cache_key === 'string' && extraBody.prompt_cache_key
+      ? { prompt_cache_key: extraBody.prompt_cache_key }
+      : {}),
   };
 }
 

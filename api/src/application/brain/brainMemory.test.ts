@@ -18,9 +18,33 @@
  * writer was handed (the cleaned text, the tenant/chat/project provenance, the upsert
  * target), which is exactly the part that was wrong.
  */
-import { describe, expect, it, vi } from 'vitest';
-import { answerTextOf, retainChatMemory } from './brainMemory';
-import { archiveChat } from './brainChats';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { runInRequestScope } from '../shared/requestScope';
+import * as projectFacts from '../llm/projectFacts';
+import * as llmProxy from '../llm/LlmProxyService';
+import * as timelineTail from '../../domain/shared/timelineTail';
+import * as brainLlmCall from './brainLlmCall';
+import * as advisoryReservation from '../commerce/advisoryReservation';
+import * as brainChatGuards from './brainChatGuards';
+
+// `vi.mock` does not intercept the modules this file already imported (the
+// factory never runs). Spy the live exports the use cases bound so the
+// assertion and the call are the same function, and so summarize never
+// reaches a model or a real access query.
+const upsertProjectFact = vi.spyOn(projectFacts, 'upsertProjectFact').mockResolvedValue(true);
+vi.spyOn(llmProxy, 'readProxyChoice').mockResolvedValue({
+  content: '<think>the user is right - I should have deleted the branch</think>Agreed; the branch stays.',
+} as never);
+vi.spyOn(timelineTail, 'readTimelineTail').mockResolvedValue([
+  { role: 'user', content: 'hello' },
+  { role: 'assistant', content: 'world' },
+] as never);
+vi.spyOn(brainLlmCall, 'buildTenantLlmService').mockResolvedValue({} as never);
+vi.spyOn(brainLlmCall, 'completeTraced').mockResolvedValue({} as never);
+vi.spyOn(advisoryReservation, 'advisoryChatAdmittedToAiContext').mockResolvedValue(true);
+vi.spyOn(brainChatGuards, 'canAccessChat').mockResolvedValue({ id: 5, projectId: 2 } as never);
+
+import { answerTextOf, archiveChat, retainChatMemory, summarizeChat } from './brainMemory';
 
 describe('answerTextOf', () => {
   it('leaves an answer with no reasoning untouched', () => {
@@ -85,6 +109,15 @@ describe('answerTextOf', () => {
     expect(answerTextOf(null)).toBe('');
     expect(answerTextOf(undefined)).toBe('');
   });
+
+  it('does not promote a swallowed thought the display reader would keep', () => {
+    // The package's display `answerTextOf` promotes this reply out of the think
+    // block (reasoning.test.ts). A memory must not learn that deliberation.
+    const reply = '"Fix" is too vague - I need to know what to fix. Could you specify a file, or a ticket';
+    const raw = `<think>${reply}</think>\n\n/task number?`;
+    expect(answerTextOf(raw)).toBe('/task number?');
+    expect(answerTextOf(raw)).not.toContain('too vague');
+  });
 });
 
 describe('retainChatMemory', () => {
@@ -132,6 +165,10 @@ describe('retainChatMemory', () => {
 });
 
 describe('archiveChat', () => {
+  beforeEach(() => {
+    upsertProjectFact.mockClear();
+  });
+
   /**
    * A `Db` spy over the four statements `archiveChat` makes: the ownership
    * `select`, the `update`, the memory `insert`, and nothing else.
@@ -189,5 +226,82 @@ describe('archiveChat', () => {
     expect(result).toEqual({ ok: true });
     expect(spy.state.archived).toBe(true);
     expect(spy.state.memory).toBeNull();
+    expect(upsertProjectFact).not.toHaveBeenCalled();
+  });
+
+  it('writes chat_memories AND a project fact keyed chat-summary:<id>', async () => {
+    const spy = archiveDb({ id: 5, origin: 'brainstorm', summary: 'We agreed to ship Friday.', projectId: 2 });
+    const env = { OPENROUTER_API_KEY: 'test-key' };
+
+    const result = await runInRequestScope({ env }, () => archiveChat(spy.db, 5, 1, 'user-1'));
+
+    expect(result).toEqual({ ok: true });
+    expect(spy.state.archived).toBe(true);
+    expect(spy.state.memory).toMatchObject({
+      tenantId: 1,
+      chatId: 5,
+      projectId: 2,
+      summary: 'We agreed to ship Friday.',
+    });
+    expect(upsertProjectFact).toHaveBeenCalledWith(
+      env,
+      spy.db,
+      1,
+      2,
+      'chat-summary:5',
+      'We agreed to ship Friday.',
+      'chat-archive',
+    );
+  });
+
+  it('cleans reasoning before the fact write, and skips the fact when there is no project', async () => {
+    const spy = archiveDb({
+      id: 5,
+      origin: 'brainstorm',
+      summary: '<think>the user is right - I should have deleted the branch</think>Agreed; the branch stays.',
+      projectId: null,
+    });
+
+    await runInRequestScope({ env: { OPENROUTER_API_KEY: 'test-key' } }, () => archiveChat(spy.db, 5, 1, 'user-1'));
+
+    expect(spy.state.memory?.summary).toBe('Agreed; the branch stays.');
+    expect(upsertProjectFact).not.toHaveBeenCalled();
+  });
+});
+
+describe('summarizeChat', () => {
+  beforeEach(() => {
+    upsertProjectFact.mockClear();
+  });
+
+  it('stores the cleaned summary and does not write the chat title', async () => {
+    const sets: Record<string, unknown>[] = [];
+    const db = {
+      update: () => ({
+        set: (values: Record<string, unknown>) => {
+          sets.push(values);
+          return { where: async () => [] };
+        },
+      }),
+      insert: () => ({ values: () => ({ onConflictDoUpdate: async () => undefined }) }),
+    } as never;
+    const env = { OPENROUTER_API_KEY: 'test-key' } as never;
+
+    const result = await summarizeChat(db, 5, 1, 'user-1', env);
+
+    expect(result).toEqual({ summary: 'Agreed; the branch stays.' });
+    expect(sets).toHaveLength(1);
+    expect(sets[0]).not.toHaveProperty('title');
+    expect(sets[0]?.summary).toBe('Agreed; the branch stays.');
+    expect(String(sets[0]?.summary)).not.toContain('I should have deleted');
+    expect(upsertProjectFact).toHaveBeenCalledWith(
+      env,
+      db,
+      1,
+      2,
+      'chat-summary:5',
+      'Agreed; the branch stays.',
+      'chat-archive',
+    );
   });
 });

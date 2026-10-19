@@ -100,6 +100,49 @@ describe('describeWorkspaceBlock / codingTargetToolingLine', () => {
   });
 });
 
+describe('IDE workspace listing pagination', () => {
+  it('pages past an R2 cursor so a glob match on a later page is not a miss', async () => {
+    const prefix = 'ide/projects/7/';
+    const pages = [
+      {
+        objects: [{ key: `${prefix}noise/a.ts`, size: 1 }],
+        truncated: true,
+        cursor: 'page-2',
+      },
+      {
+        objects: [{ key: `${prefix}frontend/src/lib/widget.test.ts`, size: 1 }],
+        truncated: false,
+      },
+    ];
+    let call = 0;
+    const bucket = {
+      async list(opts: { prefix: string; cursor?: string }) {
+        expect(opts.prefix).toBe(prefix);
+        if (call === 1) expect(opts.cursor).toBe('page-2');
+        return pages[call++]!;
+      },
+    } as unknown as R2Bucket;
+    const listed = await listIdeWorkspaceFiles(bucket, 7, 'frontend/src/lib', '**/*.test.ts');
+    expect(listed.ok).toBe(true);
+    expect(listed.paths).toEqual(['frontend/src/lib/widget.test.ts']);
+    expect(listed.truncated).toBe(false);
+    expect(call).toBe(2);
+  });
+
+  it('says an empty truncated glob search is incomplete, not absence', async () => {
+    const bucket = {
+      async list() {
+        return { objects: [{ key: 'ide/projects/7/a.ts', size: 1 }], truncated: true, cursor: 'more' };
+      },
+    } as unknown as R2Bucket;
+    const listed = await listIdeWorkspaceFiles(bucket, 7, 'frontend/src/lib', '**/*.test.ts');
+    expect(listed.paths).toEqual([]);
+    expect(listed.truncated).toBe(true);
+    expect(listed.note).toContain('NOT proof the file does not exist');
+    expect(listed.note).not.toContain('0 matches means no such file exists');
+  });
+});
+
 describe('IDE workspace file ops', () => {
   it('lists, reads, searches, writes, edits and deletes against R2', async () => {
     const r2 = fakeR2();
@@ -113,6 +156,9 @@ describe('IDE workspace file ops', () => {
 
     const globbed = await listIdeWorkspaceFiles(bucket, 34, undefined, '*.md');
     expect(globbed.paths).toEqual(['README.md']);
+
+    const relative = await listIdeWorkspaceFiles(bucket, 34, 'src', '*.jsx');
+    expect(relative.paths).toEqual(['src/App.jsx']);
 
     const read = await readIdeWorkspaceFile(bucket, 34, 'src/App.jsx');
     expect(read).toEqual({ ok: true, path: 'src/App.jsx', content: 'export const App = () => 1;\n' });

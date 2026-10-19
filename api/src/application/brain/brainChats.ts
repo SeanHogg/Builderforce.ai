@@ -1,6 +1,8 @@
 /**
- * Brain chat CRUD use cases — list (with participant roster), create, open, update,
- * archive. Split out of `BrainService.ts`; the facade delegates here.
+ * Brain chat CRUD use cases — list (with participant roster), create, open, update.
+ * Archive itself lives in `brainMemory.ts` (it also writes the memory);
+ * this module re-exports it so the facade's chat-CRUD import stays one line.
+ * Split out of `BrainService.ts`; the facade delegates here.
  */
 
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -12,9 +14,9 @@ import { normalizeChatMode, resolveChatMode, NEW_CHAT_MODE } from './chatMode';
 import { normalizeChatTitle } from './chatTitle';
 import { chatColumns, normalizeCapability, normalizeOriginalRequest, type CreateChatDto, type UpdateChatDto } from './brainChatShapes';
 import { canAccessChat, syncPendingMemberships, verifyChatOwnership, verifyProjectInTenant } from './brainChatGuards';
-import { answerTextOf, retainChatMemory } from './brainMemory';
 import type { Db } from '../../infrastructure/database/connection';
 import { bumpChatStructure, bumpTeamChats } from './chatCacheVersions';
+export { archiveChat } from './brainMemory';
 
 /** Which archive states a chat list may return. See {@link listChats}. */
 export type ArchivedFilter = 'exclude' | 'only' | 'all';
@@ -256,41 +258,4 @@ export async function updateChat(
   const previousMode = resolveChatMode(existing as { origin?: string | null; mode?: string | null });
   const modeChangedTo = nextMode && nextMode !== previousMode ? nextMode : null;
   return { ...updated, modeChangedTo };
-}
-
-export async function archiveChat(db: Db, chatId: number, tenantId: number, userId: string, options: { isWorkspaceAdmin?: boolean } = {}) {
-  // `summary` + `projectId` are selected for the memory write below; the ownership
-  // gate's own return type is narrowed to `{ id, origin }`, so the extra columns are
-  // re-stated here — the same `as` cast `summarizeChat` uses on `canAccessChat`.
-  const existing = await verifyChatOwnership(
-    db,
-    chatId,
-    tenantId,
-    userId,
-    { summary: brainChats.summary, projectId: brainChats.projectId },
-    options,
-  ) as { id: number; origin: string; summary: string | null; projectId: number | null } | null;
-  if (!existing) return { error: 'Chat not found' as const };
-
-  await db
-    .update(brainChats)
-    .set({ isArchived: true, updatedAt: new Date() })
-    .where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, chatId)));
-
-  // Archiving used to be a flag and nothing else: the conversation left every chat
-  // list (`listChats` filters `isArchived`), and the summary it had already earned went
-  // with it. With no `chat_memories` row for the chat, "consolidate project memory" and
-  // the memory-sync push to agent hosts never saw any of it. Retaining the memory HERE
-  // is what makes an archive a change of view rather than a deletion. It reuses the
-  // summary already on the chat, so archiving costs no LLM call and invents nothing —
-  // and it runs the same `answerTextOf` clean the summariser did, so a chat whose
-  // summary was written before that fix cannot smuggle its reasoning into memory here.
-  const summary = answerTextOf(existing.summary);
-  if (summary) {
-    await retainChatMemory(db, { tenantId, chatId, projectId: existing.projectId, summary });
-  }
-
-  await Promise.all([bumpChatStructure(chatId), bumpTeamChats(tenantId)]);
-
-  return { ok: true };
 }

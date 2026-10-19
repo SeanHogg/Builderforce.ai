@@ -8,7 +8,7 @@
  * deliverable in its summary. Scratch-repo-at-create is rejected (Brain tenants
  * have no git provider). This module is the R2 working-tree substitute.
  */
-import { filterByGlobInScope, applyStringEdit, editFacts } from '@builderforce/agent-tools';
+import { matchGlobInScope, isUnderScopeDir, normalizeScopeDir, emptyGlobListingNote, applyStringEdit, editFacts } from '@builderforce/agent-tools';
 import type {
   RepoListResult, RepoReadResult, RepoSearchResult, RepoWriteResult, RepoDeleteResult, RepoEditResult,
 } from '@builderforce/agent-tools';
@@ -17,7 +17,7 @@ import type { Db } from '../../../infrastructure/database/connection';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { ensureProjectCodingTarget } from '../../project/ensureProjectCodingTarget';
 import { applyTaskWorkspaceChanges, resolveTaskWorkspaceTarget } from '../../ide/taskWorkspaceTarget';
-import { listWorkspaceFiles, readWorkspaceFile } from '../../ide/workspaceStore';
+import { listWorkspaceFiles, readWorkspaceFile, workspacePrefix } from '../../ide/workspaceStore';
 
 /** The R2 workspace a repo-less cloud run writes into. */
 export interface IdeWorkspaceRun {
@@ -124,20 +124,54 @@ export function codingTargetToolingLine(workspace: WorkspacePromptView): string 
   return 'If no repository and no IDE workspace is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.';
 }
 
+/** Match cap for a globbed IDE listing. Counts matches, not raw R2 keys, so a
+ *  file past the first page is not hidden and then reported as missing. */
+const IDE_LIST_MATCH_CAP = 5_000;
+
 export async function listIdeWorkspaceFiles(
   bucket: R2Bucket,
   projectId: number,
   sub?: string,
   glob?: string,
 ): Promise<RepoListResult> {
-  const entries = await listWorkspaceFiles(bucket, projectId);
-  let paths = entries.map((e) => e.path).filter(Boolean);
-  if (sub) {
-    const prefix = sub.endsWith('/') ? sub : `${sub}/`;
-    paths = paths.filter((p) => p === sub || p.startsWith(prefix));
+  const keyPrefix = workspacePrefix(projectId);
+  const scope = normalizeScopeDir(sub);
+  const pattern = glob?.trim() ? glob.trim() : undefined;
+  const paths: string[] = [];
+  let cursor: string | undefined;
+  let truncated = false;
+  let finished = false;
+  const seenCursors = new Set<string>();
+  // Page until R2 says the listing is complete. `listWorkspaceFiles` reads one
+  // page and drops `truncated`, which made an empty glob look like absence.
+  // A repeated cursor or the page budget means the listing never finished —
+  // that must stay truncated so an empty glob is not reported as absence.
+  for (let pageNo = 0; pageNo < 200; pageNo++) {
+    if (cursor) {
+      if (seenCursors.has(cursor)) break;
+      seenCursors.add(cursor);
+    }
+    const page = await bucket.list({ prefix: keyPrefix, ...(cursor ? { cursor } : {}) });
+    for (const obj of page.objects ?? []) {
+      if (!obj.key?.startsWith(keyPrefix)) continue;
+      const rel = obj.key.slice(keyPrefix.length);
+      if (!rel || rel.endsWith('/')) continue;
+      if (scope && !isUnderScopeDir(rel, scope)) continue;
+      if (pattern && !matchGlobInScope(rel, pattern, scope)) continue;
+      if (paths.length >= IDE_LIST_MATCH_CAP) {
+        truncated = true;
+        break;
+      }
+      paths.push(rel);
+    }
+    if (truncated) break;
+    if (!page.truncated || !page.cursor) { finished = true; break; }
+    cursor = page.cursor;
   }
-  if (glob) paths = filterByGlobInScope(paths, glob, sub);
-  return { ok: true, ref: 'workspace', paths, truncated: false };
+  if (!finished) truncated = true;
+  paths.sort((a, b) => a.localeCompare(b));
+  const note = pattern && paths.length === 0 ? emptyGlobListingNote(pattern, scope, truncated) : undefined;
+  return { ok: true, ref: 'workspace', paths, truncated, ...(note ? { note } : {}) };
 }
 
 export async function readIdeWorkspaceFile(

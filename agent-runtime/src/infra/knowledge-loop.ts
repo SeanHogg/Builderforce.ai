@@ -25,7 +25,13 @@ import { appendKnowledgeMemory } from "../builderforce/project-context.js";
 import { contributeProjectEvermindFromText, type ProjectEvermindSyncConfig } from "./project-evermind-sync.js";
 import { contributeProjectEvermindFromDelta } from "./project-evermind-delta.js";
 import { pushProjectFact, recallSharedProjectFacts } from "./project-facts-sync.js";
-import { commitRunOutcomeMemory } from "./run-outcome-memory.js";
+import {
+  checkResultFromToolEvent,
+  commitRunOutcomeMemory,
+  recordOnPremVerify,
+  type OnPremVerifyEvent,
+  type RecordedCheckResult,
+} from "./run-outcome-memory.js";
 import { logDebug } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import { getAgentRunContext, onAgentEvent } from "./agent-events.js";
@@ -45,12 +51,37 @@ import { getSsmMemoryService } from "./ssm-memory-service.js";
  */
 export { deriveActivitySummary } from "@builderforce/agent-tools";
 
+/** Path a tool event named, from the payload or the start-phase args. */
+function pathFromToolEvent(
+  data: Record<string, unknown>,
+  pendingArgs?: Record<string, unknown> | null,
+): string | null {
+  if (typeof data["path"] === "string" && data["path"].trim()) {
+    return data["path"];
+  }
+  const args =
+    data["args"] && typeof data["args"] === "object" && !Array.isArray(data["args"])
+      ? (data["args"] as Record<string, unknown>)
+      : pendingArgs ?? null;
+  if (!args) {
+    return null;
+  }
+  const raw = args["path"] ?? args["file_path"];
+  return typeof raw === "string" && raw.trim() ? raw : null;
+}
+
 export type KnowledgeLoopOptions = {
   workspaceDir: string;
   apiKey?: string | null;
   baseUrl?: string;
   agentNodeId?: string | null;
   projectId?: number;
+  /**
+   * Observes record-only verify events. Production posts them to the timeline;
+   * a test injects a recorder here. A throw is swallowed — it must not fail
+   * the finished run.
+   */
+  verifyRecorder?: (event: OnPremVerifyEvent) => void;
 };
 
 type RunAccumulator = {
@@ -58,6 +89,10 @@ type RunAccumulator = {
   filesCreated: string[];
   filesEdited: string[];
   toolNames: string[];
+  /** Check results the tool loop already finished. Never a shell we started. */
+  checkResults?: RecordedCheckResult[];
+  /** Args from the start phase, so a result event can recover `command`. */
+  pendingArgs?: Map<string, Record<string, unknown>>;
   /** The run's initiating user prompt (the "ticket"), captured at accumulate time
    *  from the run context so the project-Evermind teacher distils (task → answer). */
   prompt?: string;
@@ -85,6 +120,9 @@ export function buildKnowledgeMemoryEntry(params: {
           created: params.acc.filesCreated,
           edited: params.acc.filesEdited,
           tools: params.acc.toolNames,
+          // The run's own prompt is what makes the note describe THIS run
+          // instead of a fixed template.
+          prompt: params.acc.prompt,
         }
       : undefined,
   });
@@ -183,19 +221,41 @@ export class KnowledgeLoopService {
         filesCreated: [],
         filesEdited: [],
         toolNames: [],
+        checkResults: [],
+        pendingArgs: new Map(),
         ...(prompt ? { prompt } : {}),
       });
     }
     const acc = this.runs.get(runId)!;
-    const toolName = typeof data["toolName"] === "string" ? data["toolName"] : null;
+    acc.checkResults ??= [];
+    acc.pendingArgs ??= new Map();
+    // The embedded tool loop emits `name` (and `toolName` on some older
+    // payloads). Read both, or a real check never reaches the verify record.
+    const rawName = data["name"] ?? data["toolName"];
+    const toolName = typeof rawName === "string" && rawName.trim() ? rawName.trim() : null;
     if (toolName) {
       acc.toolNames.push(toolName);
     }
-    const filePath = typeof data["path"] === "string" ? data["path"] : null;
-    if (filePath) {
-      if (toolName === "create" || toolName === "write") {
+    const toolCallId = typeof data["toolCallId"] === "string" ? data["toolCallId"] : null;
+    if (data["phase"] === "start" && toolCallId) {
+      const args = data["args"];
+      if (args && typeof args === "object" && !Array.isArray(args)) {
+        acc.pendingArgs.set(toolCallId, args as Record<string, unknown>);
+      }
+    }
+    const pending = toolCallId ? acc.pendingArgs.get(toolCallId) : undefined;
+    const check = checkResultFromToolEvent(data, pending ?? null);
+    if (check) {
+      acc.checkResults.push(check);
+      if (toolCallId) {
+        acc.pendingArgs.delete(toolCallId);
+      }
+    }
+    const filePath = pathFromToolEvent(data, pending ?? null);
+    if (filePath && toolName) {
+      if (toolName === "create" || toolName === "write" || toolName === "write_file") {
         acc.filesCreated.push(filePath);
-      } else if (toolName === "edit") {
+      } else if (toolName === "edit" || toolName === "edit_file") {
         acc.filesEdited.push(filePath);
       }
     }
@@ -209,18 +269,38 @@ export class KnowledgeLoopService {
     const created = acc ? [...new Set(acc.filesCreated)] : [];
     const edited = acc ? [...new Set(acc.filesEdited)] : [];
     const tools = acc ? [...new Set(acc.toolNames)] : [];
-    const summary = deriveActivitySummary({ created, edited, tools });
+    const results = acc?.checkResults ?? [];
+    const writtenPaths = [...created, ...edited];
+    const summary = deriveActivitySummary({ created, edited, tools, prompt: acc?.prompt });
+
+    // Record-only verify, before any await. A thrown recorder is swallowed
+    // inside recordOnPremVerify; the outer catch is the run boundary so a
+    // bug in the selection cannot reject this finished run either.
+    try {
+      recordOnPremVerify({ writtenPaths, toolNames: tools, results }, (event) => {
+        try {
+          this.opts.verifyRecorder?.(event);
+        } catch (err) {
+          logDebug(`[knowledge-loop] verify recorder threw: ${String(err)}`);
+        }
+        this.emitVerifyTimeline(runId, sessionKey, event);
+      });
+    } catch (err) {
+      logDebug(`[knowledge-loop] verify record failed: ${String(err)}`);
+    }
 
     const ts = new Date().toISOString();
     const entry = buildKnowledgeMemoryEntry({ ts, sessionKey, acc });
-    if (!entry) {
+    if (!entry && results.length === 0) {
       return;
     }
 
-    try {
-      await appendKnowledgeMemory(this.opts.workspaceDir, entry);
-    } catch (err) {
-      logDebug(`[knowledge-loop] failed to write memory entry: ${String(err)}`);
+    if (entry) {
+      try {
+        await appendKnowledgeMemory(this.opts.workspaceDir, entry);
+      } catch (err) {
+        logDebug(`[knowledge-loop] failed to write memory entry: ${String(err)}`);
+      }
     }
 
     // The on-prem mirror of the cloud run's memory commit: write this run's
@@ -235,9 +315,19 @@ export class KnowledgeLoopService {
     // markdown is already durable in the workspace memory file.
     void commitRunOutcomeMemory(this.projectEvermindConfig(), {
       summary,
-      writtenPaths: [...created, ...edited],
+      writtenPaths,
+      // Record-only verify: results the tool loop already finished. No shell
+      // is started. verify_started is emitted only when one of those results
+      // is in hand (see recordOnPremVerify). A check that did not run is not
+      // invented.
+      toolNames: tools,
+      results,
       runId,
     });
+
+    if (!entry) {
+      return;
+    }
 
     // Feed the SSM hippocampus layer — non-fatal.
     // remember() stores the concise summary for fast semantic recall; learn()
@@ -301,6 +391,53 @@ export class KnowledgeLoopService {
     void this.contributeToProjectEvermind((entry ?? summary ?? "").trim(), acc?.prompt, created.length + edited.length > 0);
 
     await this.syncIfConfigured();
+  }
+
+  /**
+   * Best-effort timeline post for a verify event that already has a result
+   * behind it. No live frame (the tool loop did not emit this), so it goes to
+   * the same tool-audit door the relay persists to. Never awaited, never
+   * thrown — a bookkeeping failure must not delay the finished run.
+   * `verify_completed` is not a tool name this posts.
+   */
+  private emitVerifyTimeline(runId: string, sessionKey: string, event: OnPremVerifyEvent): void {
+    try {
+      const { apiKey, baseUrl, agentNodeId } = this.opts;
+      if (!apiKey || !agentNodeId) {
+        return;
+      }
+      const url = `${normalizeBaseUrl(baseUrl ?? DEFAULT_BUILDERFORCE_URL)}/api/agent-hosts/${agentNodeId}/tool-audit`;
+      const body =
+        "type" in event && event.type === "verify_started"
+          ? {
+              runId,
+              sessionKey,
+              toolName: "run_policy",
+              category: "policy",
+              args: { event: "verify_started" },
+              result: "run entered the verify phase (surface on-prem)",
+              ts: new Date().toISOString(),
+            }
+          : {
+              runId,
+              sessionKey,
+              toolName: "in_run_verify" as const,
+              category: "tool" as const,
+              args: event.detail,
+              result: event.result,
+              ts: new Date().toISOString(),
+            };
+      void fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10_000),
+      }).catch((err) => {
+        logDebug(`[knowledge-loop] verify timeline post failed: ${String(err)}`);
+      });
+    } catch (err) {
+      logDebug(`[knowledge-loop] verify timeline post failed: ${String(err)}`);
+    }
   }
 
   /** Build project-Evermind sync config from the loop's gateway opts (reuses the

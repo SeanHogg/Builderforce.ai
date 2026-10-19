@@ -13,9 +13,10 @@
  * (the durable loop in `CloudLoopState`, the container in `containerRunModelStore`).
  *
  * ── THE PHASE RULE ──────────────────────────────────────────────────────────
- * A cloud run is a ticket being IMPLEMENTED, so it starts — and stays — in `code`: the
- * run holds one model for its whole life (the lock below), which is exactly the case
- * where the policy's implicit plan→code re-ask never fires. A delegated child carries
+ * A cloud run is a ticket being IMPLEMENTED, so it starts in `code` and holds one
+ * model until it has written files. The finish path then emits `verify_started` on
+ * the LIVE state, which moves the run onto `phaseModels.verify` and excludes the
+ * author. A delegated child carries
  * its own role (`CloudChildSpec.role`): a `plan` or `verify` child starts in that phase,
  * and a child delegated one kind of non-phase work (`explore`, `utility`, `chat`) asks
  * for that role on every turn. That is the effective role the loop always used
@@ -97,7 +98,10 @@ export function cloudRunRole(delegatedRole: string | null | undefined): TurnRequ
 export function initialCloudRunModelState(
   pick: { model: string; strict: boolean },
   delegatedRole: string | null | undefined,
+  phaseModels?: RunPolicyOptions['phaseModels'],
 ): CloudRunModelState {
+  const verify = phaseModels?.verify;
+  const reviewModel = typeof verify === 'string' && verify.trim() ? verify.trim() : null;
   return {
     policy: initialRunPolicy({
       pinnedModel: pick.model,
@@ -106,6 +110,8 @@ export function initialCloudRunModelState(
       lockAfterFirstSuccess: true,
       decliningModelPrefixes: DECLINING_MODEL_PREFIXES,
       ...cloudRunPolicyRole(delegatedRole),
+      ...(phaseModels ? { phaseModels } : {}),
+      reviewModel,
     }),
     stallRecoveries: 0,
   };
@@ -121,9 +127,21 @@ export function resumeCloudRunModelState(
   legacyPinnedModel: string | undefined,
   pick: { model: string; strict: boolean },
   delegatedRole: string | null | undefined,
+  phaseModels?: RunPolicyOptions['phaseModels'],
 ): CloudRunModelState {
-  if (saved?.policy) return saved;
-  return initialCloudRunModelState({ ...pick, model: legacyPinnedModel || pick.model }, delegatedRole);
+  if (saved?.policy) {
+    if (!phaseModels) return saved;
+    const verify = phaseModels.verify;
+    const reviewModel = typeof verify === 'string' && verify.trim() ? verify.trim() : (saved.policy.options.reviewModel ?? null);
+    return {
+      ...saved,
+      policy: {
+        ...saved.policy,
+        options: { ...saved.policy.options, phaseModels, reviewModel },
+      },
+    };
+  }
+  return initialCloudRunModelState({ ...pick, model: legacyPinnedModel || pick.model }, delegatedRole, phaseModels);
 }
 
 /** The request fields a turn adds to a gateway completion body. */
@@ -177,7 +195,8 @@ export async function completeUnderRunPolicy<R extends { response: { status: num
     policy = reduceRunPolicy(policy, { type: 'turn_succeeded', ...(result.resolvedModel ? { model: result.resolvedModel } : {}) });
   }
   // The forced tool choice was one-shot: this request spent it.
-  return { state: { policy, stallRecoveries: state.stallRecoveries }, result };
+  // Keep every field the next tick reads (phase models live on `policy.options`).
+  return { state: { ...state, policy, forceToolChoice: undefined }, result };
 }
 
 /** Timeline wording for a pin or lock the policy released. */

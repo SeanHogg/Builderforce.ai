@@ -92,6 +92,52 @@ describe('hand_off', () => {
     expect(nextTurn(s, TOOLS).role).toBe('verify');
     expect(offersHandOff(s)).toBe(false);
   });
+
+  it('verify_started pins a different review model and excludes the author', () => {
+    const s = run(
+      initialRunPolicy({
+        startPhase: 'code',
+        pinnedModel: 'opus',
+        strictPin: true,
+        phaseModels: { code: 'opus', verify: 'gpt-4.1' },
+      }),
+      { type: 'verify_started' },
+    );
+    expect(s.phase).toBe('verify');
+    expect(s.authorModel).toBe('opus');
+    expect(nextTurn(s, TOOLS)).toMatchObject({
+      role: 'verify',
+      model: 'gpt-4.1',
+      excludeModels: ['opus'],
+    });
+  });
+
+  it('a review pin equal to the author is still excluded', () => {
+    const s = run(
+      initialRunPolicy({ startPhase: 'code', pinnedModel: 'opus', reviewModel: 'opus' }),
+      { type: 'verify_started' },
+    );
+    expect(nextTurn(s, TOOLS)).toMatchObject({ model: undefined, excludeModels: ['opus'] });
+  });
+
+  it('verify is not masked by a fixed role', () => {
+    const s = run(
+      initialRunPolicy({ startPhase: 'code', pinnedModel: 'opus', fixedRole: 'explore', phaseModels: { verify: 'haiku' } }),
+      { type: 'verify_started' },
+    );
+    expect(nextTurn(s, TOOLS).role).toBe('verify');
+    expect(nextTurn(s, TOOLS).model).toBe('haiku');
+  });
+
+  it('a second verify_started does not recapture the review model as the author', () => {
+    const s = run(
+      initialRunPolicy({ startPhase: 'code', pinnedModel: 'opus', phaseModels: { verify: 'haiku' } }),
+      { type: 'verify_started' },
+      { type: 'verify_started' },
+    );
+    expect(s.authorModel).toBe('opus');
+    expect(nextTurn(s, TOOLS).excludeModels).toEqual(['opus']);
+  });
 });
 
 describe('transport failures', () => {

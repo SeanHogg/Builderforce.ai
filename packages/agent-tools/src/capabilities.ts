@@ -529,6 +529,8 @@ export interface RepoListResult {
   ref?: string;
   paths?: string[];
   truncated?: boolean;
+  /** Set when a glob matched nothing — an incomplete walk must say so, never "no such file". */
+  note?: string;
   error?: string;
 }
 export interface RepoReadResult {

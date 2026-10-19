@@ -103,6 +103,47 @@ describe('listBranchDiff — GitLab compare', () => {
   });
 });
 
+describe('listRepoFiles — glob before the tree cap', () => {
+  const gh = { provider: 'github', host: null, owner: 'o', repo: 'r', token: 't', ref: 'main' };
+
+  it('returns a glob match that sits past the 400-entry slice', async () => {
+    const tree = [
+      ...Array.from({ length: 401 }, (_, i) => ({ path: `noise/f${String(i).padStart(4, '0')}.ts`, type: 'blob' })),
+      { path: 'frontend/src/lib/widget.test.ts', type: 'blob' },
+    ];
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ tree, truncated: false })));
+    const r = await listRepoFiles(gh, undefined, 'frontend/src/lib/**/*.test.ts');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.paths).toContain('frontend/src/lib/widget.test.ts');
+    expect(r.truncated).toBe(false);
+  });
+
+  it('resolves a glob written relative to path', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      tree: [
+        { path: 'frontend/src/lib/a.test.ts', type: 'blob' },
+        { path: 'frontend/src/other/b.test.ts', type: 'blob' },
+      ],
+      truncated: false,
+    })));
+    const r = await listRepoFiles(gh, 'frontend/src/lib', '**/*.test.ts');
+    expect(r.ok && r.paths).toEqual(['frontend/src/lib/a.test.ts']);
+  });
+
+  it('does not claim a complete miss when GitHub truncated the tree and nothing matched', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      tree: [{ path: 'a.ts', type: 'blob' }],
+      truncated: true,
+    })));
+    const r = await listRepoFiles(gh, 'frontend/src/lib', '**/*.test.ts');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.paths).toEqual([]);
+    expect(r.truncated).toBe(true);
+  });
+});
+
 describe('listRepoFiles — non-GitHub via RepoSource [1248]', () => {
   it('lists GitLab files (blobs only, dirs excluded)', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {

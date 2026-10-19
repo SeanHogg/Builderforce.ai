@@ -20,6 +20,12 @@ import { usageDatabaseOf } from '../llm/usageLedger';
 
 export const CLOUD_RUN_USAGE_LIMIT = 500;
 
+function phaseOf(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const phase = (metadata as { phase?: unknown }).phase;
+  return typeof phase === 'string' && phase.trim() ? phase : null;
+}
+
 /** The `usage_snapshots` row shape the trace consumers already render. */
 export interface CloudRunUsagePoint {
   id: number;
@@ -35,6 +41,8 @@ export interface CloudRunUsagePoint {
   compactionCount: number;
   ts: Date;
   createdAt: Date;
+  /** Policy phase this turn was billed under, when the ledger row recorded one. */
+  phase: string | null;
 }
 
 /**
@@ -54,6 +62,7 @@ export async function readCloudRunUsage(
       promptTokens: llmUsageLog.promptTokens,
       completionTokens: llmUsageLog.completionTokens,
       createdAt: llmUsageLog.createdAt,
+      metadata: llmUsageLog.metadata,
     })
     .from(llmUsageLog)
     .where(scopedToTenant(llmUsageLog, tenantId,
@@ -76,5 +85,6 @@ export async function readCloudRunUsage(
     compactionCount: 0,
     ts: r.createdAt,
     createdAt: r.createdAt,
+    phase: phaseOf(r.metadata),
   }));
 }

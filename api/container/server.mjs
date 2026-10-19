@@ -139,7 +139,11 @@ function globToRegExp(pattern) {
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i];
     if (c === '*') {
-      if (pattern[i + 1] === '*') { re += '.*'; i++; } else { re += '[^/]*'; }
+      // `**/` is one token: zero or more directories, matching glob.ts.
+      if (pattern[i + 1] === '*') {
+        if (pattern[i + 2] === '/') { re += '(?:.*/)?'; i += 2; }
+        else { re += '.*'; i++; }
+      } else { re += '[^/]*'; }
     } else if (c === '?') {
       re += '[^/]';
     } else {
@@ -167,6 +171,50 @@ function matchGlobScoped(p, pattern, sub) {
   return matchGlob(p, pattern) || matchGlob(p.slice(scope.length + 1), pattern);
 }
 
+/** Mirror of `dirMayContainGlobMatch` in packages/agent-tools/src/glob.ts. */
+function dirMayContainGlob(dir, pattern, sub) {
+  const norm = (s) => (s ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
+  const d = norm(dir);
+  const scope = norm(sub);
+  const pat = String(pattern).split('\\').join('/');
+  if (scope && d && d !== scope && !d.startsWith(scope + '/') && !scope.startsWith(d + '/')) return false;
+  const literalPrefix = (p) => {
+    if (!p.includes('/')) return null;
+    const meta = p.search(/[*?\[]/);
+    if (meta === 0) return null;
+    const head = meta < 0 ? p : p.slice(0, meta);
+    const slash = head.lastIndexOf('/');
+    return slash < 0 ? null : head.slice(0, slash + 1);
+  };
+  const canReach = (directory, prefix) => {
+    if (directory === '') return true;
+    const dirSlash = directory + '/';
+    return prefix.startsWith(dirSlash) || dirSlash.startsWith(prefix);
+  };
+  const readings = [literalPrefix(pat)];
+  if (scope) {
+    const rel = literalPrefix(pat);
+    readings.push(rel == null ? scope + '/' : scope + '/' + rel);
+  }
+  for (const prefix of readings) {
+    if (prefix == null) {
+      if (!scope || d === '' || d === scope || d.startsWith(scope + '/') || scope.startsWith(d + '/')) return true;
+      continue;
+    }
+    if (canReach(d, prefix)) return true;
+  }
+  return false;
+}
+
+function emptyGlobNote(glob, sub, truncated) {
+  const scope = (sub ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
+  const base = 'No file matches glob "' + glob + '"' + (scope ? ' under "' + scope + '"' : '') + '.';
+  if (truncated) {
+    return base + ' This is NOT proof the file does not exist: the search was cut off before the tree was fully scanned, so this only means "not among the paths scanned so far". Narrow path to a smaller folder and re-run before concluding anything is missing.';
+  }
+  return base + ' Try a broader pattern, or list_files without a glob to see the tree. 0 matches means no such file exists in the paths scanned — do not claim one is missing without trying a broader glob first.';
+}
+
 /**
  * List repo files under `dir` (skipping .git/node_modules), capped. BREADTH-FIRST so
  * shallow files (root docs like ROADMAP.md) are collected before the cap is hit deep
@@ -190,7 +238,13 @@ async function listFiles(dir, sub, glob) {
     for (const e of entries) {
       if (e.name === '.git' || e.name === 'node_modules') continue;
       const full = join(d, e.name);
-      if (e.isDirectory()) { queue.push(full); }
+      if (e.isDirectory()) {
+        if (glob) {
+          const relDir = relative(dir, full).split(sep).join('/');
+          if (!dirMayContainGlob(relDir, glob, sub)) continue;
+        }
+        queue.push(full);
+      }
       else {
         const rel = relative(dir, full).split(sep).join('/');
         if (glob && !matchGlobScoped(rel, glob, sub)) continue;
@@ -200,7 +254,9 @@ async function listFiles(dir, sub, glob) {
     }
   }
   acc.sort((a, b) => a.localeCompare(b));
-  return { ok: true, paths: acc, truncated };
+  const result = { ok: true, paths: acc, truncated };
+  if (glob && acc.length === 0) result.note = emptyGlobNote(glob, sub, truncated);
+  return result;
 }
 
 /** Execute one tool call. Repo reads/writes hit local disk (the clone); write also
@@ -268,7 +324,7 @@ async function verifyThenRemember(spec, workdir, writtenPaths, finalOutput, proc
   await op(spec, { op: 'verify', args: { writtenPaths: [...writtenPaths], results, summary: finalOutput } }).catch(() => {});
 }
 
-async function execTool(spec, workdir, writtenPaths, name, parsed, proc, loop) {
+async function execTool(spec, workdir, writtenPaths, readMemo, name, parsed, proc, loop) {
   if (name === 'list_files') {
     if (!workdir) return { ok: false, error: 'no repository bound to this task' };
     return listFiles(
@@ -281,9 +337,13 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc, loop) {
     const path = typeof parsed.path === 'string' ? parsed.path : '';
     if (!path) return { ok: false, error: 'path is required' };
     if (!workdir) return { ok: false, error: 'no repository bound to this task' };
+    const cached = readMemo.get(path);
+    if (cached) return cached;
     try {
       const content = await readFile(join(workdir, path), 'utf8');
-      return { ok: true, path, content: content.slice(0, 100_000), truncated: content.length > 100_000 };
+      const result = { ok: true, path, content: content.slice(0, 100_000), truncated: content.length > 100_000 };
+      readMemo.set(path, result);
+      return result;
     } catch (e) { return { ok: false, error: `read failed: ${e.message}` }; }
   }
   if (name === 'write_file') {
@@ -296,14 +356,20 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc, loop) {
       try { await mkdir(dirname(join(workdir, path)), { recursive: true }); await writeFile(join(workdir, path), content); } catch { /* non-fatal; commit is source of truth */ }
     }
     const r = await op(spec, { op: 'write', args: { path, content, summary: parsed.summary, isNew } });
-    if (r.ok) writtenPaths.add(path);
+    if (r.ok) { writtenPaths.add(path); readMemo.delete(path); }
     return r;
   }
   if (name === 'analyze_codebase') {
     if (!workdir) return { ok: false, error: 'no repository checked out' };
     return runCodeAnalysis(parsed, {
       run: async (command) => { const r = await runShell(command, workdir, proc); return { ok: r.exitCode === 0, exitCode: r.exitCode, stdout: r.output }; },
-      read: async (path) => ({ ok: true, content: await readFile(join(workdir, path), 'utf8') }),
+      read: async (path) => {
+        const cached = readMemo.get(path);
+        if (cached?.ok) return { ok: true, content: cached.content };
+        const content = await readFile(join(workdir, path), 'utf8');
+        readMemo.set(path, { ok: true, path, content, truncated: false });
+        return { ok: true, content };
+      },
       persist: async (snapshot) => { const r = await op(spec, { op: 'audit_analysis', args: { snapshot } }); if (!r.ok) throw new Error('Could not persist analyzer snapshot'); },
     });
   }
@@ -590,6 +656,7 @@ async function startPreviewDevServer(spec, workdir) {
 async function runLoop(spec) {
   let workdir = null;
   const writtenPaths = new Set();
+  const readMemo = new Map();
   let finalOutput = '';
   let cancelled = false;
   let crashed = null;
@@ -678,8 +745,8 @@ async function runLoop(spec) {
       // `CONTAINER_SURFACE_CAPS` the moment its Worker-side op exists rather than only
       // after every image has been rebuilt and deployed. An older image simply omits
       // the new name and is never offered the tool.
-      llm: (transcript) => op(spec, { op: 'llm', args: { messages: transcript, supportedTools: SUPPORTED_TOOL_NAMES } }),
-      execTool: (name, parsed, loop) => execTool(spec, workdir, writtenPaths, name, parsed, proc, loop),
+      llm: (transcript) => op(spec, { op: 'llm', args: { messages: transcript, supportedTools: SUPPORTED_TOOL_NAMES, writtenPaths: [...writtenPaths] } }),
+      execTool: (name, parsed, loop) => execTool(spec, workdir, writtenPaths, readMemo, name, parsed, proc, loop),
       // A heartbeat may have observed a cancel (and killed an in-flight command)
       // since the last step — stop before spending another LLM call.
       isCancelled: () => cancelled,

@@ -823,9 +823,15 @@ export const projectFacts = pgTable('project_facts', {
    *  the same anchor means the belief was corrected. NULL on pre-1242 rows, which
    *  acquire one on their next write. */
   contentHash:   text('content_hash'),
-  /** Files this fact was read out of, as `{path,line}` objects. A fact whose anchor
-   *  no longer holds the claim it makes is the signal to retire it. */
-  fileAnchors:   jsonb('file_anchors').$type<Array<{ path: string; line?: number }>>(),
+  /** Files this fact is about, as `{path, line?, contentHash?}` (1242/1248).
+   *  `contentHash` is the file hash at write time; recall drops the fact when that
+   *  file has since changed. JSON shape only — the column stays JSONB. */
+  fileAnchors:   jsonb('file_anchors').$type<Array<{ path: string; line?: number; contentHash?: string }>>(),
+  /** When a run last returned this fact (1248). Null = never recalled. Not a
+   *  proxy for updated_at: a rewrite is not a recall. */
+  lastRecalledAt: timestamp('last_recalled_at'),
+  /** How many times recall has returned this fact (1248). 0 = never. */
+  recallCount:    integer('recall_count').notNull().default(0),
   /** SEMANTIC RECALL (1134) — the same three columns `agent_memory` carries, because
    *  governed recall unions both stores and a half-embedded union ranks half by
    *  meaning and half by keyword. */

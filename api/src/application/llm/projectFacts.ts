@@ -15,11 +15,11 @@
  * read-through cache, keyed by a per-(tenant,project) VERSION token bumped on every
  * write, so a recall never serves a stale fact set.
  */
-import { and, desc, eq, gt, ilike, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, inArray, isNull, lt, ne, or, sql, type SQL } from 'drizzle-orm';
 import { embedMemoryText, memoryEmbeddingText, toVectorLiteral, MEMORY_EMBEDDING_MODEL } from '../memory/memoryEmbedding';
 import { annRecallProject } from '../memory/memorySemanticRecall';
 import { fuseHybridArms } from '@seanhogg/builderforce-memory/retrieval';
-import { projectFacts } from '../../infrastructure/database/schema';
+import { agentHostDirectoryFiles, llmTraces, projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -57,6 +57,10 @@ export interface ProjectFact {
   /** Included so a cached row can be revalidated against wall-clock time on every
    * recall; time passing does not bump the cache's version token. */
   expiresAt?: string | null;
+  /** The fact's file anchors, carried through the cached payload so the stale-anchor
+   * check can run outside the loader. Absent means unanchored, and an unanchored
+   * fact is never stale. */
+  fileAnchors?: Array<{ path: string; line?: number; contentHash?: string }> | null;
 }
 
 function versionKey(tenantId: number, projectId: number): string {
@@ -123,6 +127,30 @@ const IMPORTANCE_BY_KIND: Record<FactImportance, number> = {
  * Order matters — the strongest pattern that matches wins, so an invariant that also
  * says "we use" is scored as an invariant.
  */
+/**
+ * Drop beliefs that have not been recalled within `windowMs` of `now`.
+ *
+ * Pure and total: a fact with no `lastRecalledAt` has never been recalled, so it is
+ * the first thing this drops, and a fact recalled inside the window survives.
+ * `sweepUnrecalledFactDecay` is what runs this against the table — recall stamps
+ * `last_recalled_at` first, and the sweep only then expires what this filter drops.
+ * Calling it before that stamp exists would expire every row. `now` is injectable
+ * so a test does not depend on the clock.
+ */
+export function decayUnrecalled<T extends { lastRecalledAt?: string | null }>(
+  facts: readonly T[],
+  now: Date,
+  windowMs: number,
+): T[] {
+  if (!(windowMs > 0)) return [...facts];
+  const cutoff = now.getTime() - windowMs;
+  return facts.filter((fact) => {
+    if (!fact.lastRecalledAt) return false;
+    const recalled = new Date(fact.lastRecalledAt).getTime();
+    return Number.isFinite(recalled) && recalled >= cutoff;
+  });
+}
+
 export function factImportance(content: string, kind?: FactImportance): number {
   if (kind) return IMPORTANCE_BY_KIND[kind];
   const c = (content ?? '').toLowerCase();
@@ -145,10 +173,142 @@ export function factContentHash(key: string, content: string): Promise<string> {
   return sha256Hex(`${key}\n${(content ?? '').toLowerCase().replace(/\s+/g, ' ').trim()}`);
 }
 
+/** How long a cached Q&A answer stays replayable. The column already exists (0371). */
+export const QA_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** A fact never returned by recall within this window is expired by the sweep. */
+export const UNRECALLED_DECAY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** One file a fact is about. `contentHash` is the file hash at write time. */
+export interface FactFileAnchor {
+  path: string;
+  line?: number;
+  contentHash?: string;
+}
+
+/**
+ * Keep only anchors that name a path. A recorded hash is kept when the caller
+ * has one; a missing hash is not invented, and an anchor without one is never
+ * treated as stale.
+ */
+export function normalizeFileAnchors(anchors: readonly FactFileAnchor[] | null | undefined): FactFileAnchor[] | null {
+  if (!anchors?.length) return null;
+  const out: FactFileAnchor[] = [];
+  for (const anchor of anchors) {
+    const path = typeof anchor?.path === 'string' ? anchor.path.trim() : '';
+    if (!path) continue;
+    const contentHash = typeof anchor.contentHash === 'string' && anchor.contentHash.trim()
+      ? anchor.contentHash.trim()
+      : undefined;
+    const line = typeof anchor.line === 'number' && Number.isFinite(anchor.line) ? anchor.line : undefined;
+    out.push({ path, ...(line != null ? { line } : {}), ...(contentHash ? { contentHash } : {}) });
+  }
+  return out.length ? out : null;
+}
+
+/** Tool/route payloads are untyped. Keep only object anchors; hashes are filled later. */
+export function parseFactFileAnchors(raw: unknown): FactFileAnchor[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const anchors = normalizeFileAnchors(
+    raw.filter((item): item is FactFileAnchor => item != null && typeof item === 'object'),
+  );
+  return anchors ?? undefined;
+}
+
+/**
+ * A path without a hash cannot go stale later. Fill it from the directory index
+ * when the caller named the file but did not hash it. A miss stays unhashed, and
+ * an unhashed anchor is never treated as stale.
+ */
+async function stampAnchorHashes(
+  db: Db,
+  tenantId: number,
+  anchors: FactFileAnchor[] | null,
+): Promise<FactFileAnchor[] | null> {
+  if (!anchors?.length) return anchors;
+  const read = hostDirectoryHashReader(db, tenantId);
+  const out: FactFileAnchor[] = [];
+  for (const anchor of anchors) {
+    if (anchor.contentHash) {
+      out.push(anchor);
+      continue;
+    }
+    const hash = await read(anchor.path).catch(() => null);
+    out.push(hash ? { ...anchor, contentHash: hash } : anchor);
+  }
+  return out;
+}
+
+/**
+ * Fill a missing origin triple from the execution's own LLM trace. Returns the
+ * caller's triple when it already names a model. Returns null when there is no
+ * execution id or no trace — never a guessed model or a guessed token count.
+ */
+export async function resolveFactOrigin(
+  db: Db,
+  tenantId: number,
+  executionId: number | null | undefined,
+  origin: FactOriginCost | null | undefined,
+): Promise<FactOriginCost | null> {
+  if (origin?.model?.trim()) return origin;
+  if (executionId == null || !Number.isInteger(executionId) || executionId <= 0) return origin ?? null;
+  const [trace] = await db
+    .select({
+      model: llmTraces.resolvedModel,
+      promptTokens: llmTraces.promptTokens,
+      completionTokens: llmTraces.completionTokens,
+    })
+    .from(llmTraces)
+    .where(and(eq(llmTraces.executionId, executionId), eq(llmTraces.tenantId, tenantId)))
+    .orderBy(desc(llmTraces.id))
+    .limit(1)
+    .catch((err: unknown) => {
+      // A missing trace is a legitimate "no origin cost", but a FAILED TRACE READ is
+      // a database problem the origin columns will silently omit. Report it so the
+      // belief is still written — a cost-less fact beats a lost write.
+      reportCaughtError(err, { source: 'project-facts', operation: 'resolve-fact-origin', level: 'warning', context: { tenantId, executionId } });
+      return [] as Array<{ model: string | null; promptTokens: number; completionTokens: number }>;
+    });
+  if (!trace?.model?.trim()) return origin ?? null;
+  return {
+    model: trace.model.trim(),
+    promptTokens: trace.promptTokens,
+    completionTokens: trace.completionTokens,
+  };
+}
+
+/**
+ * The only file-hash reader this repo already has: the host directory index.
+ * A path it does not index returns null, and a null read is not stale.
+ */
+export function hostDirectoryHashReader(db: Db, tenantId: number): FileContentHashReader {
+  return async (path: string) => {
+    const rel = path.trim();
+    if (!rel) return null;
+    const [row] = await db
+      .select({ contentHash: agentHostDirectoryFiles.contentHash })
+      .from(agentHostDirectoryFiles)
+      .where(and(eq(agentHostDirectoryFiles.tenantId, tenantId), eq(agentHostDirectoryFiles.relPath, rel)))
+      .orderBy(desc(agentHostDirectoryFiles.updatedAt))
+      .limit(1)
+      .catch((err: unknown) => {
+        // An unindexed path is the normal miss (the reader returns null and the
+        // anchor is simply not stale). A FAILED READ is not, and it must not be
+        // indistinguishable from one — report it and keep the "not stale" default,
+        // which is the safe direction: never drop a belief on a broken index.
+        reportCaughtError(err, { source: 'project-facts', operation: 'host-directory-hash-read', level: 'warning', context: { tenantId } });
+        return [] as Array<{ contentHash: string }>;
+      });
+    return row?.contentHash ?? null;
+  };
+}
+
 /** A fact's content plus its production cost, when known. */
 export interface ProjectFactRecord {
   content: string;
   origin: FactOriginCost | null;
+  /** Files the cached answer was about, so a replay can drop it when they change. */
+  fileAnchors: FactFileAnchor[] | null;
 }
 
 /** The origin-cost columns for a write — all three or none, so a half-known cost is
@@ -191,8 +351,8 @@ export async function upsertProjectFact(
     /** Explicit weight; scored from the content when omitted. */
     importance?: number;
     kind?: FactImportance;
-    /** Files the fact was read out of — the anchor a later write checks. */
-    fileAnchors?: Array<{ path: string; line?: number }>;
+    /** Files the fact is about. `contentHash` is the file hash at write time. */
+    fileAnchors?: FactFileAnchor[];
   },
 ): Promise<boolean> {
   const k = (key ?? '').trim().slice(0, 255);
@@ -200,17 +360,32 @@ export async function upsertProjectFact(
   if (!k || !c || !Number.isInteger(projectId) || projectId <= 0) return false;
   const expiresAt = opts?.expiresAt ?? null;
   const originExecutionId = opts?.originExecutionId ?? null;
-  // What producing the fact cost (1228). Replaced with the content, like the rest of the
-  // provenance: a re-write by a different turn is a different production cost.
-  const originCost = originCostColumns(opts?.origin);
-  // A REAL weight (1242). Until this, no caller ever set `importance`, so all 591 rows
-  // sat on the column default and the recall ordering was plain newest-first — the
-  // ranking carried no information at all.
-  const importance = clamp01(opts?.importance ?? factImportance(c, opts?.kind));
+  // Provenance is the execution id the caller already has, plus the model of that
+  // run's own trace when the caller did not pass a triple. A missing id stays null.
+  const origin = await resolveFactOrigin(db, tenantId, originExecutionId, opts?.origin);
+  const originCost = originCostColumns(origin);
+  // Content score, then a small lift from how often recall has already returned
+  // this key. A brand-new key has no prior count, so it keeps the content score.
+  const prior = await db
+    .select({ recallCount: projectFacts.recallCount })
+    .from(projectFacts)
+    .where(and(eq(projectFacts.tenantId, tenantId), eq(projectFacts.projectId, projectId), eq(projectFacts.key, k)))
+    .limit(1)
+    .catch((err: unknown) => {
+      // A brand-new key has no prior count, which is the normal path here. A FAILED
+      // count read is not, and it would flatter the fact: recallCount 0 skips the
+      // recall-frequency lift. Report it rather than writing a belief whose
+      // importance was computed from a stand-in zero.
+      reportCaughtError(err, { source: 'project-facts', operation: 'prior-recall-count', level: 'warning', context: { tenantId, projectId } });
+      return [] as Array<{ recallCount: number }>;
+    });
+  const recallCount = prior[0]?.recallCount ?? 0;
+  const baseImportance = opts?.importance ?? factImportance(c, opts?.kind);
+  const importance = clamp01(baseImportance + Math.min(0.1, recallCount * 0.01));
   // Stamped on every write, on BOTH branches below. This digest is what tells a
   // corrected belief from a re-assertion of the same one.
   const contentHash = await factContentHash(k, c);
-  const fileAnchors = opts?.fileAnchors ?? null;
+  const fileAnchors = await stampAnchorHashes(db, tenantId, normalizeFileAnchors(opts?.fileAnchors));
   // Embed on write so the fact is semantically reachable on the next recall (1134).
   // Best-effort, and now actually so: the `catch` used to be MISSING, so a provider
   // error propagated out of this function and the belief was never written at all —
@@ -278,7 +453,13 @@ export async function upsertProjectFact(
       // `supersededBy: null` REVIVES a retired row when someone re-asserts the belief:
       // a retirement is "this was contradicted", not "this is forbidden", and a fresh
       // assertion is exactly the evidence that it is live again.
-      set: { content: c, source: source.slice(0, 64), expiresAt, originExecutionId, importance, contentHash, fileAnchors, supersededBy: null, ...originCost, ...embeddingFields, updatedAt: now },
+      set: {
+        content: c, source: source.slice(0, 64), expiresAt, importance, contentHash, fileAnchors, supersededBy: null, ...embeddingFields, updatedAt: now,
+        // A rewrite that does not know its run must not wipe a stamp a previous write
+        // recorded. Insert still writes null when nothing is known (values above).
+        ...(originExecutionId != null ? { originExecutionId } : {}),
+        ...(origin ? originCost : {}),
+      },
     });
   await bumpCacheVersion(env, versionKey(tenantId, projectId));
   return true;
@@ -301,7 +482,14 @@ export async function deleteProjectFact(
     .delete(projectFacts)
     .where(and(eq(projectFacts.tenantId, tenantId), eq(projectFacts.projectId, projectId), eq(projectFacts.key, k)))
     .returning({ id: projectFacts.id })
-    .catch(() => [] as Array<{ id: string }>);
+    .catch((err: unknown) => {
+      // Returning `false` on a FAILED DELETE would tell the caller the belief is gone
+      // when it is still stored and will be recalled again — the one outcome worse
+      // than an error. So the rejection is reported as an error (not a warning) and
+      // the caller still gets its honest `false`, with the failure now visible.
+      reportCaughtError(err, { source: 'project-facts', operation: 'delete-project-fact', level: 'error', context: { tenantId, projectId } });
+      return [] as Array<{ id: string }>;
+    });
   if (removed.length > 0) await bumpCacheVersion(env, versionKey(tenantId, projectId));
   return removed.length > 0;
 }
@@ -330,7 +518,12 @@ export async function purgeProjectQaCache(
       eq(projectFacts.source, QA_CACHE_SOURCE),
     ))
     .returning({ id: projectFacts.id })
-    .catch(() => [] as Array<{ id: string }>);
+    .catch((err: unknown) => {
+      // Same contract as deleteProjectFact: a failed purge must not be counted as
+      // "nothing to purge", or the caller stops believing the cache needs clearing.
+      reportCaughtError(err, { source: 'project-facts', operation: 'purge-project-qa-cache', level: 'error', context: { tenantId, projectId } });
+      return [] as Array<{ id: string }>;
+    });
   if (removed.length > 0) await bumpCacheVersion(env, versionKey(tenantId, projectId));
   return removed.length;
 }
@@ -351,12 +544,53 @@ export async function purgeProjectQaCache(
  * Without a `query`, returns the most important/recent. Degrades to [] on any error
  * (e.g. pre-migration table).
  */
+/**
+ * Reads the CURRENT content hash of one anchored file, so recall can tell a belief
+ * whose anchor has since changed from one that still holds.
+ *
+ * Injected rather than imported: recall runs in the Worker, where there is no
+ * filesystem, and the file store differs per surface (R2 canvas, container worktree,
+ * on-prem disk). A caller that has a store passes a reader; a caller that does not —
+ * including every existing one, and the unit tests — passes nothing, and an
+ * unanchored-or-unread file is treated as NOT stale. Staleness is excluded, never
+ * guessed.
+ */
+export type FileContentHashReader = (path: string) => Promise<string | null>;
+
+/** One `{path, line?, contentHash?}` anchor as stored in the `file_anchors` jsonb. */
+interface FileAnchor { path?: unknown; contentHash?: unknown }
+
+/**
+ * A fact is stale only when an anchor BOTH recorded the file's hash at write time
+ * AND that file now hashes differently. No anchor, no recorded hash, or a reader
+ * that cannot see the file (null) all mean "not stale" — a missing read must never
+ * silently drop a belief.
+ */
+export async function anchorsAreStale(anchors: unknown, readHash: FileContentHashReader): Promise<boolean> {
+  if (!Array.isArray(anchors)) return false;
+  for (const anchor of anchors as FileAnchor[]) {
+    const recorded = typeof anchor?.contentHash === 'string' ? anchor.contentHash : '';
+    const path = typeof anchor?.path === 'string' ? anchor.path : '';
+    if (!recorded || !path) continue;
+    const current = await readHash(path).catch((err: unknown) => {
+      // `null` here means "cannot tell", and the contract above is that not-tell is
+      // never stale. Report it anyway: a persistently failing hash reader otherwise
+      // looks identical to a project with no anchors, and every anchor in it goes
+      // permanently un-checked.
+      reportCaughtError(err, { source: 'project-facts', operation: 'anchor-hash-read', level: 'warning', context: { path } });
+      return null;
+    });
+    if (current != null && current !== recorded) return true;
+  }
+  return false;
+}
+
 export async function recallProjectFacts(
   env: Env,
   db: Db,
   tenantId: number,
   projectId: number,
-  opts?: { query?: string; limit?: number },
+  opts?: { query?: string; limit?: number; readFileHash?: FileContentHashReader },
 ): Promise<ProjectFact[]> {
   if (!Number.isInteger(projectId) || projectId <= 0) return [];
   const limit = Math.min(Math.max(1, Math.trunc(opts?.limit ?? RECALL_DEFAULT)), RECALL_MAX);
@@ -392,7 +626,7 @@ export async function recallProjectFacts(
 
         const lexicalRows: SemanticFactRow[] = (
           await db
-            .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt, importance: projectFacts.importance })
+            .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt, importance: projectFacts.importance, fileAnchors: projectFacts.fileAnchors })
             .from(projectFacts)
             .where(scopedToTenant(projectFacts, tenantId, lexicalWhere))
             .orderBy(desc(projectFacts.importance), desc(projectFacts.updatedAt))
@@ -409,6 +643,7 @@ export async function recallProjectFacts(
           // score with NaN.
           importance: Number.isFinite(Number(row.importance)) ? Number(row.importance) : 0.5,
           score: 1, // a lexical match is a full-text hit, so it scores 1 by construction
+          fileAnchors: normalizeFileAnchors(row.fileAnchors as FactFileAnchor[] | null),
         }));
 
         const semanticRows = await recallProjectFactsSemantically(
@@ -446,15 +681,162 @@ export async function recallProjectFacts(
           key: row.key,
           content: row.content,
           expiresAt: row.expiresAt ? new Date(row.expiresAt).toISOString() : null,
+          // The anchors MUST survive the cache: the stale-anchor check below runs on
+          // whatever this returns, so a payload without them would make every
+          // anchored fact look unanchored and nothing would ever be flagged stale.
+          ...(row.fileAnchors?.length ? { fileAnchors: row.fileAnchors } : {}),
         }));
       },
       { kvTtlSeconds: 60 },
     );
     const now = new Date();
-    return cached.filter((fact) => !isExpired(fact.expiresAt, now));
+    const live = cached.filter((fact) => !isExpired(fact.expiresAt, now));
+    // Stale-anchor exclusion runs OUTSIDE the cached loader on purpose (ticket 5301).
+    // The cache key is the fact-table version token, so a file changing does not bust
+    // it — a check folded inside the loader would keep serving a belief about a file
+    // for up to the 60s TTL after the file changed. With no reader nothing is
+    // excluded, so this changes no caller's current behaviour.
+    const readHash = opts?.readFileHash;
+    const kept: ProjectFact[] = [];
+    for (const fact of live) {
+      if (readHash && await anchorsAreStale(fact.fileAnchors, readHash)) continue;
+      kept.push(fact);
+    }
+    // Stamp what recall actually RETURNED (1248) — the kept facts, so a fact dropped
+    // as stale is not counted as recalled and cannot be rescued by the decay sweep.
+    // Best-effort: a failed stamp must not lose the recall itself.
+    if (kept.length) {
+      await stampFactRecall(db, tenantId, projectId, kept.map((f) => f.key)).catch((err: unknown) => {
+        reportCaughtError(err, { source: 'project-facts', operation: 'stamp-recall', level: 'warning', context: { tenantId, projectId } });
+      });
+    }
+    return kept;
   } catch {
     return [];
   }
+}
+
+/**
+ * Record that these keys were just recalled: bump `recall_count` and move
+ * `last_recalled_at`. Scoped to (tenant, project, key) and to live rows only, so
+ * it can never revive or touch a retired fact. Best-effort by contract.
+ */
+export async function stampFactRecall(
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  keys: readonly string[],
+): Promise<void> {
+  const wanted = [...new Set(keys.map((k) => (k ?? '').trim()).filter(Boolean))];
+  if (!wanted.length || !Number.isInteger(projectId) || projectId <= 0) return;
+  await db
+    .update(projectFacts)
+    .set({
+      lastRecalledAt: new Date(),
+      recallCount: sql`${projectFacts.recallCount} + 1`,
+    })
+    .where(and(
+      scopedToTenant(projectFacts, tenantId),
+      eq(projectFacts.projectId, projectId),
+      inArray(projectFacts.key, wanted),
+      isNull(projectFacts.supersededBy),
+    ));
+}
+
+/**
+ * Expire facts recall has not returned within `windowMs` (1248).
+ *
+ * Same predicate as `decayUnrecalled`, with one guard that comment names: recall
+ * stamps `last_recalled_at` first, and the sweep only then expires a missing
+ * stamp. A column that has not been stamped yet is NULL on every row, and
+ * treating that as "never recalled" would expire the whole project on the first
+ * sweep. The NULL branch therefore requires that SOME row in this scope already
+ * has a stamp. A fact recalled inside the window has a timestamp past the cutoff
+ * and is not in either branch. Written as an EXPIRY, not a delete. `updated_at`
+ * is not touched: a sweep is not a rewrite.
+ */
+export async function sweepUnrecalledFactDecay(
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  opts?: { now?: Date; windowMs?: number },
+): Promise<number> {
+  const now = opts?.now ?? new Date();
+  const windowMs = opts?.windowMs ?? UNRECALLED_DECAY_WINDOW_MS;
+  if (!Number.isInteger(projectId) || projectId <= 0) return 0;
+  if (!(windowMs > 0)) return 0;
+  const cutoff = new Date(now.getTime() - windowMs);
+  const expired = await db
+    .update(projectFacts)
+    .set({ expiresAt: now })
+    .where(and(
+      scopedToTenant(projectFacts, tenantId),
+      eq(projectFacts.projectId, projectId),
+      isNull(projectFacts.supersededBy),
+      ne(projectFacts.source, QA_CACHE_SOURCE),
+      or(
+        // Recalled, and outside the window. A timestamp is evidence the column
+        // has been stamped, so this branch is safe even on the first sweep.
+        lt(projectFacts.lastRecalledAt, cutoff),
+        // Never recalled — but only once a stamp exists in this scope. See the
+        // comment on `decayUnrecalled`: calling the filter before that stamp
+        // exists would expire every row.
+        and(
+          isNull(projectFacts.lastRecalledAt),
+          sql`EXISTS (
+            SELECT 1 FROM project_facts AS stamped_recall
+            WHERE stamped_recall.tenant_id = ${tenantId}
+              AND stamped_recall.project_id = ${projectId}
+              AND stamped_recall.last_recalled_at IS NOT NULL
+          )`,
+        ),
+      ),
+      or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, now)),
+    ))
+    .returning({ key: projectFacts.key })
+    .catch((err: unknown) => {
+      // The sweep RETURNS this count. Zero is indistinguishable from "nothing
+      // expired", so a failed delete must be reported — otherwise a systematically
+      // failing sweep reports a clean bill of health forever and nothing ever decays.
+      reportCaughtError(err, { source: 'project-facts', operation: 'sweep-unrecalled-fact-decay', level: 'error', context: { tenantId, projectId } });
+      return [] as Array<{ key: string }>;
+    });
+  return expired.length;
+}
+
+/** Every (tenantId, projectId) that has facts, so a sweep can run without a
+ *  caller-supplied project. Used by the cron entrypoint. */
+export async function listProjectFactScopes(db: Db): Promise<Array<{ tenantId: number; projectId: number }>> {
+  const rows = await db
+    .selectDistinct({ tenantId: projectFacts.tenantId, projectId: projectFacts.projectId })
+    .from(projectFacts)
+    .catch((err: unknown) => {
+      // The cron entrypoint decides WHICH SCOPES to sweep from this list. An empty
+      // list on failure means the sweep silently does nothing and no fact anywhere in
+      // the workspace ever decays, so this is an error, not a warning.
+      reportCaughtError(err, { source: 'project-facts', operation: 'list-fact-scopes', level: 'error' });
+      return [] as Array<{ tenantId: number; projectId: number }>;
+    });
+  return rows.filter((r) => Number.isInteger(r.tenantId) && Number.isInteger(r.projectId));
+}
+
+/** Decay across every project scope, for the scheduled sweep. */
+export async function sweepAllUnrecalledFactDecay(
+  db: Db,
+  opts?: { now?: Date; windowMs?: number },
+): Promise<number> {
+  const scopes = await listProjectFactScopes(db);
+  let expired = 0;
+  for (const scope of scopes) {
+    expired += await sweepUnrecalledFactDecay(db, scope.tenantId, scope.projectId, opts).catch((err: unknown) => {
+      // The per-scope sweep already reports its own failure; this catch exists so one
+      // broken tenant cannot abort the loop and leave every LATER scope undecayed.
+      // Reporting keeps the reason visible instead of folding it into the total.
+      reportCaughtError(err, { source: 'project-facts', operation: 'sweep-fact-decay-per-scope', level: 'error', context: { tenantId: scope.tenantId, projectId: scope.projectId } });
+      return 0;
+    });
+  }
+  return expired;
 }
 
 /** One recalled fact plus the semantic similarity that found it. */
@@ -469,6 +851,8 @@ interface SemanticFactRow {
   /** Cosine SIMILARITY in [0,1] (already floored at 0 by `memorySemanticRecall`), so it
    *  is directly comparable with the lexical arm's 1. Higher is better, both arms. */
   score: number;
+  /** The fact's anchors (1248), carried so the stale-anchor check sees them. */
+  fileAnchors?: Array<{ path: string; line?: number; contentHash?: string }> | null;
 }
 
 /**
@@ -509,7 +893,7 @@ async function recallProjectFactsSemantically(
   const keys = hits.map((h) => h.key).filter(Boolean);
   if (!keys.length) return [];
   const rows = await db
-    .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt, importance: projectFacts.importance })
+    .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt, importance: projectFacts.importance, fileAnchors: projectFacts.fileAnchors })
     .from(projectFacts)
     .where(and(
       scopedToTenant(projectFacts, tenantId),
@@ -527,6 +911,7 @@ async function recallProjectFactsSemantically(
     expiresAt: row.expiresAt ? new Date(row.expiresAt) : null,
     importance: Number.isFinite(Number(row.importance)) ? Number(row.importance) : 0.5,
     score: scoreByKey.get(row.key) ?? 0,
+    fileAnchors: normalizeFileAnchors(row.fileAnchors as FactFileAnchor[] | null),
   }));
 }
 
@@ -562,6 +947,7 @@ export async function getProjectFactRecordByKey(
             originModel: projectFacts.originModel,
             originPromptTokens: projectFacts.originPromptTokens,
             originCompletionTokens: projectFacts.originCompletionTokens,
+            fileAnchors: projectFacts.fileAnchors,
           })
           .from(projectFacts)
           .where(and(
@@ -582,7 +968,7 @@ export async function getProjectFactRecordByKey(
         const origin = row.originModel != null && row.originPromptTokens != null && row.originCompletionTokens != null
           ? { model: row.originModel, promptTokens: row.originPromptTokens, completionTokens: row.originCompletionTokens }
           : null;
-        return { content: row.content, origin };
+        return { content: row.content, origin, fileAnchors: normalizeFileAnchors(row.fileAnchors as FactFileAnchor[] | null) };
       },
       { kvTtlSeconds: 60 },
     );
@@ -608,7 +994,13 @@ export async function buildProjectFactsBlock(
   tenantId: number,
   projectId: number,
   query?: string,
+  opts?: { readFileHash?: FileContentHashReader },
 ): Promise<string> {
-  const facts = await recallProjectFacts(env, db, tenantId, projectId, query != null ? { query } : undefined);
+  const facts = await recallProjectFacts(env, db, tenantId, projectId, {
+    ...(query != null ? { query } : {}),
+    // Run-start default: a fact whose anchored files changed is excluded. Callers
+    // that already have a reader (tests, a workspace walk) pass their own.
+    readFileHash: opts?.readFileHash ?? hostDirectoryHashReader(db, tenantId),
+  });
   return formatProjectFactsBlock(facts);
 }

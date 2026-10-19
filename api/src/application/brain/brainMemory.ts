@@ -8,13 +8,18 @@ import { eq, and, desc, isNotNull } from 'drizzle-orm';
 import { brainChats, brainChatMessages, chatMemories, chatSessions, chatMessages, projectMemories } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { readTimelineTail } from '../../domain/shared/timelineTail';
-// The reasoning channel's LEARNING policy (see `reasoning.ts`): it excises `<think>…`
-// blocks IN PLACE and — unlike the display policy `answerTextOf` — never promotes a
-// swallowed thought back into the answer, so nothing the model thought can reach a
-// summary a user reads or a memory we consolidate.
-import { stripReasoningScratchpad } from '@builderforce/agent-loop';
+// `answerTextOf` is the package's display reader (the name the archive contract
+// names). `stripReasoningScratchpad` is its LEARNING policy: it excises `<think>…`
+// in place and — unlike the display reader — never promotes a swallowed thought
+// back into the answer. A memory write uses the display reading only when the two
+// agree, so a summary still goes through `answerTextOf` and a promoted thought
+// cannot reach a row we consolidate.
+import { answerTextOf as displayAnswerTextOf, stripReasoningScratchpad } from '@builderforce/agent-loop';
 import { readProxyChoice } from '../llm/LlmProxyService';
-import { canAccessChat, verifyProjectInTenant } from './brainChatGuards';
+import { upsertProjectFact } from '../llm/projectFacts';
+import { currentRequestScope } from '../shared/requestScope';
+import { canAccessChat, verifyChatOwnership, verifyProjectInTenant } from './brainChatGuards';
+import { bumpChatStructure, bumpTeamChats } from './chatCacheVersions';
 import { ADVISORY_THREAD_AI_CONTEXT_ERROR, advisoryChatAdmittedToAiContext } from '../commerce/advisoryReservation';
 import { buildTenantLlmService, completeTraced } from './brainLlmCall';
 import type { Db } from '../../infrastructure/database/connection';
@@ -45,7 +50,15 @@ import type { Env } from '../../env';
  * stripping is unit-testable without a database.
  */
 export function answerTextOf(raw: string | null | undefined): string {
-  return stripReasoningScratchpad(raw ?? '');
+  const source = raw ?? '';
+  const learned = stripReasoningScratchpad(source);
+  // Display rejoins trimmed pieces with paragraph breaks and, when the visible
+  // tail is a fragment, promotes the thought that held the real reply. Either
+  // change would be stored as a fact. Agreeing with the learning policy is the
+  // common case (a closed think block, then a real answer); the disagreement is
+  // exactly the case that must not be learned.
+  const displayed = displayAnswerTextOf(source);
+  return displayed === learned ? displayed : learned;
 }
 
 // -----------------------------------------------------------------------
@@ -92,6 +105,104 @@ export async function retainChatMemory(
       target: chatMemories.chatId,
       set: { summary: args.summary, projectId: args.projectId, updatedAt: new Date() },
     });
+}
+
+/**
+ * THE memory write shared by Summarize and Archive.
+ *
+ * A summary that lands only on `brain_chats.summary` is invisible to memory readers,
+ * and one that lands only in `chat_memories` is invisible to project-fact recall.
+ * Both callers go through here so the two rows cannot drift: the cleaned answer is
+ * upserted as the chat's memory, and — when the chat belongs to a project — written
+ * through as the fact `chat-summary:<chatId>`.
+ *
+ * Cleaning is {@link answerTextOf}, the same reading every other memory writer uses.
+ * An empty result writes nothing: archiving a chat that was never summarized must
+ * not invent a memory, and must not invent a fact either.
+ *
+ * `env` is optional. Summarize already holds one and passes it. Archive's HTTP
+ * caller does not, and threading one through the facade would change a signature
+ * this module does not own — the Worker entry point already stores `c.env` on the
+ * request scope, which is how every other `Db`-only writer reaches it. With no env
+ * (a test, a bare script) the fact write is skipped; the memory row still lands.
+ * `upsertProjectFact` cannot embed without an env, and a thrown embed must not
+ * turn an archive into a failed delete.
+ */
+export async function archiveChatMemory(
+  db: Db,
+  args: {
+    tenantId: number;
+    chatId: number;
+    projectId: number | null;
+    summary: string;
+    env?: Env | null;
+  },
+): Promise<void> {
+  const summary = answerTextOf(args.summary);
+  if (!summary) return;
+  await retainChatMemory(db, {
+    tenantId: args.tenantId,
+    chatId: args.chatId,
+    projectId: args.projectId,
+    summary,
+  });
+  const projectId = args.projectId;
+  if (projectId == null || !Number.isInteger(projectId) || projectId <= 0) return;
+  const env = args.env ?? (currentRequestScope()?.env as Env | undefined);
+  if (!env) return;
+  await upsertProjectFact(
+    env,
+    db,
+    args.tenantId,
+    projectId,
+    `chat-summary:${args.chatId}`,
+    summary,
+    'chat-archive',
+  );
+}
+
+/**
+ * Archive a chat and keep the summary it already earned.
+ *
+ * One use case, not a flag plus a side write: (a) the summary is read through
+ * {@link answerTextOf} (the package display reader, falling back to the learning
+ * policy when that reader would store a swallowed thought), (b) that text is
+ * written as a `chat_memories` row and, when the chat belongs to a project, as
+ * the fact `chat-summary:<chatId>`, (c) `brain_chats.isArchived` is set. It
+ * reuses the summary already on the chat, so archiving costs no LLM call and
+ * invents nothing. Env for the fact write comes from the request scope (the
+ * DELETE handler does not thread one); without it the fact write is skipped,
+ * the memory row is not.
+ */
+export async function archiveChat(db: Db, chatId: number, tenantId: number, userId: string, options: { isWorkspaceAdmin?: boolean } = {}) {
+  // `summary` + `projectId` are selected for the memory write below; the ownership
+  // gate's own return type is narrowed to `{ id, origin }`, so the extra columns are
+  // re-stated here — the same `as` cast `summarizeChat` uses on `canAccessChat`.
+  const existing = await verifyChatOwnership(
+    db,
+    chatId,
+    tenantId,
+    userId,
+    { summary: brainChats.summary, projectId: brainChats.projectId },
+    options,
+  ) as { id: number; origin: string; summary: string | null; projectId: number | null } | null;
+  if (!existing) return { error: 'Chat not found' as const };
+
+  await db
+    .update(brainChats)
+    .set({ isArchived: true, updatedAt: new Date() })
+    .where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, chatId)));
+
+  await archiveChatMemory(db, {
+    tenantId,
+    chatId,
+    projectId: existing.projectId,
+    summary: existing.summary ?? '',
+  });
+
+  await Promise.all([bumpChatStructure(chatId), bumpTeamChats(tenantId)]);
+
+  return { ok: true };
 }
 
 /** `opts.executionCtx` is the request context the trace write rides on. Optional:
@@ -161,10 +272,10 @@ export async function summarizeChat(db: Db, chatId: number, tenantId: number, us
     .set({ summary, updatedAt: new Date() })
     .where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, chatId)));
 
-  // …AND as a memory, which is what consolidation, `listMemories` and the memory-sync
-  // push to agent hosts read. Without this the summary only existed on the chat row
-  // and no chat content ever reached `chat_memories` at all.
-  await retainChatMemory(db, { tenantId, chatId, projectId: chat.projectId, summary });
+  // …AND as a memory plus, when the chat has a project, the `chat-summary:<id>` fact.
+  // Same use case Archive runs, so Summarize and Archive cannot drift. The chat
+  // row above is `summary` + `updatedAt` only — never `title`.
+  await archiveChatMemory(db, { tenantId, chatId, projectId: chat.projectId, summary, env });
 
   return { summary };
 }

@@ -15,7 +15,8 @@ import type { Context } from 'hono';
 import { tenantDoor, type FrontDoor } from '../middleware/frontDoor';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
-import { deleteProjectFact, recallProjectFacts, upsertProjectFact } from '../../application/llm/projectFacts';
+import { deleteProjectFact, hostDirectoryHashReader, parseFactFileAnchors, recallProjectFacts, upsertProjectFact } from '../../application/llm/projectFacts';
+import { cloudExecutionIdFromRequest } from '../../application/llm/cloudByoPolicy';
 import { resolveMemoryAnswer, cacheProjectAnswer } from '../../application/llm/projectMemory';
 import { recordMemoryAnswerSavings } from '../../application/llm/memoryAnswerSavings';
 import { normalizeUsageSurface } from '../../application/llm/savingsLedger';
@@ -29,6 +30,12 @@ const RememberFactBody = z.object({
   key: z.unknown().optional(),
   content: z.unknown().optional(),
   source: z.unknown().optional(),
+  fileAnchors: z.unknown().optional(),
+  origin: z.object({
+    model: z.string().max(200),
+    promptTokens: z.number().int().nonnegative(),
+    completionTokens: z.number().int().nonnegative(),
+  }).optional(),
 });
 
 const CacheAnswerBody = z.object({
@@ -41,6 +48,7 @@ const CacheAnswerBody = z.object({
     promptTokens: z.number().int().nonnegative(),
     completionTokens: z.number().int().nonnegative(),
   }).optional(),
+  fileAnchors: z.unknown().optional(),
 });
 
 const json = (body: unknown, status = 200): Response =>
@@ -55,6 +63,7 @@ async function recallCore(env: Env, db: Db, tenantId: number, projectId: number,
   const facts = await recallProjectFacts(env, db, tenantId, projectId, {
     ...(query ? { query } : {}),
     ...(Number.isFinite(limitQ) && limitQ > 0 ? { limit: limitQ } : {}),
+    readFileHash: hostDirectoryHashReader(db, tenantId),
   });
   return json({ facts });
 }
@@ -65,7 +74,13 @@ async function rememberCore(env: Env, db: Db, tenantId: number, projectId: numbe
   const key = typeof body.key === 'string' ? body.key : '';
   const content = typeof body.content === 'string' ? body.content : '';
   if (!key.trim() || !content.trim()) return json({ error: 'key and content are required' }, 400);
-  const ok = await upsertProjectFact(env, db, tenantId, projectId, key, content, typeof body.source === 'string' ? body.source : 'agent');
+  const fileAnchors = parseFactFileAnchors(body.fileAnchors);
+  const originExecutionId = cloudExecutionIdFromRequest((name) => c.req.header(name));
+  const ok = await upsertProjectFact(env, db, tenantId, projectId, key, content, typeof body.source === 'string' ? body.source : 'agent', {
+    ...(originExecutionId != null ? { originExecutionId } : {}),
+    ...(body.origin ? { origin: body.origin } : {}),
+    ...(fileAnchors ? { fileAnchors } : {}),
+  });
   return json({ ok, key: key.trim() });
 }
 
@@ -139,7 +154,12 @@ async function cacheAnswerCore(env: Env, db: Db, tenantId: number, projectId: nu
   const question = typeof body.question === 'string' ? body.question : '';
   const answer = typeof body.answer === 'string' ? body.answer : '';
   if (!question.trim() || !answer.trim()) return json({ error: 'question and answer are required' }, 400);
-  await cacheProjectAnswer(env, db, tenantId, projectId, question, answer, body.origin ?? null);
+  await cacheProjectAnswer(
+    env, db, tenantId, projectId, question, answer,
+    body.origin ?? null,
+    parseFactFileAnchors(body.fileAnchors),
+    cloudExecutionIdFromRequest((name) => c.req.header(name)),
+  );
   return json({ ok: true });
 }
 

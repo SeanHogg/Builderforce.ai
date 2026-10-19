@@ -26,6 +26,7 @@ function chatHook(chats: { id: number; isArchived?: boolean }[]) {
     select: vi.fn(async () => {}),
     rename: vi.fn(async () => {}),
     summarize: vi.fn(async () => {}),
+    archive: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
     assignToProject: vi.fn(async () => {}),
     chats,
@@ -66,5 +67,21 @@ describe('useBrainChatRowActions — the host actually supplies archive state', 
     expect(result.current.rowProps(9).archived).toBe(false);
     rerender({ chats: [{ id: 9, isArchived: true }] });
     expect(result.current.rowProps(9).archived).toBe(true);
+  });
+
+  // The gate above was never the whole binding. `useChatRowActions` renders NO Archive
+  // action unless the host hands it an `archive` port, so a host that supplies only
+  // `isArchived` reads `archived: false` on every row AND offers no Archive at all.
+  // That is exactly the state the web panel was in: the shared hook's own Archive test
+  // passed, and the web rows still had nothing to click.
+  it('offers Archive and routes it to the chat hook, not to delete', async () => {
+    const chats = chatHook([{ id: 7, isArchived: false }]);
+    const rows = renderHook(() =>
+      useBrainChatRowActions({ chats, isPage: true, showChatTab: vi.fn() }),
+    ).result.current;
+    expect(rows.rowProps(7).onArchive).toBeTypeOf('function');
+    await rows.onArchive!({ id: 7, title: 'Plan' });
+    expect(chats.archive).toHaveBeenCalledWith(7);
+    expect(chats.remove).not.toHaveBeenCalled();
   });
 });

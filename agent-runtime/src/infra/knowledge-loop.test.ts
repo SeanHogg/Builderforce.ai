@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { buildKnowledgeMemoryEntry, deriveActivitySummary } from "./knowledge-loop.js";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { emitAgentEvent } from "./agent-events.js";
+import {
+  buildKnowledgeMemoryEntry,
+  deriveActivitySummary,
+  KnowledgeLoopService,
+} from "./knowledge-loop.js";
+import type { OnPremVerifyEvent } from "./run-outcome-memory.js";
 
 describe("deriveActivitySummary", () => {
   it("returns empty string when no activity", () => {
@@ -121,5 +130,97 @@ describe("buildKnowledgeMemoryEntry", () => {
 
     expect(entry).toContain("**Edited**: src/app.ts");
     expect(entry).toContain("**Summary**: Code modifications: 1 file(s) changed");
+  });
+});
+
+describe("on-prem finish path records verify without a shell", () => {
+  const dirs: string[] = [];
+  const services: KnowledgeLoopService[] = [];
+
+  afterEach(async () => {
+    for (const svc of services.splice(0)) {
+      svc.stop();
+    }
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function started(verifyRecorder: (event: OnPremVerifyEvent) => void) {
+    const workspaceDir = await mkdtemp(join(tmpdir(), "bf-verify-"));
+    dirs.push(workspaceDir);
+    const svc = new KnowledgeLoopService({ workspaceDir, verifyRecorder });
+    services.push(svc);
+    svc.start();
+    return svc;
+  }
+
+  it("records a check the tool loop already ran, and does not emit verify_started for a run with no check", async () => {
+    const events: OnPremVerifyEvent[] = [];
+    await started((event) => events.push(event));
+
+    emitAgentEvent({
+      runId: "no-check",
+      stream: "tool",
+      data: { phase: "result", name: "read_file", toolCallId: "r1", isError: false, result: { ok: true } },
+    });
+    emitAgentEvent({ runId: "no-check", stream: "lifecycle", data: { phase: "end" } });
+
+    emitAgentEvent({
+      runId: "checked",
+      stream: "tool",
+      data: { phase: "start", name: "run_command", toolCallId: "c1", args: { command: "npm test" } },
+    });
+    emitAgentEvent({
+      runId: "checked",
+      stream: "tool",
+      data: {
+        phase: "result",
+        name: "run_command",
+        toolCallId: "c1",
+        isError: false,
+        result: { exitCode: 0, stdout: "ok" },
+      },
+    });
+    emitAgentEvent({ runId: "checked", stream: "lifecycle", data: { phase: "end" } });
+
+    const startedEvents = events.filter((e) => "type" in e && e.type === "verify_started");
+    expect(startedEvents).toHaveLength(1);
+    const timeline = events.find((e) => !("type" in e));
+    expect(timeline).toMatchObject({
+      toolName: "in_run_verify",
+      category: "tool",
+      result: expect.stringContaining("verify passed: npm test (exit 0)"),
+    });
+    expect(JSON.stringify(events)).not.toContain("verify_completed");
+  });
+
+  it("a thrown recorder does not fail the finished run", async () => {
+    const rejections: unknown[] = [];
+    const onRejection = (err: unknown) => {
+      rejections.push(err);
+    };
+    process.on("unhandledRejection", onRejection);
+    let calls = 0;
+    try {
+      await started(() => {
+        calls += 1;
+        throw new Error("recorder down");
+      });
+      emitAgentEvent({
+        runId: "throws",
+        stream: "tool",
+        data: {
+          phase: "result",
+          name: "run_checks",
+          isError: false,
+          result: { ok: true, ran: true },
+        },
+      });
+      emitAgentEvent({ runId: "throws", stream: "lifecycle", data: { phase: "end" } });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(calls).toBeGreaterThan(0);
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onRejection);
+    }
   });
 });

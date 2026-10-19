@@ -174,6 +174,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
           // output, and the Effort ceiling cut every one of them off mid-JSON.
           routingMode, maxTokens: turnMaxTokens(maxTokens, !!tools), reasoning, metadata: callMetadata, role: ask.role,
           ...(ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}),
+          prompt_cache_key: `brain:${run.chatId}`,
           signal: c.abort?.signal,
         },
         handlers,

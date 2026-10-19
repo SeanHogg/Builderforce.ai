@@ -20,7 +20,7 @@ export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
 }) {
   const tBrain = useTranslations('brain');
   const confirm = useConfirm();
-  const { select, rename, summarize, remove, assignToProject, chats: chatList } = chats;
+  const { select, rename, summarize, archive, remove, assignToProject, chats: chatList } = chats;
 
   /**
    * Docked, history is a tab beside the conversation, so opening a chat switches back
@@ -49,6 +49,10 @@ export function useBrainChatRowActions({ chats, isPage, showChatTab }: {
     revealActionsOnOpen: isPage,
     rename,
     summarize,
+    // The shared hook offers Archive to every host that supplies it — without this
+    // the web rows silently offered none, because `useChatRowActions` gates on the
+    // port and an omitted one renders no action at all.
+    archive: (chat) => archive(chat.id),
     remove: (chat) => remove(chat.id),
     confirmDelete,
     assign: assignToProject,

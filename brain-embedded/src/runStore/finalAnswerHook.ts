@@ -30,6 +30,12 @@ import { persistMidTurnText } from './turnPersistence';
 import { emitEvermindLearnReconcile } from './runMemory';
 import { metaOf, reportToPolicy, settleReply, type RunLoopContext } from './runLoopContext';
 
+/** A blocked finish that already wrote files continues on the review model, not the author. */
+function enterVerifyIfChanged(run: RunLoopContext): void {
+  if (!run.c.codeChanged || run.policy.phase === 'verify') return;
+  reportToPolicy(run, { type: 'verify_started' });
+}
+
 export function finalAnswerHook(run: RunLoopContext): NonNullable<LoopHooks<ChatCompletionMessage>['onNoToolCalls']> {
   const { c, chatId, runKey, req, convo, canAskUser, catalogToolNames, userRequest, priorReply } = run;
   const { tools: toolSpecs, pickFallbackModel, runTool, persistence, onActivity } = req;
@@ -125,6 +131,7 @@ export function finalAnswerHook(run: RunLoopContext): NonNullable<LoopHooks<Chat
       });
       c.streamingText = '';
       emit(c);
+      enterVerifyIfChanged(run);
       return { action: 'continue' };
     }
 
@@ -151,6 +158,7 @@ export function finalAnswerHook(run: RunLoopContext): NonNullable<LoopHooks<Chat
       });
       c.streamingText = '';
       emit(c);
+      enterVerifyIfChanged(run);
       return { action: 'continue' };
     }
 
@@ -176,6 +184,7 @@ export function finalAnswerHook(run: RunLoopContext): NonNullable<LoopHooks<Chat
       });
       c.streamingText = '';
       emit(c);
+      enterVerifyIfChanged(run);
       return { action: 'continue' };
     }
 

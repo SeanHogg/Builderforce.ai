@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { filterByGlob, filterByGlobInScope, isUnderScopeDir, matchGlob, matchGlobInScope, normalizeScopeDir } from "./glob.js";
+import {
+  dirMayContainGlobMatch,
+  emptyGlobListingNote,
+  filterByGlob,
+  filterByGlobInScope,
+  isUnderScopeDir,
+  matchGlob,
+  matchGlobInScope,
+  normalizeScopeDir,
+  selectPathsWithinCap,
+} from "./glob.js";
 
 const TREE = [
   "README.md",
@@ -140,5 +150,87 @@ describe("matchGlobInScope / filterByGlobInScope", () => {
 
   it("keeps the case-insensitive basename-anywhere rule inside a scope", () => {
     expect(filterByGlobInScope(TREE, "ROADMAP.md", "docs")).toEqual(["docs/ROADMAP.md"]);
+  });
+});
+
+describe("selectPathsWithinCap", () => {
+  it("keeps a glob match that sits past the size cap", () => {
+    const paths = [
+      ...Array.from({ length: 400 }, (_, i) => `noise/f${String(i).padStart(4, "0")}.ts`),
+      "frontend/src/lib/widget.test.ts",
+    ];
+    const selected = selectPathsWithinCap(paths, {
+      glob: "frontend/src/lib/**/*.test.ts",
+      cap: 400,
+    });
+    expect(selected.paths).toEqual(["frontend/src/lib/widget.test.ts"]);
+    expect(selected.truncated).toBe(false);
+  });
+
+  it("resolves a scope-relative glob before the cap", () => {
+    const paths = [
+      ...Array.from({ length: 400 }, (_, i) => `frontend/src/lib/noise${i}.ts`),
+      "frontend/src/lib/a.test.ts",
+      "frontend/src/other/b.test.ts",
+    ];
+    const selected = selectPathsWithinCap(paths, {
+      glob: "**/*.test.ts",
+      scopeDir: "frontend/src/lib",
+      cap: 400,
+    });
+    expect(selected.paths).toEqual(["frontend/src/lib/a.test.ts"]);
+    expect(selected.truncated).toBe(false);
+  });
+
+  it("reports an incomplete search when the source listing was cut off and nothing matched", () => {
+    const selected = selectPathsWithinCap(["a.ts"], {
+      glob: "**/*.test.ts",
+      scopeDir: "frontend/src/lib",
+      cap: 400,
+      sourceTruncated: true,
+    });
+    expect(selected.paths).toEqual([]);
+    expect(selected.truncated).toBe(true);
+  });
+
+  it("still slices an unscoped listing at the cap", () => {
+    const paths = Array.from({ length: 401 }, (_, i) => `f${i}.ts`);
+    const selected = selectPathsWithinCap(paths, { cap: 400 });
+    expect(selected.paths).toHaveLength(400);
+    expect(selected.truncated).toBe(true);
+  });
+});
+
+describe("emptyGlobListingNote", () => {
+  it("never claims a truncated empty search is absence", () => {
+    const note = emptyGlobListingNote("**/*.test.ts", "frontend/src/lib", true);
+    expect(note).toContain("NOT proof the file does not exist");
+    expect(note).toContain("cut off");
+    expect(note).toContain('under "frontend/src/lib"');
+    expect(note).not.toContain("0 matches means no such file exists");
+  });
+
+  it("may claim absence only when the walk finished", () => {
+    const note = emptyGlobListingNote("*.rs", undefined, false);
+    expect(note).toContain("0 matches means no such file exists");
+    expect(note).toContain("broader pattern");
+  });
+});
+
+describe("dirMayContainGlobMatch", () => {
+  it("prunes directories a rooted glob cannot reach", () => {
+    expect(dirMayContainGlobMatch("agent-runtime", "frontend/src/lib/**/*.test.ts")).toBe(false);
+    expect(dirMayContainGlobMatch("frontend", "frontend/src/lib/**/*.test.ts")).toBe(true);
+    expect(dirMayContainGlobMatch("frontend/src/lib", "frontend/src/lib/**/*.test.ts")).toBe(true);
+  });
+
+  it("keeps the scope-relative reading so a relative glob still descends", () => {
+    expect(dirMayContainGlobMatch("frontend/src/lib", "**/*.test.ts", "frontend/src/lib")).toBe(true);
+    expect(dirMayContainGlobMatch("frontend/src/board", "lib/**/*.ts", "frontend/src")).toBe(false);
+    expect(dirMayContainGlobMatch("frontend/src/lib", "lib/**/*.ts", "frontend/src")).toBe(true);
+  });
+
+  it("does not prune on a slash-free pattern", () => {
+    expect(dirMayContainGlobMatch("anywhere", "*.test.ts")).toBe(true);
   });
 });

@@ -47,15 +47,29 @@ describe("deriveActivitySummary", () => {
 
   it("treats run_checks as test activity", () => {
     expect(deriveActivitySummary({ tools: ["run_checks"] })).toBe("Agent activity (no file changes)");
-    expect(deriveActivitySummary({ edited: ["api/src/x.test.ts"], tools: ["edit_file"] })).toBe(
-      "Tests updated",
-    );
   });
 
-  it("prefers the test label over the generic edit label", () => {
-    expect(deriveActivitySummary({ created: ["packages/agent-tools/src/x.test.ts"] })).toBe(
-      "Test suite created",
-    );
+  it("names the run's own prompt and the files it touched, not a fixed template", () => {
+    expect(
+      deriveActivitySummary({
+        prompt: "Bound the shared-facts recall so a hung gateway cannot leak a socket",
+        edited: ["api/src/application/llm/projectFacts.ts"],
+      }),
+    ).toBe("Bound the shared-facts recall so a hung gateway cannot leak a socket — projectFacts.ts");
+  });
+
+  it("caps the file list so a wide diff cannot swallow the prompt", () => {
+    const summary = deriveActivitySummary({
+      prompt: "Wire verify into every run loop",
+      edited: ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"],
+    });
+    expect(summary).toBe("Wire verify into every run loop — a.ts, b.ts, c.ts (+2 more)");
+  });
+
+  it("collapses a multi-line prompt onto one line", () => {
+    expect(
+      deriveActivitySummary({ prompt: "fix\n\n  the   flaky test", created: ["x.ts"] }),
+    ).toBe("fix the flaky test — x.ts");
   });
 
   it("recognises a shipped change", () => {
@@ -64,13 +78,10 @@ describe("deriveActivitySummary", () => {
     );
   });
 
-  it("still falls back to the generic counts when nothing more specific applies", () => {
-    expect(deriveActivitySummary({ edited: ["a.ts", "b.ts"] })).toBe(
-      "Code modifications: 2 file(s) changed",
-    );
-    expect(deriveActivitySummary({ created: ["a.ts"] })).toBe("New file(s) created: 1");
-    expect(deriveActivitySummary({ created: ["a.ts"], edited: ["b.ts"] })).toBe(
-      "Feature implementation: new files + edits",
+  it("falls back to the generic counts when the run recorded neither prompt nor path", () => {
+    expect(deriveActivitySummary({ tools: ["run_checks"] })).toBe("Agent activity (no file changes)");
+    expect(deriveActivitySummary({ tools: ["git_commit", "git_push"] })).toBe(
+      "Change shipped (commit/push)",
     );
   });
 
@@ -91,7 +102,18 @@ describe("buildKnowledgeMemoryEntry", () => {
       activity: { edited: ["a.ts", "b.ts"], tools: ["edit_file"] },
     });
     expect(entry).toContain("**Edited**: a.ts, b.ts");
+    // No prompt was recorded, so the note falls back to the count label rather
+    // than repeating the basenames the Edited line already carries.
     expect(entry).toContain("**Summary**: Code modifications: 2 file(s) changed");
+  });
+
+  it("carries the run's prompt into the note so it describes what happened", () => {
+    const entry = buildKnowledgeMemoryEntry({
+      sessionKey: "s1",
+      ts: "2026-08-20T10:00:00Z",
+      activity: { edited: ["retry.ts"], tools: ["edit_file"], prompt: "Stop the retry storm" },
+    });
+    expect(entry).toContain("**Summary**: Stop the retry storm — retry.ts");
   });
 
   it("collapses duplicate paths", () => {

@@ -109,6 +109,9 @@ export async function annRecallProject(
         tenantId,
         eq(projectFacts.projectId, projectId),
         sql`${projectFacts.source} <> ${qaCacheSource}`,
+        // A retired fact is already gone (1242). Hydration re-applies this; the
+        // ANN arm must not nominate a superseded row for the join to only drop.
+        isNull(projectFacts.supersededBy),
         unexpired(projectFacts.expiresAt),
         eq(projectFacts.embeddingModel, MEMORY_EMBEDDING_MODEL),
       ),

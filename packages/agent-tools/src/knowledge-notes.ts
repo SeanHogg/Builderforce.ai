@@ -50,6 +50,12 @@ export interface RunActivity {
   edited?: readonly string[];
   /** Tool names the run invoked. Duplicates are collapsed. */
   tools?: readonly string[];
+  /**
+   * The run's own prompt — what it was asked to do. When present, the summary
+   * describes THAT rather than falling back to a fixed template, so two runs
+   * that both edited a test file do not read as the same "Test suite created".
+   */
+  prompt?: string;
 }
 
 /**
@@ -90,7 +96,31 @@ function canonicalTool(name: string): string {
  * Returns `''` when there was no activity at all, which is the caller's signal to write
  * no note rather than an empty one.
  */
+/** How many paths a summary will name before it says "and N more". */
+const MAX_NAMED_PATHS = 3;
+
+/** One line saying what the run was asked and which files it touched. */
+function describeRun(prompt: string | undefined, created: readonly string[], edited: readonly string[]): string {
+  const asked = (prompt ?? "").replace(/\s+/g, " ").trim().slice(0, 140);
+  const paths = [...created, ...edited];
+  const named = paths.slice(0, MAX_NAMED_PATHS).map((p) => p.slice(p.lastIndexOf("/") + 1));
+  const more = paths.length - named.length;
+  const files = named.length === 0 ? "" : `${named.join(", ")}${more > 0 ? ` (+${more} more)` : ""}`;
+  if (asked && files) return `${asked} — ${files}`;
+  return asked || files;
+}
+
 export function deriveActivitySummary(activity: RunActivity): string {
+  // A summary must say what THIS run did. The run's own prompt is the only thing
+  // that can say that precisely, so it wins outright when one was recorded. A
+  // path list on its own says nothing a reader could not already see in the
+  // Created/Edited lines, so it must NOT pre-empt the labels below — "a.ts,
+  // b.ts, c.ts" is not a description of what happened, "Code modifications: 3
+  // file(s) changed" is. A run that recorded neither falls through to the labels.
+  const described = describeRun(activity.prompt, activity.created ?? [], activity.edited ?? []);
+  const asked = (activity.prompt ?? "").trim();
+  if (asked && described) return described;
+
   const created = [...new Set(activity.created ?? [])];
   const edited = [...new Set(activity.edited ?? [])];
   const tools = [...new Set((activity.tools ?? []).map(canonicalTool))];
@@ -184,7 +214,7 @@ export function buildKnowledgeMemoryEntry(params: {
       lines.push(`**Tools**: ${tools.join(", ")}`);
       meaningful = true;
     }
-    const summary = deriveActivitySummary({ created, edited, tools });
+    const summary = deriveActivitySummary({ created, edited, tools, prompt: params.activity.prompt });
     if (summary) {
       lines.push(`**Summary**: ${summary}`);
       meaningful = true;

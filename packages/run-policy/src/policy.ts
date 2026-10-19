@@ -100,6 +100,14 @@ export interface RunPolicyOptions {
   /** Models the run routes around from its first turn (failures the session already
    *  proved). They join {@link RunPolicyState.broken}. */
   excludeModels?: readonly string[];
+  /**
+   * Optional pin per phase. Only `verify` overrides the run's locked model — a code
+   * pin must survive stall failover. `null` means no pin for that phase.
+   * `reviewModel` is the legacy alias for `phaseModels.verify`.
+   */
+  phaseModels?: Partial<Record<RunPhase, string | null>>;
+  /** Review model for the verify phase. `null` means none is configured. */
+  reviewModel?: string | null;
 }
 
 /** What the host must do about the event it just reported. */
@@ -143,10 +151,15 @@ export interface RunPolicyState {
   /** Transport retries spent on the CURRENT turn; a success resets it. */
   readonly turnRetries: number;
   readonly outcome: RunPolicyOutcome;
+  /**
+   * The model that wrote the change, captured when verification starts. Every later
+   * verify turn excludes it, even when no distinct review model is configured.
+   */
+  readonly authorModel?: string;
   readonly options: Readonly<
     Required<Pick<RunPolicyOptions,
       'pinReleasable' | 'lockAfterFirstSuccess' | 'maxFailovers' | 'decliningModelPrefixes' | 'strictFailover' | 'preferProvenFailover'>>
-    & Pick<RunPolicyOptions, 'fixedRole'>
+    & Pick<RunPolicyOptions, 'fixedRole' | 'phaseModels' | 'reviewModel'>
     /** Whether the configured pin was strict — what a pin the run returns to is asked as. */
     & { pinStrict: boolean }
   >;
@@ -220,17 +233,42 @@ export function initialRunPolicy(opts: RunPolicyOptions = {}): RunPolicyState {
       preferProvenFailover: !!opts.preferProvenFailover,
       pinStrict: !!opts.strictPin && !!model,
       ...(opts.fixedRole ? { fixedRole: opts.fixedRole } : {}),
+      ...(opts.phaseModels ? { phaseModels: opts.phaseModels } : {}),
+      ...(opts.reviewModel !== undefined ? { reviewModel: opts.reviewModel } : {}),
     },
   };
 }
 
+/** A configured pin for one phase. Verify also honours the legacy `reviewModel`. */
+function configuredPhaseModel(
+  options: RunPolicyState['options'],
+  phase: RunPhase,
+): string | undefined {
+  const fromMap = options.phaseModels?.[phase];
+  if (typeof fromMap === 'string' && fromMap.trim()) return fromMap.trim();
+  if (phase === 'verify' && typeof options.reviewModel === 'string' && options.reviewModel.trim()) {
+    return options.reviewModel.trim();
+  }
+  return undefined;
+}
+
 /** A tool-less turn is conversation, not analysis or code. */
 export function nextTurn(state: RunPolicyState, turn: { hasTools: boolean }): TurnRequest {
+  const verifying = state.phase === 'verify';
+  const author = state.authorModel;
+  // Only verify overrides the locked model. A per-phase code pin must not undo a
+  // stall failover that already moved the run off the original coder.
+  const mapped = verifying ? configuredPhaseModel(state.options, 'verify') : undefined;
+  let model = mapped ?? state.model;
+  if (verifying && author && model === author) model = undefined;
+  const excludeModels = [...state.broken];
+  if (verifying && author && !excludeModels.includes(author)) excludeModels.push(author);
   return {
-    role: turn.hasTools ? (state.options.fixedRole ?? state.phase) : 'chat',
-    model: state.model,
-    strict: !!state.model && state.strictPin,
-    excludeModels: [...state.broken],
+    // A coding run's verify turn is a review, not whatever fixedRole the child had.
+    role: turn.hasTools ? (verifying ? 'verify' : (state.options.fixedRole ?? state.phase)) : 'chat',
+    model,
+    strict: !!model && state.strictPin,
+    excludeModels,
   };
 }
 
@@ -254,8 +292,24 @@ export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): R
       return s.phase === 'plan'
         ? { ...s, phase: 'code', outcome: { kind: 'handed_off' } }
         : { ...s, outcome: { kind: 'hand_off_rejected' } };
-    case 'verify_started':
-      return { ...s, phase: 'verify' };
+    case 'verify_started': {
+      // Already reviewing — a second finish block must not recapture the review
+      // model as the author and exclude it.
+      if (s.phase === 'verify') return s;
+      const author = s.authorModel ?? s.model;
+      const review = configuredPhaseModel(s.options, 'verify');
+      const distinct = review && review !== author ? review : undefined;
+      return {
+        ...s,
+        phase: 'verify',
+        ...(author ? { authorModel: author } : {}),
+        // No distinct review pin ⇒ drop the author pin so the gateway must pick
+        // someone else. The author stays in excludeModels either way.
+        model: distinct,
+        strictPin: distinct ? s.strictPin : false,
+        locked: distinct ? s.locked : false,
+      };
+    }
     case 'stalled':
       return stalled(s, event);
     case 'transport_failed':

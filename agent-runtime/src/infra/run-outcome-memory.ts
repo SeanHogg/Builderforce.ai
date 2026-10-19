@@ -21,14 +21,18 @@
  * facts door (`pushProjectFact`, the same helper the per-file write-through
  * beliefs already use).
  *
- * NOT the verify half of the seam: `commitRunMemory` lives beside
- * `runVerifyPhase`, and the verify phase is deliberately NOT mirrored. The
- * embedded runner has no verify step of its own — it runs the agent's own tool
- * loop and has no declared check to select — so emitting the run policy's
- * `verify_started` here would be a claim about a step that never happened. The
- * cloud twin guards exactly this (`runVerifyPhase` degrades an on-prem caller to
- * the durable surface). The verify note therefore stays absent rather than
- * invented.
+ * RECORD-ONLY verify, never a shell. `commitRunMemory` lives beside
+ * `runVerifyPhase`, and this module does NOT call it and does NOT start a
+ * runner. The embedded runner's tool loop is the only check that happened;
+ * {@link selectRecordOnlyVerify} takes those already-finished
+ * `{ command, exitCode }` results — the same input shape `inRunVerifyOutcome`
+ * / `runVerifyPhase` use — and records what they did. `verify_started` is
+ * emitted only when one of those results is already in hand. Completion, when
+ * there are real results, is a timeline event (`toolName: 'in_run_verify'`,
+ * `category: 'tool'`). `verify_completed` does not exist and is not emitted.
+ * A run that changed nothing and ran no check records nothing. `mayFinish` is
+ * always true: a failed check is a line in the fact, never a thrown error and
+ * never a reason to delay or fail the finished run.
  *
  * BEST-EFFORT BY CONTRACT. A run that finished is a finished run: this never
  * throws, never rejects, and never blocks the run that called it. A memory
@@ -55,6 +59,19 @@ export interface RunOutcomeMemoryInput {
   writtenPaths?: readonly string[];
   /** An extra fact worth keeping (an in-run failure worth not repeating). */
   learning?: string;
+  /**
+   * Tool names the run's own loop already invoked. Record-only verify reads
+   * these and nothing else — it never starts a shell to discover more.
+   * A name is not an exit code: it can say a check tool was called, and it
+   * cannot emit `verify_started`.
+   */
+  toolNames?: readonly string[];
+  /**
+   * Check results the agent's own tool loop already produced
+   * (`{ command, exitCode }`, the same shape `inRunVerifyOutcome` takes as
+   * `results`). Never a shell this runtime started.
+   */
+  results?: readonly RecordedCheckResult[] | null;
   /** Extra tags, appended after `run-outcome` exactly as the cloud twin does. */
   tags?: readonly string[];
   /**
@@ -81,9 +98,313 @@ export function runOutcomeFactKey(cfg: RunOutcomeMemoryConfig, runId: string): s
 }
 
 /**
+ * One check the agent's own tool loop already finished. Same shape as
+ * `InRunVerifyCommandResult` (`command` + `exitCode`). This module never
+ * produces one by starting a shell.
+ */
+export type RecordedCheckResult = { command: string; exitCode: number };
+
+/**
+ * Record-only outcome. Same fields as `InRunVerifyOutcome`, narrowed to the
+ * on-prem record path: no `pending` (we do not wait on a shell we will not
+ * start), no `no_shell` / `no_scripts` / `not_yet_run` (those are plans).
+ * `mayFinish` is always true — a failure is recorded, never a gate.
+ */
+export type OnPremVerifyOutcome = {
+  surface: "on-prem";
+  kind: "skipped" | "ran";
+  reason: "nothing_written" | "no_check_ran" | "verify_failed" | "verify_passed" | null;
+  commands: string[];
+  failedCommands: string[];
+  mayFinish: true;
+  note: string;
+};
+
+/** Policy event. Emitted only when a real `{ command, exitCode }` is in hand. */
+export type OnPremVerifyStartedEvent = { type: "verify_started" };
+
+/**
+ * Completion. A timeline event, not a policy union member. `verify_completed`
+ * is not a member of this type and must not be added.
+ */
+export type OnPremVerifyTimelineEvent = {
+  toolName: "in_run_verify";
+  category: "tool";
+  detail: {
+    event: "in_run_verify";
+    surface: "on-prem";
+    outcome: OnPremVerifyOutcome;
+  };
+  result: string;
+};
+
+export type OnPremVerifyEvent = OnPremVerifyStartedEvent | OnPremVerifyTimelineEvent;
+
+/**
+ * Tools whose having run is evidence the agent's own loop already checked
+ * something. Matched on the tool name only — this function has no runner and
+ * must not grow one. A name not in this set is not reported as a check.
+ * `run_checks` is the catalog verify tool. `run_command` is not: a shell can
+ * do anything, so only a command that already looks like a check is recorded,
+ * and only when the loop already ran it.
+ */
+const CHECK_TOOLS = new Set([
+  "test",
+  "typecheck",
+  "lint",
+  "build",
+  "exec",
+  "shell",
+  "run_checks",
+]);
+
+function wrotePaths(paths: readonly string[] | null | undefined): boolean {
+  return (paths ?? []).some((p) => typeof p === "string" && !!p.trim());
+}
+
+function namedChecks(toolNames: readonly string[] | null | undefined): string[] {
+  return [...new Set((toolNames ?? []).filter((t) => CHECK_TOOLS.has(t)))];
+}
+
+/** Last exit code wins, so a retried command is recorded once. */
+function normalizeResults(
+  results: readonly RecordedCheckResult[] | null | undefined,
+): RecordedCheckResult[] {
+  const byCommand = new Map<string, number>();
+  for (const r of results ?? []) {
+    if (!r || typeof r.command !== "string" || !r.command.trim()) {
+      continue;
+    }
+    if (typeof r.exitCode !== "number" || !Number.isFinite(r.exitCode)) {
+      continue;
+    }
+    byCommand.set(r.command.trim(), r.exitCode);
+  }
+  return [...byCommand.entries()].map(([command, exitCode]) => ({ command, exitCode }));
+}
+
+function looksLikeCheckCommand(command: string): boolean {
+  return /\b(test|typecheck|type-check|lint|build)\b/i.test(command);
+}
+
+/**
+ * The selection `runVerifyPhase` / `inRunVerifyOutcome` perform, record-only.
+ *
+ * Inputs are what the tool loop already finished. There is no `runner`, no
+ * package.json plan, and no `pending` state — those exist to drive a shell,
+ * and this path does not have one. `null` means record nothing: the run
+ * changed no file and ran no check, so there is no verify line and no event.
+ */
+export function selectRecordOnlyVerify(input: {
+  writtenPaths?: readonly string[] | null;
+  toolNames?: readonly string[] | null;
+  results?: readonly RecordedCheckResult[] | null;
+}): { outcome: OnPremVerifyOutcome; events: OnPremVerifyEvent[] } | null {
+  const wrote = wrotePaths(input.writtenPaths);
+  const results = normalizeResults(input.results);
+  const named = namedChecks(input.toolNames);
+
+  if (results.length > 0) {
+    const failed = results.filter((r) => r.exitCode !== 0);
+    const commands = results.map((r) => r.command);
+    const passed = failed.length === 0;
+    const listed = (rows: RecordedCheckResult[]) =>
+      rows.map((r) => `${r.command} (exit ${r.exitCode})`).join(", ");
+    const note = passed
+      ? `verify passed: ${listed(results)} (agent tools, not a runtime shell)`
+      : `verify failed: ${listed(failed)} (agent tools, not a runtime shell)`;
+    const outcome: OnPremVerifyOutcome = {
+      surface: "on-prem",
+      kind: "ran",
+      reason: passed ? "verify_passed" : "verify_failed",
+      commands,
+      failedCommands: failed.map((r) => r.command),
+      mayFinish: true,
+      note,
+    };
+    return {
+      outcome,
+      events: [
+        { type: "verify_started" },
+        {
+          toolName: "in_run_verify",
+          category: "tool",
+          detail: { event: "in_run_verify", surface: "on-prem", outcome },
+          result: note,
+        },
+      ],
+    };
+  }
+
+  // A tool name is not an exit code. Say what the loop called, and do not
+  // emit verify_started — that event means a result is already in hand.
+  if (!wrote && named.length === 0) {
+    return null;
+  }
+  if (!wrote) {
+    const note = "verify skipped (nothing_written)";
+    return {
+      outcome: {
+        surface: "on-prem",
+        kind: "skipped",
+        reason: "nothing_written",
+        commands: named,
+        failedCommands: [],
+        mayFinish: true,
+        note,
+      },
+      events: [],
+    };
+  }
+  if (named.length === 0) {
+    const note = "verify skipped (no_check_ran)";
+    return {
+      outcome: {
+        surface: "on-prem",
+        kind: "skipped",
+        reason: "no_check_ran",
+        commands: [],
+        failedCommands: [],
+        mayFinish: true,
+        note,
+      },
+      events: [],
+    };
+  }
+  const note = `verify recorded: ${named.join(", ")} (agent tools, not a runtime shell)`;
+  return {
+    outcome: {
+      surface: "on-prem",
+      kind: "ran",
+      reason: null,
+      commands: named,
+      failedCommands: [],
+      mayFinish: true,
+      note,
+    },
+    events: [],
+  };
+}
+
+/**
+ * The on-prem verify note, or `null` when there is nothing to record (no
+ * files changed and no check ran). Record only. Never a shell. A name-only
+ * check does not emit `verify_started`; that happens in
+ * {@link recordOnPremVerify} and only when a real result is in hand.
+ */
+export function recordOnlyVerifyNote(input: {
+  writtenPaths?: readonly string[] | null;
+  toolNames?: readonly string[] | null;
+  results?: readonly RecordedCheckResult[] | null;
+}): string | null {
+  return selectRecordOnlyVerify(input)?.outcome.note ?? null;
+}
+
+/**
+ * Emit the verify events for one finished run. A recorder that throws is
+ * logged and swallowed: bookkeeping must not fail or delay the run that
+ * already finished. Returns the fact note (`null` = record nothing).
+ */
+export function recordOnPremVerify(
+  input: {
+    writtenPaths?: readonly string[] | null;
+    toolNames?: readonly string[] | null;
+    results?: readonly RecordedCheckResult[] | null;
+  },
+  record?: (event: OnPremVerifyEvent) => void,
+): { note: string | null; outcome: OnPremVerifyOutcome | null } {
+  const selected = selectRecordOnlyVerify(input);
+  if (record && selected) {
+    for (const event of selected.events) {
+      try {
+        record(event);
+      } catch (err) {
+        logDebug(`[run-outcome-memory] verify recorder threw: ${String(err)}`);
+      }
+    }
+  }
+  return { note: selected?.outcome.note ?? null, outcome: selected?.outcome ?? null };
+}
+
+function toolNameOf(data: Record<string, unknown>): string | null {
+  const raw = data["name"] ?? data["toolName"];
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}
+
+function argsOf(
+  data: Record<string, unknown>,
+  pendingArgs?: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const args = data["args"];
+  if (args && typeof args === "object" && !Array.isArray(args)) {
+    return args as Record<string, unknown>;
+  }
+  return pendingArgs ?? null;
+}
+
+/**
+ * A check result from one tool-loop event the embedded runner already
+ * emitted. `null` when the event is not a finished check — a start, a read,
+ * a `run_checks` that did not run, a `run_command` that is not a check.
+ * Never starts a shell to find out.
+ */
+export function checkResultFromToolEvent(
+  data: Record<string, unknown>,
+  pendingArgs?: Record<string, unknown> | null,
+): RecordedCheckResult | null {
+  const phase = data["phase"];
+  if (phase !== "result" && typeof data["isError"] !== "boolean") {
+    return null;
+  }
+  const name = toolNameOf(data);
+  if (!name) {
+    return null;
+  }
+  const args = argsOf(data, pendingArgs);
+  const result = data["result"];
+  const resultObj =
+    result && typeof result === "object" && !Array.isArray(result)
+      ? (result as Record<string, unknown>)
+      : null;
+  // Invoked, but the tool itself says it did not run a check.
+  if (resultObj && resultObj["ran"] === false) {
+    return null;
+  }
+
+  let command: string | null = null;
+  if (name === "run_command") {
+    const cmd = args && typeof args["command"] === "string" ? args["command"].trim() : "";
+    if (!cmd || !looksLikeCheckCommand(cmd)) {
+      return null;
+    }
+    command = cmd;
+  } else if (CHECK_TOOLS.has(name)) {
+    const cmd = args && typeof args["command"] === "string" ? args["command"].trim() : "";
+    command = cmd || name;
+  } else {
+    return null;
+  }
+
+  if (resultObj && typeof resultObj["exitCode"] === "number" && Number.isFinite(resultObj["exitCode"])) {
+    return { command, exitCode: resultObj["exitCode"] };
+  }
+  if (resultObj && typeof resultObj["ok"] === "boolean") {
+    return { command, exitCode: resultObj["ok"] ? 0 : 1 };
+  }
+  if (data["isError"] === true) {
+    return { command, exitCode: 1 };
+  }
+  if (phase === "result" || data["isError"] === false) {
+    return { command, exitCode: 0 };
+  }
+  return null;
+}
+
+/**
  * Build the fact body: the cloud twin joins `[body, verifyNote?, "changed: …"]`
- * with newlines. On-prem has no verify note (see the header), so the changed
- * paths line carries the same information the next run needs from it.
+ * with newlines. The verify line is {@link recordOnlyVerifyNote} — omitted
+ * entirely when the run changed nothing and ran no check. Never a claim that
+ * this runtime started a shell.
  */
 export function buildRunOutcomeFact(input: RunOutcomeMemoryInput): string {
   const body = input.learning?.trim() || input.summary.trim();
@@ -91,6 +412,10 @@ export function buildRunOutcomeFact(input: RunOutcomeMemoryInput): string {
     .filter((p) => typeof p === "string" && !!p.trim())
     .slice(0, MAX_PATHS);
   const parts = [body];
+  const note = recordOnlyVerifyNote(input);
+  if (note) {
+    parts.push(note);
+  }
   if (paths.length > 0) {
     parts.push(`changed: ${paths.join(", ")}`);
   }
@@ -116,10 +441,14 @@ export async function commitRunOutcomeMemory(
   }
 
   const key = runOutcomeFactKey(cfg, input.runId ?? "");
-  const content = buildRunOutcomeFact(input);
-  if (content.length < MIN_COMMIT_BODY) {
+  // The floor measures the LEARNING, not the verify note appended below it: a
+  // four-word summary teaches nothing, and a "verify skipped" line must not be
+  // what pushes it over the floor.
+  const body = (input.learning?.trim() || input.summary.trim());
+  if (body.length < MIN_COMMIT_BODY) {
     return false;
   }
+  const content = buildRunOutcomeFact(input);
 
   // Tags are part of the cloud twin's contract but the facts door stores no tag
   // column (RememberFactBody takes key/content/source only), so `run-outcome`

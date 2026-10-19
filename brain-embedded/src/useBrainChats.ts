@@ -93,12 +93,12 @@ export interface UseBrainChats {
   /**
    * Archive a chat — put it away rather than remove it.
    *
-   * The server's archive IS its delete (`DELETE /api/brain/chats/:id` sets
-   * `isArchived`, and `listChats` filters those out), so this keeps the local list
-   * honest the same way: the row leaves the list and an open chat is left. It is
-   * NOT {@link remove}'s twin — they are the same server write reached from two
-   * menu items, because "archive" is the honest word for what the server does and
-   * "delete" reads as a destroy that would lose the conversation's summary.
+   * Calls `persistence.archiveChat`, never {@link remove}'s `deleteChat`. The
+   * server's archive happens to be `DELETE /api/brain/chats/:id` (it sets
+   * `isArchived`), but reaching it through `deleteChat` is what made Archive a
+   * delete. A persistence that has not grown `archiveChat` fails closed — it
+   * does not fall back to `deleteChat`, which on the local-first adapter
+   * tombstones the row.
    */
   archive(id: number): Promise<void>;
   remove(id: number): Promise<void>;
@@ -337,7 +337,9 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
 
   const archive = useCallback(async (id: number) => {
     try {
-      await persistence.deleteChat(id);
+      // Never `deleteChat`: on the local-first adapter that tombstones the row,
+      // so routing Archive through it made "archive" a destroy.
+      await persistence.archiveChat(id);
       setChats((prev) => prev.filter((c) => c.id !== id));
       if (activeIdRef.current === id) setActiveChatId(null);
     } catch (e) {

@@ -201,6 +201,11 @@ export function buildResponsesBody(params: VendorCallParams, opts?: ResponsesBod
     ...(toolChoice ? { tool_choice: toolChoice } : {}),
     ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
     ...opts?.extra,
+    // xAI and OpenAI Responses ignore extraBody passthrough. The cache key has to
+    // land on the body itself, after extra, for both streamed and buffered calls.
+    ...(typeof params.extraBody?.prompt_cache_key === 'string' && params.extraBody.prompt_cache_key
+      ? { prompt_cache_key: params.extraBody.prompt_cache_key }
+      : {}),
   };
 }
 

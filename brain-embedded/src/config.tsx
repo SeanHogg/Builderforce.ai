@@ -26,6 +26,15 @@ export interface BrainPersistenceAdapter {
   createChat(body: { title?: string; originalRequest?: string | null; projectId?: number | null; capability?: string | null; mode?: string | null }): Promise<BrainChat>;
   updateChat(id: number, body: { title?: string; originalRequest?: string | null; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null; memoryEnabled?: boolean }): Promise<BrainChat>;
   deleteChat(id: number): Promise<unknown>;
+  /**
+   * Archive a chat — put it away rather than remove it. Distinct from
+   * `deleteChat` on purpose: the local-first adapter's `deleteChat` tombstones
+   * the row, and routing Archive through it is what made "archive" a destroy.
+   * The server's archive happens to be the same `DELETE` route as its delete
+   * (it sets `isArchived`); a local adapter archives by marking the row, not by
+   * tombstoning it.
+   */
+  archiveChat(id: number): Promise<unknown>;
   summarizeChat(id: number): Promise<{ summary: string } | { error: string }>;
   getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;
   /** Subscribe to durable message invalidations for one chat. The callback carries

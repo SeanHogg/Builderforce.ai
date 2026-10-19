@@ -97,6 +97,15 @@ export function createBrainRestPersistence(opts: BrainRestOptions) {
     deleteChat: (id: number) =>
       request<{ archived: boolean }>(`/api/brain/chats/${id}`, { method: 'DELETE' }),
 
+    /**
+     * Archive a chat. The server's archive IS `DELETE /api/brain/chats/:id`
+     * (sets `isArchived` and retains the summary) — there is no second route.
+     * Named apart from `deleteChat` so Archive is not a call to the destroy
+     * method. `deleteChat` is unchanged.
+     */
+    archiveChat: (id: number) =>
+      request<{ archived: boolean }>(`/api/brain/chats/${id}`, { method: 'DELETE' }),
+
     /** Summarize a chat and store the summary on it. */
     summarizeChat: (id: number) =>
       request<{ summary: string } | { error: string }>(`/api/brain/chats/${id}/summarize`, { method: 'POST' }),

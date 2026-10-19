@@ -275,6 +275,11 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
         arguments: { projectId, ...toolArgs, ...(ctx.originatingChatId != null ? { chatId: ctx.originatingChatId } : {}) },
         env, userId: cloudAgentRef ?? null, agentRef: cloudAgentRef ?? null,
         role: TenantRole.MANAGER,
+        // Provenance (ticket 5301): the container only relays the tool, but the
+        // execution that formed the belief is known here. The model name alone is not
+        // a recordable cost (origin columns store model + both token counts, or none),
+        // and this op never sees the token counts, so only the execution id is stamped.
+        executionId,
       });
       result = data && typeof data === 'object' ? (data as Record<string, unknown>) : { ok: true, result: data };
     } catch (e) {
@@ -559,7 +564,6 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       resolvedModel: turn.resolvedModel as string | undefined,
     }, turn.fallbackSurface ?? null);
     await recordStallStep(db, { tenantId, cloudAgentRef, executionId }, stall.step, turn.resolvedModel as string | undefined);
-    await saveContainerRunModelState(env, executionId, stall.state);
     if (stall.step.kind === 'nudge' || stall.step.kind === 'failover') steering.push(stall.step.nudge);
     const content = stall.step.kind === 'exhausted'
       ? (turn.content ? `${turn.content}\n\n${stall.step.notice}` : stall.step.notice)
@@ -567,6 +571,15 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     // An owner never ends with children still working. The image's loop treats a steer as
     // overriding a finish in the same turn, so the gate needs nothing from the image.
     const finishing = toolCalls.some((c) => c.function?.name === 'finish');
+    const wrote = Array.isArray(args.writtenPaths) && args.writtenPaths.length > 0;
+    let persisted = stall.state;
+    // A finish that wrote files is not the end: the next llm op must already be in
+    // verify, on the review model, before the image accepts the finish.
+    if (finishing && wrote && persisted.policy.phase !== 'verify') {
+      persisted = { ...persisted, policy: applyVerifyPhase(persisted.policy) };
+      steering.push('Files changed. Continue in verify on the review model: check the diff and the declared checks before finishing.');
+    }
+    await saveContainerRunModelState(env, executionId, persisted);
     const childBlock = finishing ? await liveChildrenFinishBlock(db, tenantId, executionId) : null;
     if (childBlock) steering.push(childBlock);
     return { status: 200, body: {

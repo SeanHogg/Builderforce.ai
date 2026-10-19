@@ -97,7 +97,7 @@ import {
   assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey,
 } from './cloudAgentTools';
 import {
-  CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, filterByGlobInScope, applyStringEdit, editFacts,
+  CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, applyStringEdit, editFacts,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type PolicyGate, type AgentExecParams, type Capability,
   type PrdWriteCapability, type PrdUpdateResult,
 } from '@builderforce/agent-tools';
@@ -453,6 +453,42 @@ function buildCloudProvider(args: {
       ? authorizeCredentialDelegation(db, { tenantId, principalId: args.principalId, delegationId: args.repositoryDelegationId, requiredScope: scope })
       : Promise.resolve(false);
 
+  // ── REPEAT-READ GUARD ──────────────────────────────────────────────────────
+  // A model that re-reads a file it already holds pays for it twice: a git-API round
+  // trip here, and a `recordContextContribution` row per repeat. Nothing about
+  // re-reading an UNCHANGED file can return different bytes, so an identical repeat is
+  // served from the first result. Deliberately NOT the approval fingerprint
+  // (`policyGateCallKey`) or the prose-loop detector (`detectRepetitionLoop`): it keys
+  // on (ref, path), never on prose or approval identity.
+  //
+  // Correctness rests on two invalidations, both below: the memo is keyed by the SAME
+  // `readRef()` the read uses, so the base→branch switch is a different key; and every
+  // write/edit/delete to a path drops its entries, so a read that must see the run's
+  // own new content always goes to the repo. A FAILED read is never memoized, so a
+  // transient git failure is not cached for the rest of the run.
+  //
+  // Scope boundary, stated rather than implied: this saves the read's I/O and DB cost,
+  // NOT the model's context tokens. `read_file`'s result shaper in
+  // `@builderforce/agent-tools` rebuilds its payload from `content` and drops a
+  // provider `note`, so an "already read" hint cannot reach the model from here; and
+  // returning a content-less repeat would break `write_file`'s overwrite probe, which
+  // reads through this same capability (`core-tools.ts`). Truncating a repeat read into
+  // a stub belongs at that shaper.
+  //
+  // Lifetime, likewise: the memo lives as long as this provider, and the provider is
+  // rebuilt every tick (`buildCloudProvider` is called per tick, not per run), so this
+  // suppresses repeats WITHIN a tick — the repeated-read, repeated-search turn where
+  // they actually happen — and a durable DO tick starts with an empty memo. Carrying
+  // it ACROSS ticks is deliberately not done here: the only correct version of that
+  // must cache file CONTENT in `CloudLoopState` (a set of keys alone would either
+  // re-read anyway or wrongly serve stale bytes), which is a durable-state size
+  // decision, not a local one. Stated here rather than left for the next reader to
+  // assume.
+  const readMemo = new Map<string, { path: string; content: string; truncated?: boolean }>();
+  const forgetReads = (path: string): void => {
+    for (const [key, cached] of readMemo) if (cached.path === path) readMemo.delete(key);
+  };
+
   // MULTI-REPO SPANNING (0956). `repoCtx` is the task's PRIMARY repo — the only one
   // a single-repo task has, and the fallback for every write a spanning task cannot
   // route by pathGlob. The router is resolved LAZILY and exactly once per run: a
@@ -495,18 +531,27 @@ function buildCloudProvider(args: {
         if (!repoCtx) return { ok: false, error: noRepo() };
         if (!(await credentialAllowed('repository:read'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
         const ref = readRef();
-        const ls = await listRepoFiles({ ...repoCtx, ref }, sub);
+        // Glob is applied inside listRepoFiles, BEFORE the 400-path tree cap.
+        // Filtering the already-sliced listing dropped matches past the cap and
+        // the zero-match note then reported real files as missing.
+        const ls = await listRepoFiles({ ...repoCtx, ref }, sub, glob);
         if (!ls.ok) return { ok: false, error: ls.reason };
-        // A glob is an explicit "find these files" — filter to matches (case-insensitive,
-        // bare name matches basename at any depth) so a named file is always surfaced.
-        const paths = glob ? filterByGlobInScope(ls.paths, glob, sub) : ls.paths;
-        return { ok: true, ref, paths, truncated: ls.truncated };
+        return { ok: true, ref, paths: ls.paths, truncated: ls.truncated };
       },
       async readFile(path) {
         if (!repoCtx) return { ok: false, error: noRepo() };
         if (!(await credentialAllowed('repository:read'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
-        const rf = await readRepoFile({ ...repoCtx, ref: readRef() }, path);
-        if (rf.ok) await recordContextContribution(db, { tenantId, executionId, sourceKind: 'repository_file', sourceRef: `${repoCtx.owner}/${repoCtx.repo}:${path}`, trustTier: 'repository', content: rf.content });
+        const ref = readRef();
+        // An identical repeat of a read this run already served. Keyed by ref so the
+        // base→branch switch reads for real, and consulted only BEFORE the round trip.
+        const memoKey = `${ref}\u0000${path}`;
+        const memo = readMemo.get(memoKey);
+        if (memo) return { ok: true, path: memo.path, content: memo.content, truncated: memo.truncated };
+        const rf = await readRepoFile({ ...repoCtx, ref }, path);
+        if (rf.ok) {
+          readMemo.set(memoKey, { path: rf.path, content: rf.content, ...(rf.truncated === true ? { truncated: true } : {}) });
+          await recordContextContribution(db, { tenantId, executionId, sourceKind: 'repository_file', sourceRef: `${repoCtx.owner}/${repoCtx.repo}:${path}`, trustTier: 'repository', content: rf.content });
+        }
         return rf.ok ? { ok: true, path: rf.path, content: rf.content, truncated: rf.truncated } : { ok: false, error: rf.reason };
       },
       async searchCode(query, scope) {
@@ -537,6 +582,9 @@ function buildCloudProvider(args: {
         const commit = await commitAgentFile(target, path, content, agentCommitMessage(firstWriteThisRun ? 'Add' : 'Update', path, taskRow.id, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
+        // The run just changed this path: any memoized read of it is now stale, and
+        // leaving it would hand the model bytes from before its own edit.
+        forgetReads(path);
         await recordRepoWrite(db, tenantId, taskRow.id, target);
         // created vs modified comes from whether the path pre-existed in the repo
         // (commit.existed), not first-write-this-run.
@@ -570,6 +618,10 @@ function buildCloudProvider(args: {
         const commit = await commitAgentFile(target, path, updated, agentCommitMessage(firstWriteThisRun ? 'Edit' : 'Update', path, taskRow.id, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
+        // Same invalidation as `writeFile` — this run just changed the path. The
+        // read above went straight to `readRepoFile` precisely because an edit must
+        // always see the CURRENT bytes, memo or no memo.
+        forgetReads(path);
         await recordRepoWrite(db, tenantId, taskRow.id, target);
         await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'modified', agentLabel);
         notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'modified', ts: new Date().toISOString() });
@@ -583,6 +635,9 @@ function buildCloudProvider(args: {
         const del = await deleteAgentFile(target, path, agentCommitMessage('Remove', path, taskRow.id, agentLabel, suffix));
         if (del.ok) {
           writtenPaths.delete(path);
+          // The path is gone from the branch: a memoized read of it would hand back
+          // content that no longer exists.
+          forgetReads(path);
           await recordRepoWrite(db, tenantId, taskRow.id, target);
           await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'deleted', agentLabel);
           notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'deleted', ts: new Date().toISOString() });
@@ -939,8 +994,12 @@ async function runCloudToolLoop(
   // THE model hand-off policy for this run: locks onto what serves turn 1, releases a
   // pin on 429/413/503 or an Evermind decline, fails over a model that only narrates.
   // Carried across DO ticks in CloudLoopState.
+  // Verify is a different model than the author. Seed it from ROLE_MODELS with no
+  // explicit pin — the coder's `requested` must not become the review model.
+  const verifyPin = requestedModelForRole(env, 'verify');
   let modelState: CloudRunModelState = resumeCloudRunModelState(
     opts?.resume?.modelPolicy, opts?.resume?.pinnedModel, pick, opts?.delegation?.spec?.role,
+    verifyPin ? { verify: verifyPin } : undefined,
   );
   const cloudToolNames = cloudTools.map((t) => t.function.name);
   /** What answered the latest turn — the only id naming a spent model under auto-select. */
@@ -1260,6 +1319,18 @@ async function runCloudToolLoop(
         ciFailureBlocks = ciDecision.failureBlocks;
         if (ciDecision.ciVerified) ciVerified = true;
       }
+      // This run has just PERFORMED its verification action — `verifyWrittenFiles`
+      // above and/or the branch-CI poll. That is the moment the run enters the
+      // policy's `verify` phase, so every turn the block messages below force the
+      // agent to take is asked for as `verify` rather than continuing in `code`.
+      //
+      // It has to happen HERE, not in the verify/remember tail: that tail runs only
+      // once the run is over, so a phase applied there reduced the state into a value
+      // nobody ever read. `applyVerifyPhase` RETURNS the new state — the assignment is
+      // the whole point. Idempotent, so a second blocked finish is a no-op.
+      if (repoCtx && writtenPaths.size > 0) {
+        modelState = { ...modelState, policy: applyVerifyPhase(modelState.policy) };
+      }
       let finishBlock: string | null = null;
       if (requiredSignoff && !reviewVerdictRecorded) {
         finishBlock = missingReviewVerdictMessage(requiredSignoff);
@@ -1417,6 +1488,7 @@ async function runCloudToolLoop(
               }) ?? {}
             : {}),
           useCase: 'task_execution',
+          prompt_cache_key: `cloud:${executionId}`,
         },
         undefined,
         undefined,
@@ -1432,6 +1504,7 @@ async function runCloudToolLoop(
         requestedModel: pick.model, fallbackModel: modelState.policy.model,
         effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
         role: runRole,
+        phase: modelState.policy.phase,
       }, { tGen0, step: ctx.step, notify: false });
       if (!turn.ok) return { failed: turn.error };
       lastResolvedModel = turn.resolvedModel;
@@ -1454,6 +1527,11 @@ async function runCloudToolLoop(
             arguments: { projectId, ...call.args, ...(opts?.originatingChatId != null ? { chatId: opts.originatingChatId } : {}) },
             env, userId: cloudAgentRef ?? null, agentRef: cloudAgentRef ?? null,
             role: TenantRole.MANAGER,
+            // Provenance (ticket 5301): this run formed the belief, so a
+            // project_facts.remember from here carries the execution id. The model is
+            // known but the token counts are metered per turn, not per tool call, and a
+            // half-known origin cost is stored as none — so it is omitted, not invented.
+            executionId: meterExecutionId,
           });
           return { data: data && typeof data === 'object' ? (data as Record<string, unknown>) : { ok: true, result: data } };
         } catch (e) {
@@ -1606,9 +1684,12 @@ async function runCloudToolLoop(
  *  1. `runVerifyPhase` selects the verification verdict from what `onFinish` already
  *     ran (`ciVerified`), and `recordRunVerifyEvents` writes BOTH halves onto the
  *     timeline while returning the `verify_started` event for the reducer.
- *  2. `applyVerifyPhase(modelState.policy)` applies the `verify_started` event through
- *     the run policy's reducer — what actually moves the run into the `verify` phase.
- *     Until a loop emits it, the policy never sees a verify step at all.
+ *  2. The `verify_started` policy event is applied where the run actually VERIFIES —
+ *     in `onFinish`, next to `verifyWrittenFiles`/`pollBranchCi` — because that is the
+ *     only place the new phase can ride the live `modelState` into the turns a blocked
+ *     finish forces. Applying it here, to a state this function only holds a COPY of
+ *     and at the very end of the run, reduced it into a value nobody read. This tail
+ *     asserts the phase rather than re-applying it.
  *  3. `commitRunMemory` writes the outcome into the governed memory the run already
  *     had as a capability. A failed write is reported and the run still finishes.
  */
@@ -1637,9 +1718,20 @@ async function runVerifyThenRemember(args: {
       results: ciVerified ? [{ command: 'branch-ci', exitCode: 0 }] : null,
     });
     recordRunVerifyEvents({ db, tenantId, executionId, ...(cloudAgentRef ? { cloudAgentRef } : {}) }, outcome);
-    // The policy event is applied HERE, by the module that owns the transition for every
-    // run loop — until a loop emits it, the run never enters the verify phase.
-    applyVerifyPhase(modelState.policy);
+    // The `verify_started` POLICY event is applied where the run actually verifies —
+    // in `onFinish`, next to `verifyWrittenFiles`/`pollBranchCi` — because only the
+    // live `modelState` can carry the new phase into the turns a blocked finish
+    // forces. Applying it to a `modelState` this function only holds a COPY of, at
+    // the very end of the run, reduced the state into a value nobody read. Assert the
+    // invariant instead of pretending to perform the transition: a run that reaches
+    // here having verified must already be in the verify phase.
+    if (modelState.policy.phase !== 'verify') {
+      reportCaughtError(new Error(`run reached its verify tail still in the '${modelState.policy.phase}' phase`), {
+        source: 'application/runtime/cloudAgentEngine.ts',
+        operation: 'runVerifyThenRemember.assertVerifyPhase',
+        context: { logMessage: '[cloud-run] verify phase was not applied before the run end', details: { tenantId, executionId, phase: modelState.policy.phase } },
+      });
+    }
     await commitRunMemory({
       db, env, tenantId, projectId, ticketId: taskRow.id, executionId,
       ...(cloudAgentRef ? { cloudAgentRef } : {}),

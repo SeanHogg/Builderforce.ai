@@ -29,7 +29,7 @@ import {
   writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { join, relative, resolve as resolvePath, sep } from "node:path";
-import { applyStringEdit, editFacts, matchGlobInScope, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
+import { applyStringEdit, editFacts, matchGlobInScope, dirMayContainGlobMatch, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the VS Code local provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
@@ -105,6 +105,12 @@ async function walkFiles(
     for (const entry of entries) {
       if (entry.isDirectory()) {
         if (LIST_IGNORED_DIRS.has(entry.name)) {
+          continue;
+        }
+        const childRel = relative(root, join(dir, entry.name)).split(sep).join("/");
+        // Prune directories the glob cannot reach so the match budget is not
+        // spent walking unrelated trees (and a truncated miss is not a miss).
+        if (glob && !dirMayContainGlobMatch(childRel, glob, scopeArg)) {
           continue;
         }
         queue.push(join(dir, entry.name));

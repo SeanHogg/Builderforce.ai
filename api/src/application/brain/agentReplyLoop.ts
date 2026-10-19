@@ -12,7 +12,8 @@ import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from 
 import { readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
 import { callBuiltinTool } from '../llm/builtinMcpService';
 import { codingFallbackSurface } from '../llm/codingFallbackSurface';
-import { initialRunPolicy, resolveStallStep, type RunPolicyState } from '@builderforce/run-policy';
+import { initialRunPolicy, nextTurn, resolveStallStep, type RunPolicyState } from '@builderforce/run-policy';
+import { requestedModelForRole } from '../runtime/cloudAgent/routing';
 import {
   applyVerifyPhase, commitRunMemory, describeVerifyOutcome, recordRunVerifyEvents, runVerifyPhase,
 } from '../runtime/cloudAgent/runEndMemory';
@@ -88,6 +89,13 @@ export interface AgentReplyLoopInput {
 export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<ReplyTurnState> {
   const { db, env, tenantId, userId, agentRef, agentName, opts, service, convo, userRequest, replyTemp, pinnedModel, byoVendors, plan, call } = input;
   const { tools, nameToTool } = input.toolset;
+  const verifyPin = requestedModelForRole(input.env, 'verify');
+  let wroteFiles = false;
+  const FILE_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch', 'delete_file']);
+  const enterVerifyTurn = (): void => {
+    if (!wroteFiles || s.policy.phase === 'verify') return;
+    s.policy = applyVerifyPhase(s.policy);
+  };
 
   const s: ReplyTurnState = {
     text: '',
@@ -104,7 +112,10 @@ export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<Rep
     // emitting a tool call is spent; the only remedy left is a DIFFERENT model, so the
     // reply picks one itself. A base-model pin is not routed around on a transport
     // failure — the proxy's own cascade handles those.
-    policy: initialRunPolicy({ pinnedModel }),
+    policy: initialRunPolicy({
+      pinnedModel,
+      ...(verifyPin && verifyPin !== pinnedModel ? { phaseModels: { verify: verifyPin }, reviewModel: verifyPin } : {}),
+    }),
     trace: [],
   };
 
@@ -277,6 +288,7 @@ export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<Rep
           category: 'tool', label: toolIdOf(toolCall.name), args: toolCall.args, result: result.data,
           isError: result.isError === true, durationMs: Date.now() - tStart,
         });
+        if (result.isError !== true && FILE_TOOLS.has(toolCall.name)) wroteFiles = true;
         return undefined;
       },
     },
@@ -285,8 +297,13 @@ export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<Rep
         s.iterations = ctx.step + 1;
         const turnToolChoice = forceToolChoice;
         forceToolChoice = undefined;
+        enterVerifyTurn();
+        const ask = nextTurn(s.policy, { hasTools: true });
         const result = await completeTraced(db, service, {
-          model: s.policy.model,
+          model: ask.model,
+          role: ask.role,
+          ...(ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}),
+          prompt_cache_key: `brain-reply:${input.tenantId}:${input.agentRef}`,
           messages: convo as never,
           tools,
           ...(turnToolChoice ? { tool_choice: turnToolChoice } : {}),
@@ -344,11 +361,16 @@ export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<Rep
   // model that returned an empty turn): force ONE final synthesis WITHOUT tools so
   // the agent always speaks — a bounded extra call, not another tool round.
   if (!s.text) {
+    enterVerifyTurn();
+    const ask = nextTurn(s.policy, { hasTools: false });
     const finalResult = await completeTraced(db, service, {
       // The policy's model, NOT the original pin: when the loop above failed over, the pin
       // names a model that has already proven it cannot do this turn, and re-pinning it
       // for the one call that must produce the user's answer throws the failover away.
-      model: s.policy.model,
+      model: ask.model,
+      role: ask.role,
+      ...(ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {}),
+      prompt_cache_key: `brain-reply:${input.tenantId}:${input.agentRef}`,
       messages: [...convo, { role: 'user', content: `Now write your reply to the team AS ${agentName}: plain prose, first person, no tool calls. Summarise what you found or did.` }] as never,
       temperature: replyTemp,
       max_tokens: 1000,
@@ -389,7 +411,7 @@ export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<Rep
   try {
     const outcome = runVerifyPhase({
       surface: 'brain-reply',
-      writtenPaths: [],
+      writtenPaths: wroteFiles ? ['changed'] : [],
       // The tools this loop actually ran, as the verification evidence they are: a
       // reply that asked the agent to change code and only READ that code did not verify.
       results: s.trace

@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildRunOutcomeFact,
+  checkResultFromToolEvent,
   commitRunOutcomeMemory,
+  recordOnPremVerify,
   runOutcomeFactKey,
+  type OnPremVerifyEvent,
   type RunOutcomeMemoryConfig,
 } from "./run-outcome-memory.js";
 
@@ -75,10 +78,148 @@ describe("run-outcome mirror parity with the cloud commitRunMemory", () => {
     ).toBe(25);
   });
 
-  it("never emits a verify line — the embedded runner has no verify step to report", () => {
-    expect(buildRunOutcomeFact({ summary: SUMMARY, writtenPaths: ["retry.ts"] })).not.toMatch(
-      /verify/i,
+  it("records a verify skip, not a passed check, when the run wrote files but ran no check tool", () => {
+    const fact = buildRunOutcomeFact({ summary: SUMMARY, writtenPaths: ["retry.ts"], toolNames: ["read", "edit"] });
+    expect(fact).toContain("verify skipped (no_check_ran)");
+    expect(fact).not.toMatch(/verify recorded/);
+  });
+
+  it("records only the check tools the agent's own loop already ran — never a runtime shell", () => {
+    const fact = buildRunOutcomeFact({
+      summary: SUMMARY,
+      writtenPaths: ["retry.ts"],
+      toolNames: ["edit", "test", "test", "exec"],
+    });
+    expect(fact).toContain("verify recorded: test, exec (agent tools, not a runtime shell)");
+  });
+
+  it("skips verify when nothing was written, even if a check tool ran", () => {
+    expect(
+      buildRunOutcomeFact({ summary: SUMMARY, writtenPaths: [], toolNames: ["test"] }),
+    ).toContain("verify skipped (nothing_written)");
+  });
+
+  it("records nothing when the run changed nothing and ran no check", () => {
+    const fact = buildRunOutcomeFact({ summary: SUMMARY, writtenPaths: [], toolNames: ["read"] });
+    expect(fact).not.toContain("verify ");
+    expect(fact).not.toContain("changed:");
+    const recorded = recordOnPremVerify({ writtenPaths: [], toolNames: ["read"] }, () => {
+      throw new Error("must not be called");
+    });
+    expect(recorded).toEqual({ note: null, outcome: null });
+  });
+});
+
+describe("record-only on-prem verify", () => {
+  it("records the outcome when the tool loop already ran a check", () => {
+    const events: OnPremVerifyEvent[] = [];
+    const recorded = recordOnPremVerify(
+      {
+        writtenPaths: ["retry.ts"],
+        results: [{ command: "npm test", exitCode: 0 }],
+      },
+      (event) => events.push(event),
     );
+    expect(recorded.note).toContain("verify passed: npm test (exit 0)");
+    expect(recorded.note).toContain("agent tools, not a runtime shell");
+    expect(recorded.outcome).toMatchObject({
+      surface: "on-prem",
+      kind: "ran",
+      reason: "verify_passed",
+      commands: ["npm test"],
+      failedCommands: [],
+      mayFinish: true,
+    });
+    expect(events.map((e) => ("type" in e ? e.type : e.toolName))).toEqual([
+      "verify_started",
+      "in_run_verify",
+    ]);
+    const timeline = events[1];
+    expect(timeline).toMatchObject({ toolName: "in_run_verify", category: "tool" });
+    expect(JSON.stringify(events)).not.toContain("verify_completed");
+  });
+
+  it("records a failed check without blocking finish", () => {
+    const recorded = recordOnPremVerify({
+      writtenPaths: ["retry.ts"],
+      results: [{ command: "npm run typecheck", exitCode: 1 }],
+    });
+    expect(recorded.note).toContain("verify failed: npm run typecheck (exit 1)");
+    expect(recorded.outcome?.reason).toBe("verify_failed");
+    expect(recorded.outcome?.mayFinish).toBe(true);
+  });
+
+  it("does not emit verify_started when no check result is in hand", () => {
+    const events: OnPremVerifyEvent[] = [];
+    const wrote = recordOnPremVerify(
+      { writtenPaths: ["retry.ts"], toolNames: ["read", "edit"] },
+      (event) => events.push(event),
+    );
+    expect(wrote.note).toBe("verify skipped (no_check_ran)");
+    expect(events).toEqual([]);
+
+    const namedOnly = recordOnPremVerify(
+      { writtenPaths: ["retry.ts"], toolNames: ["test", "exec"] },
+      (event) => events.push(event),
+    );
+    expect(namedOnly.note).toContain("verify recorded: test, exec");
+    expect(events).toEqual([]);
+  });
+
+  it("does not fail the run when the recorder throws", () => {
+    expect(() =>
+      recordOnPremVerify(
+        { writtenPaths: ["retry.ts"], results: [{ command: "run_checks", exitCode: 0 }] },
+        () => {
+          throw new Error("recorder down");
+        },
+      ),
+    ).not.toThrow();
+    const recorded = recordOnPremVerify(
+      { writtenPaths: ["retry.ts"], results: [{ command: "run_checks", exitCode: 0 }] },
+      () => {
+        throw new Error("recorder down");
+      },
+    );
+    expect(recorded.note).toContain("verify passed: run_checks (exit 0)");
+    expect(recorded.outcome?.mayFinish).toBe(true);
+  });
+
+  it("reads a finished run_checks result and ignores a start or a non-check", () => {
+    expect(
+      checkResultFromToolEvent({
+        phase: "result",
+        name: "run_checks",
+        isError: false,
+        result: { ok: true, ran: true },
+      }),
+    ).toEqual({ command: "run_checks", exitCode: 0 });
+    expect(
+      checkResultFromToolEvent({
+        phase: "start",
+        name: "run_checks",
+        args: {},
+      }),
+    ).toBeNull();
+    expect(
+      checkResultFromToolEvent({
+        phase: "result",
+        name: "run_checks",
+        result: { ok: false, ran: false },
+      }),
+    ).toBeNull();
+    expect(
+      checkResultFromToolEvent(
+        { phase: "result", name: "run_command", isError: true },
+        { command: "npm test" },
+      ),
+    ).toEqual({ command: "npm test", exitCode: 1 });
+    expect(
+      checkResultFromToolEvent(
+        { phase: "result", name: "run_command", isError: false, result: { exitCode: 0 } },
+        { command: "git status" },
+      ),
+    ).toBeNull();
   });
 });
 

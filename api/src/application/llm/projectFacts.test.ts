@@ -26,11 +26,21 @@ function recallDb(rows: Array<{ key: string; content: string }>) {
 }
 
 /** db mock for upsert: records the onConflictDoUpdate call so we can assert it fired. */
-function upsertDb() {
+function upsertDb(priorRecallCount = 0) {
   const onConflictDoUpdate = vi.fn(async () => undefined);
   const values = vi.fn(() => ({ onConflictDoUpdate }));
   const insert = vi.fn(() => ({ values }));
-  return { db: { insert } as never, insert, values, onConflictDoUpdate };
+  // The write path first reads this key's existing recall_count (1248, requirement 3)
+  // to lift importance by how often recall already returned it. A brand-new key has
+  // no prior row, so the default mock answers with no rows at all.
+  const select = vi.fn(() => ({
+    from: () => ({
+      where: () => ({
+        limit: async () => (priorRecallCount > 0 ? [{ recallCount: priorRecallCount }] : []),
+      }),
+    }),
+  }));
+  return { db: { insert, select } as never, insert, values, onConflictDoUpdate, select };
 }
 
 describe('formatProjectFactsBlock', () => {
