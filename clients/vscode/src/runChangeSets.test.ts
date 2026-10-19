@@ -53,6 +53,15 @@ vi.mock("./localFirstStore", () => ({
   }),
 }));
 
+// Host start also journals the run. That journal is not the change set, and a
+// shared store would make records[0] the recovery row. G22 covers the journal.
+vi.mock("./installRunRecovery", () => ({
+  installRunRecovery: () => ({
+    recovered: Promise.resolve([]),
+    recordStarted: async () => undefined,
+  }),
+}));
+
 vi.mock("./auditToolCatalog", () => ({
   auditToolCatalog: async (_secrets: unknown, tools: unknown) => tools,
 }));
