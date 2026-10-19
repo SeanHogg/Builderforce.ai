@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
@@ -20,11 +21,31 @@ const sourcePackageTests = sourcePackageRoots(REPO_ROOT).map(
   (root) => `${path.relative(API_ROOT, root).split(path.sep).join('/')}/**/*.test.ts`,
 );
 
+/**
+ * Vitest keys a manual `vi.mock` with `normalizeResolvedIdToUrl`, which emits the
+ * root-relative `/src/…` URL only when `resolvedId.startsWith(root)`. On Windows
+ * the resolver keeps the filesystem drive letter (`C:/…`) while a root taken from
+ * `process.cwd()` / `import.meta.url` is often `c:/…`. The case-sensitive check
+ * fails, the mock is stored as `/@fs/C:/…`, and the transformed import requests
+ * `/src/…` — every manual mock is a silent no-op. Pin root to the native realpath
+ * so the drive letter matches resolved ids. Do NOT rewrite resolve ids to chase
+ * root: that loads a second copy of packages like `yjs` and breaks identity checks.
+ */
+function windowsNativeRoot(fallback: string): string {
+  if (process.platform !== 'win32') return fallback;
+  try {
+    return fs.realpathSync.native(fallback);
+  } catch {
+    return fallback;
+  }
+}
+
 // Vitest does not read tsconfig `paths`, so the source-only shared packages
 // (`@builderforce/agent-tools`, resolved via tsconfig paths for tsc + wrangler/esbuild
 // bundling) need explicit resolve aliases here too. They point at the package source
 // (vitest transforms TS on the fly).
 export default defineConfig({
+  root: windowsNativeRoot(API_ROOT),
   test: {
     // Reset the module-global L1 read-through cache before every test so
     // cache-backed tests are order-independent (see test/setup.ts).
