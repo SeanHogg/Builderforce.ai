@@ -1,27 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import {
-  VSIX_LOCK_STEAL_MS,
+  BUSY_TIMEOUT,
+  decideRecoveryCopy,
+  isSecretShapedKey,
+  leaseBusy,
   lockStolen,
   recoverSnapshot,
+  redactForUploadOrLog,
   requiresRecoveryCopy,
+  SECRET_SHAPED_KEYS,
 } from './durabilityContract.js';
 
 describe('durability contract', () => {
-  it('does not steal a VSIX lock held for 29_999 ms', () => {
+  it('keeps a held lease busy until release, including at 30s and later', () => {
+    const holder = 'window-a';
     const heldSince = 1_700_000_000_000;
-    expect(VSIX_LOCK_STEAL_MS).toBe(30_000);
-    expect(lockStolen(heldSince, heldSince + 29_999, VSIX_LOCK_STEAL_MS)).toBe(false);
+    expect(BUSY_TIMEOUT).toBe('until_release');
+    for (const age of [0, 29_999, 30_000, 30_001, 60_000, 3_600_000]) {
+      const now = heldSince + age;
+      expect(leaseBusy(holder, now, heldSince)).toBe(true);
+      expect(lockStolen(holder, now, heldSince, 30_000)).toBe(false);
+      expect(lockStolen(holder, now, heldSince, age)).toBe(false);
+    }
   });
 
-  it('steals a VSIX lock at 30_000 ms and after', () => {
-    const heldSince = 1_700_000_000_000;
-    expect(lockStolen(heldSince, heldSince + 30_000, VSIX_LOCK_STEAL_MS)).toBe(true);
-    expect(lockStolen(heldSince, heldSince + 30_001, VSIX_LOCK_STEAL_MS)).toBe(true);
-  });
-
-  it('uses the caller window: stolen at the boundary, not before', () => {
-    expect(lockStolen(100, 109, 10)).toBe(false);
-    expect(lockStolen(100, 110, 10)).toBe(true);
+  it('does not treat a missing holder as busy and does not grant a steal', () => {
+    expect(leaseBusy(undefined)).toBe(false);
+    expect(leaseBusy(null)).toBe(false);
+    expect(leaseBusy('')).toBe(false);
+    expect(leaseBusy(undefined, 1_700_000_030_000, 1_700_000_000_000)).toBe(false);
+    expect(lockStolen(undefined, 1_700_000_030_000, 1_700_000_000_000, 30_000)).toBe(false);
+    expect(lockStolen(null)).toBe(false);
+    expect(lockStolen('')).toBe(false);
   });
 
   it('recovers valid JSON', () => {
@@ -46,5 +56,80 @@ describe('durability contract', () => {
   it('requires a recovery copy only for the VSIX file snapshot', () => {
     expect(requiresRecoveryCopy('vsix-file')).toBe(true);
     expect(requiresRecoveryCopy('indexeddb')).toBe(false);
+  });
+
+  it('keeps the previous good VSIX copy when the parse failed', () => {
+    const previous = { records: [1], note: 'good' };
+    const decision = decideRecoveryCopy('vsix-file', previous, '{');
+    expect(decision).toEqual({
+      adapter: 'vsix-file',
+      replace: false,
+      keepPrevious: true,
+      previous,
+      reason: 'corrupt_snapshot',
+    });
+    if (decision.replace) throw new Error('corrupt parse must not replace');
+    expect(decision.previous).toBe(previous);
+  });
+
+  it('may replace a VSIX copy only with a parse that succeeded', () => {
+    const previous = { records: [1] };
+    expect(decideRecoveryCopy('vsix-file', previous, '{"records":[2]}')).toEqual({
+      adapter: 'vsix-file',
+      replace: true,
+      value: { records: [2] },
+    });
+  });
+
+  it('does not ask IndexedDB for a second file', () => {
+    const previous = { records: [1] };
+    expect(decideRecoveryCopy('indexeddb', previous, '{')).toEqual({
+      secondFile: false,
+      replace: false,
+    });
+    expect(decideRecoveryCopy('indexeddb', previous, '{"records":[2]}')).toEqual({
+      secondFile: false,
+      replace: false,
+    });
+  });
+
+  it('strips secret-shaped keys before a snapshot is eligible to upload or log', () => {
+    expect(SECRET_SHAPED_KEYS).toEqual([
+      'token',
+      'password',
+      'authorization',
+      'cookie',
+      'apiKey',
+      'clientSecret',
+    ]);
+    for (const key of SECRET_SHAPED_KEYS) {
+      expect(isSecretShapedKey(key)).toBe(true);
+      expect(isSecretShapedKey(key.toUpperCase())).toBe(true);
+    }
+    expect(isSecretShapedKey('note')).toBe(false);
+    expect(isSecretShapedKey('records')).toBe(false);
+
+    const snapshot = {
+      records: [1],
+      token: 'secret-token',
+      Password: 'secret-password',
+      nested: {
+        authorization: 'Bearer x',
+        cookie: 'sid=1',
+        apiKey: 'key',
+        clientSecret: 'secret',
+        name: 'kept',
+      },
+      items: [{ token: 'drop', id: 2 }],
+    };
+    const redacted = redactForUploadOrLog(snapshot);
+    expect(redacted).toEqual({
+      records: [1],
+      nested: { name: 'kept' },
+      items: [{ id: 2 }],
+    });
+    expect(redacted).not.toBe(snapshot);
+    expect(snapshot.token).toBe('secret-token');
+    expect(snapshot.nested.authorization).toBe('Bearer x');
   });
 });
