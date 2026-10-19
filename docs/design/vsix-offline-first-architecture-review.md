@@ -218,3 +218,131 @@ Do not duplicate server business rules inside presentation code. Extract host-ne
 This review identifies the cross-cutting gaps in the inspected execution, storage, tooling, audit, and transport paths. It is not a claim that every feature in the repository is offline-capable or that every network call has been dynamically exercised. A complete transport inventory and packaged network-denial tests are delivery gates.
 
 The working tree contains active unrelated edits, including changes made during this review. Revalidate the audit/provider integration against the implementation baseline before development; transient file/export mismatches observed during inspection had resolved by the final source check. No product code was changed or tests run for this architecture-only deliverable.
+
+## Implementation status against the working tree
+
+The last sentence of the section above is the original review limit. It is no longer true of the working tree. This section records what that tree actually contains as of the follow-up on 2026-10-18, and it supersedes only that sentence. Earlier sections are unchanged: a capability described there as missing is still missing unless this section says a live path now calls it.
+
+Status words used below:
+
+- **Composed** — a live path calls it (activation, a host port, or a queue the host already drains).
+- **Library** — the module and its tests exist; no composition root imports it.
+- **Contract** — types, schema, ports, or a migration exist; there is no repository, route, or importer.
+- **Not started** — no implementation was found. A name in a comment is not an implementation.
+
+Comments in `api/migrations/1247_sync_batch_protocol.sql` and `api/src/infrastructure/database/schema/sync.ts` name a swept-table registration and import use cases (`importSyncedTicket`, `importSyncedProject`, `importMirrorRecord`). Those files are not in the tree. Treat the comments as intent.
+
+Files outside the paths named here are not evidence that a gap is closed.
+
+### G01–G27
+
+| Gap | Status | Evidence in the working tree | Still required |
+| --- | --- | --- | --- |
+| G01 API-denied default | Partial, VSIX only | `packages/local-first/src/policy.ts` (`LOCAL_FIRST_POLICY`, every capability false). VSIX settings `builderforce.platform.*` default false in `clients/vscode/package.json`, with nls strings, read by `clients/vscode/src/platformPolicy.ts`. | Web `bootWebPlatformPolicy` is not called. Rovr `createRovrPlatformPolicy` is imported only by its test. No settings UI beyond the VSIX contribution. |
+| G02 single enforcement point | Partial, host `fetch` only | `bindPlatformPolicy` replaces `globalThis.fetch` for configured BuilderForce origins, classifies the capability, and sets `redirect: "error"`. `modelRouting.ts` checks `gateway-inference` before opening a cloud stream. `outboxStorage.ts` passes `outboxSendPermission`. | The webview is another JavaScript realm; its `fetch` is not the host's. WebSockets, `vscode` request APIs, and child-process network are not classified. Web and Rovr policy modules are not composed, so their fetches are not gated. |
+| G03 local system of record | Partial, chat messages on the host run | `localBrainApplication` (`clients/vscode/src/localFirstStore.ts`) is passed into `brainRunHostPorts` `persistence.sendMessages`, the chat participant, the webview host bridge, and step durability in `extension.ts`. | The store is one JSON snapshot (`globalStorage/local-first-v1.json`), not a transactional embedded database. Run context, tool catalogs, and platform writes still call `bfApi` / `gateway`. Signed-out work is not the record for projects, tickets, audits, or runs. |
+| G04 stable client identity | Contract | Client UUIDs and `EntityMapping` live in `packages/local-first`. `sync_entity_mappings` is in migration 1247. | No live run, step, or approval contract was changed to keep one client id across restart and sync. `localDeviceId` is written with an un-awaited `globalState.update`, so a crash can mint a second device id. |
+| G05 local projects and tickets | Library, Web only | `frontend/src/lib/localFirst/workManagement.ts` (`createLocalWorkManagement`). | Nothing in the web app imports it. VSIX has no local project or ticket repository, tree, or board. |
+| G06 local domain tools | Not started | — | Platform tool calls still target the API. No local adapter, queue, or sync handoff. |
+| G07 local audit definitions and runs | Library | `clients/vscode/src/auditDefinitions.ts`, `localAuditStore.ts` (`startLocalAuditRun`, findings, remediation, `recoverInterruptedAuditRuns`). | `auditExecution.ts` does not call them. Definitions are not loaded from the local store. |
+| G08 close means local complete | Not corrected | Recovery helper only, and it is not called. | Close-audit behaviour was not changed. A completed local audit still has no durable "closed locally" state on the live path, and no rule stops it launching a cloud audit. |
+| G09 policy snapshot, including signed out | Library, hook unwired | `policySnapshots.ts` and a fallback in `policyGates.ts` (`snapshotPermitsOfflineRun`). | `configurePolicyGatesPersistence` is never called from `extension.ts`, so the resolver still runs memory-only. Sign-out still drops the in-memory cache. |
+| G10 destination binding | Contract | `EntityDestination` / `UNBOUND_DESTINATION` in `packages/local-first/src/records.ts`. `destinationBindingError` in `api/src/domain/sync/syncProtocol.ts`. | Not enforced at project, ticket, chat, audit, or run creation. Unbound records can still be written by any caller that does not use the coordinator. |
+| G11 binding is a snapshot | Contract | `destinationKey` is pure and snapshotted on the record. The coordinator refuses an unbound batch. | `taskProjectId()` and the other live parent lookups were not replaced. No rebind operation exists. |
+| G12 outbox permission revoked | Partial, VSIX queues | `packages/write-outbox` `sendPermission` aborts automatic, manual, final, probe, and `drainWith` sends. VSIX `outboxStorage.ts` wires `outboxSendPermission`. | Only queues built through that helper are gated. A direct `fetch` that is not a platform-origin request, or a socket, is unaffected. |
+| G13 durable vs best-effort | Partial | Outbox types distinguish durable retention, dead letters, and best-effort drop. | Not every user-work queue was reclassified. Dead-letter export and repair are not a user-visible action. |
+| G14 mutation and outbox commit together | Partial | `enqueueDurable` exists. The VSIX snapshot store commits a record and its journal event in one rename. | The outbox file and the local-first snapshot are different stores. A domain write and its sync enqueue are not one commit. |
+| G15 batch sync protocol | Contract | Client `SyncPushBatch` / `SyncPullResult` / `SyncTransport` in `packages/local-first/src/sync.ts`. Server tables in migration 1247, Drizzle `schema/sync.ts`, domain rules in `domain/sync/syncProtocol.ts`, ports in `application/sync/syncPorts.ts`. | No `SyncRepository`, no service, no `POST /api/sync/v1/push` or pull route, no client transport implementation. `createSyncCoordinator` is called only from `localFirst.test.ts`. |
+| G16 idempotency and ordering | Schema only | Unique `(tenant_id, device_id, event_id)` and `(tenant_id, entity_type, client_entity_id)`. `depends_on` column. Coordinator rejects a short receipt list. | No transaction applies a mutation and writes its receipt together. `dependency_pending` is specified and not stored, which is correct, but nothing parks or resumes it on the server. Retention is not registered, so the "permanent uniqueness" rule has no retention story either. |
+| G17 bounded import use cases | Port only | `SyncEntityImporter` and `SyncImportContext` in `syncPorts.ts`. | No importer. A future route must not grow a generic entity writer. |
+| G18 cursor, tombstone, resnapshot | Client library + server codec | Coordinator conflict list and `resnapshotRequired`. `encodeSyncCursor` / `decodeSyncCursor` reject a future `v` or a non-finite `seq`. | No pull query, no server tombstone read, no client path that consumes a server cursor. |
+| G19 run change sets | Library | `clients/vscode/src/runChangeSets.ts`. | Not imported by the run host. A run still does not record a content-hashed baseline and finalization. |
+| G20 memory provenance | Not started | `memory-fact` exists only on the `LocalEntityType` union. | No local fact store, no provenance record, no separation from chat sync. |
+| G21 capability matrix | Not started | `attachment-manifest` exists only on the union. | Meetings, attachments, and cloud-only tools have no offline behaviour table in code. |
+| G22 interrupted runs | Library | `clients/vscode/src/runRecovery.ts` (`recordRunStarted`, `recoverInterruptedRuns`, `safeToResume`). | Not called from activation or the run host. A restarted host still has no interrupted-run record. |
+| G23 sync status | Not started | `platformRequestAccount` counts blocked host fetches. Nothing reads it. | No local / syncing / synced / conflict / dead-letter state on chat, ticket, audit, or run. |
+| G24 one coordinator, one lease | Library | `createSyncCoordinator` plus an IndexedDB lease and a VSIX file lock (`local-first-v1.lock`). | No host constructs the coordinator. Two entry points can still sync, because nothing syncs. |
+| G25 client and server time | Domain rule + columns | `occurred_at` / `received_at` on `sync_events`. `occurredAtError` rejects an invalid or future client time (15 minutes). | No route calls it. Historical past timestamps are intentionally allowed and untested on a server. |
+| G26 per-device durability | Partial adapters | IndexedDB adapter and lease (`packages/local-first/src/indexedDb.ts`). VSIX snapshot uses temp file + rename and a lock file. | Not equivalent stores. The VSIX lock is stolen after 30 seconds, so a long transaction can race. Corrupt snapshot throws with no recovery copy. Secrets and redaction are not specified in the store. Web multi-tab is tested only against the IndexedDB adapter. |
+| G27 packaged acceptance gate | Not met | Unit tests: `packages/local-first/src/localFirst.test.ts`, `indexedDb.test.ts`, `clients/chrome/src/platform/policy.test.ts`, `brain-embedded/src/localFirstPersistence.test.ts`. | No test disables the network and drives Web, Rovr, and a packaged VSIX through the same scenario. No test proves a blocked platform call, a durable local write, and a later batch replay. |
+
+### What the working tree actually added
+
+Shared contract, `packages/local-first`:
+
+- Policy: eight capabilities, all denied, `authenticate` implied by synchronize, connected features, or gateway inference.
+- Records: fifteen entity types, unbound vs bound destination, journal event, receipt, mapping.
+- In-memory transactional store, used as the inner store of the VSIX snapshot.
+- Sync coordinator: lease, policy assert, dead-letter skip, one receipt per event id.
+- IndexedDB adapter. Not used by VSIX or by the web app.
+
+VSIX, composed:
+
+- Settings and nls for `builderforce.platform.*`.
+- Host `fetch` patch and model-route gate.
+- Outbox send permission on queues built by `outboxStorage.ts`.
+- Local brain persistence for host-run `sendMessages`, the participant, the webview bridge, and step durability.
+
+VSIX, present and not called from `extension.ts` or the run host:
+
+- `localAuditStore.ts`, `auditDefinitions.ts`, `policySnapshots.ts` (the configure call is missing), `runChangeSets.ts`, `runRecovery.ts`.
+
+Web and Rovr, present and not composed:
+
+- `frontend/src/lib/localFirst/{platformPolicy,store,workManagement}.ts`. `bootWebPlatformPolicy` has no caller.
+- `clients/chrome/src/platform/policy.ts`. The service worker does not import it.
+
+Server, contract only:
+
+- Migration `1247_sync_batch_protocol.sql`: `sync_events`, `sync_entity_mappings`, `sync_records`, `sync_changes`.
+- Drizzle schema re-exported from `api/src/infrastructure/database/schema.ts`.
+- Domain helpers and the `SyncStores` port. No repository, service, route, importer, or retention registration. `sweptTables.ts` does not name either log table.
+
+Write outbox:
+
+- `sendPermission`, dead letters, `enqueueDurable`, durable retention vs best-effort drop. Wired into VSIX outboxes that use `outboxStorage.ts`.
+
+### Remaining build, in dependency order
+
+Do not start later items by calling the unwired libraries and calling the gap closed.
+
+1. **Compose the policy on every surface.** Call `bootWebPlatformPolicy` from the web boot path. Construct `createRovrPlatformPolicy` in the Rovr service worker and panel, and gate that extension's platform `fetch` the same way VSIX gates the host. Add the missing settings UI copy only where a surface has no native settings contribution.
+2. **Replace the VSIX JSON snapshot before more entity types land.** One SQLite (or equivalent) file in global storage, with a real transaction around record + journal event, a busy timeout instead of a 30-second lock steal, and a corrupt-file recovery path. Await device-id persistence before the first write that stamps it.
+3. **Wire the libraries that already match a gap, still on the local store only.** `configurePolicyGatesPersistence` from activation (G09). `recordRunStarted` / `recoverInterruptedRuns` from the run host and activation (G22). Change-set baseline and finalization around the same run (G19). Local audit start/save/close/recover from `auditExecution.ts` (G07, G08), including an explicit refusal to launch a cloud audit on local close.
+4. **Local projects, tickets, and tools (G05, G06).** A VSIX repository beside the web `workManagement` library, then tool adapters that write that repository instead of `bfApi` when the platform is denied.
+5. **Server write path (G15–G18, G25).** One repository implementing `SyncStores.transact`. Push validates protocol version, destination binding, schema version, and `occurredAt` before any insert. One transaction per event: importer outcome, mapping, projection, change row, receipt. Pull reads `sync_changes` / `sync_records` through the cursor codec. Importers are `importSyncedTicket`, `importSyncedProject`, and a mirror importer for history-only types — nothing else. Register `sync_events` (90 days) and `sync_changes` (30 days) in `sweptTables.ts`, and state that event-id uniqueness does not survive retention: a replay after purge is a new event, not a silent duplicate.
+6. **One coordinator per device store (G24), then status (G23).** Hosts call `createSyncCoordinator` only after synchronize is granted. Status is derived from the store (pending, in flight, conflict, dead letter), not from a second cache.
+7. **Acceptance suite (G27) before any claim that offline-first shipped.**
+
+### Acceptance test plan
+
+Existing tests cover the library, not the gate in the Acceptance gates section above. The rows below are the checks that section requires, mapped onto what the tree can already run.
+
+| Check | Existing test | Missing test |
+| --- | --- | --- |
+| Fresh install, network off, no platform call, local project/ticket/chat/audit/run survive restart | Policy unit test asserts the default is denied. Persistence test covers chat messages in the embedded adapter. | Packaged VSIX and Rovr service worker with network disabled. Restart across the real store, not the memory store. |
+| No sign-in prompt and no token refresh while every `platform.*` setting is false | VSIX settings default false. No behavioural test. | Activation test that fails if `fetch` to a BuilderForce origin, or a token refresh, is attempted. |
+| Grant sync only: one batch, no inference, download, or MCP | Coordinator test rejects sync when the policy denies it. | A transport test where synchronize is the only grant, asserting the other capabilities stay denied and are not called. |
+| Revoke permission during a flush: no retry, durable rows remain | Outbox contract says `sendPermission` aborts. | A VSIX test that flips `builderforce.platform.synchronize` mid-flush and asserts the outbox row and the local record both remain. |
+| Restart mid-run: interrupted, no replay of an unrecorded shell command | `runRecovery.ts` documents `safeToResume`. | Activation test that a running execution becomes `interrupted`, and a step without `safeToResume` is not re-executed. |
+| Same event twice, dependency not yet accepted, stale version, unknown schema | Unique indexes in SQL. Coordinator rejects a short receipt list. Cursor codec rejects a bad cursor. | Repository tests: duplicate event id returns one receipt and does not double-apply; unmet `depends_on` returns `dependency_pending` and writes nothing; stale `base_version` returns `conflict`; `schema_version > 1` returns `rejected`. |
+| Denied platform call is visible and blocks completion | `platformRequestAccount` exists and is unread. | UI or log assertion, plus a completion rule that a denied sync is not "done". |
+| Web, Rovr, packaged VSIX, same scenario | None. | One scenario, three hosts, network denied, then one granted replay. |
+
+### Risks and open questions
+
+- **The host `fetch` patch is not the enforcement point the acceptance gates assume.** Webview `fetch`, sockets, and non-HTTP platform clients bypass it. Until those are classified or removed, "API denied" is true only for host `fetch` to a configured origin.
+- **Two stores, one user action.** Chat text can commit in the snapshot while its sync row commits in another file. Crash between them is a lost sync, which the acceptance text treats as data loss.
+- **Lock steal.** `local-first-v1.lock` is removed after 30 seconds. A transaction slower than that can have two writers. The rename makes the last writer win and drop the other's commit.
+- **Device id race.** `void ctx.globalState.update(deviceKey, deviceId)` can lose the id. The next activation mints another, and server idempotency is per device id, so the same client event can be accepted twice under two device ids.
+- **Retention vs idempotency.** Unique event ids do not survive a purge of `sync_events`. The retention registration must say that, or a purged event is replayed as new work.
+- **Import isolation is a comment.** Shipping a generic `payload jsonb` writer because the tables already exist would violate G17. The route has to call a named importer or reject the entity type.
+- **FNV-1a payload hash.** `hashSyncPayload` is a non-cryptographic identity check shared with the client. It detects accidental replay differences, not a hostile payload swap. Do not treat it as an integrity proof.
+- **Web connected grants.** `WEB_CONNECTED_GRANTS` exists beside the denied default. If boot applies it before the person opts in, G01 is false on the web even after `bootWebPlatformPolicy` is called. Boot must start from `LOCAL_FIRST_POLICY`.
+- **Unrelated dirty files.** Changes outside the paths in this section (packaged `brain-embedded` dist, inference routing, and any other dirty path) are not part of this design and must not be read as closing a gap.
+
+Open questions, still blocking a server route:
+
+- Who may bind a destination the first time — any signed-in member, or an admin?
+- After retention, is a replayed event id a conflict the client must drop, or a new accept? The client coordinator cannot tell those apart today.
+- Is the VSIX snapshot an acceptable interim for chat text only, with an explicit ban on storing tickets, audits, and runs in it? This section assumes yes until a transactional store exists. If that assumption is rejected, G03 is not partial; it is not started.
