@@ -1,6 +1,7 @@
 import type * as vscode from "vscode";
 import type { StepDurability, StepOutgoingMessage } from "@seanhogg/builderforce-brain-embedded";
 import {
+  classifyQueue,
   createOnlineSignal,
   createOutbox,
   createSnapshotOutboxStore,
@@ -185,10 +186,23 @@ export function setOutboxScope(ids: { workspace: number | undefined; key: number
 }
 
 /**
+ * What a failed send does. Omitted and `"retain-until-acked"` keep the retry policy
+ * every existing caller already has. `"drop-on-failure"` does not install that policy,
+ * so a best-effort batch is discarded on failure instead of being kept until acknowledged.
+ * Durable user-work rows are still retained either way — this option does not weaken them.
+ *
+ * When the caller omits this, {@link createDurableOutbox} uses `classifyQueue(name)`.
+ * A known telemetry name drops. A known user-work name retains. An unknown name is
+ * not guessed, so omitting the stamp still retries.
+ */
+export type DurableOutboxOnFailure = "retain-until-acked" | "drop-on-failure";
+
+/**
  * The ONE way the extension builds a durable outbox: persisted under `name`, scoped to
- * the tenant it was written in (`identity`), retried with backoff, paused while the API
- * is unreachable and replayed when it answers again (or its tenant is current again).
- * A sender should pass `scopeTenantId(ctx.scope)` as the tenant it must act as.
+ * the tenant it was written in (`identity`), retried with backoff unless the caller
+ * opts into drop-on-failure, paused while the API is unreachable and replayed when it
+ * answers again (or its tenant is current again). A sender should pass
+ * `scopeTenantId(ctx.scope)` as the tenant it must act as.
  *
  * Every send is gated by {@link outboxSendPermission}, and the gate is applied to the
  * SENDER rather than left to the outbox alone: senders do not read the abort signal, so a
@@ -197,19 +211,30 @@ export function setOutboxScope(ids: { workspace: number | undefined; key: number
  */
 export function createDurableOutbox<T, K = string>(
   name: string,
-  opts: Omit<OutboxOptions<T, K>, "store" | "online" | "retry" | "scope" | "sendPermission">,
+  opts: Omit<OutboxOptions<T, K>, "store" | "online" | "retry" | "scope" | "sendPermission"> & {
+    onFailure?: DurableOutboxOnFailure;
+  },
   identity: OutboxIdentity = "workspace",
 ): Outbox<T, K> {
+  const { onFailure: callerOnFailure, ...rest } = opts;
+  const classified = classifyQueue(name);
+  // Caller stamps win. A known name fills a missing stamp. An unknown name
+  // (activity, run-outcomes, host-persist) is not guessed.
+  const onFailure = callerOnFailure ?? classified?.onFailure;
+  const work = rest.work ?? (classified ? name : undefined);
   const outbox = createOutbox<T, K>({
-    ...opts,
-    retry: {},
+    ...rest,
+    ...(work !== undefined ? { work } : {}),
+    // Omitted keeps retry-until-ack. drop-on-failure omits retry so settleFailure
+    // discards a best-effort batch instead of retaining it.
+    ...(onFailure === "drop-on-failure" ? {} : { retry: {} }),
     store: durableOutboxStore<T, K>(name),
     online: apiConnectivity,
     sendPermission: outboxSendPermission,
     scope: () => scopes[identity],
     // Senders do not read the abort signal. Reject the flush on revoke so the row
     // stays queued instead of being acknowledged when the request later resolves.
-    send: gateOutboxSend(outboxSendPermission, opts.send),
+    send: gateOutboxSend(outboxSendPermission, rest.send),
   });
   const gated: Outbox<T, K> = {
     ...outbox,
