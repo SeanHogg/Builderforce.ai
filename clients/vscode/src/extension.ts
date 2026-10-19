@@ -52,6 +52,7 @@ import { buildIdentityReport } from "./buildIdentityReport";
 import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
 import { bindOutboxStorage, durableStepHost } from "./outboxStorage";
 import { installAuditClose } from "./installAuditClose";
+import { bootVsixHost } from "./bootVsixHost";
 // The SAME bundled-React HTML shell every other React surface here boots (the board,
 // Project 360, the project pages, the Evermind sidebar view) — only its `<title>`
 // differs. Used by the Visualization panel.
@@ -120,6 +121,8 @@ async function syncSignedInContext(context: vscode.ExtensionContext): Promise<vo
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(installAuditClose());
+  const vsixHost = bootVsixHost({ network: "denied", directory: context.globalStorageUri.fsPath });
+  context.subscriptions.push({ dispose: () => vsixHost.stop() });
   // G09: a sign-out drops the in-memory gate cache. The durable snapshot must already
   // be the resolver's fallback, or managed records lose their policy. Same device id
   // localFirstStore mints — read it, never mint a second one here.
