@@ -1,0 +1,163 @@
+import { describe, expect, it, vi } from "vitest";
+import { createRevokeGate } from "@builderforce/write-outbox";
+import {
+  bindOutboxSendPermission,
+  bindOutboxStorage,
+  createDurableOutbox,
+  setOutboxScope,
+} from "./outboxStorage";
+
+/**
+ * G12 for the VS Code host: a revoked SEND PERMISSION must abort a durable flush that
+ * is already in flight. The sender here deliberately ignores `ctx.signal` — exactly the
+ * host senders in `activity.ts` / `bfApi.ts` / `gateway.ts`, which have no abort plumbing
+ * of their own — so this is the case that a bare `sendPermission` alone does not cover:
+ * without the gate the request resolves after the ban and the row is acknowledged and
+ * dropped.
+ */
+
+/** The slice of `Memento` a durable store actually touches. */
+class MemoryMemento {
+  readonly values = new Map<string, unknown>();
+
+  get<T>(key: string): T | undefined {
+    return this.values.get(key) as T | undefined;
+  }
+
+  async update(key: string, value: unknown): Promise<void> {
+    if (value === undefined) this.values.delete(key);
+    else this.values.set(key, value);
+  }
+
+  keys(): readonly string[] {
+    return [...this.values.keys()];
+  }
+}
+
+const memento = new MemoryMemento();
+const STORAGE_PREFIX = "builderforce.outbox.";
+
+/** The rows still held in the snapshot the durable store wrote — i.e. not acknowledged. */
+const storedRows = (name: string): number => {
+  const snapshot = memento.get<unknown>(`${STORAGE_PREFIX}${name}`);
+  return JSON.stringify(snapshot ?? null).match(/"text"/g)?.length ?? 0;
+};
+
+/** Binds the host's storage (first bind wins — the module holds one host) and a fresh gate. */
+const host = (): ReturnType<typeof createRevokeGate> => {
+  const gate = createRevokeGate();
+  bindOutboxStorage({ workspaceState: memento, secrets: {} } as never);
+  bindOutboxSendPermission(gate);
+  // Stable across tests, so this only replays parked queues on the very first call.
+  setOutboxScope({ workspace: 7, key: undefined });
+  return gate;
+};
+
+/** A sender that has been entered and can be released later, ignoring the abort signal. */
+function hangingSender() {
+  const state = { calls: 0, release: (): void => undefined };
+  const entered = new Promise<void>((resolve) => {
+    state.release = () => resolve();
+  });
+  let open: () => void = () => undefined;
+  const firstSend = new Promise<void>((resolve) => {
+    open = () => resolve();
+  });
+  return {
+    state,
+    firstSend,
+    openSend: () => open(),
+    async send(): Promise<{ ok: true }> {
+      state.calls += 1;
+      open();
+      await entered;
+      return { ok: true };
+    },
+  };
+}
+
+describe("durable host outbox — revoked send permission", () => {
+  it("aborts a flush that is in flight, and does not acknowledge the row", async () => {
+    vi.useFakeTimers();
+    try {
+      const gate = host();
+      const sender = hangingSender();
+      const outbox = createDurableOutbox<{ text: string }, string>("g12-inflight", {
+        maxItems: 10,
+        maxWaitMs: 0,
+        send: sender.send,
+      });
+
+      // The durable store loads asynchronously (the host binds at activation), so wait
+      // for the backlog load before queueing — otherwise the load replaces the lane.
+      await outbox.ready();
+      await outbox.enqueueDurable("chat-1", { text: "hello" });
+      expect(outbox.size()).toBe(1);
+      expect(storedRows("g12-inflight")).toBe(1);
+
+      const flushed = outbox.flush();
+      await sender.firstSend;
+      expect(sender.state.calls).toBe(1);
+
+      // The ban lands while the request is open. The sender ignores the abort and resolves.
+      gate.revoke();
+      sender.state.release();
+      await flushed;
+
+      expect(sender.state.calls).toBe(1);
+      expect(outbox.size()).toBe(1);
+      expect(storedRows("g12-inflight")).toBe(1);
+
+      // …and nothing retries it while the ban holds.
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(sender.state.calls).toBe(1);
+      expect(outbox.size()).toBe(1);
+      expect(storedRows("g12-inflight")).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("never starts a send once the permission is revoked", async () => {
+    const gate = host();
+    gate.revoke();
+    const sender = hangingSender();
+    const outbox = createDurableOutbox<{ text: string }, string>("g12-never", {
+      maxItems: 10,
+      maxWaitMs: 0,
+      send: sender.send,
+    });
+
+    await outbox.enqueueDurable("chat-1", { text: "queued while banned" });
+    await outbox.flush();
+
+    expect(sender.state.calls).toBe(0);
+    expect(outbox.size()).toBe(1);
+    expect(storedRows("g12-never")).toBe(1);
+  });
+
+  it("rejects an in-flight drain instead of reporting a success", async () => {
+    const gate = host();
+    const sender = hangingSender();
+    const outbox = createDurableOutbox<{ text: string }, string>("g12-drain", {
+      maxItems: 10,
+      maxWaitMs: 0,
+      send: sender.send,
+    });
+
+    await outbox.enqueueDurable("chat-1", { text: "rides along" });
+    const drained = outbox.drainWith("chat-1", (items) =>
+      sender.send().then(() => ({ sent: items.length })),
+    );
+    await sender.firstSend;
+
+    gate.revoke();
+    sender.state.release();
+
+    // The drain must REJECT — a revoke can never be reported to a caller as a success.
+    // The code is `permission_revoked` from the host's `guardSend`; the outbox core also
+    // re-checks after the request resolves and may raise its own `platform_send_disabled`.
+    await expect(drained).rejects.toThrow(/permission_revoked|platform_send_disabled/);
+    expect(outbox.size()).toBe(1);
+  });
+});

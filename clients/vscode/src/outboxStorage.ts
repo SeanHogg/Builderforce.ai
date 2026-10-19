@@ -4,8 +4,11 @@ import {
   createOnlineSignal,
   createOutbox,
   createSnapshotOutboxStore,
+  gateOutboxSend,
+  guardSend,
   type Outbox,
   type OutboxOptions,
+  type OutboxSendPermission,
   type OutboxStore,
 } from "@builderforce/write-outbox";
 
@@ -33,6 +36,14 @@ import {
  * that got no answer at all marks the platform unreachable, any answer marks it reachable
  * again — so a queue parked offline replays the moment ANY call gets through, rather than
  * waiting out its backoff.
+ *
+ * PERMISSION: connectivity is not permission. Every durable send — the outbox batch, a
+ * drain riding along with a caller's own request, and the step-row sender — is gated by
+ * {@link outboxSendPermission}. The gate is INJECTED ({@link bindOutboxSendPermission})
+ * rather than read from a policy module here, so this file owns storage and gating only
+ * and the administrative source stays the caller's decision. A permission that flips to
+ * denied mid-flush aborts that flush: the rows stay queued, they are not acknowledged, and
+ * they are not retried while the ban holds.
  */
 
 const STORAGE_PREFIX = "builderforce.outbox.";
@@ -81,6 +92,48 @@ export async function trackReachability(request: Promise<Response>): Promise<Res
 }
 
 /**
+ * The administrative send gate every durable outbox reads. Nothing is bound at module
+ * load, so a window with no policy bound sends exactly as it did before this gate existed
+ * ({@link bindOutboxSendPermission} decides otherwise).
+ */
+let boundPermission: OutboxSendPermission | null = null;
+const permissionListeners = new Set<(allowed: boolean) => void>();
+let unsubscribeBound: (() => void) | null = null;
+
+/**
+ * The permission every durable outbox is gated by. Deliberately a stable object: outboxes
+ * are built at module load, long before activation binds the policy, so each holds this
+ * one gate and reads whatever permission is bound at send time.
+ */
+export const outboxSendPermission: OutboxSendPermission = {
+  isAllowed: () => boundPermission?.isAllowed() ?? true,
+  subscribe(listener) {
+    permissionListeners.add(listener);
+    return () => {
+      permissionListeners.delete(listener);
+    };
+  },
+};
+
+/**
+ * Install (or clear, with `null`) the permission every durable outbox is gated by. The
+ * outboxes already built pick it up: the gate is read at send time and forwards this
+ * permission's transitions, so a revoke aborts the flushes that are in flight.
+ */
+export function bindOutboxSendPermission(permission: OutboxSendPermission | null): void {
+  unsubscribeBound?.();
+  unsubscribeBound = null;
+  boundPermission = permission;
+  if (permission) {
+    unsubscribeBound = permission.subscribe((allowed) => {
+      for (const listener of [...permissionListeners]) listener(allowed);
+    });
+  }
+  const allowed = outboxSendPermission.isAllowed();
+  for (const listener of [...permissionListeners]) listener(allowed);
+}
+
+/**
  * The identities durable writes are sent as; `null` = not known / parked.
  *   - `workspace`: the tenant the API client's tenant JWT acts as (the selected workspace)
  *     — every `/api/*` write.
@@ -121,10 +174,15 @@ export function setOutboxScope(ids: { workspace: number | undefined; key: number
  * the tenant it was written in (`identity`), retried with backoff, paused while the API
  * is unreachable and replayed when it answers again (or its tenant is current again).
  * A sender should pass `scopeTenantId(ctx.scope)` as the tenant it must act as.
+ *
+ * Every send is gated by {@link outboxSendPermission}, and the gate is applied to the
+ * SENDER rather than left to the outbox alone: senders do not read the abort signal, so a
+ * revoke has to reject the flush itself — otherwise a request that lands after the ban
+ * would be acknowledged and the durable row dropped.
  */
 export function createDurableOutbox<T, K = string>(
   name: string,
-  opts: Omit<OutboxOptions<T, K>, "store" | "online" | "retry" | "scope">,
+  opts: Omit<OutboxOptions<T, K>, "store" | "online" | "retry" | "scope" | "sendPermission">,
   identity: OutboxIdentity = "workspace",
 ): Outbox<T, K> {
   const outbox = createOutbox<T, K>({
@@ -132,10 +190,21 @@ export function createDurableOutbox<T, K = string>(
     retry: {},
     store: durableOutboxStore<T, K>(name),
     online: apiConnectivity,
+    sendPermission: outboxSendPermission,
     scope: () => scopes[identity],
+    // Senders do not read the abort signal. Reject the flush on revoke so the row
+    // stays queued instead of being acknowledged when the request later resolves.
+    send: gateOutboxSend(outboxSendPermission, opts.send),
   });
-  replays.add(() => outbox.flush());
-  return outbox;
+  const gated: Outbox<T, K> = {
+    ...outbox,
+    drainWith: (key, request) =>
+      outbox.drainWith(key, (items, ctx) =>
+        guardSend(outboxSendPermission, () => request(items, ctx), ctx.signal),
+      ),
+  };
+  replays.add(() => gated.flush());
+  return gated;
 }
 
 /** The persistence keys of the stored step queues (`steps:<key>`), by queue key. */
@@ -163,7 +232,8 @@ export function durableStepHost(
         })
         .map((k) => k.slice(prefix.length));
     },
-    sendRows: (chatId, rows, scope) => sendRows(chatId, rows, scopeTenantId(scope)),
+    sendRows: (chatId, rows, scope) =>
+      guardSend(outboxSendPermission, () => sendRows(chatId, rows, scopeTenantId(scope))),
     online: apiConnectivity,
     scope: () => scopes.workspace,
   };
