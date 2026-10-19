@@ -47,6 +47,12 @@ import { DiscountCodeCapture } from '@/components/DiscountCodeCapture';
 import { CookieConsentManager } from '@/components/privacy/CookieConsentManager';
 import { SkipToContent } from '@/components/SkipToContent';
 
+// Code-split for the same reason as ReplayLoader below: `bootWebPlatformPolicy`
+// restores one stored object and adds one listener — not first-paint work, and a
+// static import here would put the whole local-first policy module in the root
+// closure that `check-root-closure` ratchets.
+const PlatformPolicyBoot = dynamic(() => import('@/components/PlatformPolicyBoot').then((m) => m.PlatformPolicyBoot));
+
 // Code-split: the recorder's gate (consent, entitlement, sensitive routes) is not
 // first-paint work, so it stays out of the root layout's static closure.
 const ReplayLoader = dynamic(() => import('@/components/ReplayLoader').then((m) => m.ReplayLoader));
@@ -189,6 +195,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         {/* Client island: syncs icon labels after JS hydrates */}
         <ThemeProvider />
+
+        {/* Composes the platform policy for this tab. Refuses every capability
+            unless the person granted it here before; nothing renders. */}
+        <PlatformPolicyBoot />
 
         {/* Default-locale messages render statically; LocaleProvider swaps to the
             user's cookie locale on the client after hydration. */}
