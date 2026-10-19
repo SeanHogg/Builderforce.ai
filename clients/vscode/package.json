@@ -44,6 +44,10 @@
     "url": "https://github.com/SeanHogg/Builderforce.ai/issues"
   },
   "main": "./out/extension.js",
+  "exports": {
+    ".": "./out/extension.js",
+    "./bootVsixHost": "./src/bootVsixHost.ts"
+  },
   "l10n": "./l10n",
   "activationEvents": [
     "onStartupFinished"
