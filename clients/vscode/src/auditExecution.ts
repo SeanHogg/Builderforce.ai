@@ -5,9 +5,36 @@ import { BuilderForcePanel } from './builderforcePanel';
 import { getSelectedProject, onProjectChange } from './projectState';
 import { appendBrainMessages, listSystemAudits } from './bfApi';
 import { AuditResultsPanel } from './auditResultsPanel';
+import { registerAuditFindingsSink } from './auditToolCatalog';
+import { findRepository, getGitApi } from './gitApi';
+import { localBrainApplication } from './localFirstStore';
+import { platformPolicy } from './platformPolicy';
+import {
+  ensureLocalAuditDefinitions,
+  ensureLocalAuditDeviceId,
+  getLocalAuditRun,
+  listLocalAuditFindings,
+  loadLocalAuditDefinition,
+  markLocalAuditRun,
+  recoverInterruptedAuditRuns,
+  startLocalAuditRun,
+} from './localAuditStore';
 
 const CLOSE_KEY = 'builderforce.audits.pendingClose';
+const LOCAL_RUN_SUFFIX = '\nFor this local run, use save_audit_findings to submit the report; its run and project are already bound by the host.';
 interface CloseIntent { projectId: number; auditId: string; requestId: string }
+
+/** A cloud audit session needs a synchronize write and a connected-feature read. */
+function cloudAuditDenied(): boolean {
+  const policy = platformPolicy();
+  return !policy.allows('synchronize') || !policy.allows('connected-feature');
+}
+
+function evidenceDetail(evidence: unknown): string {
+  if (!evidence || typeof evidence !== 'object') return '';
+  const detail = (evidence as { detail?: unknown }).detail;
+  return typeof detail === 'string' ? detail : '';
+}
 
 /** Close intent is durable before shutdown. Interrupted submissions retry at next activation. */
 export class AuditExecution implements vscode.Disposable {
@@ -31,6 +58,7 @@ export class AuditExecution implements vscode.Disposable {
   }
 
   private async initialize(): Promise<void> {
+    try { await this.recoverLocalAudits(); } catch (error) { this.error(error); }
     await this.flushClose();
     await this.armClose();
     if (this.started || this.disposed || !vscode.workspace.getConfiguration('builderforce.audits').get<boolean>('atStartup', false)) return;
@@ -53,23 +81,32 @@ export class AuditExecution implements vscode.Disposable {
   async flushClose(): Promise<void> {
     const pending = this.ctx.workspaceState.get<CloseIntent[]>(CLOSE_KEY, []);
     for (const intent of pending) {
-      await startSystemAudit(this.ctx.secrets, intent.auditId, intent.projectId, 'cloud', 'close', intent.requestId);
+      if (cloudAuditDenied()) await this.queueLocalClose(intent);
+      else await startSystemAudit(this.ctx.secrets, intent.auditId, intent.projectId, 'cloud', 'close', intent.requestId);
       const remaining = this.ctx.workspaceState.get<CloseIntent[]>(CLOSE_KEY, []).filter((r) => r.requestId !== intent.requestId);
       await this.ctx.workspaceState.update(CLOSE_KEY, remaining);
     }
   }
 
-  async run(auditId: string, projectId: number, trigger: 'manual' | 'startup' = 'manual'): Promise<void> {
+  async run(auditId: string, projectId: number, trigger: 'manual' | 'startup' = 'manual', runId?: string): Promise<void> {
     const key = `${projectId}:${auditId}`;
     if (this.active.has(key)) return;
     this.active.add(key);
-    try { await this.runOnce(auditId, projectId, trigger); }
+    try { await this.runOnce(auditId, projectId, trigger, runId); }
     finally { this.active.delete(key); }
   }
 
-  private async runOnce(auditId: string, projectId: number, trigger: 'manual' | 'startup'): Promise<void> {
+  private async runOnce(auditId: string, projectId: number, trigger: 'manual' | 'startup', runId?: string): Promise<void> {
     if (!vscode.workspace.isTrusted) throw new Error(vscode.l10n.t('Trust this workspace before running a local audit.'));
     if (!vscode.workspace.workspaceFolders?.length) throw new Error(vscode.l10n.t('Open a workspace folder before running a local audit.'));
+    // Supported audits execute from the local definition store. Close stays in flushClose (G08).
+    const localAudit = await this.localAuditContext();
+    await ensureLocalAuditDefinitions(localAudit.store, { deviceId: localAudit.deviceId });
+    const definition = await loadLocalAuditDefinition(localAudit.store, auditId);
+    if (definition || cloudAuditDenied()) {
+      await this.runLocal(auditId, projectId, trigger, runId);
+      return;
+    }
     const chatId = await createBrainChat(this.ctx.secrets, { title: vscode.l10n.t('Audit: {0}', auditId), projectId });
     if (chatId == null) throw new Error(vscode.l10n.t('Sign in to save the audit conversation.'));
     const run = await startSystemAudit(this.ctx.secrets, auditId, projectId, 'local', trigger);
@@ -81,7 +118,7 @@ export class AuditExecution implements vscode.Disposable {
     } });
     void vscode.commands.executeCommand('builderforce.refreshSessions');
     try {
-      await this.host.start({ chatId, projectId, systemPrompt: run.briefing + "\nFor this local run, use save_audit_findings to submit the report; its run and project are already bound by the host.",
+      await this.host.start({ chatId, projectId, systemPrompt: run.briefing + LOCAL_RUN_SUFFIX,
         userTurn: run.briefing, autoApprove: false, evermind: true, chatMode: 'work',
         audit: { runId: run.runId, auditId },
       });
@@ -101,6 +138,107 @@ export class AuditExecution implements vscode.Disposable {
       const action = await vscode.window.showInformationMessage(vscode.l10n.t('Audit complete. Findings and remediation tickets are saved.'), vscode.l10n.t('Open audit conversation'));
       if (action) await BuilderForcePanel.open(this.ctx, { kind: 'focus', chatId });
     } finally { detach(); }
+  }
+
+  /** Crash recovery never resumes a source review. Import of a finished run must not replay it. */
+  private async recoverLocalAudits(): Promise<void> {
+    const { store, deviceId } = await this.localAuditContext();
+    await recoverInterruptedAuditRuns(store, { deviceId });
+  }
+
+  /** Close intent is a queued local session when cloud audit is denied — not a launched run, and not a server session. */
+  private async queueLocalClose(intent: CloseIntent): Promise<void> {
+    const { store, deviceId } = await this.localAuditContext();
+    if (await getLocalAuditRun(store, intent.requestId)) return;
+    await startLocalAuditRun(store, { deviceId }, {
+      auditId: intent.auditId,
+      projectId: intent.projectId,
+      trigger: 'close',
+      runId: intent.requestId,
+      status: 'queued',
+      source: await this.auditSource('close'),
+    });
+  }
+
+  /**
+   * Offline audit: packaged definition, local session, local chat, and a findings sink.
+   * An id that already exists (imported, recovered, or retried) is not executed again.
+   */
+  private async runLocal(auditId: string, projectId: number, trigger: 'manual' | 'startup', runId?: string): Promise<void> {
+    const { store, deviceId, persistence } = await this.localAuditContext();
+    if (runId && await getLocalAuditRun(store, runId)) return;
+    const started = await startLocalAuditRun(store, { deviceId }, {
+      auditId, projectId, trigger, ...(runId ? { runId } : {}), source: await this.auditSource(trigger),
+    });
+    const stored = await getLocalAuditRun(store, started.runId);
+    if (!stored || stored.record.payload.status !== 'running') return;
+
+    const chat = await persistence.createChat({ title: vscode.l10n.t('Audit: {0}', auditId), projectId });
+    await persistence.sendMessages(chat.id, [{ role: 'user', content: started.briefing }]);
+    const unregister = registerAuditFindingsSink(started.runId, { store, deviceId });
+    const detach = this.host.attach({ post: (message) => {
+      if (message.chatId === chat.id && message.type === 'run.sync' && message.snapshot.pendingConfirm) {
+        void BuilderForcePanel.open(this.ctx, { kind: 'focus', chatId: chat.id });
+      }
+    } });
+    void vscode.commands.executeCommand('builderforce.refreshSessions');
+    try {
+      await this.host.start({
+        chatId: chat.id, projectId, systemPrompt: started.briefing + LOCAL_RUN_SUFFIX,
+        userTurn: started.briefing, autoApprove: false, evermind: true, chatMode: 'work',
+        audit: { runId: started.runId, auditId },
+      });
+      const saved = await getLocalAuditRun(store, started.runId);
+      if (saved?.record.payload.status !== 'completed') {
+        await BuilderForcePanel.open(this.ctx, { kind: 'focus', chatId: chat.id });
+        throw new Error(saved?.record.payload.error ?? vscode.l10n.t('The audit has not saved its findings. Open its conversation to continue.'));
+      }
+      await vscode.commands.executeCommand('builderforce.refreshDiagnostics');
+      const findings = await listLocalAuditFindings(store, started.runId);
+      await vscode.commands.executeCommand('builderforce.openDiagnosticReport', {
+        auditId, name: started.definition.name, emoji: started.definition.icon, projectId, ticketIds: [],
+        result: {
+          headline: vscode.l10n.t('Audit complete. Findings and remediation tickets are saved.'),
+          summary: started.definition.blurb,
+          audit: { runId: started.runId, projectId, status: 'completed', ticketIds: [] },
+          recommendations: findings.map((finding) => ({ title: finding.summary, detail: evidenceDetail(finding.evidence) })),
+        },
+      });
+      const action = await vscode.window.showInformationMessage(vscode.l10n.t('Audit complete. Findings and remediation tickets are saved.'), vscode.l10n.t('Open audit conversation'));
+      if (action) await BuilderForcePanel.open(this.ctx, { kind: 'focus', chatId: chat.id });
+    } catch (error) {
+      const current = await getLocalAuditRun(store, started.runId);
+      if (current?.record.payload.status === 'running') {
+        await markLocalAuditRun(store, { deviceId }, { runId: started.runId, status: 'failed', error: String(error), safeToResume: false });
+      }
+      throw error;
+    } finally {
+      unregister();
+      detach();
+    }
+  }
+
+  private async localAuditContext() {
+    const deviceId = await ensureLocalAuditDeviceId(this.ctx.globalState);
+    const local = localBrainApplication(this.ctx);
+    return { store: local.store, deviceId, persistence: local.persistence };
+  }
+
+  private async auditSource(trigger: 'manual' | 'startup' | 'close'): Promise<Record<string, unknown>> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const source: Record<string, unknown> = { surface: 'vsix', trigger };
+    try {
+      const git = await getGitApi();
+      const repo = git && root ? findRepository(git, root) : undefined;
+      const head = repo?.state.HEAD;
+      if (head?.name) source.branch = head.name;
+      if (head?.commit) source.commit = head.commit;
+      if (repo) {
+        const dirty = repo.state.workingTreeChanges.length + repo.state.indexChanges.length + (repo.state.untrackedChanges?.length ?? 0);
+        source.dirty = dirty > 0;
+      }
+    } catch { /* provenance is best-effort */ }
+    return source;
   }
 
   dispose(): void { this.disposed = true; for (const s of this.subscriptions) s.dispose(); }
