@@ -54,7 +54,7 @@
  * injected; `crypto.randomUUID` is used for ids only when the host has it.
  */
 
-import { classifyOutboxWork } from "./classification.js";
+import { classifyQueue } from "./classifyQueue.js";
 import { exportDeadLetters as listDeadLetters, repairDeadLetter as repairOneDeadLetter } from "./deadLetter.js";
 import { defaultId } from "./idempotency.js";
 import {
@@ -150,10 +150,14 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
     return durable ? "durable" : "best-effort";
   };
 
-  /** Per-call work wins, then the queue's work, then the enqueue path / outbox mode. */
+  /**
+   * Per-call work wins, then the queue's work, then the enqueue path / outbox mode.
+   * A known queue name is authoritative: telemetry stays best-effort and user work
+   * stays durable even when the constructor also set retry or a store.
+   */
   const resolveRetention = (work: string | undefined, path: "enqueue" | "enqueueDurable"): OutboxRetention => {
-    const classified = classifyOutboxWork(work) ?? classifyOutboxWork(opts.work);
-    if (classified) return classified;
+    const classified = classifyQueue(work) ?? classifyQueue(opts.work);
+    if (classified) return classified.retention;
     if (path === "enqueueDurable" || durable) return "durable";
     return "best-effort";
   };
@@ -261,6 +265,12 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
     try {
       await opts.send(key, opts.coalesce ? opts.coalesce(items) : items, { final, ...ctx, signal: controller.signal });
       l.inFlight -= batch.length;
+      // A revoke aborts this signal. A sender that ignores it can still resolve; do not
+      // acknowledge that completion, or the durable row is gone and will not be retried.
+      if (controller.signal.aborted || !maySend()) {
+        requeue(l, batch);
+        return false;
+      }
       l.attempt = 0;
       void persist((s) => s.remove(ids));
       return true;

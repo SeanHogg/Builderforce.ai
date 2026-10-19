@@ -4,9 +4,9 @@
  * Connectivity is not permission. A revoked permission must not start a send, and a
  * permission that flips to denied during a flush must abort that flush: the send is not
  * acknowledged, it is not retried, and the caller keeps the durable rows. The outbox
- * already aborts the signal it passes to `send`, but a sender that ignores the signal
- * would still resolve and the row would be dropped — {@link guardSend} rejects the flush
- * itself so that cannot happen.
+ * already aborts the signal it passes to `send` and does not acknowledge a send that
+ * resolves after that abort, so the row stays queued. {@link guardSend} still rejects the
+ * flush itself so a sender that ignores the signal cannot report success to its caller.
  *
  * This does not cancel a socket or a raw fetch the sender already opened. That is a
  * separate gate (G02).

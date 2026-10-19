@@ -530,3 +530,33 @@ describe("dead-letter export and repair", () => {
   });
 });
 
+describe("named queue classification", () => {
+  it("keeps a named user-work queue and drops a named telemetry queue", () => {
+    const held = createOutbox<string>({
+      work: "brain-turns",
+      maxEntries: 1,
+      maxItems: 1,
+      maxWaitMs: 0,
+      online: createOnlineSignal(false),
+      send: () => undefined,
+    });
+    held.enqueue("q", "turn");
+    expect(() => held.enqueue("q", "another")).toThrow(/outbox_capacity/);
+    held.close();
+
+    const noise = createOutbox<string>({
+      work: "qa-capture",
+      maxEntries: 1,
+      maxItems: 1,
+      maxWaitMs: 0,
+      online: createOnlineSignal(false),
+      send: () => undefined,
+    });
+    noise.enqueue("q", "a");
+    noise.enqueue("q", "b");
+    expect(noise.size()).toBe(1);
+    expect(noise.stats().dropped).toBe(1);
+    noise.close();
+  });
+});
+

@@ -25,7 +25,7 @@ export const bySeq = (a: { seq: number }, b: { seq: number }): number => a.seq -
 
 /** May `e` be sent under `scope`? Unscoped entries go under any scope. */
 export function sendable<T, K>(e: OutboxEntry<T, K>, scope: string | undefined): boolean {
-  return scope === undefined || e.scope === undefined || e.scope === scope;
+  return !e.deadLetter && (scope === undefined || e.scope === undefined || e.scope === scope);
 }
 
 /**
