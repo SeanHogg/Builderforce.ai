@@ -39,6 +39,7 @@ import { QualityErrorReporter } from '@/components/QualityErrorReporter';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { ChunkErrorRecovery } from '@/components/ChunkErrorRecovery';
+import { API_ORIGIN } from '@/lib/apiOrigin';
 import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
 import { RANDOM_UUID_POLYFILL } from '@/lib/randomUuidPolyfill';
 import { QUALITY_INGEST_ENDPOINT } from '@/lib/reportError';
@@ -50,8 +51,15 @@ import { SkipToContent } from '@/components/SkipToContent';
 // Code-split for the same reason as ReplayLoader below: `bootWebPlatformPolicy`
 // restores one stored object and adds one listener — not first-paint work, and a
 // static import here would put the whole local-first policy module in the root
-// closure that `check-root-closure` ratchets.
+// closure that `check-root-closure` ratchets. The head script below is what
+// makes that split safe: it holds platform-origin fetch until the chunk calls
+// `bootWebPlatformPolicy` and sets `__bfPlatformPolicyBooted`.
 const PlatformPolicyBoot = dynamic(() => import('@/components/PlatformPolicyBoot').then((m) => m.PlatformPolicyBoot));
+
+// Runs in <head> before any bundle. No `fetch(` — the transport guard treats
+// that token as a call, and this assigns the existing function instead. The
+// origin comes from the meta tag (API_ORIGIN), never a second copy of the literal.
+const PLATFORM_POLICY_BOOT_HOLD = `(function(){try{var meta=document.querySelector('meta[name="bf-api-origin"]');var origin=meta&&meta.content;if(!origin)return;var native=window.fetch;if(typeof native!=='function')return;var inner=native.bind(window);window.fetch=function(input,init){if(window.__bfPlatformPolicyBooted)return inner.apply(window,arguments);var raw=typeof input==='string'?input:(input&&input.url)||'';try{if(new URL(raw,location.href).origin===origin)return Promise.reject(new TypeError('platform_denied'));}catch(e){}return inner.apply(window,arguments);};}catch(e){}})();`;
 
 // Code-split: the recorder's gate (consent, entitlement, sensitive routes) is not
 // first-paint work, so it stays out of the root layout's static closure.
@@ -155,6 +163,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning className={jetbrainsMono.variable}>
       <head>
+        {/* Origin for the boot hold. The script reads this; the literal stays in apiOrigin.ts. */}
+        <meta name="bf-api-origin" content={API_ORIGIN} />
+        {/* Holds platform-origin fetch until bootWebPlatformPolicy has applied the denied default. */}
+        <script dangerouslySetInnerHTML={{ __html: PLATFORM_POLICY_BOOT_HOLD }} />
         {/*
           Anti-FOUC: runs synchronously before any paint.
           Reads saved theme from localStorage; defaults to "dark".

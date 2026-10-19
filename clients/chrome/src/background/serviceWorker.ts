@@ -16,7 +16,9 @@ import { createIndexedDbOutboxStore, createOnlineSignal } from '@builderforce/wr
 import { createApiClient } from '../api/apiClient';
 import { createSession } from '../auth/session';
 import { DEFAULT_BASE_URL, ERROR_OUTBOX_DB, LOCAL_DB, SYNC_ALARM, SYNC_ALARM_MINUTES, SYNC_OUTBOX_DB } from '../config';
+import { createRovrGuardedFetch } from '../platform/guardedFetch';
 import { chromeKeyValue } from '../platform/keyValue';
+import { createRovrPlatformPolicy } from '../platform/policy';
 import { createSettings } from '../platform/settings';
 import { createIdbRecords } from '../store/idbRecords';
 import { createChatSync, type SyncItem } from '../sync/chatSync';
@@ -24,18 +26,41 @@ import { isRovrRuntimeMessage, type SyncStats, type SyncStatsChanged } from '../
 import type { ClientErrorEvent } from '../telemetry/errorEvents';
 import { createErrorReports, REPORT_LANE } from '../telemetry/errorReports';
 
-const fetchImpl = (input: string, init?: RequestInit) => fetch(input, init);
-
 const local = chromeKeyValue('local');
+
+// The PLATFORM POLICY is composed here, before anything can reach the network (G01/G02):
+// the worker reads the persisted `policy.*` capabilities at startup and refuses every
+// platform request and every outbox send while they are denied. On a fresh install there
+// are no keys, so the default is API-denied — connectivity and signing in grant nothing.
+// `ready()` is the FIRST read of storage, awaited below before any fetch or flush runs.
+const platformPolicy = createRovrPlatformPolicy(local);
+
+// Every platform call the worker makes goes through this: a BuilderForce origin is
+// classified into a capability and refused (before `fetch` is called) unless the policy
+// allows it; any other origin — loopback inference, a provider called directly — passes
+// through untouched.
+const fetchImpl = createRovrGuardedFetch({
+  policy: platformPolicy,
+  onRequest: (record) => {
+    if (record.outcome === 'blocked') console.warn(`Rovr platform: ${record.capability} denied (${record.url})`);
+  },
+});
+
 const session = createSession({ storage: local, baseUrl: DEFAULT_BASE_URL, fetch: fetchImpl, now: Date.now });
 const settings = createSettings(local);
 const api = createApiClient({ session, baseUrl: DEFAULT_BASE_URL, fetch: fetchImpl });
 const records = createIdbRecords(self.indexedDB, LOCAL_DB);
 
 // Connectivity, from the worker's own events — the queue waits offline and replays on return.
-const online = createOnlineSignal(self.navigator.onLine);
-self.addEventListener('online', () => online.set(true));
-self.addEventListener('offline', () => online.set(false));
+// It starts OFFLINE: the outboxes are built at import time and a stored backlog leaves as
+// soon as it loads, so a `true` here would let a denied worker send before the policy has
+// been read. It turns on after `ready()`, and only when `synchronize` is allowed.
+const online = createOnlineSignal(false);
+const connectivity = (reached: boolean): void => online.set(reached && platformPolicy.allows('synchronize'));
+self.addEventListener('online', () => connectivity(true));
+self.addEventListener('offline', () => connectivity(false));
+// Revoking sync mid-session must also close the door the retry/probe path walks through.
+platformPolicy.subscribe(() => connectivity(self.navigator.onLine));
 
 const chatSync = createChatSync({
   api,
@@ -56,6 +81,13 @@ const errorReports = createErrorReports({
 
 const flushAll = async (): Promise<void> => {
   await session.ready();
+  // The persisted policy is read BEFORE anything leaves — on a fresh install it is still
+  // loading here, and the answer (denied) is the one that must win. With `synchronize`
+  // denied NOTHING is flushed: every entry stays queued, the alarm stays armed so the
+  // backlog is still there when it is granted, and no platform request is attempted.
+  await platformPolicy.ready();
+  connectivity(self.navigator.onLine);
+  if (!platformPolicy.allows('synchronize')) return;
   await Promise.all([chatSync.flush(), errorReports.flush()]);
 };
 

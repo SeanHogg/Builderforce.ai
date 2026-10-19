@@ -16,16 +16,20 @@
  * object and registers one listener — it is not first-paint work, and nothing
  * in the shell renders as a result of it.
  *
- * It renders nothing. The boot runs in an effect, so it cannot run during the
- * server render (the module guards on `window` itself, but there is no stored
- * choice on the server to restore).
+ * It renders nothing. The call is at module evaluation, not in an effect: an
+ * effect runs after paint, and a child's effect runs before its parent's, so
+ * deferring this would let a platform fetch leave first. The module guards on
+ * `window`, so the server evaluation is a no-op. The root layout's head script
+ * holds platform-origin fetch until this call finishes, covering the gap before
+ * this chunk arrives.
  */
-import { useEffect } from 'react';
 import { bootWebPlatformPolicy } from '@/lib/localFirst/platformPolicy';
 
+bootWebPlatformPolicy();
+
 export function PlatformPolicyBoot(): null {
-  useEffect(() => {
-    bootWebPlatformPolicy();
-  }, []);
+  // Idempotent. A client render that races module evaluation still boots;
+  // `booted` makes the second call a no-op and does not add a second listener.
+  bootWebPlatformPolicy();
   return null;
 }

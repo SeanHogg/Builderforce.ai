@@ -237,11 +237,20 @@ export const webPlatformSendPermission = platformSendPermission(policy);
 let booted = false;
 
 /**
+ * Set by `bootWebPlatformPolicy` only after the denied default (or the stored
+ * choice) is applied. The root layout's head script holds platform-origin
+ * `fetch` until this is true, so a request cannot leave before the policy runs.
+ * The continuing gate for every transport is G02; this flag is the ordering.
+ */
+export const WEB_PLATFORM_POLICY_BOOTED = '__bfPlatformPolicyBooted';
+
+/**
  * Boot the policy for this tab: restore the person's explicit choices, or — when
  * they have never been asked — leave every capability REFUSED. Signing in,
  * coming online and mounting this module all grant nothing; `connectAccountSync`
  * and `grantWebPlatformCapabilities` are the only ways a capability opens. Then
  * mirror cross-tab changes, so a Disconnect in one tab is a Disconnect in all.
+ * The boot flag is set last, after the snapshot is in place.
  */
 export function bootWebPlatformPolicy(): void {
   if (booted || typeof window === 'undefined') return;
@@ -252,6 +261,7 @@ export function bootWebPlatformPolicy(): void {
     if (event.key !== null && event.key !== WEB_PLATFORM_POLICY_STORAGE_KEY) return;
     policy.set(readStoredGrants() ?? DENIED_DEFAULT);
   });
+  (window as unknown as Record<string, boolean>)[WEB_PLATFORM_POLICY_BOOTED] = true;
 }
 
 /** Test hook: re-arm the bootstrap and return the policy to the API-denied default. */
@@ -259,6 +269,9 @@ export function resetWebPlatformPolicyForTests(): void {
   booted = false;
   policy.set(Object.fromEntries(GRANTABLE.map((key) => [key, false])) as Partial<PlatformPolicySnapshot>);
   resetWebPlatformRequestAccount();
+  if (typeof window !== 'undefined') {
+    delete (window as unknown as Record<string, boolean>)[WEB_PLATFORM_POLICY_BOOTED];
+  }
 }
 
 export { PlatformAccessDenied };

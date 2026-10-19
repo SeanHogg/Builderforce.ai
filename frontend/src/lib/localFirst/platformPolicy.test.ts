@@ -10,9 +10,13 @@
  * signed-in visitor on a fresh profile was silently synced, authenticated, and
  * able to pull models without ever having been asked.
  */
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { API_ORIGIN } from '../apiOrigin';
 import {
+  WEB_PLATFORM_POLICY_BOOTED,
   WEB_PLATFORM_POLICY_STORAGE_KEY,
   bootWebPlatformPolicy,
   connectAccountSync,
@@ -154,5 +158,68 @@ describe('the origin classifier', () => {
     // webPlatformFetch reads as "not the platform's business" and skips.
     expect(webPlatformCapabilityFor('/api/sync/push', { method: 'POST' })).toBe('synchronize');
     expect(webPlatformCapabilityFor('/api/projects')).toBe('connected-feature');
+  });
+});
+
+const frontendSrc = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
+function source(relativePath: string): string {
+  return readFileSync(resolve(frontendSrc, relativePath), 'utf8');
+}
+
+function withoutComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+}
+
+describe('the web boot path calls the denied default before any platform fetch', () => {
+  it('mounts the boot and holds platform-origin fetch until that call finishes', () => {
+    const layout = source('app/layout.tsx');
+    const boot = withoutComments(source('components/PlatformPolicyBoot.tsx'));
+    const holdAt = layout.indexOf('__html: PLATFORM_POLICY_BOOT_HOLD');
+    const bodyAt = layout.indexOf('<body>');
+    const mountAt = layout.indexOf('<PlatformPolicyBoot />');
+    const authAt = layout.indexOf('<AuthProvider>');
+
+    expect(layout).toContain('name="bf-api-origin"');
+    expect(layout.indexOf('name="bf-api-origin"')).toBeLessThan(holdAt);
+    expect(holdAt).toBeGreaterThan(-1);
+    expect(holdAt).toBeLessThan(bodyAt);
+    expect(mountAt).toBeGreaterThan(-1);
+    expect(mountAt).toBeLessThan(authAt);
+    // Module evaluation, not an effect: removing this call, or deferring it, fails here.
+    expect(boot.indexOf('bootWebPlatformPolicy()')).toBeGreaterThan(-1);
+    expect(boot.indexOf('bootWebPlatformPolicy()')).toBeLessThan(boot.indexOf('export function PlatformPolicyBoot'));
+    expect(boot).not.toContain('useEffect');
+    expect(layout).toContain(WEB_PLATFORM_POLICY_BOOTED);
+  });
+
+  it('rejects a platform fetch that races the chunk, then releases it once boot has applied the denial', async () => {
+    const layout = source('app/layout.tsx');
+    const script = layout.match(/const PLATFORM_POLICY_BOOT_HOLD = `([\s\S]*?)`;/)?.[1];
+    expect(script).toBeTruthy();
+    document.head.insertAdjacentHTML('afterbegin', `<meta name="bf-api-origin" content="${API_ORIGIN}">`);
+    const native = vi.fn(async () => new Response('ok', { status: 200 }));
+    const previous = window.fetch;
+    window.fetch = native as unknown as typeof fetch;
+    try {
+      // The head script is what a fresh document runs before the policy chunk.
+      // eslint-disable-next-line no-eval
+      eval(script as string);
+      await expect(window.fetch(`${API_ORIGIN}/api/sync/push`, { method: 'POST' })).rejects.toThrow(/platform_denied/);
+      expect(native).not.toHaveBeenCalled();
+      await window.fetch('https://example.com/asset.js');
+      expect(native).toHaveBeenCalledTimes(1);
+
+      bootWebPlatformPolicy();
+      expect((window as unknown as Record<string, boolean>)[WEB_PLATFORM_POLICY_BOOTED]).toBe(true);
+      expect(webPlatformPolicy().allows('synchronize')).toBe(false);
+      expect(webPlatformPolicy().allows('authenticate')).toBe(false);
+
+      await window.fetch(`${API_ORIGIN}/api/sync/push`, { method: 'POST' });
+      expect(native).toHaveBeenCalledTimes(2);
+    } finally {
+      window.fetch = previous;
+      document.head.querySelector('meta[name="bf-api-origin"]')?.remove();
+    }
   });
 });
