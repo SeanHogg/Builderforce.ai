@@ -13791,6 +13791,19 @@
         "packTerms": "Prepago, pago único. Los créditos duran 12 meses y nada se renueva."
       },
       "openApp": "Abrir {app}"
+    },
+    "stageLearning": {
+      "title": "Aprendizaje por etapa",
+      "metaDescription": "Cursos de la Academia y el kit inicial para la etapa de negocio de tu empresa.",
+      "intro": "Cursos y el kit inicial para la etapa de negocio de tu empresa.",
+      "introWithStage": "Cursos y el kit inicial para la etapa de negocio de tu empresa ({stage}).",
+      "noStage": "Este espacio de trabajo no tiene una etapa de negocio definida.",
+      "installToolkit": "Instalar el kit de la etapa",
+      "toolkitInstalled": "Kit instalado",
+      "coursesHeading": "Cursos para esta etapa",
+      "noCourses": "Aún no hay cursos publicados para esta etapa.",
+      "enrol": "Inscribirse",
+      "enrolled": "Inscrito en {name}"
     }
   },
   "models": {
@@ -35340,5 +35353,28 @@
     "added": "Hallazgos añadidos",
     "resolved": "Hallazgos resueltos",
     "unchanged": "Hallazgos sin cambios"
+  },
+  "advisory": {
+    "title": "Asesoría",
+    "metaDescription": "Reserva y continúa sesiones de asesoría con el asesor que ya está en tu cuenta.",
+    "intro": "Reserva una sesión con un asesor, mantén la relación y continúa desde la última.",
+    "bookHeading": "Reservar una sesión",
+    "serviceId": "ID del servicio",
+    "startsAt": "Inicio",
+    "hostRef": "Asesor (referencia del anfitrión, opcional)",
+    "book": "Reservar",
+    "booked": "Sesión reservada",
+    "upcomingHeading": "Tus próximas sesiones",
+    "noUpcoming": "No hay próximas sesiones.",
+    "completedHeading": "Sesiones completadas",
+    "noCompleted": "No hay sesiones completadas para continuar.",
+    "relationHeading": "Continuar desde la relación guardada",
+    "continue": "Continuar",
+    "continued": "Continuaste con tu asesor",
+    "reservationId": "ID de la reserva",
+    "saveRelation": "Guardar como mi asesor",
+    "relationSaved": "Relación con el asesor guardada",
+    "rosterHeading": "Sesiones que organizas",
+    "noRoster": "No hay nada en tu agenda."
   }
 }

@@ -1,7 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { apiRequest, faultMessage } from '@/lib/apiClient';
+import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { apiRequest } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 
 interface StageCourse {
   id: string;
@@ -28,76 +30,81 @@ interface AcademyShelf {
  * marketplace actions beside that shelf, not a second catalogue.
  */
 export function StageLearningClient() {
+  const t = useTranslations('marketplace.stageLearning');
+  const errorMessage = useErrorMessage();
   const [shelf, setShelf] = useState<AcademyShelf | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    const shelf = await apiRequest<AcademyShelf>('/api/creation-listings/academy');
-    if (!shelf.ok) {
-      setShelf({ ok: false, courses: [] });
-      setError(shelf.detail ?? shelf.reason ?? 'No business stage is set on this workspace');
-      return;
-    }
-    setShelf(shelf);
-  }, []);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    void load().catch((err: unknown) => setError(faultMessage(err, 'Could not load stage courses')));
-  }, [load]);
+    let cancelled = false;
+    apiRequest<AcademyShelf>('/api/creation-listings/academy').then((next) => {
+      if (cancelled) return;
+      if (!next.ok) {
+        setShelf({ ok: false, courses: [] });
+        setError(t('noStage'));
+        return;
+      }
+      setShelf(next);
+    }).catch((err: unknown) => {
+      if (!cancelled) setError(errorMessage(err));
+    });
+    return () => { cancelled = true; };
+  }, [reloadKey, t, errorMessage]);
 
   async function run(label: string, work: () => Promise<unknown>) {
     setError(null);
     setMessage(null);
     try {
-      const result = await work();
-      setMessage(typeof result === 'object' && result ? `${label}: ${JSON.stringify(result)}` : label);
-      await load().catch(() => undefined);
+      await work();
+      setMessage(label);
+      setReloadKey((key) => key + 1);
     } catch (err) {
-      setError(faultMessage(err, 'Request failed'));
+      setError(errorMessage(err));
     }
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-8 p-6">
+    <main className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:px-6">
       <header>
-        <h1 className="text-2xl font-semibold">Stage learning</h1>
-        <p className="text-sm text-neutral-600">
-          Courses and the starter toolkit for your company&apos;s business stage
-          {shelf?.stage ? ` (${shelf.stage.replaceAll('_', ' ')})` : ''}.
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{t('title')}</h1>
+        <p className="text-sm text-[var(--text-secondary)]">
+          {shelf?.stage ? t('introWithStage', { stage: shelf.stage.replaceAll('_', ' ') }) : t('intro')}
         </p>
       </header>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {message && <p className="text-sm text-green-700 break-all">{message}</p>}
+      {error && <p role="alert" className="text-sm text-[var(--error-text)]">{error}</p>}
+      {message && <p role="status" className="text-sm text-[var(--success-text)]">{message}</p>}
 
       <section className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="rounded bg-neutral-900 px-3 py-2 text-sm text-white"
-          onClick={() => void run('Toolkit installed', () => apiRequest('/api/creation-listings/stage-toolkit/install', { method: 'POST' }))}
+          className="min-h-[44px] rounded bg-[var(--accent)] px-3 py-2 text-sm text-[var(--text-on-accent)]"
+          onClick={() => void run(t('toolkitInstalled'), () => apiRequest('/api/creation-listings/stage-toolkit/install', { method: 'POST' }))}
         >
-          Install stage toolkit
+          {t('installToolkit')}
         </button>
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-medium">Courses for this stage</h2>
+        <h2 className="text-lg font-medium text-[var(--text-primary)]">{t('coursesHeading')}</h2>
         {!shelf?.courses || shelf.courses.length === 0 ? (
-          <p className="text-sm text-neutral-500">No published courses for this stage yet.</p>
+          <p className="text-sm text-[var(--text-secondary)]">{t('noCourses')}</p>
         ) : (
-          <ul className="divide-y rounded border">
-            {shelf.courses?.map((course) => (
+          <ul className="divide-y divide-[var(--border)] rounded border border-[var(--border)] bg-[var(--surface-card)]">
+            {shelf.courses.map((course) => (
               <li key={course.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium">{course.name}</p>
-                  {course.summary && <p className="text-xs text-neutral-600">{course.summary}</p>}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">{course.name}</p>
+                  {course.summary && <p className="text-xs text-[var(--text-secondary)]">{course.summary}</p>}
                 </div>
                 <button
                   type="button"
-                  className="rounded border px-3 py-1 text-sm"
+                  className="min-h-[44px] rounded border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-primary)]"
                   onClick={() =>
-                    void run(`Enrolled in ${course.name}`, () =>
+                    void run(t('enrolled', { name: course.name }), () =>
                       apiRequest('/api/creation-listings/academy/enrol', {
                         method: 'POST',
                         body: JSON.stringify({ listingId: course.id }),
@@ -105,7 +112,7 @@ export function StageLearningClient() {
                     )
                   }
                 >
-                  Enrol
+                  {t('enrol')}
                 </button>
               </li>
             ))}

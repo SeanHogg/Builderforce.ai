@@ -24,6 +24,7 @@ import { bookingReservations } from '../../infrastructure/database/schema';
 import type { ActorIdentity } from '../activity/activityLog';
 import { StatusError } from '../../domain/shared/errors';
 import { reserve } from './bookings';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 
 /** The second-session write. Defaults to {@link reserve}; tests pass a fake so
  *  the reuse of host and service is asserted without the overlap transaction. */
@@ -230,7 +231,9 @@ export async function listFounderAdvisorSessions(
   return db
     .select(sessionColumns)
     .from(bookingReservations)
-    .where(and(
+    .where(acrossTenants(
+      bookingReservations,
+      'subject_own_rows',
       eq(bookingReservations.bookerRef, founderRef),
       gte(bookingReservations.startsAt, new Date()),
     ))
@@ -238,7 +241,8 @@ export async function listFounderAdvisorSessions(
     .limit(20);
 }
 
-/** Completed sessions this founder can continue. Past rows, newest first. */
+/** Completed sessions this founder can continue. Past rows, newest first.
+ *  Cross-tenant for the same reason as {@link listFounderAdvisorSessions}. */
 export async function listFounderCompletedSessions(
   db: Db,
   input: { founderRef: string },
@@ -247,7 +251,9 @@ export async function listFounderCompletedSessions(
   return db
     .select(sessionColumns)
     .from(bookingReservations)
-    .where(and(
+    .where(acrossTenants(
+      bookingReservations,
+      'subject_own_rows',
       eq(bookingReservations.bookerRef, founderRef),
       eq(bookingReservations.status, CONTINUABLE_STATUS),
     ))

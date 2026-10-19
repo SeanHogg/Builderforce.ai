@@ -13791,6 +13791,19 @@
         "packTerms": "预付、一次性付款。额度有效期 12 个月，不会自动续费。"
       },
       "openApp": "打开 {app}"
+    },
+    "stageLearning": {
+      "title": "阶段学习",
+      "metaDescription": "适合您公司业务阶段的学院课程和入门工具包。",
+      "intro": "适合您公司业务阶段的课程和入门工具包。",
+      "introWithStage": "适合您公司业务阶段（{stage}）的课程和入门工具包。",
+      "noStage": "此工作区尚未设置业务阶段。",
+      "installToolkit": "安装阶段工具包",
+      "toolkitInstalled": "工具包已安装",
+      "coursesHeading": "本阶段的课程",
+      "noCourses": "本阶段暂无已发布的课程。",
+      "enrol": "报名",
+      "enrolled": "已报名 {name}"
     }
   },
   "models": {
@@ -35340,5 +35353,28 @@
     "added": "新增问题",
     "resolved": "已解决问题",
     "unchanged": "未变问题"
+  },
+  "advisory": {
+    "title": "顾问服务",
+    "metaDescription": "与账户中已有的顾问预约并继续顾问会话。",
+    "intro": "与顾问预约会话，保持合作关系，并从上一次会话继续。",
+    "bookHeading": "预约会话",
+    "serviceId": "服务 ID",
+    "startsAt": "开始时间",
+    "hostRef": "顾问（主持人引用，可选）",
+    "book": "预约",
+    "booked": "会话已预约",
+    "upcomingHeading": "您即将进行的会话",
+    "noUpcoming": "暂无即将进行的会话。",
+    "completedHeading": "已完成的会话",
+    "noCompleted": "没有可继续的已完成会话。",
+    "relationHeading": "从已保存的合作关系继续",
+    "continue": "继续",
+    "continued": "已与您的顾问继续",
+    "reservationId": "预约 ID",
+    "saveRelation": "设为我的顾问",
+    "relationSaved": "顾问关系已保存",
+    "rosterHeading": "您主持的会话",
+    "noRoster": "您的日程中暂无会话。"
   }
 }

@@ -13791,6 +13791,19 @@
         "packTerms": "Prepaid, one-off payment. Credits last 12 months and nothing renews."
       },
       "openApp": "Open {app}"
+    },
+    "stageLearning": {
+      "title": "Stage learning",
+      "metaDescription": "Academy courses and the starter toolkit for your company business stage.",
+      "intro": "Courses and the starter toolkit for your company's business stage.",
+      "introWithStage": "Courses and the starter toolkit for your company's business stage ({stage}).",
+      "noStage": "No business stage is set on this workspace.",
+      "installToolkit": "Install stage toolkit",
+      "toolkitInstalled": "Toolkit installed",
+      "coursesHeading": "Courses for this stage",
+      "noCourses": "No published courses for this stage yet.",
+      "enrol": "Enrol",
+      "enrolled": "Enrolled in {name}"
     }
   },
   "models": {
@@ -35340,5 +35353,28 @@
     "added": "Added findings",
     "resolved": "Resolved findings",
     "unchanged": "Unchanged findings"
+  },
+  "advisory": {
+    "title": "Advisory",
+    "metaDescription": "Book and continue advisory sessions with the advisor already on your account.",
+    "intro": "Book a session with an advisor, keep the relationship, and continue from the last one.",
+    "bookHeading": "Book a session",
+    "serviceId": "Service id",
+    "startsAt": "Starts",
+    "hostRef": "Advisor (host ref, optional)",
+    "book": "Book",
+    "booked": "Session booked",
+    "upcomingHeading": "Your upcoming sessions",
+    "noUpcoming": "No upcoming sessions.",
+    "completedHeading": "Completed sessions",
+    "noCompleted": "No completed sessions to continue.",
+    "relationHeading": "Continue from the saved relationship",
+    "continue": "Continue",
+    "continued": "Continued with your advisor",
+    "reservationId": "Reservation id",
+    "saveRelation": "Save as my advisor",
+    "relationSaved": "Advisor relationship saved",
+    "rosterHeading": "Sessions you are hosting",
+    "noRoster": "Nothing on your roster."
   }
 }

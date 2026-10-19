@@ -13791,6 +13791,19 @@
         "packTerms": "Vorausbezahlt, einmalige Zahlung. Guthaben gilt 12 Monate, nichts verlängert sich."
       },
       "openApp": "{app} öffnen"
+    },
+    "stageLearning": {
+      "title": "Lernen nach Phase",
+      "metaDescription": "Academy-Kurse und das Starter-Toolkit für die Geschäftsphase deines Unternehmens.",
+      "intro": "Kurse und das Starter-Toolkit für die Geschäftsphase deines Unternehmens.",
+      "introWithStage": "Kurse und das Starter-Toolkit für die Geschäftsphase deines Unternehmens ({stage}).",
+      "noStage": "Für diesen Workspace ist keine Geschäftsphase festgelegt.",
+      "installToolkit": "Phasen-Toolkit installieren",
+      "toolkitInstalled": "Toolkit installiert",
+      "coursesHeading": "Kurse für diese Phase",
+      "noCourses": "Für diese Phase gibt es noch keine veröffentlichten Kurse.",
+      "enrol": "Einschreiben",
+      "enrolled": "In {name} eingeschrieben"
     }
   },
   "models": {
@@ -35340,5 +35353,28 @@
     "added": "Neue Befunde",
     "resolved": "Behobene Befunde",
     "unchanged": "Unveränderte Befunde"
+  },
+  "advisory": {
+    "title": "Beratung",
+    "metaDescription": "Buche und setze Beratungssitzungen mit dem Berater fort, der bereits mit deinem Konto verknüpft ist.",
+    "intro": "Buche eine Sitzung mit einem Berater, halte die Beziehung und setze bei der letzten fort.",
+    "bookHeading": "Sitzung buchen",
+    "serviceId": "Service-ID",
+    "startsAt": "Beginn",
+    "hostRef": "Berater (Host-Referenz, optional)",
+    "book": "Buchen",
+    "booked": "Sitzung gebucht",
+    "upcomingHeading": "Deine anstehenden Sitzungen",
+    "noUpcoming": "Keine anstehenden Sitzungen.",
+    "completedHeading": "Abgeschlossene Sitzungen",
+    "noCompleted": "Keine abgeschlossenen Sitzungen zum Fortsetzen.",
+    "relationHeading": "Mit der gespeicherten Beziehung fortfahren",
+    "continue": "Fortsetzen",
+    "continued": "Mit deinem Berater fortgesetzt",
+    "reservationId": "Reservierungs-ID",
+    "saveRelation": "Als meinen Berater speichern",
+    "relationSaved": "Beraterbeziehung gespeichert",
+    "rosterHeading": "Sitzungen, die du leitest",
+    "noRoster": "Nichts in deinem Plan."
   }
 }

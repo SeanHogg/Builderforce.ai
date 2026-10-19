@@ -22,7 +22,7 @@
 
 /** Directories under `src/app`. Asserted exhaustive by `rootRoutes.test.ts`. */
 export const APP_ROUTE_SEGMENTS: readonly string[] = [
-  'about', 'activate', 'admin', 'agent-ops', 'agent-worker', 'agents', 'alerts', 'apps', 'auth',
+  'about', 'activate', 'admin', 'advisory', 'agent-ops', 'agent-worker', 'agents', 'alerts', 'apps', 'auth',
   'billing', 'blog', 'book', 'book-demo', 'brainstorm', 'ceremonies', 'challenges',
   'career', 'cofounder', 'compare', 'compile', 'content-manager', 'contributors', 'create',
   'companies', 'creation-canvas', 'crm', 'dashboard', 'dashboards', 'data-rooms', 'deal', 'debug',

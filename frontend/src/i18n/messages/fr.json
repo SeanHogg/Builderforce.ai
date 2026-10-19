@@ -13791,6 +13791,19 @@
         "packTerms": "Prépayé, paiement unique. Les crédits durent 12 mois et rien ne se renouvelle."
       },
       "openApp": "Ouvrir {app}"
+    },
+    "stageLearning": {
+      "title": "Apprentissage par étape",
+      "metaDescription": "Cours de l’Académie et kit de démarrage pour l’étape de développement de votre entreprise.",
+      "intro": "Cours et kit de démarrage pour l’étape de développement de votre entreprise.",
+      "introWithStage": "Cours et kit de démarrage pour l’étape de développement de votre entreprise ({stage}).",
+      "noStage": "Aucune étape de développement n’est définie pour cet espace de travail.",
+      "installToolkit": "Installer le kit de l’étape",
+      "toolkitInstalled": "Kit installé",
+      "coursesHeading": "Cours pour cette étape",
+      "noCourses": "Aucun cours publié pour cette étape pour le moment.",
+      "enrol": "S’inscrire",
+      "enrolled": "Inscrit à {name}"
     }
   },
   "models": {
@@ -35340,5 +35353,28 @@
     "added": "Résultats ajoutés",
     "resolved": "Résultats résolus",
     "unchanged": "Résultats inchangés"
+  },
+  "advisory": {
+    "title": "Conseil",
+    "metaDescription": "Réservez et poursuivez des séances de conseil avec le conseiller déjà associé à votre compte.",
+    "intro": "Réservez une séance avec un conseiller, gardez la relation et reprenez depuis la dernière.",
+    "bookHeading": "Réserver une séance",
+    "serviceId": "ID du service",
+    "startsAt": "Début",
+    "hostRef": "Conseiller (référence de l’hôte, facultatif)",
+    "book": "Réserver",
+    "booked": "Séance réservée",
+    "upcomingHeading": "Vos prochaines séances",
+    "noUpcoming": "Aucune séance à venir.",
+    "completedHeading": "Séances terminées",
+    "noCompleted": "Aucune séance terminée à poursuivre.",
+    "relationHeading": "Reprendre depuis la relation enregistrée",
+    "continue": "Poursuivre",
+    "continued": "Séance poursuivie avec votre conseiller",
+    "reservationId": "ID de la réservation",
+    "saveRelation": "Enregistrer comme mon conseiller",
+    "relationSaved": "Relation avec le conseiller enregistrée",
+    "rosterHeading": "Séances que vous animez",
+    "noRoster": "Rien dans votre planning."
   }
 }

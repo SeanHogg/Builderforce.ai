@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { apiRequest, faultMessage } from '@/lib/apiClient';
+import { useTranslations } from 'next-intl';
+import { apiRequest } from '@/lib/apiClient';
+import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { ContinueAdvisor } from '@/components/freelance/ContinueAdvisor';
 
 interface AdvisorSession {
@@ -14,6 +16,11 @@ interface AdvisorSession {
   meetingUrl: string | null;
 }
 
+const HEADING = 'text-lg font-medium text-[var(--text-primary)]';
+const MUTED = 'text-sm text-[var(--text-secondary)]';
+const INPUT = 'min-h-[44px] rounded border border-[var(--border)] bg-[var(--surface-card)] px-2 py-1 text-[var(--text-primary)]';
+const SECONDARY_BUTTON = 'min-h-[44px] rounded border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-primary)]';
+
 /**
  * Founder-facing advisory surface (epic #2545 A2).
  *
@@ -23,6 +30,8 @@ interface AdvisorSession {
  * endpoints — this page does not invent a second booking table.
  */
 export function AdvisoryClient() {
+  const t = useTranslations('advisory');
+  const errorMessage = useErrorMessage();
   const [sessions, setSessions] = useState<AdvisorSession[]>([]);
   const [roster, setRoster] = useState<AdvisorSession[]>([]);
   const [history, setHistory] = useState<AdvisorSession[]>([]);
@@ -34,20 +43,25 @@ export function AdvisoryClient() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    const [mine, hosted, done] = await Promise.all([
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => setReloadKey((key) => key + 1), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
       apiRequest<{ sessions: AdvisorSession[] }>('/api/advisory/sessions'),
       apiRequest<{ sessions: AdvisorSession[] }>('/api/practice-ops/booking/advisor-roster'),
       apiRequest<{ sessions: AdvisorSession[] }>('/api/practice-ops/booking/advisor-history'),
-    ]);
-    setSessions(mine.sessions ?? []);
-    setRoster(hosted.sessions ?? []);
-    setHistory(done.sessions ?? []);
-  }, []);
-
-  useEffect(() => {
-    void load().catch((err: unknown) => setError(faultMessage(err, 'Could not load advisory sessions')));
-  }, [load]);
+    ]).then(([mine, hosted, done]) => {
+      if (cancelled) return;
+      setSessions(mine.sessions ?? []);
+      setRoster(hosted.sessions ?? []);
+      setHistory(done.sessions ?? []);
+    }).catch((err: unknown) => {
+      if (!cancelled) setError(errorMessage(err));
+    });
+    return () => { cancelled = true; };
+  }, [reloadKey, errorMessage]);
 
   async function run(label: string, work: () => Promise<unknown>) {
     setError(null);
@@ -55,31 +69,31 @@ export function AdvisoryClient() {
     try {
       await work();
       setMessage(label);
-      await load();
+      reload();
     } catch (err) {
-      setError(faultMessage(err, 'Request failed'));
+      setError(errorMessage(err));
     }
   }
 
+  const continuable = history.filter((row) => row.hostRef && row.serviceId != null);
+
   return (
-    <main className="mx-auto max-w-3xl space-y-8 p-6">
+    <main className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:px-6">
       <header>
-        <h1 className="text-2xl font-semibold">Advisory</h1>
-        <p className="text-sm text-neutral-600">
-          Book a session with an advisor, keep the relationship, and continue from the last one.
-        </p>
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{t('title')}</h1>
+        <p className={MUTED}>{t('intro')}</p>
       </header>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {message && <p className="text-sm text-green-700">{message}</p>}
+      {error && <p role="alert" className="text-sm text-[var(--error-text)]">{error}</p>}
+      {message && <p role="status" className="text-sm text-[var(--success-text)]">{message}</p>}
 
       <section className="space-y-3">
-        <h2 className="text-lg font-medium">Book a session</h2>
+        <h2 className={HEADING}>{t('bookHeading')}</h2>
         <form
           className="grid gap-2 sm:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
-            void run('Session booked', () =>
+            void run(t('booked'), () =>
               apiRequest('/api/advisory/sessions', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -91,33 +105,35 @@ export function AdvisoryClient() {
             );
           }}
         >
-          <label className="text-sm">
-            Service id
-            <input className="mt-1 w-full rounded border px-2 py-1" value={serviceId} onChange={(e) => setServiceId(e.target.value)} required inputMode="numeric" />
+          <label className={MUTED}>
+            {t('serviceId')}
+            <input className={`mt-1 w-full ${INPUT}`} value={serviceId} onChange={(e) => setServiceId(e.target.value)} required inputMode="numeric" />
           </label>
-          <label className="text-sm">
-            Starts
-            <input className="mt-1 w-full rounded border px-2 py-1" type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required />
+          <label className={MUTED}>
+            {t('startsAt')}
+            <input className={`mt-1 w-full ${INPUT}`} type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required />
           </label>
-          <label className="text-sm sm:col-span-2">
-            Advisor (host ref, optional)
-            <input className="mt-1 w-full rounded border px-2 py-1" value={hostRef} onChange={(e) => setHostRef(e.target.value)} />
+          <label className={`${MUTED} sm:col-span-2`}>
+            {t('hostRef')}
+            <input className={`mt-1 w-full ${INPUT}`} value={hostRef} onChange={(e) => setHostRef(e.target.value)} />
           </label>
-          <button type="submit" className="rounded bg-neutral-900 px-3 py-2 text-sm text-white sm:col-span-2">Book</button>
+          <button type="submit" className="min-h-[44px] rounded bg-[var(--accent)] px-3 py-2 text-sm text-[var(--text-on-accent)] sm:col-span-2">
+            {t('book')}
+          </button>
         </form>
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-medium">Your upcoming sessions</h2>
-        <SessionList rows={sessions} empty="No upcoming sessions." />
+        <h2 className={HEADING}>{t('upcomingHeading')}</h2>
+        <SessionList rows={sessions} empty={t('noUpcoming')} />
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-medium">Completed sessions</h2>
-        {history.filter((row) => row.hostRef && row.serviceId != null).length === 0 ? (
-          <p className="text-sm text-neutral-500">No completed sessions to continue.</p>
+        <h2 className={HEADING}>{t('completedHeading')}</h2>
+        {continuable.length === 0 ? (
+          <p className={MUTED}>{t('noCompleted')}</p>
         ) : (
-          history.filter((row) => row.hostRef && row.serviceId != null).map((row) => (
+          continuable.map((row) => (
             <ContinueAdvisor
               key={row.id}
               session={{
@@ -126,19 +142,19 @@ export function AdvisoryClient() {
                 serviceId: row.serviceId as number,
               }}
               advisorName={row.hostRef}
-              onContinued={() => void load()}
+              onContinued={reload}
             />
           ))
         )}
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-medium">Continue from the saved relationship</h2>
+        <h2 className={HEADING}>{t('relationHeading')}</h2>
         <form
           className="flex flex-wrap gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            void run('Continued with your advisor', () =>
+            void run(t('continued'), () =>
               apiRequest('/api/practice-ops/booking/advisor-continue', {
                 method: 'POST',
                 body: JSON.stringify({ startsAt: new Date(continueAt).toISOString() }),
@@ -146,14 +162,21 @@ export function AdvisoryClient() {
             );
           }}
         >
-          <input className="rounded border px-2 py-1" type="datetime-local" value={continueAt} onChange={(e) => setContinueAt(e.target.value)} required />
-          <button type="submit" className="rounded border px-3 py-1 text-sm">Continue</button>
+          <input
+            className={`min-w-0 flex-1 ${INPUT}`}
+            type="datetime-local"
+            aria-label={t('startsAt')}
+            value={continueAt}
+            onChange={(e) => setContinueAt(e.target.value)}
+            required
+          />
+          <button type="submit" className={SECONDARY_BUTTON}>{t('continue')}</button>
         </form>
         <form
           className="flex flex-wrap gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            void run('Advisor relationship saved', () =>
+            void run(t('relationSaved'), () =>
               apiRequest('/api/practice-ops/booking/advisor-relation', {
                 method: 'POST',
                 body: JSON.stringify({ reservationId: Number(relationId) }),
@@ -161,27 +184,35 @@ export function AdvisoryClient() {
             );
           }}
         >
-          <input className="rounded border px-2 py-1" value={relationId} onChange={(e) => setRelationId(e.target.value)} placeholder="Reservation id" required inputMode="numeric" />
-          <button type="submit" className="rounded border px-3 py-1 text-sm">Save as my advisor</button>
+          <input
+            className={`min-w-0 flex-1 ${INPUT}`}
+            value={relationId}
+            onChange={(e) => setRelationId(e.target.value)}
+            placeholder={t('reservationId')}
+            aria-label={t('reservationId')}
+            required
+            inputMode="numeric"
+          />
+          <button type="submit" className={SECONDARY_BUTTON}>{t('saveRelation')}</button>
         </form>
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-medium">Sessions you are hosting</h2>
-        <SessionList rows={roster} empty="Nothing on your roster." />
+        <h2 className={HEADING}>{t('rosterHeading')}</h2>
+        <SessionList rows={roster} empty={t('noRoster')} />
       </section>
     </main>
   );
 }
 
 function SessionList({ rows, empty }: { rows: AdvisorSession[]; empty: string }) {
-  if (rows.length === 0) return <p className="text-sm text-neutral-500">{empty}</p>;
+  if (rows.length === 0) return <p className={MUTED}>{empty}</p>;
   return (
-    <ul className="divide-y rounded border">
+    <ul className="divide-y divide-[var(--border)] rounded border border-[var(--border)] bg-[var(--surface-card)]">
       {rows.map((row) => (
-        <li key={row.id} className="flex flex-wrap justify-between gap-2 px-3 py-2 text-sm">
-          <span>#{row.id} · {row.status}{row.hostRef ? ` · ${row.hostRef}` : ''}</span>
-          <span>{new Date(row.startsAt).toLocaleString()}</span>
+        <li key={row.id} className="flex flex-wrap justify-between gap-2 px-3 py-2 text-sm text-[var(--text-primary)]">
+          <span className="min-w-0 break-words">#{row.id} · {row.status}{row.hostRef ? ` · ${row.hostRef}` : ''}</span>
+          <span className="text-[var(--text-secondary)]">{new Date(row.startsAt).toLocaleString()}</span>
         </li>
       ))}
     </ul>
