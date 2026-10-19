@@ -20,6 +20,12 @@ import { commitLearnedFacts, MEMORY_COMMIT_SYSTEM, readChangedExcerpt } from "./
 import { setLocalChatRuns } from "./attention";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
+import { installRunRecovery } from "./installRunRecovery";
+import { installLocalDomainTools, type DomainToolRequest } from "./installLocalDomainTools";
+import { classifyLocalDomainTool, type LocalDomainToolName } from "./localDomainTools";
+import { platformPolicy } from "./platformPolicy";
+import type { ToolDef } from "./fileTools";
+import type { LocalFirstStore } from "@builderforce/local-first";
 import { resolveRunPolicyGates } from "./policyGates";
 import { editorRunDirectives } from "./hooks/editorDirectives";
 import { withWorkspaceStaleness } from "./memoryStaleness";
@@ -41,15 +47,214 @@ function workspaceRoot(): string {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
 }
 
+/**
+ * Explicit synchronize grant only. A missing or throwing policy is a denial,
+ * so a domain tool writes the local store instead of calling the platform.
+ */
+function domainToolPolicyAllows(): boolean {
+  try {
+    return platformPolicy().allows("synchronize") === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Bind the adapter to this host's store. Idempotent, and LAZY on purpose:
+ * `localBrainApplication` mints the device id and only then persists it, so at
+ * host-construction time a fresh install has none yet and an eager bind would
+ * throw `local_device_id_required` and take the whole extension host down.
+ * By the time a tool request is dispatched the id is durable.
+ */
+function installHostDomainTools(ctx: vscode.ExtensionContext, store: LocalFirstStore): void {
+  const deviceId = ctx.globalState.get<string>(LOCAL_DEVICE_KEY);
+  if (typeof deviceId !== "string" || deviceId.length === 0) return;
+  installLocalDomainTools(ctx, { localFirstStore: store, localDeviceId: deviceId });
+}
+
+/**
+ * The ONE call on the tool-dispatch path. A denial writes the local repository
+ * and queues the store's sync event; it never reaches bfApi.
+ */
+function runInstalledDomainTool(ctx: vscode.ExtensionContext, request: DomainToolRequest) {
+  return installLocalDomainTools(ctx).execute(request);
+}
+
+/**
+ * Only names the landed library actually implements. `memory-recall` is
+ * deliberately absent: `classifyLocalDomainTool` answers "unknown" for it, so
+ * advertising it would offer the model a tool that always throws
+ * `unknown_domain_tool`. Adding one means adding its repository write first.
+ */
+const LOCAL_DOMAIN_TOOL_SPECS: readonly (Omit<ToolDef, "execute" | "name"> & {
+  name: LocalDomainToolName;
+})[] = [
+  {
+    name: "project-create",
+    description:
+      "Create a project in the local repository when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Project name." },
+        key: { type: "string", description: "Optional stable project key." },
+        status: { type: "string", description: "Optional project status." },
+      },
+      required: ["name"],
+    },
+    mutating: true,
+  },
+  {
+    name: "project-update",
+    description:
+      "Patch a locally stored project when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Local project id to patch." },
+        name: { type: "string", description: "New project name." },
+        key: { type: "string", description: "New stable project key." },
+        status: { type: "string", description: "New project status." },
+      },
+      required: ["id"],
+    },
+    mutating: true,
+  },
+  {
+    name: "project-archive",
+    description:
+      "Archive a locally stored project when the platform is denied. Writes a local tombstone and queues the store's sync event. Does not call the platform.",
+    parameters: {
+      type: "object",
+      properties: { id: { type: "string", description: "Local project id to archive." } },
+      required: ["id"],
+    },
+    mutating: true,
+  },
+  {
+    name: "ticket-create",
+    description:
+      "Create a ticket in the local repository when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "Local project id the ticket belongs to." },
+        title: { type: "string", description: "Ticket title." },
+        description: { type: "string", description: "Optional ticket description." },
+        status: { type: "string", description: "Optional ticket status." },
+        priority: { type: "string", description: "Optional ticket priority." },
+        parentTicketId: { type: "string", description: "Optional local parent ticket id." },
+      },
+      required: ["projectId", "title"],
+    },
+    mutating: true,
+  },
+  {
+    name: "ticket-update",
+    description:
+      "Patch a locally stored ticket when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Local ticket id to patch." },
+        title: { type: "string", description: "New ticket title." },
+        description: { type: "string", description: "New ticket description." },
+        priority: { type: "string", description: "New ticket priority." },
+        assignedUserId: { type: "string", description: "New assignee." },
+      },
+      required: ["id"],
+    },
+    mutating: true,
+  },
+  {
+    name: "ticket-move",
+    description:
+      "Change the status of a locally stored ticket when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Local ticket id to move." },
+        status: { type: "string", description: "New ticket status." },
+      },
+      required: ["id", "status"],
+    },
+    mutating: true,
+  },
+  {
+    name: "ticket-archive",
+    description:
+      "Archive or restore a locally stored ticket when the platform is denied. Writes locally and queues the store's sync event. Does not call the platform.",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Local ticket id to archive." },
+        archived: { type: "boolean", description: "False restores an archived ticket." },
+      },
+      required: ["id"],
+    },
+    mutating: true,
+  },
+  {
+    name: "ticket-delete",
+    description:
+      "Delete a locally stored ticket when the platform is denied. Writes a local tombstone and queues the store's sync event. Does not call the platform.",
+    parameters: {
+      type: "object",
+      properties: { id: { type: "string", description: "Local ticket id to delete." } },
+      required: ["id"],
+    },
+    mutating: true,
+  },
+];
+
+/**
+ * When synchronize is denied, a supported domain tool is the installed adapter:
+ * it writes `store` and the create journal event is the sync handoff. An allowed
+ * platform keeps the catalog executor. A non-domain tool is never replaced.
+ */
+function routeDeniedDomainTools(
+  ctx: vscode.ExtensionContext,
+  store: LocalFirstStore,
+  tools: readonly ToolDef[],
+): readonly ToolDef[] {
+  installHostDomainTools(ctx, store);
+  if (domainToolPolicyAllows()) return tools;
+  const localExecute = (name: LocalDomainToolName): ToolDef["execute"] => async (args) => {
+    const request: DomainToolRequest = {
+      tool: name,
+      args,
+    };
+    const outcome = await runInstalledDomainTool(ctx, request);
+    return JSON.stringify(outcome);
+  };
+  // A catalog entry is a domain tool only if the landed classifier says so; a
+  // name that merely looks like one is never repointed at the local writer.
+  const routed = tools.map((tool) =>
+    classifyLocalDomainTool(tool.name) === "local"
+      ? { ...tool, remote: false, execute: localExecute(tool.name as LocalDomainToolName) }
+      : tool,
+  );
+  const present = new Set(routed.map((tool) => tool.name));
+  const added = LOCAL_DOMAIN_TOOL_SPECS.filter((spec) => !present.has(spec.name)).map(
+    (spec): ToolDef => ({ ...spec, execute: localExecute(spec.name) }),
+  );
+  return added.length === 0 ? routed : [...routed, ...added];
+}
+
 export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeRunHostHooks): BrainRunHost {
   const { secrets } = ctx;
   const local = localBrainApplication(ctx);
+  // installHostDomainTools is intentionally deferred to the tool-dispatch path
+  // (lazy on purpose: localBrainApplication mints the device id only after
+  // globalState persists it, so an eager bind at construction would throw
+  // local_device_id_required and crash the extension host on first activation).
   const streamForRoute = async (): Promise<BrainStreamFn> =>
     routeStream(await resolveModelRoute(secrets), await getApiKey(secrets));
   const host = createBrainRunHost({
     tools: async (projectId, children, signal, opts) => {
       const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts);
-      return opts.audit && projectId != null ? auditToolCatalog(secrets, tools, projectId, opts.audit) : tools;
+      const catalog = opts.audit && projectId != null ? auditToolCatalog(secrets, tools, projectId, opts.audit) : tools;
+      return routeDeniedDomainTools(ctx, local.store, catalog);
     },
     workspaceRoot,
     stream: streamForRoute,
@@ -134,6 +339,9 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     ...host,
     start(payload) {
       const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
+      const chatId = payload.chatId;
+      // Running only. A settled start is not proof the run finished.
+      void installRunRecovery(ctx).recordStarted({ runId, chatId: String(chatId) });
       return recordChangeSetAroundRun(
         {
           store: local.store,

@@ -7,8 +7,11 @@
  * queues the journal event the transaction appended. It does not call the
  * platform client.
  *
- * Activation does not call this. The host file is not edited here. The library
- * is idempotent per host context and reuses the device id the host already holds.
+ * The run host (the file named in prose only, never imported) installs this on its
+ * tool-dispatch path and routes a denied domain tool through it — see
+ * `HOST_DOMAIN_TOOL_LINE`. The library is idempotent per host context and reuses
+ * the device id the host already holds. This module stays free of `vscode` and of
+ * any host import, so the host file is the only place that binds the two.
  */
 import type { LocalFirstStore } from "@builderforce/local-first";
 import {
@@ -47,7 +50,10 @@ export interface InstalledLocalDomainTools {
   ): ReturnType<LocalDomainTools["execute"]>;
 }
 
-/** The dispatch line a host uses after install. Activation does not call this yet. */
+/**
+ * The dispatch line the host uses after install — the host's executor returns
+ * exactly this. Pinned by the host-wiring cases in the suite.
+ */
 export const HOST_DOMAIN_TOOL_LINE = "return installLocalDomainTools(ctx).execute(request);";
 
 const INSTALLED = new WeakMap<object, InstalledLocalDomainTools>();
