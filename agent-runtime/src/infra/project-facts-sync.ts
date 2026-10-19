@@ -59,6 +59,14 @@ export async function recallSharedProjectFacts(
       `${cfg.gatewayUrl}/api/agent/projects/${cfg.projectId}/facts?${qs.toString()}`,
       {
         headers: authHeaders(cfg),
+        // Same bound as `pushProjectFact` above and as `pullTeamMemory`
+        // (knowledge-loop.ts), which reads the sibling mesh door. Unlike the POST,
+        // this call is AWAITED on the run's critical path — the team-memory context
+        // builder (`knowledge-loop.ts`) awaits it before the prompt is assembled — so
+        // an unbounded hang here does not merely leak a socket, it stalls the run.
+        // The abort surfaces through the existing `catch` as `[]`, exactly like a
+        // non-ok response, so the return contract is unchanged.
+        signal: AbortSignal.timeout(10_000),
       },
     );
     if (!res.ok) return [];

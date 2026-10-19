@@ -164,4 +164,35 @@ describe("recallSharedProjectFacts", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("down")));
     await expect(recallSharedProjectFacts(CFG)).resolves.toEqual([]);
   });
+
+  it("BOUNDS the recall: aborts after 10s, matching pullTeamMemory", async () => {
+    const { timeoutCalls } = shrinkTimeouts();
+    const fetchMock = mockHangingFetch();
+
+    await recallSharedProjectFacts(CFG, "retry", 6);
+
+    expect(timeoutCalls).toEqual([10_000]);
+    const init = fetchMock.mock.calls[0][1];
+    expect(init?.signal).toBeDefined();
+    expect(init?.signal?.aborted).toBe(true);
+  });
+
+  it("returns [] when a non-responding gateway never answers — without hanging", async () => {
+    shrinkTimeouts();
+    mockHangingFetch();
+
+    // This call is awaited on the run's critical path, so an unbounded hang would
+    // stall the run, not merely leak a socket. The watchdog makes removing the bound
+    // fail the suite loudly instead of hanging it.
+    const started = Date.now();
+    const result = await Promise.race([
+      recallSharedProjectFacts(CFG),
+      new Promise<"HUNG">((resolve) => setTimeout(() => resolve("HUNG"), 2_000)),
+    ]);
+
+    // A timeout must be INDISTINGUISHABLE from any other non-ok response: `[]`,
+    // never a throw — the team-memory context builder treats both alike.
+    expect(result).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
 });
