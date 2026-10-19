@@ -48,6 +48,7 @@ import {
 } from '@builderforce/local-first';
 import { API_ORIGIN } from '../apiOrigin';
 import { readLocal, removeLocal, writeLocal } from '../storage';
+import { bootWebHostStore, type BootWebHostOptions, type WebHostBoot } from './bootWebHost';
 
 export const WEB_PLATFORM_POLICY_STORAGE_KEY = 'bf_platform_policy_v1';
 
@@ -275,3 +276,16 @@ export function resetWebPlatformPolicyForTests(): void {
 }
 
 export { PlatformAccessDenied };
+export type { BootWebHostOptions, WebDurableRecord, WebHostBoot, WebReplayResult } from './bootWebHost';
+export { WEB_REPLAY_KIND } from './bootWebHost';
+
+/**
+ * Node-callable web boot. `bootWebPlatformPolicy` no-ops without `window` and
+ * only sets policy flags. This boot writes into the caller's durable store —
+ * not localStorage, which `writeLocal` cannot use without `window` — and
+ * replays one batch locally while the network is denied. It uses this module's
+ * policy object. Platform fetch is not called on that path.
+ */
+export function bootWebHost(options: BootWebHostOptions): WebHostBoot {
+  return bootWebHostStore({ ...options, policy });
+}
