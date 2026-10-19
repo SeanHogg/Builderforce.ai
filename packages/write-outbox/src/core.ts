@@ -15,6 +15,17 @@ export {
   OUTBOX_RETRY_BASE_MS,
   OUTBOX_RETRY_MAX_MS,
 } from "./policy.js";
+export {
+  assertSendAllowed,
+  createRevokeGate,
+  filterSendable,
+  gateOutboxSend,
+  guardSend,
+  isPermissionRevoked,
+  PERMISSION_REVOKED,
+  permissionRevokedError,
+} from "./revokeGate.js";
+export type { OutboxPermission, RevokeGate, SendableSplit } from "./revokeGate.js";
 export type {
   Outbox,
   OutboxDrainContext,
