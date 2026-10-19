@@ -41,6 +41,8 @@ import { recordActivity, cloudAgentActor, resolveHumanActor } from '../../applic
 import { coordinateTicket } from '../../application/manager/coordinateTicket';
 import { coordinationGate } from '../../application/kanban/coordinationGate';
 import { buildRuntimeService } from '../../buildRuntimeService';
+import { bulkCreateScope } from '../../application/task/TaskService';
+import { runInRequestScope } from '../../application/shared/requestScope';
 import { parseBody, z } from './requestBody';
 
 // ── Bodies ───────────────────────────────────────────────────────────────────
@@ -564,6 +566,17 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
   });
 
   // Materialize a child work-item task per resolved participant (the %-complete rollup).
+  //
+  // THE RESPONSE MUST NOT WAIT ON A MODEL. Each participant's child is created by
+  // TaskService, which on an agent-assigned task runs the Epic assessment — the LLM
+  // free-model cascade in production. Awaiting that per participant meant one click
+  // on THIS endpoint put a full cascade per participant in front of the reply
+  // (measured: 1,158 error events, slowest call 5m 6s). So the child ROWS and the
+  // `created` count still happen inline — they are cheap writes and `created` is what
+  // the %-complete rollup is built on — while the assessment fan-out is handed to
+  // `waitUntil`, exactly as the ordinary task routes fire their post-response work.
+  // `waitUntil` KEEPS the promise alive past the response; awaiting nothing here is
+  // what bounds the request.
   router.post('/tasks/:taskId/participants/materialize', async (c) => {
     const verdict = await coordinationVerdict(c);
     if (!verdict.ok) return c.json({ error: verdict.error, remedy: verdict.remedy, projectId: verdict.projectId }, 403);
@@ -572,8 +585,9 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     const taskId = Number(c.req.param('taskId'));
     const projectId = await projectIdOf(tenantId, taskId);
     if (projectId == null) return c.json({ error: 'task not found' }, 404);
-    const created = await participantsService.materializeChildTasks(env(c), tenantId, taskId, (input) =>
-      createChild({ projectId, tenantId, title: input.title, parentTaskId: input.parentTaskId, assignedAgentRef: input.assignedAgentRef, assignedUserId: input.assignedUserId }));
+    const created = await runInRequestScope(bulkCreateScope((task) => c.executionCtx.waitUntil(task)), () =>
+      participantsService.materializeChildTasks(env(c), tenantId, taskId, (input) =>
+        createChild({ projectId, tenantId, title: input.title, parentTaskId: input.parentTaskId, assignedAgentRef: input.assignedAgentRef, assignedUserId: input.assignedUserId })));
     return c.json({ created });
   });
 

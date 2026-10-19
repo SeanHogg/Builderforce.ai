@@ -148,11 +148,31 @@ const DECOMP_SCHEMA = jsonSchemaFormat('epic_decomposition', {
 const VALID_PRIORITIES = new Set<string>(['low', 'medium', 'high', 'urgent']);
 
 /**
+ * WHOLE-ASSESSMENT CEILING for the LLM decomposer, in ms.
+ *
+ * One attempt against the free pool is budgeted at `FREE_VENDOR_CALL_TIMEOUT_MS`
+ * (15s, set in `ideProxy`), and a vendor may declare up to
+ * `MAX_DECLARED_ATTEMPT_TIMEOUT_MS` (90s) for one attempt of its own. Those are
+ * PER-ATTEMPT numbers: `assess()` walks the cascade itself, so N candidates means
+ * N x 15s of wall clock with no ceiling on N. That is the measured production cost
+ * — one materialize call held a request for 5m 6s while empty-200, 429 and 402
+ * models were burned one after another.
+ *
+ * 45s comfortably covers a healthy attempt PLUS failover (15s + 15s, with room for
+ * the connect/body overhead a real free endpoint adds) and still stays far below a
+ * Worker request budget, and far below the point where a caller is better served by
+ * the heuristic. Correctness costs nothing for choosing it: the caller degrades to
+ * {@link heuristicEpicDecomposer} on ANY failure, so a timeout is a plan swap, not
+ * a lost ticket.
+ */
+export const LLM_DECOMPOSITION_BUDGET_MS = 45_000;
+
+/**
  * LLM-backed decomposer — real BA-style scope assessment via the FREE model pool
  * (`ideProxy`, so it spends nothing on paid vendors). Returns the same
  * {@link DecompositionPlan} shape as the heuristic. Best-effort by contract: ANY
- * failure (kill switch, malformed reply, no LLM) falls back to
- * {@link heuristicEpicDecomposer} so on-assign decomposition ALWAYS produces a
+ * failure (kill switch, malformed reply, no LLM, or the deadline below) falls back
+ * to {@link heuristicEpicDecomposer} so on-assign decomposition ALWAYS produces a
  * defensible answer and never blocks task creation on model availability.
  */
 export function llmEpicDecomposer(env: Env): EpicDecomposer {
@@ -173,6 +193,15 @@ export function llmEpicDecomposer(env: Env): EpicDecomposer {
             temperature: 0,
             maxTokens: 900,
             useCase: 'epic_decomposition',
+            // Bound the WHOLE assessment, not one attempt: the cascade inside
+            // `completeJson` walks the entire FREE_MODEL_POOL and each candidate
+            // carries its own 15s budget, so without this N candidates is N x 15s.
+            // `dispatchProxy` forwards this to `ideProxy(...).complete(...)`, the
+            // vendor layer throws `RequestAbortedError` on an external abort and
+            // `proxyDispatcher` re-throws it, and `completeJson` catches a throwing
+            // dispatch as `{ ok: false, reason: 'gateway' }` — so the abort lands as
+            // the failure that hands the plan to the heuristic below.
+            signal: AbortSignal.timeout(LLM_DECOMPOSITION_BUDGET_MS),
           },
           asJsonObject,
         );

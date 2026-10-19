@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { currentRequestScope, deferPastResponse, runInRequestScope, type RequestScope } from '../shared/requestScope';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Task } from '../../domain/task/Task';
@@ -100,6 +101,71 @@ export interface UpdateTaskDto {
   dueDate?: string | null;
   persona?: string | null;
   archived?: boolean;
+}
+
+/** Per-call knobs on {@link TaskService.createTask}. Absent ⇒ today's behaviour exactly. */
+export interface CreateTaskOptions {
+  /**
+   * Run the on-assign Epic assessment (decomposition) OUT OF BAND and return the
+   * created task immediately, instead of awaiting it.
+   *
+   * This is an OPT-OUT for callers that create agent-assigned tasks in BULK on an
+   * HTTP response path: `createTask` on an agent-assigned task calls
+   * `EpicDecomposer.assess`, which in production is the LLM free-model cascade — so
+   * a caller creating N such tasks awaited N cascades serially in front of its
+   * response (the kanban materialize endpoint did exactly this: 1,158 error events,
+   * slowest call 5m 6s). The rows themselves are cheap and are still written and
+   * RETURNED before the response, because a caller counting created work items needs
+   * that number to be complete when the call returns.
+   *
+   * Usually set through {@link bulkCreateScope} rather than passed per call — see the
+   * note there on why the flag cannot be threaded through a port.
+   *
+   * A deferred assessment that FAILS is reported, never rethrown: the fan-out runs
+   * after the response, so a rejection there would have no caller left to catch it.
+   */
+  deferAssessment?: boolean;
+}
+
+/**
+ * THE ambient-scope opt-out name: a caller that creates agent-assigned tasks in bulk
+ * sets it on the request scope, and {@link TaskService.createTask} honours it for
+ * every create inside that scope.
+ */
+const DEFER_ASSIGNED_ASSESSMENT = 'deferAssignedAssessment';
+
+/**
+ * A request scope in which on-assign Epic assessment is DEFERRED — the pattern for a
+ * route that creates many agent-assigned tasks in one request (the kanban materialize
+ * endpoint: one child per participant) and must not put a model cascade per child in
+ * front of its response.
+ *
+ * Why a SCOPE flag and not an argument on the create call: the child-task port
+ * `createKanbanRoutes` receives is implemented in the composition root (`index.ts`)
+ * and forwards a FIXED field set into `TaskService.createTask`, so a per-call flag
+ * cannot reach this service from that path without editing the composition root. The
+ * request scope is already established for the invocation and already carries the
+ * `waitUntil` that keeps the fan-out alive, so it is the channel that reaches here
+ * unchanged.
+ *
+ * Scoped to the bulk create by re-entering a scope around it, so the opt-out covers
+ * those children and nothing else in the request — the ordinary single-task create
+ * route, which awaits its own fan-out and fires its own auto-run, is unaffected.
+ *
+ * `waitUntil` is passed in explicitly (rather than inherited) so the deferred work is
+ * guaranteed to ride THIS request's execution context, including when the route is
+ * mounted without the composition root's scope middleware.
+ */
+export function bulkCreateScope(waitUntil: (task: Promise<unknown>) => void): RequestScope {
+  const scope = { ...currentRequestScope(), waitUntil } as RequestScope & Record<string, unknown>;
+  scope[DEFER_ASSIGNED_ASSESSMENT] = true;
+  return scope;
+}
+
+/** True when the invocation opted out of synchronous on-assign assessment. */
+function defersAssignedAssessment(): boolean {
+  const scope = currentRequestScope() as (Record<string, unknown> | undefined);
+  return scope?.[DEFER_ASSIGNED_ASSESSMENT] === true;
 }
 
 /**
@@ -235,7 +301,7 @@ export class TaskService {
     }
   }
 
-  async createTask(dto: CreateTaskDto, callerTenantId: number): Promise<Task> {
+  async createTask(dto: CreateTaskDto, callerTenantId: number, options?: CreateTaskOptions): Promise<Task> {
     const project = await this.projects.findById(asProjectId(dto.projectId));
     if (!project) throw new NotFoundError('Project', dto.projectId);
     if (project.tenantId !== callerTenantId) throw new ForbiddenError('Project belongs to a different workspace');
@@ -279,6 +345,14 @@ export class TaskService {
     // A task created already assigned to an agent goes through the same on-assign
     // assessment as one reassigned later (assess scope → maybe Epic → decompose).
     if (saved.isAssignedToAgent && saved.taskType === TaskType.TASK) {
+      if (options?.deferAssessment || defersAssignedAssessment()) {
+        // The caller OWNS the lifetime of this fan-out (it defers it past its own
+        // response), so the created task is returned as-is and the assessment runs on
+        // the caller's schedule. Used by the kanban materialize endpoint, where one
+        // user action would otherwise put a full LLM cascade PER PARTICIPANT in front
+        // of the HTTP response.
+        return this.deferredAssessment(saved);
+      }
       return this.onAssignedToAgent(saved);
     }
     return saved;
@@ -346,6 +420,42 @@ export class TaskService {
     // `replace` so a task re-entering agent ownership reconciles its existing
     // children instead of failing the assignment on the idempotency guard.
     return this.decomposeEpic(task.id as number, plan.children, { replace: true, source: plan.source });
+  }
+
+  /**
+   * The {@link CreateTaskOptions.deferAssessment} path: hand the on-assign fan-out
+   * to the caller and return the created task NOW, unchanged.
+   *
+   * The returned task is the PRE-assessment task on purpose — a deferred assessment
+   * that later decides this is an Epic rewrites the row (reclassify + fan-out), and
+   * the caller that asked to go async has no use for the post-assessment value. This
+   * keeps `createTask`'s contract honest: with `deferAssessment` the Task it returns
+   * is exactly the Task that was persisted.
+   *
+   * `deferPastResponse` reports false outside a Worker invocation (tests, direct
+   * calls), so an unattached promise is NEVER left floating — the pending fan-out
+   * stays attached to this returned Task as `pendingAssessment` and the caller can
+   * await it if it wants the fan-out to actually happen.
+   */
+  private deferredAssessment(task: Task): Task {
+    const pending = this.onAssignedToAgent(task)
+      .catch((error: unknown) => {
+        // Swallowed deliberately: this runs after the response, so rethrowing would be
+        // an unhandled rejection with no caller left to catch it. Reported instead.
+        reportCaughtError(error, {
+          source: 'application/task/TaskService.ts',
+          operation: 'onAssignedToAgent (deferred)',
+          context: { taskId: task.id as number },
+        });
+        return task;
+      });
+    const taskWithPending = task as Task & { pendingAssessment?: Promise<Task> };
+    // Attached to THIS request's waitUntil (the scope carries it). If there is no
+    // invocation to attach to — a direct call, or a route mounted without the scope
+    // middleware — the pending fan-out stays reachable on the returned Task as
+    // `pendingAssessment` rather than being left floating and cancelled.
+    if (!deferPastResponse(pending)) taskWithPending.pendingAssessment = pending;
+    return taskWithPending;
   }
 
   /**
