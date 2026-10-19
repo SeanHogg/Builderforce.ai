@@ -1,9 +1,40 @@
 /**
  * {@link RovrRecords} over IndexedDB — one database (`rovr`) for the extension origin,
  * read by the side panel and written by both it and the service worker.
+ *
+ * G26 — this adapter's durability, in one place. Two claims this store can actually
+ * prove and nothing larger:
+ *
+ *  1. BUSY, NOT STOLEN. IndexedDB serialises writers itself, so this adapter adds no
+ *     lock and therefore has no steal: nothing here admits a write because a lease
+ *     looks old. The rule that would govern such a lease lives once, in
+ *     `withWriteLease` (`records.ts`) — it polls while a holder exists and then
+ *     refuses with {@link RovrLeaseBusyError}, and {@link rovrLockStolen} is false at
+ *     any age — so the panel, the service worker and any later writer cannot each
+ *     invent their own age-based override.
+ *  2. NO QUIET EMPTY. Every read validates what the device returned
+ *     ({@link readStoredChats}, {@link readStoredMessages}) and raises
+ *     {@link RovrCorruptRecordError} rather than returning `[]`. `[]` is this store's
+ *     truthful "nothing here"; handing it back for an unreadable store would make lost
+ *     work look like a clean device.
+ *
+ * Both are the shared rules from `packages/local-first`, reached through `records.ts` —
+ * this file states what it does with them, it does not redefine them.
  */
 import type { BrainMessage } from '@seanhogg/builderforce-brain-embedded';
-import { newLocalChatId, type LedgerEntry, type LocalChat, type LocalTask, type MessageInput, type RovrRecords } from './records';
+import {
+  newLocalChatId,
+  readStoredChats,
+  readStoredMessages,
+  rovrLockStolen,
+  RovrCorruptRecordError,
+  RovrLeaseBusyError,
+  type LedgerEntry,
+  type LocalChat,
+  type LocalTask,
+  type MessageInput,
+  type RovrRecords,
+} from './records';
 
 const VERSION = 1;
 const CHATS = 'chats';
@@ -66,11 +97,17 @@ export function createIdbRecords(factory: IDBFactory, dbName: string): RovrRecor
     async listChats() {
       const tx = (await open()).transaction(CHATS, 'readonly');
       const all = await promised(tx.objectStore(CHATS).getAll() as IDBRequest<LocalChat[]>);
+      // Validate before sorting: a malformed row must raise, never be sorted away.
+      readStoredChats(all);
       return all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },
     async getChat(id) {
       const tx = (await open()).transaction(CHATS, 'readonly');
-      return promised(tx.objectStore(CHATS).get(id) as IDBRequest<LocalChat | undefined>);
+      const chat = await promised(tx.objectStore(CHATS).get(id) as IDBRequest<LocalChat | undefined>);
+      // A row that is absent is the store's real answer; one that is present but
+      // malformed is corruption, and must not read as "no such chat".
+      if (chat !== undefined) readStoredChats([chat]);
+      return chat;
     },
     async createChat(title) {
       const now = new Date().toISOString();
@@ -89,6 +126,9 @@ export function createIdbRecords(factory: IDBFactory, dbName: string): RovrRecor
     },
     async listMessages(chatId) {
       const rows = await byChat<StoredMessage & { id: number }>(MESSAGES, chatId);
+      // Validate while `chatId` is still on the row, then strip it for the caller.
+      // Dropping one bad row would silently shorten the only copy of the transcript.
+      readStoredMessages(rows, chatId);
       return rows.sort((a, b) => a.id - b.id).map(({ chatId: _c, ...m }) => ({ ...m, seq: m.id }));
     },
     async appendMessages(chatId: number, rows: readonly MessageInput[]) {
