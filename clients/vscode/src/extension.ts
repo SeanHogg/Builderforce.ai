@@ -56,6 +56,9 @@ import { bindOutboxStorage, durableStepHost } from "./outboxStorage";
 // differs. Used by the Visualization panel.
 import { renderWebviewHtml } from "./webviewShared";
 import { VisualizationPanel } from "./visualizationPanel";
+import { localBrainApplication } from "./localFirstStore";
+import { configurePolicyGatesPersistence } from "./policyGates";
+import { createPolicyGatesPersistence } from "./policySnapshots";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 /**
@@ -115,6 +118,13 @@ async function syncSignedInContext(context: vscode.ExtensionContext): Promise<vo
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  // G09: a sign-out drops the in-memory gate cache. The durable snapshot must already
+  // be the resolver's fallback, or managed records lose their policy. Same device id
+  // localFirstStore mints — read it, never mint a second one here.
+  const localFirst = localBrainApplication(context);
+  configurePolicyGatesPersistence(createPolicyGatesPersistence(localFirst.store, {
+    deviceId: context.globalState.get<string>("builderforce.localDeviceId") ?? "",
+  }));
   initProjectState(context.workspaceState);
   // Gate the sidebar on auth before anything else registers: until this resolves the
   // key is falsy, so the login (Welcome) panel shows and the feature views stay hidden.

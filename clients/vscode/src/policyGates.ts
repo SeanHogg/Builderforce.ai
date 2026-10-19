@@ -20,6 +20,7 @@
 import type * as vscode from "vscode";
 import { fetchPolicyGates } from "./bfApi";
 import type { PolicyGate } from "./policy";
+import { snapshotPermitsOfflineRun, type PolicySnapshotValue } from "./policySnapshots";
 
 /** Raised when a tenant's gates could not be resolved — the run must not start. */
 export class PolicyGatesUnavailableError extends Error {
@@ -33,6 +34,25 @@ export class PolicyGatesUnavailableError extends Error {
 export const POLICY_GATES_FRESH_MS = 60_000;
 /** How long a last-known policy still governs a turn when a re-read fails. */
 export const POLICY_GATES_STALE_MS = 10 * 60_000;
+
+/**
+ * Durable policy-snapshot persistence (G09), wired once by the composition root.
+ * Every successful read is persisted as a versioned snapshot; a re-read failure past
+ * the in-memory stale window falls back to that snapshot when it is still valid and
+ * permits offline runs. Without a configured port the resolver behaves as before
+ * (memory only) — and durable snapshots are NEVER cleared by sign-out or cache resets,
+ * so signing out cannot strip policy from previously managed records.
+ */
+export interface PolicyGatesPersistence {
+  save(scopeKey: string, projectId: number | undefined, gates: PolicyGate[]): Promise<void>;
+  load(scopeKey: string): Promise<PolicySnapshotValue | undefined>;
+}
+
+let persistence: PolicyGatesPersistence | undefined;
+
+export function configurePolicyGatesPersistence(port: PolicyGatesPersistence | undefined): void {
+  persistence = port;
+}
 
 interface CachedGates {
   gates: PolicyGate[];
@@ -60,9 +80,20 @@ export async function resolveRunPolicyGates(
   try {
     const gates = (await fetchPolicyGates(secrets, projectId)) ?? [];
     cache.set(key, { gates, readAt: now });
+    // Persist before returning so a sign-out that clears this cache in the same turn
+    // still has a snapshot. A failed save must not refuse a turn the read already answered.
+    try {
+      await persistence?.save(key, projectId, gates);
+    } catch {
+      /* snapshot write failed; the in-memory read still governs this turn */
+    }
     return gates;
   } catch (e) {
     if (cached && now - cached.readAt < POLICY_GATES_STALE_MS) return cached.gates;
+    // Durable last resort: a valid snapshot that permits offline runs still governs
+    // this scope across restarts. Missing or expired required policy fails closed.
+    const snapshot = await persistence?.load(key).catch(() => undefined);
+    if (snapshot && snapshotPermitsOfflineRun(snapshot, new Date(now))) return snapshot.gates;
     throw new PolicyGatesUnavailableError(e);
   }
 }
