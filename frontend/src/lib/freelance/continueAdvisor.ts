@@ -6,6 +6,7 @@
  * {@link reserveTalentSession} — the same founder write A0 uses — with that
  * host and service, not through a listing search.
  */
+import { apiRequest } from '@/lib/apiClient';
 import { reserveTalentSession } from './booking';
 
 export interface CompletedAdvisorSession {
@@ -42,6 +43,12 @@ export async function continueAdvisorSession(
   timezone?: string,
 ): Promise<{ id: number; startsAt: string; endsAt: string; status: string }> {
   const target = continuationTarget(session);
+  // The history row writes the stored relation before the second book.
+  // Without this, users.advisor_reservation_id never moves off null.
+  await apiRequest('/api/practice-ops/booking/advisor-relation', {
+    method: 'POST',
+    body: JSON.stringify({ reservationId: session.reservationId }),
+  });
   return reserveTalentSession({
     talentId: target.talentId,
     serviceId: target.serviceId,

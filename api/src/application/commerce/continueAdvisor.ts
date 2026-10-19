@@ -17,7 +17,7 @@
  * The column is written with raw SQL. Migration 1241 adds it; the Drizzle
  * `users` declaration is shared with other tickets and is not edited here.
  */
-import { and, asc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { bookingReservations } from '../../infrastructure/database/schema';
@@ -235,6 +235,23 @@ export async function listFounderAdvisorSessions(
       gte(bookingReservations.startsAt, new Date()),
     ))
     .orderBy(asc(bookingReservations.startsAt))
+    .limit(20);
+}
+
+/** Completed sessions this founder can continue. Past rows, newest first. */
+export async function listFounderCompletedSessions(
+  db: Db,
+  input: { founderRef: string },
+) {
+  const founderRef = founderRefOf(input.founderRef);
+  return db
+    .select(sessionColumns)
+    .from(bookingReservations)
+    .where(and(
+      eq(bookingReservations.bookerRef, founderRef),
+      eq(bookingReservations.status, CONTINUABLE_STATUS),
+    ))
+    .orderBy(desc(bookingReservations.startsAt))
     .limit(20);
 }
 

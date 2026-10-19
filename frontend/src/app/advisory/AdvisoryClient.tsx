@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiRequest, faultMessage } from '@/lib/apiClient';
+import { ContinueAdvisor } from '@/components/freelance/ContinueAdvisor';
 
 interface AdvisorSession {
   id: number;
@@ -24,6 +25,7 @@ interface AdvisorSession {
 export function AdvisoryClient() {
   const [sessions, setSessions] = useState<AdvisorSession[]>([]);
   const [roster, setRoster] = useState<AdvisorSession[]>([]);
+  const [history, setHistory] = useState<AdvisorSession[]>([]);
   const [serviceId, setServiceId] = useState('');
   const [startsAt, setStartsAt] = useState('');
   const [hostRef, setHostRef] = useState('');
@@ -33,12 +35,14 @@ export function AdvisoryClient() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [mine, hosted] = await Promise.all([
+    const [mine, hosted, done] = await Promise.all([
       apiRequest<{ sessions: AdvisorSession[] }>('/api/advisory/sessions'),
       apiRequest<{ sessions: AdvisorSession[] }>('/api/practice-ops/booking/advisor-roster'),
+      apiRequest<{ sessions: AdvisorSession[] }>('/api/practice-ops/booking/advisor-history'),
     ]);
     setSessions(mine.sessions ?? []);
     setRoster(hosted.sessions ?? []);
+    setHistory(done.sessions ?? []);
   }, []);
 
   useEffect(() => {
@@ -109,7 +113,27 @@ export function AdvisoryClient() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-medium">Continue with your advisor</h2>
+        <h2 className="text-lg font-medium">Completed sessions</h2>
+        {history.filter((row) => row.hostRef && row.serviceId != null).length === 0 ? (
+          <p className="text-sm text-neutral-500">No completed sessions to continue.</p>
+        ) : (
+          history.filter((row) => row.hostRef && row.serviceId != null).map((row) => (
+            <ContinueAdvisor
+              key={row.id}
+              session={{
+                reservationId: row.id,
+                advisorUserId: row.hostRef as string,
+                serviceId: row.serviceId as number,
+              }}
+              advisorName={row.hostRef}
+              onContinued={() => void load()}
+            />
+          ))
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-medium">Continue from the saved relationship</h2>
         <form
           className="flex flex-wrap gap-2"
           onSubmit={(event) => {

@@ -40,6 +40,7 @@ import {
 import {
   continueWithAdvisor,
   listAdvisorRoster,
+  listFounderCompletedSessions,
   recordAdvisorRelation,
 } from '../../application/commerce/continueAdvisor';
 import {
@@ -232,6 +233,13 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       rowId(c.req.param('id')), String(body.status ?? '') as ReservationStatus,
     ));
   });
+
+  router.get('/booking/advisor-history', async (c) =>
+    Response.json({
+      sessions: await listFounderCompletedSessions(db, {
+        founderRef: c.get('userId') as string,
+      }),
+    }));
 
   router.get('/booking/advisor-roster', async (c) =>
     Response.json({
