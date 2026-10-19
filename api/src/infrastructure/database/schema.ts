@@ -32,3 +32,5 @@ export * from './schema/operations';
 export * from './schema/legal';
 export * from './schema/search';
 export * from './schema/discovery';
+// Synchronization — the batch push/pull protocol's delivery tables (migration 1247).
+export * from './schema/sync';

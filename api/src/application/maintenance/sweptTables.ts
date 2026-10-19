@@ -23,6 +23,12 @@
  * row-level expiry (lapsed agent memories) remains deliberately OUT — it is purged by
  * its own policy in retentionPurge.ts and never rewritten.
  *
+ * The sync receipt journal is the named exception (migration 1247): `sync_events`
+ * (90d) and `sync_changes` (30d) are registered below. A purge of those rows is NOT
+ * an idempotent replay — after `sync_events` is purged, the same event id is a NEW
+ * event, not a silent duplicate. `sync_records` and `sync_entity_mappings` stay out;
+ * they are not disposable.
+ *
  * CROSS-TENANT BY CONSTRUCTION. A retention window is a platform policy, not a
  * tenant one, so these deletes deliberately carry no tenant predicate — declared as
  * `acrossTenants(t, 'scheduled_sweep', …)` on the six relations that own a
@@ -41,6 +47,7 @@ import { rollUpLlmUsage, LLM_USAGE_ROLLUP_AFTER_DAYS } from './llmUsageRollup';
 import { VISITOR_RETENTION_DAYS, purgeVisitorActivity } from '../marketing/visitorActivity';
 import { BOUNDED_TELEMETRY_TABLES, EXPIRED_CREDENTIAL_TABLES } from './sweptTablesBounded';
 import { DAY_MS, MINUTE_MS } from '../../domain/shared/time';
+import { SYNC_CHANGE_RETENTION_DAYS, SYNC_EVENT_RETENTION_DAYS } from '../../domain/sync/syncRetention';
 import {
   activitySignals,
   apiErrorLog,
@@ -66,6 +73,8 @@ import {
   replayRecordings,
   replayRouteDaily,
   replayVitalsDaily,
+  syncChanges,
+  syncEvents,
   toolAuditDaily,
   toolAuditEvents,
 } from '../../infrastructure/database/schema';
@@ -589,6 +598,27 @@ export const SWEPT_TABLES: readonly SweptTable[] = [
     rationale: 'Insights live presence: a row older than five minutes is not live and nothing reads it.',
     purge: (db, cutoff) => boundedDelete(db, replayLive, acrossTenants(replayLive, 'scheduled_sweep',
       lt(replayLive.lastSeenAt, new Date(cutoff.getTime() + DAY_MS - 5 * MINUTE_MS)))),
+  },
+  // Migration 1247 names these two here. Domain rows are normally excluded; this is
+  // the exception. A purge is NOT an idempotent replay: after sync_events is purged,
+  // the same event id is a NEW event, not a silent duplicate. sync_records and
+  // sync_entity_mappings are not registered — they are not disposable. Neither window
+  // declares a pressure floor: shortening it would turn a replay into a new accept.
+  {
+    relation: 'sync_events',
+    connections: ['primary'],
+    retentionDays: SYNC_EVENT_RETENTION_DAYS,
+    rationale:
+      'Sync receipt journal (migration 1247, 90 days). A purge is NOT an idempotent replay: after sync_events is purged, the same event id is a NEW event, not a silent duplicate. Uniqueness of (tenant, device, event) holds only while the receipt row still exists.',
+    purge: (db, cutoff) => boundedDelete(db, syncEvents, acrossTenants(syncEvents, 'scheduled_sweep', lt(syncEvents.receivedAt, cutoff))),
+  },
+  {
+    relation: 'sync_changes',
+    connections: ['primary'],
+    retentionDays: SYNC_CHANGE_RETENTION_DAYS,
+    rationale:
+      'Sync delta log (migration 1247, 30 days). A purge is NOT an idempotent replay: after sync_events is purged, the same event id is a NEW event, not a silent duplicate. This change log is only the pull-cursor window; deleting it does not restore event-id uniqueness, and a cursor older than the window must resnapshot.',
+    purge: (db, cutoff) => boundedDelete(db, syncChanges, acrossTenants(syncChanges, 'scheduled_sweep', lt(syncChanges.recordedAt, cutoff))),
   },
   // Append-only feeds that had no window, and credentials past their expiry — declared in
   // their own module so this file stays the registry's contract, not its inventory.
