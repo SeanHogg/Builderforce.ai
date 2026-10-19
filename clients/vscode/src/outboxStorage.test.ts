@@ -1,9 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createRevokeGate } from "@builderforce/write-outbox";
 import {
   bindOutboxSendPermission,
   bindOutboxStorage,
+  boundOutboxSendPermission,
   createDurableOutbox,
+  outboxSendPermission,
   setOutboxScope,
 } from "./outboxStorage";
 
@@ -159,5 +161,49 @@ describe("durable host outbox — revoked send permission", () => {
     // re-checks after the request resolves and may raise its own `platform_send_disabled`.
     await expect(drained).rejects.toThrow(/permission_revoked|platform_send_disabled/);
     expect(outbox.size()).toBe(1);
+  });
+});
+
+/**
+ * The fail-closed default: an outbox store with NO permission bound has not been told
+ * sends are allowed, so it must not send. Clearing the binding restores that state, which
+ * is how the extension's deactivation leaves the store too.
+ */
+describe("durable host outbox — unbound send permission", () => {
+  // The module-level store is shared, and the suite above leaves a gate bound on it.
+  beforeEach(() => bindOutboxSendPermission(null));
+
+  it("denies while nothing is bound, and refuses a send rather than defaulting to allowed", async () => {
+    const sender = hangingSender();
+    const outbox = createDurableOutbox<{ text: string }, string>("g12-unbound", {
+      maxItems: 10,
+      maxWaitMs: 0,
+      send: sender.send,
+    });
+
+    expect(boundOutboxSendPermission()).toBeNull();
+    expect(outboxSendPermission.isAllowed()).toBe(false);
+
+    await outbox.enqueueDurable("chat-1", { text: "never sent" });
+    await outbox.flush();
+
+    expect(sender.state.calls).toBe(0);
+    expect(outbox.size()).toBe(1);
+    expect(storedRows("g12-unbound")).toBe(1);
+
+    // …and a drain reports the refusal, it never resolves as a success.
+    await expect(
+      outbox.drainWith("chat-1", (items) => Promise.resolve({ sent: items.length })),
+    ).rejects.toMatchObject({ code: "PLATFORM_SEND_DISABLED" });
+  });
+
+  it("closes again when a bound permission is cleared", async () => {
+    const gate = createRevokeGate();
+    bindOutboxSendPermission(gate);
+    expect(outboxSendPermission.isAllowed()).toBe(true);
+
+    bindOutboxSendPermission(null);
+    expect(boundOutboxSendPermission()).toBeNull();
+    expect(outboxSendPermission.isAllowed()).toBe(false);
   });
 });

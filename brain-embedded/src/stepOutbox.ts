@@ -33,6 +33,7 @@
 import {
   createOutbox,
   type OutboxOnlineSignal,
+  type OutboxSendPermission,
   type OutboxStore,
 } from '@builderforce/write-outbox';
 import type { BrainMessage } from './types';
@@ -71,6 +72,8 @@ export interface StepBatchingOptions {
   online?: OutboxOnlineSignal;
   /** The identity rows are sent as (e.g. tenant); rows queued under another are parked. */
   scope?(): string | null;
+  /** Administrative permission, independent of network reachability. */
+  sendPermission?: OutboxSendPermission;
 }
 
 /**
@@ -93,6 +96,8 @@ export interface StepDurability {
   sendRows?(chatId: number, rows: StepOutgoingMessage[], scope?: string): Promise<unknown>;
   online?: OutboxOnlineSignal;
   scope?(): string | null;
+  /** Administrative permission, independent of network reachability. */
+  sendPermission?: OutboxSendPermission;
 }
 
 let durability: StepDurability | null = null;
@@ -113,9 +118,16 @@ export function installStepDurability(next: StepDurability | null): void {
   runKeys.clear();
   replays.clear();
   if (!next) return;
-  stopListening = next.online?.subscribe((online) => {
+  const stopOnline = next.online?.subscribe((online) => {
     if (online) void drainStoredSteps();
-  }) ?? null;
+  });
+  const stopPermission = next.sendPermission?.subscribe((allowed) => {
+    if (allowed) void drainStoredSteps();
+  });
+  stopListening = () => {
+    stopOnline?.();
+    stopPermission?.();
+  };
   void drainStoredSteps();
 }
 
@@ -129,6 +141,7 @@ const optionsFor = (d: StepDurability, key: string): StepBatchingOptions => {
     store,
     ...(d.online ? { online: d.online } : {}),
     ...(d.scope ? { scope: d.scope } : {}),
+    ...(d.sendPermission ? { sendPermission: d.sendPermission } : {}),
   };
 };
 
@@ -151,7 +164,7 @@ export function stepDurabilityFor(chatId: number, runKey: number): StepBatchingO
  */
 export async function drainStoredSteps(): Promise<void> {
   const d = durability;
-  if (!d?.sendRows || !d.storedKeys) return;
+  if (!d?.sendRows || !d.storedKeys || d.sendPermission?.isAllowed() === false) return;
   const sendRows = d.sendRows;
   let keys: string[];
   try {
@@ -189,6 +202,7 @@ export function batchStepPersistence<P extends StepPersistence>(
     ...(opts.store ? { store: opts.store } : {}),
     ...(opts.online ? { online: opts.online } : {}),
     ...(opts.scope ? { scope: opts.scope } : {}),
+    ...(opts.sendPermission ? { sendPermission: opts.sendPermission } : {}),
     send: (chatId, rows, ctx) =>
       base.sendMessages(chatId, withEventKeys(rows, ctx.ids), ctx.scope !== undefined ? { scope: ctx.scope } : undefined),
   });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMemoryOutboxStore, createOnlineSignal } from '@builderforce/write-outbox';
+import { createMemoryOutboxStore, createOnlineSignal, createRevokeGate } from '@builderforce/write-outbox';
 import { batchStepPersistence, installStepDurability, stepDurabilityFor, type StepOutgoingMessage } from './stepOutbox';
 import type { BrainMessage } from './types';
 
@@ -145,6 +145,30 @@ describe('batchStepPersistence', () => {
       online.set(true);
       await vi.advanceTimersByTimeAsync(0);
       expect(sendRows).toHaveBeenCalledWith(3, [expect.objectContaining({ eventKey: 'step:e3' })], undefined);
+    } finally {
+      installStepDurability(null);
+    }
+  });
+
+  it('does not drain a stored queue while send permission is revoked, and drains when it is restored', async () => {
+    const store = createMemoryOutboxStore<StepOutgoingMessage, number>();
+    const sendRows = vi.fn().mockResolvedValue(undefined);
+    const permission = createRevokeGate('revoked');
+    await store.put([{ id: 'e4', key: 4, item: step(4), seq: 4 }]);
+    installStepDurability({
+      storeFor: () => store,
+      storedKeys: () => ['chat:4'],
+      sendRows,
+      sendPermission: permission,
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(sendRows).not.toHaveBeenCalled();
+      expect(await store.load()).toHaveLength(1);
+
+      permission.grant();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(sendRows).toHaveBeenCalledWith(4, [expect.objectContaining({ eventKey: 'step:e4' })], undefined);
     } finally {
       installStepDurability(null);
     }

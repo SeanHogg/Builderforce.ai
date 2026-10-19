@@ -93,8 +93,13 @@ export async function trackReachability(request: Promise<Response>): Promise<Res
 
 /**
  * The administrative send gate every durable outbox reads. Nothing is bound at module
- * load, so a window with no policy bound sends exactly as it did before this gate existed
- * ({@link bindOutboxSendPermission} decides otherwise).
+ * load — and an UNBOUND gate DENIES. A window whose activation never bound a permission
+ * has not been told sends are allowed, so it must not send: fail-open here would make the
+ * ban advisory in exactly the window where it has not been installed, and a durable row
+ * would leave the machine with no permission ever having granted it. {@link
+ * bindOutboxSendPermission} installs the real permission at activation; until it runs
+ * (and again whenever it is cleared with `null`) a send is refused by the outbox with its
+ * existing `platform_send_disabled` error rather than being let through.
  */
 let boundPermission: OutboxSendPermission | null = null;
 const permissionListeners = new Set<(allowed: boolean) => void>();
@@ -103,10 +108,11 @@ let unsubscribeBound: (() => void) | null = null;
 /**
  * The permission every durable outbox is gated by. Deliberately a stable object: outboxes
  * are built at module load, long before activation binds the policy, so each holds this
- * one gate and reads whatever permission is bound at send time.
+ * one gate and reads whatever permission is bound at send time. `isAllowed` is FALSE
+ * while nothing is bound — the fail-closed default above, not a fail-open one.
  */
 export const outboxSendPermission: OutboxSendPermission = {
-  isAllowed: () => boundPermission?.isAllowed() ?? true,
+  isAllowed: () => boundPermission?.isAllowed() ?? false,
   subscribe(listener) {
     permissionListeners.add(listener);
     return () => {
@@ -114,6 +120,15 @@ export const outboxSendPermission: OutboxSendPermission = {
     };
   },
 };
+
+/**
+ * The permission currently bound, or `null` when none is. The owner of a binding uses it
+ * to tell its own binding apart from a later one, so disposing the earlier owner cannot
+ * clear a gate the later one installed.
+ */
+export function boundOutboxSendPermission(): OutboxSendPermission | null {
+  return boundPermission;
+}
 
 /**
  * Install (or clear, with `null`) the permission every durable outbox is gated by. The
@@ -236,5 +251,9 @@ export function durableStepHost(
       guardSend(outboxSendPermission, () => sendRows(chatId, rows, scopeTenantId(scope))),
     online: apiConnectivity,
     scope: () => scopes.workspace,
+    // G12: the queue itself must hear the permission, not only the sender. Without
+    // this, a revoke never reaches the step queue's subscription, so a flush that
+    // is already queued keeps sending after the permission is gone.
+    sendPermission: outboxSendPermission,
   };
 }
