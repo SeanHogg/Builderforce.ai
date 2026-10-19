@@ -56,9 +56,11 @@ import {
 } from '../../application/marketplace/listingCommerce';
 import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
 import {
+  enrolFounderInStageCourse,
   listAcademyCoursesForWorkspace,
   narrowListingsToStageQuery,
 } from '../../application/marketplace/stageCourses';
+import { founderCompanyId, installStagePack } from '../../application/marketplace/stagePacks';
 
 /**
  * What is being sold and from where. Shared by publish and stage because the same
@@ -226,6 +228,38 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
       companyId,
     );
     return c.json(result);
+  });
+
+  /**
+   * Enrol the signed-in founder in one stage-tagged course.
+   * `companyId` defaults to the workspace's newest company.
+   */
+  router.post('/academy/enrol', async (c) => {
+    const body = await parseBody(c, z.object({
+      listingId: zNonEmptyString,
+      companyId: z.number().int().positive().optional(),
+    }));
+    const tenantId = c.get('tenantId') as number;
+    const companyId = body.companyId ?? await founderCompanyId(db, tenantId);
+    if (companyId == null) {
+      return c.json({ ok: false, reason: 'unknown_company', detail: 'no company in this workspace' }, 400);
+    }
+    const result = await enrolFounderInStageCourse(db, {
+      tenantId,
+      companyId,
+      listingId: body.listingId,
+      learnerRef: c.get('userId') as string,
+    });
+    return c.json(result, result.ok ? 200 : 400);
+  });
+
+  /** Copy the founder's stage starter toolkit onto a new board. */
+  router.post('/stage-toolkit/install', async (c) => {
+    const installed = await installStagePack(db, c.env, {
+      tenantId: c.get('tenantId') as number,
+      userId: c.get('userId') as string,
+    });
+    return c.json(installed, 201);
   });
 
   /** Withdraw from the public catalogue. Buyers keep their licences. */

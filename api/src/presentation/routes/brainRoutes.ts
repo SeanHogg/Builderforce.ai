@@ -40,6 +40,7 @@ import { brainChatRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { relayToRoom } from './realtimeRelay';
 import { chatChangedFiles } from '../../application/delta/chatChangedFiles';
 import { limitParam, offsetParam } from './queryParams';
+import { inviteAdvisorToAdvisoryThread } from '../../application/commerce/advisoryReservation';
 import { parseBody, parseOptionalBody } from './requestBody';
 import {
   AgentReplyBody,
@@ -50,6 +51,7 @@ import {
   CreateChatBody,
   FetchUrlBody,
   InviteAgentBody,
+  InviteAdvisorBody,
   InviteMemberBody,
   LinkTicketBody,
   MarkReadBody,
@@ -733,6 +735,22 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       })());
     }
     return c.json(result, 201);
+  });
+
+  // POST /chats/:id/advisor-invite — founder admits the bound advisor to aiContext.
+  router.post('/chats/:id/advisor-invite', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const body = await parseBody(c, InviteAdvisorBody);
+    const result = await inviteAdvisorToAdvisoryThread(
+      db,
+      c.get('tenantId') as number,
+      id,
+      c.get('userId') as string,
+      body.advisorUserId,
+    );
+    if ('error' in result) return c.json({ error: result.error }, 400);
+    return c.json(result);
   });
 
   // DELETE /chats/:id/members/:memberId — remove a human member (owner only).

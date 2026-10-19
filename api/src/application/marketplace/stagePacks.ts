@@ -172,6 +172,17 @@ export async function founderBusinessStage(db: Db, tenantId: number): Promise<Bu
   return isBusinessStage(company?.businessStage) ? company.businessStage : null;
 }
 
+/** Newest company in the workspace. Enrolment needs the id, not only the stage. */
+export async function founderCompanyId(db: Db, tenantId: number): Promise<number | null> {
+  const [company] = await db
+    .select({ id: companies.id })
+    .from(companies)
+    .where(scopedToTenant(companies, tenantId))
+    .orderBy(desc(companies.updatedAt))
+    .limit(1);
+  return company?.id ?? null;
+}
+
 /** The public pack for this stage, or null when nobody has published it yet. */
 export async function findStagePack(
   db: Db,

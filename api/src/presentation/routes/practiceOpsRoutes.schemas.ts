@@ -55,6 +55,17 @@ export const AddHostBody = z.object({
   connectionId: z.number().nullish(),
 });
 
+/** `POST /booking/advisor-relation` — remember a completed session on the signed-in founder. */
+export const AdvisorRelationBody = z.object({
+  reservationId: z.number().nullish(),
+});
+
+/** `POST /booking/advisor-continue` — book the next session with that advisor, as the signed-in founder. */
+export const AdvisorContinueBody = z.object({
+  startsAt: z.string().nullish(),
+  timezone: z.string().nullish(),
+});
+
 /** `POST /booking/reservations` — the handler refuses a missing serviceId/startsAt itself. */
 export const ReserveBody = z.object({
   serviceId: z.number().nullish(),

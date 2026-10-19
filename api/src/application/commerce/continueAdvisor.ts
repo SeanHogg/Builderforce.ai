@@ -17,7 +17,7 @@
  * The column is written with raw SQL. Migration 1241 adds it; the Drizzle
  * `users` declaration is shared with other tickets and is not edited here.
  */
-import { eq, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { bookingReservations } from '../../infrastructure/database/schema';
@@ -205,4 +205,53 @@ export async function continueWithAdvisor(
     tenantId: reused.tenantId,
     session: booked,
   };
+}
+
+const sessionColumns = {
+  id: bookingReservations.id,
+  status: bookingReservations.status,
+  hostRef: bookingReservations.hostRef,
+  serviceId: bookingReservations.serviceId,
+  startsAt: bookingReservations.startsAt,
+  endsAt: bookingReservations.endsAt,
+  meetingUrl: bookingReservations.meetingUrl,
+};
+
+/**
+ * Upcoming sessions the founder booked. Not scoped to the viewer's tenant:
+ * a continued session is written in the advisor's tenant, and filtering on
+ * the founder's tenant would hide the relationship this module exists to show.
+ */
+export async function listFounderAdvisorSessions(
+  db: Db,
+  input: { founderRef: string },
+) {
+  const founderRef = founderRefOf(input.founderRef);
+  return db
+    .select(sessionColumns)
+    .from(bookingReservations)
+    .where(and(
+      eq(bookingReservations.bookerRef, founderRef),
+      gte(bookingReservations.startsAt, new Date()),
+    ))
+    .orderBy(asc(bookingReservations.startsAt))
+    .limit(20);
+}
+
+/** Upcoming sessions this advisor is hosting, in their own tenant. */
+export async function listAdvisorRoster(
+  db: Db,
+  input: { tenantId: number; hostRef: string },
+) {
+  const hostRef = founderRefOf(input.hostRef);
+  return db
+    .select(sessionColumns)
+    .from(bookingReservations)
+    .where(and(
+      eq(bookingReservations.tenantId, input.tenantId),
+      eq(bookingReservations.hostRef, hostRef),
+      gte(bookingReservations.startsAt, new Date()),
+    ))
+    .orderBy(asc(bookingReservations.startsAt))
+    .limit(40);
 }

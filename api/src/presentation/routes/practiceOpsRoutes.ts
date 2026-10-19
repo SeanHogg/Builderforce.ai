@@ -38,6 +38,11 @@ import {
   type ReservationStatus,
 } from '../../application/commerce/bookings';
 import {
+  continueWithAdvisor,
+  listAdvisorRoster,
+  recordAdvisorRelation,
+} from '../../application/commerce/continueAdvisor';
+import {
   addClient,
   branding,
   clientEconomics,
@@ -119,6 +124,8 @@ import {
 import { parseBody } from './requestBody';
 import {
   AddClientBody,
+  AdvisorContinueBody,
+  AdvisorRelationBody,
   AddHostBody,
   ArticleBody,
   ArticleVisibilityBody,
@@ -224,6 +231,36 @@ export function createPracticeOpsRoutes(db: Db): Hono<HonoEnv> {
       db, c.env as Env, tenant(c), await who(c),
       rowId(c.req.param('id')), String(body.status ?? '') as ReservationStatus,
     ));
+  });
+
+  router.get('/booking/advisor-roster', async (c) =>
+    Response.json({
+      sessions: await listAdvisorRoster(db, {
+        tenantId: tenant(c),
+        hostRef: c.get('userId') as string,
+      }),
+    }));
+
+  router.post('/booking/advisor-relation', async (c) => {
+    const body = await parseBody(c, AdvisorRelationBody);
+    const reservationId = body.reservationId;
+    if (reservationId == null) throw new BookingError('reservationId is required', 400);
+    return Response.json(await recordAdvisorRelation(db, {
+      // The signed-in founder only. A body field would let one user write another's relation.
+      founderRef: c.get('userId') as string,
+      reservationId,
+    }), { status: 201 });
+  });
+
+  router.post('/booking/advisor-continue', async (c) => {
+    const body = await parseBody(c, AdvisorContinueBody);
+    const startsAt = whenOrUndefined(body.startsAt);
+    if (!startsAt) throw new BookingError('startsAt is required', 400);
+    return Response.json(await continueWithAdvisor(db, c.env as Env, await who(c), {
+      founderRef: c.get('userId') as string,
+      startsAt,
+      ...(body.timezone != null ? { timezone: body.timezone } : {}),
+    }), { status: 201 });
   });
 
   // ── Agency ────────────────────────────────────────────────────────────────

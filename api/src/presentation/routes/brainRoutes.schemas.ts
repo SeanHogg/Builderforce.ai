@@ -10,7 +10,7 @@
  * value is a 400 naming the field, where it used to reach `.trim()` / `.map()` /
  * `.role` and die as a 500.
  */
-import { z, zNumberLike, zOptionalString } from './requestBody';
+import { z, zNonEmptyString, zNumberLike, zOptionalString } from './requestBody';
 import type { AppendMessagesDto } from '../../application/brain/BrainService';
 
 const isObjectLike = (value: unknown): boolean => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -100,6 +100,14 @@ export const InviteAgentBody = z.object({
 
 /** POST /chats/:id/members. */
 export const InviteMemberBody = z.object({ email: z.string().nullish() });
+
+/**
+ * POST /chats/:id/advisor-invite — the founder admitting their advisor to an
+ * advisory thread. `advisorUserId` is the bound `host_ref`; the application
+ * layer refuses anyone else, so the route does not resolve an email to a user
+ * the way the open-member invite does.
+ */
+export const InviteAdvisorBody = z.object({ advisorUserId: zNonEmptyString.max(64) });
 
 /** POST /chats/:id/agent-reply. `agentReply` reads `agentName?.trim() || 'the agent'`. */
 export const AgentReplyBody = z.object({
