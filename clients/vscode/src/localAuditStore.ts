@@ -15,8 +15,8 @@
  *     ticket and a later cloud remediation for the same finding converge on one record.
  *   • A run the host never finished is recovered as `interrupted`, never silently
  *     completed or re-run (G22); re-running is an explicit new run.
- *   • A scheduled-but-never-dispatched audit (the close-audit intent, G08) is a durable
- *     `queued` job bound to its destination, waiting for explicit dispatch.
+ *   • Closing an audit (G08) is a local completion: `closedLocally` is durable, the
+ *     session is not re-executed, and close never becomes a cloud launch.
  */
 
 import {
@@ -80,6 +80,8 @@ export interface LocalAuditRunValue {
   error?: string;
   /** Recovery marker: what a restart may safely do with an interrupted run. */
   checkpoint?: { safeToResume: boolean; note?: string };
+  /** Close recorded a local completion. A later activation must not launch cloud work for it. */
+  closedLocally?: boolean;
 }
 
 export interface LocalRemediationValue {
@@ -368,6 +370,95 @@ export async function saveLocalAuditFindings(
     });
     return { runId: args.runId, completed: true as const, findings, errors, remediationIds };
   });
+}
+
+const CLOSED_LOCALLY_NOTE = "Closed locally. A cloud audit was not launched.";
+
+/**
+ * G08: closing an audit is a local completion. Persists `closedLocally` and does not
+ * start a host run or a cloud audit. An existing session is stamped, not re-executed.
+ * A close with no session is recorded completed locally so a later activation cannot
+ * turn the same request id into a cloud launch.
+ */
+export async function closeLocalAuditRun(
+  store: LocalFirstStore,
+  deps: StoreDeps,
+  args: {
+    auditId: string;
+    projectId?: number;
+    runId: string;
+    source?: Record<string, unknown>;
+  },
+): Promise<{ runId: string; closedLocally: true }> {
+  const at = (deps.now?.() ?? new Date()).toISOString();
+  const existing = await store.read((tx) => tx.get<LocalAuditRunValue>("audit-run", args.runId));
+  if (existing?.payload.closedLocally) return { runId: args.runId, closedLocally: true };
+
+  if (!existing) {
+    const definition = await loadLocalAuditDefinition(store, args.auditId) ?? getLocalAuditDefinition(args.auditId);
+    if (!definition) throw new Error(`unknown_audit:${args.auditId}`);
+    const briefing = buildLocalAuditBriefing(definition, { runId: args.runId, projectId: args.projectId, source: args.source });
+    const record = newLocalRecord<LocalAuditRunValue>({
+      id: args.runId,
+      entityType: "audit-run",
+      deviceId: deps.deviceId,
+      destination: auditDestination(args.projectId),
+      occurredAt: at,
+      schemaVersion: LOCAL_AUDIT_SCHEMA_VERSION,
+      payload: {
+        auditId: definition.id,
+        auditVersion: definition.version,
+        auditName: definition.name,
+        ...(args.projectId != null ? { projectId: args.projectId } : {}),
+        status: "completed",
+        trigger: "close",
+        briefing,
+        ...(args.source ? { source: args.source } : {}),
+        findingsCount: 0,
+        remediationIds: [],
+        closedLocally: true,
+        checkpoint: { safeToResume: false, note: CLOSED_LOCALLY_NOTE },
+      },
+    });
+    record.provenance = { ...record.provenance, auditVersion: String(definition.version), deviceId: deps.deviceId, source: "local" };
+    await persistRun(store, record, "create", `audit-run:close:${args.runId}`);
+    return { runId: args.runId, closedLocally: true };
+  }
+
+  await store.transact(async (tx) => {
+    const run = await tx.get<LocalAuditRunValue>("audit-run", args.runId);
+    if (!run || run.payload.closedLocally) return;
+    const finished = run.payload.status === "completed";
+    const status = finished ? "completed" : "interrupted";
+    await tx.put<LocalAuditRunValue>(
+      {
+        ...run,
+        version: run.version + 1,
+        updatedAt: at,
+        payload: {
+          ...run.payload,
+          status,
+          closedLocally: true,
+          checkpoint: finished
+            ? (run.payload.checkpoint ?? { safeToResume: false, note: CLOSED_LOCALLY_NOTE })
+            : { safeToResume: false, note: CLOSED_LOCALLY_NOTE },
+        },
+      },
+      run.version,
+    );
+    await tx.append({
+      eventId: `audit-run:close:${args.runId}:${at}`,
+      clientEntityId: args.runId,
+      entityType: "audit-run",
+      operation: "update",
+      schemaVersion: run.schemaVersion,
+      occurredAt: at,
+      dependsOn: [],
+      destination: run.destination,
+      payload: { status, closedLocally: true },
+    });
+  });
+  return { runId: args.runId, closedLocally: true };
 }
 
 /** Mark a run failed/interrupted with a checkpoint. Recovery markers never auto-replay. */

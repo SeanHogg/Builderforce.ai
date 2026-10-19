@@ -10,6 +10,7 @@ import { findRepository, getGitApi } from './gitApi';
 import { localBrainApplication } from './localFirstStore';
 import { platformPolicy } from './platformPolicy';
 import {
+  closeLocalAuditRun,
   ensureLocalAuditDefinitions,
   ensureLocalAuditDeviceId,
   getLocalAuditRun,
@@ -36,7 +37,7 @@ function evidenceDetail(evidence: unknown): string {
   return typeof detail === 'string' ? detail : '';
 }
 
-/** Close intent is durable before shutdown. Interrupted submissions retry at next activation. */
+/** Close intent is durable before shutdown. Closing marks the audit closed locally and never launches a cloud audit. */
 export class AuditExecution implements vscode.Disposable {
   private subscriptions: vscode.Disposable[] = [];
   private started = false;
@@ -81,8 +82,7 @@ export class AuditExecution implements vscode.Disposable {
   async flushClose(): Promise<void> {
     const pending = this.ctx.workspaceState.get<CloseIntent[]>(CLOSE_KEY, []);
     for (const intent of pending) {
-      if (cloudAuditDenied()) await this.queueLocalClose(intent);
-      else await startSystemAudit(this.ctx.secrets, intent.auditId, intent.projectId, 'cloud', 'close', intent.requestId);
+      await this.closeLocally(intent);
       const remaining = this.ctx.workspaceState.get<CloseIntent[]>(CLOSE_KEY, []).filter((r) => r.requestId !== intent.requestId);
       await this.ctx.workspaceState.update(CLOSE_KEY, remaining);
     }
@@ -146,16 +146,13 @@ export class AuditExecution implements vscode.Disposable {
     await recoverInterruptedAuditRuns(store, { deviceId });
   }
 
-  /** Close intent is a queued local session when cloud audit is denied — not a launched run, and not a server session. */
-  private async queueLocalClose(intent: CloseIntent): Promise<void> {
+  /** Closing an audit is a local completion. It never calls startSystemAudit or starts a host run. */
+  private async closeLocally(intent: CloseIntent): Promise<void> {
     const { store, deviceId } = await this.localAuditContext();
-    if (await getLocalAuditRun(store, intent.requestId)) return;
-    await startLocalAuditRun(store, { deviceId }, {
+    await closeLocalAuditRun(store, { deviceId }, {
       auditId: intent.auditId,
       projectId: intent.projectId,
-      trigger: 'close',
       runId: intent.requestId,
-      status: 'queued',
       source: await this.auditSource('close'),
     });
   }

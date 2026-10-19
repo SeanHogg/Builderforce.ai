@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as vscode from 'vscode';
 import { createMemoryLocalFirstStore, type LocalFirstStore } from '@builderforce/local-first';
 const state = vi.hoisted(() => ({ config: {} as Record<string, unknown>, stored: new Map<string, unknown>(), trusted: true }));
 const local = vi.hoisted(() => ({
@@ -75,27 +76,47 @@ describe('audit lifecycle triggers', () => {
     expect(startSystemAudit).not.toHaveBeenCalled();
     execution.dispose();
   });
-  it('durably arms close work and submits the same request id during shutdown', async () => {
+  it('durably arms close work and marks the same request id closed locally', async () => {
     state.config = { atClose: true, selected: ['quality-audit'] };
     const execution = new AuditExecution(ctx as never, host() as never);
     await vi.waitFor(() => expect(state.stored.get(closeKey)).toHaveLength(1));
     const intent = (state.stored.get(closeKey) as Array<{ requestId: string }>)[0]!;
     expect(startSystemAudit).not.toHaveBeenCalled();
     await execution.flushClose();
-    expect(startSystemAudit).toHaveBeenCalledWith(ctx.secrets, 'quality-audit', 7, 'cloud', 'close', intent.requestId);
+    expect(startSystemAudit).not.toHaveBeenCalled();
+    expect(createBrainChat).not.toHaveBeenCalled();
+    expect((await getLocalAuditRun(local.store!, intent.requestId))?.record.payload).toMatchObject({
+      closedLocally: true, trigger: 'close', status: 'completed',
+    });
     expect(state.stored.get(closeKey)).toEqual([]);
     execution.dispose();
   });
-  it('retains interrupted close work for a later retry', async () => {
+  it('retains a close that failed to persist and retries the same request locally', async () => {
     const intent = { projectId: 7, auditId: 'quality-audit', requestId: 'request' };
     state.stored.set(closeKey, [intent]);
-    vi.mocked(startSystemAudit).mockRejectedValueOnce(new Error('offline'));
+    const store = local.store!;
+    const transact = store.transact.bind(store);
+    let failures = 0;
+    store.transact = (async (fn: Parameters<typeof store.transact>[0]) => {
+      if (failures === 0) {
+        failures += 1;
+        throw new Error('offline');
+      }
+      return transact(fn);
+    }) as typeof store.transact;
+    vi.mocked(vscode.window.showErrorMessage).mockClear();
     const execution = new AuditExecution(ctx as never, host() as never);
-    await vi.waitFor(() => expect(startSystemAudit).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(failures).toBe(1));
+    await vi.waitFor(() => expect(vscode.window.showErrorMessage).toHaveBeenCalled());
     expect(state.stored.get(closeKey)).toEqual([intent]);
+    expect(startSystemAudit).not.toHaveBeenCalled();
     await execution.flushClose();
+    expect(startSystemAudit).not.toHaveBeenCalled();
+    expect(createBrainChat).not.toHaveBeenCalled();
     expect(state.stored.get(closeKey)).toEqual([]);
-    expect(vi.mocked(startSystemAudit).mock.calls[1]?.[5]).toBe('request');
+    expect((await getLocalAuditRun(store, 'request'))?.record.payload).toMatchObject({
+      closedLocally: true, trigger: 'close', status: 'completed',
+    });
     execution.dispose();
   });
   it('does not arm automatic work in an untrusted workspace', async () => {
@@ -230,8 +251,33 @@ describe('audit lifecycle triggers', () => {
     expect(startSystemAudit).not.toHaveBeenCalled();
     expect(createBrainChat).not.toHaveBeenCalled();
     expect(runHost.start).not.toHaveBeenCalled();
-    expect((await getLocalAuditRun(store, intent.requestId))?.record.payload).toMatchObject({ status: 'queued', trigger: 'close' });
+    expect((await getLocalAuditRun(store, intent.requestId))?.record.payload).toMatchObject({
+      status: 'completed', trigger: 'close', closedLocally: true,
+    });
     expect(state.stored.get(closeKey)).toEqual([]);
+    execution.dispose();
+  });
+  it('marks a close audit closed locally and does not launch a cloud audit', async () => {
+    local.allowCloud = true;
+    state.config = { atClose: true, selected: ['quality-audit'] };
+    const store = local.store!;
+    const runHost = host();
+    const execution = new AuditExecution(ctx as never, runHost as never);
+    await vi.waitFor(() => expect(state.stored.get(closeKey)).toHaveLength(1));
+    const intent = (state.stored.get(closeKey) as Array<{ requestId: string }>)[0]!;
+    await execution.flushClose();
+    expect(startSystemAudit).not.toHaveBeenCalled();
+    expect(createBrainChat).not.toHaveBeenCalled();
+    expect(runHost.start).not.toHaveBeenCalled();
+    const saved = await getLocalAuditRun(store, intent.requestId);
+    expect(saved?.record.payload).toMatchObject({
+      status: 'completed', trigger: 'close', closedLocally: true, auditId: 'quality-audit', projectId: 7,
+    });
+    expect(saved?.record.payload.checkpoint).toMatchObject({ safeToResume: false });
+    expect(state.stored.get(closeKey)).toEqual([]);
+    await execution.flushClose();
+    expect(startSystemAudit).not.toHaveBeenCalled();
+    expect(runHost.start).not.toHaveBeenCalled();
     execution.dispose();
   });
   it('does not launch a close audit that was already imported', async () => {
