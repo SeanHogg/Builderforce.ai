@@ -7,8 +7,10 @@ import {
   createBoundRecord,
   createDestinationBoundRecord,
   bindingSnapshot,
+  destinationRebindCode,
   DESTINATION_CREATION_KINDS,
   UNBOUND_DESTINATION_CODE,
+  type DestinationBindingCode,
   type DestinationCreationKind,
 } from './destinationBinding.js';
 import { UNBOUND_DESTINATION, destinationKey, type EntityDestination, type LocalEntityType } from './records.js';
@@ -32,6 +34,19 @@ const created = (entityType: LocalEntityType = 'ticket', destination?: EntityDes
     schemaVersion: 1,
     ...(destination ? { destination: destination as EntityDestination } : {}),
   });
+
+/**
+ * A create input whose destination is supplied by the caller, so a proposal
+ * can be aimed at the same neutral record each time.
+ */
+const NEUTRAL_CREATE = {
+  id: 'ticket-neutral',
+  entityType: 'ticket' as LocalEntityType,
+  payload: { title: 'Offline' },
+  deviceId: 'device-a',
+  occurredAt: AT,
+  schemaVersion: 1,
+};
 
 const KIND_ENTITY: Record<DestinationCreationKind, LocalEntityType> = {
   project: 'project',
@@ -289,6 +304,72 @@ describe('destination binding', () => {
 
     const source = readFileSync(fileURLToPath(new URL('./destinationBinding.ts', import.meta.url)), 'utf8');
     expect(source).not.toMatch(/from ['"]vscode['"]|localStorage|sessionStorage|getConfiguration|selectedTenant/);
+  });
+
+  it('refuses a second destination that arrives after binding, on every bound path', () => {
+    // Both paths a caller can use to move an already-bound record: the
+    // explicit assignment and the generic binder. A second destination must be
+    // refused by each. (Creation is not one of them — a new record is a new
+    // entity and is stamped at creation, which is not a second destination.)
+    const attempts: Array<{ label: string; propose: (destination: Record<string, unknown>) => unknown }> = [
+      { label: 'assignDestination', propose: (destination) => assignDestination(created('ticket', OWNED), destination) },
+      {
+        label: 'bindLocalRecord',
+        propose: (destination) => bindLocalRecord({ existing: created('ticket', OWNED), destination }),
+      },
+    ];
+
+    // A different tenant, a different account, a different project, a
+    // different repository, and a different platform instance are each a
+    // second destination and each is refused.
+    const seconds: Array<[string, Record<string, unknown>, DestinationBindingCode]> = [
+      ['tenant', { ...OWNED, tenantId: 'tenant-b' }, 'destination_tenant_mismatch'],
+      ['account', { ...OWNED, accountId: 'account-b' }, 'destination_account_mismatch'],
+      ['project', { ...OWNED, projectId: 'project-b' }, 'destination_rebind_refused'],
+      ['repository', { ...OWNED, repository: 'org/other' }, 'destination_rebind_refused'],
+      ['platform instance', { ...OWNED, platformInstance: 'https://other.example' }, 'destination_rebind_refused'],
+    ];
+
+    for (const { label, propose } of attempts) {
+      for (const [field, second, code] of seconds) {
+        const error = refusal(() => propose(second));
+        expect(error?.code, `${label} accepted a second ${field}`).toBe(code);
+      }
+    }
+  });
+
+  it('refuses a second destination padded with whitespace and never leaves the first', () => {
+    const ticket = created('ticket', OWNED);
+    const chat = created('chat', OWNED);
+    // A padded tenant is still tenant-b, not a new tenant.
+    expect(destinationRebindCode(ticket.destination, bindingSnapshot({ ...OWNED, tenantId: '  tenant-b  ' }))).toBe(
+      'destination_tenant_mismatch',
+    );
+    // A blank tenant is not the same tenant either: it trims away to no tenant,
+    // which loses the stored one, so it is refused as a mismatch rather than
+    // accepted as the identical destination.
+    expect(destinationRebindCode(ticket.destination, bindingSnapshot({ ...OWNED, tenantId: '   ' }))).toBe(
+      'destination_tenant_mismatch',
+    );
+    expect(() => assignDestination(ticket, { ...OWNED, tenantId: '  tenant-b  ' })).toThrow(
+      'destination_tenant_mismatch',
+    );
+    expect(() => bindLocalRecord({ existing: chat, destination: { ...OWNED, accountId: '  account-b  ' } })).toThrow(
+      'destination_account_mismatch',
+    );
+    // An unbound proposal is not a second destination; it is a loss of one.
+    expect(destinationRebindCode(ticket.destination, UNBOUND_DESTINATION)).toBe('destination_tenant_mismatch');
+    expect(() => assignDestination(chat, UNBOUND_DESTINATION)).toThrow('destination_tenant_mismatch');
+    // Creating is the one path that stamps a destination without comparing:
+    // a new record gets the destination given at creation, once.
+    const fresh = createBoundRecord({ ...NEUTRAL_CREATE, destination: OWNED });
+    expect(fresh.destination).toEqual({ kind: 'bound', ...OWNED });
+    expect(destinationRebindCode(ticket.destination, fresh.destination)).toBeNull();
+    // The first destination survives every refusal, unmutated and frozen.
+    expect(ticket.destination).toEqual({ kind: 'bound', ...OWNED });
+    expect(chat.destination).toEqual({ kind: 'bound', ...OWNED });
+    expect(Object.isFrozen(ticket.destination)).toBe(true);
+    expect(Object.isFrozen(chat.destination)).toBe(true);
   });
 
   it('requires a record when neither creating nor updating', () => {
