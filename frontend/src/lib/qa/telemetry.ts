@@ -17,7 +17,7 @@
  */
 
 import { deriveSelector, redactInput } from '@builderforce/interaction-contract';
-import { createOutbox } from '@builderforce/write-outbox';
+import { classifyQueue, createOutbox, isDurableUserWorkQueue, isTelemetryQueue } from '@builderforce/write-outbox';
 import { getApiBaseUrl, getAuthHeaders, apiRequestStream } from '../apiClient';
 import { AMBIENT_REQUEST_ERRORS } from '../errors/transportFailure';
 
@@ -39,6 +39,14 @@ export interface QaCaptureEvent {
 const FLUSH_INTERVAL_MS = 5000;
 const MAX_QUEUE = 50;
 const SESSION_KEY = 'bf_qa_session_id';
+const QA_CAPTURE = 'qa-capture';
+/** Named telemetry stays best-effort. Only durable user work would stamp history. */
+const qaCaptureWork =
+  isTelemetryQueue(QA_CAPTURE) && !isDurableUserWorkQueue(QA_CAPTURE)
+    ? 'telemetry'
+    : classifyQueue(QA_CAPTURE)?.retention === 'durable'
+      ? 'history'
+      : 'telemetry';
 
 function isEnabled(): boolean {
   return process.env.NEXT_PUBLIC_QA_CAPTURE === '1';
@@ -93,6 +101,7 @@ class QaCapture {
    * every {@link FLUSH_INTERVAL_MS}, in order; a failure is dropped (best-effort).
    */
   private outbox = createOutbox<QaCaptureEvent, QaProject>({
+    work: qaCaptureWork,
     maxItems: MAX_QUEUE,
     maxWaitMs: FLUSH_INTERVAL_MS,
     send: (projectId, events, ctx) => sendQaBatch(projectId, events, ctx.final),

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 
+import { classifyQueue, isDurableUserWorkQueue, isTelemetryQueue } from "@builderforce/write-outbox";
 import { authedRaw } from "./bfApi";
 import { createDurableOutbox, outboxSecrets, scopeTenantId } from "./outboxStorage";
 import { getSelectedProject } from "./projectState";
@@ -26,9 +27,11 @@ import { getSelectedProject } from "./projectState";
  * module can log without being handed one, and so that "log it" and "file it" can
  * never drift apart.
  *
- * Filing goes through the durable write outbox: a report raised while offline (often
- * BECAUSE the editor is offline) is kept and filed once the platform answers again,
- * under its own `Idempotency-Key`, so a replay never files the same error twice. This
+ * Filing is best-effort telemetry (`error-reports`), not retained user work. A failed
+ * send is dropped, not retried until acknowledged, and a permanent refusal is not a
+ * dead letter. A report raised while offline (often BECAUSE the editor is offline)
+ * is still sent once the platform answers — that wait is not a failed send — under
+ * its own `Idempotency-Key`, so a replay never files the same error twice. This
  * is the same door — `POST /api/quality-ingest/client-report` — every signed-in client
  * (agent-runtime, the browser extension) reports through.
  */
@@ -96,11 +99,24 @@ interface ClientErrorEvent {
 const laneOf = (projectId: number | null): string => (projectId == null ? "" : String(projectId));
 
 /**
- * Queued reports, one lane per destination project, filed in batches. A 5xx or no answer
- * is retried; 422 (no destination project) and 429 (the workspace hit its monthly event
- * cap) are settled outcomes the user can act on, so they are logged and NOT retried.
+ * Queued reports, one lane per destination project, filed in batches. A failed send
+ * (5xx, 401, or no answer) is dropped, not retried until acknowledged. 422 (no
+ * destination project) and 429 (the workspace hit its monthly event cap) are settled
+ * outcomes the user can act on, so they are logged and the batch is acknowledged.
  */
+const ERROR_REPORTS = "error-reports";
+/** Named telemetry stays best-effort. Only durable user work may retain a refusal. */
+const errorReportsAreTelemetry = isTelemetryQueue(ERROR_REPORTS) && !isDurableUserWorkQueue(ERROR_REPORTS);
+
 const reports = createDurableOutbox<ClientErrorEvent>("error-reports", {
+  // Telemetry. classifyQueue("error-reports") is best-effort; only a durable
+  // classification would stamp the history kind.
+  work: classifyQueue("error-reports")?.retention === "durable" ? "history" : "telemetry",
+  // Classifier says drop-on-failure. Omitting this would install retry-until-ack.
+  // Kind helpers force the drop when the name is telemetry, so a table drift cannot retain it.
+  onFailure: errorReportsAreTelemetry
+    ? "drop-on-failure"
+    : classifyQueue("error-reports")?.onFailure === "retain-until-acked" ? "retain-until-acked" : "drop-on-failure",
   // The door takes at most 20 events a request (`MAX_CLIENT_REPORT_EVENTS`).
   maxItems: 20,
   maxWaitMs: 2_000,
@@ -120,7 +136,7 @@ const reports = createDurableOutbox<ClientErrorEvent>("error-reports", {
       logLine(`  (report not filed: HTTP ${result.status}${result.body?.error ? ` ${result.body.error}` : ""})`);
     }
   },
-  onError: (error) => logLine(`  (report not filed yet, will retry: ${String(error)})`),
+  onError: (error) => logLine(`  (report dropped after a failed send: ${String(error)})`),
 });
 
 /**
