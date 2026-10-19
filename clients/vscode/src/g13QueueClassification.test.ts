@@ -110,12 +110,15 @@ describe("G13 — a refused durable row is kept, a refused telemetry row is drop
   });
 
   it("keeps an unstamped unknown name retrying rather than guessing a retention", async () => {
-    // `activity` and `run-outcomes` are deliberately unnamed by the table. A queue built
-    // without a work stamp must fall back to the outbox's own mode, NOT be guessed at.
+    // `activity` and `run-outcomes` are DELIBERATELY unnamed by the table (recorded, with
+    // per-name reasons, in `UNCLASSIFIED_USER_WORK_QUEUES`) — not merely forgotten. Both
+    // carry user work, so the unclassified path must still land on the durable default
+    // rather than being guessed at as telemetry.
     expect(classifyQueue("activity")).toBeUndefined();
     expect(classifyQueue("run-outcomes")).toBeUndefined();
 
     host();
+    // No stamp AND an unknown name: the retention is whatever the outbox's own mode says.
     const outbox = createDurableOutbox<{ n: number }>("g13-unknown", {
       maxItems: 10,
       maxWaitMs: 60_000,
@@ -128,6 +131,25 @@ describe("G13 — a refused durable row is kept, a refused telemetry row is drop
     // No stamp → no classification → the durable default retains the row.
     expect(outbox.exportDeadLetters()).toHaveLength(1);
     expect(outbox.size()).toBe(1);
+
+    // The three deliberately-unclassified names are user work that must NOT be lost if the
+    // mode fallback they rely on ever changes. Today they resolve to durable only because
+    // `createDurableOutbox` is durable; this asserts that so a regression in the fallback
+    // is caught here rather than by a user finding their activity or run outcomes gone.
+    for (const name of ["activity", "run-outcomes", "host-persist"] as const) {
+      expect(classifyQueue(name)).toBeUndefined();
+      host();
+      const named = createDurableOutbox<{ n: number }>(name, {
+        maxItems: 10,
+        maxWaitMs: 60_000,
+        send: refused,
+      });
+      await named.ready();
+      named.enqueue("lane", { n: 1 });
+      await named.flush();
+      expect(named.exportDeadLetters(), `${name} carries user work and must be retained`).toHaveLength(1);
+      expect(named.size()).toBe(1);
+    }
   });
 });
 

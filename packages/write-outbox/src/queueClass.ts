@@ -12,9 +12,28 @@
  *   QA capture, visitor journey, session replay, tool audit, usage snapshot,
  *   file-change telemetry, remote chunks.
  *
- * Still unclassified, on purpose: `activity` (the editor bills it; the portal
- * drops it), `run-outcomes` (offline teaching, not history and not telemetry),
- * and `host-persist` (one queue mixes chat messages with host telemetry).
+ * Deliberately UNCLASSIFIED names — recorded in UNCLASSIFIED_USER_WORK_QUEUES
+ * below rather than left as an omission. That registry carries the per-name
+ * reason; the short version is that all three carry user work today, so the
+ * durable-mode fallback in `createOutbox`'s `resolveRetention` is currently the
+ * right answer — but it is right BY FALLBACK, not by decision:
+ *   - `activity` — the editor bills it; the portal is free to drop it. The two
+ *     consumers disagree about whether losing a row matters, so this table
+ *     refuses to overrule either one on their behalf.
+ *   - `run-outcomes` — offline teaching for learned routing. Neither chat
+ *     history nor telemetry, so neither column describes it, and a canonical
+ *     queue id is not free to claim: only the VS Code client builds this queue.
+ *   - `host-persist` — one queue mixes chat messages with host telemetry, so a
+ *     single retention is wrong for part of its payload on EVERY delivery, not
+ *     only on failure. Splitting the queue or stamping per entry is its owner's
+ *     call, not a table row's.
+ *
+ * An explicit table entry for any of them takes more than a new row: these
+ * names are asserted UNCLASSIFIED by committed tests outside this file
+ * (packages/write-outbox/src/classifyQueue.test.ts and
+ * clients/vscode/src/errorReporter.test.ts) that this slice does not own, so
+ * adding one would break `npx vitest run` in both packages rather than record a
+ * decision. Reconcile those first.
  *
  * Live constructors this table does not rewrite (off-limits):
  *   - clients/vscode/src/outboxStorage.ts createDurableOutbox
@@ -54,6 +73,41 @@ export const USER_WORK_QUEUES = [
 
 export type UserWorkQueue = (typeof USER_WORK_QUEUES)[number];
 
+/**
+ * Live queue names that carry user work but stay unclassified on purpose.
+ *
+ * Each carries the work it protects and the reason it has no row in
+ * USER_WORK_QUEUES, so the decision is recorded rather than inferred from an
+ * entry's absence. `classifyUserWorkQueue` returns undefined for all of them by
+ * design: the durable-mode fallback in `createOutbox` is the correct retention
+ * for each one today, and a caller can verify that instead of assuming it.
+ *
+ * Read-only at runtime (frozen): this is a record, not a hook.
+ */
+export const UNCLASSIFIED_USER_WORK_QUEUES: Readonly<
+  Record<string, { carries: string; reason: string }>
+> = Object.freeze({
+  activity: {
+    carries: "user work",
+    reason:
+      "The editor bills an activity row and the portal drops it. Whether losing one " +
+      "matters is the two consumers' call, so the table does not decide it for them.",
+  },
+  "run-outcomes": {
+    carries: "user work",
+    reason:
+      "Offline teaching for learned routing: not chat history and not telemetry, so " +
+      "neither column describes it, and the queue is built only by the VS Code client.",
+  },
+  "host-persist": {
+    carries: "user work (mixed with host telemetry)",
+    reason:
+      "One queue mixes chat messages with host telemetry, so a single retention is wrong " +
+      "for part of the payload on every delivery. Splitting the queue or stamping per " +
+      "entry belongs to the queue's owner, not to a row in this table.",
+  },
+});
+
 /** What a failed send does. Paired with retention and never chosen independently. */
 export type QueueFailurePolicy = "retain-until-acked" | "drop-on-failure";
 
@@ -88,7 +142,10 @@ const CLASS_BY_QUEUE: Readonly<Record<UserWorkQueue, QueueClassification>> = {
 
 /**
  * Names a live constructor already uses, mapped onto a canonical queue.
- * `activity`, `run-outcomes`, and `host-persist` are not here.
+ *
+ * `activity`, `run-outcomes`, and `host-persist` are deliberately absent — see
+ * UNCLASSIFIED_USER_WORK_QUEUES at the top of this file for why each one is left
+ * unclassified instead of given a row.
  */
 const ALIAS_TO_QUEUE: Readonly<Record<string, UserWorkQueue>> = {
   "audit-close": "audit-close",

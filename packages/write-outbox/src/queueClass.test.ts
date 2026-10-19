@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { classifyUserWorkQueue, retentionForQueue, USER_WORK_QUEUES } from "./queueClass.js";
+import {
+  classifyUserWorkQueue,
+  retentionForQueue,
+  UNCLASSIFIED_USER_WORK_QUEUES,
+  USER_WORK_QUEUES,
+} from "./queueClass.js";
 
 describe("classifyUserWorkQueue", () => {
   it("retains user work until acknowledged", () => {
@@ -69,10 +74,41 @@ describe("classifyUserWorkQueue", () => {
     expect(classifyUserWorkQueue("builderforce-outbox:rovr-errors")?.queue).toBe("diagnostics-telemetry");
   });
 
-  it("does not guess a queue this table does not own", () => {
-    expect(classifyUserWorkQueue("activity")).toBeUndefined();
-    expect(classifyUserWorkQueue("run-outcomes")).toBeUndefined();
+  it("leaves host-persist unclassified on purpose and records the reason", () => {
+    // Deliberate, not an omission: host-persist mixes chat messages with host telemetry,
+    // so a single retention is wrong for part of its payload on EVERY delivery, not only
+    // on failure. `classifyUserWorkQueue` must not be the thing that guesses.
     expect(classifyUserWorkQueue("host-persist")).toBeUndefined();
+    expect(UNCLASSIFIED_USER_WORK_QUEUES["host-persist"]).toBeDefined();
+    expect(UNCLASSIFIED_USER_WORK_QUEUES["host-persist"]?.carries).toContain("user work");
+    expect(UNCLASSIFIED_USER_WORK_QUEUES["host-persist"]?.reason).toMatch(/mixes chat messages/i);
+  });
+
+  it("records activity and run-outcomes as deliberate unclassified user work", () => {
+    // Both stay out of USER_WORK_QUEUES: `activity` is billed by the editor and dropped by
+    // the portal, and `run-outcomes` is offline teaching that is neither history nor
+    // telemetry. The registry records that decision; the classifier must not act on it.
+    for (const name of ["activity", "run-outcomes"] as const) {
+      expect(classifyUserWorkQueue(name)).toBeUndefined();
+      const recorded = UNCLASSIFIED_USER_WORK_QUEUES[name];
+      expect(recorded, `${name} must be recorded as a deliberate omission`).toBeDefined();
+      expect(recorded?.carries).toContain("user work");
+      expect(recorded?.reason.length ?? 0).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps the deliberate-omission registry and the table from drifting apart", () => {
+    // The registry and the table must not drift: anything the doc comment lists as
+    // deliberately unclassified has to carry a reason, and vice versa.
+    const registered = Object.keys(UNCLASSIFIED_USER_WORK_QUEUES).sort();
+    expect(registered).toEqual(["activity", "host-persist", "run-outcomes"]);
+    for (const name of registered) {
+      expect(USER_WORK_QUEUES).not.toContain(name);
+      expect(classifyUserWorkQueue(name)).toBeUndefined();
+    }
+  });
+
+  it("does not guess a queue this table does not own", () => {
     expect(classifyUserWorkQueue("history")).toBeUndefined();
     expect(classifyUserWorkQueue("")).toBeUndefined();
     expect(classifyUserWorkQueue("   ")).toBeUndefined();
