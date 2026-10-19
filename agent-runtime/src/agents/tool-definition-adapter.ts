@@ -11,6 +11,7 @@ import {
   runBeforeToolCallHook,
 } from "./coding-tools.before-tool-call.js";
 import { normalizeToolName } from "./tool-policy.js";
+import { executeWithTransientToolRetry } from "./tool-retry.js";
 import { jsonResult } from "./tools/common.js";
 
 type AnyAgentTool = AgentTool;
@@ -124,7 +125,15 @@ export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
             }
             executeParams = hookOutcome.params;
           }
-          const result = await tool.execute(toolCallId, executeParams, signal, onUpdate);
+          // A rate-limited / transient failure is absorbed here, INSIDE the single
+          // `execute` invocation, so the before-tool-call hook, the after-tool-call hook
+          // and the consecutive-failure guard upstream each see exactly one call with one
+          // final outcome. A 429 that recovers is simply never surfaced to the model; a
+          // 400 still fails on the first attempt with zero retries.
+          const result = await executeWithTransientToolRetry(
+            () => tool.execute(toolCallId, executeParams, signal, onUpdate),
+            { label: normalizedName, signal },
+          );
           const afterParams = beforeHookWrapped
             ? (consumeAdjustedParamsForToolCall(toolCallId) ?? executeParams)
             : executeParams;
