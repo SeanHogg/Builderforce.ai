@@ -7,10 +7,10 @@
  */
 
 import * as vscode from "vscode";
-import { attachEvermindLearn, type BrainMessage, type BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
+import { isRunning, type BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
-import { fetchRunContextSection, postBrainMessages, projectEvermindHooks } from "./bfApi";
-import { scopeTenantId } from "./outboxStorage";
+import { fetchRunContextSection, projectEvermindHooks } from "./bfApi";
+import { localBrainApplication } from "./localFirstStore";
 import { auditToolCatalog } from "./auditToolCatalog";
 import { brainToolCatalog } from "./brainToolCatalog";
 import { localWindowProbes, resolveModelRoute, routeStream } from "./modelRouting";
@@ -18,12 +18,16 @@ import { refreshPendingChanges } from "./gitChanges";
 import { appendSessionNote } from "./sessionNotes";
 import { setLocalChatRuns } from "./attention";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
+import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
 import { resolveRunPolicyGates } from "./policyGates";
 import { editorRunDirectives } from "./hooks/editorDirectives";
 import { withWorkspaceStaleness } from "./memoryStaleness";
 
 /** The Sessions-tree overlay source for host-owned runs (one bucket, not per panel). */
 const RUNS_SOURCE = "brain-host";
+
+/** Same key `localFirstStore` mints. Read it; never mint a second device id here. */
+const LOCAL_DEVICE_KEY = "builderforce.localDeviceId";
 
 export interface VsCodeRunHostHooks {
   /** A chat gained a turn — refresh the Sessions sidebar. */
@@ -38,49 +42,19 @@ function workspaceRoot(): string {
 
 export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeRunHostHooks): BrainRunHost {
   const { secrets } = ctx;
-  // ONE model route for this host: the run's own turns and any sub-agent it delegates
-  // to resolve it the same way, so a child can never end up on a different model (or a
-  // stale credential) than the parent that spawned it.
+  const local = localBrainApplication(ctx);
   const streamForRoute = async (): Promise<BrainStreamFn> =>
     routeStream(await resolveModelRoute(secrets), await getApiKey(secrets));
-  return createBrainRunHost({
-    // The run's sub-agent controls and Stop come from the RUN (only it knows its key, its
-    // chat and its depth), so they are passed straight through rather than rebuilt here.
+  const host = createBrainRunHost({
     tools: async (projectId, children, signal, opts) => {
       const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts);
       return opts.audit && projectId != null ? auditToolCatalog(secrets, tools, projectId, opts.audit) : tools;
     },
     workspaceRoot,
-    // Resolved per run, not once: an explicit pick, the project's Evermind pin or an
-    // on-device route can all change between turns, and a local credential can expire.
     stream: streamForRoute,
-    // Memoized in `localModels`, so asking per window decision costs nothing while
-    // nothing changed — the routing seam's probe, the one the local-first route reads.
     localProbes: localWindowProbes,
     persistence: {
-      // `opts.scope` arrives on a queued step batch (the step outbox): it is sent AS the
-      // tenant it was queued for, or not at all.
-      async sendMessages(chatId, messages, opts?: { scope?: string }): Promise<BrainMessage[]> {
-        const r = await postBrainMessages(secrets, chatId, messages, { asTenant: scopeTenantId(opts?.scope) });
-        // Say which failure it was. "Sign in again" is advice a person can only act on
-        // when signing in is the problem; for a dropped connection it sends them to fix
-        // something that was never broken, and hides the reason the turn was lost.
-        if (!r.ok) {
-          // The status rides along so the step outbox can tell a refusal (4xx: dropped)
-          // from a connection that was not there (kept and replayed).
-          throw Object.assign(
-            new Error(
-              r.signedOut
-                ? "Could not save the turn — sign in again and retry."
-                : `Could not save the turn — ${r.reason}`,
-            ),
-            r.status !== undefined ? { status: r.status } : {},
-          );
-        }
-        // The server's truthful learn-gate outcome rides on the assistant turn(s) so
-        // the run renders a learn step — or an explained skip — exactly as the web does.
-        return attachEvermindLearn(r.messages, r.evermindLearn);
-      },
+      sendMessages: (chatId, messages) => local.persistence.sendMessages(chatId, messages),
     },
     // How a code-changing run's coder did — so the next run's coder is picked on evidence.
     reportOutcome: (outcome) => postRunOutcome(outcome),
@@ -118,4 +92,24 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       await appendSessionNote(root, { sessionKey: `chat-${chatId}`, activity });
     },
   });
+  // Baseline before the turn, immutable change set after it. A duplicate start while
+  // the chat is already running is a no-op in the host — don't finalize that, or the
+  // live run's edits would be claimed twice. No upload, no apply to another checkout.
+  // Sub-agents start through the host's internal start, not this wrapper.
+  return {
+    ...host,
+    start(payload) {
+      const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
+      return recordChangeSetAroundRun(
+        {
+          store: local.store,
+          deviceId: () => ctx.globalState.get<string>(LOCAL_DEVICE_KEY) ?? "",
+          runId,
+          author,
+          stillRunning: () => isRunning(payload.chatId),
+        },
+        () => host.start(payload),
+      );
+    },
+  };
 }
