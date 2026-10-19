@@ -39,6 +39,8 @@ import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { decideParticipantRemoval } from './participantRemovalPolicy';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { excluded } from '../../infrastructure/database/upsert';
+import { deferPastResponse } from '../shared/requestScope';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 // Role display names come from the ONE resolver in `roleCatalog` (this module used to
 // keep its own private copy, and it disagreed with the lane gate's).
@@ -640,8 +642,60 @@ export class TicketParticipantsService {
         .where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, l.participantId)))) as unknown as Parameters<typeof this.db.batch>[0]);
     }
     const created = links.length;
-    if (created) { await this.syncStates(env, tenantId, taskId); await this.bump(env, taskId); }
+    // The child ROWS and the count are the contract and stay inline above: `created` is
+    // what the parent ticket's %-complete rollup is built on, and the response shape is
+    // `{ created }`. What follows is the rollup's bookkeeping, and it is multi-hop DB
+    // work with no bound — `syncStates` re-reads the manifest plus the append-only
+    // sign-off ledger and rewrites changed rows, then `bump` walks the task version
+    // token, the task context and the project version token. None of it changes the
+    // number being returned, so it does not belong in front of the response.
+    //
+    // `syncStates` is safe to let finish a moment late. It is a pure re-derivation: it
+    // recomputes every slot from the ledger, the child task's status and the assignee,
+    // and writes only rows that actually differ, so running it again (the next sign-off,
+    // `ensureManifest`, or `coordinateCompletedStage`, which calls it as its first act)
+    // re-derives the same answer. A client that reads the manifest in the brief window
+    // before the deferred rollup lands sees the pre-rollup state and then the correct
+    // one — the same staleness a cached read already has, and one the next write event
+    // heals on its own. `bump` is cache invalidation and is naturally idempotent.
+    //
+    // The one caller of this method is the materialize route, which returns `created`
+    // and nothing else; the MCP tool replays that same route. Nothing reads the rollup
+    // off the returned value, so deferring cannot break a caller that expected it
+    // settled. Where there is no invocation to attach to (a unit test, a non-Worker
+    // caller) it is awaited inline, so those callers behave exactly as before.
+    if (created) await this.rollupPastResponse(env, tenantId, taskId);
     return created;
+  }
+
+  /**
+   * The post-create bookkeeping for {@link materializeChildTasks}: recompute participant
+   * states, then invalidate the ticket and project caches. Runs after the response when
+   * the invocation has a `waitUntil`; awaited inline when it does not.
+   *
+   * The deferred promise must never become an unhandled rejection — after the response
+   * there is no caller left, and an unhandled rejection kills the Worker isolate. A
+   * failure is reported through the caught-error sink instead, exactly as a deferred
+   * on-assign assessment is.
+   */
+  private async rollupPastResponse(env: Env, tenantId: number, taskId: number): Promise<void> {
+    const rollup = (async () => {
+      await this.syncStates(env, tenantId, taskId);
+      await this.bump(env, taskId);
+    })();
+    if (deferPastResponse(rollup)) {
+      // Swallowed deliberately: this runs after the response, so rethrowing would be
+      // an unhandled rejection with no caller left to catch it. Reported instead.
+      rollup.catch((error: unknown) => {
+        reportCaughtError(error, {
+          source: 'application/kanban/ticketParticipants.ts',
+          operation: 'materializeChildTasks rollup (deferred)',
+          context: { taskId, tenantId },
+        });
+      });
+      return;
+    }
+    await rollup;
   }
 
   /**

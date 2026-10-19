@@ -137,8 +137,10 @@ describe('materialize: the agent fan-out never blocks the response', () => {
     expect(body).toEqual({ created: 3 });
     // The two agent-assigned children each kicked off an assessment; none of it is awaited.
     expect(assess).toHaveBeenCalledTimes(2);
-    // Each fan-out was handed to the execution context instead of being left floating.
-    expect(waited.length).toBe(2);
+    // Each assessment fan-out was handed to the execution context instead of being left
+    // floating, and so was the post-create rollup (syncStates + bump) — three deferred
+    // tasks, none of them in front of the response.
+    expect(waited.length).toBe(3);
   });
 
   it('reports the count even when a child create is still slow but resolves', async () => {
