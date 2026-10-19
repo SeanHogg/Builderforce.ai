@@ -7,33 +7,31 @@
  * that passes one of these names as `work` gets the retention below.
  *
  *   durable (retain until acked): audit close, run checkpoint, fact publish,
- *   ticket mutation, brain turns (chat history), step rows, chat sync.
+ *   ticket mutation, brain turns (chat history), step rows, chat sync,
+ *   activity, run outcomes.
  *   best-effort (drop on failure): diagnostics telemetry, session refresh,
  *   QA capture, visitor journey, session replay, tool audit, usage snapshot,
  *   file-change telemetry, remote chunks.
  *
  * Deliberately UNCLASSIFIED names — recorded in UNCLASSIFIED_USER_WORK_QUEUES
  * below rather than left as an omission. That registry carries the per-name
- * reason; the short version is that all three carry user work today, so the
+ * reason; the short version is that it carries user work today, so the
  * durable-mode fallback in `createOutbox`'s `resolveRetention` is currently the
  * right answer — but it is right BY FALLBACK, not by decision:
- *   - `activity` — the editor bills it; the portal is free to drop it. The two
- *     consumers disagree about whether losing a row matters, so this table
- *     refuses to overrule either one on their behalf.
- *   - `run-outcomes` — offline teaching for learned routing. Neither chat
- *     history nor telemetry, so neither column describes it, and a canonical
- *     queue id is not free to claim: only the VS Code client builds this queue.
  *   - `host-persist` — one queue mixes chat messages with host telemetry, so a
  *     single retention is wrong for part of its payload on EVERY delivery, not
  *     only on failure. Splitting the queue or stamping per entry is its owner's
  *     call, not a table row's.
  *
- * An explicit table entry for any of them takes more than a new row: these
- * names are asserted UNCLASSIFIED by committed tests outside this file
- * (packages/write-outbox/src/classifyQueue.test.ts and
- * clients/vscode/src/errorReporter.test.ts) that this slice does not own, so
- * adding one would break `npx vitest run` in both packages rather than record a
- * decision. Reconcile those first.
+ * `activity` and `run-outcomes` WERE here and now have explicit durable rows
+ * (G13c, ticket #5941). The registry said "the two consumers disagree about
+ * whether losing a row matters", which is an argument the table cannot settle
+ * for itself — but it is answered by retention, not by silence: both are user
+ * work that the durable mode already retained, so making that a row changes
+ * nothing observable and turns a load-bearing fallback into a decision. Note
+ * that the durable row is about FAILURE behaviour, not billing: the portal is
+ * still free to ignore an activity row it receives, it simply cannot lose one
+ * to a transport error.
  *
  * Live constructors this table does not rewrite (off-limits):
  *   - clients/vscode/src/outboxStorage.ts createDurableOutbox
@@ -69,6 +67,8 @@ export const USER_WORK_QUEUES = [
   "usage-snapshot",
   "file-change",
   "remote-chunks",
+  "activity",
+  "run-outcomes",
 ] as const;
 
 export type UserWorkQueue = (typeof USER_WORK_QUEUES)[number];
@@ -87,18 +87,6 @@ export type UserWorkQueue = (typeof USER_WORK_QUEUES)[number];
 export const UNCLASSIFIED_USER_WORK_QUEUES: Readonly<
   Record<string, { carries: string; reason: string }>
 > = Object.freeze({
-  activity: {
-    carries: "user work",
-    reason:
-      "The editor bills an activity row and the portal drops it. Whether losing one " +
-      "matters is the two consumers' call, so the table does not decide it for them.",
-  },
-  "run-outcomes": {
-    carries: "user work",
-    reason:
-      "Offline teaching for learned routing: not chat history and not telemetry, so " +
-      "neither column describes it, and the queue is built only by the VS Code client.",
-  },
   "host-persist": {
     carries: "user work (mixed with host telemetry)",
     reason:
@@ -138,14 +126,15 @@ const CLASS_BY_QUEUE: Readonly<Record<UserWorkQueue, QueueClassification>> = {
   "usage-snapshot": { queue: "usage-snapshot", retention: "best-effort", onFailure: "drop-on-failure" },
   "file-change": { queue: "file-change", retention: "best-effort", onFailure: "drop-on-failure" },
   "remote-chunks": { queue: "remote-chunks", retention: "best-effort", onFailure: "drop-on-failure" },
+  activity: { queue: "activity", retention: "durable", onFailure: "retain-until-acked" },
+  "run-outcomes": { queue: "run-outcomes", retention: "durable", onFailure: "retain-until-acked" },
 };
 
 /**
  * Names a live constructor already uses, mapped onto a canonical queue.
  *
- * `activity`, `run-outcomes`, and `host-persist` are deliberately absent — see
- * UNCLASSIFIED_USER_WORK_QUEUES at the top of this file for why each one is left
- * unclassified instead of given a row.
+ * `host-persist` is deliberately absent — see UNCLASSIFIED_USER_WORK_QUEUES at
+ * the top of this file for why it stays unclassified instead of given a row.
  */
 const ALIAS_TO_QUEUE: Readonly<Record<string, UserWorkQueue>> = {
   "audit-close": "audit-close",
@@ -191,6 +180,10 @@ const ALIAS_TO_QUEUE: Readonly<Record<string, UserWorkQueue>> = {
   "file-changes": "file-change",
   "remote-chunks": "remote-chunks",
   "remote-chunk": "remote-chunks",
+  // Live VS Code names that are their own canonical ids. The retention column is
+  // decided here, not by whichever mode happened to build the queue.
+  activity: "activity",
+  "run-outcomes": "run-outcomes",
 };
 
 const STORAGE_PREFIX = "builderforce.outbox.";

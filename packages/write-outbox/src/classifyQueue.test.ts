@@ -68,8 +68,26 @@ describe("classifyQueue", () => {
     }
   });
 
+  it("retains activity and run-outcomes as durable user work", () => {
+    // G13c (#5941): these two gained explicit rows. They resolved to durable before that
+    // through the outbox's mode fallback; the row makes it a decision, and asserts it
+    // through this table rather than through the mode.
+    for (const name of ["activity", "run-outcomes"] as const) {
+      const classified = classifyQueue(name);
+      expect(classified?.queue).toBe(name);
+      expect(classified?.retention).toBe("durable");
+      expect(classified?.onFailure).toBe("retain-until-acked");
+      expect(classified?.kind).toBe("user-work");
+      expect(isDurableUserWorkQueue(name)).toBe(true);
+      expect(isTelemetryQueue(name)).toBe(false);
+    }
+  });
+
   it("does not guess a name this table does not own", () => {
-    for (const name of ["activity", "run-outcomes", "host-persist", "", "   ", undefined, null]) {
+    // `host-persist` stays here deliberately — one queue mixes chat messages with host
+    // telemetry, so no single retention is right for part of its payload on every
+    // delivery. Only that one name; `activity` and `run-outcomes` now have rows.
+    for (const name of ["host-persist", "", "   ", undefined, null]) {
       expect(classifyQueue(name)).toBeUndefined();
       expect(isDurableUserWorkQueue(name)).toBe(false);
       expect(isTelemetryQueue(name)).toBe(false);

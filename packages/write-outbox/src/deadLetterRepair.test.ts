@@ -105,8 +105,10 @@ describe("requeueDeadLetter", () => {
   });
 
   it("does not requeue an unclassified queue, a blank id, or an unknown id", () => {
-    const records = [letter({ id: "activity", key: "activity", payload: { kind: "heartbeat" } })];
-    expect(requeueDeadLetter(records, "activity")).toBeNull();
+    // `host-persist` is the live unclassified name (`activity` and `run-outcomes` held this
+    // role until G13c/#5941 gave them durable rows).
+    const records = [letter({ id: "host", key: "host-persist", payload: { kind: "heartbeat" } })];
+    expect(requeueDeadLetter(records, "host")).toBeNull();
     expect(requeueDeadLetter(records, "  ")).toBeNull();
     expect(requeueDeadLetter(records, "missing")).toBeNull();
     expect(exportDeadLettersForRepair(records)[0]).toMatchObject({
@@ -124,7 +126,25 @@ describe("requeueDeadLetter", () => {
       retention: "durable",
       payload: { kind: "chat" },
     });
-    expect(requeueDeadLetter([letter({ id: "outcomes", queue: "run-outcomes", payload: { taught: true } })], "outcomes")).toBeNull();
+  });
+
+  it("requeues activity and run outcomes without a retention stamp, because both are now user work", () => {
+    // G13c/#5941: both gained explicit durable rows, so a letter for either is repairable
+    // with no stamp — the same rule `brain-turns` has always had.
+    expect(requeueDeadLetter([letter({ id: "sig", queue: "activity", payload: { kind: "edit" } })], "sig")).toEqual({
+      id: "sig",
+      queue: "activity",
+      retention: "durable",
+      payload: { kind: "edit" },
+    });
+    expect(
+      requeueDeadLetter([letter({ id: "outcomes", queue: "run-outcomes", payload: { taught: true } })], "outcomes"),
+    ).toEqual({
+      id: "outcomes",
+      queue: "run-outcomes",
+      retention: "durable",
+      payload: { taught: true },
+    });
   });
 
   it("requeues brain turns without a retention stamp because that queue is user work", () => {

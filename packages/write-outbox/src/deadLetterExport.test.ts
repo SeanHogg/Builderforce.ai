@@ -80,13 +80,16 @@ describe("exportDeadLetterAction", () => {
   });
 
   it("does not requeue an unclassified queue", () => {
+    // `host-persist` is the live unclassified name: it mixes chat messages with host
+    // telemetry, so no single retention fits. (`activity` and `run-outcomes` were used
+    // here as the unclassified fixture until G13c/#5941 gave them durable rows.)
     const result = exportDeadLetterAction([
       letter({ id: "turns", queue: "brain-turns", item: { role: "user" }, retention: "durable" }),
-      letter({ id: "activity", key: "activity", payload: { kind: "heartbeat" } }),
+      letter({ id: "host", key: "host-persist", payload: { kind: "heartbeat" } }),
     ]);
     expect(result.repair.requeue.map((row) => row.id)).toEqual(["turns"]);
     expect(result.repair.stayDead).toEqual([
-      { id: "activity", queue: "activity", retention: "unclassified", action: "stay-dead", why: "unclassified" },
+      { id: "host", queue: "host-persist", retention: "unclassified", action: "stay-dead", why: "unclassified" },
     ]);
   });
 

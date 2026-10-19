@@ -129,8 +129,14 @@ describe("errorReporter drop-on-failure", () => {
 
   it("does not guess a retention for an unclassified name", async () => {
     host();
-    expect(classifyQueue("activity")).toBeUndefined();
-    expect(classifyQueue("run-outcomes")).toBeUndefined();
+    // `host-persist` is the live unclassified name: it mixes chat messages with host
+    // telemetry, so no single retention fits. `activity` and `run-outcomes` gained
+    // explicit durable rows in G13c (#5941) and are asserted as user work below.
+    expect(classifyQueue("host-persist")).toBeUndefined();
+    expect(classifyQueue("activity")?.retention).toBe("durable");
+    expect(classifyQueue("activity")?.onFailure).toBe("retain-until-acked");
+    expect(classifyQueue("run-outcomes")?.retention).toBe("durable");
+    expect(classifyQueue("run-outcomes")?.onFailure).toBe("retain-until-acked");
     const activity = createDurableOutbox<{ n: number }>("activity", {
       maxItems: 10,
       maxWaitMs: 60_000,

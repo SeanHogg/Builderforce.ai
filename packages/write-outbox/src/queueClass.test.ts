@@ -84,16 +84,20 @@ describe("classifyUserWorkQueue", () => {
     expect(UNCLASSIFIED_USER_WORK_QUEUES["host-persist"]?.reason).toMatch(/mixes chat messages/i);
   });
 
-  it("records activity and run-outcomes as deliberate unclassified user work", () => {
-    // Both stay out of USER_WORK_QUEUES: `activity` is billed by the editor and dropped by
-    // the portal, and `run-outcomes` is offline teaching that is neither history nor
-    // telemetry. The registry records that decision; the classifier must not act on it.
+  it("retains activity and run-outcomes as explicit durable user work", () => {
+    // G13c (#5941): both used to resolve to durable only through the mode fallback, which
+    // made them load-bearing by accident. The row says it outright instead, and the row is
+    // durable — the queue is user work that must survive a refused send, exactly as before.
     for (const name of ["activity", "run-outcomes"] as const) {
-      expect(classifyUserWorkQueue(name)).toBeUndefined();
-      const recorded = UNCLASSIFIED_USER_WORK_QUEUES[name];
-      expect(recorded, `${name} must be recorded as a deliberate omission`).toBeDefined();
-      expect(recorded?.carries).toContain("user work");
-      expect(recorded?.reason.length ?? 0).toBeGreaterThan(0);
+      expect(USER_WORK_QUEUES).toContain(name);
+      expect(classifyUserWorkQueue(name)).toEqual({
+        queue: name,
+        retention: "durable",
+        onFailure: "retain-until-acked",
+      });
+      expect(retentionForQueue(name)).toBe("durable");
+      // The row and the registry are two views of one decision: a name cannot be both.
+      expect(UNCLASSIFIED_USER_WORK_QUEUES[name]).toBeUndefined();
     }
   });
 
@@ -101,10 +105,14 @@ describe("classifyUserWorkQueue", () => {
     // The registry and the table must not drift: anything the doc comment lists as
     // deliberately unclassified has to carry a reason, and vice versa.
     const registered = Object.keys(UNCLASSIFIED_USER_WORK_QUEUES).sort();
-    expect(registered).toEqual(["activity", "host-persist", "run-outcomes"]);
+    expect(registered).toEqual(["host-persist"]);
     for (const name of registered) {
       expect(USER_WORK_QUEUES).not.toContain(name);
       expect(classifyUserWorkQueue(name)).toBeUndefined();
+    }
+    // And the converse: a row in the table is never also a "deliberate omission".
+    for (const queue of USER_WORK_QUEUES) {
+      expect(UNCLASSIFIED_USER_WORK_QUEUES[queue]).toBeUndefined();
     }
   });
 

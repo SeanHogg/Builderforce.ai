@@ -110,12 +110,14 @@ describe("G13 — a refused durable row is kept, a refused telemetry row is drop
   });
 
   it("keeps an unstamped unknown name retrying rather than guessing a retention", async () => {
-    // `activity` and `run-outcomes` are DELIBERATELY unnamed by the table (recorded, with
-    // per-name reasons, in `UNCLASSIFIED_USER_WORK_QUEUES`) — not merely forgotten. Both
-    // carry user work, so the unclassified path must still land on the durable default
-    // rather than being guessed at as telemetry.
-    expect(classifyQueue("activity")).toBeUndefined();
-    expect(classifyQueue("run-outcomes")).toBeUndefined();
+    // G13c (#5941): `activity` and `run-outcomes` now have explicit durable rows, so they
+    // are no longer part of this fallback's blast radius — the table decides, not the mode.
+    expect(classifyQueue("activity")?.retention).toBe("durable");
+    expect(classifyQueue("run-outcomes")?.retention).toBe("durable");
+    // `host-persist` is the last deliberately-unclassified live name: it mixes chat messages
+    // with host telemetry, so no single retention fits, and it is recorded (with its reason)
+    // in `UNCLASSIFIED_USER_WORK_QUEUES` rather than forgotten.
+    expect(classifyQueue("host-persist")).toBeUndefined();
 
     host();
     // No stamp AND an unknown name: the retention is whatever the outbox's own mode says.
@@ -132,12 +134,11 @@ describe("G13 — a refused durable row is kept, a refused telemetry row is drop
     expect(outbox.exportDeadLetters()).toHaveLength(1);
     expect(outbox.size()).toBe(1);
 
-    // The three deliberately-unclassified names are user work that must NOT be lost if the
-    // mode fallback they rely on ever changes. Today they resolve to durable only because
-    // `createDurableOutbox` is durable; this asserts that so a regression in the fallback
-    // is caught here rather than by a user finding their activity or run outcomes gone.
+    // Every live VS Code queue that carries user work must survive a permanent refusal.
+    // `activity` and `run-outcomes` are retained by their own table rows now;
+    // `host-persist` still leans on the mode fallback, and this is the guard for it — if
+    // that fallback ever changes, a user must not silently lose chat messages.
     for (const name of ["activity", "run-outcomes", "host-persist"] as const) {
-      expect(classifyQueue(name)).toBeUndefined();
       host();
       const named = createDurableOutbox<{ n: number }>(name, {
         maxItems: 10,
