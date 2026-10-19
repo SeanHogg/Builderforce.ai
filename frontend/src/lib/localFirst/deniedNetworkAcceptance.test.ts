@@ -23,7 +23,7 @@ import {
   type SyncTransport,
 } from '@builderforce/local-first';
 import { API_ORIGIN } from '../apiOrigin';
-import { bootLocalWorkManagement, type BootedLocalWork } from './workManagementBoot';
+import { bootLocalWorkManagement, type LocalWorkManagementBoot } from './workManagementBoot';
 import {
   bootWebPlatformPolicy,
   connectAccountSync,
@@ -86,7 +86,7 @@ function closedTransport(): SyncTransport {
 }
 
 describe('G27 web network denial', () => {
-  const open: BootedLocalWork[] = [];
+  const open: LocalWorkManagementBoot[] = [];
   let previousSocket: typeof globalThis.WebSocket | undefined;
 
   afterEach(() => {
@@ -185,7 +185,6 @@ describe('G27 web network denial', () => {
       deviceId: DEVICE_ID,
       destination: DESTINATION,
       newId: () => ids[nextId++] ?? crypto.randomUUID(),
-      now: () => new Date(OCCURRED_AT),
     });
     open.push(writing);
     expect(writing.storage).toBe('durable');
