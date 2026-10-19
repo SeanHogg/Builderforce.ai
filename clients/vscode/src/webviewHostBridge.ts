@@ -1,6 +1,9 @@
 import * as vscode from "vscode";
 import { getTenantJwt } from "./bfApi";
 import { logLine } from "./errorReporter";
+import { getBaseUrl, getWebBaseUrl } from "./gateway";
+import { platformPolicy } from "./platformPolicy";
+import { assertPlatformSocketAllowed, platformPolicyFrame, platformSocketUrl } from "./platformCallGate";
 
 /**
  * The host half of the webview bridge — the three things EVERY bundled-React
@@ -33,9 +36,46 @@ export interface WebviewInbound {
   id?: string;
 }
 
+const watchedWebviews = new Set<vscode.Webview>();
+let policyPushInstalled = false;
+
+function publishPlatformPolicy(webview: vscode.Webview): void {
+  try {
+    postToWebview(webview, platformPolicyFrame(getBaseUrl(), getWebBaseUrl()));
+  } catch {
+    watchedWebviews.delete(webview);
+  }
+}
+
+/** Push the host snapshot now, and again whenever the host policy changes. */
+function watchPlatformPolicy(webview: vscode.Webview | undefined): void {
+  if (!webview) return;
+  if (!policyPushInstalled) {
+    policyPushInstalled = true;
+    platformPolicy().subscribe(() => {
+      for (const view of watchedWebviews) publishPlatformPolicy(view);
+    });
+  }
+  if (!watchedWebviews.has(webview)) watchedWebviews.add(webview);
+  publishPlatformPolicy(webview);
+}
+
 /** Fire-and-forget post to a webview. A no-op when the surface is not resolved. */
 export function postToWebview(webview: vscode.Webview | undefined, msg: unknown): void {
-  void webview?.postMessage(msg);
+  if (!webview) return;
+  if (msg && typeof msg === "object" && (msg as { type?: unknown }).type === "init") {
+    watchPlatformPolicy(webview);
+    const frame = msg as { platformPolicy?: unknown; baseUrl?: string };
+    if (!frame.platformPolicy) {
+      void webview.postMessage({
+        ...frame,
+        platformPolicy: platformPolicy().snapshot(),
+        baseUrl: frame.baseUrl ?? getBaseUrl(),
+      });
+      return;
+    }
+  }
+  void webview.postMessage(msg);
 }
 
 /**
@@ -84,6 +124,16 @@ export async function handleSharedHostMessage(
   webview: vscode.Webview | undefined,
   msg: WebviewInbound,
 ): Promise<boolean> {
+  watchPlatformPolicy(webview);
+  const socket = platformSocketUrl(msg);
+  if (socket) {
+    try {
+      assertPlatformSocketAllowed(socket);
+    } catch (error) {
+      respondToWebview(webview, msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+      return true;
+    }
+  }
   switch (msg.type) {
     case "token.refresh": {
       const token = (await getTenantJwt(ctx.secrets)) ?? null;

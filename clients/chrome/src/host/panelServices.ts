@@ -17,6 +17,8 @@ import { loopbackEndpoints, resolveLoopbackProbes } from '../inference/localRunt
 import { createRovrStream } from '../inference/route';
 import { createLocalFirstPersistence } from '../persistence/localFirstPersistence';
 import { chromeKeyValue } from '../platform/keyValue';
+import { createRovrGuardedFetch } from '../platform/guardedFetch';
+import { createRovrPlatformPolicy } from '../platform/policy';
 import { createSettings, type RovrSettings } from '../platform/settings';
 import { createSitePermissions, type SitePermissions } from '../platform/sitePermissions';
 import { createPlaybookStore, renderPlaybooks, type PlaybookStore } from '../playbooks/playbooks';
@@ -62,11 +64,14 @@ export interface PanelServices {
   reportError(error: unknown, operation: string): void;
 }
 
-const fetchImpl = (input: string, init?: RequestInit) => fetch(input, init);
-
 export async function createPanelServices(): Promise<PanelServices> {
   const baseUrl = DEFAULT_BASE_URL;
   const local = chromeKeyValue('local');
+  // Same gate the service worker uses. A raw fetch here would be a second, ungated
+  // platform call — loopback and direct-provider URLs still pass through ungated.
+  const rovrPolicy = createRovrPlatformPolicy(local);
+  const fetchImpl = createRovrGuardedFetch({ policy: rovrPolicy });
+  await rovrPolicy.ready();
   const session = createSession({ storage: local, baseUrl, fetch: fetchImpl, now: Date.now });
   await session.ready();
   const settings = createSettings(local);
