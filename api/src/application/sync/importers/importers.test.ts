@@ -6,6 +6,8 @@ import type { SyncEntityMappingRow, SyncEventInput, SyncImportContext, SyncStore
 import { importMirrorRecord, mirrorRefuses } from './importMirrorRecord';
 import { importSyncedProject } from './importSyncedProject';
 import { importSyncedTicket } from './importSyncedTicket';
+import { importEntity as importProjectEntity, kind as projectKind } from './projectImporter';
+import { importEntity as importTicketEntity, kind as ticketKind } from './ticketImporter';
 import { syncImporterFor } from './index';
 
 const destination = { kind: 'bound' as const, tenantId: '7', accountId: 'user-1' };
@@ -441,5 +443,66 @@ describe('importMirrorRecord', () => {
       stores(),
     );
     expect(unknown).toEqual({ status: 'rejected', detail: 'entity_type_rejected' });
+  });
+});
+
+function thrownCode(run: () => void): string | undefined {
+  try {
+    run();
+    return undefined;
+  } catch (error) {
+    if (!error || typeof error !== 'object' || !('code' in error)) return undefined;
+    const code = (error as { code: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+}
+
+describe('bounded kind importers', () => {
+  const bound = { kind: 'bound' as const, tenantId: '7', accountId: 'user-1' };
+  const ticketEvent = {
+    entityType: 'ticket' as const,
+    destination: bound,
+    clientEntityId: '11111111-1111-4111-8111-111111111111',
+  };
+  const projectEvent = {
+    entityType: 'project' as const,
+    destination: bound,
+    clientEntityId: '22222222-2222-4222-8222-222222222222',
+  };
+
+  it('exports one kind and accepts only that kind, with no writer callback', () => {
+    expect(ticketKind).toBe('ticket');
+    expect(projectKind).toBe('project');
+    expect(importTicketEntity).toHaveLength(1);
+    expect(importProjectEntity).toHaveLength(1);
+    expect(importTicketEntity(ticketEvent)).toEqual({
+      kind: 'ticket',
+      clientEntityId: ticketEvent.clientEntityId,
+    });
+    expect(importProjectEntity(projectEvent)).toEqual({
+      kind: 'project',
+      clientEntityId: projectEvent.clientEntityId,
+    });
+  });
+
+  it('refuses a ticket event on the project importer', () => {
+    expect(thrownCode(() => importProjectEntity(ticketEvent))).toBe('wrong_kind');
+    expect(thrownCode(() => importProjectEntity({ ...ticketEvent, destination: { kind: 'unbound' } }))).toBe('wrong_kind');
+  });
+
+  it('throws wrong_kind when the kind is missing or foreign', () => {
+    expect(thrownCode(() => importTicketEntity({ destination: bound }))).toBe('wrong_kind');
+    expect(thrownCode(() => importTicketEntity(undefined))).toBe('wrong_kind');
+    expect(thrownCode(() => importProjectEntity({ destination: bound }))).toBe('wrong_kind');
+    expect(thrownCode(() => importTicketEntity({ entityType: 'chat', destination: bound }))).toBe('wrong_kind');
+    expect(thrownCode(() => importProjectEntity({ entityType: 'chat', destination: bound }))).toBe('wrong_kind');
+    expect(thrownCode(() => importTicketEntity(projectEvent))).toBe('wrong_kind');
+  });
+
+  it('refuses an unbound destination', () => {
+    expect(thrownCode(() => importTicketEntity({ ...ticketEvent, destination: { kind: 'unbound' } }))).toBe('unbound_destination');
+    expect(thrownCode(() => importTicketEntity({ entityType: 'ticket' }))).toBe('unbound_destination');
+    expect(thrownCode(() => importProjectEntity({ ...projectEvent, destination: null }))).toBe('unbound_destination');
+    expect(thrownCode(() => importProjectEntity({ entityType: 'project', destination: { kind: 'unbound' } }))).toBe('unbound_destination');
   });
 });
