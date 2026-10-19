@@ -57,6 +57,22 @@ describe("SessionNotes accumulator", () => {
 });
 
 describe("appendSessionNote", () => {
+  it("summarises the ask instead of a fixed label when the run recorded one", async () => {
+    const root = await workspace();
+    const notes = new SessionNotes();
+    notes.setPrompt("fix the map cache so an edit refreshes it");
+    notes.record("edit_file", { path: "src/a.ts" });
+    const wrote = await appendSessionNote(root, {
+      sessionKey: "chat-7",
+      activity: notes.activity,
+      at: new Date("2026-08-20T10:00:00.000Z"),
+    });
+    expect(wrote).toBe(true);
+    const text = await fs.readFile(path.join(memoryDir(root), "2026-08-20.md"), "utf-8");
+    expect(text).toContain("**Summary**: fix the map cache so an edit refreshes it");
+    expect(text).not.toContain("Code review / analysis");
+  });
+
   it("writes into the SAME tree and filename the on-prem loop uses", async () => {
     const root = await workspace();
     const at = new Date("2026-08-20T10:00:00.000Z");

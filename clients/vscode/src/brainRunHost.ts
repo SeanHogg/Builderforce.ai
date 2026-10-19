@@ -58,6 +58,23 @@ import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
 import { createChildApprovalRelay, type ChildApprover } from "./childApprovalRelay";
 
 export { syncMessageFor } from "./brainRunHostProtocol";
+
+/** The user's ask, whether the panel sent a string or multimodal parts. */
+function askedText(turn: RunSpec["userTurn"]): string | undefined {
+  if (typeof turn === "string") {
+    const asked = turn.replace(/\s+/g, " ").trim();
+    return asked || undefined;
+  }
+  if (!Array.isArray(turn)) return undefined;
+  const parts: string[] = [];
+  for (const part of turn) {
+    if (part && typeof part === "object" && part.type === "text" && typeof part.text === "string") {
+      parts.push(part.text);
+    }
+  }
+  const asked = parts.join(" ").replace(/\s+/g, " ").trim();
+  return asked || undefined;
+}
 export type { RunHostMessage, RunSink, RunSyncMessage, RunToolMessage, SinkEntry, WebviewRunStart } from "./brainRunHostProtocol";
 
 /** The top-level owner's name, as the chat shows it (a brand, not translated). */
@@ -261,6 +278,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const flag = { autoApprove: p.autoApprove };
     flags.set(key, flag);
     const root = ports.workspaceRoot();
+    const asked = askedText(p.userTurn);
+    if (asked) notesFor(key).setPrompt(asked);
     const projectId = p.projectId ?? undefined;
     // Governance FIRST: an unreadable policy throws here and the run never starts.
     const gates = (await ports.policyGates?.(projectId)) ?? [];

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { readRecentSessionNotes } from "./sessionNotes";
 import { desktopRepoMapSection } from "./desktopContext";
+import { symbolIndexGrounding } from "./workspaceSymbols";
 
 /** Single source of truth for the current workspace grounding summary, shared by the
  *  chat panels and the native chat participant (so none holds its own copy). */
@@ -21,16 +22,21 @@ export function setGroundingSummary(summary: string | undefined): void {
  *
  * With Builderforce Desktop running, the reference-ranked repo map from its live index
  * joins them — the codebase's shape by what the code actually depends on, current to the
- * last save rather than the last rescan.
+ * last save rather than the last rescan. The definition index joins them too, so a turn
+ * sees `.builderforce/symbols.json` up front instead of only when it calls `find_symbol`.
  *
- * Async and best-effort: an unreadable (or absent) memory tree or desktop service
- * degrades to what remains, never to a failed turn.
+ * Async and best-effort: an unreadable (or absent) memory tree, desktop service or
+ * symbol index degrades to what remains, never to a failed turn.
  */
 export async function getGroundingWithHistory(root: string | undefined): Promise<string | undefined> {
   const map = groundingSummary;
   if (!root) return map;
-  const [notes, repoMap] = await Promise.all([readRecentSessionNotes(root), desktopRepoMapSection(root)]);
+  const [notes, repoMap, symbols] = await Promise.all([
+    readRecentSessionNotes(root),
+    desktopRepoMapSection(root),
+    symbolIndexGrounding(root),
+  ]);
   const history = notes ? `## Recent activity in this workspace\n${notes}` : "";
-  const sections = [map, repoMap, history].filter((s): s is string => !!s);
+  const sections = [map, repoMap, symbols, history].filter((s): s is string => !!s);
   return sections.length ? sections.join("\n\n") : undefined;
 }

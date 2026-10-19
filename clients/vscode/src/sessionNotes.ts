@@ -69,6 +69,14 @@ export class SessionNotes {
   private readonly created: string[] = [];
   private readonly edited: string[] = [];
   private readonly tools: string[] = [];
+  /** What this run was asked — the note's summary describes THAT, not a template. */
+  private prompt: string | undefined;
+
+  /** Record the user's ask so the written summary names this run, not a fixed label. */
+  setPrompt(prompt: string): void {
+    const asked = prompt.replace(/\s+/g, " ").trim();
+    if (asked) this.prompt = asked;
+  }
 
   /** Record one tool call. Unknown tools still count toward `**Tools**`. */
   record(name: string, args?: unknown): void {
@@ -93,7 +101,12 @@ export class SessionNotes {
 
   /** This run's activity, in the shared note format's shape. */
   get activity(): RunActivity {
-    return { created: this.created, edited: this.edited, tools: this.tools };
+    return {
+      created: this.created,
+      edited: this.edited,
+      tools: this.tools,
+      ...(this.prompt ? { prompt: this.prompt } : {}),
+    };
   }
 }
 

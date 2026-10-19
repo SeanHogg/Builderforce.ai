@@ -29,3 +29,51 @@ export function workspaceSymbolIndex(root: string): WorkspaceSymbolIndex {
     fullRefreshMs: FULL_REFRESH_MS,
   });
 }
+
+/** How many files the grounding section will name before it stops listing. */
+const GROUNDING_FILE_CAP = 60;
+/** How many symbols one file contributes to that line. */
+const GROUNDING_SYMBOLS_PER_FILE = 6;
+/** Hard cap on the section, so a large index cannot crowd the rest of the prompt out. */
+const GROUNDING_CHARS = 3_500;
+
+/**
+ * A bounded view of the fresh definition index, for the run's grounding.
+ *
+ * `find_symbol` already reads `.builderforce/symbols.json`, but only once the model
+ * asks. Loading it here means the turn starts with the index warm and a sample of
+ * what it holds, instead of discovering the index exists by guessing a tool call.
+ * The full index is not injected — a workspace snapshot is megabytes, and the
+ * sample plus `find_symbol` is how a turn should navigate it.
+ *
+ * Best-effort: a walk that fails degrades to no section, never a failed turn.
+ */
+export async function symbolIndexGrounding(root: string): Promise<string> {
+  if (!root) return "";
+  try {
+    const files = await workspaceSymbolIndex(root).filesUnder();
+    if (files.length === 0) return "";
+    const ordered = [...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    let symbolCount = 0;
+    const lines: string[] = [];
+    for (const file of ordered) {
+      symbolCount += file.symbols.length;
+      if (lines.length >= GROUNDING_FILE_CAP || file.symbols.length === 0) continue;
+      const preferred = file.symbols.filter((s) => s.exported);
+      const shown = (preferred.length > 0 ? preferred : file.symbols).slice(0, GROUNDING_SYMBOLS_PER_FILE);
+      lines.push(`- ${file.path}: ${shown.map((s) => `${s.kind} ${s.name}`).join(", ")}`);
+    }
+    const more = ordered.length - lines.length;
+    const body = [
+      "## Symbol index",
+      `Fresh definition index (\`.builderforce/symbols.json\`): ${ordered.length} files, ${symbolCount} symbols. Loaded before this run — call \`find_symbol\` for a name not listed below.`,
+      ...lines,
+      more > 0 ? `- … (${more} more files in the index)` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return body.length > GROUNDING_CHARS ? `${body.slice(0, GROUNDING_CHARS)}\n- …` : body;
+  } catch {
+    return "";
+  }
+}

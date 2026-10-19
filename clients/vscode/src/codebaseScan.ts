@@ -16,10 +16,22 @@ const MANIFEST_FILES = new Set([
 const MAX_DIRS = 3000;
 const MAX_DEPTH = 6;
 const MAX_ROOT_FILES = 200;
+/** Whole-file hash ceiling. Larger files contribute a prefix hash plus size. */
+const FULL_CONTENT_HASH_MAX = 1024 * 1024;
+const CONTENT_HASH_PREFIX = 256 * 1024;
 
 interface ScanData {
   dirs: string[];
   manifests: string[];
+  /**
+   * A content fingerprint of every file the walk saw, not just names. A
+   * name-only token (or one that only stamps manifests and the workspace
+   * root) survives a nested edit that keeps the name, the size and the
+   * extension histogram, so the cached overview outlives the file it
+   * describes. The stamp is a hash of file bytes, so a same-size rewrite
+   * that also preserves mtime still misses the cache.
+   */
+  contentStamp: string;
   /** Notable shallow files: every file at the workspace root plus docs (*.md) one
    *  level down. Gives the grounding map an actual FILE index so a root-level doc
    *  (ROADMAP.md, README, a PRD) is discoverable — without it the model can wrongly
@@ -50,10 +62,33 @@ function isManifest(name: string): boolean {
   return MANIFEST_FILES.has(name) || name.endsWith(".csproj") || name.endsWith(".sln");
 }
 
+/**
+ * Hash of the file's bytes, plus its size so a change past the prefix window
+ * on a huge file still misses the cache. Never throws.
+ */
+async function stampFileContent(abs: string, rel: string): Promise<string | undefined> {
+  let fh: fs.FileHandle | undefined;
+  try {
+    fh = await fs.open(abs, "r");
+    const st = await fh.stat();
+    if (!st.isFile()) return undefined;
+    const n = st.size <= FULL_CONTENT_HASH_MAX ? st.size : Math.min(st.size, CONTENT_HASH_PREFIX);
+    const buf = Buffer.alloc(n);
+    if (n > 0) await fh.read(buf, 0, n, 0);
+    const digest = crypto.createHash("sha256").update(buf).digest("hex");
+    return `${rel}:${st.size}:${digest}`;
+  } catch {
+    return undefined;
+  } finally {
+    await fh?.close();
+  }
+}
+
 async function scanTree(root: string): Promise<ScanData> {
   const dirs: string[] = [];
   const manifests: string[] = [];
   const rootFiles: string[] = [];
+  const contentParts: string[] = [];
   const extCounts = new Map<string, number>();
   let fileCount = 0;
   let truncated = false;
@@ -88,12 +123,20 @@ async function scanTree(root: string): Promise<ScanData> {
         if (rootFiles.length < MAX_ROOT_FILES && (depth === 0 || (depth === 1 && ext === ".md"))) {
           rootFiles.push(childRel);
         }
+        // Fingerprint every walked file, including nested sources. A rewrite
+        // that keeps the name and the length changes neither the name list nor
+        // the counts, and a stamp limited to manifests and the workspace root
+        // misses exactly that edit — the cache then serves a map of a file
+        // that no longer says what the map claims.
+        const stamp = await stampFileContent(path.join(abs, e.name), childRel);
+        if (stamp) contentParts.push(stamp);
       }
     }
   }
 
   await rec(root, "", 0);
-  return { dirs, manifests, rootFiles, extCounts, fileCount, truncated };
+  const contentStamp = crypto.createHash("sha256").update(contentParts.sort().join("\n")).digest("hex").slice(0, 32);
+  return { dirs, manifests, rootFiles, contentStamp, extCounts, fileCount, truncated };
 }
 
 /**
@@ -102,16 +145,16 @@ async function scanTree(root: string): Promise<ScanData> {
  * A NAME-ONLY token went stale the moment anyone edited a file's contents: the
  * structure was identical, so the cached overview survived an edit that
  * invalidated it and the agent was grounded on a map of a repo that no longer
- * existed. Folder names cannot detect content, so the token folds in the
- * observable content signals the walk already collects - the file count, the
- * per-extension counts and the truncation flag. Still cheap: it reuses the scan
- * already in hand rather than re-hashing every file.
+ * existed. Counts and extension histograms miss a same-size nested edit too.
+ * The token folds in {@link ScanData.contentStamp} — a hash of every walked
+ * file's bytes — so that edit misses the cache even when size and mtime do not.
  */
 function computeToken(data: ScanData): string {
   const h = crypto.createHash("sha256");
   for (const d of [...data.dirs].sort()) h.update(`d:${d}\n`);
   for (const m of [...data.manifests].sort()) h.update(`m:${m}\n`);
   for (const f of [...data.rootFiles].sort()) h.update(`f:${f}\n`);
+  h.update(`c:${data.contentStamp}\n`);
   h.update(`n:${data.fileCount}\n`);
   for (const [ext, count] of [...data.extCounts.entries()].sort()) h.update(`e:${ext}:${count}\n`);
   h.update(`t:${data.truncated}\n`);

@@ -243,7 +243,13 @@ describe("tools", () => {
     );
     await start(chatId, host);
     expect(sessionNote).toHaveBeenCalledTimes(1);
-    expect(sessionNote).toHaveBeenCalledWith(chatId, expect.anything());
+    expect(sessionNote).toHaveBeenCalledWith(
+      chatId,
+      expect.objectContaining({
+        prompt: "what does this project do?",
+        created: ["new.ts"],
+      }),
+    );
   });
 });
 
