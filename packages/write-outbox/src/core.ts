@@ -4,6 +4,9 @@
  * Node agent runtime. Browser hosts import the package root, which re-exports this.
  */
 export { createOutbox } from "./outbox.js";
+export { classifyOutboxWork, BEST_EFFORT_WORK, DURABLE_USER_WORK } from "./classification.js";
+export type { OutboxWorkKind } from "./classification.js";
+export { exportDeadLetters, repairDeadLetter } from "./deadLetter.js";
 export {
   isPermanentHttpFailure,
   OUTBOX_MAX_ENTRIES,
@@ -19,8 +22,10 @@ export type {
   OutboxEntry,
   OutboxOnlineSignal,
   OutboxOptions,
+  OutboxRetention,
   OutboxRetryPolicy,
   OutboxSendContext,
+  OutboxSendPermission,
   OutboxStats,
   OutboxStore,
 } from "./types.js";

@@ -30,10 +30,10 @@
  *     dropped. The work it describes already happened; only its record is lost.
  *   - durable (`retry` set, usually with a `store`): a failed batch goes back to the head
  *     of its key and is retried with exponential backoff; a batch the server REFUSED
- *     (`retry.isPermanent`, default: a 4xx other than 401/408/409/425/429) is dropped and
- *     counted. With a `store`, queued entries survive a restart and are replayed once the
- *     store has loaded. An injected {@link OutboxOnlineSignal} pauses automatic sends while
- *     the host is offline and replays every key the moment it comes back.
+ *     (`retry.isPermanent`, default: a 4xx other than 401/408/409/425/429) is retained as
+ *     a dead letter, not dropped. With a `store`, queued entries survive a restart and are
+ *     replayed once the store has loaded. An injected {@link OutboxOnlineSignal} pauses
+ *     automatic sends while the host is offline and replays every key the moment it comes back.
  *
  * SCOPED: with `scope` (the identity the host sends as — e.g. the signed-in tenant), each
  * entry remembers the scope it was queued under and is only ever sent under that scope.
@@ -41,9 +41,11 @@
  * again (or the bound drops them); a write made in one workspace is never replayed into
  * another. Sealing a batch stamps the current scope on any unscoped entry in it.
  *
- * BOUNDED: at most `maxEntries` queued entries across all keys (default 1000 in durable
- * mode); past that the OLDEST are dropped, counted in {@link Outbox.stats} and reported
- * to `onDrop`.
+ * BOUNDED: at most `maxEntries` queued entries across all keys when the host sets one.
+ * Best-effort telemetry may drop the oldest past that bound. Durable user work —
+ * history, tickets, audits, facts, or a queue with `retry`/`store` — is never
+ * auto-evicted; a further durable enqueue is refused (`outbox_capacity`) and reported
+ * to `onCapacity`. Drops are counted in {@link Outbox.stats} and reported to `onDrop`.
  *
  * A {@link Outbox.drainWith} caller's own request is never best-effort — its failure
  * rejects to that caller (and, in durable mode, its pending items go back to the queue).
@@ -52,17 +54,18 @@
  * injected; `crypto.randomUUID` is used for ids only when the host has it.
  */
 
+import { classifyOutboxWork } from "./classification.js";
+import { exportDeadLetters as listDeadLetters, repairDeadLetter as repairOneDeadLetter } from "./deadLetter.js";
 import { defaultId } from "./idempotency.js";
 import {
   isPermanentHttpFailure,
-  OUTBOX_MAX_ENTRIES,
   OUTBOX_MAX_ITEMS,
   OUTBOX_MAX_WAIT_MS,
   OUTBOX_RETRY_BASE_MS,
   OUTBOX_RETRY_MAX_MS,
 } from "./policy.js";
 import { bySeq, drainContext, sendable, sendContext, takeBatch, type Lane } from "./sealedBatch.js";
-import type { Outbox, OutboxDrop, OutboxEntry, OutboxOptions, OutboxStore } from "./types.js";
+import type { Outbox, OutboxDrop, OutboxEntry, OutboxOptions, OutboxRetention, OutboxStore } from "./types.js";
 
 export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T, K> {
   const maxItems = Math.max(1, opts.maxItems ?? OUTBOX_MAX_ITEMS);
@@ -74,20 +77,24 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
         isPermanent: opts.retry.isPermanent ?? isPermanentHttpFailure,
       }
     : null;
+  const retryPolicy = retry ?? {
+    baseMs: OUTBOX_RETRY_BASE_MS,
+    maxMs: OUTBOX_RETRY_MAX_MS,
+    isPermanent: isPermanentHttpFailure,
+  };
   const store = opts.store ?? null;
-  // The bound protects a queue that can GROW (durable mode holds failures); a best-effort
-  // queue empties itself at `maxItems`, so it stays unbounded unless asked.
-  const maxEntries = Math.max(
-    maxItems,
-    opts.maxEntries ?? (retry || store ? OUTBOX_MAX_ENTRIES : Number.POSITIVE_INFINITY),
-  );
+  const durable = Boolean(retry || store);
+  const maxEntries = Math.max(maxItems, opts.maxEntries ?? Number.POSITIVE_INFINITY);
   const newId = opts.newId ?? defaultId;
   const lanes = new Map<K, Lane<T, K>>();
+  const inFlightControllers = new Set<AbortController>();
   let lastSeq = 0;
   let dropped = 0;
   let closed = false;
+  let storeFailure: unknown;
 
   const isOnline = (): boolean => opts.online?.isOnline() ?? true;
+  const maySend = (): boolean => !closed && (opts.sendPermission?.isAllowed() ?? true);
 
   const lane = (key: K): Lane<T, K> => {
     let l = lanes.get(key);
@@ -103,7 +110,6 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
     return lastSeq;
   };
 
-  // ── Store: load once, then every write in order, never before the load settled ──
   const loaded: Promise<void> = store
     ? Promise.resolve()
         .then(() => store.load())
@@ -115,41 +121,84 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
             }
             for (const l of lanes.values()) l.entries.sort(bySeq);
           },
-          (error) => opts.onStoreError?.(error),
+          (error) => {
+            storeFailure ??= error;
+            opts.onStoreError?.(error);
+          },
         )
     : Promise.resolve();
   let writes: Promise<void> = loaded;
-  const persist = (op: (s: OutboxStore<T, K>) => Promise<void> | void): void => {
-    if (!store) return;
-    writes = writes.then(() => op(store)).catch((error) => opts.onStoreError?.(error));
+  const persist = (op: (s: OutboxStore<T, K>) => Promise<void> | void): Promise<void> => {
+    if (!store) return Promise.resolve();
+    writes = writes.then(() => op(store)).catch((error) => {
+      storeFailure ??= error;
+      opts.onStoreError?.(error);
+    });
+    return writes;
   };
 
   const drop = (key: K, entries: OutboxEntry<T, K>[], reason: OutboxDrop<K>["reason"]): void => {
     if (entries.length === 0) return;
     dropped += entries.length;
     const ids = entries.map((e) => e.id);
-    persist((s) => s.remove(ids));
+    void persist((s) => s.remove(ids));
     opts.onDrop?.({ key, count: entries.length, reason });
   };
 
-  /** Drop the globally oldest queued entries until the bound holds. */
-  const enforceBound = (): void => {
+  const retentionOf = (entry: OutboxEntry<T, K>): OutboxRetention => {
+    if (entry.retention) return entry.retention;
+    return durable ? "durable" : "best-effort";
+  };
+
+  /** Per-call work wins, then the queue's work, then the enqueue path / outbox mode. */
+  const resolveRetention = (work: string | undefined, path: "enqueue" | "enqueueDurable"): OutboxRetention => {
+    const classified = classifyOutboxWork(work) ?? classifyOutboxWork(opts.work);
+    if (classified) return classified;
+    if (path === "enqueueDurable" || durable) return "durable";
+    return "best-effort";
+  };
+
+  const totalQueued = (): number => {
     let total = 0;
     for (const l of lanes.values()) total += l.entries.length;
-    while (total > maxEntries) {
+    return total;
+  };
+
+  const durableQueued = (): number => {
+    let n = 0;
+    for (const l of lanes.values()) for (const entry of l.entries) if (retentionOf(entry) === "durable") n += 1;
+    return n;
+  };
+
+  /** Drop oldest best-effort entries until `limit`. Durable user work is never removed. */
+  const evictBestEffortWhileOver = (limit: number): void => {
+    let total = totalQueued();
+    while (total > limit) {
       let oldestKey: K | undefined;
-      let oldest: Lane<T, K> | undefined;
+      let oldestLane: Lane<T, K> | undefined;
+      let oldestIndex = -1;
+      let oldestSeq = Number.POSITIVE_INFINITY;
       for (const [k, l] of lanes) {
-        const head = l.entries[0];
-        if (head && (!oldest || head.seq < oldest.entries[0]!.seq)) {
-          oldest = l;
+        for (let i = 0; i < l.entries.length; i += 1) {
+          const entry = l.entries[i]!;
+          if (retentionOf(entry) !== "best-effort" || entry.seq >= oldestSeq) continue;
+          oldestSeq = entry.seq;
           oldestKey = k;
+          oldestLane = l;
+          oldestIndex = i;
         }
       }
-      if (!oldest) return;
-      drop(oldestKey as K, oldest.entries.splice(0, 1), "overflow");
+      if (!oldestLane || oldestIndex < 0) {
+        if (total > maxEntries) opts.onCapacity?.(total, maxEntries);
+        return;
+      }
+      drop(oldestKey as K, oldestLane.entries.splice(oldestIndex, 1), "overflow");
       total -= 1;
     }
+  };
+
+  const enforceBound = (): void => {
+    evictBestEffortWhileOver(maxEntries);
   };
 
   /** The scope sends go out under now; `undefined` = the outbox is not scoped. */
@@ -173,11 +222,11 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
     l.retryTimer = null;
   };
 
-  const scheduleRetry = (key: K, l: Lane<T, K>): void => {
-    if (!retry || closed || l.retryTimer !== null) return;
+  const scheduleRetry = (key: K, l: Lane<T, K>, force = false): void => {
+    if ((!retry && !force) || !maySend() || l.retryTimer !== null) return;
+    const policy = retry ?? retryPolicy;
     l.attempt += 1;
-    const delay = Math.min(retry.maxMs, retry.baseMs * 2 ** (l.attempt - 1));
-    // ±20% jitter so every client that lost the same outage does not return in step.
+    const delay = Math.min(policy.maxMs, policy.baseMs * 2 ** (l.attempt - 1));
     const jittered = Math.round(delay * (0.8 + Math.random() * 0.4));
     l.retryTimer = setTimeout(() => {
       l.retryTimer = null;
@@ -185,9 +234,8 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
     }, jittered);
   };
 
-  /** Start the lane's max-wait timer if it has none. */
   const armTimer = (key: K, l: Lane<T, K>): void => {
-    if (l.timer !== null || maxWaitMs <= 0) return;
+    if (l.timer !== null || maxWaitMs <= 0 || !maySend()) return;
     l.timer = setTimeout(() => {
       l.timer = null;
       void flushKey(key, { final: false, auto: true });
@@ -199,28 +247,30 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
     l.entries.sort(bySeq);
   };
 
-  /** Send one batch. `true` = the lane may continue; `false` = it is parked for retry. */
   const sendBatch = async (key: K, l: Lane<T, K>, batch: OutboxEntry<T, K>[], final: boolean): Promise<boolean> => {
+    if (!maySend()) {
+      requeue(l, batch);
+      return false;
+    }
     const items = batch.map((e) => e.item);
     const ctx = sendContext(batch);
     const ids = ctx.ids as string[];
+    const controller = new AbortController();
+    inFlightControllers.add(controller);
     l.inFlight += batch.length;
     try {
-      await opts.send(key, opts.coalesce ? opts.coalesce(items) : items, { final, ...ctx });
+      await opts.send(key, opts.coalesce ? opts.coalesce(items) : items, { final, ...ctx, signal: controller.signal });
       l.inFlight -= batch.length;
       l.attempt = 0;
-      persist((s) => s.remove(ids));
+      void persist((s) => s.remove(ids));
       return true;
     } catch (error) {
       l.inFlight -= batch.length;
       opts.onError?.(error, key);
-      if (retry && !retry.isPermanent(error)) {
-        requeue(l, batch);
-        scheduleRetry(key, l);
-        return false;
-      }
-      drop(key, batch, retry ? "rejected" : "failed");
-      return true;
+      const settled = settleFailure(key, l, batch, error);
+      return settled;
+    } finally {
+      inFlightControllers.delete(controller);
     }
   };
 
@@ -232,34 +282,31 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
    */
   const flushKey = (key: K, mode: { final: boolean; auto?: boolean; probe?: boolean }): Promise<void> => {
     const l = lanes.get(key);
-    if (!l) return Promise.resolve();
-    // What this flush covers: everything queued by now. A probe (retry) covers whatever
-    // is queued when it runs — it is the lane's catch-all.
+    if (!l || !maySend()) return Promise.resolve();
     const upTo = mode.probe ? Number.POSITIVE_INFINITY : lastSeq;
     if (mode.final) {
       const scope = currentScope();
       if (!isOnline() || scope === null) return Promise.resolve();
       clearTimer(l);
-      // Every batch starts NOW — the host may not live to see a second round trip.
       const batches: OutboxEntry<T, K>[][] = [];
       for (let b = take(l, scope, upTo); b; b = take(l, scope, upTo)) batches.push(b);
       return Promise.all(batches.map((b) => sendBatch(key, l, b, true))).then(() => undefined);
     }
     const run = l.tail.then(async () => {
       await loaded;
+      if (!maySend()) {
+        clearTimer(l);
+        clearRetry(l);
+        return;
+      }
       if (mode.auto && l.retryTimer !== null) return;
       if (mode.auto && !isOnline()) {
-        // Offline: hold the queue, but keep one probe scheduled so it cannot strand.
         scheduleRetry(key, l);
         return;
       }
-      if (!mode.auto && l.retryTimer !== null) {
-        // An explicit flush (or the probe itself) supersedes the pending backoff.
-        clearRetry(l);
-      }
+      if (!mode.auto && l.retryTimer !== null) clearRetry(l);
       const scope = currentScope();
       if (scope === null) {
-        // No identity to send as yet: hold, and look again later.
         scheduleRetry(key, l);
         return;
       }
@@ -267,8 +314,7 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
       for (let batch = take(l, scope, upTo); batch; batch = take(l, scope, upTo)) {
         if (!(await sendBatch(key, l, batch, false))) return;
       }
-      // Entries queued while this flush was sending wait for their own ride.
-      if (l.entries.length > 0) armTimer(key, l);
+      if (l.entries.some((entry) => !entry.deadLetter)) armTimer(key, l);
     });
     l.tail = run;
     return run;
@@ -277,12 +323,24 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
   const flushAll = (final: boolean): Promise<void> =>
     Promise.all([...lanes.keys()].map((k) => flushKey(k, { final }))).then(() => undefined);
 
-  const unsubscribe = opts.online?.subscribe((online) => {
-    if (!online || closed) return;
+  const unsubscribeOnline = opts.online?.subscribe((online) => {
+    if (!online || !maySend()) return;
     for (const l of lanes.values()) {
       clearRetry(l);
       l.attempt = 0;
     }
+    void flushAll(false);
+  });
+  const unsubscribePermission = opts.sendPermission?.subscribe((allowed) => {
+    if (!allowed) {
+      for (const l of lanes.values()) {
+        clearTimer(l);
+        clearRetry(l);
+      }
+      for (const controller of inFlightControllers) controller.abort();
+      return;
+    }
+    for (const l of lanes.values()) l.attempt = 0;
     void flushAll(false);
   });
 
@@ -294,21 +352,78 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
     });
   }
 
-  return {
-    enqueue(key, item) {
-      const l = lane(key);
-      const scope = currentScope();
-      const entry: OutboxEntry<T, K> = { id: newId(), key, item, seq: nextSeq(), ...(scope ? { scope } : {}) };
-      l.entries.push(entry);
-      persist((s) => s.put([entry]));
-      enforceBound();
-      const unsealed = l.entries.reduce((n, e) => (e.batch ? n : n + 1), 0);
-      if (unsealed >= maxItems) {
-        void flushKey(key, { final: false, auto: true });
-      } else {
-        armTimer(key, l);
+  /**
+   * Permanent 4xx on durable user work becomes a dead letter. Transient failure is
+   * retried. Best-effort telemetry may be dropped. Returns false when a retry was
+   * scheduled (the caller should stop), true when the batch was fully settled.
+   */
+  const settleFailure = (key: K, l: Lane<T, K>, batch: OutboxEntry<T, K>[], error: unknown): boolean => {
+    const permanent = retryPolicy.isPermanent(error);
+    const dead: OutboxEntry<T, K>[] = [];
+    const keep: OutboxEntry<T, K>[] = [];
+    const discarded: OutboxEntry<T, K>[] = [];
+    for (const entry of batch) {
+      const userWork = retentionOf(entry) === "durable";
+      if (permanent && userWork) dead.push(entry);
+      else if (!permanent && (userWork || retry)) keep.push(entry);
+      else discarded.push(entry);
+    }
+    if (dead.length) {
+      const at = new Date().toISOString();
+      const reason = error instanceof Error ? error.message : String(error);
+      for (const entry of dead) {
+        entry.deadLetter = { reason, at };
+        entry.retention = "durable";
       }
-      return entry.id;
+      requeue(l, dead);
+      void persist((s) => s.put(dead));
+      opts.onDeadLetter?.(key, dead, error);
+    }
+    if (keep.length) {
+      requeue(l, keep);
+      scheduleRetry(key, l, !retry && keep.some((entry) => retentionOf(entry) === "durable"));
+    }
+    if (discarded.length) drop(key, discarded, permanent ? "rejected" : "failed");
+    return keep.length === 0;
+  };
+
+  const enqueueEntry = (key: K, item: T, work: string | undefined, path: "enqueue" | "enqueueDurable"): { id: string; persisted: Promise<void> } => {
+    const retention = resolveRetention(work, path);
+    if (retention === "durable") {
+      evictBestEffortWhileOver(Math.max(0, maxEntries - 1));
+      if (durableQueued() >= maxEntries) {
+        opts.onCapacity?.(durableQueued(), maxEntries);
+        throw Object.assign(new Error("outbox_capacity"), { code: "OUTBOX_CAPACITY" });
+      }
+    }
+    const l = lane(key);
+    const scope = currentScope();
+    const entry: OutboxEntry<T, K> = {
+      id: newId(),
+      key,
+      item,
+      seq: nextSeq(),
+      retention,
+      ...(scope ? { scope } : {}),
+    };
+    l.entries.push(entry);
+    const persisted = persist((s) => s.put([entry]));
+    if (retention === "best-effort") enforceBound();
+    const unsealed = l.entries.reduce((n, e) => (e.batch || e.deadLetter ? n : n + 1), 0);
+    if (unsealed >= maxItems) void flushKey(key, { final: false, auto: true });
+    else armTimer(key, l);
+    return { id: entry.id, persisted };
+  };
+
+  return {
+    enqueue(key, item, work) {
+      return enqueueEntry(key, item, work, "enqueue").id;
+    },
+    async enqueueDurable(key, item, work) {
+      const enqueued = enqueueEntry(key, item, work, "enqueueDurable");
+      await enqueued.persisted;
+      if (storeFailure) throw storeFailure;
+      return enqueued.id;
     },
     async flush(key, flushOpts) {
       const final = flushOpts?.final ?? false;
@@ -319,9 +434,9 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
       const l = lane(key);
       const run = l.tail.then(async () => {
         await loaded;
+        if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
         clearTimer(l);
         const scope = currentScope();
-        // Only this scope's entries ride along; another scope's stay parked.
         const taken: OutboxEntry<T, K>[] = [];
         if (scope !== null) {
           const parked: OutboxEntry<T, K>[] = [];
@@ -329,24 +444,66 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
           l.entries = parked;
         }
         const items = taken.map((e) => e.item);
-        const ctx = drainContext(taken, scope, newId);
+        const controller = new AbortController();
+        inFlightControllers.add(controller);
+        const ctx = { ...drainContext(taken, scope, newId), signal: controller.signal };
         const ids = ctx.ids as string[];
         l.inFlight += taken.length;
         try {
+          if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
           const result = await request(opts.coalesce && items.length ? opts.coalesce(items) : items, ctx);
           l.inFlight -= taken.length;
-          if (taken.length) persist((s) => s.remove(ids));
+          if (taken.length) void persist((s) => s.remove(ids));
           return result;
         } catch (error) {
           l.inFlight -= taken.length;
-          if (retry) requeue(l, taken);
-          else drop(key, taken, "failed");
+          settleFailure(key, l, taken, error);
           throw error;
+        } finally {
+          inFlightControllers.delete(controller);
         }
       });
-      // The lane continues after this request whether it succeeded or not.
       l.tail = run.catch(() => undefined);
       return run;
+    },
+    async retryDeadLetters() {
+      const retained: OutboxEntry<T, K>[] = [];
+      for (const l of lanes.values()) {
+        for (const entry of l.entries) {
+          if (!entry.deadLetter) continue;
+          delete entry.deadLetter;
+          retained.push(entry);
+        }
+      }
+      if (retained.length) await persist((s) => s.put(retained));
+      await flushAll(false);
+    },
+    exportDeadLetters() {
+      const all: OutboxEntry<T, K>[] = [];
+      for (const l of lanes.values()) all.push(...l.entries);
+      return listDeadLetters(all);
+    },
+    async repairDeadLetter(id) {
+      if (typeof id !== "string" || id.trim() === "") return false;
+      let target: OutboxEntry<T, K> | undefined;
+      for (const l of lanes.values()) {
+        target = l.entries.find((entry) => entry.id === id && entry.deadLetter);
+        if (target) break;
+      }
+      if (!target?.deadLetter) return false;
+      const previousLetter = target.deadLetter;
+      const previousBatch = target.batch;
+      const repaired = repairOneDeadLetter([target], id);
+      if (!repaired) return false;
+      const failureBefore = storeFailure;
+      await persist((s) => s.put([repaired]));
+      if (storeFailure !== failureBefore) {
+        repaired.deadLetter = previousLetter;
+        if (previousBatch !== undefined) repaired.batch = previousBatch;
+        else delete repaired.batch;
+        throw storeFailure;
+      }
+      return true;
     },
     size(key) {
       if (key !== undefined) return lanes.get(key)?.entries.length ?? 0;
@@ -357,16 +514,24 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
     stats() {
       let queued = 0;
       let inFlight = 0;
+      let deadLetters = 0;
       for (const l of lanes.values()) {
         queued += l.entries.length;
         inFlight += l.inFlight;
+        deadLetters += l.entries.filter((entry) => entry.deadLetter).length;
       }
-      return { queued, inFlight, dropped };
+      return { queued, inFlight, dropped, deadLetters };
     },
-    ready: () => loaded.then(() => writes),
+    async ready() {
+      await loaded;
+      await writes;
+      if (storeFailure) throw storeFailure;
+    },
     close() {
       closed = true;
-      unsubscribe?.();
+      unsubscribeOnline?.();
+      unsubscribePermission?.();
+      for (const controller of inFlightControllers) controller.abort();
       for (const l of lanes.values()) {
         clearTimer(l);
         clearRetry(l);

@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { classifyOutboxWork } from "./classification.js";
+import { exportDeadLetters, repairDeadLetter } from "./deadLetter.js";
 import { createOutbox } from "./outbox.js";
 import { createMemoryOutboxStore, createOnlineSignal } from "./stores.js";
+import type { OutboxEntry } from "./types.js";
 
 type Sent = { key: string; items: number[]; final: boolean; idempotencyKey?: string };
 
@@ -199,13 +202,67 @@ describe("createOutbox — durable mode", () => {
     expect(box.stats().dropped).toBe(0);
   });
 
-  it("drops and counts a batch the server refused", async () => {
-    const onDrop = vi.fn();
-    const box = createOutbox<number>({ maxWaitMs: 0, retry: {}, onDrop, send: () => { throw refused(); } });
+  it("retains a permanent refusal as a dead letter until explicitly repaired", async () => {
+    const onDeadLetter = vi.fn();
+    let fail = true;
+    const box = createOutbox<number>({
+      maxWaitMs: 0,
+      retry: {},
+      onDeadLetter,
+      send: () => { if (fail) throw refused(); },
+    });
     box.enqueue("a", 1);
     await box.flush();
-    expect(onDrop).toHaveBeenCalledWith({ key: "a", count: 1, reason: "rejected" });
+    expect(onDeadLetter).toHaveBeenCalledWith("a", [expect.objectContaining({ id: expect.any(String) })], expect.any(Error));
+    expect(box.size()).toBe(1);
+    expect(box.stats()).toMatchObject({ dropped: 0, deadLetters: 1 });
+    await box.flush();
+    expect(onDeadLetter).toHaveBeenCalledTimes(1);
+    fail = false;
+    await box.retryDeadLetters();
     expect(box.size()).toBe(0);
+  });
+
+  it("denies every send path while administrative permission is off", async () => {
+    let allowed = false;
+    let listener: ((allowed: boolean) => void) | undefined;
+    const send = vi.fn();
+    const box = createOutbox<number>({
+      maxWaitMs: 0,
+      retry: {},
+      sendPermission: {
+        isAllowed: () => allowed,
+        subscribe: (next) => { listener = next; return () => undefined; },
+      },
+      send,
+    });
+    box.enqueue("a", 1);
+    await box.flush("a", { final: true });
+    await expect(box.drainWith("a", async () => "sent")).rejects.toThrow("platform_send_disabled");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(send).not.toHaveBeenCalled();
+    allowed = true;
+    listener?.(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("acknowledges durable enqueue only after persistence and never evicts at capacity", async () => {
+    const store = createMemoryOutboxStore<number, string>();
+    const box = createOutbox<number>({
+      maxWaitMs: 0,
+      maxItems: 1,
+      maxEntries: 1,
+      retry: {},
+      store,
+      online: createOnlineSignal(false),
+      send: () => undefined,
+    });
+    await box.enqueueDurable("a", 1);
+    expect((await store.load()).map((entry) => entry.item)).toEqual([1]);
+    expect(() => box.enqueue("a", 2)).toThrow("outbox_capacity");
+    expect((await store.load()).map((entry) => entry.item)).toEqual([1]);
+    expect(box.stats().dropped).toBe(0);
   });
 
   it("replays a stored backlog after a restart, sealed batches under their original key", async () => {
@@ -287,6 +344,189 @@ describe("createOutbox — durable mode", () => {
     tenant = "t1";
     await box.flush();
     expect(sent[1]).toEqual({ scope: "t1", items: [1, 3] });
+  });
+});
+
+describe("outbox work classification", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("classifies history, tickets, audits, and facts as durable, and telemetry as best-effort", () => {
+    expect(classifyOutboxWork("history")).toBe("durable");
+    expect(classifyOutboxWork("tickets")).toBe("durable");
+    expect(classifyOutboxWork("audits")).toBe("durable");
+    expect(classifyOutboxWork("facts")).toBe("durable");
+    expect(classifyOutboxWork(" ticket ")).toBe("durable");
+    expect(classifyOutboxWork("telemetry")).toBe("best-effort");
+    expect(classifyOutboxWork("activity")).toBeUndefined();
+    expect(classifyOutboxWork("")).toBeUndefined();
+    expect(classifyOutboxWork(undefined)).toBeUndefined();
+  });
+
+  it("never evicts history, tickets, audits, or facts, and may drop telemetry", () => {
+    const onDrop = vi.fn();
+    const held = createOutbox<string>({
+      maxEntries: 2,
+      maxItems: 1,
+      maxWaitMs: 0,
+      online: createOnlineSignal(false),
+      onDrop,
+      send: () => undefined,
+    });
+    held.enqueue("q", "history", "history");
+    held.enqueue("q", "tickets", "tickets");
+    expect(() => held.enqueue("q", "audits", "audits")).toThrow("outbox_capacity");
+    expect(onDrop).not.toHaveBeenCalled();
+    expect(held.size()).toBe(2);
+    expect(held.stats().dropped).toBe(0);
+
+    const mixed = createOutbox<string>({
+      maxEntries: 1,
+      maxItems: 1,
+      maxWaitMs: 0,
+      online: createOnlineSignal(false),
+      onDrop,
+      send: () => undefined,
+    });
+    mixed.enqueue("q", "noise", "telemetry");
+    mixed.enqueue("q", "fact", "facts");
+    expect(mixed.size()).toBe(1);
+    expect(onDrop).toHaveBeenCalledWith({ key: "q", count: 1, reason: "overflow" });
+    expect(mixed.stats().dropped).toBe(1);
+    mixed.enqueue("q", "more-noise", "telemetry");
+    expect(mixed.size()).toBe(1);
+    expect(mixed.stats().dropped).toBe(2);
+  });
+
+  it("classifies a queue-level work kind when enqueue does not pass one", () => {
+    const box = createOutbox<number>({
+      work: "history",
+      maxEntries: 1,
+      maxItems: 1,
+      maxWaitMs: 0,
+      online: createOnlineSignal(false),
+      send: () => undefined,
+    });
+    box.enqueue("q", 1);
+    expect(() => box.enqueue("q", 2)).toThrow("outbox_capacity");
+    expect(box.size()).toBe(1);
+    expect(box.stats().dropped).toBe(0);
+  });
+
+  it("does not silently drop user work on a permanent 4xx, and may drop telemetry", async () => {
+    const refused = () => Object.assign(new Error("HTTP 400"), { status: 400 });
+    const box = createOutbox<string>({
+      maxWaitMs: 0,
+      send: () => {
+        throw refused();
+      },
+    });
+    box.enqueue("q", "turn", "history");
+    box.enqueue("q", "ping", "telemetry");
+    await box.flush();
+    expect(box.stats()).toMatchObject({ deadLetters: 1, dropped: 1 });
+    expect(box.exportDeadLetters().map((entry) => entry.item)).toEqual(["turn"]);
+    expect(box.size()).toBe(1);
+  });
+
+  it("dead-letters enqueueDurable user work on a permanent 4xx even without a retry policy", async () => {
+    const box = createOutbox<number>({
+      maxWaitMs: 0,
+      send: () => {
+        throw Object.assign(new Error("HTTP 422"), { status: 422 });
+      },
+    });
+    await box.enqueueDurable("a", 7);
+    await box.flush();
+    expect(box.stats()).toMatchObject({ deadLetters: 1, dropped: 0 });
+    expect(box.size()).toBe(1);
+  });
+
+  it("retries unsynced user work instead of dropping a transient failure", async () => {
+    let fail = true;
+    const box = createOutbox<number>({
+      maxWaitMs: 0,
+      send: () => {
+        if (fail) throw new Error("fetch failed");
+      },
+    });
+    box.enqueue("a", 1, "facts");
+    await box.flush();
+    expect(box.size()).toBe(1);
+    expect(box.stats().dropped).toBe(0);
+    fail = false;
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(box.size()).toBe(0);
+  });
+});
+
+describe("dead-letter export and repair", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const refused = () => Object.assign(new Error("HTTP 400"), { status: 400 });
+
+  it("exports dead letters without deleting them, and repairs only an explicit id", async () => {
+    let fail = true;
+    const sent: number[][] = [];
+    const store = createMemoryOutboxStore<number, string>();
+    const box = createOutbox<number>({
+      maxWaitMs: 0,
+      retry: {},
+      store,
+      send: (_key, items) => {
+        sent.push(items);
+        if (fail) throw refused();
+      },
+    });
+    box.enqueue("a", 1, "history");
+    box.enqueue("a", 2, "audits");
+    await box.flush();
+    await box.ready();
+
+    const exported = [...box.exportDeadLetters()];
+    expect(exported.map((entry) => entry.item)).toEqual([1, 2]);
+    exported.pop();
+    const again = box.exportDeadLetters();
+    expect(again).toHaveLength(2);
+    expect(again[0]!.deadLetter).toEqual(expect.objectContaining({ reason: "HTTP 400" }));
+    expect(box.stats().deadLetters).toBe(2);
+    expect((await store.load()).filter((entry) => entry.deadLetter)).toHaveLength(2);
+
+    expect(await box.repairDeadLetter("")).toBe(false);
+    expect(await box.repairDeadLetter("   ")).toBe(false);
+    expect(await box.repairDeadLetter("missing")).toBe(false);
+    expect(box.stats().deadLetters).toBe(2);
+    expect(box.exportDeadLetters().map((entry) => entry.id)).toEqual(again.map((entry) => entry.id));
+
+    fail = false;
+    expect(await box.repairDeadLetter(again[0]!.id)).toBe(true);
+    expect(box.stats().deadLetters).toBe(1);
+    expect(box.exportDeadLetters().map((entry) => entry.id)).toEqual([again[1]!.id]);
+    const stored = await store.load();
+    expect(stored.find((entry) => entry.id === again[0]!.id)?.deadLetter).toBeUndefined();
+    expect(stored.find((entry) => entry.id === again[1]!.id)?.deadLetter).toBeDefined();
+    await box.flush();
+    expect(sent.at(-1)).toEqual([1]);
+    expect(box.stats().deadLetters).toBe(1);
+    expect(box.size()).toBe(1);
+  });
+
+  it("pure export copies dead letters and pure repair ignores a missing id", () => {
+    const entries: OutboxEntry<number, string>[] = [
+      { id: "a", key: "q", item: 1, seq: 1, deadLetter: { reason: "no", at: "t" } },
+      { id: "b", key: "q", item: 2, seq: 2 },
+    ];
+    const exported = exportDeadLetters(entries);
+    expect(exported.map((entry) => entry.id)).toEqual(["a"]);
+    delete exported[0]!.deadLetter;
+    expect(entries[0]!.deadLetter).toEqual({ reason: "no", at: "t" });
+    expect(repairDeadLetter(entries, "")).toBeNull();
+    expect(repairDeadLetter(entries, "b")).toBeNull();
+    expect(entries[0]!.deadLetter).toBeDefined();
+    expect(repairDeadLetter(entries, "a")?.retention).toBe("durable");
+    expect(entries[0]!.deadLetter).toBeUndefined();
+    expect(entries[1]!.deadLetter).toBeUndefined();
   });
 });
 
