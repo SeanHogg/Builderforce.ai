@@ -24,7 +24,22 @@ ollama pull llama3.3
 ollama pull qwen2.5-coder:32b
 # or
 ollama pull deepseek-r1:32b
+# or — JetBrains Mellum 2.1, a 12B MoE (2.5B active/token), 131,072-token context
+ollama pull hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Q4_K_M
 ```
+
+> **Note — Mellum 2.1:** it is served through Ollama like any other model, so it is not a
+> page engine and it appears in the picker only once its weights are on disk. The pull above
+> is JetBrains' own recommended `Q4_K_M` quantization (~8.1 GB, 88.0% MMLU-Pro recovery);
+> `MXFP4_MOE` is ~7.0 GB for a smaller download, and `BF16` is the ~24.3 GB reference
+> build rather than a practical local default. Budget ~8 GB of disk and the RAM of one 12B
+> MoE weight set.
+>
+> It is discovered as `local/ollama/hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Q4_K_M`.
+> The Thinking build emits its scratchpad in `<think>` blocks; those are normalized on the
+> way into the transcript (`canonicalTurnText`), so the reasoning renders as reasoning
+> instead of leaking into the answer — but it does emit them, so expect a pause before the
+> first token. Pull the `…-instruct-…` variant instead if you want a non-reasoning build.
 
 3. Enable Ollama for BuilderForce Agents (any value works; Ollama doesn't require a real key):
 

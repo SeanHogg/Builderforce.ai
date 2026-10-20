@@ -61,7 +61,9 @@ extra tooling is involved.
 
 1. **Start a runtime** and leave it serving:
    - **Ollama** — `ollama serve`, with at least one model pulled (`ollama pull qwen3:8b`).
-     Listens on `http://127.0.0.1:11434`.
+     Listens on `http://127.0.0.1:11434`. Any Ollama model works, including a JetBrains
+     Mellum 2.1 GGUF — `ollama pull hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Q4_K_M`
+     (~8.1 GB) — which shows up as its own row under **On this device**.
    - **FreeToken** — start the engine for a model in the desktop app. Listens on
      `http://127.0.0.1:1919`.
 2. **Turn it on** — tick **BuilderForce › Local Models: Enabled** in settings. Only change the

@@ -89,6 +89,21 @@ describe('local model refs', () => {
     });
   });
 
+  /**
+   * A Hugging Face GGUF pulled through Ollama carries the publisher's org and repo, so
+   * the model segment holds TWO `/` before the tag: `hf.co/JetBrains/<repo>:Q4_K_M`.
+   * `ref.ts` splits on the first two separators only, so everything after the runtime is
+   * the model — but that is exactly the kind of rule that breaks silently the first time
+   * someone routes a real repo id through it, so it is pinned here by that exact id.
+   */
+  it('round-trips a namespaced Hugging Face GGUF id served by Ollama', () => {
+    const hfId = 'hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Q4_K_M';
+    expect(formatLocalModelRef('ollama', hfId)).toBe(`local/ollama/${hfId}`);
+    expect(parseLocalModelRef(`local/ollama/${hfId}`)).toEqual({ provider: 'ollama', model: hfId });
+    // A local ref, so the router must price it at zero rather than check a plan for it.
+    expect(isLocalModelRef(`local/ollama/${hfId}`)).toBe(true);
+  });
+
   it('rejects anything that is not a local ref', () => {
     for (const ref of [
       undefined,
