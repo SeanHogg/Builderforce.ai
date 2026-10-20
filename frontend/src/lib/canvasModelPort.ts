@@ -12,7 +12,6 @@ import {
   CANVAS_RESPONSE_TOKENS,
   CANVAS_STREAM_IDLE_MS,
   CANVAS_TOOL_LIMIT,
-  RESERVED_AUTHORING_TURNS,
   canvasTurnShape,
 } from '@/lib/canvasAiTurnBudget';
 import { specsFor } from '@/lib/canvasAiToolExecution';
@@ -28,22 +27,13 @@ export type CanvasTurn = Awaited<ReturnType<typeof streamChatCompletion>>;
  * the provider breaks under it, and the completion diagnostics.
  */
 export function canvasModelPort(run: CanvasRun): LoopPorts<ChatCompletionMessage>['complete'] {
-  const { options, messages, actions, budget, mutationRequested, toolsUsedThisTurn, requiredTools, stream, guestTurnId } = run;
+  const { options, messages, actions, mutationRequested, toolsUsedThisTurn, requiredTools, stream, guestTurnId } = run;
   return async (ctx) => {
     const turn = ctx.step;
-    // The authoring phase arms on EITHER trigger. Turn count alone made it unreachable
-    // for the failure it exists to stop: a model that answers in prose instead of
-    // calling a tool is told once to act, ignores it, and the loop gives up on turn 4 —
-    // three turns before the reserved window it never reaches. Having already ignored
-    // an explicit act-now directive is the stronger signal of the two, so it arms the
-    // same phase: research and re-reads withdrawn, authoring tools only.
-    // Countdown arms only for a finite cap. An omitted cap is unbounded; subtracting
-    // it is NaN and the comparison used to fail closed by accident. Prose recovery
-    // still arms authoring on its own.
-    const stepCap = budget.stepCap;
-    run.authoringOnly = mutationRequested && !run.canvasChanged
-      && (run.mutationRecoveries > 0
-        || (typeof stepCap === 'number' && Number.isFinite(stepCap) && stepCap - turn <= RESERVED_AUTHORING_TURNS));
+    // The authoring phase arms once the model has IGNORED an explicit act-now directive
+    // (a prose recovery spent): research and re-reads withdrawn, authoring tools only.
+    // There is no step-count trigger — the canvas loop runs without a step cap.
+    run.authoringOnly = mutationRequested && !run.canvasChanged && run.mutationRecoveries > 0;
     if (run.authoringOnly && !run.authoringDirectiveIssued) {
       run.authoringDirectiveIssued = true;
       messages.push({

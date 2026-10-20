@@ -6,6 +6,8 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { fakeDb } from '../../../test/fakeDb';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 
 const signEmulationJwt = vi.fn(async (..._args: unknown[]) => 'emu-token');
@@ -40,6 +42,14 @@ describe('startImpersonation', () => {
     const db = fakeDb([[target], [{ id: 'sess-open' }]]);
     const res = await startImpersonation(env, db as unknown as Db, input);
     expect(res).toMatchObject({ ok: false, status: 409, sessionId: 'sess-open' });
+  });
+
+  it('counts only an UNEXPIRED, un-ended session as active', async () => {
+    const db = fakeDb([[target], [], [tenant], [{ role: 'viewer' }]]);
+    await startImpersonation(env, db as unknown as Db, { ...input, role: 'owner' });
+    const activeCheck = new PgDialect().sqlToQuery(db.calls[1]!.where as SQL);
+    expect(activeCheck.sql).toContain('"ended_at" is null');
+    expect(activeCheck.sql).toContain('"expires_at" >');
   });
 
   it('refuses a role above the target\'s own', async () => {

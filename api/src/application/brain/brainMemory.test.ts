@@ -20,7 +20,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runInRequestScope } from '../shared/requestScope';
-import * as projectFacts from '../llm/projectFacts';
+import * as projectFacts from '../llm/projectFactsWrite';
 import * as llmProxy from '../llm/LlmProxyService';
 import * as timelineTail from '../../domain/shared/timelineTail';
 import * as brainLlmCall from './brainLlmCall';

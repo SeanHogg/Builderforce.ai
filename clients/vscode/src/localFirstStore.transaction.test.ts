@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getLocalAuditRun, startLocalAuditRun } from "./localAuditStore";
-import { createVsCodeLocalFirstStore, decodeDurableJournalFrames, localBrainApplication } from "./localFirstStore";
+import { decodeJournalFrames } from "@builderforce/local-first";
+import { createVsCodeLocalFirstStore, localBrainApplication } from "./localFirstStore";
 import { createLocalWorkRepository } from "./localWorkRepository";
-import { changeSetLifecycleId, readChangeSetLifecycle, recordChangeSetBaseline } from "./runChangeSets";
+import { changeSetLifecycleId, readChangeSetLifecycle, recordChangeSetBaseline } from "./changeSetLifecycle";
 import { recordRunStarted } from "./runRecovery";
 
 vi.mock("vscode", () => ({
@@ -36,7 +37,7 @@ function host(directory: string, state: Map<string, unknown>): Host {
 }
 
 function framesOf(path: string) {
-  return decodeDurableJournalFrames(new Uint8Array(readFileSync(path)));
+  return decodeJournalFrames(new Uint8Array(readFileSync(path)));
 }
 
 describe("local-first journal transaction", () => {
@@ -251,11 +252,11 @@ describe("local-first journal transaction", () => {
     expect(readFileSync(writing.journalFile).subarray(0, 5).toString("utf8")).toBe("BFJF1");
     expect(committed.some((frame) =>
       frame.records.some((record) => record.entityType === "audit-run" && record.id === auditRunId)
-      && frame.events.some((event) => event.entityType === "audit-run" && event.clientEntityId === auditRunId && event.operation === "create" && event.eventId === `audit-run:create:${auditRunId}`),
+      && frame.events.some((event) => event.entityType === "audit-run" && event.clientEntityId === auditRunId && event.operation === "create" && event.idempotencyKey === `audit-run:create:${auditRunId}`),
     )).toBe(true);
     expect(committed.some((frame) =>
       frame.records.some((record) => record.entityType === "execution" && record.id === executionId)
-      && frame.events.some((event) => event.entityType === "execution" && event.clientEntityId === executionId && event.operation === "create" && event.eventId === `execution:start:${executionId}`),
+      && frame.events.some((event) => event.entityType === "execution" && event.clientEntityId === executionId && event.operation === "create" && event.idempotencyKey === `execution:start:${executionId}`),
     )).toBe(true);
     expect(committed.some((frame) =>
       frame.records.some((record) => record.entityType === "change-set" && record.id === changeSetId)

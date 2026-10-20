@@ -11,12 +11,12 @@ import { isLikeableArtifactType, readArtifactStats, toggleArtifactLike } from '.
 
 describe('toggleArtifactLike', () => {
   it('likes when nothing was removed, idempotently on the primary key', async () => {
-    const db = fakeDb([[], []]);
+    const db = fakeDb([[], [{ slug: 'p1' }], []]);
     const res = await toggleArtifactLike(db as unknown as Db, { userId: 'u1', type: 'persona', slug: 'p1' });
     expect(res).toEqual({ liked: true });
-    expect(db.calls.map((c) => c.kind)).toEqual(['delete', 'insert']);
-    expect(db.calls[1]?.chain).toContain('onConflictDoNothing');
-    expect(db.calls[1]?.payload).toEqual({ userId: 'u1', artifactType: 'persona', artifactSlug: 'p1' });
+    expect(db.calls.map((c) => c.kind)).toEqual(['delete', 'select', 'insert']);
+    expect(db.calls[2]?.chain).toContain('onConflictDoNothing');
+    expect(db.calls[2]?.payload).toEqual({ userId: 'u1', artifactType: 'persona', artifactSlug: 'p1' });
   });
 
   it('unlikes when the delete removed the caller\'s row, without inserting', async () => {
@@ -27,11 +27,18 @@ describe('toggleArtifactLike', () => {
   });
 
   it('re-derives the skill catalogue counter from the store after a skill toggle', async () => {
-    const db = fakeDb([[], [], []]);
+    const db = fakeDb([[], [{ slug: 's1' }], [], []]);
     await toggleArtifactLike(db as unknown as Db, { userId: 'u1', type: 'skill', slug: 's1' });
-    expect(db.calls.map((c) => c.kind)).toEqual(['delete', 'insert', 'update']);
+    expect(db.calls.map((c) => c.kind)).toEqual(['delete', 'select', 'insert', 'update']);
     // A recomputed count, never a `likes + 1` that drifts on retries.
-    expect(Object.keys(db.calls[2]?.payload as object)).toEqual(['likes']);
+    expect(Object.keys(db.calls[3]?.payload as object)).toEqual(['likes']);
+  });
+
+  it('404s a like on an artifact that does not exist, and writes no row', async () => {
+    const db = fakeDb([[], []]);
+    await expect(toggleArtifactLike(db as unknown as Db, { userId: 'u1', type: 'agent', slug: 'nope' }))
+      .rejects.toMatchObject({ name: 'NotFoundError' });
+    expect(db.calls.map((c) => c.kind)).toEqual(['delete', 'select']);
   });
 });
 

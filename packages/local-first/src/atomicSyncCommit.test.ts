@@ -96,14 +96,14 @@ describe('applyAtomicSyncCommit', () => {
     const saved = await applyAtomicSyncCommit(watched, plan);
 
     expect(transacts).toBe(1);
-    expect(saved.eventId).toBe('ticket:ticket-1:1');
+    expect(saved.idempotencyKey).toBe('ticket:ticket-1:1');
     expect(saved.clientEntityId).toBe('ticket-1');
     expect(saved.localSequence).toBe(1);
     expect(saved.payloadHash).toMatch(/^fnv1a:/);
     const snapshot = await store.export();
     expect(snapshot.records).toEqual([plan.record]);
     expect(snapshot.events).toEqual([saved]);
-    expect(snapshot.events.map((event) => event.eventId)).toEqual(['ticket:ticket-1:1']);
+    expect(snapshot.events.map((event) => event.idempotencyKey)).toEqual(['ticket:ticket-1:1']);
   });
 
   it('leaves neither the record nor the event when append throws', async () => {
@@ -149,7 +149,7 @@ describe('applyAtomicSyncCommit', () => {
     const after = await store.export();
     expect(after).toEqual(before);
     expect(after.records.map((row) => row.id)).toEqual(['seed-ticket']);
-    expect(after.events.map((row) => row.eventId)).toEqual(['ticket:seed-ticket:1']);
+    expect(after.events.map((row) => row.idempotencyKey)).toEqual(['ticket:seed-ticket:1']);
     expect(after.receipts).toEqual([SEED_RECEIPT]);
     expect(after.receipts.map((row) => row.eventId)).not.toContain(receipt.eventId);
   });
@@ -169,7 +169,7 @@ describe('applyAtomicSyncCommit', () => {
     expect(retried.eventId).toBe(saved.eventId);
     expect(snapshot.records).toHaveLength(1);
     expect(snapshot.events).toHaveLength(1);
-    expect(snapshot.events[0]?.eventId).toBe('ticket:ticket-9:4');
+    expect(snapshot.events[0]?.idempotencyKey).toBe('ticket:ticket-9:4');
     expect(snapshot.nextSequence).toBe(2);
   });
 

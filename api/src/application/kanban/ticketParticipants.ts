@@ -642,36 +642,31 @@ export class TicketParticipantsService {
         .where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, l.participantId)))) as unknown as Parameters<typeof this.db.batch>[0]);
     }
     const created = links.length;
-    // The child ROWS and the count are the contract and stay inline above: `created` is
-    // what the parent ticket's %-complete rollup is built on, and the response shape is
-    // `{ created }`. What follows is the rollup's bookkeeping, and it is multi-hop DB
-    // work with no bound — `syncStates` re-reads the manifest plus the append-only
-    // sign-off ledger and rewrites changed rows, then `bump` walks the task version
-    // token, the task context and the project version token. None of it changes the
-    // number being returned, so it does not belong in front of the response.
+    // The child ROWS and the count are the contract and stay inline above.
     //
-    // `syncStates` is safe to let finish a moment late. It is a pure re-derivation: it
-    // recomputes every slot from the ledger, the child task's status and the assignee,
-    // and writes only rows that actually differ, so running it again (the next sign-off,
-    // `ensureManifest`, or `coordinateCompletedStage`, which calls it as its first act)
-    // re-derives the same answer. A client that reads the manifest in the brief window
-    // before the deferred rollup lands sees the pre-rollup state and then the correct
-    // one — the same staleness a cached read already has, and one the next write event
-    // heals on its own. `bump` is cache invalidation and is naturally idempotent.
+    // The cache `bump` is INLINE, right after the child rows: the materialize route
+    // returns `{ created }` and the client immediately re-reads the ticket, its
+    // children and the project board. A bump deferred past the response let that
+    // re-read hit the pre-materialize cache — new children invisible until the TTL.
     //
-    // The one caller of this method is the materialize route, which returns `created`
-    // and nothing else; the MCP tool replays that same route. Nothing reads the rollup
-    // off the returned value, so deferring cannot break a caller that expected it
-    // settled. Where there is no invocation to attach to (a unit test, a non-Worker
-    // caller) it is awaited inline, so those callers behave exactly as before.
-    if (created) await this.rollupPastResponse(env, tenantId, taskId);
+    // Only `syncStates` is deferred: it is a pure, idempotent re-derivation of the
+    // participant states (manifest + append-only sign-off ledger), multi-hop with no
+    // bound, and it does not change `created`. When it lands it bumps AGAIN, so the
+    // re-derived states are not hidden behind the cache the first bump refreshed.
+    // Where there is no invocation to attach to (a unit test, a non-Worker caller)
+    // it is awaited inline, so those callers behave exactly as before.
+    if (created) {
+      await this.bump(env, taskId);
+      await this.rollupPastResponse(env, tenantId, taskId);
+    }
     return created;
   }
 
   /**
-   * The post-create bookkeeping for {@link materializeChildTasks}: recompute participant
-   * states, then invalidate the ticket and project caches. Runs after the response when
-   * the invocation has a `waitUntil`; awaited inline when it does not.
+   * The deferred half of {@link materializeChildTasks}' bookkeeping: recompute participant
+   * states, then invalidate the ticket and project caches a second time (the first bump
+   * already ran inline). Runs after the response when the invocation has a `waitUntil`;
+   * awaited inline when it does not.
    *
    * The deferred promise must never become an unhandled rejection — after the response
    * there is no caller left, and an unhandled rejection kills the Worker isolate. A

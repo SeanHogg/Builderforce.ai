@@ -1,25 +1,23 @@
 /**
  * Activation wiring for interrupted-run recovery (G22).
  *
- * This module has no import side effects. It is safe if `extension.ts` does not call it
- * yet — nothing journals, and nothing replays, until `installRunRecovery` runs.
+ * `extension.ts` calls `installRunRecovery(context)` at activation: every run the
+ * previous extension host left `running`/`queued`/`awaiting_input` is journaled
+ * `interrupted` (never falsely `completed`) and returned as `recovered`.
  *
- * Required call, not yet present (do not add it from a slice that must not edit
- * `extension.ts`). Inside `activate`, immediately before
- * `createVsCodeRunHost(context, …)`:
+ * The run host (`brainRunHostPorts.ts`, through `hostRunLifecycle.ts`) records the
+ * whole lifecycle of each run it starts through the same handle:
  *
- *   void installRunRecovery(context);
+ *   - `recordStarted` when it starts a run it owns;
+ *   - `recordCheckpoint` after each tool step — `safeToResume` only after a step that
+ *     cannot repeat an external effect (a successful, non-mutating, local tool);
+ *   - `recordFinished` from the host's TERMINAL run-status event (`completed`,
+ *     `failed`, `cancelled`) — not because a start promise settled, which it does on
+ *     failure too.
  *
- * `brainRunHostPorts.ts` is the run-host composition point. Another writer may own that
- * file; add one call, do not rewrite it. `installRunRecovery(ctx)` is idempotent for a
- * given context, so the host can take the activation handle and journal a start:
- *
- *   void installRunRecovery(ctx).recordStarted({ runId, chatId: String(chatId) });
- *
- * That call records `running` only. It does not mark the run completed when the host
- * promise settles — a settle is not proof the run finished, and a crash before an
- * explicit `recordFinished` must stay recoverable as `interrupted`. Resume only the
- * steps `resumePlan` lists. A shell command or external action is not replayed merely
+ * A run with a recorded terminal status is never rewritten to `interrupted` by the
+ * next activation; a run the host died inside still is. Resume only the steps
+ * `resumePlan` lists. A shell command or external action is not replayed merely
  * because no result was recorded.
  */
 
@@ -36,17 +34,8 @@ import {
   type PendingStep,
   type ResumePlan,
   type RunLifecycleDeps,
+  type RunTerminalStatus,
 } from "./runRecovery";
-
-/** The one line `extension.ts` `activate` must add, immediately before `createVsCodeRunHost`. */
-export const EXTENSION_ACTIVATION_LINE = "void installRunRecovery(context);";
-
-/**
- * The one call `brainRunHostPorts.ts` should add on the host start path.
- * Do not pair it with `recordFinished("completed")`.
- */
-export const RUN_HOST_START_LINE =
-  "void installRunRecovery(ctx).recordStarted({ runId, chatId: String(chatId) });";
 
 /** The slice of `vscode.ExtensionContext` this installer reads. `activate`'s `context` satisfies it. */
 export interface RunRecoveryHostContext {
@@ -61,6 +50,8 @@ export interface RunRecoveryPorts {
   store?: LocalFirstStore;
   deviceId?: string;
   now?: () => Date;
+  /** A start that could not be journaled. Default `console.warn`. */
+  onError?: (error: unknown) => void;
 }
 
 export interface InstalledRunRecovery {
@@ -79,10 +70,10 @@ export interface InstalledRunRecovery {
   }): Promise<void>;
   recordCheckpoint(args: { runId: string; step: number; safeToResume: boolean; state?: unknown }): Promise<void>;
   /**
-   * Explicit terminal status only. Do not call this because the host `start` promise
+   * The host's terminal run status. Do not call this because the host `start` promise
    * resolved — that promise resolves on failure too.
    */
-  recordFinished(args: { runId: string; status: "completed" | "failed" }): Promise<void>;
+  recordFinished(args: { runId: string; status: RunTerminalStatus }): Promise<void>;
   safeToResume(run: InterruptedRun): boolean;
   resumePlan(run: InterruptedRun, pending?: readonly PendingStep[]): ResumePlan;
   applyResumePlan(
@@ -130,6 +121,7 @@ async function resolvePorts(
 function bindHandle(
   opening: Promise<{ store: LocalFirstStore; deps: RunLifecycleDeps }>,
   recovered: Promise<InterruptedRun[]>,
+  onError: (error: unknown) => void,
 ): InstalledRunRecovery {
   const afterRecovery = async (): Promise<{ store: LocalFirstStore; deps: RunLifecycleDeps }> => {
     const opened = await opening;
@@ -152,8 +144,9 @@ function bindHandle(
           ...(ticketId ? { ticketId } : {}),
           ...(args.destination ? { destination: args.destination } : {}),
         });
-      } catch {
-        /* best-effort: the next activation still recovers whatever did commit */
+      } catch (error) {
+        // The run still starts; the next activation recovers whatever did commit.
+        onError(error);
       }
     },
     async recordCheckpoint(args) {
@@ -183,11 +176,16 @@ function bindHandle(
 export function installRunRecovery(ctx: RunRecoveryHostContext, ports?: RunRecoveryPorts): InstalledRunRecovery {
   const cached = installed.get(ctx);
   if (cached) return cached;
+  const onError = ports?.onError ?? ((error: unknown) => console.warn("run recovery:", error));
   const opening = resolvePorts(ctx, ports);
   const recovered = opening
     .then(({ store, deps }) => recoverInterruptedRuns(store, deps))
-    .catch(() => [] as InterruptedRun[]);
-  const handle = bindHandle(opening, recovered);
+    .catch((error: unknown) => {
+      // A journal that cannot be opened recovers nothing; say so instead of hiding it.
+      onError(error);
+      return [] as InterruptedRun[];
+    });
+  const handle = bindHandle(opening, recovered, onError);
   installed.set(ctx, handle);
   return handle;
 }

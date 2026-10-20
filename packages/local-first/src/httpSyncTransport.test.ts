@@ -94,7 +94,7 @@ describe('createHttpSyncTransport', () => {
     expect(calls).toEqual([]);
   });
 
-  it('POSTs the push batch to the path mountSyncBatch registers', async () => {
+  it('POSTs the push batch to /api/sync/v1/push', async () => {
     const frozen = Object.freeze({
       ...batch,
       events: Object.freeze(batch.events.map((event) => Object.freeze({ ...event }))),
@@ -102,10 +102,10 @@ describe('createHttpSyncTransport', () => {
     const { calls, fetch } = install(() => jsonResponse([receipt]));
     const receipts = await transport(fetch).push(frozen);
 
-    expect(HTTP_SYNC_PUSH_PATH).toBe('/sync/batch');
+    expect(HTTP_SYNC_PUSH_PATH).toBe('/api/sync/v1/push');
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe(PUSH_URL);
-    expect(calls[0]?.url).not.toContain('/api/sync/v1/push');
+    expect(calls[0]?.url).not.toContain('/sync/batch');
     expect(calls[0]?.init.method).toBe('POST');
     expect(calls[0]?.init.headers['content-type']).toBe('application/json');
     expect(calls[0]?.init.headers.accept).toBe('application/json');
@@ -134,12 +134,13 @@ describe('createHttpSyncTransport', () => {
   });
 
   it('refuses a non-2xx push without parsing it into receipts', async () => {
-    const { calls, fetch } = install(() => jsonResponse({ status: 400, code: 'invalid_batch' }, 400));
+    const { calls, fetch } = install(() => jsonResponse({ error: 'destination_tenant_mismatch' }, 400));
     await expect(transport(fetch).push(batch)).rejects.toBeInstanceOf(HttpSyncTransportError);
     await expect(transport(fetch).push(batch)).rejects.toMatchObject({
       code: 'sync_http_status',
       status: 400,
       url: PUSH_URL,
+      detail: 'destination_tenant_mismatch',
     });
     expect(calls).toHaveLength(2);
     expect(calls.every((call) => call.url === PUSH_URL)).toBe(true);
@@ -232,12 +233,11 @@ describe('createHttpSyncTransport', () => {
     expect(calls).toEqual([]);
   });
 
-  it('does not import the unattached mount or call a global fetch', () => {
+  it('targets the mounted sync routes and does not call a global fetch', () => {
     const source = readFileSync(new URL('./httpSyncTransport.ts', import.meta.url), 'utf8');
-    expect(source).not.toMatch(/from ['"][^'"]*mountSyncBatch/);
     expect(source).not.toContain('globalThis.fetch');
-    expect(source).not.toContain('/api/sync/v1/push');
-    expect(source).toContain("'/sync/batch'");
+    expect(source).not.toContain("'/sync/batch'");
+    expect(source).toContain("'/api/sync/v1/push'");
     expect(source).toContain("'/api/sync/v1/pull'");
     expect(source).not.toMatch(/from ['"]\.\.\/\.\.\/api/);
   });

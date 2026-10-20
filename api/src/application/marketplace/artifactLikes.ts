@@ -17,8 +17,10 @@
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { artifactAssignments, artifactLikes, marketplaceSkills } from '../../infrastructure/database/schema';
+import { artifactAssignments, artifactLikes, ideAgents, marketplacePersonas, marketplaceSkills } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { NotFoundError } from '../../domain/shared/errors';
+import { publicAgentScope } from './publicAgentScope';
 
 // Mirrors the `artifact_type` enum (migration 0982: 'content' retired, 'agent'
 // admitted). A marketplace agent is an artifact — the public agent listing carries a
@@ -59,10 +61,32 @@ export async function toggleArtifactLike(
     .returning({ slug: artifactLikes.artifactSlug });
   const liked = removed.length === 0;
   if (liked) {
+    // A like is a row a stranger can create, so it may only name a REAL public
+    // artifact — otherwise any slug mints a like row (and a count) for nothing.
+    // Unliking stays unconditional: a like on a since-removed artifact can be cleared.
+    if (!(await likeableArtifactExists(db, type, slug))) throw new NotFoundError('Artifact', `${type}/${slug}`);
     await db.insert(artifactLikes).values({ userId, artifactType: type, artifactSlug: slug }).onConflictDoNothing();
   }
   if (type === 'skill') await syncSkillLikeCounter(db, slug);
   return { liked };
+}
+
+/**
+ * Is there a publicly listed artifact of this type under this slug? The same
+ * visibility rules the purchase loaders use: a published skill, a public persona,
+ * a publicly listed agent (`publicAgentScope`; an agent's artifact slug is its id).
+ */
+export async function likeableArtifactExists(db: Db, type: LikeableArtifactType, slug: string): Promise<boolean> {
+  const rows = type === 'skill'
+    ? await db.select({ slug: marketplaceSkills.slug }).from(marketplaceSkills)
+      .where(and(eq(marketplaceSkills.slug, slug), eq(marketplaceSkills.published, true))).limit(1)
+    : type === 'persona'
+      ? await db.select({ slug: marketplacePersonas.slug }).from(marketplacePersonas)
+        .where(acrossTenants(marketplacePersonas, 'public_catalogue',
+          eq(marketplacePersonas.slug, slug), eq(marketplacePersonas.visibility, 'public'))).limit(1)
+      : await db.select({ slug: ideAgents.id }).from(ideAgents)
+        .where(publicAgentScope(eq(ideAgents.id, slug))).limit(1);
+  return rows.length > 0;
 }
 
 /**

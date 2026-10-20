@@ -125,7 +125,7 @@ async function persistRun(
   await store.transact(async (tx) => {
     await tx.put(record, operation === "update" ? record.version - 1 : undefined);
     await tx.append({
-      eventId,
+      idempotencyKey: eventId,
       clientEntityId: record.id,
       entityType: "audit-run",
       operation,
@@ -170,7 +170,7 @@ export async function ensureLocalAuditDefinitions(store: LocalFirstStore, deps: 
       record.provenance = { deviceId: deps.deviceId, source: "local", auditVersion: String(definition.version) };
       await tx.put(record, current ? current.version : undefined);
       await tx.append({
-        eventId: current
+        idempotencyKey: current
           ? `audit-definition:update:${definition.id}:v${record.version}`
           : `audit-definition:create:${definition.id}`,
         clientEntityId: definition.id,
@@ -299,7 +299,7 @@ export async function saveLocalAuditFindings(
       });
       await tx.put(findingRecord);
       await tx.append({
-        eventId: `audit-finding:create:${findingId}`,
+        idempotencyKey: `audit-finding:create:${findingId}`,
         clientEntityId: findingId,
         entityType: "audit-finding",
         operation: "create",
@@ -334,7 +334,7 @@ export async function saveLocalAuditFindings(
         });
         await tx.put(remediation);
         await tx.append({
-          eventId: `remediation:create:${remediationId}`,
+          idempotencyKey: `remediation:create:${remediationId}`,
           clientEntityId: remediationId,
           entityType: "remediation",
           operation: "create",
@@ -358,7 +358,7 @@ export async function saveLocalAuditFindings(
       run.version,
     );
     await tx.append({
-      eventId: `audit-run:complete:${args.runId}`,
+      idempotencyKey: `audit-run:complete:${args.runId}`,
       clientEntityId: args.runId,
       entityType: "audit-run",
       operation: "update",
@@ -447,7 +447,7 @@ export async function closeLocalAuditRun(
       run.version,
     );
     await tx.append({
-      eventId: `audit-run:close:${args.runId}:${at}`,
+      idempotencyKey: `audit-run:close:${args.runId}:${at}`,
       clientEntityId: args.runId,
       entityType: "audit-run",
       operation: "update",
@@ -486,7 +486,7 @@ export async function markLocalAuditRun(
       run.version,
     );
     await tx.append({
-      eventId: `audit-run:${args.status}:${args.runId}:${at}`,
+      idempotencyKey: `audit-run:${args.status}:${args.runId}:${at}`,
       clientEntityId: args.runId,
       entityType: "audit-run",
       operation: "update",

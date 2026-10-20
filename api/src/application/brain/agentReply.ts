@@ -87,7 +87,7 @@ export async function agentReply(
     mode: brainChats.mode,
   });
   if (!chat) return { error: 'Chat not found' as const };
-  if (!await advisoryChatAdmittedToAiContext(db, chatId)) {
+  if (!await advisoryChatAdmittedToAiContext(db, chatId, env)) {
     return { error: ADVISORY_THREAD_AI_CONTEXT_ERROR };
   }
   const apiKey = env.OPENROUTER_API_KEY;

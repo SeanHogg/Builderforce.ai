@@ -91,7 +91,7 @@ async function queue(
   },
 ): Promise<void> {
   await store.transact((tx) => tx.append({
-    eventId: event.eventId,
+    idempotencyKey: event.eventId,
     clientEntityId: event.eventId,
     entityType: "project",
     operation: event.operation,
@@ -102,6 +102,21 @@ async function queue(
     payload: { name: "Offline project" },
     ...(event.deadLetter ? { deadLetter: event.deadLetter } : {}),
   }));
+}
+
+/**
+ * The store mints each wire `eventId`; `queue` names the logical write by its
+ * `idempotencyKey`. Read the pending ids BEFORE draining (an accepted push
+ * acknowledges them) and translate a minted id back to the name the test gave it.
+ */
+async function namesById(store: LocalFirstStore): Promise<(eventId: string) => string> {
+  const pending = await store.read((tx) => tx.pending());
+  const names = new Map(pending.map((event) => [event.eventId, event.idempotencyKey ?? event.eventId]));
+  return (eventId) => names.get(eventId) ?? eventId;
+}
+
+function named<T extends { eventId: string }>(rows: readonly T[], nameOf: (eventId: string) => string): T[] {
+  return rows.map((row) => ({ ...row, eventId: nameOf(row.eventId) }));
 }
 
 function exportSlice(source: string, signature: string): string {
@@ -267,13 +282,12 @@ describe("drainQueuedCreates", () => {
   it("hands a queued create to synchronize only when synchronize is granted", async () => {
     const store = createMemoryLocalFirstStore();
     await queue(store, { eventId: "evt-create", operation: "create", destination: DESTINATION });
+    const nameOf = await namesById(store);
     const recorded = recordingTransport();
     const result = await drainQueuedCreates(host({ store, transport: recorded.transport }));
-    expect(result).toEqual({
-      drained: true,
-      handed: [{ eventId: "evt-create", destination: DESTINATION }],
-    });
-    expect(recorded.pushed).toEqual([[{ eventId: "evt-create", operation: "create" }]]);
+    expect(result.drained).toBe(true);
+    expect(named(result.handed, nameOf)).toEqual([{ eventId: "evt-create", destination: DESTINATION }]);
+    expect(recorded.pushed.map((batch) => named(batch, nameOf))).toEqual([[{ eventId: "evt-create", operation: "create" }]]);
     expect(recorded.pulls()).toBeGreaterThan(0);
   });
 
@@ -300,6 +314,7 @@ describe("drainQueuedCreates", () => {
   it("hands the create when this device holds the lease, including past 30s", async () => {
     const store = createMemoryLocalFirstStore();
     await queue(store, { eventId: "evt-create", operation: "create", destination: DESTINATION });
+    const nameOf = await namesById(store);
     const recorded = recordingTransport();
     const result = await drainQueuedCreates(host({
       holder: "device-a",
@@ -309,7 +324,7 @@ describe("drainQueuedCreates", () => {
       transport: recorded.transport,
     }));
     expect(result.drained).toBe(true);
-    expect(recorded.pushed).toEqual([[{ eventId: "evt-create", operation: "create" }]]);
+    expect(recorded.pushed.map((batch) => named(batch, nameOf))).toEqual([[{ eventId: "evt-create", operation: "create" }]]);
   });
 
   it("does not call synchronize for an update, an unbound create, or a dead-letter create", async () => {
@@ -335,17 +350,16 @@ describe("drainQueuedCreates", () => {
     await queue(store, { eventId: "evt-a", operation: "create", destination: DESTINATION });
     await queue(store, { eventId: "evt-b", operation: "create", destination: DESTINATION });
     await queue(store, { eventId: "evt-c", operation: "create", destination: OTHER });
+    const nameOf = await namesById(store);
     const recorded = recordingTransport();
     const result = await drainQueuedCreates(host({ store, transport: recorded.transport }));
-    expect(result).toEqual({
-      drained: true,
-      handed: [
-        { eventId: "evt-a", destination: DESTINATION },
-        { eventId: "evt-b", destination: DESTINATION },
-        { eventId: "evt-c", destination: OTHER },
-      ],
-    });
-    expect(recorded.pushed).toEqual([
+    expect(result.drained).toBe(true);
+    expect(named(result.handed, nameOf)).toEqual([
+      { eventId: "evt-a", destination: DESTINATION },
+      { eventId: "evt-b", destination: DESTINATION },
+      { eventId: "evt-c", destination: OTHER },
+    ]);
+    expect(recorded.pushed.map((batch) => named(batch, nameOf))).toEqual([
       [
         { eventId: "evt-a", operation: "create" },
         { eventId: "evt-b", operation: "create" },

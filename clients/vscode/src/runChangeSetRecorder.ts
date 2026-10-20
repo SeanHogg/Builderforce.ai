@@ -17,11 +17,11 @@
 import { normalizePath } from "./gitChangeModel";
 import {
   attributeRunChanges,
-  runChangeSetId,
   type AttributedChange,
   type FileFingerprint,
   type RunChangeBaseline,
-} from "./runChangeSets";
+} from "./runChangeBaseline";
+import { runChangeSetId } from "./runChangeSets";
 
 /** One pending file the port already hashed. The adapter does not read the file or git. */
 export interface CurrentFileReading {

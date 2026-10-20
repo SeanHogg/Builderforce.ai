@@ -1062,6 +1062,7 @@ export function createWebSearchTool(options?: {
   return {
     label: "Web Search",
     name: "web_search",
+    idempotent: true,
     description,
     parameters: WebSearchSchema,
     execute: async (_toolCallId, args) => {

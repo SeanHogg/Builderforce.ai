@@ -20,6 +20,7 @@ export function createAgentsListTool(opts?: {
   return {
     label: "Agents",
     name: "agents_list",
+    idempotent: true,
     description: "List agent ids you can target with sessions_spawn (based on allowlists).",
     parameters: AgentsListToolSchema,
     execute: async () =>

@@ -41,7 +41,7 @@ import { TaskRepository } from './infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from './infrastructure/repositories/ProjectRepository';
 
 import { runMemoryEmbeddingBackfill } from './application/memory/memoryEmbeddingBackfill';
-import { sweepAllUnrecalledFactDecay } from './application/llm/projectFacts';
+import { sweepAllUnrecalledFactDecay } from './application/llm/projectFactsDecay';
 import { runAgentBenchmarkSweep } from './application/eval/agentBenchmarkSweep';
 import { projectRegistry } from './application/kernel/registryProjection';
 import { METRIC_ROLLUPS } from './application/kernel/rollupRegistry';

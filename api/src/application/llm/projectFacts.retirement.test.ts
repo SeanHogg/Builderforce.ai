@@ -16,7 +16,9 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { SQL } from 'drizzle-orm';
-import { recallProjectFacts, upsertProjectFact, getProjectFactRecordByKey } from './projectFacts';
+import { recallProjectFacts } from './projectFactsRecall';
+import { upsertProjectFact } from './projectFactsWrite';
+import { getProjectFactRecordByKey } from './projectFactsAnswerCache';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 

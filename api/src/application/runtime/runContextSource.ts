@@ -49,7 +49,7 @@ import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrast
 import { pmoVersionKey } from '../pmo/pmoCacheKeys';
 import { trustNotice } from '../../domain/trust/contentTrust';
 import { findTaskPrimarySpec } from '../prd/taskPrd';
-import { buildProjectFactsBlock } from '../llm/projectFacts';
+import { buildProjectFactsBlock } from '../llm/projectFactsRecall';
 import { buildEvermindLessonsBlock } from '../llm/projectEvermind';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { loadProjectInTenant } from '../project/projectOwnership';

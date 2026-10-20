@@ -16,18 +16,20 @@ import {
   type CanvasBoundary,
 } from '@builderforce/creation-canvas-contract';
 import {
-  ADVISORY_MEETING_KIND,
   ADVISORY_THREAD_CONFIDENTIALITY,
   advisoryThreadAdmitted,
   advisoryThreadConfidentiality,
   advisoryThreadInAiContext,
-  calendarAttendeeEmails,
   encodeAdvisoryThreadMarker,
-  planAdvisorySession,
   readAdvisoryThreadState,
   sealedAdvisoryThread,
-  type ConfirmedReservation,
 } from './advisoryReservation';
+import {
+  ADVISORY_MEETING_KIND,
+  calendarAttendeeEmails,
+  planAdvisorySession,
+  type ConfirmedReservation,
+} from './advisorySessionPlan';
 
 const read = (name: string) => readFileSync(resolve(__dirname, name), 'utf8').split(String.fromCharCode(13)).join('');
 const stripComments = (src: string): string =>
@@ -145,6 +147,17 @@ describe('a confirmed 1:1 plans the three records in the service tenant', () => 
     expect(plan!.thread.ownerUserId).toBe('founder-9');
   });
 
+  it('never falls back to the advisor as the thread owner when the booker has no account', () => {
+    const plan = planAdvisorySession({
+      reservation: reservation(),
+      service: { mode: 'one_to_one', name: 'Intro' },
+      bookerIsUser: false,
+      hostIsUser: true,
+    });
+    expect(plan!.thread.ownerUserId).toBeNull();
+    expect(plan!.meeting.reservationId).toBe(42);
+  });
+
   it('does not plan a group, round-robin, cancelled, or hostless reservation', () => {
     const service = { mode: 'one_to_one', name: 'Intro' };
     expect(planAdvisorySession({ reservation: reservation(), service: { mode: 'one_to_many', name: 'Webinar' } })).toBeNull();
@@ -167,6 +180,7 @@ describe('a confirmed 1:1 plans the three records in the service tenant', () => 
 describe('confirm is wired only from the founder booking path', () => {
   const bookings = stripComments(read('bookings.ts'));
   const advisory = stripComments(read('advisoryReservation.ts'));
+  const provisioning = stripComments(read('advisoryProvisioning.ts'));
 
   it('calls the provisioner from reserveForHost and not from the generic reserve path', () => {
     expect(fn(bookings, 'reserveForHost')).toContain('provisionConfirmedAdvisory');
@@ -175,35 +189,53 @@ describe('confirm is wired only from the founder booking path', () => {
   });
 
   it('writes the three records through the existing meeting, calendar and Brain paths', () => {
-    const provision = fn(advisory, 'provisionAdvisorySession');
-    expect(provision).toContain('kind: plan.meeting.kind');
+    const provision = fn(provisioning, 'provisionAdvisorySession');
     expect(provision).toContain('pushAdvisoryCalendar');
-    expect(provision).toContain('insertAdvisoryThread');
+    expect(provision).toContain('insertOrReadAdvisoryMeeting');
+    expect(provision).toContain('attachAdvisoryThread');
     expect(provision).toContain('plan.tenantId');
     expect(provision).not.toContain('getOrCreateTeamChat');
     expect(provision).not.toContain('chatMembers');
 
-    const calendar = fn(advisory, 'pushAdvisoryCalendar');
+    const meeting = fn(provisioning, 'insertOrReadAdvisoryMeeting');
+    expect(meeting).toContain('kind: plan.meeting.kind');
+    expect(meeting).toContain('advisoryReservationId: plan.meeting.reservationId');
+    expect(meeting).toContain('onConflictDoNothing');
+
+    const attach = fn(provisioning, 'attachAdvisoryThread');
+    expect(attach).toContain('insertAdvisoryThread');
+    expect(attach).toContain('isNull(meetings.chatId)');
+
+    const calendar = fn(provisioning, 'pushAdvisoryCalendar');
     expect(calendar).toContain('pushMeetingEvent');
     expect(calendar).toContain('attendeeEmails: plan.calendar.attendeeEmails');
     expect(calendar).toContain('plan.tenantId');
 
-    const thread = fn(advisory, 'insertAdvisoryThread');
+    const thread = fn(provisioning, 'insertAdvisoryThread');
     expect(thread).toContain('insert(brainChats)');
     expect(thread).toContain("visibility: 'locked'");
     expect(thread).toContain('memoryEnabled: false');
     expect(thread).toContain('tenantId: plan.tenantId');
     expect(thread).not.toContain('chatMembers');
 
-    expect(advisory).toContain("kind: ADVISORY_MEETING_KIND");
+    expect(provisioning).toContain('kind: plan.meeting.kind');
+    expect(provisioning).not.toContain('getOrCreateTeamChat');
+    expect(provisioning).not.toContain("kind: 'advisor'");
     expect(advisory).not.toContain('getOrCreateTeamChat');
-    expect(advisory).not.toContain("kind: 'advisor'");
+  });
+
+  it('refuses to provision a thread the founder would not own', () => {
+    const provision = fn(provisioning, 'provisionAdvisorySession');
+    expect(provision).toContain('AdvisoryProvisionError');
+    expect(provision.indexOf('AdvisoryProvisionError')).toBeLessThan(provision.indexOf('insertOrReadAdvisoryMeeting'));
   });
 
   it('opens aiContext only from the explicit founder invite, in the same tenant', () => {
     const invite = fn(advisory, 'inviteAdvisorToAdvisoryThread');
     expect(invite).toContain('founderInvitedAdvisor: true');
-    expect(invite).toContain('scopedToTenant(brainChats, tenantId');
+    expect(invite).toContain("acrossTenants(brainChats, 'subject_own_rows'");
+    expect(invite).toContain('eq(brainChats.userId, founderUserId)');
+    expect(invite).toContain('invalidateCached(env, advisoryAdmissionCacheKey(chatId))');
     expect(invite).toContain('insert(chatMembers)');
     expect(invite).not.toContain('insert(brainChats)');
     expect(invite).not.toContain("confidentiality: 'internal'");

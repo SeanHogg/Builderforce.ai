@@ -246,6 +246,7 @@ export function createSessionsListTool(opts?: SessionsListDeps): AnyAgentTool {
   return {
     label: "Sessions",
     name: "sessions_list",
+    idempotent: true,
     description: "List sessions with optional filters and last messages.",
     parameters: SessionsListToolSchema,
     execute: async (_toolCallId, args) => runSessionsList(opts, args as Record<string, unknown>),

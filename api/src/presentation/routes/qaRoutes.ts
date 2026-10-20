@@ -44,7 +44,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 
 import { Hono } from 'hono';
 import { and, asc, desc, eq } from 'drizzle-orm';
-import { authMiddleware, optionalAuthMiddleware, requireRole } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   projects,
   qaCredentials,
@@ -326,27 +326,18 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
 
   // ── POST /events ──────────────────────────────────────────────────────────
   /**
-   * The capture client's ingest. Registered ABOVE the blanket `authMiddleware`
-   * with optional auth, because the unload flush cannot present a credential:
-   * `sendBeacon` (frontend/src/lib/qa/telemetry.ts) sets NO headers, so the last
-   * batch of every session — precisely the journeys worth having — arrived
-   * signed-out and was 401'd by the gate. The timed flush goes through
-   * `apiRequestStream` and was always authenticated, which is why only the tail of
-   * each session went missing.
+   * The capture client's ingest — AUTHENTICATED, like every other QA endpoint.
    *
-   * Anonymous is ACCEPTED AND DISCARDED, never stored: `qa_journey_events.tenant_id`
-   * is NOT NULL with an FK to `tenants`, and every read of the table is
-   * tenant-scoped, so an unattributable row could be written but never read back —
-   * it would only be unreclaimable storage. Returning 201 rather than 401 keeps the
-   * client's fire-and-forget contract honest (it must not retry a doomed request)
-   * while storing exactly what the authenticated flush would have.
-   *
-   * An explicit token is still fully authenticated by {@link optionalAuthMiddleware},
-   * so a tenant's events are attributed, segment-scoped and ownership-checked
-   * exactly as before.
+   * Every flush, the page-unload one included, goes through `apiRequestStream` with
+   * `keepalive: true` (frontend/src/lib/qa/telemetry.ts), which carries the bearer.
+   * The former `sendBeacon` unload path could not, and the anonymous branch that
+   * answered it with a 201 silently dropped the tail of every session while telling
+   * the client it had landed. An unattributable batch can never be stored
+   * (`qa_journey_events.tenant_id` is NOT NULL, every read is tenant-scoped), so it
+   * is now REJECTED (401) rather than acknowledged and discarded.
    */
-  router.post('/events', optionalAuthMiddleware, async (c) => {
-    const tenantId  = c.get('tenantId') as number | undefined;
+  router.post('/events', authMiddleware, async (c) => {
+    const tenantId  = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string | undefined;
     const userId    = c.get('userId') as string | undefined;
 
@@ -356,19 +347,10 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     const sessionId = (body.sessionId ?? c.req.query('sessionId') ?? '').slice(0, 64);
     const events = body.events ?? [];
 
-    // Validate the shape of the batch even when it is going to be dropped, so a
-    // genuinely malformed caller gets a 400 rather than being told its garbage was
-    // accepted — and so the two paths cannot drift on what counts as valid.
     if (!sessionId) return c.json({ error: 'sessionId is required' }, 400);
     if (events.length > MAX_EVENT_BATCH) return c.json({ error: `Batch too large (max ${MAX_EVENT_BATCH})` }, 400);
 
     if (events.length === 0) return c.json({ inserted: 0 });
-
-    // No workspace on this request: the batch is unstattable. Acknowledge it so the
-    // beacon is spent rather than surfacing as a failure nobody asked for.
-    if (tenantId === undefined) {
-      return c.json({ inserted: 0, dropped: 'anonymous' }, 201);
-    }
 
     // The site-under-test this batch was captured on. Absent = the Builderforce
     // app shell itself, which belongs to no customer project — the meaning every
@@ -410,8 +392,8 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     return c.json({ inserted: rows.length }, 201);
   });
 
-  // Every OTHER QA endpoint requires an authenticated tenant. Hono applies
-  // middleware in registration order, so the route above is already past this point.
+  // Every other QA endpoint requires an authenticated tenant too (the route above
+  // carries the gate itself, since it is registered before this blanket use).
   router.use('*', authMiddleware);
 
   // ── GET /events ───────────────────────────────────────────────────────────

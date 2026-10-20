@@ -36,7 +36,8 @@ vi.mock("vscode", () => ({
   },
 }));
 
-import { attributeRunChanges, runChangeSetId, type RunChangeBaseline } from "./runChangeSets";
+import { attributeRunChanges, type RunChangeBaseline } from "./runChangeBaseline";
+import { runChangeSetId } from "./runChangeSets";
 import {
   finalizeRecordedChangeSet,
   recordRunChangeSet,

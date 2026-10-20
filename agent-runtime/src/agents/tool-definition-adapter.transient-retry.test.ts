@@ -6,6 +6,7 @@ import { toToolDefinitions } from "./tool-definition-adapter.js";
 import { jsonResult } from "./tools/common.js";
 import {
   executeWithTransientToolRetry,
+  isRetryableTool,
   isTransientToolFailure,
   retryAfterMsFromToolError,
   TRANSIENT_TOOL_RETRY_DEFAULTS,
@@ -32,12 +33,18 @@ function rateLimitedError(retryAfterSeconds?: number): Error {
 }
 
 /** A tool that throws `makeError(attempt)` for its first `failures` calls, then succeeds. */
-function flakyTool(name: string, failures: number, makeError: (attempt: number) => unknown) {
+function flakyTool(
+  name: string,
+  failures: number,
+  makeError: (attempt: number) => unknown,
+  idempotent = true,
+) {
   let attempts = 0;
   const tool = {
     name,
     label: name,
     description: "flaky",
+    idempotent,
     parameters: Type.Object({}),
     execute: async () => {
       attempts += 1;
@@ -93,7 +100,7 @@ describe("transient tool-failure backoff in the tool-execution path", () => {
         }
         return "ok";
       },
-      { label: "kanban_create", onRetry: (info) => delays.push(info.delayMs) },
+      { label: "kanban_create", idempotent: true, onRetry: (info) => delays.push(info.delayMs) },
     );
     await vi.runAllTimersAsync();
 
@@ -136,7 +143,7 @@ describe("transient tool-failure backoff in the tool-execution path", () => {
         attempts += 1;
         throw rateLimitedError(2);
       },
-      { label: "tasks_create", onRetry: (info) => delays.push(info.delayMs) },
+      { label: "tasks_create", idempotent: true, onRetry: (info) => delays.push(info.delayMs) },
     ).catch((err: unknown) => err);
     await vi.runAllTimersAsync();
     const outcome = await promise;
@@ -174,7 +181,7 @@ describe("transient tool-failure backoff in the tool-execution path", () => {
         attempts += 1;
         throw rateLimitedError(600);
       },
-      { label: "tasks_create", onRetry: (info) => delays.push(info.delayMs) },
+      { label: "tasks_create", idempotent: true, onRetry: (info) => delays.push(info.delayMs) },
     ).catch((err: unknown) => err);
     await vi.runAllTimersAsync();
     const outcome = await promise;
@@ -191,9 +198,15 @@ describe("transient tool-failure backoff in the tool-execution path", () => {
     expect(outcome).toBeInstanceOf(Error);
   });
 
-  it("classifies transient vs non-transient through the existing failover classifier", () => {
+  it("classifies ONLY structured rate-limit signals as transient, never message text", () => {
     expect(isTransientToolFailure(Object.assign(new Error("nope"), { status: 429 }))).toBe(true);
-    expect(isTransientToolFailure(new Error("429 Too Many Requests"))).toBe(true);
+    expect(isTransientToolFailure(Object.assign(new Error("nope"), { response: { status: 429 } }))).toBe(true);
+    expect(isTransientToolFailure(Object.assign(new Error("slow"), { retryAfterMs: 100 }))).toBe(true);
+    // Message text is NOT a signal: a failed command's output may say anything.
+    expect(isTransientToolFailure(new Error("429 Too Many Requests"))).toBe(false);
+    expect(isTransientToolFailure(new Error("rate limit exceeded"))).toBe(false);
+    expect(isTransientToolFailure(new Error("Command timed out after 30 seconds"))).toBe(false);
+    expect(isTransientToolFailure(Object.assign(new Error("t"), { code: "ETIMEDOUT" }))).toBe(false);
     expect(isTransientToolFailure(Object.assign(new Error("nope"), { status: 400 }))).toBe(false);
     expect(isTransientToolFailure(Object.assign(new Error("nope"), { status: 401 }))).toBe(false);
     expect(isTransientToolFailure(Object.assign(new Error("nope"), { statusCode: 402 }))).toBe(
@@ -248,7 +261,7 @@ describe("transient tool-failure backoff in the tool-execution path", () => {
         }
         return "ok";
       },
-      { onRetry: (info) => delays.push(info.delayMs) },
+      { idempotent: true, onRetry: (info) => delays.push(info.delayMs) },
     );
     await vi.runAllTimersAsync();
 
@@ -265,11 +278,66 @@ describe("transient tool-failure backoff in the tool-execution path", () => {
         controller.abort();
         throw rateLimitedError(1);
       },
-      { signal: controller.signal },
+      { signal: controller.signal, idempotent: true },
     ).catch((err: unknown) => err);
     await vi.runAllTimersAsync();
 
     expect(attempts).toBe(1);
     expect(await promise).toBeInstanceOf(Error);
+  });
+
+  it("never retries a non-idempotent tool, even on a structured 429", async () => {
+    const { tool, attempts } = flakyTool("kanban_create", 2, () => rateLimitedError(1), false);
+
+    const promise = runTool(tool, "call-429-mutating");
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(attempts()).toBe(1);
+    expect(isToolResultError(result)).toBe(true);
+  });
+
+  it("never retries exec/write/edit even when mis-flagged idempotent", async () => {
+    for (const name of ["exec", "bash", "write", "edit", "apply_patch"]) {
+      expect(isRetryableTool({ name, idempotent: true })).toBe(false);
+    }
+    expect(isRetryableTool({ name: "read", idempotent: true })).toBe(true);
+    expect(isRetryableTool({ name: "read" })).toBe(false);
+
+    const { tool, attempts } = flakyTool("exec", 2, () => rateLimitedError(1), true);
+    const promise = runTool(tool, "call-exec");
+    await vi.runAllTimersAsync();
+    await promise;
+    expect(attempts()).toBe(1);
+  });
+
+  it("does not replay a command that timed out or printed '429' in its output", async () => {
+    const { tool, attempts } = flakyTool("web_fetch", 2, (n) =>
+      n === 1
+        ? new Error("Command timed out after 120 seconds")
+        : new Error("HTTP 429 rate limit timeout"),
+    );
+    const promise = runTool(tool, "call-timeout");
+    await vi.runAllTimersAsync();
+    const result = await promise;
+    expect(attempts()).toBe(1);
+    expect(isToolResultError(result)).toBe(true);
+  });
+
+  it("bounds total WALL time: a slow 429ing attempt stops further retries", async () => {
+    let attempts = 0;
+    const promise = executeWithTransientToolRetry(
+      async () => {
+        attempts += 1;
+        // Each attempt itself burns 20s before being rate-limited.
+        await new Promise((resolve) => setTimeout(resolve, 20_000));
+        throw rateLimitedError(1);
+      },
+      { idempotent: true, maxTotalWallMs: 20_500 },
+    ).catch((err: unknown) => err);
+    await vi.runAllTimersAsync();
+
+    expect(await promise).toBeInstanceOf(Error);
+    expect(attempts).toBe(1);
   });
 });

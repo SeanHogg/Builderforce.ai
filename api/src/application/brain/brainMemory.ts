@@ -16,7 +16,7 @@ import { readTimelineTail } from '../../domain/shared/timelineTail';
 // cannot reach a row we consolidate.
 import { answerTextOf as displayAnswerTextOf, stripReasoningScratchpad } from '@builderforce/agent-loop';
 import { readProxyChoice } from '../llm/LlmProxyService';
-import { upsertProjectFact } from '../llm/projectFacts';
+import { upsertProjectFact } from '../llm/projectFactsWrite';
 import { currentRequestScope } from '../shared/requestScope';
 import { canAccessChat, verifyChatOwnership, verifyProjectInTenant } from './brainChatGuards';
 import { bumpChatStructure, bumpTeamChats } from './chatCacheVersions';
@@ -213,7 +213,7 @@ export async function summarizeChat(db: Db, chatId: number, tenantId: number, us
     projectId: brainChats.projectId,
   }) as { id: number; projectId: number | null } | null;
   if (!chat) return { error: 'Chat not found' as const };
-  if (!await advisoryChatAdmittedToAiContext(db, chatId)) {
+  if (!await advisoryChatAdmittedToAiContext(db, chatId, env)) {
     return { error: ADVISORY_THREAD_AI_CONTEXT_ERROR };
   }
 

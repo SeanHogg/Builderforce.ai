@@ -12,17 +12,20 @@
  * resumed. A shell command or external action whose result was never recorded is
  * re-confirmed by a human, not re-executed, because replaying it could run it twice.
  *
- * Activation calls `installRunRecovery` (`installRunRecovery.ts`). That line is not in
- * `extension.ts` yet; this module stays inert until it is.
+ * Activation calls `installRunRecovery` (`installRunRecovery.ts`); the run host records
+ * start, checkpoints and the terminal status through it (`hostRunLifecycle.ts`), so a
+ * run that finished is never rewritten to `interrupted` by the next activation.
  */
 
 import {
+  isTerminalExecutionStatus,
   newLocalRecord,
   UNBOUND_DESTINATION,
   type EntityDestination,
   type ExecutionValue,
   type LocalFirstStore,
   type LocalRecord,
+  type TerminalExecutionStatus,
 } from "@builderforce/local-first";
 
 export const RUN_LIFECYCLE_SCHEMA_VERSION = 1;
@@ -34,12 +37,27 @@ export interface RunLifecycleDeps {
 
 export type InterruptedRun = { runId: string; record: LocalRecord<ExecutionValue> };
 
-/** Record that a run started. Safe to call again with the same id (a retried dispatch). */
+/** How a run ended, as the host observed it. Stored as-is on the execution row. */
+export type RunTerminalStatus = TerminalExecutionStatus;
+
+/** Thrown, before the store is touched, when a start names no run. */
+export const RUN_ID_REQUIRED = "run_id_required";
+
+function requireRunId(runId: string | null | undefined): string {
+  if (typeof runId !== "string" || runId.trim() === "") throw new Error(RUN_ID_REQUIRED);
+  return runId;
+}
+
+/**
+ * Record that a run started. Safe to call again with the same id (a retried dispatch).
+ * A missing or blank `runId` rejects with `run_id_required` and writes nothing.
+ */
 export async function recordRunStarted(
   store: LocalFirstStore,
   deps: RunLifecycleDeps,
   args: { runId: string; chatId?: string; ticketId?: string; destination?: EntityDestination },
 ): Promise<void> {
+  requireRunId(args.runId);
   const at = (deps.now?.() ?? new Date()).toISOString();
   await store.transact(async (tx) => {
     const existing = await tx.get<ExecutionValue>("execution", args.runId);
@@ -60,7 +78,7 @@ export async function recordRunStarted(
     });
     await tx.put(record);
     await tx.append({
-      eventId: `execution:start:${args.runId}`,
+      idempotencyKey: `execution:start:${args.runId}`,
       clientEntityId: args.runId,
       entityType: "execution",
       operation: "create",
@@ -106,18 +124,19 @@ export async function recordRunCheckpoint(
 export async function recordRunFinished(
   store: LocalFirstStore,
   deps: RunLifecycleDeps,
-  args: { runId: string; status: "completed" | "failed" },
+  args: { runId: string; status: RunTerminalStatus },
 ): Promise<void> {
   const at = (deps.now?.() ?? new Date()).toISOString();
+  const { status } = args;
   await store.transact(async (tx) => {
     const run = await tx.get<ExecutionValue>("execution", args.runId);
-    if (!run || run.payload.status === "completed" || run.payload.status === "failed") return;
+    if (!run || isTerminalExecutionStatus(run.payload.status)) return;
     await tx.put<ExecutionValue>(
-      { ...run, version: run.version + 1, updatedAt: at, payload: { ...run.payload, status: args.status } },
+      { ...run, version: run.version + 1, updatedAt: at, payload: { ...run.payload, status } },
       run.version,
     );
     await tx.append({
-      eventId: `execution:${args.status}:${args.runId}`,
+      idempotencyKey: `execution:${status}:${args.runId}`,
       clientEntityId: args.runId,
       entityType: "execution",
       operation: "update",
@@ -125,7 +144,7 @@ export async function recordRunFinished(
       occurredAt: at,
       dependsOn: [],
       destination: run.destination,
-      payload: { status: args.status },
+      payload: { status },
     });
   });
 }
@@ -158,7 +177,7 @@ export async function recoverInterruptedRuns(store: LocalFirstStore, deps: RunLi
         run.version,
       );
       await tx.append({
-        eventId: `execution:interrupted:${run.id}:${at}`,
+        idempotencyKey: `execution:interrupted:${run.id}:${at}`,
         clientEntityId: run.id,
         entityType: "execution",
         operation: "update",

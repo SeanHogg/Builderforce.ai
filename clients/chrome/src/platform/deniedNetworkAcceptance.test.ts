@@ -215,7 +215,7 @@ describe('G27 Rovr packaged network denial', () => {
     const onDisk = JSON.parse(readFileSync(snapshotFile, 'utf8')) as LocalFirstSnapshot;
     expect(onDisk.records.map((record) => record.id)).toEqual(expect.arrayContaining([projectId, ticketId]));
     const eventIds = onDisk.events.map((event) => event.eventId);
-    expect(eventIds).toEqual([`project:${projectId}:v1`, `ticket:${ticketId}:v1`]);
+    expect(onDisk.events.map((event) => event.idempotencyKey)).toEqual([`project:${projectId}:v1`, `ticket:${ticketId}:v1`]);
     expect(onDisk.receipts).toEqual([]);
 
     const restarted = openSnapshot(snapshotFile);

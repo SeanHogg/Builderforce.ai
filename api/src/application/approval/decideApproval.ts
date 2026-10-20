@@ -142,10 +142,16 @@ export async function decideApproval(db: Db, env: ApprovalEnv, input: DecideAppr
 
   const responseText = status === 'answered' ? input.responseText!.trim() : null;
 
-  await db
+  // The pending check above is a prior read: two concurrent decides both pass it.
+  // The UPDATE itself is the claim — only the decide whose predicate still sees
+  // `pending` wins a row, and the loser stops here, BEFORE any side effect
+  // (resume, run start, audit, relay) can fire a second time.
+  const claimed = await db
     .update(approvals)
     .set({ status, reviewedBy: userId, reviewNote: input.reviewNote ?? null, responseText, updatedAt: new Date() })
-    .where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
+    .where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId), eq(approvals.status, 'pending')))
+    .returning({ id: approvals.id });
+  if (claimed.length === 0) return { ok: false, httpStatus: 409, error: 'Request is not pending' };
   // An answered run question clears an "awaiting input" flag on every attention poller.
   if (existing.executionId && isAnswerableKind(kind)) await bumpExecutionState(env, tenantId);
 

@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { indexedDB } from 'fake-indexeddb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  createMemoryLocalFirstStore,
   createSyncCoordinator,
   type EntityDestination,
   type SyncTransport,
@@ -25,6 +26,8 @@ import {
 import { API_ORIGIN } from '../apiOrigin';
 import { bootLocalWorkManagement, type LocalWorkManagementBoot } from './workManagementBoot';
 import {
+  WEB_REPLAY_KIND,
+  bootWebHost,
   bootWebPlatformPolicy,
   connectAccountSync,
   resetWebPlatformPolicyForTests,
@@ -197,7 +200,7 @@ describe('G27 web network denial', () => {
     expect(ticket.payload).toMatchObject({ title: 'Offline ticket', projectId: PROJECT_ID, status: 'backlog' });
     expect(ticket.destination).toEqual(DESTINATION);
     const writtenPending = await writing.store!.read((tx) => tx.pending(DESTINATION));
-    expect(writtenPending.map((event) => event.eventId)).toEqual([PROJECT_EVENT, TICKET_EVENT]);
+    expect(writtenPending.map((event) => event.idempotencyKey)).toEqual([PROJECT_EVENT, TICKET_EVENT]);
     expect(attempts).toEqual([]);
     writing.close();
 
@@ -215,7 +218,10 @@ describe('G27 web network denial', () => {
     expect(restored[0]?.payload).toMatchObject({ title: 'Offline ticket', projectId: PROJECT_ID });
     expect(restored[0]?.destination).toEqual(DESTINATION);
     const pendingBeforeGrant = await restarted.store!.read((tx) => tx.pending(DESTINATION));
-    expect(pendingBeforeGrant.map((event) => event.eventId)).toEqual([PROJECT_EVENT, TICKET_EVENT]);
+    expect(pendingBeforeGrant.map((event) => event.idempotencyKey)).toEqual([PROJECT_EVENT, TICKET_EVENT]);
+    // The wire carries the store-minted event id; translate it back to the logical write it names.
+    const keyById = new Map(pendingBeforeGrant.map((event) => [event.eventId, event.idempotencyKey]));
+    const keyOf = (eventId: string): string | undefined => keyById.get(eventId);
     expect(attempts).toEqual([]);
     expect(sockets).toEqual([]);
 
@@ -238,12 +244,12 @@ describe('G27 web network denial', () => {
     });
     const first = await coordinator.synchronize(DESTINATION);
     expect(first).toMatchObject({ pushed: 2 });
-    expect(replayed).toEqual([PROJECT_EVENT, TICKET_EVENT]);
+    expect(replayed.map(keyOf)).toEqual([PROJECT_EVENT, TICKET_EVENT]);
     expect(await restarted.store!.read((tx) => tx.pending(DESTINATION))).toEqual([]);
 
     const second = await coordinator.synchronize(DESTINATION);
     expect(second).toMatchObject({ pushed: 0 });
-    expect(replayed).toEqual([PROJECT_EVENT, TICKET_EVENT]);
+    expect(replayed.map(keyOf)).toEqual([PROJECT_EVENT, TICKET_EVENT]);
     expect(attempts).toEqual([]);
     expect(sockets).toEqual([]);
     expect(webPlatformRequestAccount()).toMatchObject({ attempted: 0, blocked: 1 });
@@ -259,11 +265,36 @@ describe('G27 web network denial', () => {
     expect(reread.store).not.toBe(restarted.store);
     expect(await reread.store!.read((tx) => tx.pending(DESTINATION))).toEqual([]);
     const receipts = await reread.store!.export();
-    expect(receipts.receipts.map((receipt) => receipt.eventId).sort()).toEqual([PROJECT_EVENT, TICKET_EVENT].sort());
+    expect(receipts.receipts.map((receipt) => keyOf(receipt.eventId)).sort()).toEqual([PROJECT_EVENT, TICKET_EVENT].sort());
     expect(receipts.receipts.every((receipt) => receipt.status === 'accepted')).toBe(true);
     const stillThere = await reread.work!.listTickets({ projectId: PROJECT_ID });
     expect(stillThere[0]?.payload).toMatchObject({ title: 'Offline ticket', projectId: PROJECT_ID });
     expect(attempts).toEqual([]);
     expect(sockets).toEqual([]);
+  });
+
+  // Moved here from PlatformPolicyBoot: activation no longer writes a ticket. The
+  // durable denied-host proof is this acceptance test, against the page policy.
+  it('writes one durable record through the denied web host, and a second boot reads it back and replays locally', async () => {
+    const fetchSpy = vi.fn(() => Promise.reject(new Error('platform fetch must not be called')));
+    vi.stubGlobal('fetch', fetchSpy);
+    bootWebPlatformPolicy();
+    expect(webPlatformPolicy().allows('synchronize')).toBe(false);
+
+    const store = createMemoryLocalFirstStore();
+    const first = bootWebHost({ network: 'denied', store, fetch: fetchSpy });
+    const id = await first.writeDurable({ id: 'web-acceptance-ticket', title: 'Web acceptance ticket' });
+    first.stop();
+
+    const second = bootWebHost({ network: 'denied', store, fetch: fetchSpy });
+    expect(await second.readDurable(id)).toEqual({ id, title: 'Web acceptance ticket' });
+    await expect(second.replayBatch()).resolves.toEqual({ count: 1, idempotencyKey: `ticket:${id}:v1` });
+    await expect(second.replayBatch()).resolves.toEqual({ count: 0, idempotencyKey: `ticket:${id}:v1` });
+    const snapshot = await store.export();
+    expect(snapshot.records.filter((row) => row.entityType === 'ticket')).toHaveLength(1);
+    expect(snapshot.records.some((row) => row.entityType === 'memory-fact' && (row.payload as { kind?: string }).kind === WEB_REPLAY_KIND)).toBe(true);
+    expect(await store.read((tx) => tx.pending())).toHaveLength(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    second.stop();
   });
 });

@@ -4,21 +4,26 @@
  * Direct insert/update of the `tasks` row. Does not call TaskService, does not
  * open a run, does not assign an agent, does not send a mention, and does not
  * file a remediation. Agent-assignment columns are never written, even if the
- * client payload carries them.
+ * client payload carries them. A human assignee is written only when it is an
+ * active member of the caller's tenant (`ticket_assignee_invalid` otherwise).
+ *
+ * Writes go through `tx`, the push's unit-of-work transaction, inside a
+ * savepoint: a lost key race rolls back only this write, never the receipt
+ * transaction around it.
  */
 
 import { and, eq } from 'drizzle-orm';
-import { CLIENT_REPORTED_EVIDENCE } from '../../../domain/sync/syncProtocol';
+import { CLIENT_REPORTED_EVIDENCE } from '../../../domain/sync/occurredAtGate';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
-import type { Db } from '../../../infrastructure/database/connection';
+import type { Tx } from '../../../infrastructure/database/connection';
 import { tasks } from '../../../infrastructure/database/schema';
+import { isUniqueViolation } from '../../../infrastructure/database/uniqueViolation';
 import type { SyncEntityMappingRow, SyncEventInput, SyncImportContext, SyncStoreSet } from '../syncPorts';
 import {
   appliedExisting,
   appliedNew,
   conflict,
   insertedId,
-  isUniqueViolation,
   mutateGate,
   preludeRejection,
   rejected,
@@ -119,6 +124,9 @@ async function resolveRefs(
   payload: TicketPayload,
   ctx: SyncImportContext,
 ): Promise<{ projectServerId: number; parentServerId: number | null } | BoundedImportOutcome> {
+  if (payload.assignedUserId !== undefined && !(await ctx.isTenantMember(payload.assignedUserId))) {
+    return rejected('ticket_assignee_invalid');
+  }
   const projectServerId = await ctx.resolveProjectId(payload.projectId);
   if (projectServerId === null) return rejected('project_unresolved');
   if (payload.parentTicketId === undefined) return { projectServerId, parentServerId: null };
@@ -130,7 +138,7 @@ async function resolveRefs(
 async function createTicket(
   event: SyncEventInput,
   ctx: SyncImportContext,
-  db: Db,
+  tx: Tx,
   mapping: SyncEntityMappingRow | null,
 ): Promise<BoundedImportOutcome> {
   const parsed = readTicket(event.payload, 'backlog');
@@ -145,7 +153,7 @@ async function createTicket(
     return conflict(mapping, 'entity_already_imported');
   }
   try {
-    const rows = await db.insert(tasks).values({
+    const rows = await tx.transaction((savepoint) => savepoint.insert(tasks).values({
       projectId: refs.projectServerId,
       tenantId: ctx.auth.tenantId,
       key: taskKey(event.clientEntityId),
@@ -159,7 +167,7 @@ async function createTicket(
       source: CLIENT_REPORTED_EVIDENCE,
       taskType: 'task',
       updatedAt: ctx.now,
-    }).returning({ id: tasks.id });
+    }).returning({ id: tasks.id }));
     const id = insertedId(rows);
     if (id === null) return rejected('ticket_insert_failed');
     return appliedNew(String(id), 1, ctx.destinationKey, stored);
@@ -171,7 +179,7 @@ async function createTicket(
 async function updateTicket(
   event: SyncEventInput,
   ctx: SyncImportContext,
-  db: Db,
+  tx: Tx,
   mapping: SyncEntityMappingRow | null,
 ): Promise<BoundedImportOutcome> {
   const gate = mutateGate(event, ctx, mapping);
@@ -187,7 +195,7 @@ async function updateTicket(
   const stored = canonical(payload, refs.projectServerId, refs.parentServerId);
   if (sameCanonical(current, stored)) return appliedExisting(current, stored);
   try {
-    const rows = await db.update(tasks).set({
+    const rows = await tx.transaction((savepoint) => savepoint.update(tasks).set({
       projectId: refs.projectServerId,
       title: payload.title,
       description: payload.description ?? null,
@@ -197,7 +205,7 @@ async function updateTicket(
       assignedUserId: payload.assignedUserId ?? null,
       archived: payload.archived,
       updatedAt: ctx.now,
-    }).where(and(eq(tasks.id, id), eq(tasks.tenantId, ctx.auth.tenantId))).returning({ id: tasks.id });
+    }).where(and(eq(tasks.id, id), eq(tasks.tenantId, ctx.auth.tenantId))).returning({ id: tasks.id }));
     if (insertedId(rows) === null) return rejected('ticket_not_found');
     return appliedNew(current.serverId, current.serverVersion + 1, ctx.destinationKey, stored);
   } catch (error) {
@@ -208,20 +216,20 @@ async function updateTicket(
 async function deleteTicket(
   event: SyncEventInput,
   ctx: SyncImportContext,
-  db: Db,
+  tx: Tx,
   mapping: SyncEntityMappingRow | null,
 ): Promise<BoundedImportOutcome> {
-  const gate = mutateGate(event, ctx, mapping);
+  const tombstone = { archived: true };
+  const gate = mutateGate(event, ctx, mapping, tombstone);
   if (gate) return gate;
   const current = mapping as SyncEntityMappingRow;
   const id = serverNumericId(current.serverId);
   if (id === null) return rejected('server_id_invalid');
-  const tombstone = { archived: true };
   try {
-    const rows = await db.update(tasks).set({
+    const rows = await tx.transaction((savepoint) => savepoint.update(tasks).set({
       archived: true,
       updatedAt: ctx.now,
-    }).where(and(eq(tasks.id, id), eq(tasks.tenantId, ctx.auth.tenantId))).returning({ id: tasks.id });
+    }).where(and(eq(tasks.id, id), eq(tasks.tenantId, ctx.auth.tenantId))).returning({ id: tasks.id }));
     if (insertedId(rows) === null) return rejected('ticket_not_found');
     return appliedNew(current.serverId, current.serverVersion + 1, ctx.destinationKey, tombstone);
   } catch (error) {
@@ -230,21 +238,22 @@ async function deleteTicket(
 }
 
 /**
- * Apply one already-validated ticket mutation. The row is a historical fact:
- * `source` is client-reported, `taskType` stays `task`, and no agent column is set.
+ * Apply one already-validated ticket mutation through the unit-of-work `tx`.
+ * The row is a historical fact: `source` is client-reported, `taskType` stays
+ * `task`, and no agent column is set.
  */
 export async function importSyncedTicket(
   event: SyncEventInput,
   ctx: SyncImportContext,
   stores: SyncStoreSet,
-  db: Db,
+  tx: Tx,
 ): Promise<BoundedImportOutcome> {
   if (event.entityType !== 'ticket') return rejected('entity_type_rejected');
   const prelude = preludeRejection(event, ctx);
   if (prelude) return prelude;
   const mapping = await stores.findMapping(ctx.auth.tenantId, event.entityType, event.clientEntityId);
-  if (event.operation === 'delete') return deleteTicket(event, ctx, db, mapping);
-  if (event.operation === 'update') return updateTicket(event, ctx, db, mapping);
-  if (event.operation === 'create' || event.operation === 'import') return createTicket(event, ctx, db, mapping);
+  if (event.operation === 'delete') return deleteTicket(event, ctx, tx, mapping);
+  if (event.operation === 'update') return updateTicket(event, ctx, tx, mapping);
+  if (event.operation === 'create' || event.operation === 'import') return createTicket(event, ctx, tx, mapping);
   return rejected('operation_unsupported');
 }

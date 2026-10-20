@@ -1,11 +1,12 @@
 /**
  * Application — Synchronization ports.
  *
- * The narrow interfaces the batch sync use cases ({@link SyncService}) depend
- * on. Persistence implements them in `infrastructure/repositories/
- * SyncRepository.ts` (and the ticket/project stores beside it); the HTTP routes
- * never see them. Keeping them here — consumer-side — is what lets the focused
- * tests drive the whole push/pull protocol against in-memory fakes.
+ * The narrow interfaces the batch sync use cases (`handleSyncPush`,
+ * `handleSyncPull`) depend on. Persistence implements them ONCE in
+ * `infrastructure/repositories/SyncRepository.ts`; the HTTP route never sees a
+ * table. Keeping them here — consumer-side — is what lets the focused tests
+ * drive the whole push/pull protocol against the in-memory fake in
+ * `__fixtures__/memorySyncStores.ts`.
  */
 
 import type {
@@ -13,10 +14,10 @@ import type {
   JournalEvent,
   LocalEntityType,
   LocalRecord,
+  SyncReceiptStatus,
 } from '../../domain/sync/syncProtocol';
-import type { SyncReceiptStatus } from '../../domain/sync/syncProtocol';
 
-/** The authenticated caller a sync request runs as. */
+/** The authenticated caller a sync request runs as. Tenant comes from auth only. */
 export interface SyncAuthContext {
   tenantId: number;
   userId: string;
@@ -26,18 +27,16 @@ export interface SyncAuthContext {
 /** One event of a push batch, exactly as the wire contract carries it. */
 export type SyncEventInput = JournalEvent<unknown>;
 
-/** The replayable outcome stored beside a processed event (mutation + receipt commit together). */
-export interface StoredEventReceipt {
+/** What the event journal answers for a replayed (tenant, device, eventId). */
+export interface StoredSyncEvent {
+  batchId: string;
   status: SyncReceiptStatus;
   serverId: string | null;
   serverVersion: number | null;
   detail: string | null;
   receivedAt: Date;
-}
-
-/** What the event journal answers for a replayed (tenant, device, eventId). */
-export interface StoredSyncEvent extends StoredEventReceipt {
-  batchId: string;
+  /** The hash of the payload the CLIENT sent — a replay must carry the same one. */
+  payloadHash: string;
 }
 
 /** The client↔server identity mapping plus its optimistic-concurrency counter. */
@@ -46,6 +45,8 @@ export interface SyncEntityMappingRow {
   serverVersion: number;
   payloadHash: string;
   destinationKey: string;
+  /** The projection's tombstone, when the entity was deleted through sync. */
+  deletedAt?: Date | null;
 }
 
 /** The projection row a snapshot pull serves (already LocalRecord-shaped minus assembly). */
@@ -69,39 +70,45 @@ export interface SyncChangeRow {
   record: LocalRecord;
 }
 
+/** The journal row a terminal outcome writes (accepted or conflict). */
+export interface SyncEventRow {
+  tenantId: number;
+  deviceId: string;
+  eventId: string;
+  batchId: string;
+  clientEntityId: string;
+  entityType: LocalEntityType;
+  operation: string;
+  schemaVersion: number;
+  localSequence: number;
+  occurredAt: Date;
+  receivedAt: Date;
+  baseVersion: number | null;
+  dependsOn: string[];
+  destination: Record<string, unknown>;
+  payload: unknown;
+  payloadHash: string;
+  status: SyncReceiptStatus;
+  serverId: string | null;
+  serverVersion: number | null;
+  detail: string | null;
+}
+
 /**
  * The stores a sync transaction sees. ONE factory-bound set per unit of work,
- * so the mutation, the mapping bump, the projection, the change-log entry and
- * the receipt either all commit or all roll back (G16).
+ * so the importer's domain write, the mapping bump, the projection, the
+ * change-log entry and the receipt either all commit or all roll back (G16).
  */
 export interface SyncStoreSet {
   /** The stored receipt for a replayed event, or null when the event is new. */
   findEvent(tenantId: number, deviceId: string, eventId: string): Promise<StoredSyncEvent | null>;
-  /** Persist the event AND its receipt. Only terminal outcomes are stored —
-   *  `dependency_pending` is parked client-side and must stay retryable. */
-  insertEvent(row: {
-    tenantId: number;
-    deviceId: string;
-    eventId: string;
-    batchId: string;
-    clientEntityId: string;
-    entityType: LocalEntityType;
-    operation: string;
-    schemaVersion: number;
-    localSequence: number;
-    occurredAt: Date;
-    receivedAt: Date;
-    baseVersion: number | null;
-    dependsOn: string[];
-    destination: Record<string, unknown>;
-    payload: unknown;
-    payloadHash: string;
-    status: SyncReceiptStatus;
-    serverId: string | null;
-    serverVersion: number | null;
-    detail: string | null;
-  }): Promise<void>;
-  /** Of the given event ids, the ones already accepted (or known duplicates) in this tenant. */
+  /**
+   * Persist the event AND its receipt. Only terminal outcomes are stored —
+   * `dependency_pending` stays retryable. A concurrent insert of the same
+   * (tenant, device, event) violates the unique index and rolls the unit back.
+   */
+  insertEvent(row: SyncEventRow): Promise<void>;
+  /** Of the given event ids, the ones already accepted in this tenant. */
   acceptedEventIds(tenantId: number, eventIds: readonly string[]): Promise<Set<string>>;
   findMapping(tenantId: number, entityType: LocalEntityType, clientEntityId: string): Promise<SyncEntityMappingRow | null>;
   upsertMapping(row: {
@@ -116,7 +123,7 @@ export interface SyncStoreSet {
     now: Date;
   }): Promise<void>;
   /** Insert or replace the projection row pull serves for this entity. */
-  upsertRecord(row: SyncRecordRow & { tenantId: number; receivedAt: Date }): Promise<void>;
+  upsertRecord(row: SyncRecordRow & { tenantId: number; receivedAt: Date; payloadHash: string }): Promise<void>;
   /** Append the delta-log entry other devices will pull. */
   appendChange(row: {
     tenantId: number;
@@ -133,24 +140,33 @@ export interface SyncStoreSet {
   }): Promise<void>;
 }
 
-/** Read side of pull — deliberately NOT transactional (a snapshot read is enough for a cursor page). */
+/** Read side of pull — deliberately NOT transactional (one cursor page is one read). */
 export interface SyncPullStore {
-  /** The lowest retained change seq for the tenant; null when the log is empty (or swept). */
-  minChangeSeq(tenantId: number): Promise<number | null>;
-  /** Delta page: changes after `seq`, oldest first, at most `limit`. */
-  changesAfter(tenantId: number, destinationKey: string | null, seq: number, limit: number): Promise<SyncChangeRow[]>;
-  /** Snapshot page: live projection rows keyset-paginated by (entityType, clientEntityId). */
+  /** The tenant's highest change seq (0 when its log is empty). ONE aggregate, never a page walk. */
+  maxChangeSeq(tenantId: number): Promise<number>;
+  /** The lowest retained change seq for this destination; null when it has none. */
+  minChangeSeq(tenantId: number, destinationKey: string): Promise<number | null>;
+  /** Delta page: this destination's changes after `seq`, oldest first, at most `limit`. */
+  changesAfter(tenantId: number, destinationKey: string, seq: number, limit: number): Promise<SyncChangeRow[]>;
+  /** Snapshot page: projection rows keyset-paginated by (entityType, clientEntityId). */
   snapshotAfter(
     tenantId: number,
-    destinationKey: string | null,
+    destinationKey: string,
     after: { entityType: string; clientEntityId: string } | null,
     limit: number,
   ): Promise<SyncRecordRow[]>;
 }
 
-/** The full persistence port: reads for pull, plus one atomic unit of work for push. */
-export interface SyncStores extends SyncStoreSet, SyncPullStore {
-  transact<R>(work: (stores: SyncStoreSet) => Promise<R>): Promise<R>;
+/**
+ * Tenant-scoped reads of OTHER contexts a sync request needs to decide, never to
+ * write: whether a referenced project/ticket is the caller's tenant's, and
+ * whether an assignee is a member of it.
+ */
+export interface SyncReferenceReader {
+  projectInTenant(tenantId: number, projectId: number): Promise<boolean>;
+  taskInTenant(tenantId: number, taskId: number): Promise<boolean>;
+  /** An ACTIVE membership of `userId` in the tenant. */
+  tenantMember(tenantId: number, userId: string): Promise<boolean>;
 }
 
 // ── Entity importers (the owning contexts' import use cases) ────────────────
@@ -170,22 +186,57 @@ export interface SyncImportContext {
   resolveProjectId(reference: string): Promise<number | null>;
   /** Same for a ticket reference (parent ticket links). */
   resolveTaskId(reference: string): Promise<number | null>;
+  /** Whether `userId` is an active member of the caller's tenant (assignees). */
+  isTenantMember(userId: string): Promise<boolean>;
 }
 
-export type SyncImportOutcome =
-  | { ok: true; serverId: string; payload: unknown }
-  | { ok: false; status: 'rejected' | 'dependency_pending'; detail: string };
+/** Mapping fields the push persists beside the receipt. */
+export interface SyncImportMapping {
+  serverId: string;
+  serverVersion: number;
+  payloadHash: string;
+  destinationKey: string;
+}
 
 /**
- * The owning bounded context's import use case for one or more entity types.
- * Historical-import isolation (G17) is structural here: an importer writes the
- * domain record and nothing else — no agent dispatch, no notifications, no
- * audit triggers, no learning — because it is handed no collaborator that
- * could do those things.
+ * Importer outcome. `conflict` is first-class — the push must not collapse a
+ * stale base version into a generic rejection or a blind overwrite.
  */
-export interface SyncEntityImporter {
-  readonly entityTypes: readonly LocalEntityType[];
-  create(event: SyncEventInput, ctx: SyncImportContext, stores: SyncStoreSet): Promise<SyncImportOutcome>;
-  update(event: SyncEventInput, ctx: SyncImportContext, stores: SyncStoreSet, serverId: string): Promise<SyncImportOutcome>;
-  delete(event: SyncEventInput, ctx: SyncImportContext, stores: SyncStoreSet, serverId: string): Promise<SyncImportOutcome>;
+export type BoundedImportOutcome =
+  | ({ status: 'applied'; payload: unknown } & SyncImportMapping)
+  | ({ status: 'conflict'; detail: string } & SyncImportMapping)
+  | { status: 'rejected'; detail: string };
+
+/**
+ * One owning context's import use case, already bound to the unit of work's
+ * transaction. Historical-import isolation (G17) is structural: it is handed
+ * no collaborator that could dispatch an agent, notify, or trigger an audit.
+ */
+export type SyncMutationImporter = (
+  event: SyncEventInput,
+  ctx: SyncImportContext,
+  stores: SyncStoreSet,
+) => Promise<BoundedImportOutcome>;
+
+/** The three importers a push may call. There is no fourth, generic writer. */
+export interface SyncNamedImporters {
+  importSyncedTicket: SyncMutationImporter;
+  importSyncedProject: SyncMutationImporter;
+  importMirrorRecord: SyncMutationImporter;
+}
+
+/** Everything one atomic event apply writes through: sync stores AND importers, one transaction. */
+export interface SyncUnitOfWork {
+  stores: SyncStoreSet;
+  importers: SyncNamedImporters;
+}
+
+/**
+ * The full persistence port: committed reads (replay lookup, dependency check,
+ * destination binding, pull), plus one atomic unit of work per applied event.
+ */
+export interface SyncStores
+  extends SyncPullStore, Pick<SyncStoreSet, 'findEvent' | 'acceptedEventIds' | 'findMapping'> {
+  references: SyncReferenceReader;
+  transact<R>(work: (unit: SyncUnitOfWork) => Promise<R>): Promise<R>;
 }

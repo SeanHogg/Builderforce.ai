@@ -56,10 +56,15 @@ import { SkipToContent } from '@/components/SkipToContent';
 // `bootWebPlatformPolicy` and sets `__bfPlatformPolicyBooted`.
 const PlatformPolicyBoot = dynamic(() => import('@/components/PlatformPolicyBoot').then((m) => m.PlatformPolicyBoot));
 
-// Runs in <head> before any bundle. No `fetch(` — the transport guard treats
-// that token as a call, and this assigns the existing function instead. The
-// origin comes from the meta tag (API_ORIGIN), never a second copy of the literal.
-const PLATFORM_POLICY_BOOT_HOLD = `(function(){try{var meta=document.querySelector('meta[name="bf-api-origin"]');var origin=meta&&meta.content;if(!origin)return;var native=window.fetch;if(typeof native!=='function')return;var inner=native.bind(window);window.fetch=function(input,init){if(window.__bfPlatformPolicyBooted)return inner.apply(window,arguments);var raw=typeof input==='string'?input:(input&&input.url)||'';try{if(new URL(raw,location.href).origin===origin)return Promise.reject(new TypeError('platform_denied'));}catch(e){}return inner.apply(window,arguments);};}catch(e){}})();`;
+// Runs in <head> before any bundle. It HOLDS every platform-origin fetch made before
+// the policy chunk has booted: each one waits on the boot, and when
+// `bootWebPlatformPolicy` sets `__bfPlatformPolicyBooted` (an accessor defined here) the
+// held requests are re-sent through the CURRENT `window.fetch`, so the real policy
+// decides them. A boot that never arrives within 15 seconds fails closed
+// (`platform_denied`). The literal is inline because tests evaluate this exact text. Other origins pass straight through. No `fetch(` — the
+// transport guard treats that token as a call, and this assigns the existing function
+// instead. The origin comes from the meta tag (API_ORIGIN), never a second copy of the literal.
+const PLATFORM_POLICY_BOOT_HOLD = `(function(){try{var meta=document.querySelector('meta[name="bf-api-origin"]');var origin=meta&&meta.content;if(!origin)return;var native=window.fetch;if(typeof native!=='function')return;var inner=native.bind(window);var KEY='__bfPlatformPolicyBooted';var booted=!!window[KEY];var waiters=[];var release=function(){var w=waiters;waiters=[];for(var i=0;i<w.length;i++)w[i]();};try{Object.defineProperty(window,KEY,{configurable:true,enumerable:true,get:function(){return booted;},set:function(v){booted=!!v;if(booted)release();}});}catch(e){}var hold=function(input,init){if(booted)return inner(input,init);var raw=typeof input==='string'?input:(input&&input.url)||'';var same=false;try{same=new URL(raw,location.href).origin===origin;}catch(e){}if(!same)return inner(input,init);return new Promise(function(resolve,reject){var done=false;var timer=setTimeout(function(){if(done)return;done=true;reject(new TypeError('platform_denied'));},15000);waiters.push(function(){if(done)return;done=true;clearTimeout(timer);var current=window.fetch;var send=current===hold?inner:current;try{resolve(send.call(window,input,init));}catch(e){reject(e);}});});};window.fetch=hold;}catch(e){}})();`;
 
 // Code-split: the recorder's gate (consent, entitlement, sensitive routes) is not
 // first-paint work, so it stays out of the root layout's static closure.

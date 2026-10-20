@@ -14,16 +14,14 @@
  *     unacknowledged one is never half-applied. A failed commit throws with the
  *     live row untouched.
  *
- *   - BUSY TIMEOUT, NEVER A LOCK STEAL. One owner holds a lease per partition
- *     while it works. A second owner POLLS for up to `busyTimeoutMs` and then
- *     fails with `local_first_store_busy`; it does not write, and it does not
- *     take the lease. `expiresAt` is a diagnostic timestamp ONLY: a lease is
- *     held until its holder releases it, so age — including an age far past
- *     `leaseMs` — never admits a second owner. This is the IndexedDB counterpart
- *     of the VSIX rule that removed the 30-second lock steal, and it matches
- *     `durabilityContract.lockStolen`, which never grants a steal. A holder
- *     that dies without releasing leaves its row: the adapter refuses to guess,
- *     so a stuck store reports busy rather than racing a live writer.
+ *   - BUSY TIMEOUT, NEVER A LOCK STEAL, NEVER BRICKED. One owner holds a lease
+ *     per partition while it works. A second owner POLLS for up to
+ *     `busyTimeoutMs` and then fails with `local_first_store_busy`; it does not
+ *     write, and it does not take a LIVE holder's lease. Age — including an age
+ *     far past `leaseMs` — never admits a second owner. A holder that died
+ *     without releasing (closed tab, crash) is reclaimed only on proof of death:
+ *     the browser released its Web Lock, or (without Web Locks) its heartbeat
+ *     stopped long ago. See `indexedDbLease.ts`.
  *
  *   - CORRUPT-STORE RECOVERY. A staged row that no longer validates is deleted
  *     on open and the previous good live snapshot is kept — a parse that failed
@@ -44,17 +42,19 @@
  * Reads are not served from a stale cache: `read` and `export` read the live
  * row, so a record written by another tab is visible here.
  *
- * The adapter opens IndexedDB and nothing else. It writes no file, takes no OS
- * lock, calls no network, and imports no host.
+ * The adapter opens IndexedDB (and the browser's Web Locks, for the lease) and
+ * nothing else. It writes no file, takes no OS lock, calls no network, and
+ * imports no host.
  */
 
-import { leaseBusy } from './durabilityContract.js';
+import { idbRequest, trackComplete } from './idbTransaction.js';
+import { LEASES_STORE, createPartitionLease, type LeaseLockManager, type LeaseRow } from './indexedDbLease.js';
 import { redactSnapshotForUploadOrLog } from './redaction.js';
 import type { SyncLease } from './sync.js';
 import { createMemoryLocalFirstStore, type LocalFirstSnapshot, type LocalFirstStore } from './store.js';
 
 const SNAPSHOTS = 'snapshots';
-const LEASES = 'leases';
+const LEASES = LEASES_STORE;
 const STAGED = 'staged';
 const VERSION = 2;
 
@@ -68,14 +68,6 @@ interface StagedRow extends SnapshotRow {
   stagedAt: number;
 }
 
-interface LeaseRow {
-  id: string;
-  owner: string;
-  acquiredAt: number;
-  /** Diagnostic only. Never a steal window — see the module note. */
-  expiresAt: number;
-}
-
 export interface IndexedDbLocalFirstOptions {
   indexedDB: IDBFactory;
   dbName: string;
@@ -87,6 +79,15 @@ export interface IndexedDbLocalFirstOptions {
   busyPollMs?: number;
   now?: () => number;
   ownerId?: string;
+  /**
+   * Web Locks used to prove a dead holder. Defaults to `navigator.locks`; `null`
+   * forces the heartbeat fallback.
+   */
+  locks?: LeaseLockManager | null;
+  /** Heartbeat age that proves a holder dead (fallback only). Defaults to `leaseStaleAfterMs(leaseMs)`. */
+  staleAfterMs?: number;
+  /** A lease heartbeat or release write failed. Defaults to `console.warn`. */
+  onLeaseError?: (error: unknown) => void;
 }
 
 /** Contender gives up after this long without ever taking the lease. */
@@ -95,39 +96,16 @@ export const DEFAULT_BUSY_TIMEOUT_MS = 1_500;
 export const DEFAULT_BUSY_POLL_MS = 25;
 
 export {
+  leaseStaleAfterMs,
+  type LeaseLockManager,
+  type LeaseRow,
+} from './indexedDbLease.js';
+
+export {
   INDEXEDDB_REDACTED_KEYS,
   INDEXEDDB_REDACTION_RULE,
   redactSnapshotForUploadOrLog,
 } from './redaction.js';
-
-function request<T>(req: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function complete(tx: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error('indexeddb_transaction_failed'));
-    tx.onabort = () => reject(tx.error ?? new Error('indexeddb_transaction_aborted'));
-  });
-}
-
-/**
- * Attach the completion handlers BEFORE the first request is issued.
- *
- * A transaction with no pending request commits on its own, so a handler
- * attached after an `await` can miss the event entirely. A rejection handler is
- * attached immediately so the completion promise is never an unhandled
- * rejection; the caller still awaits it explicitly where it needs the outcome.
- */
-function trackComplete(tx: IDBTransaction): Promise<void> {
-  const done = complete(tx);
-  void done.catch(() => undefined);
-  return done;
-}
 
 function validSnapshot(value: unknown): value is LocalFirstSnapshot {
   if (!value || typeof value !== 'object') return false;
@@ -245,47 +223,28 @@ export function createIndexedDbLocalFirstStore(options: IndexedDbLocalFirstOptio
     await ensureRecovered();
     const tx = db.transaction(SNAPSHOTS, 'readonly');
     const tracked = trackComplete(tx);
-    const row = await request(tx.objectStore(SNAPSHOTS).get(partition) as IDBRequest<SnapshotRow | undefined>);
+    const row = await idbRequest(tx.objectStore(SNAPSHOTS).get(partition) as IDBRequest<SnapshotRow | undefined>);
     await tracked;
     if (!row) return emptySnapshot();
     if (!validSnapshot(row.value)) throw new Error('local_first_snapshot_corrupt');
     return structuredClone(row.value);
   };
 
-  /**
-   * One compare-and-set on the lease row, issued inside the transaction so the
-   * read and the write cannot drift apart. Any holder other than us is busy —
-   * there is no expiry check here, so age cannot admit a second owner.
-   */
-  const tryAcquire = async (): Promise<boolean> => {
-    const db = await open();
-    await ensureRecovered();
-    const tx = db.transaction(LEASES, 'readwrite');
-    const tracked = trackComplete(tx);
-    const store = tx.objectStore(LEASES);
-    const acquired = await new Promise<boolean>((resolve, reject) => {
-      const req = store.get(leaseKey);
-      req.onsuccess = () => {
-        const current = req.result as LeaseRow | undefined;
-        if (leaseBusy(current?.owner) && current?.owner !== owner) {
-          resolve(false);
-          tx.abort();
-          return;
-        }
-        const acquiredAt = now();
-        store.put({
-          id: leaseKey,
-          owner,
-          acquiredAt,
-          expiresAt: acquiredAt + leaseMs,
-        } satisfies LeaseRow);
-        resolve(true);
-      };
-      req.onerror = () => reject(req.error ?? new Error('indexeddb_lease_read_failed'));
-    });
-    if (acquired) await tracked;
-    return acquired;
-  };
+  const lease = createPartitionLease({
+    open: async () => {
+      const db = await open();
+      await ensureRecovered();
+      return db;
+    },
+    leaseKey,
+    lockName: `builderforce-local-first:${options.dbName}:${leaseKey}`,
+    owner,
+    now,
+    leaseMs,
+    ...(options.locks !== undefined ? { locks: options.locks } : {}),
+    ...(options.staleAfterMs !== undefined ? { staleAfterMs: options.staleAfterMs } : {}),
+    onError: options.onLeaseError ?? ((error: unknown) => console.warn('local-first lease write failed', error)),
+  });
 
   /**
    * Busy timeout. Poll until the holder releases, for at most `busyTimeoutMs`,
@@ -298,32 +257,9 @@ export function createIndexedDbLocalFirstStore(options: IndexedDbLocalFirstOptio
   const acquire = async (): Promise<void> => {
     const realDeadline = Date.now() + Math.max(0, busyTimeoutMs);
     for (;;) {
-      if (await tryAcquire()) return;
+      if (await lease.tryAcquire()) return;
       if (Date.now() >= realDeadline) throw new Error('local_first_store_busy');
       await delay(busyPollMs);
-    }
-  };
-
-  /** Releases only this owner's row. A failure never masks the caller's result. */
-  const release = async (): Promise<void> => {
-    try {
-      const db = await open();
-      const tx = db.transaction(LEASES, 'readwrite');
-      const tracked = trackComplete(tx);
-      const store = tx.objectStore(LEASES);
-      await new Promise<void>((resolve, reject) => {
-        const req = store.get(leaseKey);
-        req.onsuccess = () => {
-          const current = req.result as LeaseRow | undefined;
-          if (current?.owner === owner) store.delete(leaseKey);
-          resolve();
-        };
-        req.onerror = () => reject(req.error ?? new Error('indexeddb_lease_read_failed'));
-      });
-      await tracked;
-    } catch {
-      // A lease that outlives this process keeps the store busy for others.
-      // That is the safe direction: it never lets two owners write at once.
     }
   };
 
@@ -368,7 +304,7 @@ export function createIndexedDbLocalFirstStore(options: IndexedDbLocalFirstOptio
     try {
       return await work();
     } finally {
-      await release();
+      await lease.release();
     }
   };
 
@@ -397,14 +333,7 @@ export function createIndexedDbLocalFirstStore(options: IndexedDbLocalFirstOptio
     async exportForUploadOrLog() {
       return redactSnapshotForUploadOrLog(await load());
     },
-    async leaseOwner() {
-      const db = await open();
-      const tx = db.transaction(LEASES, 'readonly');
-      const tracked = trackComplete(tx);
-      const row = await request(tx.objectStore(LEASES).get(leaseKey) as IDBRequest<LeaseRow | undefined>);
-      await tracked;
-      return row;
-    },
+    leaseOwner: () => lease.owner(),
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

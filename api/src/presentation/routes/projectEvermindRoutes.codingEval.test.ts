@@ -23,7 +23,7 @@ vi.mock('../../application/llm/projectEvermind', () => ({ resolveEffectiveEvermi
 vi.mock('../../application/llm/evermindRecipes', () => ({}));
 vi.mock('../../application/llm/evermindRuntime', () => ({}));
 vi.mock('../../application/llm/evermindAnalyzer', () => ({}));
-vi.mock('../../application/llm/projectFacts', () => ({}));
+vi.mock('../../application/llm/projectFactsAnswerCache', () => ({}));
 
 const { createProjectEvermindRoutes } = await import('./projectEvermindRoutes');
 

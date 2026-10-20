@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.10.61",
+  "version": "2026.10.62",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -92,7 +92,8 @@
   "pnpm": {
     "overrides": {
       "sharp": "0.35.4",
-      "esbuild": "^0.28.2"
+      "esbuild": "^0.28.2",
+      "@jridgewell/sourcemap-codec": "^1.6.0"
     }
   }
 }

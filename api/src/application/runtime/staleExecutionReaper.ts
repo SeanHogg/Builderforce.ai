@@ -49,6 +49,26 @@ export const RUNNING_DEADLINE_MS = 30 * 60_000; // 30 min
  *  below, so a live durable/container tick mid-LLM-step is pulled here but spared
  *  there. Only the true ceiling decides a run's fate; this value just bounds the scan. */
 export const CLOUD_RUNNING_DEADLINE_MS = 90_000; // 90s
+/** Text match for a payload stamped `"executor":"github_actions"` (see
+ *  `cloudDispatch.withExecutor`). A regex on the text column rather than a jsonb cast,
+ *  so one malformed payload cannot throw the whole sweep. */
+const GITHUB_ACTIONS_EXECUTOR = '"executor"[[:space:]]*:[[:space:]]*"github_actions"';
+
+/**
+ * The per-surface silence ceiling, in SQL. The 90s floor alone let up to
+ * {@link REAP_BATCH_LIMIT} live durable/container runs (inside their larger ceiling)
+ * fill the LIMIT, and the JS ceiling check then dropped them — so a crowd of live runs
+ * starved the genuinely dead ones out of every batch. With the ceiling in the WHERE,
+ * LIMIT counts only reapable rows. Same rule as {@link cloudSilenceCeilingMs}: the
+ * GitHub Actions ceiling for a run stamped on that executor, the long-lived ceiling
+ * for every other (or unstamped) one.
+ */
+export function cloudPastCeiling(nowMs: number): SQL {
+  const githubCutoff = new Date(nowMs - cloudSilenceCeilingMs('github_actions')).toISOString();
+  const longLivedCutoff = new Date(nowMs - cloudSilenceCeilingMs(undefined)).toISOString();
+  return sql`coalesce(${executions.updatedAt}, ${executions.createdAt}) < (case when coalesce(${executions.payload}, '') ~ ${GITHUB_ACTIONS_EXECUTOR} then ${githubCutoff} else ${longLivedCutoff} end)::timestamp`;
+}
+
 /** A run never picked up by any agent within this window is treated as dropped. */
 export const QUEUED_DEADLINE_MS = 15 * 60_000; // 15 min
 /** A run PAUSED on an `ask_human` question whose answer never came. Deliberately
@@ -142,7 +162,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now(), db: Db =
     })
     .from(executions)
     .innerJoin(tasks, eq(tasks.id, executions.taskId))
-    .where(stale.cloudRunning)
+    .where(and(stale.cloudRunning, cloudPastCeiling(nowMs)))
     .orderBy(asc(sql`coalesce(${executions.updatedAt}, ${executions.createdAt})`))
     .limit(REAP_BATCH_LIMIT);
 

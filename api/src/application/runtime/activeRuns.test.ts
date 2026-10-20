@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ACTIVE_RUNS_DEFAULT_LIMIT, ACTIVE_RUNS_MAX_LIMIT, parseLiveRunsQuery, readActiveRuns } from './activeRuns';
+import { ACTIVE_RUNS_DEFAULT_LIMIT, ACTIVE_RUNS_MAX_LIMIT, localDayIndex, parseLiveRunsQuery, readActiveRuns } from './activeRuns';
 import { fillDailySeries, MAX_ACTIVITY_DAYS } from './runActivity';
 import { latestRunPerTaskAgent, type TaskRun } from './taskRunChips';
 import { bumpExecutionState } from './executionStateVersion';
@@ -109,5 +109,17 @@ describe('latestRunPerTaskAgent', () => {
       run(1, 2, 'completed', { agentHostId: 7 }),
     ];
     expect(latestRunPerTaskAgent(rows).map((r) => r.id)).toEqual([4, 3, 1]);
+  });
+});
+
+describe('localDayIndex — the run-activity cache key rolls over at LOCAL midnight', () => {
+  it("changes at the caller's midnight, not UTC's", () => {
+    const beforeUtcMidnight = Date.parse('2026-10-19T23:30:00.000Z');
+    const afterUtcMidnight = Date.parse('2026-10-20T00:30:00.000Z');
+    expect(localDayIndex(afterUtcMidnight, 0)).toBe(localDayIndex(beforeUtcMidnight, 0) + 1);
+    // UTC-5 is still on the 19th at 00:30Z.
+    expect(localDayIndex(afterUtcMidnight, -300)).toBe(localDayIndex(beforeUtcMidnight, -300));
+    // UTC+1 already crossed at 23:00Z.
+    expect(localDayIndex(beforeUtcMidnight, 60)).toBe(localDayIndex(beforeUtcMidnight, 0) + 1);
   });
 });

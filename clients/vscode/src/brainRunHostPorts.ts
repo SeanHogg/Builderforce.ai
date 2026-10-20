@@ -7,7 +7,7 @@
  */
 
 import * as vscode from "vscode";
-import { isRunning, type BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
+import { getRunSnapshot, isRunning, type BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, projectEvermindHooks, rememberProjectFact } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
@@ -21,6 +21,7 @@ import { setLocalChatRuns } from "./attention";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
 import { installRunRecovery } from "./installRunRecovery";
+import { createHostRunLifecycle } from "./hostRunLifecycle";
 import { installLocalDomainTools, type DomainToolRequest } from "./installLocalDomainTools";
 import { classifyLocalDomainTool, type LocalDomainToolName } from "./localDomainTools";
 import { platformPolicy } from "./platformPolicy";
@@ -41,6 +42,17 @@ export interface VsCodeRunHostHooks {
   onChatsChanged(): void;
   /** A platform (catalog) write happened — refresh Project & Tasks. */
   onPlatformWrite(toolName: string): void;
+}
+
+/**
+ * The BuilderForce output channel. Imported lazily for the same reason
+ * `projectState` is below: `errorReporter` pulls `vscode` (and an EventEmitter) into
+ * the module graph of every suite that mocks it away.
+ */
+function hostLog(line: string): void {
+  void import("./errorReporter")
+    .then(({ logLine }) => logLine(line))
+    .catch((error: unknown) => console.warn(line, error));
 }
 
 function workspaceRoot(): string {
@@ -331,17 +343,32 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       }
     },
   });
+  // G22: the run journal. Start, step checkpoints and the TERMINAL status come from the
+  // host's own run events (a sink on the host), so a finished run is never rewritten to
+  // `interrupted` by the next activation. What the previous host left in flight is
+  // surfaced in the log once recovery has run.
+  const recovery = installRunRecovery(ctx, { onError: (error) => hostLog(`[run journal] start failed: ${String(error)}`) });
+  void recovery.recovered.then((runs) => {
+    for (const run of runs) {
+      hostLog(`[run journal] interrupted by the previous editor session: ${run.runId}${run.record.payload.chatId ? ` (chat ${run.record.payload.chatId})` : ""}`);
+    }
+  });
+  const lifecycle = createHostRunLifecycle({
+    recovery,
+    snapshot: (chatId) => getRunSnapshot(chatId),
+    log: hostLog,
+  });
+  const detachLifecycle = host.attach(lifecycle.sink);
   // Baseline before the turn, immutable change set after it. A duplicate start while
   // the chat is already running is a no-op in the host — don't finalize that, or the
-  // live run's edits would be claimed twice. No upload, no apply to another checkout.
+  // live run's edits would be claimed twice, and don't journal a start that will never
+  // finish. No upload, no apply to another checkout.
   // Sub-agents start through the host's internal start, not this wrapper.
   return {
     ...host,
     start(payload) {
       const { runId, author } = changeSetIdentityForHostRun(payload, () => crypto.randomUUID());
-      const chatId = payload.chatId;
-      // Running only. A settled start is not proof the run finished.
-      void installRunRecovery(ctx).recordStarted({ runId, chatId: String(chatId) });
+      if (!isRunning(payload.chatId)) lifecycle.started(payload.chatId, runId);
       return recordChangeSetAroundRun(
         {
           store: local.store,
@@ -352,6 +379,10 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
         },
         () => host.start(payload),
       );
+    },
+    dispose() {
+      detachLifecycle();
+      host.dispose();
     },
   };
 }

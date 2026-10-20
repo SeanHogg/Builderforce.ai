@@ -74,7 +74,13 @@ export interface LocalRecord<T = unknown> {
 export type JournalOperation = 'create' | 'update' | 'delete' | 'import';
 
 export interface JournalEvent<T = unknown> {
+  /** Wire id — a UUID minted by the store at append; the server's idempotency key. */
   eventId: string;
+  /**
+   * The caller's name for this logical write (`ticket:<id>:v1`, `fact:<id>:<v>`).
+   * Dedupes a double-enqueue while the event is pending. Not a wire id.
+   */
+  idempotencyKey?: string;
   clientEntityId: ClientEntityId;
   entityType: LocalEntityType;
   operation: JournalOperation;
@@ -134,11 +140,34 @@ export interface TicketValue {
   assignedUserId?: string;
 }
 
+/**
+ * Lifecycle of a local run. `completed`, `failed` and `cancelled` (a person pressed
+ * Stop) are terminal; `interrupted` is what restart recovery writes for a run the dead
+ * host left unfinished.
+ */
+export type ExecutionStatus =
+  | 'queued'
+  | 'running'
+  | 'awaiting_input'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
+
+/** The statuses a finished run carries. Recovery never rewrites one of these. */
+export const TERMINAL_EXECUTION_STATUSES = ['completed', 'failed', 'cancelled'] as const satisfies readonly ExecutionStatus[];
+
+export type TerminalExecutionStatus = (typeof TERMINAL_EXECUTION_STATUSES)[number];
+
+export function isTerminalExecutionStatus(status: ExecutionStatus): status is TerminalExecutionStatus {
+  return (TERMINAL_EXECUTION_STATUSES as readonly ExecutionStatus[]).includes(status);
+}
+
 export interface ExecutionValue {
   chatId?: ClientEntityId;
   ticketId?: ClientEntityId;
   parentRunId?: ClientEntityId;
-  status: 'queued' | 'running' | 'awaiting_input' | 'completed' | 'failed' | 'interrupted';
+  status: ExecutionStatus;
   checkpoint?: { step: number; safeToResume: boolean; state?: unknown };
 }
 

@@ -15,6 +15,7 @@
  * `bootRovrServiceWorker` is the only composition root. The extension calls it once, below.
  * A test calls the same function with the network denied. There is no second policy.
  */
+import { bootDeniedHost, replayDeniedBatch, type DeniedReplayPorts, type DeniedReplayReceipt } from '@builderforce/local-first';
 import { createIndexedDbOutboxStore, createOnlineSignal } from '@builderforce/write-outbox';
 import { createApiClient } from '../api/apiClient';
 import { createSession } from '../auth/session';
@@ -32,12 +33,8 @@ import { createErrorReports, REPORT_LANE } from '../telemetry/errorReports';
 /** Partition that holds a local replay receipt. The send queue is a different partition. */
 export const ROVR_REPLAY_PARTITION = 'replayed';
 
-/** One batch replayed on this device. Not a platform acknowledgement. */
-export interface RovrReplayReceipt {
-  idempotencyKey: string;
-  count: number;
-  ids: string[];
-}
+/** One batch replayed on this device. Not a platform acknowledgement. The shared receipt shape. */
+export type RovrReplayReceipt = DeniedReplayReceipt;
 
 export interface BootRovrServiceWorkerOptions {
   /** Durable store. The extension uses the worker's IndexedDB; a test injects one that outlives the boot. */
@@ -214,35 +211,64 @@ export function bootRovrServiceWorker(options: BootRovrServiceWorkerOptions = {}
     await chatSync.ready();
   };
 
+  // Local replay — the shared denied-host rule over this worker's two outbox partitions:
+  // the send queue (grouped by chat) and the receipts partition. A receipt row never
+  // reuses a queue entry id (same object store, keyPath `id`), or the put would replace
+  // the backlog row.
+  const replayPorts: DeniedReplayPorts = {
+    async pending() {
+      const queued = (await syncStore.load()).filter((entry) => !entry.deadLetter);
+      return queued.map((entry) => ({
+        id: entry.id,
+        group: String(entry.key),
+        ...(entry.batch ? { idempotencyKey: entry.batch } : {}),
+      }));
+    },
+    async receipts() {
+      return (await receiptStore.load()).map((entry) => entry.item);
+    },
+    async putReceipt(receipt) {
+      await receiptStore.put([{ id: `replay:${receipt.idempotencyKey}`, key: receipt.idempotencyKey, item: { ...receipt, ids: [...receipt.ids] }, seq: Date.now() }]);
+    },
+  };
+
+  // A denied boot is the shared denied-host primitive: the deny probe through the same
+  // guarded fetch, the stopped flag, and replay that writes a local receipt only.
+  const denied = networkDenied
+    ? bootDeniedHost({
+        network: 'denied',
+        policy: platformPolicy,
+        open: ready,
+        ...replayPorts,
+        onStop: () => {
+          chatSync.close();
+          errorReports.close();
+        },
+      })
+    : undefined;
+
   return {
-    ready,
+    ready: denied ? denied.ready : ready,
     async writeDurable(chatId, item) {
-      await ready();
+      await (denied ? denied.ready() : ready());
       // Durable user work: resolve only after the store acknowledges the row.
       return chatSync.enqueueDurable(chatId, item);
     },
     async replayBatch() {
+      if (denied) return denied.replayBatch();
       await ready();
-      // Denied, or sync not granted: replay on this device. Do not flush — flush is the platform path.
-      if (!networkDenied && platformPolicy.allows('synchronize') && online.isOnline()) {
+      // Sync granted and online: the platform path. Otherwise replay on this device.
+      if (platformPolicy.allows('synchronize') && online.isOnline()) {
         await chatSync.flush();
         return { count: 0, idempotencyKey: '' };
       }
-      const queued = (await syncStore.load()).filter((entry) => !entry.deadLetter);
-      const key = queued[0]?.key;
-      const batch = queued.filter((entry) => entry.key === key);
-      if (batch.length === 0 || key === undefined) return { count: 0, idempotencyKey: '' };
-      const idempotencyKey = batch[0]?.batch ?? batch[0]?.id ?? '';
-      // Same object store as the send queue (keyPath `id`). A receipt must not reuse an entry id
-      // or the put replaces the backlog row.
-      const receiptId = `replay:${idempotencyKey}`;
-      const already = (await receiptStore.load()).some((entry) => entry.id === receiptId);
-      if (already) return { count: 0, idempotencyKey };
-      const receipt: RovrReplayReceipt = { idempotencyKey, count: batch.length, ids: batch.map((entry) => entry.id) };
-      await receiptStore.put([{ id: receiptId, key: String(key), item: receipt, seq: batch[0]?.seq ?? 0 }]);
-      return { count: batch.length, idempotencyKey };
+      return replayDeniedBatch(replayPorts);
     },
     stop() {
+      if (denied) {
+        denied.stop();
+        return;
+      }
       chatSync.close();
       errorReports.close();
     },

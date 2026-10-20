@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { destinationKey, hashSyncPayload, type LocalEntityType } from '../../../domain/sync/syncProtocol';
-import type { Db } from '../../../infrastructure/database/connection';
+import type { Tx } from '../../../infrastructure/database/connection';
 import { fakeDb } from '../../../../test/fakeDb';
 import type { SyncEntityMappingRow, SyncEventInput, SyncImportContext, SyncStoreSet } from '../syncPorts';
 import { importMirrorRecord, mirrorRefuses } from './importMirrorRecord';
 import { importSyncedProject } from './importSyncedProject';
 import { importSyncedTicket } from './importSyncedTicket';
-import { importEntity as importProjectEntity, kind as projectKind } from './projectImporter';
-import { importEntity as importTicketEntity, kind as ticketKind } from './ticketImporter';
 import { syncImporterFor } from './index';
 
 const destination = { kind: 'bound' as const, tenantId: '7', accountId: 'user-1' };
@@ -23,6 +21,7 @@ function ctx(overrides: Partial<SyncImportContext> = {}): SyncImportContext {
     now,
     resolveProjectId: async () => 3,
     resolveTaskId: async () => null,
+    isTenantMember: async () => true,
     ...overrides,
   };
 }
@@ -79,8 +78,18 @@ function mapping(partial: Partial<SyncEntityMappingRow> = {}): SyncEntityMapping
   };
 }
 
+/** The unit-of-work transaction double; `savepoints` counts nested `transaction()` calls. */
 function dbOf(results: Array<unknown[] | Error> = []) {
-  return fakeDb(results) as unknown as Db & { calls: ReturnType<typeof fakeDb>['calls'] };
+  const db = fakeDb(results);
+  let savepoints = 0;
+  const transaction = db.transaction;
+  db.transaction = (fn) => {
+    savepoints += 1;
+    return transaction(fn);
+  };
+  return Object.assign(db as unknown as Tx & { calls: ReturnType<typeof fakeDb>['calls'] }, {
+    savepoints: () => savepoints,
+  });
 }
 
 describe('syncImporterFor', () => {
@@ -367,6 +376,61 @@ describe('importSyncedTicket', () => {
     expect(db.calls[0]?.payload).toMatchObject({ archived: true });
   });
 
+  it('rejects an assignee who is not an active member of the tenant, before any write', async () => {
+    const db = dbOf();
+    const asked: string[] = [];
+    const outcome = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'create', payload }),
+      ctx({ isTenantMember: async (userId) => { asked.push(userId); return false; } }),
+      stores(),
+      db,
+    );
+    expect(outcome).toEqual({ status: 'rejected', detail: 'ticket_assignee_invalid' });
+    expect(asked).toEqual(['user-9']);
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('writes the task inside a savepoint of the unit-of-work transaction', async () => {
+    const db = dbOf([[{ id: 15 }]]);
+    await importSyncedTicket(event({ entityType: 'ticket', operation: 'create', payload }), ctx(), stores(), db);
+    expect(db.savepoints()).toBe(1);
+  });
+
+  it('applies a delete over a stale base — a tombstone wins under the conflict policy', async () => {
+    const db = dbOf([[{ id: 42 }]]);
+    const outcome = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'delete', baseVersion: 1, payload: null }),
+      ctx(),
+      stores(mapping({ serverVersion: 5 })),
+      db,
+    );
+    expect(outcome).toMatchObject({ status: 'applied', serverVersion: 6, payload: { archived: true } });
+  });
+
+  it('refuses an update that would resurrect a deleted ticket', async () => {
+    const db = dbOf();
+    const outcome = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'update', baseVersion: 3, payload }),
+      ctx(),
+      stores(mapping({ serverVersion: 3, deletedAt: new Date('2026-01-02T00:00:00.000Z') })),
+      db,
+    );
+    expect(outcome).toEqual({ status: 'rejected', detail: 'entity_deleted' });
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('acknowledges a repeat delete without a second write or version bump', async () => {
+    const db = dbOf();
+    const outcome = await importSyncedTicket(
+      event({ entityType: 'ticket', operation: 'delete', baseVersion: 1, payload: null }),
+      ctx(),
+      stores(mapping({ serverVersion: 3, deletedAt: new Date('2026-01-02T00:00:00.000Z') })),
+      db,
+    );
+    expect(outcome).toMatchObject({ status: 'applied', serverVersion: 3, payload: { archived: true } });
+    expect(db.calls).toHaveLength(0);
+  });
+
   it('does not write sync tables', async () => {
     const db = dbOf([[{ id: 15 }]]);
     const book = stores();
@@ -443,66 +507,5 @@ describe('importMirrorRecord', () => {
       stores(),
     );
     expect(unknown).toEqual({ status: 'rejected', detail: 'entity_type_rejected' });
-  });
-});
-
-function thrownCode(run: () => void): string | undefined {
-  try {
-    run();
-    return undefined;
-  } catch (error) {
-    if (!error || typeof error !== 'object' || !('code' in error)) return undefined;
-    const code = (error as { code: unknown }).code;
-    return typeof code === 'string' ? code : undefined;
-  }
-}
-
-describe('bounded kind importers', () => {
-  const bound = { kind: 'bound' as const, tenantId: '7', accountId: 'user-1' };
-  const ticketEvent = {
-    entityType: 'ticket' as const,
-    destination: bound,
-    clientEntityId: '11111111-1111-4111-8111-111111111111',
-  };
-  const projectEvent = {
-    entityType: 'project' as const,
-    destination: bound,
-    clientEntityId: '22222222-2222-4222-8222-222222222222',
-  };
-
-  it('exports one kind and accepts only that kind, with no writer callback', () => {
-    expect(ticketKind).toBe('ticket');
-    expect(projectKind).toBe('project');
-    expect(importTicketEntity).toHaveLength(1);
-    expect(importProjectEntity).toHaveLength(1);
-    expect(importTicketEntity(ticketEvent)).toEqual({
-      kind: 'ticket',
-      clientEntityId: ticketEvent.clientEntityId,
-    });
-    expect(importProjectEntity(projectEvent)).toEqual({
-      kind: 'project',
-      clientEntityId: projectEvent.clientEntityId,
-    });
-  });
-
-  it('refuses a ticket event on the project importer', () => {
-    expect(thrownCode(() => importProjectEntity(ticketEvent))).toBe('wrong_kind');
-    expect(thrownCode(() => importProjectEntity({ ...ticketEvent, destination: { kind: 'unbound' } }))).toBe('wrong_kind');
-  });
-
-  it('throws wrong_kind when the kind is missing or foreign', () => {
-    expect(thrownCode(() => importTicketEntity({ destination: bound }))).toBe('wrong_kind');
-    expect(thrownCode(() => importTicketEntity(undefined))).toBe('wrong_kind');
-    expect(thrownCode(() => importProjectEntity({ destination: bound }))).toBe('wrong_kind');
-    expect(thrownCode(() => importTicketEntity({ entityType: 'chat', destination: bound }))).toBe('wrong_kind');
-    expect(thrownCode(() => importProjectEntity({ entityType: 'chat', destination: bound }))).toBe('wrong_kind');
-    expect(thrownCode(() => importTicketEntity(projectEvent))).toBe('wrong_kind');
-  });
-
-  it('refuses an unbound destination', () => {
-    expect(thrownCode(() => importTicketEntity({ ...ticketEvent, destination: { kind: 'unbound' } }))).toBe('unbound_destination');
-    expect(thrownCode(() => importTicketEntity({ entityType: 'ticket' }))).toBe('unbound_destination');
-    expect(thrownCode(() => importProjectEntity({ ...projectEvent, destination: null }))).toBe('unbound_destination');
-    expect(thrownCode(() => importProjectEntity({ entityType: 'project', destination: { kind: 'unbound' } }))).toBe('unbound_destination');
   });
 });

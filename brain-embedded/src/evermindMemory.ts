@@ -142,7 +142,13 @@ export function projectMemoryHooks(
       void request(`/api/projects/${projectId}/answer`, {
         method: 'POST',
         headers: json,
-        body: JSON.stringify({ question: query, answer, ...(origin ? { origin } : {}) }),
+        // `chatId` is what the server prices the cached answer from (that chat's own
+        // usage row) and gates on (its Memory switch); `origin` only serves an older API.
+        body: JSON.stringify({
+          question: query, answer,
+          ...(chatId != null && chatId > 0 ? { chatId } : {}),
+          ...(origin ? { origin } : {}),
+        }),
       }).catch(() => { /* best-effort: never fail a reply to remember it */ });
     },
   };

@@ -95,7 +95,7 @@ export async function savePolicySnapshot(
         });
     await tx.put(record, existing ? existing.version : undefined);
     await tx.append({
-      eventId: `policy-snapshot:update:${id}:${value.fetchedAt}`,
+      idempotencyKey: `policy-snapshot:update:${id}:${value.fetchedAt}`,
       clientEntityId: id,
       entityType: "policy-snapshot",
       operation: existing ? "update" : "create",

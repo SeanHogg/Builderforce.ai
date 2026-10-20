@@ -127,6 +127,8 @@ import { createMessageRoutes } from './presentation/routes/messageRoutes';
 import { createPayoutRoutes } from './presentation/routes/payoutRoutes';
 import { createTaxRoutes } from './presentation/routes/taxRoutes';
 import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
+import { SYNC_ROUTE_BASE, createSyncRoutes } from './presentation/routes/syncRoutes';
+import { syncStoresFor } from './application/sync/syncStoresFor';
 import { createObjectRoutes } from './presentation/routes/objectRoutes';
 import { createDomainRoutes } from './presentation/routes/domainRoutes';
 import { createObjectRegistry } from './application/kernel/ObjectRegistry';
@@ -688,6 +690,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/earnings', createEarningsRoutes(db));
   app.route('/api/withdrawal-methods', createWithdrawalMethodRoutes(db));
   app.route('/api/activity', createActivityRoutes(db));
+  // Offline-first batch sync (G15–G18): push receipts + cursor pulls. The Drizzle
+  // adapter binds the named importers to each event's own transaction.
+  app.route(SYNC_ROUTE_BASE, createSyncRoutes(syncStoresFor));
   // LTI 1.3: the LMS-facing half of the teaching vocabulary — a signed launch, the
   // roster coming in through NRPS and marks going back through AGS. Unauthenticated
   // by design: every endpoint authenticates the PLATFORM cryptographically rather

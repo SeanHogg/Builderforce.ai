@@ -15,6 +15,15 @@
  * caller's memory recall for the latest directive, else an elision marker — so
  * correctness never depends on an LLM call.
  *
+ * ONE estimator sizes everything: the gate ("is this over budget?"), the packer
+ * (`estimateTokens`) and the reported before/after numbers all run the packer's own
+ * per-message count (`tokensOf`) over the gateway's chars→tokens heuristic, and the
+ * request's advertised tool schemas (`tools`) are charged against the window
+ * (`toolsTokens`). When packing alone cannot get under the budget (the system prompt +
+ * directive + one indivisible unit is too big, or the packer kept everything), the
+ * oldest / largest tool results are TRUNCATED in place (`elideToFit`) — pairing is
+ * untouched because no message is removed.
+ *
  * Invariants (the packer's, must hold or the upstream rejects the request):
  *   • The system prompt and the LATEST user directive are always kept verbatim.
  *   • The verbatim tail takes what the budget allows, in whole units.
@@ -23,9 +32,10 @@
  *
  * Worker-safe: only the `/handoff` subpath is imported (pure, no `node:*`).
  */
-import { packHandoff, type HandoffMessage } from '@seanhogg/builderforce-memory/handoff';
+import { packHandoff, tokensOf, type HandoffMessage } from '@seanhogg/builderforce-memory/handoff';
 import { DEFAULT_HANDOFF_RESERVE_TOKENS } from '@builderforce/run-policy';
-import { estimateRequestTokens, ideProxy, readProxyChoice, type ProxyEnv } from './LlmProxyService';
+import { ideProxy, readProxyChoice, type ProxyEnv } from './LlmProxyService';
+import { estimateTokensFromChars } from './tokenUsage';
 import { catalogEntry } from './vendors/registry';
 
 type Msg = Record<string, unknown>;
@@ -47,6 +57,9 @@ export interface CompactOptions {
   recall?: (query: string, budgetChars: number) => Promise<string>;
   /** Ceiling (ms) on each of the summarize / recall calls. */
   timeoutMs?: number;
+  /** The tool schemas the request will advertise — their size is charged against the
+   *  budget, so a tool-heavy request is packed tighter instead of 413ing upstream. */
+  tools?: unknown;
 }
 
 /** Defaults for the cloud coding loop. ~40K keeps a run comfortably inside the
@@ -67,6 +80,61 @@ export interface CompactResult {
   afterTokens: number;
   /** Messages removed (the middle collapsed to one memory note). */
   droppedMessages: number;
+}
+
+/** THE estimator — gate, packer and reporting all count with it. */
+const estimateTokens = (text: string): number => estimateTokensFromChars(text.length);
+
+/** Tokens the advertised tool schemas cost. */
+export function toolsTokensOf(tools: unknown): number {
+  if (tools == null) return 0;
+  if (Array.isArray(tools) && tools.length === 0) return 0;
+  return estimateTokens(JSON.stringify(tools) ?? '');
+}
+
+/** Tokens the messages cost, counted exactly as the packer counts them. */
+function messagesTokens(messages: readonly Msg[]): number {
+  return tokensOf(messages as unknown as readonly HandoffMessage[], estimateTokens);
+}
+
+const elisionNote = (chars: number): string => ` …[${chars} chars elided to fit the context budget]`;
+
+/** Progressively tighter per-message caps for the truncation fallback. */
+const ELIDE_CAPS = [4_000, 1_000, 200] as const;
+
+/**
+ * The truncation fallback (the pre-packer elision behaviour): shrink string content of
+ * tool results first (largest first, oldest breaking ties), then of other unpinned
+ * messages, through progressively tighter caps until the messages fit `budget`. The
+ * system message(s) and the latest user directive are never touched, and no message is
+ * removed, so tool-call pairing cannot break. Returns the input when nothing shrank.
+ */
+export function elideToFit(messages: readonly Msg[], budget: number): Msg[] {
+  const out = [...messages];
+  let latestUser = -1;
+  for (let i = out.length - 1; i >= 0; i--) if (out[i]?.role === 'user') { latestUser = i; break; }
+  const candidates = (toolsOnly: boolean): number[] =>
+    out
+      .map((m, i) => ({ m, i }))
+      .filter(({ m, i }) => i !== latestUser && m.role !== 'system' && typeof m.content === 'string'
+        && (toolsOnly ? m.role === 'tool' : m.role !== 'tool'))
+      .sort((a, b) => (b.m.content as string).length - (a.m.content as string).length || a.i - b.i)
+      .map(({ i }) => i);
+  let total = messagesTokens(out);
+  for (const toolsOnly of [true, false]) {
+    for (const cap of ELIDE_CAPS) {
+      for (const i of candidates(toolsOnly)) {
+        if (total <= budget) return out;
+        const msg = out[i]!;
+        const content = msg.content as string;
+        if (content.length <= cap) continue;
+        const next = { ...msg, content: content.slice(0, cap) + elisionNote(content.length - cap) };
+        total += messagesTokens([next]) - messagesTokens([msg]);
+        out[i] = next;
+      }
+    }
+  }
+  return out;
 }
 
 /** Render a slice of the conversation as role-tagged text for the summarizer, with
@@ -105,7 +173,8 @@ export async function compactMessages(
   opts: CompactOptions = CLOUD_COMPACT_DEFAULTS,
   summarize?: CompactionSummarizer,
 ): Promise<CompactResult> {
-  const beforeTokens = estimateRequestTokens(messages);
+  const toolsTokens = toolsTokensOf(opts.tools);
+  const beforeTokens = messagesTokens(messages) + toolsTokens;
   const budget = compactionBudget(opts);
   const untouched = (): CompactResult =>
     ({ messages: [...messages], compacted: false, summarized: false, beforeTokens, afterTokens: beforeTokens, droppedMessages: 0 });
@@ -115,6 +184,8 @@ export async function compactMessages(
     messages: messages as unknown as readonly HandoffMessage[],
     targetContextTokens: budget,
     reserveOutputTokens: 0,
+    toolsTokens,
+    estimateTokens,
     ...(summarize
       ? {
           summarize: async (dropped: readonly HandoffMessage[]) => {
@@ -128,15 +199,19 @@ export async function compactMessages(
     ...(opts.recall ? { recall: opts.recall } : {}),
     ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
   });
-  // The packer's own estimate found it already fits: nothing to compact.
-  if (pack.dropped === 0) return untouched();
-  const out = pack.messages as unknown as Msg[];
+  // Packing dropped nothing (or could not fit even the pinned anchors): start from the
+  // original transcript and truncate bulky tool results instead of shipping it over cap.
+  const packed = pack.dropped > 0 ? (pack.messages as unknown as Msg[]) : [...messages];
+  const messageBudget = Math.max(0, budget - toolsTokens);
+  const out = !pack.fits || messagesTokens(packed) > messageBudget ? elideToFit(packed, messageBudget) : packed;
+  const elided = out.some((m, i) => m !== packed[i]);
+  if (pack.dropped === 0 && !elided) return untouched();
   return {
     messages: out,
     compacted: true,
-    summarized: pack.summarized,
+    summarized: pack.summarized && pack.dropped > 0,
     beforeTokens,
-    afterTokens: estimateRequestTokens(out),
+    afterTokens: messagesTokens(out) + toolsTokens,
     droppedMessages: pack.dropped,
   };
 }

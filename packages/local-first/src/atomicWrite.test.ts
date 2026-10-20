@@ -24,9 +24,10 @@ function ticket(id = 'ticket-1', title = 'offline'): LocalRecord<{ title: string
   };
 }
 
-function enqueue(clientEntityId: string, eventId: string, title = 'offline'): EnqueueEvent<{ title: string }> {
+/** `key` names the logical write; the store mints the wire `eventId`. */
+function enqueue(clientEntityId: string, key: string, title = 'offline'): EnqueueEvent<{ title: string }> {
   return {
-    eventId,
+    idempotencyKey: key,
     clientEntityId,
     entityType: 'ticket',
     operation: 'create',
@@ -231,7 +232,7 @@ describe('commitWriteAndEnqueue crash between the record and the enqueue', () =>
       // Nothing reached the durable snapshot from the killed attempt.
       expect(await host.store.export()).toEqual(before);
       expect((await host.store.export()).records.map((row) => row.id)).not.toContain('ticket-2');
-      expect((await host.store.export()).events.map((row) => row.eventId)).not.toContain('evt-2');
+      expect((await host.store.export()).events.map((row) => row.idempotencyKey)).not.toContain('evt-2');
       // No sequence was burned either, so the retry takes the identity it would have taken.
       expect((await host.store.export()).nextSequence).toBe(before.nextSequence);
     });
@@ -250,7 +251,7 @@ describe('commitWriteAndEnqueue crash between the record and the enqueue', () =>
     const restarted = createMemoryLocalFirstStore(host.durable());
     expect(orphans(await restarted.export())).toEqual({ records: [], syncRows: [] });
     expect((await restarted.export()).records.map((row) => row.id)).toEqual(['seed-ticket']);
-    expect((await restarted.export()).events.map((row) => row.eventId)).toEqual(['evt-seed']);
+    expect((await restarted.export()).events.map((row) => row.idempotencyKey)).toEqual(['evt-seed']);
 
     const saved = await commitWriteAndEnqueue(
       restarted,
@@ -260,7 +261,7 @@ describe('commitWriteAndEnqueue crash between the record and the enqueue', () =>
     const after = await restarted.export();
 
     expect(after.records.map((row) => row.id)).toEqual(['seed-ticket', 'ticket-2']);
-    expect(after.events.map((row) => row.eventId)).toEqual(['evt-seed', 'evt-2']);
+    expect(after.events.map((row) => row.idempotencyKey)).toEqual(['evt-seed', 'evt-2']);
     expect(saved.localSequence).toBe(2);
     expect(orphans(after)).toEqual({ records: [], syncRows: [] });
   });
@@ -275,7 +276,7 @@ describe('commitWriteAndEnqueue crash between the record and the enqueue', () =>
       const snapshot = await host.store.export();
       expect(orphans(snapshot)).toEqual({ records: [], syncRows: [] });
       const hasRecord = snapshot.records.some((row) => row.id === 'ticket-2');
-      const hasSyncRow = snapshot.events.some((row) => row.eventId === 'evt-2');
+      const hasSyncRow = snapshot.events.some((row) => row.idempotencyKey === 'evt-2');
       expect(hasRecord).toBe(hasSyncRow);
     }
   });
@@ -293,7 +294,8 @@ describe('commitWriteAndEnqueue', () => {
     expect(calls.transact).toBe(1);
     expect(calls.put).toBe(1);
     expect(calls.append).toBe(1);
-    expect(saved.eventId).toBe('evt-1');
+    expect(saved.idempotencyKey).toBe('evt-1');
+    expect(saved.eventId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(saved.clientEntityId).toBe('ticket-1');
     expect(saved.localSequence).toBe(1);
     expect(saved.payloadHash).toMatch(/^fnv1a:/);
@@ -335,7 +337,7 @@ describe('commitWriteAndEnqueue', () => {
     expect(calls.append).toBe(1);
     expect(await inner.export()).toEqual(before);
     expect((await inner.export()).records.map((row) => row.id)).not.toContain('ticket-2');
-    expect((await inner.export()).events.map((row) => row.eventId)).not.toContain('evt-2');
+    expect((await inner.export()).events.map((row) => row.idempotencyKey)).not.toContain('evt-2');
   });
 
   it('rolls back a real append failure inside the memory store transaction', async () => {
@@ -378,7 +380,7 @@ describe('commitWriteAndEnqueue', () => {
     );
     const snapshot = await store.export();
     expect(snapshot.records.map((row) => row.id)).toEqual(['seed-ticket', 'ticket-3']);
-    expect(snapshot.events.map((row) => row.eventId)).toEqual(['evt-seed', 'evt-3']);
+    expect(snapshot.events.map((row) => row.idempotencyKey)).toEqual(['evt-seed', 'evt-3']);
     expect(saved.localSequence).toBe(2);
   });
 });

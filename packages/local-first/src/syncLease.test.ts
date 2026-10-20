@@ -278,4 +278,48 @@ describe('device store coordinator lease', () => {
   it('rejects a missing device store', () => {
     expect(() => createDeviceStoreCoordinatorLease({ deviceStore: '', now, ttlMs: TTL_MS })).toThrow('sync_lease_device_store_required');
   });
+
+  it('aborts a hung holder after workTimeoutMs and fences its late completion out of the next holder', async () => {
+    const deviceStore = `hung-store-${clock}`;
+    const late: unknown[] = [];
+    const hung = createDeviceStoreCoordinatorLease({
+      deviceStore,
+      now,
+      ttlMs: TTL_MS,
+      workTimeoutMs: 20,
+      onLateError: (error) => late.push(error),
+    });
+    const next = createDeviceStoreCoordinatorLease({ deviceStore, now, ttlMs: TTL_MS });
+
+    let finishHung: () => void = () => undefined;
+    let fenceOfHung: { signal: AbortSignal; holds(): boolean } | undefined;
+    const hungRun = hung.run('hung', (fence) => {
+      fenceOfHung = fence;
+      return new Promise<string>((resolve, reject) => {
+        finishHung = () => (fence.holds() ? resolve('committed') : reject(new Error('fenced_out')));
+      });
+    });
+    await expect(hungRun).rejects.toThrow('sync_lease_work_timeout');
+    expect(fenceOfHung?.signal.aborted).toBe(true);
+    expect(hung.holds()).toBe(false);
+
+    // The slot is free: the next coordinator runs while the hung work is still pending.
+    let releaseNext: () => void = () => undefined;
+    const nextRun = next.run('next', () => new Promise<string>((resolve) => {
+      releaseNext = () => resolve('next-done');
+    }));
+    expect(next.holds()).toBe(true);
+
+    // The late completion neither commits nor releases the new holder's slot.
+    finishHung();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fenceOfHung?.holds()).toBe(false);
+    expect(next.holds()).toBe(true);
+    expect(late).toHaveLength(1);
+    expect((late[0] as Error).message).toBe('fenced_out');
+
+    releaseNext();
+    await expect(nextRun).resolves.toBe('next-done');
+    expect(next.holds()).toBe(false);
+  });
 });

@@ -7,7 +7,9 @@
  * HTTP interface (internal only — called by rateLimitMiddleware):
  *
  *   POST /check
- *     Body: { tenantId: number, limit: number, windowMs?: number }
+ *     Body: { limit: number, windowMs?: number, cost?: number }
+ *     `cost` (default 1) is how many units this check spends; it is admitted only
+ *     when the whole cost fits under `limit`.
  *     Response: { allowed: boolean, current: number, limit: number, resetAt: string }
  *
  * The DO stores a Map of timestamp buckets (1-second granularity) and evicts
@@ -52,10 +54,12 @@ export class TenantRateLimiterDO {
     const body = await request.json<{
       limit:    number;
       windowMs?: number;
+      cost?: number;
     }>();
 
     const windowMs = body.windowMs ?? 60_000; // default: 1 minute
     const limit    = body.limit;
+    const cost     = typeof body.cost === 'number' && Number.isFinite(body.cost) && body.cost >= 1 ? Math.floor(body.cost) : 1;
 
     await this.loadCounts();
 
@@ -75,16 +79,16 @@ export class TenantRateLimiterDO {
       if (bucket >= windowStart) current += count;
     }
 
-    const allowed = current < limit;
+    const allowed = current + cost <= limit;
 
     if (allowed) {
       // Increment current second
-      this.counts.set(nowSec, (this.counts.get(nowSec) ?? 0) + 1);
+      this.counts.set(nowSec, (this.counts.get(nowSec) ?? 0) + cost);
       await this.saveCounts();
     }
 
     const resetAt = new Date((windowStart + windowSec) * 1000).toISOString();
 
-    return Response.json({ allowed, current: allowed ? current + 1 : current, limit, resetAt });
+    return Response.json({ allowed, current: allowed ? current + cost : current, limit, resetAt });
   }
 }

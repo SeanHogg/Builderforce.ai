@@ -10,7 +10,11 @@
  *   qa-cache without one, or Evermind    → ESTIMATED. The question and answer are
  *     counted at ~4 chars/token and priced against the model the chat would have run.
  *     That under-counts (a real turn also sends the system prompt, history and tools),
- *     which is the safe direction for a figure that claims money was saved.
+ *     which is the safe direction for a figure that claims money was saved — and it is
+ *     CAPPED, so a long pasted question or answer can never claim an outsized saving.
+ *
+ * The recorded cost basis is the server's own (`memoryAnswerChat.chatAnswerOrigin`:
+ * the chat's usage-ledger row), never a caller-supplied figure.
  */
 
 import type { Db } from '../../infrastructure/database/connection';
@@ -19,6 +23,10 @@ import type { MemoryAnswer } from './projectMemory';
 import { estimateTokensFromText } from '@builderforce/workload';
 import { recordAvoidedCall } from './savingsLedger';
 import type { UsageSurface } from './usageLedger';
+
+/** Ceilings on an ESTIMATED saving — one ordinary turn's worth, never more. */
+export const ESTIMATED_SAVING_MAX_PROMPT_TOKENS = 4_000;
+export const ESTIMATED_SAVING_MAX_COMPLETION_TOKENS = 2_000;
 
 export interface MemoryAnswerSavingsInput {
   tenantId: number;
@@ -55,8 +63,8 @@ export function recordMemoryAnswerSavings(env: Env, db: Db, input: MemoryAnswerS
     ...base,
     source: answer.source === 'evermind' ? 'evermind_answer' : 'memory_answer',
     model: input.model,
-    promptTokens: estimateTokensFromText(input.question),
-    completionTokens: estimateTokensFromText(answer.text),
+    promptTokens: Math.min(estimateTokensFromText(input.question), ESTIMATED_SAVING_MAX_PROMPT_TOKENS),
+    completionTokens: Math.min(estimateTokensFromText(answer.text), ESTIMATED_SAVING_MAX_COMPLETION_TOKENS),
     estimated: true,
   });
 }

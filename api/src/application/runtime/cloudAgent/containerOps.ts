@@ -508,21 +508,6 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     // for subsequent turns; the injection here is deduped by text so that does not
     // double them. Each steer is drained exactly once (consumed_at stamped).
     const steering = await applyPendingSteering(db, { tenantId, cloudAgentRef, executionId, messages });
-    // Compress the conversation BEFORE the paid call so a long container run never
-    // re-sends a ballooning history. The container owns its loop state, so the
-    // compacted messages are RETURNED below for it to adopt — otherwise it would
-    // re-send (and re-summarize) the full history every turn.
-    const compaction = await compactMessages(messages, CLOUD_COMPACT_DEFAULTS, buildGatewaySummarizer(env));
-    const sendMessages = compaction.compacted ? compaction.messages : messages;
-    if (compaction.compacted) {
-      await recordCloudToolEvent(db, {
-        tenantId, cloudAgentRef, executionId,
-        toolName: 'context.compacted', category: 'llm',
-        detail: { beforeTokens: compaction.beforeTokens, afterTokens: compaction.afterTokens, summarized: compaction.summarized, droppedMessages: compaction.droppedMessages },
-        result: `compressed ~${compaction.beforeTokens} → ~${compaction.afterTokens} tokens (${compaction.summarized ? 'builder-memory summary' : 'elided'})`,
-      });
-    }
-    const tGen0 = Date.now();
     // Repo/shell tools + the curated platform subset (create tasks / update OKRs /
     // read remaining) — parity with the durable loop. The container relays each
     // `builtin_*` call back via the `platform_tool` op below (it has no DB).
@@ -535,6 +520,21 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas(ctx.originatingChatId)],
       readToolManifest(args.supportedTools),
     );
+    // Compress the conversation BEFORE the paid call so a long container run never
+    // re-sends a ballooning history. The container owns its loop state, so the
+    // compacted messages are RETURNED below for it to adopt — otherwise it would
+    // re-send (and re-summarize) the full history every turn.
+    const compaction = await compactMessages(messages, { ...CLOUD_COMPACT_DEFAULTS, tools: containerTools }, buildGatewaySummarizer(env));
+    const sendMessages = compaction.compacted ? compaction.messages : messages;
+    if (compaction.compacted) {
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef, executionId,
+        toolName: 'context.compacted', category: 'llm',
+        detail: { beforeTokens: compaction.beforeTokens, afterTokens: compaction.afterTokens, summarized: compaction.summarized, droppedMessages: compaction.droppedMessages },
+        result: `compressed ~${compaction.beforeTokens} → ~${compaction.afterTokens} tokens (${compaction.summarized ? 'builder-memory summary' : 'elided'})`,
+      });
+    }
+    const tGen0 = Date.now();
     // THE model hand-off policy for this run, carried between ops Worker-side: which
     // model the turn asks for (locked after turn 1, released on 429/413/503) and the
     // stall budget. The image makes no model decision at all.

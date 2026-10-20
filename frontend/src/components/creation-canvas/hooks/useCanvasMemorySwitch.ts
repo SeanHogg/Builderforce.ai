@@ -17,6 +17,29 @@ function readLocal(key: string): boolean {
 }
 
 /**
+ * The value recall / replay may act on. A chat-backed canvas whose chat value is not
+ * KNOWN yet (the read is in flight, or it failed) is OFF — defaulting ON there replayed
+ * and recalled for a conversation whose owner may have switched memory off. It becomes
+ * the switch's value once the chat's own value arrives, or once the user sets it here.
+ */
+export function effectiveCanvasMemory(input: {
+  chatId: number | null;
+  /** The chat's own value: `undefined` while in flight, `null` when the read failed. */
+  chatValue: boolean | null | undefined;
+  /** The user set the switch for this chat in this session. */
+  userSet: boolean;
+  /** What the switch shows. */
+  enabled: boolean;
+}): { memoryEnabled: boolean; memoryLoading: boolean } {
+  if (input.chatId == null) return { memoryEnabled: input.enabled, memoryLoading: false };
+  const known = typeof input.chatValue === 'boolean' || input.userSet;
+  return {
+    memoryEnabled: known ? input.enabled : false,
+    memoryLoading: input.chatValue === undefined && !input.userSet,
+  };
+}
+
+/**
  * Whether this canvas's Brain turns recall from and contribute to the project memory.
  *
  * A canvas whose Brain is a canonical chat (`chat:<id>` on its chat object, signed-in
@@ -33,7 +56,7 @@ export function useCanvasMemorySwitch({ nodes, sessionId, persistence }: {
   nodes: readonly CanvasObject[];
   sessionId: string;
   persistence: 'local' | 'server';
-}): { memoryEnabled: boolean; setMemoryMode: (on: boolean) => void } {
+}): { memoryEnabled: boolean; memoryLoading: boolean; setMemoryMode: (on: boolean) => void } {
   const chatId = useMemo(() => {
     if (persistence !== 'server') return null;
     const ref = nodes.find((node) => node.data.kind === 'chat')?.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
@@ -41,17 +64,25 @@ export function useCanvasMemorySwitch({ nodes, sessionId, persistence }: {
   }, [nodes, persistence]);
 
   // The chat's own value, tagged with the chat it was read for so a stale read never
-  // stands in for the next chat's.
-  const [fetched, setFetched] = useState<{ chatId: number; value: boolean } | null>(null);
+  // stands in for the next chat's. `value: null` records a FAILED read — still unknown,
+  // so recall stays off (see `effectiveCanvasMemory`), but no longer "loading".
+  const [fetched, setFetched] = useState<{ chatId: number; value: boolean | null } | null>(null);
   useEffect(() => {
     if (chatId == null) return;
     let live = true;
     brain.getChat(chatId)
       .then((chat) => { if (live) setFetched({ chatId, value: chat.memoryEnabled ?? true }); })
-      .catch(() => { if (live) setFetched(null); });
+      // A failed read is already filed by QualityErrorReporter (every API failure is);
+      // here it only decides state: memory stays OFF for this chat (value null).
+      .catch(() => {
+        if (live) setFetched({ chatId, value: null });
+      });
     return () => { live = false; };
   }, [chatId]);
-  const serverValue = fetched && fetched.chatId === chatId ? fetched.value : null;
+  const chatValue = fetched && fetched.chatId === chatId ? fetched.value : undefined;
+  const serverValue = chatValue ?? null;
+  // The chat the user set the switch for in this session — their choice is known.
+  const [userSetChat, setUserSetChat] = useState<number | null>(null);
 
   // The local value is READ (SSR renders the default, the client the stored choice); a
   // toggle this session wins, even where storage is blocked and the write fails.
@@ -67,10 +98,11 @@ export function useCanvasMemorySwitch({ nodes, sessionId, persistence }: {
   });
   const setMemoryMode = useCallback((on: boolean) => {
     setEnabled(on);
-    if (chatId != null) return;
+    if (chatId != null) { setUserSetChat(chatId); return; }
     setOverride({ key: localKey, on });
     try { localStorage.setItem(localKey, on ? '1' : '0'); } catch { /* storage may be unavailable */ }
   }, [chatId, localKey, setEnabled]);
 
-  return { memoryEnabled: enabled, setMemoryMode };
+  const effective = effectiveCanvasMemory({ chatId, chatValue, userSet: chatId != null && userSetChat === chatId, enabled });
+  return { ...effective, setMemoryMode };
 }

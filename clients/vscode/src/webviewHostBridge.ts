@@ -37,35 +37,74 @@ export interface WebviewInbound {
   id?: string;
 }
 
-const watchedWebviews = new Set<vscode.Webview>();
-let policyPushInstalled = false;
+/** The panel or view that owns a webview — the object that knows when it is disposed. */
+export interface WebviewOwner {
+  onDidDispose(listener: () => void): vscode.Disposable;
+}
 
-function publishPlatformPolicy(webview: vscode.Webview): void {
+/** Webviews receiving policy pushes, each with the subscription that forgets it on dispose. */
+const watchedWebviews = new Map<vscode.Webview, vscode.Disposable>();
+let policyPushInstalled = false;
+/** The frame last pushed to every watched webview — a push happens only when this changes. */
+let lastBroadcastKey: string | undefined;
+
+function currentPolicyFrame() {
+  return platformPolicyFrame(getBaseUrl(), getWebBaseUrl());
+}
+
+function publishPlatformPolicy(webview: vscode.Webview, frame: ReturnType<typeof currentPolicyFrame>): void {
   try {
-    postToWebview(webview, platformPolicyFrame(getBaseUrl(), getWebBaseUrl()));
-  } catch {
-    watchedWebviews.delete(webview);
+    void webview.postMessage(frame);
+  } catch (error) {
+    // A disposed webview throws on access. Forget it; the dispose hook may not have run yet.
+    logLine(`[webview] policy push dropped: ${error instanceof Error ? error.message : String(error)}`);
+    forgetWebview(webview);
   }
 }
 
-/** Push the host snapshot now, and again whenever the host policy changes. */
-function watchPlatformPolicy(webview: vscode.Webview | undefined): void {
-  if (!webview) return;
+function forgetWebview(webview: vscode.Webview): void {
+  watchedWebviews.get(webview)?.dispose();
+  watchedWebviews.delete(webview);
+}
+
+/**
+ * Push the host snapshot once when a webview is first seen, and again only when the
+ * host policy actually changes. Disposed webviews are removed by their owner's
+ * `onDidDispose` — `postMessage` on a disposed webview resolves, so a failed post can
+ * not be relied on to prune.
+ */
+function watchPlatformPolicy(webview: vscode.Webview | undefined, owner: WebviewOwner | undefined): void {
+  if (!webview || !owner || watchedWebviews.has(webview)) return;
   if (!policyPushInstalled) {
     policyPushInstalled = true;
     platformPolicy().subscribe(() => {
-      for (const view of watchedWebviews) publishPlatformPolicy(view);
+      const frame = currentPolicyFrame();
+      const key = JSON.stringify(frame);
+      if (key === lastBroadcastKey) return;
+      lastBroadcastKey = key;
+      for (const view of [...watchedWebviews.keys()]) publishPlatformPolicy(view, frame);
     });
   }
-  if (!watchedWebviews.has(webview)) watchedWebviews.add(webview);
-  publishPlatformPolicy(webview);
+  watchedWebviews.set(webview, owner.onDidDispose(() => forgetWebview(webview)));
+  const frame = currentPolicyFrame();
+  lastBroadcastKey ??= JSON.stringify(frame);
+  publishPlatformPolicy(webview, frame);
 }
 
-/** Fire-and-forget post to a webview. A no-op when the surface is not resolved. */
-export function postToWebview(webview: vscode.Webview | undefined, msg: unknown): void {
+/** Webviews currently receiving policy pushes. For tests and diagnostics. */
+export function watchedWebviewCount(): number {
+  return watchedWebviews.size;
+}
+
+/**
+ * Fire-and-forget post to a webview. A no-op when the surface is not resolved.
+ * Pass the `owner` (panel or view) so an `init` frame also subscribes the webview to
+ * policy changes until its owner is disposed.
+ */
+export function postToWebview(webview: vscode.Webview | undefined, msg: unknown, owner?: WebviewOwner): void {
   if (!webview) return;
   if (msg && typeof msg === "object" && (msg as { type?: unknown }).type === "init") {
-    watchPlatformPolicy(webview);
+    watchPlatformPolicy(webview, owner);
     const frame = msg as { platformPolicy?: unknown; baseUrl?: string };
     if (!frame.platformPolicy) {
       void webview.postMessage({
@@ -124,8 +163,10 @@ export async function handleSharedHostMessage(
   ctx: vscode.ExtensionContext,
   webview: vscode.Webview | undefined,
   msg: WebviewInbound,
+  owner?: WebviewOwner,
 ): Promise<boolean> {
-  watchPlatformPolicy(webview);
+  // First message from this webview subscribes it; every later one is a no-op here.
+  watchPlatformPolicy(webview, owner);
   const socket = platformSocketUrl(msg);
   if (socket) {
     try {

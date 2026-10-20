@@ -952,6 +952,29 @@ describe('transferLearningCandidate', () => {
     expect(fake.rows(evermindLearningCandidates)[0]!.transferredAt).toBeNull();
   });
 
+  it('refuses a PENDING (unreviewed) candidate with 409 and writes no fact', async () => {
+    const fake = fakeDb();
+    const candidate = seedCandidate(fake, { status: 'pending' });
+
+    const result = await transferLearningCandidate(env, fake.db, TENANT, PROJECT, candidate.id as number, {});
+
+    expect(result).toEqual({ ok: false, error: 'only an approved learning can be transferred', status: 409 });
+    expect(fake.rows(projectFacts)).toHaveLength(0);
+    expect(fake.rows(evermindLearningCandidates)[0]!.transferredAt).toBeNull();
+    expect(fake.rows(evermindLearningCandidates)[0]!.status).toBe('pending');
+  });
+
+  it('the transfer claim re-asserts approved in its predicate (race-safe)', async () => {
+    const fake = fakeDb();
+    const candidate = seedCandidate(fake, { status: 'approved' });
+
+    await transferLearningCandidate(env, fake.db, TENANT, PROJECT, candidate.id as number, {});
+
+    const claim = fake.updates.find((call) => call.table === evermindLearningCandidates)!;
+    const rejectedMeanwhile = { id: candidate.id, tenantId: TENANT, projectId: PROJECT, status: 'rejected' };
+    expect(fake.matchesRow(rejectedMeanwhile, claim.predicate)).toBe(false);
+  });
+
   // NOTE ON A BRANCH NOT COVERED HERE: `transferLearningCandidate` also maps a
   // falsy `upsertProjectFact` return to a 503 "project facts store refused the
   // learning". That branch is unreachable through the real collaborator without

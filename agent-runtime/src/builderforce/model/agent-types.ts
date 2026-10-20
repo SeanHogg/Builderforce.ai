@@ -94,6 +94,12 @@ export type AgentToolUpdateCallback<T = any> = (partialResult: AgentToolResult<T
 export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any>
   extends Tool<TParameters> {
   label: string;
+  /**
+   * The call is safe to REPLAY (read-only: read / search / list / fetch-GET). Only such
+   * tools are retried after a structured rate-limit rejection (`agents/tool-retry.ts`).
+   * Default false — a side-effecting tool (exec, write, edit, ...) is never replayed.
+   */
+  idempotent?: boolean;
   execute: (
     toolCallId: string,
     params: Static<TParameters>,

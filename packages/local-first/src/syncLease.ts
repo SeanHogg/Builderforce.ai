@@ -22,9 +22,14 @@
  * under. One slot per device store. `run` returns undefined when that store
  * already has a live lease, including while a holder is mid-transaction. Age
  * does not steal that in-flight hold: advancing past `ttlMs` does not admit a
- * second entry point. The holder releases only when its work finishes. A
- * different device store never blocks this one. An expiry in the past, with
- * nobody in flight, is not held; a future `expiresAt` is.
+ * second entry point. The holder releases when its work finishes — or when the
+ * work overruns `workTimeoutMs` on the real clock: then its AbortSignal fires,
+ * the slot is released, and `run` rejects `sync_lease_work_timeout`. The slot
+ * is FENCED by a per-run token, so the timed-out work's late completion cannot
+ * release (or be mistaken for) the next holder, and the work can ask
+ * `fence.holds()` before it commits anything. A different device store never
+ * blocks this one. An expiry in the past, with nobody in flight, is not held; a
+ * future `expiresAt` is.
  *
  * Process-local only. This module does not open IndexedDB, take a file lock,
  * or call the network.
@@ -156,11 +161,30 @@ export interface DeviceStoreCoordinatorLeaseOptions {
   readonly deviceStore: string;
   readonly now: () => number;
   readonly ttlMs: number;
+  /**
+   * Real-clock budget for one `run`. Past it the work is aborted and the slot
+   * released, so a hung holder cannot keep the store's coordinator out forever.
+   * Default {@link DEFAULT_COORDINATOR_WORK_TIMEOUT_MS}.
+   */
+  readonly workTimeoutMs?: number;
+  /** A timed-out run's work failed after the slot was released. Default `console.warn`. */
+  readonly onLateError?: (error: unknown) => void;
+}
+
+/** Five minutes: longer than any sane sync session, short of "forever". */
+export const DEFAULT_COORDINATOR_WORK_TIMEOUT_MS = 5 * 60_000;
+
+/** Handed to the work of one `run`. */
+export interface CoordinatorLeaseFence {
+  /** Fires when the run overruns `workTimeoutMs`. Stop and do not commit. */
+  readonly signal: AbortSignal;
+  /** True while this run still owns the slot. Check before committing. */
+  holds(): boolean;
 }
 
 export interface DeviceStoreCoordinatorLease {
   holds(): boolean;
-  run<R>(owner: string, work: () => Promise<R>): Promise<R | undefined>;
+  run<R>(owner: string, work: (fence: CoordinatorLeaseFence) => Promise<R>): Promise<R | undefined>;
 }
 
 interface DeviceStoreSlot {
@@ -196,7 +220,16 @@ export function createDeviceStoreCoordinatorLease(
   const deviceStore = requireDeviceStore(options.deviceStore);
   const now = requireClock(options.now);
   const ttlMs = requireTtl(options.ttlMs);
+  const workTimeoutMs = requireTtl(options.workTimeoutMs ?? DEFAULT_COORDINATOR_WORK_TIMEOUT_MS);
+  const onLateError = options.onLateError
+    ?? ((error: unknown) => console.warn('sync coordinator: timed-out run failed late', error));
   let token: string | undefined;
+
+  const releaseSlot = (owned: string): void => {
+    const slot = deviceStores.get(deviceStore);
+    if (slot?.token === owned) deviceStores.delete(deviceStore);
+    if (token === owned) token = undefined;
+  };
 
   return {
     holds(): boolean {
@@ -205,19 +238,39 @@ export function createDeviceStoreCoordinatorLease(
       if (!deviceStoreHeld(slot, readClock(now))) return false;
       return slot.token === token;
     },
-    async run<R>(_owner: string, work: () => Promise<R>): Promise<R | undefined> {
+    async run<R>(_owner: string, work: (fence: CoordinatorLeaseFence) => Promise<R>): Promise<R | undefined> {
       const at = readClock(now);
       const current = deviceStores.get(deviceStore);
       if (deviceStoreHeld(current, at)) return undefined;
       const next = crypto.randomUUID();
       token = next;
       deviceStores.set(deviceStore, { token: next, expiresAt: at + ttlMs, inFlight: true });
+      const controller = new AbortController();
+      const fence: CoordinatorLeaseFence = {
+        signal: controller.signal,
+        holds: () => !controller.signal.aborted && deviceStores.get(deviceStore)?.token === next,
+      };
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error('sync_lease_work_timeout');
+          controller.abort(error);
+          // Fenced: only this run's token is released. A later holder is untouched.
+          releaseSlot(next);
+          reject(error);
+        }, workTimeoutMs);
+      });
+      const working = Promise.resolve().then(() => work(fence));
       try {
-        return await work();
+        return await Promise.race([working, timedOut]);
       } finally {
-        const slot = deviceStores.get(deviceStore);
-        if (slot?.token === next) deviceStores.delete(deviceStore);
-        if (token === next) token = undefined;
+        if (timer !== undefined) clearTimeout(timer);
+        if (controller.signal.aborted) {
+          // The late completion of a timed-out holder is discarded, never returned
+          // to anyone, and its failure is reported rather than lost.
+          working.catch(onLateError);
+        }
+        releaseSlot(next);
       }
     },
   };

@@ -177,6 +177,12 @@ export interface StreamChatOptions {
    */
   excludeModels?: string[];
   /**
+   * Prompt-cache affinity key (OpenAI-style `prompt_cache_key`), e.g. `brain:<chatId>`,
+   * so every turn of one conversation lands on the same provider cache. Forwarded
+   * verbatim; absent ⇒ omitted from the body.
+   */
+  prompt_cache_key?: string;
+  /**
    * What kind of call this is (plan/code/verify/explore/chat/utility), emitted as the
    * body's `role`. Under auto-routing the gateway orders the tenant's connected
    * accounts for it — analysis on the tenant's own order, code on the strongest
@@ -437,6 +443,25 @@ export async function streamChatCompletion(
   opts: StreamChatOptions,
   handlers: StreamHandlers = {},
 ): Promise<StreamChatResult> {
+  // The caller's Stop is forwarded to this completion's own controller for the WHOLE
+  // call (headers and body), and the listener is removed when the call settles — a
+  // long-lived run signal must not collect one dead listener per completion.
+  const request = new AbortController();
+  const onCallerAbort = (): void => request.abort();
+  if (opts.signal?.aborted) request.abort();
+  else opts.signal?.addEventListener('abort', onCallerAbort, { once: true });
+  try {
+    return await runStreamChatCompletion(opts, handlers, request);
+  } finally {
+    opts.signal?.removeEventListener('abort', onCallerAbort);
+  }
+}
+
+async function runStreamChatCompletion(
+  opts: StreamChatOptions,
+  handlers: StreamHandlers,
+  request: AbortController,
+): Promise<StreamChatResult> {
   const { transport } = opts;
   const token = transport.getToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -465,6 +490,7 @@ export async function streamChatCompletion(
   if (model && opts.modelStrict) body.strict = true;
   if (opts.routingMode) body.routingMode = opts.routingMode;
   if (opts.excludeModels && opts.excludeModels.length > 0) body.excludeModels = opts.excludeModels;
+  if (opts.prompt_cache_key) body.prompt_cache_key = opts.prompt_cache_key;
   if (opts.role) body.role = opts.role;
   if (opts.arcStage) body.arcStage = opts.arcStage;
   if (opts.tools && opts.tools.length > 0) {
@@ -492,30 +518,41 @@ export async function streamChatCompletion(
   // THE silence rule covers the wait for response HEADERS too, not only the reads after
   // them: a gateway that accepts the socket and never answers left the turn waiting
   // forever, which is why the canvas once carried a second, private watchdog. One rule,
-  // one budget (`idleTimeoutMs`) — the user's Stop is forwarded, and our own trip is
-  // reported as an interruption the run loop routes around. The listener is `once` and
-  // stays for the body: the same signal must still cancel the stream after the headers.
+  // one budget (`idleTimeoutMs`) — our own trip is reported as an interruption the run
+  // loop routes around. The deadline is PER ATTEMPT: the connect-failure backoff between
+  // attempts (`retryOnConnectFailure`) is the network being down, not the gateway being
+  // silent, and must never be billed to the model as "sent nothing".
   const idleMs = opts.idleTimeoutMs ?? STREAM_IDLE_MS;
-  const request = new AbortController();
-  if (opts.signal?.aborted) request.abort();
-  else opts.signal?.addEventListener('abort', () => request.abort(), { once: true });
-  const headerDeadline = Number.isFinite(idleMs) && idleMs > 0 ? setTimeout(() => request.abort(), idleMs) : undefined;
+  const headerDeadlineOn = Number.isFinite(idleMs) && idleMs > 0;
+  let headerTimedOut = false;
+  const sendOnce = (): Promise<Response> => {
+    // Each attempt gets its own controller: the header deadline aborts THIS attempt only,
+    // while the caller's Stop (on `request`) still cancels it — headers and body alike.
+    const attempt = new AbortController();
+    const forwardStop = (): void => attempt.abort();
+    if (request.signal.aborted) attempt.abort();
+    else request.signal.addEventListener('abort', forwardStop, { once: true });
+    const deadline = headerDeadlineOn
+      ? setTimeout(() => { headerTimedOut = true; attempt.abort(); }, idleMs)
+      : undefined;
+    return doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: attempt.signal,
+    }).finally(() => clearTimeout(deadline));
+  };
   let res: Response;
   try {
     // A connection that never opened reached nobody, so it is sent again with backoff —
     // the user's network dropping for a few seconds must not end the run.
     res = await retryOnConnectFailure(
-      () => doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: request.signal,
-      }),
+      sendOnce,
       { signal: request.signal, ...(handlers.onConnectRetry ? { onRetry: handlers.onConnectRetry } : {}) },
     );
   } catch (e) {
-    if (opts.signal?.aborted) throw e;
-    if (request.signal.aborted) {
+    if (opts.signal?.aborted || request.signal.aborted) throw e;
+    if (headerTimedOut) {
       throw new StreamInterruptedError(`the gateway sent nothing for ${Math.round(idleMs / 1000)}s`, model);
     }
     // A transport-level failure (network error, DNS, refused, timeout before response).
@@ -528,8 +565,6 @@ export async function streamChatCompletion(
     }
     // Rethrow anything else as-is — unexpected.
     throw e;
-  } finally {
-    clearTimeout(headerDeadline);
   }
   if (res.status === 401) transport.onUnauthorized?.(res, !!token);
   if (!res.ok) throw await (transport.mapError ?? defaultMapError)(res);

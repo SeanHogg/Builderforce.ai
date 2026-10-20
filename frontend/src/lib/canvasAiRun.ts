@@ -146,10 +146,6 @@ export interface CanvasRun {
   /** The app files this turn wrote — named in the out-of-steps notice, which is all the
    *  next turn's transcript keeps of this one. */
   changedFiles: Set<string>;
-  /** The kernel reads this object every iteration. `stepCap` is optional: omitted
-   *  means unbounded (the canvas runner passes `{}`). A finite cap, when one is
-   *  present, is what the model port counts down for the reserved authoring window. */
-  budget: { stepCap?: number };
 
   finalText: string;
   /** A tool this turn STAGED (`proposed: true`) or COMMITTED (`applied: true`) a canvas

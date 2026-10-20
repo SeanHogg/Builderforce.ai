@@ -460,7 +460,7 @@ export function createFactStore(store: LocalFirstStore) {
         }
         await tx.put(next, input.expectedVersion);
         const event = await tx.append({
-          eventId: `fact:${input.id}:${next.version}`,
+          idempotencyKey: `fact:${input.id}:${next.version}`,
           clientEntityId: input.id,
           entityType: FACT_ENTITY_TYPE,
           operation: current ? 'update' : 'create',

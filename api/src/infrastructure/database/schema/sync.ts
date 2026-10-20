@@ -6,12 +6,14 @@
  * The sync context owns DELIVERY facts, not domain rules: which event was accepted,
  * which client UUID maps to which server id at which version, what a pulling device
  * has not seen yet. Applying an event is delegated to the owning context's import
- * use case (`application/task/importSyncedTicket`, `application/project/
- * importSyncedProject`, or the mirror-record importer for history-only entities) —
+ * use case (`application/sync/importers/importSyncedTicket`, `importSyncedProject`,
+ * or the mirror-record importer for history-only entities) —
  * these tables never replace a domain aggregate, they make push/pull replayable.
+ * The one reader/writer is `infrastructure/repositories/SyncRepository.ts`.
  *
- * Column-level rationale lives in migration 1247. The only cross-context reference
- * is the tenant FK, which check-domain-boundary exempts by rule.
+ * Column-level rationale lives in migration 1247 (+ 1251's destination index).
+ * The only cross-context reference is the tenant FK, which check-domain-boundary
+ * exempts by rule.
  */
 
 import {
@@ -117,4 +119,6 @@ export const syncChanges = pgTable('sync_changes', {
   eventId:       uuid('event_id').notNull(),
 }, (t) => [
   index('idx_sync_changes_cursor').on(t.tenantId, t.seq),
+  // Migration 1251: per-destination delta pages and cursor-expiry MIN(seq).
+  index('idx_sync_changes_destination').on(t.tenantId, t.destinationKey, t.seq),
 ]);

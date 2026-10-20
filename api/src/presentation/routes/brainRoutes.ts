@@ -14,6 +14,7 @@ import { isValidRoomCode } from '../../application/guest/guestToken';
 import { isValidVisitorId } from '../../application/marketing/MarketingService';
 import { claimGuestRoom } from '../../application/guest/guestRoomClient';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
+import { consumeDispatchBudget } from '../../application/ratelimit/tenantBuckets';
 import { idempotentReplay } from '../middleware/idempotentReplay';
 import { fetchWebDocumentCached } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
@@ -384,6 +385,27 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
         reportCaughtError(error, { source: "presentation/routes/brainRoutes.ts", operation: "createBrainRoutes" });
       }
     }
+    // The persist above is exempt from the door limiter; the fan-out is not. One
+    // unit per directed agent (an LLM call) and per mentioned human (in-app + email)
+    // is spent against `${tenantId}:dispatch`. Over budget: the turn stays saved,
+    // the fan-out is skipped, and the response says so (never silently dropped).
+    const dispatchUnits = directedAgents.length + mentioned.size;
+    let dispatchThrottled: { retryAfterSeconds: number } | null = null;
+    if (dispatchUnits > 0) {
+      const verdict = await consumeDispatchBudget(c.env as Env, tenantId, dispatchUnits).catch((error: unknown) => {
+        // Limiter/plan lookup down — fail open like every bucket, but report it.
+        reportCaughtError(error, { source: 'presentation/routes/brainRoutes.ts', operation: 'consumeDispatchBudget' });
+        return null;
+      });
+      if (verdict && !verdict.allowed) {
+        dispatchThrottled = { retryAfterSeconds: verdict.retryAfterSeconds };
+        reportCaughtError(new Error(`chat dispatch throttled: ${dispatchUnits} units over the tenant dispatch window`), {
+          source: 'presentation/routes/brainRoutes.ts', operation: 'consumeDispatchBudget',
+        });
+        mentioned.clear();
+        directedAgents.length = 0;
+      }
+    }
     if (mentioned.size > 0) {
       c.executionCtx.waitUntil((async () => {
         for (const uid of mentioned) {
@@ -427,7 +449,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       c.env as Env, db, id, tenantId, result, (p) => c.executionCtx.waitUntil(p),
     );
 
-    return c.json({ messages: result, evermindLearn }, 201);
+    return c.json({ messages: result, evermindLearn, ...(dispatchThrottled ? { dispatchThrottled } : {}) }, 201);
   });
 
   // ── Captured diagnostics ────────────────────────────────────────────────────
@@ -501,7 +523,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
     const svc = new ChatTicketService(db, c.env as Env);
     const result = await svc.listTicketsForChat(c.get('tenantId') as number, id, c.get('userId') as string);
-    if (!Array.isArray(result) && 'error' in result) return c.json({ error: result.error }, 404);
+    if (!Array.isArray(result)) return c.json({ error: result.error }, 404);
     return c.json({ tickets: result });
   });
 
@@ -738,13 +760,15 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   });
 
   // POST /chats/:id/advisor-invite — founder admits the bound advisor to aiContext.
+  // The thread lives in the ADVISOR's tenant, so it is resolved by chat id + owner
+  // (the caller), not by the caller's active tenant.
   router.post('/chats/:id/advisor-invite', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
     const body = await parseBody(c, InviteAdvisorBody);
     const result = await inviteAdvisorToAdvisoryThread(
       db,
-      c.get('tenantId') as number,
+      c.env as Env,
       id,
       c.get('userId') as string,
       body.advisorUserId,

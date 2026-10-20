@@ -2,8 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore, type ExecutionValue, type LocalFirstStore } from "@builderforce/local-first";
 import {
-  EXTENSION_ACTIVATION_LINE,
-  RUN_HOST_START_LINE,
   installRunRecovery,
   type RunRecoveryHostContext,
 } from "./installRunRecovery";
@@ -12,6 +10,7 @@ import {
   recordRunCheckpoint,
   recordRunFinished,
   recordRunStarted,
+  RUN_ID_REQUIRED,
   type PendingStep,
   type RunLifecycleDeps,
 } from "./runRecovery";
@@ -49,10 +48,32 @@ async function executePlan(
 }
 
 describe("installRunRecovery", () => {
-  it("documents the activation line extension.ts must add, and the host start line", () => {
-    expect(EXTENSION_ACTIVATION_LINE).toBe("void installRunRecovery(context);");
-    expect(RUN_HOST_START_LINE).toContain("recordStarted");
-    expect(RUN_HOST_START_LINE).not.toContain("completed");
+  it("records a cancelled run as terminal, so the next activation does not interrupt it", async () => {
+    const store = createMemoryLocalFirstStore();
+    await recordRunStarted(store, deps, { runId: "run-stopped" });
+    await recordRunFinished(store, deps, { runId: "run-stopped", status: "cancelled" });
+    const row = await store.read((tx) => tx.get<ExecutionValue>("execution", "run-stopped"));
+    expect(row?.payload.status).toBe("cancelled");
+    expect(row?.payload).not.toHaveProperty("outcome");
+    const installed = installRunRecovery(ctx(), ports(store));
+    expect(await installed.recovered).toEqual([]);
+    expect(await statusOf(store, "run-stopped")).toBe("cancelled");
+    const events = await store.read((tx) => tx.pending());
+    const cancelled = events.find((event) => event.idempotencyKey === "execution:cancelled:run-stopped");
+    expect(cancelled?.payload).toEqual({ status: "cancelled" });
+    // A later terminal report does not rewrite a cancelled run.
+    await recordRunFinished(store, deps, { runId: "run-stopped", status: "failed" });
+    expect(await statusOf(store, "run-stopped")).toBe("cancelled");
+  });
+
+  it("rejects a start with no run id and writes nothing", async () => {
+    const store = createMemoryLocalFirstStore();
+    for (const runId of ["", "   ", undefined as unknown as string]) {
+      await expect(recordRunStarted(store, deps, { runId })).rejects.toThrow(RUN_ID_REQUIRED);
+    }
+    const snap = await store.export();
+    expect(snap.records).toEqual([]);
+    expect(snap.events).toEqual([]);
   });
 
   it("recovers a running execution as interrupted, never completed", async () => {
@@ -90,9 +111,9 @@ describe("installRunRecovery", () => {
     expect(await statusOf(store, "run-failed")).toBe("failed");
 
     const snap = await store.export();
-    const completedEvents = snap.events.filter((event) => event.eventId.includes(":completed:"));
+    const completedEvents = snap.events.filter((event) => event.idempotencyKey?.includes(":completed:"));
     expect(completedEvents.map((event) => event.clientEntityId)).toEqual(["run-done"]);
-    expect(snap.events.some((event) => event.eventId.startsWith("execution:interrupted:"))).toBe(true);
+    expect(snap.events.some((event) => event.idempotencyKey?.startsWith("execution:interrupted:"))).toBe(true);
   });
 
   it("does not re-execute a step whose checkpoint is not safeToResume", async () => {

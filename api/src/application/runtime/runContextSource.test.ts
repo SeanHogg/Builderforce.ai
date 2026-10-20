@@ -21,7 +21,7 @@ const findTaskPrimarySpec = vi.fn();
 vi.mock('../prd/taskPrd', () => ({ findTaskPrimarySpec: (...a: unknown[]) => findTaskPrimarySpec(...a) }));
 
 const buildProjectFactsBlock = vi.fn();
-vi.mock('../llm/projectFacts', () => ({ buildProjectFactsBlock: (...a: unknown[]) => buildProjectFactsBlock(...a) }));
+vi.mock('../llm/projectFactsRecall', () => ({ buildProjectFactsBlock: (...a: unknown[]) => buildProjectFactsBlock(...a) }));
 
 const buildEvermindLessonsBlock = vi.fn();
 vi.mock('../llm/projectEvermind', () => ({ buildEvermindLessonsBlock: (...a: unknown[]) => buildEvermindLessonsBlock(...a) }));

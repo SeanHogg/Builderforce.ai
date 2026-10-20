@@ -462,8 +462,10 @@ export interface Env {
    * Dial that stops the read-through cache writing L2 to {@link AUTH_CACHE_KV}
    * without unbinding the namespace. Unset / any other value keeps today's
    * L1+L2 default. Set to the string `"false"`, `"0"`, or `"off"` to skip L2
-   * (L1 per-isolate still works). The cron work-gate, cron controls, counter
-   * buffer, and other non-cache KV keys keep using AUTH_CACHE_KV directly —
+   * (L1 per-isolate still works). The hit-counter buffer honours the same dial
+   * (its writes are quota writes too) and writes hits straight to the database
+   * when it is off. The cron work-gate, cron controls, and other non-cache KV
+   * keys keep using AUTH_CACHE_KV directly —
    * unbinding the namespace to save Workers KV Free's 1,000 writes/day would
    * fail-open every frequent tick and keep Neon awake.
    *

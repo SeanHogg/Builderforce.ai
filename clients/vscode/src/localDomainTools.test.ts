@@ -152,8 +152,10 @@ describe("localDomainTools", () => {
       expect(created.syncEvent.operation).toBe("create");
       // The create depends on the project, so a later batch push orders them.
       const journal = await store.export();
+      // `dependsOn` carries the project event's wire id (the store resolves the key).
+      const projectEvent = journal.events.find((event) => event.idempotencyKey === `project:${project.id}:v1`);
       expect(journal.events.find((event) => event.eventId === created.syncEvent.eventId)?.dependsOn).toEqual([
-        `project:${project.id}:v1`,
+        projectEvent?.eventId,
       ]);
 
       const moved = await tools.execute("ticket-move", { id: created.id, status: "in_progress" });

@@ -8,7 +8,8 @@ import {
   newLocalRecord,
   redactSnapshotForUploadOrLog,
 } from "@builderforce/local-first";
-import { createVsCodeLocalFirstStore, VSIX_LOCAL_FIRST_REDACTION_RULE } from "./localFirstStore";
+import { VSIX_LOCAL_FIRST_REDACTION_RULE } from "./durableLocalFirstStore";
+import { createVsCodeLocalFirstStore } from "./localFirstStore";
 
 vi.mock("vscode", () => ({
   l10n: { t: (message: string) => message },

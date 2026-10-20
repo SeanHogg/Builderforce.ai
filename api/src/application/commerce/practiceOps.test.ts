@@ -132,8 +132,12 @@ describe('a talent listing binds to booking_services by host_ref', () => {
   it('reserves into the host service tenant so overlap still 409s in the right calendar', () => {
     const body = fn(booking, 'reserveForHost');
     expect(body).toContain('reserve(');
-    expect(body).toContain('hosted.tenantId');
-    expect(body).toContain('That service is not offered by this person.');
+    expect(body).toContain('activeHostedServiceTenant(');
+    const guard = fn(booking, 'activeHostedServiceTenant');
+    expect(guard).toContain('hosted.tenantId');
+    expect(guard).toContain('eq(bookingServices.isActive, true)');
+    expect(guard).toContain('eq(bookingHosts.isActive, true)');
+    expect(guard).toContain('That service is not offered by this person.');
   });
 
   it('exposes Book on the talent listing rather than by un-authing practice-ops', () => {

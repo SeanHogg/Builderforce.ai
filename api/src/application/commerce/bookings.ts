@@ -46,7 +46,7 @@ import {
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
 import { registerObject } from '../kernel/ObjectRegistry';
-import { provisionConfirmedAdvisory } from './advisoryReservation';
+import { provisionConfirmedAdvisory } from './advisoryProvisioning';
 import { StatusError } from '../../domain/shared/errors';
 
 /** `booking_services.mode`. */
@@ -317,12 +317,49 @@ export async function reserve(
 }
 
 /**
+ * THE booking guard for a host-bound reservation: the service is active, the
+ * person is an active host of it, and (when given) it lives in `tenantId`.
+ * Returns the service's tenant — where the reservation must be written. Both
+ * Marketplace Book ({@link reserveForHost}) and continue-with-advisor go through
+ * it, so a deactivated service or a removed host cannot be booked by either door.
+ */
+export async function activeHostedServiceTenant(
+  db: Db,
+  hostRef: string,
+  serviceId: number,
+  tenantId?: number,
+): Promise<number> {
+  const ref = hostRef.trim().slice(0, 64);
+  if (!ref) throw new BookingError('host not found', 404);
+  const [hosted] = await db
+    .select({ tenantId: bookingServices.tenantId })
+    .from(bookingServices)
+    .innerJoin(bookingHosts, eq(bookingHosts.serviceId, bookingServices.id))
+    .where(acrossTenants(
+      bookingServices,
+      'public_catalogue',
+      eq(bookingServices.id, serviceId),
+      eq(bookingServices.isActive, true),
+      eq(bookingHosts.hostRef, ref),
+      eq(bookingHosts.isActive, true),
+      ...(tenantId != null ? [eq(bookingServices.tenantId, tenantId)] : []),
+    ))
+    .limit(1);
+  if (!hosted) throw new BookingError('That service is not offered by this person.', 404);
+  return hosted.tenantId;
+}
+
+/**
  * Marketplace Book: a founder reserves a published talent's service.
  *
  * The listing bind is `booking_hosts.host_ref` = the talent's user id. The
  * reservation is written in the SERVICE's tenant (the advisor's workspace),
  * not the booker's — otherwise overlap would be checked in the wrong calendar
  * and {@link reserve}'s 409 would never fire for the person who actually hosts.
+ *
+ * `scope.tenantId` pins the service to a known tenant (continue-with-advisor
+ * books the tenant the completed session lived in, not whatever the catalogue
+ * would resolve).
  */
 export async function reserveForHost(
   db: Db,
@@ -336,24 +373,11 @@ export async function reserveForHost(
     bookerEmail?: string | null;
     timezone?: string;
   },
+  scope: { tenantId?: number } = {},
 ) {
   const ref = hostRef.trim().slice(0, 64);
-  if (!ref) throw new BookingError('host not found', 404);
-  const [hosted] = await db
-    .select({ tenantId: bookingServices.tenantId })
-    .from(bookingServices)
-    .innerJoin(bookingHosts, eq(bookingHosts.serviceId, bookingServices.id))
-    .where(acrossTenants(
-      bookingServices,
-      'public_catalogue',
-      eq(bookingServices.id, input.serviceId),
-      eq(bookingServices.isActive, true),
-      eq(bookingHosts.hostRef, ref),
-      eq(bookingHosts.isActive, true),
-    ))
-    .limit(1);
-  if (!hosted) throw new BookingError('That service is not offered by this person.', 404);
-  const reserved = await reserve(db, env, hosted.tenantId, actor, {
+  const tenantId = await activeHostedServiceTenant(db, ref, input.serviceId, scope.tenantId);
+  const reserved = await reserve(db, env, tenantId, actor, {
     serviceId: input.serviceId,
     startsAt: input.startsAt,
     hostRef: ref,

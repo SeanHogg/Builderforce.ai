@@ -4,14 +4,15 @@
  * `store.transact` is the only commit boundary. `put` runs before `append`,
  * so a put failure never enqueues. If append throws, the transaction rejects
  * before the store publishes the draft, so the put is not committed either.
+ *
+ * The enqueue goes through `append`, which mints the wire `eventId` (a UUID);
+ * name the logical write with `idempotencyKey` to dedupe a retried enqueue.
  */
 
 import type { JournalEvent, LocalRecord } from './records.js';
-import type { LocalFirstStore } from './store.js';
+import type { AppendJournalEvent, LocalFirstStore } from './store.js';
 
-export type EnqueueEvent<T = unknown> = Omit<JournalEvent<T>, 'localSequence' | 'payloadHash'> & {
-  payloadHash?: string;
-};
+export type EnqueueEvent<T = unknown> = AppendJournalEvent<T>;
 
 export function commitWriteAndEnqueue<TRecord = unknown, TEvent = unknown>(
   store: LocalFirstStore,

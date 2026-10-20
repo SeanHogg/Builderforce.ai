@@ -1,53 +1,85 @@
 /**
- * Transient tool-failure backoff.
+ * Transient tool-failure backoff — for IDEMPOTENT tools only.
  *
- * A tool call that fails because the API was RATE-LIMITED (or the socket blipped) must not
- * reach the model as a terminal tool failure: the model re-issues immediately, gets 429'd
- * again, and after N consecutive failed dispatches the turn-ender declares the run
- * exhausted and emits an empty answer — losing the whole turn, not just the one call.
+ * A read-only tool call that fails because the API was RATE-LIMITED must not reach the
+ * model as a terminal tool failure: the model re-issues immediately, gets 429'd again, and
+ * after N consecutive failed dispatches the turn-ender declares the run exhausted.
  *
- * The retry therefore lives INSIDE a single `tool.execute` invocation (see
- * `tool-definition-adapter.ts`), so the before-tool-call hook, the after-tool-call hook
- * and the consecutive-failure guard upstream each observe exactly ONE call with ONE final
- * outcome. The guard is untouched; it simply stops firing on transient blips.
+ * The retry lives INSIDE a single `tool.execute` invocation (see
+ * `tool-definition-adapter.ts`), so the before/after-tool-call hooks and the
+ * consecutive-failure guard upstream each observe exactly ONE call with ONE final outcome.
  *
- * Classification is NOT re-implemented here. `resolveFailoverReasonFromError`
- * (`failover-error.ts`) already maps 429 -> "rate_limit" and transport/timeout failures ->
- * "timeout"; only those two reasons are retried, everything else fails fast with zero
- * retries (400 -> "format", 401/403 -> "auth", 402 -> "billing", unknown -> null).
+ * Replay safety is the whole contract:
+ *  - Only a tool that DECLARES itself idempotent (`AgentTool.idempotent === true`, default
+ *    false) is ever retried. `exec` / `write` / `edit` / `apply_patch` / `process` are never
+ *    retried even if mis-flagged — a `git push` or a deploy must never run twice.
+ *  - Only a STRUCTURED rate-limit signal is retried: `status === 429` (or `statusCode` /
+ *    `response.status`) or an explicit `retryAfterMs` / `retryAfter` / `retry_after` field
+ *    on the thrown error. The error MESSAGE is never classified: a failed command whose
+ *    output mentions "429", "timeout" or "rate limit" is that command's result, not a
+ *    transport blip, and timeouts are not retried at all.
+ *  - Total WALL time (tool runtime + backoff) is bounded, not just the backoff sleeps.
  *
  * `Retry-After` is read in the shape the gateway already writes
- * (`src/gateway/http-common.ts:28-30`, `src/gateway/server-http.ts:165-170`: integer
- * SECONDS) and that `src/discord/api.ts:35-52` already consumes (numeric seconds -> ms),
- * with the JSON-body `retry_after` variant (`DiscordApiError.retryAfter`) alongside it.
+ * (`src/gateway/http-common.ts`, `src/gateway/server-http.ts`: integer SECONDS) and that
+ * `src/discord/api.ts` already consumes, with the JSON-body `retry_after` variant alongside.
  */
 
 import { retryAsync, type RetryInfo } from "../infra/retry.js";
 import { logDebug } from "../logger.js";
-import { resolveFailoverReasonFromError } from "./failover-error.js";
+import { normalizeToolName } from "./tool-policy.js";
 
 /**
- * Bounded budget. One initial call plus two retries, and never more than ~10s of total
- * backoff inside a single turn, so a genuinely dead API still fails the call rather than
- * trading one cascade for a hang.
+ * Bounded budget. One initial call plus two retries, never more than ~10s of total backoff
+ * and never more than ~30s of wall time (runtime included) inside a single tool call.
  */
 export const TRANSIENT_TOOL_RETRY_DEFAULTS = {
   attempts: 3,
   minDelayMs: 500,
   maxDelayMs: 8_000,
   maxTotalBackoffMs: 10_000,
+  maxTotalWallMs: 30_000,
 } as const;
 
-/** Failover reasons that are worth another attempt. `format`/`auth`/`billing` are not. */
-const TRANSIENT_FAILOVER_REASONS = new Set(["rate_limit", "timeout"]);
+/** Mutating / side-effecting tools that are NEVER replayed, whatever they declare. */
+const NEVER_RETRY_TOOL_NAMES = new Set(["exec", "process", "write", "edit", "apply_patch"]);
+
+/** True when this tool may be replayed after a rate-limit rejection. */
+export function isRetryableTool(tool: { name?: string; idempotent?: boolean }): boolean {
+  if (tool.idempotent !== true) {
+    return false;
+  }
+  return !NEVER_RETRY_TOOL_NAMES.has(normalizeToolName(tool.name ?? ""));
+}
+
+function structuredStatus(err: unknown): number | undefined {
+  for (const field of ["status", "statusCode"] as const) {
+    const value = readErrorField(err, field);
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  const response = readErrorField(err, "response");
+  const nested = readErrorField(response, "status");
+  return typeof nested === "number" && Number.isFinite(nested) ? nested : undefined;
+}
+
+function hasExplicitRetryAfter(err: unknown): boolean {
+  for (const field of ["retryAfterMs", "retryAfter", "retry_after"] as const) {
+    const value = readErrorField(err, field);
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
- * True when the failure is a transient upstream condition (429 / overload / socket or
- * timeout blip). Reuses the existing classifier — no second error taxonomy here.
+ * True ONLY for a structured rate-limit rejection (status 429 or an explicit retry-after
+ * field). Message text is deliberately ignored — see the module doc.
  */
 export function isTransientToolFailure(err: unknown): boolean {
-  const reason = resolveFailoverReasonFromError(err);
-  return reason !== null && TRANSIENT_FAILOVER_REASONS.has(reason);
+  return structuredStatus(err) === 429 || hasExplicitRetryAfter(err);
 }
 
 function readErrorField(err: unknown, name: string): unknown {
@@ -164,6 +196,13 @@ export type TransientToolRetryOptions = {
   maxDelayMs?: number;
   /** Hard cap on the SUM of all backoff delays inside one turn. */
   maxTotalBackoffMs?: number;
+  /** Hard cap on elapsed wall time (runtime + backoff) before another attempt may start. */
+  maxTotalWallMs?: number;
+  /**
+   * The tool declared itself safe to replay (see {@link isRetryableTool}). When false or
+   * omitted, `fn` runs exactly once — no retry of any kind.
+   */
+  idempotent?: boolean;
   onRetry?: (info: RetryInfo) => void;
 };
 
@@ -187,17 +226,10 @@ function plannedDelayMs(
 }
 
 /**
- * Run `fn`, retrying TRANSIENT failures with backoff (honouring `Retry-After`) until the
- * budget is spent. Non-transient failures propagate on the first attempt; transient
- * failures that outlive the budget propagate the last error unchanged, so the caller's
- * existing error-result handling is untouched.
- *
- * Replay safety: a 429 is rejected before the work runs, so replaying it is safe. A
- * `timeout`/`ECONNRESET` may in principle have been thrown AFTER a mutating tool did its
- * side effect, so a tool whose replay is not idempotent should throw with an explicit
- * status (or a non-transient reason) rather than a bare transport error. This is the
- * deliberate trade: the alternative — surfacing the blip immediately — costs the whole
- * turn, which is strictly worse than the rare duplicate write.
+ * Run `fn`; when `options.idempotent` is true, retry STRUCTURED rate-limit rejections with
+ * backoff (honouring `Retry-After`) until the attempt / backoff / wall budget is spent.
+ * Everything else propagates on the first attempt, unchanged, so the caller's existing
+ * error-result handling is untouched.
  */
 export async function executeWithTransientToolRetry<T>(
   fn: () => Promise<T>,
@@ -213,7 +245,16 @@ export async function executeWithTransientToolRetry<T>(
     0,
     Math.round(options.maxTotalBackoffMs ?? TRANSIENT_TOOL_RETRY_DEFAULTS.maxTotalBackoffMs),
   );
+  const maxTotalWallMs = Math.max(
+    0,
+    Math.round(options.maxTotalWallMs ?? TRANSIENT_TOOL_RETRY_DEFAULTS.maxTotalWallMs),
+  );
 
+  if (options.idempotent !== true || attempts === 1) {
+    return fn();
+  }
+
+  const startedAt = Date.now();
   let spentBackoffMs = 0;
 
   return retryAsync(fn, {
@@ -230,8 +271,12 @@ export async function executeWithTransientToolRetry<T>(
         return false;
       }
       const next = plannedDelayMs(attempt, retryAfterMsFromToolError(err), minDelayMs, maxDelayMs);
-      // The budget is the whole point: a dead API fails the call inside this turn.
-      return spentBackoffMs + next <= maxTotalBackoffMs;
+      // The budget is the whole point: a dead API fails the call inside this turn. Both
+      // the backoff sum AND the elapsed wall time (slow attempts count) are bounded.
+      if (spentBackoffMs + next > maxTotalBackoffMs) {
+        return false;
+      }
+      return Date.now() - startedAt + next <= maxTotalWallMs;
     },
     retryAfterMs: retryAfterMsFromToolError,
     onRetry: (info) => {

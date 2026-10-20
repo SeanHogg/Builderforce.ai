@@ -1,6 +1,6 @@
 import { sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { ackCounters, bufferCounter, drainCounters, type CounterDelta, type CounterKv, type DrainedCounter } from '../../infrastructure/cache/counterBuffer';
+import { ackCounters, bufferCounter, drainCounters, type CounterDelta, type CounterFallback, type CounterKv, type DrainedCounter } from '../../infrastructure/cache/counterBuffer';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { deferPastResponse } from '../shared/requestScope';
 
@@ -82,14 +82,28 @@ export async function applyHitDeltas(db: Db, kind: HitCounterKind, deltas: reado
   `);
 }
 
+/** Apply deltas of mixed kinds directly — one statement per kind. The path a hit takes
+ *  when its KV write failed, so a quota-exhausted namespace never strands a count. */
+export function directHitWriter(db: Db): CounterFallback {
+  return async (deltas) => {
+    const byKind = new Map<HitCounterKind, CounterDelta[]>();
+    for (const d of deltas) {
+      if (!isHitCounterKind(d.kind)) continue;
+      byKind.set(d.kind, [...(byKind.get(d.kind) ?? []), d]);
+    }
+    for (const [kind, rows] of byKind) await applyHitDeltas(db, kind, rows);
+  };
+}
+
 /**
- * Count one hit. Buffered in KV and applied by the sweep; when there is no KV to
- * buffer in, applied directly so the count is never silently dropped. Deferred past
- * the response — a visitor never waits on a counter.
+ * Count one hit. Buffered in KV and applied by the sweep; when KV writes are off or
+ * unavailable, applied directly so the count is never silently dropped (and a failed
+ * KV put falls back to the same direct write). Deferred past the response — a visitor
+ * never waits on a counter.
  */
 export async function recordHit(env: CounterKv, db: Db, kind: HitCounterKind, key: string): Promise<void> {
   const at = Date.now();
-  const task = bufferCounter(env, kind, key, 1, at)
+  const task = bufferCounter(env, kind, key, 1, at, directHitWriter(db))
     .then(async (buffered) => {
       if (!buffered) await applyHitDeltas(db, kind, [{ kind, key, n: 1, t: at }]);
     })

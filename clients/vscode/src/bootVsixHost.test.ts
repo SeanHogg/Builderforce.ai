@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -20,14 +20,14 @@ function directory(): string {
 }
 
 describe("bootVsixHost", () => {
-  it("imports only the denied-network store and does not call platform fetch", () => {
+  it("boots through the shared denied-host primitive over the durable store, and does not call platform fetch", () => {
     const source = readFileSync(new URL("./bootVsixHost.ts", import.meta.url), "utf8");
     const specifiers = [...source.matchAll(/from\s+["']([^"']+)["']/g)].map((match) => match[1]);
     expect(specifiers).toEqual([
-      "node:fs",
-      "node:path",
       "@builderforce/local-first",
+      "./durableLocalFirstStore",
     ]);
+    expect(source).toContain("bootDeniedHost(");
     expect(source).not.toMatch(/\bfetch\s*\(/);
     expect(source).not.toMatch(/from\s+["']vscode["']/);
     expect(source).not.toMatch(/from\s+["']\.\/extension["']/);
@@ -67,9 +67,25 @@ describe("bootVsixHost", () => {
     third.stop();
   });
 
-  it("refuses a corrupt snapshot instead of reporting an empty store", async () => {
+  it("keeps a corrupt snapshot cache aside and boots from the journal instead of failing activation", async () => {
     const root = directory();
+    const first = bootVsixHost({ network: "denied", directory: root });
+    const id = await first.writeDurable({ title: "Kept in the journal" });
+    first.stop();
     writeFileSync(path.join(root, VSIX_LOCAL_SNAPSHOT_FILE), "{not-json");
-    expect(() => bootVsixHost({ network: "denied", directory: root })).toThrow("local_first_snapshot_corrupt");
+
+    const second = bootVsixHost({ network: "denied", directory: root });
+    await second.ready();
+    expect(await second.readRecord(id)).toEqual({ id, title: "Kept in the journal" });
+    expect(readdirSync(root).some((name) => name.startsWith(`${VSIX_LOCAL_SNAPSHOT_FILE}.corrupt-`))).toBe(true);
+    second.stop();
+  });
+
+  it("refuses a network that is not denied and a stopped boot", async () => {
+    const root = directory();
+    expect(() => bootVsixHost({ network: "open" as "denied", directory: root })).toThrow("vsix_boot_requires_denied_network");
+    const boot = bootVsixHost({ network: "denied", directory: root });
+    boot.stop();
+    await expect(boot.writeDurable({ title: "late" })).rejects.toThrow("vsix_boot_stopped");
   });
 });

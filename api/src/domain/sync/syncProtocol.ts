@@ -4,13 +4,17 @@
  * The wire contract itself lives in `packages/local-first` (`SyncPushBatch`,
  * `SyncReceipt`, `SyncPullResult`, `JournalEvent`, `LocalRecord`); this module
  * holds the SERVER-side rules over that contract that need no database and no
- * HTTP: payload integrity hashing (the same FNV-1a the client store stamps),
- * opaque pull cursors, destination-binding verification (client-supplied
- * identifiers never grant access — they must AGREE with the authenticated
- * context), and occurred-at sanity bounds (G25).
+ * HTTP: payload integrity hashing (the same FNV-1a the client store stamps) and
+ * destination normalisation (client-supplied identifiers never grant access —
+ * they must AGREE with the authenticated context, and the tenant is always the
+ * caller's).
  *
- * Everything here is a pure function so the rules are testable without a
- * database and reusable by any future transport adapter.
+ * The other pure rules each have ONE home beside this file:
+ *   - pull cursors            → `cursorCodec.ts`
+ *   - client clock (G25)      → `occurredAtGate.ts`
+ *   - conflict verdicts       → `conflictPolicy.ts`
+ *   - pull page bound         → `importBounds.ts`
+ *   - retention windows       → `syncRetention.ts`
  */
 
 import {
@@ -23,6 +27,8 @@ import {
 export {
   SYNC_PROTOCOL_VERSION,
   destinationKey,
+  /** The ONE event-id shape check — the client store mints exactly this. */
+  isJournalEventId,
   type EntityDestination,
   type JournalEvent,
   type LocalEntityType,
@@ -36,22 +42,14 @@ export {
 export type SyncReceiptStatus = 'accepted' | 'duplicate' | 'conflict' | 'rejected' | 'dependency_pending';
 
 /**
- * The entity types this server build can apply. Every `LocalEntityType` is
- * ACCEPTED into the protocol; the ones without an owning-context importer land
- * in the mirror store as client-reported history (see
- * `application/sync/importMirrorRecord`).
+ * The entity types this server build applies through an owning-context importer.
+ * Every other accepted `LocalEntityType` lands in the mirror as client-reported
+ * history (see `application/sync/importers/importMirrorRecord`).
  */
 export const DOMAIN_IMPORTED_ENTITY_TYPES = ['ticket', 'project'] as const satisfies readonly LocalEntityType[];
 
 /** The highest event `schemaVersion` this build understands. */
 export const MAX_SUPPORTED_SCHEMA_VERSION = 1;
-
-/**
- * Client clocks drift; historical import makes `occurredAt` arbitrarily OLD by
- * design, so only the future direction is bounded. Past this skew the claim is
- * treated as a client defect, not history.
- */
-export const MAX_FUTURE_CLOCK_SKEW_MS = 15 * 60 * 1000;
 
 /**
  * FNV-1a over `JSON.stringify(payload)` — byte-identical to the hash the client
@@ -69,145 +67,41 @@ export function hashSyncPayload(payload: unknown): string {
   return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`;
 }
 
-// ── Opaque pull cursors ──────────────────────────────────────────────────────
-//
-// A cursor is base64url JSON so clients treat it as opaque, but the server can
-// still reject a garbled one deterministically. Two shapes: a DELTA cursor names
-// the last `sync_changes.seq` the device saw; a SNAPSHOT cursor keysets a
-// bounded bootstrap over `sync_records`. A delta cursor whose rows have been
-// retention-swept is answered with `resnapshotRequired`, never with a gap.
-
-export interface DeltaCursor {
-  v: 1;
-  kind: 'delta';
-  seq: number;
-}
-
-export interface SnapshotCursor {
-  v: 1;
-  kind: 'snapshot';
-  /** Keyset: the last `(entityType, clientEntityId)` pair served. */
-  afterEntityType: string;
-  afterClientEntityId: string;
-}
-
-export type SyncCursor = DeltaCursor | SnapshotCursor;
-
-const b64urlEncode = (text: string): string =>
-  btoa(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-const b64urlDecode = (text: string): string => {
-  const padded = text.replace(/-/g, '+').replace(/_/g, '/');
-  return atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
-};
-
-export function encodeSyncCursor(cursor: SyncCursor): string {
-  return b64urlEncode(JSON.stringify(cursor));
-}
-
-/** Parse an opaque cursor; `null` when it is not one of ours (treated as expired). */
-export function decodeSyncCursor(raw: string): SyncCursor | null {
-  try {
-    const value: unknown = JSON.parse(b64urlDecode(raw));
-    if (typeof value !== 'object' || value === null) return null;
-    const cursor = value as Record<string, unknown>;
-    if (cursor.v !== 1) return null;
-    if (cursor.kind === 'delta' && typeof cursor.seq === 'number' && Number.isInteger(cursor.seq) && cursor.seq >= 0) {
-      return { v: 1, kind: 'delta', seq: cursor.seq };
-    }
-    if (
-      cursor.kind === 'snapshot'
-      && typeof cursor.afterEntityType === 'string'
-      && typeof cursor.afterClientEntityId === 'string'
-    ) {
-      return {
-        v: 1,
-        kind: 'snapshot',
-        afterEntityType: cursor.afterEntityType,
-        afterClientEntityId: cursor.afterClientEntityId,
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 // ── Destination binding (G10/G11: the client NAMES its destination; the server decides) ──
+
+/** A bound destination whose `tenantId` is the authenticated tenant, always. */
+export type NormalisedDestination = Extract<EntityDestination, { kind: 'bound' }> & { tenantId: string };
 
 export type DestinationBindingError =
   | 'sync_destination_required'
   | 'destination_tenant_mismatch'
   | 'destination_account_mismatch';
 
+export type NormaliseDestinationResult =
+  | { ok: true; destination: NormalisedDestination }
+  | { ok: false; code: DestinationBindingError };
+
 /**
- * Verify a pushed destination against the authenticated context. A bound
- * destination that contradicts the token's tenant or user is a protocol
- * violation, not an authorization failure — the client is claiming to be
- * someone it is not, so the whole batch is refused before any per-event work.
+ * Verify a pushed or pulled destination against the authenticated context and
+ * return it with the tenant taken FROM AUTH.
+ *
+ * An explicit tenant or account that contradicts the token is a protocol
+ * violation — the client claims to be someone it is not. An OMITTED tenant is
+ * not trusted either: it is filled from the token, so `{ kind: 'bound' }` and
+ * `{ kind: 'bound', tenantId: '<mine>' }` name the same destination key and can
+ * never resolve to a second partition (or to another tenant's).
  */
-export function destinationBindingError(
+export function normaliseSyncDestination(
   destination: EntityDestination,
   auth: { tenantId: number; userId: string },
-): DestinationBindingError | null {
-  if (destination.kind !== 'bound') return 'sync_destination_required';
-  if (destination.tenantId !== undefined && destination.tenantId !== String(auth.tenantId)) {
-    return 'destination_tenant_mismatch';
+): NormaliseDestinationResult {
+  if (destination.kind !== 'bound') return { ok: false, code: 'sync_destination_required' };
+  const tenantId = String(auth.tenantId);
+  if (destination.tenantId !== undefined && destination.tenantId !== tenantId) {
+    return { ok: false, code: 'destination_tenant_mismatch' };
   }
   if (destination.accountId !== undefined && destination.accountId !== auth.userId) {
-    return 'destination_account_mismatch';
+    return { ok: false, code: 'destination_account_mismatch' };
   }
-  return null;
-}
-
-/** Why a client `occurredAt` cannot be stored. */
-export type OccurredAtErrorCode = 'occurred_at_invalid' | 'occurred_at_in_future';
-
-/** Is `occurredAt` a parseable timestamp within the allowed future skew? */
-export function occurredAtError(occurredAt: string, now: Date): OccurredAtErrorCode | null {
-  const at = Date.parse(occurredAt);
-  if (Number.isNaN(at)) return 'occurred_at_invalid';
-  if (at > now.getTime() + MAX_FUTURE_CLOCK_SKEW_MS) return 'occurred_at_in_future';
-  return null;
-}
-
-/**
- * Trust label for a client clock the server accepted. Imported evidence is a
- * claim, not a server observation — billing and audit must not treat
- * `occurredAt` as time the server witnessed.
- */
-export const CLIENT_REPORTED_EVIDENCE = 'client-reported' as const;
-
-/**
- * The pair a push must persist: the client's `occurredAt` unchanged, plus the
- * server clock at apply time. Historical past values stay on `occurredAt`.
- */
-export interface AppliedClientTime {
-  occurredAt: string;
-  receivedAt: string;
-  evidence: typeof CLIENT_REPORTED_EVIDENCE;
-}
-
-export type ApplyClientOccurredAtResult =
-  | { ok: true; time: AppliedClientTime }
-  | { ok: false; error: OccurredAtErrorCode };
-
-/**
- * Domain apply for G25, before any insert. There is no sync route yet; this is
- * the one place the clock rule is applied. An invalid or too-future client time
- * is refused via {@link occurredAtError}. An accepted time — including an
- * arbitrarily old historical import — keeps the client's `occurredAt` and stamps
- * a separate server `receivedAt`. The evidence is always client-reported.
- */
-export function applyClientOccurredAt(occurredAt: string, now: Date): ApplyClientOccurredAtResult {
-  const error = occurredAtError(occurredAt, now);
-  if (error) return { ok: false, error };
-  return {
-    ok: true,
-    time: {
-      occurredAt,
-      receivedAt: now.toISOString(),
-      evidence: CLIENT_REPORTED_EVIDENCE,
-    },
-  };
+  return { ok: true, destination: { ...destination, tenantId } };
 }

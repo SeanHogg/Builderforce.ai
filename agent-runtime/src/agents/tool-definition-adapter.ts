@@ -11,7 +11,7 @@ import {
   runBeforeToolCallHook,
 } from "./coding-tools.before-tool-call.js";
 import { normalizeToolName } from "./tool-policy.js";
-import { executeWithTransientToolRetry } from "./tool-retry.js";
+import { executeWithTransientToolRetry, isRetryableTool } from "./tool-retry.js";
 import { jsonResult } from "./tools/common.js";
 
 type AnyAgentTool = AgentTool;
@@ -105,6 +105,7 @@ export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
     const name = tool.name || "tool";
     const normalizedName = normalizeToolName(name);
     const beforeHookWrapped = isToolWrappedWithBeforeToolCallHook(tool);
+    const idempotent = isRetryableTool(tool);
     return {
       name,
       label: tool.label ?? name,
@@ -125,14 +126,13 @@ export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
             }
             executeParams = hookOutcome.params;
           }
-          // A rate-limited / transient failure is absorbed here, INSIDE the single
-          // `execute` invocation, so the before-tool-call hook, the after-tool-call hook
-          // and the consecutive-failure guard upstream each see exactly one call with one
-          // final outcome. A 429 that recovers is simply never surfaced to the model; a
-          // 400 still fails on the first attempt with zero retries.
+          // A structured 429 on an IDEMPOTENT (read-only) tool is absorbed here, INSIDE
+          // the single `execute` invocation, so the hooks and the consecutive-failure
+          // guard upstream each see exactly one call with one final outcome. Every other
+          // tool (exec, write, edit, ...) runs exactly once — a push/deploy never replays.
           const result = await executeWithTransientToolRetry(
             () => tool.execute(toolCallId, executeParams, signal, onUpdate),
-            { label: normalizedName, signal },
+            { label: normalizedName, signal, idempotent },
           );
           const afterParams = beforeHookWrapped
             ? (consumeAdjustedParamsForToolCall(toolCallId) ?? executeParams)

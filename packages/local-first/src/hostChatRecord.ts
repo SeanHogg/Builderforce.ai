@@ -16,7 +16,7 @@
  * which is why an offline chat's run is explicitly unbound too.
  */
 
-import type { EntityDestination, LocalEntityType, LocalRecord } from './records.js';
+import type { EntityDestination, ExecutionStatus, LocalEntityType, LocalRecord } from './records.js';
 import { resolveCreateDestination } from './creationDestination.js';
 import { newLocalRecord, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 
@@ -45,7 +45,7 @@ export interface HostRunValue {
   chatId: string;
   turnId?: string;
   parentRunId?: string;
-  status: 'queued' | 'running' | 'awaiting_input' | 'completed' | 'failed' | 'interrupted';
+  status: ExecutionStatus;
   seq: number;
   lineage: HostLineage;
 }

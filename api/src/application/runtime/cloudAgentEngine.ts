@@ -1165,7 +1165,7 @@ async function runCloudToolLoop(
       // Sized to the model the policy asks for next when it names one (its catalog window).
       const compaction = await compactMessages(
         messages,
-        { ...CLOUD_COMPACT_DEFAULTS, ...(modelState.policy.model ? { targetModel: modelState.policy.model } : {}) },
+        { ...CLOUD_COMPACT_DEFAULTS, tools: cloudTools, ...(modelState.policy.model ? { targetModel: modelState.policy.model } : {}) },
         buildGatewaySummarizer(env),
       );
       if (compaction.compacted) {

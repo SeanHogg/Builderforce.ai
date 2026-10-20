@@ -59,6 +59,8 @@ vi.mock("./installRunRecovery", () => ({
   installRunRecovery: () => ({
     recovered: Promise.resolve([]),
     recordStarted: async () => undefined,
+    recordCheckpoint: async () => undefined,
+    recordFinished: async () => undefined,
   }),
 }));
 
@@ -99,20 +101,22 @@ vi.mock("./hooks/editorDirectives", () => ({ editorRunDirectives: async () => []
 vi.mock("./memoryStaleness", () => ({ withWorkspaceStaleness: (hooks: unknown) => hooks }));
 
 import { createVsCodeRunHost } from "./brainRunHostPorts";
+import { attributeRunChanges, FINGERPRINT_HASH_MAX_BYTES, fingerprintFile, fingerprintFiles } from "./runChangeBaseline";
 import {
-  attributeRunChanges,
   beginChangeSet,
   changeSetCompleteness,
-  changeSetIdentityForHostRun,
-  finalizeRunChangeSets,
   finishChangeSet,
   hashRunChangeBaseline,
   isChangeSetLifecycle,
   readChangeSetLifecycle,
   readRunChangeSetPhase,
-  recordChangeSetAroundRun,
   recordChangeSetBaseline,
   recordChangeSetFinalization,
+} from "./changeSetLifecycle";
+import {
+  changeSetIdentityForHostRun,
+  finalizeRunChangeSets,
+  recordChangeSetAroundRun,
   type LocalChangeSetValue,
 } from "./runChangeSets";
 
@@ -295,7 +299,9 @@ describe("recordChangeSetAroundRun", () => {
     expect(created?.beforeHash).toBeUndefined();
     expect(payload.files.some((file) => file.path === "untouched.ts")).toBe(false);
     expect(payload.files.every((file) => file.patchManifestId == null)).toBe(true);
-    expect(snapshot.events[0]?.dependsOn).toEqual(["execution:start:run-1"]);
+    // A pending `execution:start` event is referenced by its wire id; otherwise the key is kept.
+    const startEvent = snapshot.events.find((event) => event.idempotencyKey === "execution:start:run-1");
+    expect(snapshot.events[0]?.dependsOn).toEqual([startEvent?.eventId ?? "execution:start:run-1"]);
     expect(snapshot.records.some((record) => record.entityType === "execution")).toBe(false);
 
     await fs.writeFile(path.join(root, "edited.ts"), "changed again\n");
@@ -465,8 +471,9 @@ describe("createVsCodeRunHost change sets", () => {
       }),
     ]);
     expect(payload.files.some((file) => file.path === "untouched.ts")).toBe(false);
+    const startEvent = snapshot.events.find((event) => event.idempotencyKey === `execution:start:${payload.runId}`);
     expect(snapshot.events.find((event) => event.entityType === "change-set")?.dependsOn).toEqual([
-      `execution:start:${payload.runId}`,
+      startEvent?.eventId ?? `execution:start:${payload.runId}`,
     ]);
   });
 
@@ -638,5 +645,33 @@ describe("change set baseline and finalization", () => {
     expect(again.finalizedAt).toBe("2026-04-01T01:00:00.000Z");
     expect(again.author).toBe("agent:brain-host");
     expect(again.changeSetIds).toEqual([]);
+  });
+});
+
+describe("bounded baseline fingerprints", () => {
+  it("content-hashes small files, fingerprints large ones by size and mtime, and keeps input order", async () => {
+    const root = await workspace();
+    const small = path.join(root, "small.txt");
+    const large = path.join(root, "large.bin");
+    await fs.writeFile(small, "hello");
+    await fs.writeFile(large, Buffer.alloc(FINGERPRINT_HASH_MAX_BYTES + 1, 1));
+
+    expect(await fingerprintFile(small)).toBe(sha("hello"));
+    const largePrint = await fingerprintFile(large);
+    expect(largePrint).toMatch(new RegExp(`^stat:${FINGERPRINT_HASH_MAX_BYTES + 1}:\\d+$`));
+    expect(await fingerprintFile(path.join(root, "missing"))).toBeUndefined();
+
+    // A change to a large file still shows: its size (or mtime) moves.
+    await fs.appendFile(large, Buffer.from([2]));
+    expect(await fingerprintFile(large)).not.toBe(largePrint);
+
+    const many = await Promise.all(
+      Array.from({ length: 20 }, async (_, index) => {
+        const file = path.join(root, `f-${index}.txt`);
+        await fs.writeFile(file, `file ${index}`);
+        return file;
+      }),
+    );
+    expect(await fingerprintFiles(many)).toEqual(many.map((_, index) => sha(`file ${index}`)));
   });
 });

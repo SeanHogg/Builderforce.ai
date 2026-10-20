@@ -143,10 +143,6 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     throwIfStopped,
     toolsUsedThisTurn: new Set<string>(),
     changedFiles: new Set<string>(),
-    // Omitted `stepCap` is unbounded (`stepCap ?? Infinity` in the kernel). The
-    // authoring countdown arms only when a finite cap is set; a prose recovery
-    // still arms authoring on its own.
-    budget: {},
     finalText: '',
     canvasChanged: false,
     executiveRequestRecoveryUsed: false,
@@ -190,7 +186,8 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     messages,
     codec: openAiChatCodec<ChatCompletionMessage>(),
     signal: options.signal,
-    budget: run.budget,
+    // No step cap (`stepCap ?? Infinity` in the kernel): the failure streak is the stop.
+    budget: {},
     ports: { complete: canvasModelPort(run), dispatch: canvasToolPort(run) },
     hooks: {
       // A stopped run must not START another tool. One already in flight is left to

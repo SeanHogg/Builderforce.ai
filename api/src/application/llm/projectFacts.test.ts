@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  formatProjectFactsBlock,
-  recallProjectFacts,
-  upsertProjectFact,
-  buildProjectFactsBlock,
-} from './projectFacts';
+import { formatProjectFactsBlock, recallProjectFacts, buildProjectFactsBlock } from './projectFactsRecall';
+import { upsertProjectFact } from './projectFactsWrite';
 import type { Env } from '../../env';
 
 // No AUTH_CACHE_KV → getCacheVersion/getOrSetCached fall through to the loader.

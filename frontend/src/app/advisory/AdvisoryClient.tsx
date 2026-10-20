@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { apiRequest } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { ContinueAdvisor } from '@/components/freelance/ContinueAdvisor';
+import { canInviteAdvisor, inviteAdvisorToAiContext } from '@/lib/freelance/advisorInvite';
 
 interface AdvisorSession {
   id: number;
@@ -14,6 +15,8 @@ interface AdvisorSession {
   startsAt: string;
   endsAt: string;
   meetingUrl: string | null;
+  /** The restricted advisory thread (upcoming founder sessions only). */
+  chatId?: number | null;
 }
 
 const HEADING = 'text-lg font-medium text-[var(--text-primary)]';
@@ -125,7 +128,24 @@ export function AdvisoryClient() {
 
       <section className="space-y-2">
         <h2 className={HEADING}>{t('upcomingHeading')}</h2>
-        <SessionList rows={sessions} empty={t('noUpcoming')} />
+        <SessionList
+          rows={sessions}
+          empty={t('noUpcoming')}
+          action={(row) => {
+            const target = { chatId: row.chatId ?? null, hostRef: row.hostRef };
+            if (!canInviteAdvisor(target)) return null;
+            return (
+              <button
+                type="button"
+                className={SECONDARY_BUTTON}
+                title={t('inviteAdvisorHint')}
+                onClick={() => void run(t('advisorInvited'), () => inviteAdvisorToAiContext(target))}
+              >
+                {t('inviteAdvisor')}
+              </button>
+            );
+          }}
+        />
       </section>
 
       <section className="space-y-3">
@@ -205,14 +225,22 @@ export function AdvisoryClient() {
   );
 }
 
-function SessionList({ rows, empty }: { rows: AdvisorSession[]; empty: string }) {
+function SessionList({ rows, empty, action }: {
+  rows: AdvisorSession[];
+  empty: string;
+  /** Optional per-row control (e.g. the founder's invite-advisor action). */
+  action?: (row: AdvisorSession) => ReactNode;
+}) {
   if (rows.length === 0) return <p className={MUTED}>{empty}</p>;
   return (
     <ul className="divide-y divide-[var(--border)] rounded border border-[var(--border)] bg-[var(--surface-card)]">
       {rows.map((row) => (
-        <li key={row.id} className="flex flex-wrap justify-between gap-2 px-3 py-2 text-sm text-[var(--text-primary)]">
+        <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm text-[var(--text-primary)]">
           <span className="min-w-0 break-words">#{row.id} · {row.status}{row.hostRef ? ` · ${row.hostRef}` : ''}</span>
-          <span className="text-[var(--text-secondary)]">{new Date(row.startsAt).toLocaleString()}</span>
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-[var(--text-secondary)]">{new Date(row.startsAt).toLocaleString()}</span>
+            {action?.(row)}
+          </span>
         </li>
       ))}
     </ul>

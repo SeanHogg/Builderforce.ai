@@ -362,6 +362,16 @@ export const GUEST_CHAT_LIMITS = {
    * per visitor per day) and `ipMessagesDailyLimit`.
    */
   maxToolTokensPerRequest: 3_200,
+  /**
+   * Max MODEL ROUND-TRIPS per visitorId per UTC day. `messagesDailyLimit` counts user
+   * SUBMITS (a canvas turn's tool continuations ride the submit's turnId for free), and
+   * the canvas loop has no step cap — so without this a single submit could loop on the
+   * free pool indefinitely. Every accepted upstream call, continuation included, is
+   * charged here (`guestRoundTrips.ts`). Sized for ~15 round-trips per submit.
+   */
+  roundTripsDailyLimit: 150,
+  /** The same round-trip ceiling per source IP — the spoof backstop behind it. */
+  ipRoundTripsDailyLimit: 600,
 } as const;
 
 /**

@@ -11,6 +11,7 @@
 import { TenantRole } from '../../domain/shared/types';
 import { ValidationError } from '../../domain/shared/errors';
 import type { TenantExportSource } from '../export/exportSource';
+import { isReportableYear } from '../../domain/finance/taxThreshold';
 import { buildTaxYearReport, taxYearReportFilename, taxYearReportTable } from './taxReport';
 
 export const taxYearExportSource: TenantExportSource = {
@@ -22,8 +23,10 @@ export const taxYearExportSource: TenantExportSource = {
   async load(ctx) {
     const year = Number(ctx.param('year'));
     const onlyReportable = ctx.param('all') !== 'true';
-    const report = await buildTaxYearReport(ctx.db, ctx.env, ctx.tenantId, year).catch(() => null);
-    if (!report) throw new ValidationError('That is not a reportable tax year.');
+    // Validate up front: a database failure must surface as one, not be relabelled
+    // "not a reportable year" by a blanket catch.
+    if (!isReportableYear(year)) throw new ValidationError('That is not a reportable tax year.');
+    const report = await buildTaxYearReport(ctx.db, ctx.env, ctx.tenantId, year);
     return {
       filename: taxYearReportFilename(year, onlyReportable),
       title: `Tax year ${year}`,

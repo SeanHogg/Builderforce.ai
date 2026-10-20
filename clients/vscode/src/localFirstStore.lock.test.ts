@@ -1,13 +1,16 @@
-import { existsSync, readFileSync, statSync, utimesSync } from "node:fs";
+import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import nodePath from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { leaseBusy } from "@builderforce/local-first";
+import { createVsCodeLocalFirstStore } from "./localFirstStore";
 import {
   LOCAL_FIRST_BUSY_TIMEOUT_MS,
-  createVsCodeLocalFirstStore,
-} from "./localFirstStore";
+  THIS_HOST,
+  createLocalFirstFileLock,
+  lockHolderLiveness,
+} from "./localFirstLock";
 
 vi.mock("vscode", () => ({
   l10n: { t: (message: string) => message },
@@ -73,5 +76,79 @@ describe("local-first file lock", () => {
 
     await expect(second.transact(async () => undefined)).resolves.toBeUndefined();
     expect(existsSync(lock)).toBe(false);
+  });
+
+  async function lockDirectory(): Promise<{ root: string; lock: string }> {
+    const root = await mkdtemp(nodePath.join(tmpdir(), "bf-local-first-lock-"));
+    directories.push(root);
+    return { root, lock: nodePath.join(root, "local-first-v1.lock") };
+  }
+
+  it("reclaims a lock whose holder process is gone, then commits", async () => {
+    const { root, lock } = await lockDirectory();
+    // A pid that cannot exist on this machine: process.kill(pid, 0) answers ESRCH.
+    writeFileSync(lock, JSON.stringify({
+      holder: "crashed-window",
+      pid: 2 ** 30,
+      hostStartedAt: 1,
+      host: hostname(),
+      heldSince: Date.now(),
+    }));
+    const store = createVsCodeLocalFirstStore(host(root));
+    const started = Date.now();
+    await expect(store.transact(async () => "committed")).resolves.toBe("committed");
+    // Reclaimed on proof of death, not after waiting out the busy timeout.
+    expect(Date.now() - started).toBeLessThan(LOCAL_FIRST_BUSY_TIMEOUT_MS);
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it("reclaims a lock left by a previous process that had this pid", async () => {
+    const { root, lock } = await lockDirectory();
+    writeFileSync(lock, JSON.stringify({
+      holder: "previous-host",
+      pid: process.pid,
+      hostStartedAt: THIS_HOST.startedAt - 60_000,
+      host: THIS_HOST.host,
+      heldSince: Date.now(),
+    }));
+    const store = createVsCodeLocalFirstStore(host(root));
+    await expect(store.transact(async () => "ok")).resolves.toBe("ok");
+  });
+
+  it("reclaims a lock that names nobody (a create that crashed before writing its holder)", async () => {
+    const { root, lock } = await lockDirectory();
+    writeFileSync(lock, "");
+    const store = createVsCodeLocalFirstStore(host(root));
+    await expect(store.transact(async () => "ok")).resolves.toBe("ok");
+    writeFileSync(lock, "{\"holder\":");
+    await expect(store.transact(async () => "again")).resolves.toBe("again");
+  });
+
+  it("keeps a live holder in another process busy, however old its lock is", async () => {
+    const { lock } = await lockDirectory();
+    writeFileSync(lock, JSON.stringify({
+      holder: "other-window",
+      pid: 4242,
+      hostStartedAt: 1,
+      host: THIS_HOST.host,
+      heldSince: 1,
+    }));
+    const contender = createLocalFirstFileLock(lock, { processLiveness: () => "alive", busyTimeoutMs: 80 });
+    await expect(contender.acquire()).rejects.toThrow("local_first_store_busy");
+    expect(JSON.parse(readFileSync(lock, "utf8")).holder).toBe("other-window");
+  });
+
+  it("judges holder liveness on evidence: another machine and a fresh legacy lock stay busy", () => {
+    const self = { pid: 100, startedAt: 1_000_000, host: "this-machine" };
+    expect(lockHolderLiveness({ holder: "x", pid: 7, host: "other-machine", hostStartedAt: 1 }, self, () => "dead")).toBe("unknown");
+    expect(lockHolderLiveness({ holder: "x", pid: 7, host: "this-machine", hostStartedAt: 1 }, self, () => "dead")).toBe("dead");
+    expect(lockHolderLiveness({ holder: "x", pid: 7, host: "this-machine", hostStartedAt: 1 }, self, () => "alive")).toBe("alive");
+    expect(lockHolderLiveness({ holder: null }, self)).toBe("dead");
+    // A lock written by a pre-identity build before this process existed has no live writer.
+    expect(lockHolderLiveness({ holder: "legacy", heldSince: 10 }, self)).toBe("dead");
+    expect(lockHolderLiveness({ holder: "legacy", heldSince: 2_000_000 }, self)).toBe("unknown");
+    // Our own pid and start, but no holder of that id in this process: a commit that never released.
+    expect(lockHolderLiveness({ holder: "leaked", pid: 100, host: "this-machine", hostStartedAt: 1_000_000 }, self, () => "alive", () => false)).toBe("dead");
+    expect(lockHolderLiveness({ holder: "live", pid: 100, host: "this-machine", hostStartedAt: 1_000_000 }, self, () => "alive", () => true)).toBe("alive");
   });
 });

@@ -14,7 +14,7 @@
  * picking the older URL.
  */
 
-import { eq, isNull } from 'drizzle-orm';
+import { eq, gt, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { adminImpersonationSessions, tenants, users } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -75,12 +75,15 @@ export async function startImpersonation(
   if (target.isSuperadmin) return { ok: false, status: 403, error: 'Cannot impersonate a Super Admin account' };
 
   // One active session at a time, so "end impersonation" always has one answer.
+  // ACTIVE = not ended AND not expired: a session whose hour ran out (its token is
+  // dead) without anyone pressing "end" must not lock the admin out for good.
   const [existing] = await db
     .select({ id: adminImpersonationSessions.id })
     .from(adminImpersonationSessions)
     .where(scopedToTenant(adminImpersonationSessions, input.tenantId,
       eq(adminImpersonationSessions.adminUserId, input.adminId),
-      isNull(adminImpersonationSessions.endedAt)))
+      isNull(adminImpersonationSessions.endedAt),
+      gt(adminImpersonationSessions.expiresAt, new Date())))
     .limit(1);
   if (existing) {
     return {

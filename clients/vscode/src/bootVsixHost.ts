@@ -2,12 +2,15 @@
  * Denied-network VSIX host boot.
  *
  * A scenario calls this without a live extension host, a platform session, or
- * `vscode.ExtensionContext`. The durable store is a snapshot file in
- * `directory` (global storage, once activation wires this in). A second boot
- * against the same directory reads that file back through a new store.
+ * `vscode.ExtensionContext`. The durable store is the SAME journal-backed store
+ * activation uses (`createDurableLocalFirstStore`) over `directory` (global
+ * storage in the extension). A second boot against the same directory reads the
+ * journal back through a new store; a corrupt snapshot cache is moved aside and
+ * the open continues from the journal instead of failing activation.
  *
- * Replay seals one local batch into a ledger beside the snapshot. It does not
- * acknowledge the journal and it does not call platform fetch, so a later
+ * The boot itself is the shared `bootDeniedHost` primitive: the deny probe, the
+ * stopped flag, and a replay that seals one local batch into a receipt. Replay
+ * does not acknowledge the journal and does not call platform fetch, so a later
  * granted sync can still send the same events.
  *
  * Live activation still belongs to `extension.ts`. This module does not import
@@ -15,29 +18,24 @@
  */
 
 import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
-import path from "node:path";
-import {
   LOCAL_FIRST_POLICY,
-  createMemoryLocalFirstStore,
+  bootDeniedHost,
   createPlatformPolicy,
-  newLocalRecord,
-  type LocalFirstSnapshot,
+  localFirstStoreReplayPorts,
+  readLocalTicket,
+  recordLocalTicket,
+  type DeniedReplayResult,
   type LocalFirstStore,
+  type LocalTicket,
 } from "@builderforce/local-first";
+import { createDurableLocalFirstStore, SNAPSHOT_FILE } from "./durableLocalFirstStore";
 
-export const VSIX_LOCAL_SNAPSHOT_FILE = "local-first-v1.json";
+export const VSIX_LOCAL_SNAPSHOT_FILE = SNAPSHOT_FILE;
 
-const REPLAY_LEDGER_FILE = "local-replay-v1.json";
+/** Receipt rows this boot writes. Local only; a receipt carries no journal event. */
+export const VSIX_REPLAY_KIND = "vsix-replay-receipt";
+
 const DEVICE_ID = "vsix-denied-host";
-const LOCAL_REPLAY_PREFIX = "local_replay:";
 
 export interface BootVsixHostOptions {
   /** Directory that outlives this process. The next boot must be given the same path. */
@@ -46,183 +44,48 @@ export interface BootVsixHostOptions {
   network: "denied";
 }
 
-export interface VsixDurableRecord {
-  id: string;
-  title: string;
-}
-
-export interface VsixReplayBatch {
-  count: number;
-  idempotencyKey: string;
-}
+export type VsixDurableRecord = LocalTicket;
+export type VsixReplayBatch = DeniedReplayResult;
 
 export interface VsixHostBoot {
   ready(): Promise<void>;
-  /** Write one local record and flush it to the snapshot file. Does not fetch. */
+  /** Write one local record; resolves once it is a journal frame and the cache caught up. Does not fetch. */
   writeDurable(input: { title: string; id?: string }): Promise<string>;
   /** Read a record back from the store this boot opened. */
   readRecord(id: string): Promise<VsixDurableRecord | undefined>;
-  /** Replay one pending batch into the local ledger. Does not fetch. */
+  /** Replay one pending batch into a local receipt. Does not fetch. */
   replayBatch(): Promise<VsixReplayBatch>;
   /** The store this boot opened. A second boot opens a different store over the same directory. */
   store(): LocalFirstStore;
   stop(): void;
 }
 
-interface ReplayLedger {
-  idempotencyKey: string;
-  eventIds: string[];
-}
-
 export function bootVsixHost(options: BootVsixHostOptions): VsixHostBoot {
-  if (options.network !== "denied") {
-    throw new Error("vsix_boot_requires_denied_network");
-  }
-  const policy = createPlatformPolicy(LOCAL_FIRST_POLICY);
-  if (policy.allows("synchronize")) {
-    throw new Error("vsix_boot_requires_denied_network");
-  }
-
-  const directory = options.directory;
-  const store = openDurableStore(directory);
-  let stopped = false;
-
-  const assertOpen = (): void => {
-    if (stopped) throw new Error("vsix_boot_stopped");
-  };
+  const store = createDurableLocalFirstStore(options.directory);
+  const host = bootDeniedHost({
+    network: options.network,
+    policy: createPlatformPolicy(LOCAL_FIRST_POLICY),
+    open: async () => {
+      await store.export();
+    },
+    ...localFirstStoreReplayPorts(store, { kind: VSIX_REPLAY_KIND, deviceId: DEVICE_ID }),
+    errors: { notDenied: "vsix_boot_requires_denied_network", stopped: "vsix_boot_stopped" },
+  });
 
   return {
-    ready: () => Promise.resolve(),
+    ready: host.ready,
     async writeDurable(input) {
-      assertOpen();
-      const title = input.title.trim();
-      if (!title) throw new Error("ticket_title_required");
-      const id = input.id ?? crypto.randomUUID();
-      await store.transact(async (tx) => {
-        const record = newLocalRecord({
-          id,
-          entityType: "ticket",
-          payload: { title },
-          deviceId: DEVICE_ID,
-        });
-        await tx.put(record);
-        await tx.append({
-          eventId: `event:${id}`,
-          clientEntityId: id,
-          entityType: "ticket",
-          operation: "create",
-          schemaVersion: record.schemaVersion,
-          occurredAt: record.occurredAt,
-          dependsOn: [],
-          destination: record.destination,
-          payload: record.payload,
-        });
-      });
+      host.assertOpen();
+      const id = await recordLocalTicket(store, input, { deviceId: DEVICE_ID, idempotencyKeyFor: (ticket) => `event:${ticket}` });
+      await store.flush();
       return id;
     },
     async readRecord(id) {
-      assertOpen();
-      const record = await store.read((tx) => tx.get("ticket", id));
-      if (!record) return undefined;
-      const payload = record.payload as { title?: unknown };
-      return {
-        id: record.id,
-        title: typeof payload.title === "string" ? payload.title : "",
-      };
+      host.assertOpen();
+      return readLocalTicket(store, id);
     },
-    async replayBatch() {
-      assertOpen();
-      const pending = await store.read((tx) => tx.pending());
-      const ledger = readLedger(directory);
-      const covered = new Set(ledger.eventIds);
-      const batch = pending.filter((event) => !covered.has(event.eventId));
-      if (batch.length === 0) {
-        return { count: 0, idempotencyKey: ledger.idempotencyKey };
-      }
-      const idempotencyKey = ledger.idempotencyKey || batch[0].eventId;
-      writeJsonAtomic(path.join(directory, REPLAY_LEDGER_FILE), {
-        idempotencyKey,
-        eventIds: [...ledger.eventIds, ...batch.map((event) => event.eventId)],
-        detail: `${LOCAL_REPLAY_PREFIX}${idempotencyKey}`,
-      });
-      return { count: batch.length, idempotencyKey };
-    },
+    replayBatch: host.replayBatch,
     store: () => store,
-    stop() {
-      stopped = true;
-    },
+    stop: host.stop,
   };
-}
-
-function openDurableStore(directory: string): LocalFirstStore {
-  mkdirSync(directory, { recursive: true });
-  const file = path.join(directory, VSIX_LOCAL_SNAPSHOT_FILE);
-  const memory = createMemoryLocalFirstStore(readSnapshot(file));
-  const flush = async (): Promise<void> => {
-    writeJsonAtomic(file, await memory.export());
-  };
-  return {
-    read: (work) => memory.read(work),
-    transact: async (work) => {
-      const result = await memory.transact(work);
-      await flush();
-      return result;
-    },
-    export: () => memory.export(),
-    subscribe: (listener) => memory.subscribe(listener),
-  };
-}
-
-function readSnapshot(file: string): LocalFirstSnapshot | undefined {
-  if (!existsSync(file)) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(file, "utf8"));
-  } catch {
-    throw new Error("local_first_snapshot_corrupt");
-  }
-  if (!isSnapshot(parsed)) throw new Error("local_first_snapshot_corrupt");
-  return parsed;
-}
-
-function isSnapshot(value: unknown): value is LocalFirstSnapshot {
-  if (!value || typeof value !== "object") return false;
-  const snapshot = value as Partial<LocalFirstSnapshot>;
-  return Array.isArray(snapshot.records)
-    && Array.isArray(snapshot.events)
-    && Array.isArray(snapshot.mappings)
-    && Array.isArray(snapshot.receipts)
-    && Array.isArray(snapshot.conflicts)
-    && typeof snapshot.cursors === "object"
-    && snapshot.cursors !== null
-    && !Array.isArray(snapshot.cursors)
-    && typeof snapshot.nextSequence === "number";
-}
-
-function readLedger(directory: string): ReplayLedger {
-  const file = path.join(directory, REPLAY_LEDGER_FILE);
-  if (!existsSync(file)) return { idempotencyKey: "", eventIds: [] };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(file, "utf8"));
-  } catch {
-    throw new Error("local_replay_ledger_corrupt");
-  }
-  if (!parsed || typeof parsed !== "object") throw new Error("local_replay_ledger_corrupt");
-  const ledger = parsed as Partial<ReplayLedger>;
-  if (typeof ledger.idempotencyKey !== "string" || !Array.isArray(ledger.eventIds)) {
-    throw new Error("local_replay_ledger_corrupt");
-  }
-  return { idempotencyKey: ledger.idempotencyKey, eventIds: ledger.eventIds.filter((id) => typeof id === "string") };
-}
-
-function writeJsonAtomic(file: string, value: unknown): void {
-  const tmp = `${file}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value));
-  try {
-    renameSync(tmp, file);
-  } catch {
-    copyFileSync(tmp, file);
-    unlinkSync(tmp);
-  }
 }

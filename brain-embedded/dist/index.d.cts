@@ -1678,6 +1678,12 @@ interface StreamChatOptions {
      */
     excludeModels?: string[];
     /**
+     * Prompt-cache affinity key (OpenAI-style `prompt_cache_key`), e.g. `brain:<chatId>`,
+     * so every turn of one conversation lands on the same provider cache. Forwarded
+     * verbatim; absent ⇒ omitted from the body.
+     */
+    prompt_cache_key?: string;
+    /**
      * What kind of call this is (plan/code/verify/explore/chat/utility), emitted as the
      * body's `role`. Under auto-routing the gateway orders the tenant's connected
      * accounts for it — analysis on the tenant's own order, code on the strongest
@@ -2896,7 +2902,13 @@ interface LocalRecord<T = unknown> {
 }
 type JournalOperation = 'create' | 'update' | 'delete' | 'import';
 interface JournalEvent<T = unknown> {
+    /** Wire id — a UUID minted by the store at append; the server's idempotency key. */
     eventId: string;
+    /**
+     * The caller's name for this logical write (`ticket:<id>:v1`, `fact:<id>:<v>`).
+     * Dedupes a double-enqueue while the event is pending. Not a wire id.
+     */
+    idempotencyKey?: string;
     clientEntityId: ClientEntityId;
     entityType: LocalEntityType;
     operation: JournalOperation;
@@ -2943,9 +2955,20 @@ interface LocalFirstTransaction {
     get<T = unknown>(entityType: LocalEntityType, id: string): Promise<LocalRecord<T> | undefined>;
     list<T = unknown>(entityType?: LocalEntityType): Promise<LocalRecord<T>[]>;
     put<T>(record: LocalRecord<T>, expectedVersion?: number): Promise<void>;
-    append<T>(event: Omit<JournalEvent<T>, 'localSequence' | 'payloadHash'> & {
-        payloadHash?: string;
-    }): Promise<JournalEvent<T>>;
+    /**
+     * Remove one local row. A pull tombstone calls this instead of `put`: writing
+     * the row back would resurrect the entity the server deleted. Returns whether
+     * a row was present. A missing row is not an error — the delete already won.
+     */
+    delete(entityType: LocalEntityType, id: string): Promise<boolean>;
+    /**
+     * Enqueue one journal event. The store MINTS the wire `eventId` (a UUID — the
+     * server's `(tenant, device, event)` key). Callers name the logical write with
+     * `idempotencyKey` (e.g. `ticket:<id>:v1`): a second append with a key that is
+     * still pending returns the first event instead of enqueueing twice, and a
+     * `dependsOn` entry naming a pending key is rewritten to that event's id.
+     */
+    append<T>(event: AppendJournalEvent<T>): Promise<JournalEvent<T>>;
     pending(destination?: EntityDestination): Promise<JournalEvent[]>;
     acknowledge(eventIds: readonly string[]): Promise<void>;
     putMapping(mapping: ServerMapping): Promise<void>;
@@ -2956,6 +2979,16 @@ interface LocalFirstTransaction {
     setCursor(destination: EntityDestination, cursor: string | undefined): Promise<void>;
     cursor(destination: EntityDestination): Promise<string | undefined>;
 }
+/**
+ * What `append` takes. `eventId` is optional and kept only when it is already a
+ * UUID (a replayed wire event); any other value is a legacy composite id and is
+ * treated as the `idempotencyKey`.
+ */
+type AppendJournalEvent<T = unknown> = Omit<JournalEvent<T>, 'localSequence' | 'payloadHash' | 'eventId' | 'idempotencyKey'> & {
+    eventId?: string;
+    idempotencyKey?: string;
+    payloadHash?: string;
+};
 interface LocalFirstSnapshot {
     records: LocalRecord[];
     events: JournalEvent[];

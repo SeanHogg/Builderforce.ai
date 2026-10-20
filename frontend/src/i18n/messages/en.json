@@ -27186,7 +27186,8 @@
       "calling": "Calling…",
       "callEarlyFailed": "Could not record the call. Try again.",
       "readAgain": "Read again with what we learned"
-    }
+    },
+    "memoryLoading": "Reading this conversation’s memory setting…"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -35375,6 +35376,9 @@
     "saveRelation": "Save as my advisor",
     "relationSaved": "Advisor relationship saved",
     "rosterHeading": "Sessions you are hosting",
-    "noRoster": "Nothing on your roster."
+    "noRoster": "Nothing on your roster.",
+    "inviteAdvisor": "Invite advisor to AI context",
+    "inviteAdvisorHint": "Lets the AI read this restricted thread and adds your advisor to it.",
+    "advisorInvited": "Advisor invited to AI context"
   }
 }

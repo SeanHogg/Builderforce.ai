@@ -10,16 +10,31 @@
 
 import type { Env } from '../../env';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { invalidateTenantSnapshot } from './tenantReadCache';
+import { invalidateTenantMembersWorkspaces, invalidateTenantSnapshot } from './tenantReadCache';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 export const tenantPlanCacheKey = (tenantId: number): string => `tenant:plan:${tenantId}`;
 
-/** Drop both cache layers for a tenant's plan snapshot. No-op without a worker env. */
-export async function invalidateTenantPlan(env: Env | undefined, tenantId: number): Promise<void> {
+/**
+ * Drop both cache layers for a tenant's plan snapshot, the workspace snapshot, and
+ * every member's "my workspaces" list (which embeds the same name/plan/billing/trial
+ * columns — a plan change was otherwise invisible in the switcher for up to 60s).
+ * No-op without a worker env. Pass `memberUserIds` when the caller already holds the
+ * roster to skip the member read.
+ */
+export async function invalidateTenantPlan(
+  env: Env | undefined,
+  tenantId: number,
+  opts: { memberUserIds?: readonly string[] } = {},
+): Promise<void> {
   if (!env) return;
   await Promise.all([
     invalidateCached(env, tenantPlanCacheKey(tenantId)),
     // The workspace snapshot carries the same plan/billing columns.
     invalidateTenantSnapshot(env, tenantId),
+    invalidateTenantMembersWorkspaces(env, tenantId, opts).catch((error: unknown) => {
+      // The 60s TTL is the floor; a failed roster read must not fail the billing write.
+      reportCaughtError(error, { source: 'application/tenant/tenantPlanCache.ts', operation: 'invalidateTenantMembersWorkspaces', context: { tenantId } });
+    }),
   ]);
 }

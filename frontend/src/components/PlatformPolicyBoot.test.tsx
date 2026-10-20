@@ -1,6 +1,7 @@
 /**
- * Activation must call `bootWebHost` with the network denied. `bootWebPlatformPolicy`
- * only sets flags and no-ops without `window` — it is not this proof.
+ * Activation boots the policy at module evaluation and does nothing else: it
+ * must not write a durable record. The denied-host durability proof is in
+ * `lib/localFirst/deniedNetworkAcceptance.test.ts`.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -21,19 +22,19 @@ describe('PlatformPolicyBoot', () => {
     vi.resetModules();
   });
 
-  it('calls bootWebHost with the network denied at module evaluation, not in an effect', () => {
+  it('boots the policy at module evaluation, not in an effect, and writes nothing durable', () => {
     const source = executable(readFileSync(bootPath, 'utf8'));
-    const callAt = source.indexOf('bootWebHost(');
+    const callAt = source.indexOf('bootWebPlatformPolicy()');
     expect(callAt).toBeGreaterThan(-1);
-    expect(source).toContain("network: 'denied'");
     expect(callAt).toBeLessThan(source.indexOf('export function PlatformPolicyBoot'));
-    expect(source.indexOf('activateDeniedWebHost()')).toBeGreaterThan(-1);
-    expect(source.indexOf('activateDeniedWebHost()')).toBeLessThan(source.indexOf('export function PlatformPolicyBoot'));
-    expect(source).toContain('bootWebPlatformPolicy()');
     expect(source).not.toContain('useEffect');
+    // Acceptance scaffolding stays out of the runtime entry point.
+    expect(source).not.toContain('bootWebHost');
+    expect(source).not.toContain('writeDurable');
+    expect(source).not.toContain('replayBatch');
   });
 
-  it('writes one durable record, and a second boot reads it back without a platform fetch', async () => {
+  it('applies the denied default and sets the boot flag on import, with no platform fetch', async () => {
     const fetchSpy = vi.fn(() => Promise.reject(new Error('platform fetch must not be called')));
     vi.stubGlobal('fetch', fetchSpy);
     window.localStorage.clear();
@@ -42,35 +43,10 @@ describe('PlatformPolicyBoot', () => {
     const policy = await import('@/lib/localFirst/platformPolicy');
     policy.resetWebPlatformPolicyForTests();
     const boot = await import('./PlatformPolicyBoot');
-
-    const id = await boot.webHostActivation();
-    expect(id).toBe(boot.WEB_HOST_ACTIVATION_ID);
-    expect(fetchSpy).not.toHaveBeenCalled();
-
     render(<boot.PlatformPolicyBoot />);
-    const store = boot.deniedWebHostStore();
-    expect(store).toBeDefined();
 
-    const second = policy.bootWebHost({
-      network: 'denied',
-      store,
-      fetch: fetchSpy,
-    });
-    expect(await second.readDurable(id)).toEqual({
-      id,
-      title: boot.WEB_HOST_ACTIVATION_TITLE,
-    });
-    await expect(second.replayBatch()).resolves.toEqual({
-      count: 0,
-      idempotencyKey: `ticket:${id}:v1`,
-    });
-    const snapshot = await store!.export();
-    expect(snapshot.records.filter((row) => row.entityType === 'ticket')).toHaveLength(1);
-    expect(snapshot.records.some((row) => {
-      const payload = row.payload as { kind?: string };
-      return row.entityType === 'memory-fact' && payload.kind === policy.WEB_REPLAY_KIND;
-    })).toBe(true);
+    expect((window as unknown as Record<string, boolean>)[policy.WEB_PLATFORM_POLICY_BOOTED]).toBe(true);
+    expect(policy.webPlatformPolicy().allows('synchronize')).toBe(false);
     expect(fetchSpy).not.toHaveBeenCalled();
-    second.stop();
   });
 });

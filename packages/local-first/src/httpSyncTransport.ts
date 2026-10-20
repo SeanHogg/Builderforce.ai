@@ -1,26 +1,25 @@
 /**
  * HTTP adapter for `SyncTransport` (G15).
  *
- * Push POSTs the batch to the only path `mountSyncBatch` registers:
- * `POST /sync/batch` (`api/src/presentation/routes/mountSyncBatch.ts`).
- * That mount does not register a pull route, so pull POSTs the pull input
- * to `/api/sync/v1/pull`.
+ * Push POSTs the batch to `POST /api/sync/v1/push` and reads the per-event
+ * receipt envelope `{ receipts: SyncReceipt[] }` — one receipt per event, keyed
+ * by the store-minted UUID `eventId`. Pull POSTs `{ destination, cursor?, limit }`
+ * to `POST /api/sync/v1/pull` and reads a `SyncPullResult`. Both routes are
+ * `api/src/presentation/routes/syncRoutes.ts`; a refused request is a 400/403
+ * `{ error: code }` and surfaces here as `HttpSyncTransportError` with that code
+ * in `detail`.
  *
- * Fetch is injected. This module does not call the network, does not import
- * the API package or the unattached mount, and is not imported by the app,
- * `sync.ts`, or the extension host.
+ * Fetch is injected. This module does not call the network on construction and
+ * does not import the API package.
  */
 
 import type { SyncReceipt } from './records.js';
-import type { SyncPullResult, SyncPushBatch, SyncTransport } from './sync.js';
+import type { SyncPullResult, SyncPushBatch, SyncTransport, SyncTransportInit } from './sync.js';
 
-/** Exact router path registered by `mountSyncBatch`. */
-export const HTTP_SYNC_PUSH_PATH = '/sync/batch';
+/** Push route (`syncRoutes.ts` under `/api/sync/v1`). */
+export const HTTP_SYNC_PUSH_PATH = '/api/sync/v1/push';
 
-/**
- * Pull path. `mountSyncBatch` registers no pull route, so this is the
- * companion path named for the G15 delta pull.
- */
+/** Pull route (`syncRoutes.ts` under `/api/sync/v1`). */
 export const HTTP_SYNC_PULL_PATH = '/api/sync/v1/pull';
 
 const RECEIPT_STATUSES = new Set<SyncReceipt['status']>([
@@ -41,6 +40,8 @@ export interface HttpSyncRequest {
   readonly method: 'POST';
   readonly headers: Readonly<Record<string, string>>;
   readonly body: string;
+  /** Aborts the request when the sync run loses its lease. */
+  readonly signal?: AbortSignal;
 }
 
 /** Injected fetch. Tests pass a fake; a host passes its own fetch. */
@@ -55,7 +56,7 @@ export interface HttpSyncTransportOptions {
   /**
    * Absolute http(s) origin or prefix. A trailing slash is stripped and the
    * path is appended, so an origin base yields a request path of exactly
-   * `/sync/batch` or `/api/sync/v1/pull`. A path-only or blank base is refused
+   * `/api/sync/v1/push` or `/api/sync/v1/pull`. A path-only or blank base is refused
    * before fetch is called.
    */
   readonly baseUrl: string;
@@ -66,14 +67,30 @@ export class HttpSyncTransportError extends Error {
   readonly code: string;
   readonly status: number;
   readonly url: string;
+  /** The server's refusal code (`{ error }` body) when it sent one. */
+  readonly detail?: string;
 
-  constructor(code: string, status: number, url: string) {
-    super(code);
+  constructor(code: string, status: number, url: string, detail?: string) {
+    super(detail ? `${code}: ${detail}` : code);
     this.name = 'HttpSyncTransportError';
     this.code = code;
     this.status = status;
     this.url = url;
+    if (detail) this.detail = detail;
   }
+}
+
+/** The `{ error }` code of a refused request, when the body carries one. */
+async function refusalCode(response: HttpSyncResponse): Promise<string | undefined> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    // A non-JSON error body has no code to report; the status still does.
+    return undefined;
+  }
+  const error = typeof body === 'object' && body !== null ? (body as { error?: unknown }).error : undefined;
+  return typeof error === 'string' && error !== '' ? error : undefined;
 }
 
 function resolveUrl(baseUrl: string, path: string): string {
@@ -105,15 +122,17 @@ async function postJson(
   options: HttpSyncTransportOptions,
   path: string,
   body: unknown,
+  init: SyncTransportInit | undefined,
 ): Promise<{ url: string; parsed: unknown }> {
   const url = resolveUrl(options.baseUrl, path);
   const response = await options.fetch(url, {
     method: 'POST',
     headers: await resolveHeaders(options.headers),
     body: JSON.stringify(body),
+    ...(init?.signal ? { signal: init.signal } : {}),
   });
   if (!response.ok) {
-    throw new HttpSyncTransportError('sync_http_status', response.status, url);
+    throw new HttpSyncTransportError('sync_http_status', response.status, url, await refusalCode(response));
   }
   try {
     return { url, parsed: await response.json() };
@@ -187,17 +206,17 @@ function readPull(body: unknown, url: string): SyncPullResult {
  */
 export function createHttpSyncTransport(options: HttpSyncTransportOptions): SyncTransport {
   return {
-    async push(batch: SyncPushBatch): Promise<SyncReceipt[]> {
-      const { url, parsed } = await postJson(options, HTTP_SYNC_PUSH_PATH, batch);
+    async push(batch: SyncPushBatch, init?: SyncTransportInit): Promise<SyncReceipt[]> {
+      const { url, parsed } = await postJson(options, HTTP_SYNC_PUSH_PATH, batch, init);
       return readReceipts(parsed, url);
     },
-    async pull(input): Promise<SyncPullResult> {
+    async pull(input, init): Promise<SyncPullResult> {
       const wire = {
         destination: input.destination,
         limit: input.limit,
         ...(input.cursor !== undefined ? { cursor: input.cursor } : {}),
       };
-      const { url, parsed } = await postJson(options, HTTP_SYNC_PULL_PATH, wire);
+      const { url, parsed } = await postJson(options, HTTP_SYNC_PULL_PATH, wire, init);
       return readPull(parsed, url);
     },
   };

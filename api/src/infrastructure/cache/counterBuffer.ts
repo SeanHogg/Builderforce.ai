@@ -1,5 +1,6 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { currentRequestScope, deferPastResponse } from '../../application/shared/requestScope';
+import { cacheL2Kv } from './readThroughCache';
 
 /**
  * A write buffer for approximate hit counters, held in memory and flushed to KV.
@@ -25,6 +26,15 @@ import { currentRequestScope, deferPastResponse } from '../../application/shared
  *  - A hit still in an isolate's Map when the isolate is evicted is lost. These are
  *    display counters, not ledgers — never route a counter that gates billing, quota or
  *    money (including campaign conversions) through here.
+ *
+ * KV WRITE QUOTA. Buffer writes go through the SAME {@link cacheL2Kv} gate as the
+ * read-through cache: with `CACHE_L2_KV=false` (set to protect Workers KV Free's
+ * 1,000 writes/day) nothing is buffered and {@link bufferCounter} returns false, so
+ * the caller writes the hit straight to the database. A `put` that FAILS falls back
+ * to the caller's direct database write instead of re-queueing in memory — a
+ * re-queued delta would just retry the same exhausted quota and then die with the
+ * isolate. The drain still lists/deletes the raw namespace so keys flushed before
+ * the dial was turned are applied, not stranded.
  *
  * Reads do NOT include pending deltas: a displayed count lags by the flush interval plus
  * the sweep cadence, which is invisible against a counter shown rounded or compared in
@@ -62,7 +72,12 @@ export interface DrainedPage {
 
 export interface CounterKv {
   AUTH_CACHE_KV?: KVNamespace;
+  /** The L2-off dial shared with the read-through cache (see {@link cacheL2Kv}). */
+  CACHE_L2_KV?: string;
 }
+
+/** Applies deltas straight to the database — the path taken when a KV write fails. */
+export type CounterFallback = (deltas: CounterDelta[]) => Promise<void>;
 
 // Minted on first use, never at import: Workers reject random values in global scope
 // (deploy fails with code 10021). The first flush always runs inside a handler.
@@ -93,34 +108,54 @@ function parseMeta(meta: unknown): { n: number; t: number } | null {
   return v && typeof v.n === 'number' && typeof v.t === 'number' ? { n: v.n, t: v.t } : null;
 }
 
-/** Write every pending delta once, each to its own key. A failed write goes back into the Map. */
-export async function flushCounterBuffer(env: CounterKv): Promise<void> {
-  const kv = env.AUTH_CACHE_KV;
+/**
+ * Write every pending delta once, each to its own key. A failed write is handed to
+ * `fallback` (the direct database write) rather than re-queued in memory; without a
+ * fallback it is re-queued as before, so nothing is dropped.
+ */
+export async function flushCounterBuffer(env: CounterKv, fallback?: CounterFallback): Promise<void> {
+  const kv = cacheL2Kv(env);
   lastFlushAt = Date.now();
-  if (!kv || pending.size === 0) return;
+  if (pending.size === 0) return;
   const batch = [...pending.values()];
   pending.clear();
+  if (!kv) {
+    // KV writes were turned off after these were buffered: apply them directly.
+    await applyFallback(batch, fallback);
+    return;
+  }
   const seq = ++flushSeq;
   const results = await Promise.allSettled(batch.map((d) =>
     kv.put(kvName(d.kind, d.key, seq), String(d.n), { expirationTtl: STATE_TTL_SECONDS, metadata: { n: d.n, t: d.t } })));
+  const failed: CounterDelta[] = [];
   results.forEach((r, i) => {
     if (r.status === 'fulfilled') return;
-    const d = batch[i]!;
-    const cur = pending.get(mapKey(d.kind, d.key));
-    pending.set(mapKey(d.kind, d.key), { ...d, n: d.n + (cur?.n ?? 0), t: Math.max(d.t, cur?.t ?? 0) });
+    failed.push(batch[i]!);
     reportCaughtError(r.reason, { source: 'infrastructure/cache/counterBuffer.ts', operation: 'flushCounterBuffer', level: 'warning' });
   });
+  if (failed.length > 0) await applyFallback(failed, fallback);
+}
+
+async function applyFallback(deltas: CounterDelta[], fallback: CounterFallback | undefined): Promise<void> {
+  if (fallback) {
+    await fallback(deltas);
+    return;
+  }
+  for (const d of deltas) {
+    const cur = pending.get(mapKey(d.kind, d.key));
+    pending.set(mapKey(d.kind, d.key), { ...d, n: d.n + (cur?.n ?? 0), t: Math.max(d.t, cur?.t ?? 0) });
+  }
 }
 
 /** Make sure the tail of a burst is flushed even if no further hit arrives. Without an
  *  invocation to attach the timer to it could be cancelled with the response, so it is
  *  only treated as scheduled when the runtime accepted it; the next bump's interval check
  *  still flushes either way. */
-function scheduleTail(env: CounterKv): void {
+function scheduleTail(env: CounterKv, fallback?: CounterFallback): void {
   if (tailScheduled || !currentRequestScope()?.waitUntil) return;
   const wait = Math.max(0, lastFlushAt + FLUSH_INTERVAL_MS - Date.now());
   const task = new Promise<void>((resolve) => setTimeout(resolve, wait))
-    .then(() => { tailScheduled = false; return flushCounterBuffer(env); })
+    .then(() => { tailScheduled = false; return flushCounterBuffer(env, fallback); })
     .catch((error) => {
       tailScheduled = false;
       reportCaughtError(error, { source: 'infrastructure/cache/counterBuffer.ts', operation: 'scheduleTail', level: 'warning' });
@@ -128,16 +163,25 @@ function scheduleTail(env: CounterKv): void {
   tailScheduled = deferPastResponse(task);
 }
 
-/** Add `n` to the isolate's pending delta. Returns false when there is no KV to buffer in,
- *  so the caller can apply the write directly instead of dropping it. */
-export async function bufferCounter(env: CounterKv, kind: string, key: string, n: number, atMs: number): Promise<boolean> {
-  if (!env.AUTH_CACHE_KV) return false;
+/** Add `n` to the isolate's pending delta. Returns false when KV writes are unavailable
+ *  (namespace unbound, or `CACHE_L2_KV` off) so the caller can apply the write directly
+ *  instead of dropping it. `fallback` is that same direct write, used for any delta
+ *  whose KV `put` fails at flush time. */
+export async function bufferCounter(
+  env: CounterKv,
+  kind: string,
+  key: string,
+  n: number,
+  atMs: number,
+  fallback?: CounterFallback,
+): Promise<boolean> {
+  if (!cacheL2Kv(env)) return false;
   const k = mapKey(kind, key);
   const cur = pending.get(k);
   pending.set(k, { kind, key, n: (cur?.n ?? 0) + n, t: Math.max(cur?.t ?? 0, atMs) });
   try {
-    if (Date.now() - lastFlushAt >= FLUSH_INTERVAL_MS || pending.size >= MAX_PENDING_KEYS) await flushCounterBuffer(env);
-    else scheduleTail(env);
+    if (Date.now() - lastFlushAt >= FLUSH_INTERVAL_MS || pending.size >= MAX_PENDING_KEYS) await flushCounterBuffer(env, fallback);
+    else scheduleTail(env, fallback);
   } catch (error) {
     reportCaughtError(error, { source: 'infrastructure/cache/counterBuffer.ts', operation: 'bufferCounter', level: 'warning' });
   }

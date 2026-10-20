@@ -37,6 +37,7 @@ import {
 import { wrapStreamForTrace } from '../../../application/llm/streamTrace';
 import { requestDb } from '../../../application/shared/dbHandle';
 import { GuestChatService } from '../../../application/guest/GuestChatService';
+import { consumeGuestRoundTrip } from '../../../application/guest/guestRoundTrips';
 import { GuestPromptService } from '../../../application/marketing/GuestPromptService';
 import { verifyGuestToken, guestBrainEnabled } from '../../../application/guest/guestToken';
 import { guestRoomTurn } from '../../../application/guest/guestRoomClient';
@@ -113,6 +114,22 @@ export async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
         : `You've used your ${cap.limit} free guest messages for today. Sign up free to keep going.`,
       code: 'guest_limit_reached',
       reason: cap.reason,
+      limit: cap.limit,
+      terminal: true,
+    }, 429);
+  }
+
+  // The SUBMIT allowance above lets a turn's tool continuations through for free; the
+  // spend is per MODEL ROUND-TRIP, and the canvas loop has no step cap. So every call —
+  // continuation or not — is charged against the daily round-trip ceiling as well.
+  const roundTrip = await consumeGuestRoundTrip(c.env as Env, visitorId, ip);
+  if (!roundTrip.allowed) {
+    return c.json({
+      error: roundTrip.reason === 'ip'
+        ? 'This device has reached its free guest limit for today. Sign up free to keep going.'
+        : "You have used today's free guest allowance. Sign up free to keep going.",
+      code: 'guest_limit_reached',
+      reason: roundTrip.reason,
       limit: cap.limit,
       terminal: true,
     }, 429);

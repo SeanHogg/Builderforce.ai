@@ -9,7 +9,8 @@ import {
 } from './records.js';
 import { partitionUnboundPending, type UnboundSyncRefusal } from './creationDestination.js';
 import { destinationsForSync, readOfflineDestinations } from './destinationRebind.js';
-import type { LocalFirstStore, LocalFirstTransaction } from './store.js';
+import { isJournalEventId, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
+import type { CoordinatorLeaseFence } from './syncLease.js';
 
 export const SYNC_PROTOCOL_VERSION = 1;
 
@@ -27,13 +28,40 @@ export interface SyncPullResult {
   resnapshotRequired?: boolean;
 }
 
-export interface SyncTransport {
-  push(batch: SyncPushBatch): Promise<SyncReceipt[]>;
-  pull(input: { destination: EntityDestination; cursor?: string; limit: number }): Promise<SyncPullResult>;
+/** Per-request options. `signal` aborts the request when the sync lease is lost. */
+export interface SyncTransportInit {
+  readonly signal?: AbortSignal;
 }
 
+export interface SyncTransport {
+  push(batch: SyncPushBatch, init?: SyncTransportInit): Promise<SyncReceipt[]>;
+  pull(input: { destination: EntityDestination; cursor?: string; limit: number }, init?: SyncTransportInit): Promise<SyncPullResult>;
+}
+
+/**
+ * A lease that may hand its work a fence (`createDeviceStoreCoordinatorLease`
+ * does). With a fence, transport requests carry its `signal`, and nothing pulled
+ * or acknowledged is committed once `holds()` is false. A lease without one is
+ * trusted for the whole run.
+ */
 export interface SyncLease {
-  run<R>(owner: string, work: () => Promise<R>): Promise<R | undefined>;
+  run<R>(owner: string, work: (fence?: CoordinatorLeaseFence) => Promise<R>): Promise<R | undefined>;
+}
+
+/** Thrown, before any store write, when the run's lease fence no longer holds. */
+export const SYNC_LEASE_LOST = 'sync_lease_lost';
+
+/**
+ * Refuse the commit a run that lost its lease was about to make. The throw ends
+ * the run before the transaction opens, so nothing is written; a timed-out run's
+ * rejection reaches the lease's late-error report, any other reaches the caller.
+ */
+function assertFenceHolds(fence: CoordinatorLeaseFence | undefined): void {
+  if (fence && !fence.holds()) throw new Error(SYNC_LEASE_LOST);
+}
+
+function transportInit(fence: CoordinatorLeaseFence | undefined): SyncTransportInit | undefined {
+  return fence ? { signal: fence.signal } : undefined;
 }
 
 export interface SyncCoordinatorOptions {
@@ -106,6 +134,30 @@ async function mergePulled(
   return false;
 }
 
+/**
+ * Put `dependsOn` on the wire: every entry becomes a store-minted event id. A
+ * caller key (`project:<id>:v1`) is resolved against ALL pending events — so a
+ * forward reference written in the same transaction, or a dependency queued in
+ * another destination's partition, still orders the push (the server answers
+ * `dependency_pending` until it lands). A key with no pending event was already
+ * acknowledged, so nothing is left to wait for and it is dropped. The journal
+ * itself is not rewritten.
+ */
+export function wireDependencies(events: readonly JournalEvent[], allPending: readonly JournalEvent[]): JournalEvent[] {
+  const byKey = new Map<string, string>();
+  for (const event of allPending) {
+    if (event.idempotencyKey !== undefined) byKey.set(event.idempotencyKey, event.eventId);
+  }
+  return events.map((event) => {
+    const dependsOn: string[] = [];
+    for (const id of event.dependsOn) {
+      const wire = isJournalEventId(id) ? id : byKey.get(id);
+      if (wire !== undefined && wire !== event.eventId && !dependsOn.includes(wire)) dependsOn.push(wire);
+    }
+    return { ...event, dependsOn };
+  });
+}
+
 function batchEvents(events: readonly JournalEvent[], maxEvents: number, maxBytes: number): { batch: JournalEvent[]; bytes: number } {
   const pending = new Set(events.map((event) => event.eventId));
   const selected: JournalEvent[] = [];
@@ -136,16 +188,21 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
   const now = options.now ?? (() => new Date());
   const owner = `local-first:${options.deviceId}`;
 
-  const pull = async (destination: EntityDestination): Promise<{ count: number; conflicts: number }> => {
-    let cursor = await options.store.read((tx) => tx.cursor(destination));
-    let result = await options.transport.pull({ destination, ...(cursor ? { cursor } : {}), limit: maxPullRecords });
+  const pull = async (
+    destination: EntityDestination,
+    fence: CoordinatorLeaseFence | undefined,
+  ): Promise<{ count: number; conflicts: number }> => {
+    const init = transportInit(fence);
+    const cursor = await options.store.read((tx) => tx.cursor(destination));
+    let result = await options.transport.pull({ destination, ...(cursor ? { cursor } : {}), limit: maxPullRecords }, init);
     if (result.resnapshotRequired) {
+      assertFenceHolds(fence);
       await options.store.transact(async (tx) => {
         await tx.setCursor(destination, undefined);
       });
-      cursor = undefined;
-      result = await options.transport.pull({ destination, limit: maxPullRecords });
+      result = await options.transport.pull({ destination, limit: maxPullRecords }, init);
     }
+    assertFenceHolds(fence);
     const conflicts = await options.store.transact(async (tx) => {
       let count = 0;
       for (const record of result.records) {
@@ -165,9 +222,13 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
     return { count: result.records.length, conflicts };
   };
 
-  const syncPartition = async (destination: EntityDestination): Promise<SyncSummary> => {
-    const pulled = await pull(destination);
-    const pending = await options.store.read((tx) => tx.pending(destination));
+  const syncPartition = async (
+    destination: EntityDestination,
+    fence: CoordinatorLeaseFence | undefined,
+  ): Promise<SyncSummary> => {
+    const pulled = await pull(destination, fence);
+    const pending = await options.store.read(async (tx) =>
+      wireDependencies(await tx.pending(destination), await tx.pending()));
     // G10: an unbound event parked in the bound partition (a record
     // rebound without its events, or a destination smuggled onto an
     // unbound value) is refused here, not pushed and not dropped. The
@@ -186,15 +247,19 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
       unboundRefused: refused.length,
     };
     if (batch.length === 0) return summary;
+    assertFenceHolds(fence);
     const receipts = await options.transport.push({
       batchId: newId(),
       protocolVersion: SYNC_PROTOCOL_VERSION,
       deviceId: options.deviceId,
       destination,
       events: batch,
-    });
+    }, transportInit(fence));
     const byEvent = new Map(receipts.map((receipt) => [receipt.eventId, receipt]));
     if (byEvent.size !== receipts.length) throw new Error('sync_duplicate_event_receipt');
+    // The events stay pending when the lease was lost mid-push: the server's
+    // receipts dedupe them on the next holder's push, so nothing is lost.
+    assertFenceHolds(fence);
     await options.store.transact(async (tx) => {
       const acknowledged: string[] = [];
       for (const event of batch) {
@@ -219,7 +284,7 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
       }
       await tx.acknowledge(acknowledged);
     });
-    const caughtUp = await pull(destination);
+    const caughtUp = await pull(destination, fence);
     summary.pulled += caughtUp.count;
     summary.conflicts += caughtUp.conflicts;
     return summary;
@@ -240,9 +305,9 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
     async synchronize(destination: EntityDestination): Promise<SyncSummary | undefined> {
       options.policy.assert('synchronize');
       if (destination.kind === 'unbound') throw new Error('sync_destination_required');
-      return options.lease.run(owner, async () => {
+      return options.lease.run(owner, async (fence) => {
         options.policy.assert('synchronize');
-        return syncPartition(destination);
+        return syncPartition(destination, fence);
       });
     },
 
@@ -256,7 +321,7 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
      */
     async synchronizeSnapshotted(input?: SnapshottedSyncInput): Promise<SyncSummary | undefined> {
       options.policy.assert('synchronize');
-      return options.lease.run(owner, async () => {
+      return options.lease.run(owner, async (fence) => {
         options.policy.assert('synchronize');
         const liveParent = input?.liveLookup ?? input?.liveParent;
         void input?.liveLookup;
@@ -277,7 +342,7 @@ export function createSyncCoordinator(options: SyncCoordinatorOptions) {
           unboundRefused: planned.unboundRefused,
         };
         for (const destination of planned.bound) {
-          addSummary(summary, await syncPartition(destination));
+          addSummary(summary, await syncPartition(destination, fence));
         }
         return summary;
       });

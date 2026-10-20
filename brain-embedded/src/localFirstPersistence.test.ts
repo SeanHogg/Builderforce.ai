@@ -16,7 +16,7 @@ describe('local Brain persistence', () => {
     const chatRecord = snapshot.records.find((record) => record.entityType === 'chat');
     expect(chatRecord?.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(chatRecord?.payload).toMatchObject({ chat: { id: chat.id } });
-    expect(snapshot.events.map((event) => event.eventId)).toContain(eventKey);
+    expect(snapshot.events.map((event) => event.idempotencyKey)).toContain(eventKey);
     expect(saved.map((message) => message.seq)).toEqual([1, 2]);
     expect(await persistence.getMessages(chat.id)).toHaveLength(2);
   });

@@ -94,17 +94,26 @@ export function parseLiveRunsQuery(get: (key: string) => string | undefined): Li
   return { limit, since, activityDays, tzOffsetMinutes, taskRuns };
 }
 
+/** Whole days since the epoch in the caller's local calendar (`tzOffsetMinutes` added to UTC). */
+export function localDayIndex(nowMs: number, tzOffsetMinutes: number): number {
+  return Math.floor((nowMs + tzOffsetMinutes * 60_000) / 86_400_000);
+}
+
 export async function readActiveRuns(env: Env | undefined, db: Db, tenantId: number, query: LiveRunsQuery): Promise<LiveRunsResponse> {
   const version = env ? await executionStateVersion(env, tenantId) : '';
   if (version && query.since === version) return { version, unchanged: true };
 
+  const readAtMs = Date.now();
   const cached = <T>(part: string, load: () => Promise<T>): Promise<T> =>
     env ? getOrSetCached(env, `${part}:v:${version}:${tenantId}`, load, LIVE_RUNS_CACHE) : load();
 
   const [rows, activity, taskRuns] = await Promise.all([
     cached(`active-runs:${query.limit}`, () => loadActiveRuns(db, tenantId, query.limit)),
+    // The series is bucketed by the caller's LOCAL day, so the key carries that day:
+    // past local midnight a cached series would otherwise show yesterday as "today"
+    // for up to the 600s TTL while no run moved the version token.
     query.activityDays
-      ? cached(`run-activity:${query.activityDays}:${query.tzOffsetMinutes ?? 0}`,
+      ? cached(`run-activity:${query.activityDays}:${query.tzOffsetMinutes ?? 0}:d${localDayIndex(readAtMs, query.tzOffsetMinutes ?? 0)}`,
         () => loadRunActivity(db, tenantId, query.activityDays!, query.tzOffsetMinutes ?? 0))
       : undefined,
     query.taskRuns != null

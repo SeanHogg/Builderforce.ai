@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { compactMessages, compactionBudget, CLOUD_COMPACT_DEFAULTS, type CompactionSummarizer } from './compactMessages';
+import { compactMessages, compactionBudget, elideToFit, toolsTokensOf, CLOUD_COMPACT_DEFAULTS, type CompactionSummarizer } from './compactMessages';
 
 type Msg = Record<string, unknown>;
 
@@ -110,5 +110,45 @@ describe('compactMessages', () => {
     // A 131k catalog window leaves the 40k cost cap in charge.
     expect(compactionBudget({ maxTokens: 40_000, targetModel: '@cf/zai-org/glm-4.7-flash', reserveOutputTokens: 4_096 })).toBe(40_000);
     expect(compactionBudget({ maxTokens: 200_000, targetModel: '@cf/zai-org/glm-4.7-flash', reserveOutputTokens: 4_096 })).toBe(131_072 - 4_096);
+  });
+
+  it('charges the advertised tool schemas against the budget (no 413 on tool-heavy requests)', async () => {
+    // ~3.3K tokens of messages: under the 5K cap alone, over it once ~2.5K of tool schemas ride along.
+    const msgs = [SYS, TASK, ...round(1, 6_000), ...round(2, 6_000), ...round(3, 200)];
+    const tools = [{ type: 'function', function: { name: 'read_file', description: 'D'.repeat(10_000), parameters: {} } }];
+    expect((await compactMessages(msgs, opts)).compacted).toBe(false);
+
+    const r = await compactMessages(msgs, { ...opts, tools });
+    expect(r.compacted).toBe(true);
+    expect(r.beforeTokens).toBeGreaterThan(opts.maxTokens);
+    expect(r.afterTokens).toBeLessThanOrEqual(opts.maxTokens);
+    expect(r.afterTokens - toolsTokensOf(tools)).toBeGreaterThan(0);
+    assertAnchored(r.messages);
+    assertPairingValid(r.messages);
+  });
+
+  it('reports before/after with the SAME estimator the packer used (after never exceeds the budget)', async () => {
+    const big = [SYS, TASK, ...round(1, 8_000), ...round(2, 8_000), ...round(3, 8_000), ...round(4, 200)];
+    const r = await compactMessages(big, opts);
+    expect(r.afterTokens).toBeLessThanOrEqual(opts.maxTokens);
+  });
+
+  it('elideToFit truncates the largest tool results first, keeps the directive verbatim and never removes a message', () => {
+    const msgs = [SYS, TASK, ...round(1, 20_000), ...round(2, 2_000)];
+    const out = elideToFit(msgs, 2_000);
+    expect(out).toHaveLength(msgs.length);
+    assertAnchored(out);
+    assertPairingValid(out);
+    const [first, second] = [out[3]!.content as string, out[5]!.content as string];
+    expect(first).toMatch(/chars elided to fit the context budget/);
+    expect(first.length).toBeLessThan(20_000);
+    // The small, recent result survives when the big one alone frees enough room.
+    expect(second).toBe('X'.repeat(2_000));
+  });
+
+  it('elideToFit returns the input untouched when it already fits', () => {
+    const msgs = [SYS, TASK, ...round(1, 100)];
+    const out = elideToFit(msgs, 100_000);
+    expect(out.every((m, i) => m === msgs[i])).toBe(true);
   });
 });

@@ -18,7 +18,7 @@
 
 import { deriveSelector, redactInput } from '@builderforce/interaction-contract';
 import { classifyQueue, createOutbox, isDurableUserWorkQueue, isTelemetryQueue } from '@builderforce/write-outbox';
-import { getApiBaseUrl, getAuthHeaders, apiRequestStream } from '../apiClient';
+import { getAuthHeaders, apiRequestStream } from '../apiClient';
 import { AMBIENT_REQUEST_ERRORS } from '../errors/transportFailure';
 
 export { deriveSelector };
@@ -70,21 +70,18 @@ function getSessionId(): string {
 type QaProject = number | null;
 
 /**
- * Send one project's batch. `final` (page unload) uses sendBeacon: it cannot set
- * Authorization, so it cannot go through the shared transport at all — a best-effort
- * last gasp. The timed flush is the reliable, authenticated path.
+ * Send one project's batch — every flush, the page-unload one included, through the
+ * shared AUTHENTICATED transport. `keepalive: true` is what lets the unload flush
+ * outlive the page; `sendBeacon` could not carry the bearer, so the server dropped
+ * every unload batch it sent.
  */
-function sendQaBatch(projectId: QaProject, events: QaCaptureEvent[], final: boolean): Promise<unknown> | void {
+function sendQaBatch(projectId: QaProject, events: QaCaptureEvent[]): Promise<unknown> {
   const path = '/api/qa/events';
   const payload = JSON.stringify({
     sessionId: getSessionId(),
     ...(projectId !== null ? { projectId } : {}),
     events,
   });
-  if (final && navigator.sendBeacon) {
-    navigator.sendBeacon(`${getApiBaseUrl()}${path}`, new Blob([payload], { type: 'application/json' }));
-    return;
-  }
   return apiRequestStream(path, {
     method: 'POST',
     body: payload,
@@ -104,7 +101,7 @@ class QaCapture {
     work: qaCaptureWork,
     maxItems: MAX_QUEUE,
     maxWaitMs: FLUSH_INTERVAL_MS,
-    send: (projectId, events, ctx) => sendQaBatch(projectId, events, ctx.final),
+    send: (projectId, events) => sendQaBatch(projectId, events),
   });
   private seq = 0;
   /**
@@ -203,9 +200,9 @@ class QaCapture {
     }
   }
 
-  /** Send every queued batch. `beacon` = the page is unloading (see {@link sendQaBatch}). */
-  flush(beacon = false): void {
-    void this.outbox.flush(undefined, { final: beacon });
+  /** Send every queued batch. `final` = the page is unloading (keepalive carries it). */
+  flush(final = false): void {
+    void this.outbox.flush(undefined, { final });
   }
 }
 

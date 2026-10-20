@@ -76,4 +76,26 @@ describe('hit counters', () => {
     await applyHitDeltas(db, 'landing.view', [{ kind: 'landing.view', key: 'no-tenant', n: 1, t: 0 }]);
     expect(statements).toHaveLength(0);
   });
+
+  it('writes straight to the database when CACHE_L2_KV is off — no KV write spent', async () => {
+    const { env, store } = kvStub();
+    const { db, statements } = dbStub();
+    await recordHit({ ...env, CACHE_L2_KV: 'false' }, db, 'skill.download', 'a');
+    expect(store.size).toBe(0);
+    expect(statements).toHaveLength(1);
+  });
+
+  it('falls back to the database when the KV put fails instead of re-queueing in memory', async () => {
+    const { env, store } = kvStub();
+    const kv = env.AUTH_CACHE_KV as unknown as { put: () => Promise<void> };
+    kv.put = async () => { throw new Error('KV put() limit exceeded for the day'); };
+    const { db, statements } = dbStub();
+    await recordHit(env, db, 'skill.download', 'a');
+    expect(store.size).toBe(0);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toContain('"marketplace_skills"');
+    // Nothing left pending to retry the exhausted quota.
+    await flushCounterBuffer(env);
+    expect(statements).toHaveLength(1);
+  });
 });

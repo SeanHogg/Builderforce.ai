@@ -193,19 +193,31 @@ describe('the web boot path calls the denied default before any platform fetch',
     expect(layout).toContain(WEB_PLATFORM_POLICY_BOOTED);
   });
 
-  it('rejects a platform fetch that races the chunk, then releases it once boot has applied the denial', async () => {
+  function evalHoldScript(): void {
     const layout = source('app/layout.tsx');
     const script = layout.match(/const PLATFORM_POLICY_BOOT_HOLD = `([\s\S]*?)`;/)?.[1];
     expect(script).toBeTruthy();
+    expect(script).not.toContain('fetch(');
+    // The head script is what a fresh document runs before the policy chunk.
+    // eslint-disable-next-line no-eval
+    eval(script as string);
+  }
+
+  it('holds a platform fetch that races the chunk, then lets the booted policy decide it', async () => {
     document.head.insertAdjacentHTML('afterbegin', `<meta name="bf-api-origin" content="${API_ORIGIN}">`);
     const native = vi.fn(async () => new Response('ok', { status: 200 }));
     const previous = window.fetch;
     window.fetch = native as unknown as typeof fetch;
     try {
-      // The head script is what a fresh document runs before the policy chunk.
-      // eslint-disable-next-line no-eval
-      eval(script as string);
-      await expect(window.fetch(`${API_ORIGIN}/api/sync/push`, { method: 'POST' })).rejects.toThrow(/platform_denied/);
+      evalHoldScript();
+      let settled = false;
+      const held = window.fetch(`${API_ORIGIN}/api/sync/push`, { method: 'POST' }).then((response) => {
+        settled = true;
+        return response;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Held, not rejected and not sent.
+      expect(settled).toBe(false);
       expect(native).not.toHaveBeenCalled();
       await window.fetch('https://example.com/asset.js');
       expect(native).toHaveBeenCalledTimes(1);
@@ -215,9 +227,32 @@ describe('the web boot path calls the denied default before any platform fetch',
       expect(webPlatformPolicy().allows('synchronize')).toBe(false);
       expect(webPlatformPolicy().allows('authenticate')).toBe(false);
 
-      await window.fetch(`${API_ORIGIN}/api/sync/push`, { method: 'POST' });
+      // Released through the current transport once the policy exists.
+      await expect(held).resolves.toBeInstanceOf(Response);
       expect(native).toHaveBeenCalledTimes(2);
+      await window.fetch(`${API_ORIGIN}/api/sync/push`, { method: 'POST' });
+      expect(native).toHaveBeenCalledTimes(3);
     } finally {
+      window.fetch = previous;
+      document.head.querySelector('meta[name="bf-api-origin"]')?.remove();
+    }
+  });
+
+  it('fails a held platform fetch closed when the policy never boots', async () => {
+    vi.useFakeTimers();
+    document.head.insertAdjacentHTML('afterbegin', `<meta name="bf-api-origin" content="${API_ORIGIN}">`);
+    const native = vi.fn(async () => new Response('ok', { status: 200 }));
+    const previous = window.fetch;
+    window.fetch = native as unknown as typeof fetch;
+    try {
+      evalHoldScript();
+      const held = window.fetch(`${API_ORIGIN}/api/projects`);
+      const outcome = expect(held).rejects.toThrow(/platform_denied/);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await outcome;
+      expect(native).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
       window.fetch = previous;
       document.head.querySelector('meta[name="bf-api-origin"]')?.remove();
     }

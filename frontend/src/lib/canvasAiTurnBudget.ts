@@ -16,16 +16,6 @@
 
 import { effortProfile, type Effort } from '@seanhogg/builderforce-brain-embedded';
 
-/**
- * How many turns a finite step cap would reserve for authoring after research.
- *
- * The canvas loop no longer sets a step cap — it passes `budget: {}`, the same
- * budget Rovr and the VSIX pass — so this window does not arm from a countdown.
- * The model port still reads it when a cap is present; a prose recovery
- * (`mutationRecoveries`) arms authoring on its own.
- */
-export const RESERVED_AUTHORING_TURNS = 2;
-
 /** Two encyclopedic results are enough evidence that repeating differently worded
  * searches will not produce the open-web design sources the user requested. */
 export const MAX_NARROW_SEARCHES = 2;

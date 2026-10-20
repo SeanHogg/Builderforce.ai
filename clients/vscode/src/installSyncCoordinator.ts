@@ -23,16 +23,12 @@ import {
   type JournalEvent,
   type LocalFirstStore,
   type PlatformPolicy,
+  type SyncLease,
   type SyncTransport,
 } from "@builderforce/local-first";
 
-/**
- * Structural match for the coordinator lease. The package entry does not
- * re-export the lease type, so this stays a local shape.
- */
-export interface SyncCoordinatorLease {
-  run<R>(owner: string, work: () => Promise<R>): Promise<R | undefined>;
-}
+/** The coordinator lease. A fenced lease's `signal` and `holds()` reach the coordinator. */
+export type SyncCoordinatorLease = SyncLease;
 
 export interface SyncCoordinatorHost {
   /** Host grant. Anything other than true refuses construction and the drain. */

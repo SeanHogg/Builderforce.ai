@@ -24,7 +24,9 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getProjectEvermindHead, resolveEffectiveEvermindProjectId, recordEvermindServeOutcome } from './projectEvermind';
-import { anchorsAreStale, getProjectFactRecordByKey, hostDirectoryHashReader, upsertProjectFact, QA_CACHE_SOURCE, QA_CACHE_TTL_MS, type FactFileAnchor, type FactOriginCost } from './projectFacts';
+import { anchorsAreStale, hostDirectoryHashReader, QA_CACHE_SOURCE, QA_CACHE_TTL_MS, type FactFileAnchor, type FactOriginCost } from './projectFactsStore';
+import { getProjectFactRecordByKey } from './projectFactsAnswerCache';
+import { upsertProjectFact } from './projectFactsWrite';
 import { EVERMIND_ANSWER_MIN_CHARS, isServableText } from '@seanhogg/builderforce-memory/evermind';
 import { memoryReplayable, promisesUnfinishedWork } from '@builderforce/agent-stall';
 

@@ -475,7 +475,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const mobileViewportFittedRef = useRef(false);
   const { updateBrainDock, toggleFullscreen } = useCanvasDockAndFullscreen({ autoApplyRef, comparisonModelIds, fullscreen, initialSurface, nativeFullscreenRef, phoneViewport, sessionId, setAutoApply, setBrainDock, setFullscreen, setSurfaceState, shellRef });
   const { setAutoApplyMode, setSessionMode } = useCanvasSessionModes({ autoApplyRef, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen });
-  const { memoryEnabled, setMemoryMode } = useCanvasMemorySwitch({ nodes, sessionId, persistence });
+  const { memoryEnabled, memoryLoading, setMemoryMode } = useCanvasMemorySwitch({ nodes, sessionId, persistence });
   const runShapingControls = useCanvasRunShaping();
   const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard, boardLoaded } = useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded: settleLoadedPhase, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges: setEdgesOnScreen, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes: setNodesOnScreen, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline: setTimelineOnScreen, setTitle, t, timeline, title, viewportRef });
   // HOW THIS BOARD IS PRESENTED (`lib/canvasLens.ts`) — every lens decision reads this def, never the id.
@@ -745,7 +745,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
     runStartedAt={brainRunStartedAt} brainIsSurface={surfaceDef.brainIsSurface}
     promptPlacement={promptPlacement} setPromptPlacement={setPromptPlacement} brainDockDrawn={brainDockDrawn} updateBrainDock={updateBrainDock}
     scope={{ mode: scopeMode, setMode: setScopeMode, autoLabel: scopeLabel, selectionCount: effectiveSelectedIds.length, frameSelected: selectedNode?.data.kind === 'frame' }}
-    memoryProjectId={evermindProjectId} onTwilioJourney={setTwilioPromptSelected} applyTemplate={applyTemplate} conversationStarted={brainMessages.length > 0}
+    memoryProjectId={evermindProjectId} memoryLoading={memoryLoading} onTwilioJourney={setTwilioPromptSelected} applyTemplate={applyTemplate} conversationStarted={brainMessages.length > 0}
     input={{
       // NEVER disabled while Brain works: an empty composer offers Stop, typing queues the next turn.
       value: prompt, onChange: setPrompt, running: thinking, onStop: stopCanvasRun, queued: queuedTurns,

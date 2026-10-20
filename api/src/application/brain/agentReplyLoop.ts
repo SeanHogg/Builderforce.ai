@@ -188,7 +188,7 @@ export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<Rep
     hooks: {
       beforeTurn: async () => {
         // Sized to the model the policy asks for next when it names one (its catalog window).
-        const compaction = await compactMessages(convo, { ...CLOUD_COMPACT_DEFAULTS, ...(s.policy.model ? { targetModel: s.policy.model } : {}) }, summarize);
+        const compaction = await compactMessages(convo, { ...CLOUD_COMPACT_DEFAULTS, tools, ...(s.policy.model ? { targetModel: s.policy.model } : {}) }, summarize);
         if (compaction.compacted) convo.splice(0, convo.length, ...compaction.messages);
         return undefined;
       },

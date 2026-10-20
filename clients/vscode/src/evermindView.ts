@@ -68,7 +68,7 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
     // `token.refresh` and `signin` are host-owned on EVERY surface and answered by
     // the shared bridge, so this view and the panel base cannot disagree about them
     // (they had already diverged on whether a success carries an `error` key).
-    if (await handleSharedHostMessage(this.ctx, this.view?.webview, msg)) return;
+    if (await handleSharedHostMessage(this.ctx, this.view?.webview, msg, this.view)) return;
     switch (msg.type) {
       case "ready":
         await this.sendInit();

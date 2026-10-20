@@ -4,6 +4,7 @@ import {
   decideRecoveryCopy,
   isSecretShapedKey,
   leaseBusy,
+  leaseReclaimable,
   lockStolen,
   recoverSnapshot,
   redactForUploadOrLog,
@@ -32,6 +33,18 @@ describe('durability contract', () => {
     expect(lockStolen(undefined, 1_700_000_030_000, 1_700_000_000_000, 30_000)).toBe(false);
     expect(lockStolen(null)).toBe(false);
     expect(lockStolen('')).toBe(false);
+  });
+
+  it('reclaims only a provably dead holder or a holder-less lease, never on age', () => {
+    // A crashed create left a lease that names nobody.
+    expect(leaseReclaimable(null, 'unknown')).toBe(true);
+    expect(leaseReclaimable('', 'alive')).toBe(true);
+    // A named holder needs proof of death.
+    expect(leaseReclaimable('window-a', 'dead')).toBe(true);
+    expect(leaseReclaimable('window-a', 'alive')).toBe(false);
+    expect(leaseReclaimable('window-a', 'unknown')).toBe(false);
+    // Reclaiming a dead holder is not a steal from a live one.
+    expect(lockStolen('window-a', Date.now(), 0, 1)).toBe(false);
   });
 
   it('recovers valid JSON', () => {

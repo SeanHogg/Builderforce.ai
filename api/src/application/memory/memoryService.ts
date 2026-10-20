@@ -52,7 +52,9 @@ import {
 import { agentMemory, projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { QA_CACHE_SOURCE, deleteProjectFact, projectFactsVersion, recallProjectFacts, upsertProjectFact } from '../llm/projectFacts';
+import { QA_CACHE_SOURCE, projectFactsVersion } from '../llm/projectFactsStore';
+import { recallProjectFacts } from '../llm/projectFactsRecall';
+import { deleteProjectFact, upsertProjectFact } from '../llm/projectFactsWrite';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { fuseHybridArms } from '@seanhogg/builderforce-memory/retrieval';

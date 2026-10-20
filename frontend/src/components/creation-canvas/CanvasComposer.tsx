@@ -95,6 +95,8 @@ export interface CanvasComposerProps {
   };
   /** The Evermind project on (or behind) this board. Null ⇒ memory has nowhere to live. */
   memoryProjectId: number | null;
+  /** The conversation's own Memory value is still being read — memory is off until it is. */
+  memoryLoading?: boolean;
   onTwilioJourney: (selected: boolean) => void;
   applyTemplate: (template: CreationTemplate) => void;
   /** The Brain conversation has turns, so next-step chips are offered above an empty box. */
@@ -104,7 +106,7 @@ export interface CanvasComposerProps {
 
 export function CanvasComposer({
   docked, surface, editable, preferAsk, onAsk, onCaptureIdea, hostRef, actions, runStartedAt, brainIsSurface,
-  promptPlacement, setPromptPlacement, brainDockDrawn, updateBrainDock, scope, memoryProjectId,
+  promptPlacement, setPromptPlacement, brainDockDrawn, updateBrainDock, scope, memoryProjectId, memoryLoading = false,
   onTwilioJourney, applyTemplate, conversationStarted, input,
 }: CanvasComposerProps) {
   const t = useTranslations('creationCanvas');
@@ -212,7 +214,7 @@ export function CanvasComposer({
             </>}
             starters={starters}
             {...(suggestions ? { suggestions } : {})}
-            memoryUnavailableReason={memoryProjectId == null || !signedIn ? t('memoryNeedsProject') : undefined}
+            memoryUnavailableReason={memoryProjectId == null || !signedIn ? t('memoryNeedsProject') : memoryLoading ? t('memoryLoading') : undefined}
             // `canvasTurnShape` raises a level's ceiling to the canvas's own, never lowers it.
             effortMinAnswerTokens={CANVAS_RESPONSE_TOKENS}
             // A board that lives only on this device has no workspace behind it, so it gets

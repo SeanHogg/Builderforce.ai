@@ -102,13 +102,13 @@ export abstract class WebviewPanelBase<M extends WebviewInbound = WebviewInbound
    *  The shared set lives in `webviewHostBridge` because the Evermind SIDEBAR VIEW
    *  answers the same messages and cannot extend this panel base. */
   private async dispatchMessage(msg: M): Promise<void> {
-    if (await handleSharedHostMessage(this.ctx, this.panel.webview, msg)) return;
+    if (await handleSharedHostMessage(this.ctx, this.panel.webview, msg, this.panel)) return;
     await this.onMessage(msg);
   }
 
   /** Fire-and-forget post to the webview. */
   protected post(msg: unknown): void {
-    postToWebview(this.panel.webview, msg);
+    postToWebview(this.panel.webview, msg, this.panel);
   }
 
   /** Reply to a webview `request` round-trip; a no-op without an id (fire-and-forget). */

@@ -10,10 +10,9 @@ import type { Db } from '../../infrastructure/database/connection';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { listTeamMemoryEntries, parseTeamMemoryKey, teamMemoryKey } from './teamMemoryFeed';
 
-vi.mock('../llm/projectFacts', () => ({
-  projectFactsVersion: async () => '0',
-  QA_CACHE_SOURCE: 'qa', deleteProjectFact: vi.fn(), recallProjectFacts: vi.fn(), upsertProjectFact: vi.fn(),
-}));
+vi.mock('../llm/projectFactsStore', () => ({ projectFactsVersion: async () => '0', QA_CACHE_SOURCE: 'qa' }));
+vi.mock('../llm/projectFactsRecall', () => ({ recallProjectFacts: vi.fn() }));
+vi.mock('../llm/projectFactsWrite', () => ({ deleteProjectFact: vi.fn(), upsertProjectFact: vi.fn() }));
 
 const env = {} as Env;
 

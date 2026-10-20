@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryLocalFirstStore } from "@builderforce/local-first";
-import type { RunChangeBaseline } from "./runChangeSets";
+import type { RunChangeBaseline } from "./runChangeBaseline";
 
 const git = vi.hoisted(() => ({
   detect: vi.fn(async () => ({ total: 0, repos: [] })),
@@ -31,7 +31,7 @@ vi.mock("./localFirstStore", () => ({
   },
 }));
 
-import { isFinishedChangeSet, isPartialChangeSet } from "./runChangeSets";
+import { isFinishedChangeSet, isPartialChangeSet } from "./changeSetLifecycle";
 import {
   RUN_HOST_CHANGE_SET_LINE,
   installRunChangeSets,

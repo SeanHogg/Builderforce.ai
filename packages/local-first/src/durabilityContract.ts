@@ -5,6 +5,12 @@
  * lock file. A held lease is busy until the holder releases it. Age does not
  * grant the lock to a second window: there is no steal, including at 30s.
  *
+ * A lease whose holder is PROVABLY dead is not a held lease, it is debris, and
+ * leaving it would brick the store forever. `leaseReclaimable` is the one rule
+ * for that: reclaim needs evidence of death (the holder's process is gone, the
+ * browser released its Web Lock, the live holder stopped refreshing its
+ * heartbeat), never the lease's age.
+ *
  * A corrupt VSIX snapshot keeps the previous good copy and must not replace
  * it with a parse that failed. IndexedDB does not need a second file.
  *
@@ -57,6 +63,38 @@ export function leaseBusy(
   _heldSince?: number,
 ): boolean {
   return typeof holder === 'string' && holder.length > 0;
+}
+
+/**
+ * What a host can PROVE about a lease holder.
+ *
+ *   - `alive`: the holder is running (its pid answers, it holds its Web Lock, or
+ *     its heartbeat is fresh). Never reclaimed.
+ *   - `dead`: the holder cannot be running (its pid is gone, a different
+ *     process now owns that pid, its Web Lock was released by the browser, its
+ *     heartbeat stopped long ago, or the lease was never finished being
+ *     written). Reclaimable.
+ *   - `unknown`: no evidence either way (another machine, a format with no
+ *     identity). Treated as alive.
+ */
+export type HolderLiveness = 'alive' | 'dead' | 'unknown';
+
+/**
+ * May a contender remove this lease and take the store?
+ *
+ * A lease with no named holder is a create that never finished (a crash
+ * between creating the lease and naming its holder) — reclaimable. A named
+ * holder is reclaimable ONLY when the host proved it `dead`. Age is not an
+ * input: a live holder is never reclaimed, at 30s or at any later time, and
+ * `unknown` stays busy. This is not a steal — `lockStolen` stays false for
+ * every live holder.
+ */
+export function leaseReclaimable(
+  holder: string | null | undefined,
+  liveness: HolderLiveness,
+): boolean {
+  if (!leaseBusy(holder)) return true;
+  return liveness === 'dead';
 }
 
 /**

@@ -433,3 +433,57 @@ describe('caller metadata (gateway audit emit)', () => {
     expect(sentBody(fetchMock)).not.toHaveProperty('metadata');
   });
 });
+
+describe('header deadline vs connect-failure backoff', () => {
+  afterEach(() => vi.useRealTimers());
+
+  const refused = (): TypeError =>
+    Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) });
+
+  it('starts the header deadline per attempt, so backoff longer than the idle budget is not "gateway sent nothing"', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls += 1;
+      if (calls <= 2) throw refused();
+      return sseResponse([`data: ${JSON.stringify({ choices: [{ delta: { content: 'ok' } }] })}\n`, 'data: [DONE]\n']);
+    }));
+    // Backoff before the third attempt is 1s + 2s — far past the 50ms header budget.
+    const pending = streamChatCompletion({ messages: [], transport: baseTransport, idleTimeoutMs: 50 }).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(3_500);
+    const result = await pending;
+    expect(result).not.toBeInstanceOf(StreamInterruptedError);
+    expect(calls).toBe(3);
+    expect((result as { text: string }).text).toBe('ok');
+  });
+
+  it('still trips the header deadline on an attempt that connected and then went silent', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => {
+      calls += 1;
+      if (calls === 1) return Promise.reject(refused());
+      return new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+      });
+    }));
+    const pending = streamChatCompletion({ messages: [], model: 'm/x', transport: baseTransport, idleTimeoutMs: 50 }).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(1_100);
+    const err = await pending;
+    expect(err).toBeInstanceOf(StreamInterruptedError);
+    expect((err as Error).message).toContain('sent nothing');
+    expect(calls).toBe(2);
+  });
+
+  it("removes its abort listener from the caller's signal once the completion settles", async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse(['data: [DONE]\n'])));
+    const stop = new AbortController();
+    const add = vi.spyOn(stop.signal, 'addEventListener');
+    const remove = vi.spyOn(stop.signal, 'removeEventListener');
+    await streamChatCompletion({ messages: [], transport: baseTransport, signal: stop.signal });
+    const added = add.mock.calls.filter(([type]) => type === 'abort').map(([, fn]) => fn);
+    const removed = remove.mock.calls.filter(([type]) => type === 'abort').map(([, fn]) => fn);
+    expect(added).toHaveLength(1);
+    expect(removed).toContain(added[0]);
+  });
+});

@@ -20,7 +20,14 @@ export interface LocalFirstTransaction {
    * a row was present. A missing row is not an error — the delete already won.
    */
   delete(entityType: LocalEntityType, id: string): Promise<boolean>;
-  append<T>(event: Omit<JournalEvent<T>, 'localSequence' | 'payloadHash'> & { payloadHash?: string }): Promise<JournalEvent<T>>;
+  /**
+   * Enqueue one journal event. The store MINTS the wire `eventId` (a UUID — the
+   * server's `(tenant, device, event)` key). Callers name the logical write with
+   * `idempotencyKey` (e.g. `ticket:<id>:v1`): a second append with a key that is
+   * still pending returns the first event instead of enqueueing twice, and a
+   * `dependsOn` entry naming a pending key is rewritten to that event's id.
+   */
+  append<T>(event: AppendJournalEvent<T>): Promise<JournalEvent<T>>;
   pending(destination?: EntityDestination): Promise<JournalEvent[]>;
   acknowledge(eventIds: readonly string[]): Promise<void>;
   putMapping(mapping: ServerMapping): Promise<void>;
@@ -30,6 +37,24 @@ export interface LocalFirstTransaction {
   conflicts(): Promise<SyncConflict[]>;
   setCursor(destination: EntityDestination, cursor: string | undefined): Promise<void>;
   cursor(destination: EntityDestination): Promise<string | undefined>;
+}
+
+/**
+ * What `append` takes. `eventId` is optional and kept only when it is already a
+ * UUID (a replayed wire event); any other value is a legacy composite id and is
+ * treated as the `idempotencyKey`.
+ */
+export type AppendJournalEvent<T = unknown> =
+  Omit<JournalEvent<T>, 'localSequence' | 'payloadHash' | 'eventId' | 'idempotencyKey'> & {
+    eventId?: string;
+    idempotencyKey?: string;
+    payloadHash?: string;
+  };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isJournalEventId(value: unknown): value is string {
+  return typeof value === 'string' && UUID.test(value);
 }
 
 export interface LocalFirstSnapshot {
@@ -64,6 +89,22 @@ function hashPayload(payload: unknown): string {
     hash = Math.imul(hash, 16777619);
   }
   return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+/**
+ * Rewrite `dependsOn` keys that name a PENDING event onto that event's wire id.
+ * Anything else is kept as written: a key for an event appended later in the
+ * same transaction (a forward reference) is resolved when the batch is built
+ * (`wireDependencies` in `sync.ts`), which also drops a key whose event has
+ * already been acknowledged.
+ */
+function resolveDependencies(dependsOn: readonly string[], pendingByKey: ReadonlyMap<string, JournalEvent>): string[] {
+  const ids: string[] = [];
+  for (const id of dependsOn) {
+    const resolved = pendingByKey.get(id)?.eventId ?? id;
+    if (!ids.includes(resolved)) ids.push(resolved);
+  }
+  return ids;
 }
 
 class Transaction implements LocalFirstTransaction {
@@ -102,17 +143,37 @@ class Transaction implements LocalFirstTransaction {
     return this.state.records.delete(recordKey(entityType, id));
   }
 
-  async append<T>(event: Omit<JournalEvent<T>, 'localSequence' | 'payloadHash'> & { payloadHash?: string }): Promise<JournalEvent<T>> {
+  async append<T>(event: AppendJournalEvent<T>): Promise<JournalEvent<T>> {
     this.assertMutable();
-    if (this.state.events.has(event.eventId)) return clone(this.state.events.get(event.eventId)) as JournalEvent<T>;
+    const { eventId: given, idempotencyKey: key, ...rest } = event;
+    const wireId = isJournalEventId(given) ? given : undefined;
+    const idempotencyKey = key ?? (given !== undefined && !wireId ? given : undefined);
+    if (wireId && this.state.events.has(wireId)) return clone(this.state.events.get(wireId)) as JournalEvent<T>;
+    const pendingByKey = this.pendingByKey();
+    if (idempotencyKey !== undefined) {
+      const existing = pendingByKey.get(idempotencyKey);
+      if (existing) return clone(existing) as JournalEvent<T>;
+    }
     const stored: JournalEvent<T> = {
-      ...clone(event),
+      ...clone(rest),
+      eventId: wireId ?? crypto.randomUUID(),
+      ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+      dependsOn: resolveDependencies(event.dependsOn, pendingByKey),
       localSequence: this.state.nextSequence,
       payloadHash: event.payloadHash ?? hashPayload(event.payload),
     };
     this.state.nextSequence += 1;
     this.state.events.set(stored.eventId, stored);
     return clone(stored);
+  }
+
+  /** Pending events by their caller-side idempotency key. */
+  private pendingByKey(): Map<string, JournalEvent> {
+    const byKey = new Map<string, JournalEvent>();
+    for (const pending of this.state.events.values()) {
+      if (pending.idempotencyKey !== undefined) byKey.set(pending.idempotencyKey, pending);
+    }
+    return byKey;
   }
 
   async pending(destination?: EntityDestination): Promise<JournalEvent[]> {

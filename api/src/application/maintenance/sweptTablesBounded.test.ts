@@ -22,6 +22,7 @@ const TELEMETRY_WINDOWS: Record<string, number> = {
   deliveries: 180, monitor_events: 90, alert_events: 180, ide_training_logs: 90,
   marketing_sessions: 90, marketing_session_prompts: 90, marketing_heatmap_pages: 90,
   project_insight_events: 180,
+  evermind_learning_runs: 90,
   usage_snapshots: 90, run_model_outcomes: 400,
   replay_visit_summaries: 400, replay_releases: 400,
 };
@@ -123,5 +124,14 @@ describe('activity_log machine lifecycle verbs', () => {
     expect(q.sql).toContain('"verb" in (');
     expect(q.sql).toContain('"occurred_at" <');
     expect(q.params).toEqual(expect.arrayContaining(['visitor', ...MACHINE_LIFECYCLE_VERBS]));
+  });
+});
+
+describe('evermind_learning_runs retention', () => {
+  it('ages runs out at 90 days but never a run whose candidate awaits review', () => {
+    const q = toSQL(byName('evermind_learning_runs').purge(realDb, CUTOFF));
+    expect(byName('evermind_learning_runs').retentionDays).toBe(90);
+    expect(q.sql).toContain('"evermind_learning_candidates"');
+    expect(q.sql).toContain("= 'pending'");
   });
 });

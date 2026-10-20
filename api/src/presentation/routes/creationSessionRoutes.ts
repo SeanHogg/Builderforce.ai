@@ -132,6 +132,7 @@ import { boundedIntParam, limitParam, offsetParam } from '../../domain/shared/bo
 // already started to differ between the two copies; the public `/api/v1` item CRUD is
 // the third caller. See `creationGraphWriter.ts` for why it returns statements rather
 // than executing them.
+import { partitionAgentRefs } from '../../application/creation/agentRefPartition';
 import {
   buildPreview,
   creationGraphStatements,
@@ -593,21 +594,12 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
 
     const agentIds = ids('agent');
     if (agentIds.length) {
-      // Numeric refs are the folded `agents.id` on `agent_registrations.legacy_agent_id`
-      // (Postgres int4). Text refs are workforce `ide_agents.id` or registration UUIDs.
-      const numeric: number[] = [];
-      const text: string[] = [];
-      for (const id of agentIds) {
-        if (/^\d+$/.test(id)) {
-          const n = Number(id);
-          if (!Number.isInteger(n) || n < 1 || n > 2_147_483_647) {
-            return 'An Agent is unavailable or belongs to another workspace';
-          }
-          numeric.push(n);
-        } else {
-          text.push(id);
-        }
-      }
+      // Numeric refs → `legacy_agent_id`; text refs → `ide_agents.id` (workforce and
+      // built-in agents); only UUID-shaped text refs may reach the uuid column
+      // `agent_registrations.id`. A ref neither finds is reported unavailable.
+      const partition = partitionAgentRefs(agentIds);
+      if (!partition) return 'An Agent is unavailable or belongs to another workspace';
+      const { numeric, text, uuid: uuidRefs } = partition;
       const [byLegacy, workforce, byUuid] = await Promise.all([
         numeric.length
           ? db.select({ id: agentRegistrations.legacyAgentId }).from(agentRegistrations).where(and(
@@ -619,11 +611,11 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         text.length
           ? db.select({ id: ideAgents.id }).from(ideAgents).where(and(eq(ideAgents.tenantId, tenantId), inArray(ideAgents.id, text)))
           : Promise.resolve([]),
-        text.length
+        uuidRefs.length
           ? db.select({ id: agentRegistrations.id }).from(agentRegistrations).where(and(
               eq(agentRegistrations.tenantId, tenantId),
               eq(agentRegistrations.segmentId, segmentId),
-              inArray(agentRegistrations.id, text),
+              inArray(agentRegistrations.id, uuidRefs),
             ))
           : Promise.resolve([]),
       ]);

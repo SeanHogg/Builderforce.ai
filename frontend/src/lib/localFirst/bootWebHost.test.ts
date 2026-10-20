@@ -72,6 +72,8 @@ describe('bootWebHost', () => {
     expect(boot).not.toContain('runNetworkDenialScenario');
     expect(boot).not.toContain('createSyncCoordinator');
     expect(boot).toContain('createMemoryLocalFirstStore');
-    expect(boot).toContain('createGuardedPlatformFetch');
+    // The deny probe and local replay are the shared primitive, not a web copy.
+    expect(boot).toContain('bootDeniedHost(');
+    expect(boot).not.toContain('createGuardedPlatformFetch');
   });
 });

@@ -1,24 +1,14 @@
 /**
- * POST /api/qa/events must accept the capture client's UNLOAD flush.
+ * POST /api/qa/events is AUTHENTICATED.
  *
- * The client flushes on `pagehide` with `navigator.sendBeacon`
- * (frontend/src/lib/qa/telemetry.ts), which cannot set headers — so the last batch
- * of every session arrived with no Authorization and the blanket `authMiddleware`
- * answered 401. The timed flush uses `apiRequestStream` and was always
- * authenticated, which is why only the tail of each journey was lost.
+ * The capture client used to flush on `pagehide` with `navigator.sendBeacon`, which
+ * cannot set headers, and the route answered that headerless batch with a 201 and
+ * dropped it — every session's tail was lost while the client was told it landed.
+ * The client now sends every flush, the unload one included, through
+ * `apiRequestStream(..., { keepalive: true })`, which carries the bearer — so the
+ * route rejects an unauthenticated batch (401) instead of pretending to accept it.
  *
- * Two properties are load-bearing here, and both are about not being careless
- * with the fix:
- *
- *  1. The anonymous beacon is ACKNOWLEDGED, not rejected — otherwise the client
- *     sees a failure for a request it never made, and cannot retry it anyway.
- *  2. The anonymous batch is NEVER STORED. `qa_journey_events.tenant_id` is NOT
- *     NULL with an FK to `tenants`, and every read of that table is
- *     tenant-scoped, so an unattributable row would be written but never read
- *     back. The test asserts the Db is not touched rather than trusting that.
- *
- * The authenticated path must keep behaving exactly as before — these tests
- * would pass on a route that simply dropped everything.
+ * The authenticated path must keep behaving exactly as before.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
@@ -49,18 +39,6 @@ vi.mock('../middleware/authMiddleware', async (importOriginal) => {
   return {
     ...actual,
     authMiddleware: fakeAuth,
-    // Mirrors the real one's contract: delegate to the gate, swallow ONLY
-    // UnauthorizedError, then continue. Swallowing anything else would hide a
-    // real failure as an anonymous caller — which is what makes this safe to
-    // widen a route with, and what the "still gated" test below pins down.
-    optionalAuthMiddleware: async (c: any, next: () => Promise<void>) => {
-      try {
-        await fakeAuth(c, async () => {});
-      } catch (err) {
-        if (!(err instanceof UnauthorizedError)) throw err;
-      }
-      await next();
-    },
   };
 });
 
@@ -102,27 +80,12 @@ const BODY = {
   events: [{ type: 'pageview', route: '/dashboard', seq: 0 }],
 };
 
-describe('POST /qa/events — the unload beacon', () => {
+describe('POST /qa/events — an unauthenticated batch', () => {
   beforeEach(() => {
     bumpCacheVersion.mockClear();
   });
 
-  it('accepts a headerless beacon instead of answering 401', async () => {
-    // sendBeacon cannot set headers, so there is NO Authorization at all here.
-    const res = await app().request('/api/qa/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(BODY),
-    }, ENV);
-
-    expect(res.status).not.toBe(401);
-    expect(res.status).toBe(201);
-    // 201 rather than an error: the client treats this as fire-and-forget and must
-    // not be told it failed when the batch was merely unattributable.
-    expect(await res.json()).toMatchObject({ inserted: 0 });
-  });
-
-  it('never stores an unattributable batch', async () => {
+  it('is rejected (401), never acknowledged-and-dropped', async () => {
     const { db, inserted } = recordingDb();
     const res = await app(db).request('/api/qa/events', {
       method: 'POST',
@@ -130,16 +93,17 @@ describe('POST /qa/events — the unload beacon', () => {
       body: JSON.stringify(BODY),
     }, ENV);
 
-    expect(res.status).toBe(201);
-    // The whole point: a row with no tenant could be written but never read back.
+    expect(res.status).toBe(401);
     expect(inserted).toEqual([]);
     expect(bumpCacheVersion).not.toHaveBeenCalled();
   });
+});
 
-  it('still rejects a malformed batch, so garbage is not silently accepted', async () => {
+describe('POST /qa/events — validation', () => {
+  it('rejects a malformed authenticated batch, so garbage is not silently accepted', async () => {
     const res = await app().request('/api/qa/events', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer tenant-token' },
       body: JSON.stringify({ events: [{ type: 'click' }] }), // no sessionId
     }, ENV);
 
@@ -172,7 +136,6 @@ describe('GET /qa/events — still gated', () => {
   it('keeps the blanket auth on every other QA endpoint', async () => {
     const res = await app().request('/api/qa/events', {}, ENV);
 
-    // Widening POST must not have widened the reads that return tenant data.
     expect(res.status).toBe(401);
   });
 });

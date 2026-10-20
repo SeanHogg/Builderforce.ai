@@ -254,6 +254,7 @@ export function createSessionsHistoryTool(opts?: SessionsHistoryDeps): AnyAgentT
   return {
     label: "Session History",
     name: "sessions_history",
+    idempotent: true,
     description: "Fetch message history for a session.",
     parameters: SessionsHistoryToolSchema,
     execute: async (_toolCallId, args) => runSessionsHistory(opts, args as Record<string, unknown>),

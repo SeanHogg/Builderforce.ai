@@ -83,7 +83,7 @@ export async function createLocalAuditFinding(
     });
     await tx.put(record);
     await tx.append({
-      eventId: `audit-finding:${record.id}:v${record.version}`,
+      idempotencyKey: `audit-finding:${record.id}:v${record.version}`,
       clientEntityId: record.id,
       entityType: 'audit-finding',
       operation: 'create',

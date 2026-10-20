@@ -153,7 +153,7 @@ async function writeAndRestart(host: NetworkDenialHost): Promise<{
   await first.transact(async (tx) => {
     await tx.put(ticket);
     await tx.append({
-      eventId: write.eventId,
+      idempotencyKey: write.eventId,
       clientEntityId: ticket.id,
       entityType: ticket.entityType,
       operation: 'create',
@@ -174,7 +174,7 @@ async function writeAndRestart(host: NetworkDenialHost): Promise<{
     restored?.id !== write.id
     || restored.payload.title !== write.title
     || restored.payload.host !== host
-    || !pending.some((event) => event.eventId === write.eventId)
+    || !pending.some((event) => event.idempotencyKey === write.eventId)
   ) {
     throw new Error('write_lost_on_restart');
   }
@@ -209,9 +209,10 @@ async function replayBatchLater(
     }
   });
   const receipts = (await store.export()).receipts;
-  const eventIds = batch.events.map((event) => event.eventId);
-  for (const eventId of eventIds) {
-    const receipt = receipts.find((row) => row.eventId === eventId);
+  // The store mints the wire id; the scenario names its write by idempotency key.
+  const eventIds = batch.events.map((event) => event.idempotencyKey ?? event.eventId);
+  for (const event of batch.events) {
+    const receipt = receipts.find((row) => row.eventId === event.eventId);
     if (receipt?.status !== 'accepted' || receipt.detail !== 'in_process_replay') {
       throw new Error('batch_not_replayed');
     }

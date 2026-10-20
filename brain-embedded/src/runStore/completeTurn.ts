@@ -22,7 +22,8 @@ import { createComposingActivity, toolCallArgBytes } from '../composingActivity'
 import { hasCallMarkup } from '../xmlToolCalls';
 import { turnInterruption } from '../finishReason.js';
 import { drainRunSteering } from '../runSteering';
-import { buildWorkingTranscript, summarizeMiddle, transcriptTokens } from '../workingTranscript';
+import { buildWorkingTranscript, summarizeMiddle } from '../workingTranscript';
+import { compactionSavedTokens, stampOncePerCall } from './compactionSaved';
 import { callMemoryEffect } from '../memorySavings';
 import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, setActivity } from './runCells';
 import { asLiveTurn, connectRetryStep, liveTurnModel } from './turnPersistence';
@@ -59,12 +60,18 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     );
     // What memory did to THIS call's prompt — compaction kept the folded part of the
     // transcript out of it, recall added its block — carried in the metadata the call
-    // already sends, so the gateway stamps it on this call's own usage row.
+    // already sends, so the gateway stamps it on this call's own usage row. Saved is
+    // measured against what the prompt would have been WITHOUT compaction, which is
+    // itself capped at the history budget — never the whole transcript.
     const trimmed = c.compactMemo
-      ? transcriptTokens([{ role: 'system', content: systemPrompt }, ...c.transcript]) - transcriptTokens(working)
+      ? compactionSavedTokens([{ role: 'system', content: systemPrompt }, ...c.transcript], working)
       : 0;
     const memoryEffect = callMemoryEffect(trimmed, recallBlockTokens);
-    const callMetadata: CompletionMetadata = memoryEffect ? { ...metadata, memory: memoryEffect } : metadata;
+    const memoryMetadata: CompletionMetadata = memoryEffect ? { ...metadata, memory: memoryEffect } : metadata;
+    // Stamped ONCE per call: only the first request of this turn carries the effect; a
+    // transport retry or the coder re-ask is the same call's prompt again, not a second
+    // saving, so it rides the plain metadata.
+    const nextCallMetadata = stampOncePerCall<CompletionMetadata>(memoryMetadata, metadata);
     // User hit Stop while compacting — the kernel reports it as `cancelled` (the
     // run's signal is the one it watches) and the run unwinds quietly.
     if (c.abort?.signal.aborted) throw new Error('run stopped');
@@ -166,6 +173,7 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     // `extra` rides THIS request only (the hand-off brief); it never enters the transcript.
     const request = async (extra: ChatCompletionMessage[] = []): Promise<StreamChatResult> => {
       const ask = nextTurn(run.policy, { hasTools: !!tools });
+      const callMetadata = nextCallMetadata();
       const messages = await run.windowFit.prepare({ messages: extra.length > 0 ? [...working, ...extra] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
       return asLiveTurn(c, () => stream(
         {

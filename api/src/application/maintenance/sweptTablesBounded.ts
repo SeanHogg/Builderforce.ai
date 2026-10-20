@@ -44,6 +44,8 @@ import {
   deviceAuthorizations,
   emailDeliveryFailures,
   emailOtpChallenges,
+  evermindLearningCandidates,
+  evermindLearningRuns,
   executionClaimEvidence,
   executionClaims,
   executionLimits,
@@ -172,6 +174,11 @@ export const BOUNDED_TELEMETRY_TABLES: readonly SweptTable[] = [
     rationale: 'Rebuilt per-page density aggregates (screenshots cascade); a page not recomputed for a quarter is not viewed.' }),
   entry({ relation: 'project_insight_events', connections: CORE, table: projectInsightEvents, tenanted: projectInsightEvents, column: projectInsightEvents.createdAt, days: 180, reclaimable: false,
     rationale: 'Project insight signal stream; six months covers the trend lines.' }),
+  // One row per text-learn (1240). Candidates CASCADE from their run, so a run whose
+  // candidate still awaits review is never aged out — a manager's queue is not telemetry.
+  entry({ relation: 'evermind_learning_runs', connections: CORE, table: evermindLearningRuns, tenanted: evermindLearningRuns, column: evermindLearningRuns.createdAt, days: 90, reclaimable: false,
+    only: () => sql`not exists (select 1 from ${evermindLearningCandidates} where ${evermindLearningCandidates.runId} = ${evermindLearningRuns.id} and ${evermindLearningCandidates.status} = 'pending')`,
+    rationale: 'Evermind learning-pipeline run ledger (one row per text-learn). 90 days bounds the KR window; runs with a pending candidate are kept so the review queue never loses work.' }),
   // ── Run telemetry, dual-resident (writers on the operational endpoint, core residue) ──
   entry({ relation: 'usage_snapshots', connections: BOTH, table: usageSnapshots, tenanted: usageSnapshots, column: usageSnapshots.ts, days: 90, floor: 14,
     rationale: 'Host usage gauges and per-run token snapshots; billing reads llm_usage_log.' }),

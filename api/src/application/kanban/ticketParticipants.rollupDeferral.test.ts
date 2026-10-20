@@ -3,11 +3,12 @@
  *
  * The child rows and the `created` count are the contract and stay inline: `created` is
  * what the parent ticket's %-complete rollup is built on, and the HTTP response is
- * `{ created }`. What moves off the call is the bookkeeping that follows — `syncStates`
- * (re-read the manifest and the append-only sign-off ledger, recompute each slot, rewrite
- * the rows that changed) and `bump` (task version token, task context, project version
- * token). Neither changes the number being returned, and both are un-bounded multi-hop DB
- * work, so the pair is handed to the invocation's `waitUntil` and the count returns now.
+ * `{ created }`. The cache `bump` (task version token, task context, project version
+ * token) also stays inline, right after the child rows, so the client's immediate
+ * re-read sees the new children. What moves off the call is `syncStates` (re-read the
+ * manifest and the append-only sign-off ledger, recompute each slot, rewrite the rows
+ * that changed) followed by a second `bump` — un-bounded multi-hop DB work that does
+ * not change the number being returned.
  *
  * What must hold:
  *   • with a `waitUntil` on the request scope, the call returns while the rollup is still
@@ -26,6 +27,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { tasks, ticketParticipants, ticketRoleSignoffs } from '../../infrastructure/database/schema';
 import { TicketParticipantsService } from './ticketParticipants';
 import { runInRequestScope, type RequestScope } from '../shared/requestScope';
+import { getCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
   configureCaughtErrorReporter,
   resetCaughtErrorReporterForTests,
@@ -130,6 +132,25 @@ describe('materializeChildTasks: the syncStates + bump rollup is off the call', 
     release();
     await Promise.all(waited);
     expect(settled).toBe(true);
+  });
+
+  it('bumps the ticket cache INLINE, before returning, even while the deferred syncStates is pending', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const db = dbStub({ holdParticipants: gate });
+    const waited: Array<Promise<unknown>> = [];
+    const before = await getCacheVersion({} as never, `participants:task:${TASK_ID}`);
+
+    const { result } = await runWithScope(
+      { env: {}, waitUntil: (task) => { waited.push(task); } },
+      () => new TicketParticipantsService(db).materializeChildTasks({} as never, TENANT_ID, TASK_ID, createChild),
+    );
+
+    expect(result).toBe(1);
+    // The version token moved before the response — the client's re-read sees the children.
+    expect(await getCacheVersion({} as never, `participants:task:${TASK_ID}`)).not.toBe(before);
+    release();
+    await Promise.all(waited);
   });
 
   it('with no waitUntil, awaits the rollup inline and still returns created', async () => {

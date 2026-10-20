@@ -30,12 +30,12 @@ import {
 import {
   commitOfflineEntitySet,
   commitOfflineEntityWrite,
-  createNodeJournalIo,
   createOfflineLocalFirstStore,
   decodeJournalFrames as decodeHostFrames,
-  offlineEventId,
+  offlineIdempotencyKey,
   OFFLINE_COMMITTED_ENTITY_TYPES,
 } from './offlineLocalFirstStore';
+import { createNodeJournalIo } from './localFirstJournalIo';
 import { readFileSync } from 'node:fs';
 
 const DEVICE = 'device-under-test';
@@ -131,13 +131,17 @@ describe('G03 offline local-first store', () => {
     // One transaction, therefore one journal frame, therefore one append.
     expect(await store.frameCount()).toBe(1);
     expect(committed.records).toHaveLength(5);
-    expect(committed.events).toEqual([
+    const pending = await store.read(async (tx) => tx.pending());
+    // The store mints each wire id; the composite names the logical write.
+    expect(pending.map((event) => event.idempotencyKey)).toEqual([
       'project:p-1:v1',
       'ticket:t-1:v1',
       'chat:c-1:v1',
       'audit-run:a-1:v1',
       'execution:r-1:v1',
     ]);
+    // The ids the commit reports are the ids the journal holds.
+    expect(committed.events).toEqual(pending.map((event) => event.eventId));
 
     const listed = await store.read(async (tx) => {
       const rows = await tx.list();
@@ -295,14 +299,17 @@ describe('G03 offline local-first store', () => {
     await expect(stat(join(directory, SNAPSHOT_FILE))).rejects.toThrow();
   });
 
-  it('exposes the same event id `commitWriteAndEnqueue` plans', async () => {
+  it('exposes the event id the store minted, keyed by the logical write', async () => {
     const store = createJournaledLocalFirstStore({ io: createMemoryIo() });
     const committed = await commitOfflineEntityWrite(store, DEVICE, {
       entityType: 'ticket',
       id: 't-9',
       payload: { projectId: 'p-1', title: 'Idempotent', status: 'backlog' },
     });
-    expect(committed.events).toEqual([`${offlineEventId(committed.records[0])}`]);
+    const [stored] = await store.read(async (tx) => tx.pending());
+    expect(stored?.idempotencyKey).toBe(offlineIdempotencyKey(committed.records[0]));
+    expect(stored?.idempotencyKey).toBe('ticket:t-9:v1');
+    expect(committed.events).toEqual([stored?.eventId]);
     // Replaying the same version cannot mint a second identity.
     const replay = await commitOfflineEntityWrite(store, DEVICE, {
       entityType: 'ticket',

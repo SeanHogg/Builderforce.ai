@@ -27186,7 +27186,8 @@
       "calling": "Decidiendo…",
       "callEarlyFailed": "No se pudo registrar la decisión. Inténtalo de nuevo.",
       "readAgain": "Leer de nuevo con lo aprendido"
-    }
+    },
+    "memoryLoading": "Leyendo la configuración de memoria de esta conversación…"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -35375,6 +35376,9 @@
     "saveRelation": "Guardar como mi asesor",
     "relationSaved": "Relación con el asesor guardada",
     "rosterHeading": "Sesiones que organizas",
-    "noRoster": "No hay nada en tu agenda."
+    "noRoster": "No hay nada en tu agenda.",
+    "inviteAdvisor": "Invitar al asesor al contexto de IA",
+    "inviteAdvisorHint": "Permite que la IA lea este hilo restringido y añade a tu asesor.",
+    "advisorInvited": "Asesor invitado al contexto de IA"
   }
 }

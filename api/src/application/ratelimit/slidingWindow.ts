@@ -41,6 +41,9 @@ export async function checkSlidingWindow(
   key: string,
   limit: number,
   windowMs = 60_000,
+  /** Units this request spends — a fan-out of N billable dispatches spends N in one
+   *  round-trip. Admitted only when the WHOLE cost fits; a partial spend never lands. */
+  cost = 1,
 ): Promise<RateLimitVerdict | null> {
   const namespace = env.TENANT_RATE_LIMITER;
   if (!namespace) return null;
@@ -50,7 +53,7 @@ export async function checkSlidingWindow(
     new Request('https://internal/check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limit, windowMs }),
+      body: JSON.stringify({ limit, windowMs, cost: Math.max(1, Math.floor(cost)) }),
     }),
   );
   const data = await res.json<{ allowed: boolean; current: number; limit: number; resetAt: string }>();

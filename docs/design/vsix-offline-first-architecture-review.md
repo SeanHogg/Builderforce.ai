@@ -343,6 +343,6 @@ Existing tests cover the library, not the gate in the Acceptance gates section a
 
 Open questions, still blocking a server route:
 
-- Who may bind a destination the first time — any signed-in member, or an admin?
+- ~~Who may bind a destination the first time — any signed-in member, or an admin?~~ **Decided 2026-10-19:** any tenant member with write access to the project (tenant role `developer` or above) may bind it on first push; reading (pull) needs any membership. The tenant is always taken from auth, and a `projectId` must be the tenant's project before the destination key is built. One named policy, `mayBindSyncDestination` in `api/src/application/sync/syncDestination.ts`, so it can be tightened to admins in one place.
 - After retention, is a replayed event id a conflict the client must drop, or a new accept? The client coordinator cannot tell those apart today.
 - Is the VSIX snapshot an acceptable interim for chat text only, with an explicit ban on storing tickets, audits, and runs in it? This section assumes yes until a transactional store exists. If that assumption is rejected, G03 is not partial; it is not started.

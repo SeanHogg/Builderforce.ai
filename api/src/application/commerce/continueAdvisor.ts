@@ -10,24 +10,25 @@
  * resolved to a company row.
  *
  * The second session reuses that reservation's `host_ref` and `service_id` and
- * is written with {@link reserve} in the advisor's tenant. It does not call
- * `reserveForHost`: that path re-resolves the talent through the public
- * catalogue, which is the cold start this relation exists to skip.
+ * goes through {@link reserveForHost} pinned to the completed session's tenant:
+ * the SAME guard Marketplace Book uses (the service is still active, the advisor
+ * is still an active host of it), then {@link reserve}, then the confirmed-1:1
+ * advisory provisioning (meeting, calendar, restricted thread). It does not
+ * search the public catalogue — the host and service come from the stored row.
  *
- * The column is written with raw SQL. Migration 1241 adds it; the Drizzle
- * `users` declaration is shared with other tickets and is not edited here.
+ * The column is declared on the Drizzle `users` table (migration 1241).
  */
-import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { bookingReservations } from '../../infrastructure/database/schema';
+import { bookingReservations, meetings, users } from '../../infrastructure/database/schema';
 import type { ActorIdentity } from '../activity/activityLog';
 import { StatusError } from '../../domain/shared/errors';
-import { reserve } from './bookings';
+import { reserveForHost } from './bookings';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 
-/** The second-session write. Defaults to {@link reserve}; tests pass a fake so
- *  the reuse of host and service is asserted without the overlap transaction. */
+/** The second-session write. Defaults to {@link reserveContinuation}; tests pass a
+ *  fake so the reuse of host and service is asserted without the overlap transaction. */
 export type ContinueBooker = (
   db: Db,
   env: Env,
@@ -41,6 +42,19 @@ export type ContinueBooker = (
     timezone?: string;
   },
 ) => Promise<{ id: number; status: string }>;
+
+/**
+ * The default second-session write: Marketplace Book's guard + reserve + advisory
+ * provisioning ({@link reserveForHost}), pinned to the completed session's tenant
+ * so the booking lands in the same advisor calendar.
+ */
+export const reserveContinuation: ContinueBooker = (db, env, tenantId, actor, input) =>
+  reserveForHost(db, env, actor, input.hostRef, {
+    serviceId: input.serviceId,
+    startsAt: input.startsAt,
+    bookerRef: input.bookerRef,
+    timezone: input.timezone,
+  }, { tenantId });
 
 /** Column added by migration 1241. */
 export const FOUNDER_ADVISOR_RELATION = {
@@ -137,11 +151,7 @@ export async function recordAdvisorRelation(
   if (!session) throw new ContinueAdvisorError('session not found', 404);
   const reused = continuationOf(session, founderRef);
 
-  await db.execute(sql`
-    UPDATE users
-    SET advisor_reservation_id = ${session.id}
-    WHERE id = ${founderRef}
-  `);
+  await db.update(users).set({ advisorReservationId: session.id }).where(eq(users.id, founderRef));
 
   return {
     table: FOUNDER_ADVISOR_RELATION.table,
@@ -155,16 +165,13 @@ export async function recordAdvisorRelation(
 }
 
 async function readFounderReservationId(db: Db, founderRef: string): Promise<number | null> {
-  const result = await db.execute(sql`
-    SELECT advisor_reservation_id AS "advisorReservationId"
-    FROM users
-    WHERE id = ${founderRef}
-    LIMIT 1
-  `);
-  const row = result.rows[0] as { advisorReservationId?: number | string | null } | undefined;
-  if (!row || row.advisorReservationId == null) return null;
-  const id = Number(row.advisorReservationId);
-  return Number.isInteger(id) && id > 0 ? id : null;
+  const [row] = await db
+    .select({ advisorReservationId: users.advisorReservationId })
+    .from(users)
+    .where(eq(users.id, founderRef))
+    .limit(1);
+  const id = row?.advisorReservationId;
+  return id != null && Number.isInteger(id) && id > 0 ? id : null;
 }
 
 /**
@@ -177,7 +184,7 @@ export async function continueWithAdvisor(
   env: Env,
   actor: ActorIdentity,
   input: { founderRef: string; startsAt: Date; timezone?: string },
-  book: ContinueBooker = reserve,
+  book: ContinueBooker = reserveContinuation,
 ) {
   const founderRef = founderRefOf(input.founderRef);
   if (!(input.startsAt instanceof Date) || Number.isNaN(input.startsAt.getTime())) {
@@ -222,6 +229,10 @@ const sessionColumns = {
  * Upcoming sessions the founder booked. Not scoped to the viewer's tenant:
  * a continued session is written in the advisor's tenant, and filtering on
  * the founder's tenant would hide the relationship this module exists to show.
+ *
+ * `chatId` is the restricted advisory thread provisioned for the session (null
+ * until provisioned, and for any non-1:1 booking) — the founder's "invite the
+ * advisor to AI context" action targets it.
  */
 export async function listFounderAdvisorSessions(
   db: Db,
@@ -229,8 +240,12 @@ export async function listFounderAdvisorSessions(
 ) {
   const founderRef = founderRefOf(input.founderRef);
   return db
-    .select(sessionColumns)
+    .select({ ...sessionColumns, chatId: meetings.chatId })
     .from(bookingReservations)
+    .leftJoin(meetings, and(
+      eq(meetings.advisoryReservationId, bookingReservations.id),
+      eq(meetings.tenantId, bookingReservations.tenantId),
+    ))
     .where(acrossTenants(
       bookingReservations,
       'subject_own_rows',

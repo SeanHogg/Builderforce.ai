@@ -37,7 +37,7 @@ import {
   applyKnowledgeRepairs,
   type KnowledgeFinding,
 } from '../../application/llm/evermindAnalyzer';
-import { purgeProjectQaCache } from '../../application/llm/projectFacts';
+import { purgeProjectQaCache } from '../../application/llm/projectFactsAnswerCache';
 import { isRoutableModel } from '../../application/llm/vendors/registry';
 import {
   getProjectEvermindHead,
@@ -325,14 +325,15 @@ async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: numb
   if (fanOut) {
     const contributed = await contributeTextToProjectEverminds(env, db, tenantId, projectId, text, weight, prompt);
     // The pipeline ledger is the extraction-rate denominator. A failed insert must
-    // not turn an accepted teach into a 500 — the weight write already happened.
-    await recordLearningRun(env, db, tenantId, projectId, text);
+    // not turn an accepted teach into a 500 — the weight write already happened —
+    // and it is not on the response path (it reports its own failures).
+    c.executionCtx.waitUntil(recordLearningRun(env, db, tenantId, projectId, text));
     // `baseVersion` kept for on-prem back-compat (it reads a single version); `contributed`
     // names every Evermind that received the text.
     return json({ ok: true, contributed, ...(contributed[0] ? { baseVersion: contributed[0].version } : {}) });
   }
   const result = await dispatchProjectEvermindLearnText(env, tenantId, projectId, text, weight, prompt);
-  if (result.status < 300) await recordLearningRun(env, db, tenantId, projectId, text);
+  if (result.status < 300) c.executionCtx.waitUntil(recordLearningRun(env, db, tenantId, projectId, text));
   return json(result.body, result.status);
 }
 

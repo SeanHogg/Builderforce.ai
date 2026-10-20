@@ -27186,7 +27186,8 @@
       "calling": "正在判定…",
       "callEarlyFailed": "无法记录判定，请重试。",
       "readAgain": "带着所学重新解读"
-    }
+    },
+    "memoryLoading": "正在读取此对话的记忆设置…"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -35375,6 +35376,9 @@
     "saveRelation": "设为我的顾问",
     "relationSaved": "顾问关系已保存",
     "rosterHeading": "您主持的会话",
-    "noRoster": "您的日程中暂无会话。"
+    "noRoster": "您的日程中暂无会话。",
+    "inviteAdvisor": "邀请顾问加入 AI 上下文",
+    "inviteAdvisorHint": "允许 AI 读取此受限会话，并将您的顾问加入其中。",
+    "advisorInvited": "已邀请顾问加入 AI 上下文"
   }
 }

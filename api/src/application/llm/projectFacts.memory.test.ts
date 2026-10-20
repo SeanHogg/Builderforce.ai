@@ -18,16 +18,10 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SQL } from 'drizzle-orm';
-import {
-  anchorsAreStale,
-  decayUnrecalled,
-  normalizeFileAnchors,
-  recallProjectFacts,
-  stampFactRecall,
-  sweepUnrecalledFactDecay,
-  sweepAllUnrecalledFactDecay,
-  upsertProjectFact,
-} from './projectFacts';
+import { anchorsAreStale, normalizeFileAnchors } from './projectFactsStore';
+import { recallProjectFacts, stampFactRecall } from './projectFactsRecall';
+import { decayUnrecalled, sweepUnrecalledFactDecay, sweepAllUnrecalledFactDecay } from './projectFactsDecay';
+import { upsertProjectFact } from './projectFactsWrite';
 import { MEMORY_EMBEDDING_DIMS } from '../memory/memoryEmbedding';
 import { __clearL1CacheForTests } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
@@ -372,7 +366,7 @@ describe('QA cache expiry (5301 req 5)', () => {
   it('gives a cached answer a TTL instead of replaying it forever', async () => {
     // `cacheProjectAnswer` is exercised through its own module's test; here assert
     // the constant the write path uses is a real, bounded window.
-    const { QA_CACHE_TTL_MS } = await import('./projectFacts');
+    const { QA_CACHE_TTL_MS } = await import('./projectFactsStore');
     expect(QA_CACHE_TTL_MS).toBeGreaterThan(0);
     expect(QA_CACHE_TTL_MS).toBeLessThanOrEqual(30 * 24 * 60 * 60 * 1000);
   });

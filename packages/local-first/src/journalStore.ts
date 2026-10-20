@@ -111,6 +111,38 @@ export function isLocalFirstSnapshot(value: unknown): value is LocalFirstSnapsho
     && typeof snapshot.nextSequence === 'number';
 }
 
+/** Header-checked frame boundaries: magic, a length that fits, and a matching crc. No JSON parse. */
+function frameBounds(bytes: Uint8Array): Array<{ start: number; end: number }> {
+  const bounds: Array<{ start: number; end: number }> = [];
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 0;
+  while (offset + HEADER_BYTES <= bytes.byteLength) {
+    for (let index = 0; index < MAGIC_BYTES; index += 1) {
+      if (bytes[offset + index] !== JOURNAL_FRAME_MAGIC.charCodeAt(index)) return bounds;
+    }
+    const length = view.getUint32(offset + MAGIC_BYTES, false);
+    const expected = view.getUint32(offset + MAGIC_BYTES + 4, false);
+    const start = offset + HEADER_BYTES;
+    const end = start + length;
+    // A short read is the torn tail. Nothing after it can be trusted.
+    if (end > bytes.byteLength) return bounds;
+    if (crc32(bytes.subarray(start, end)) !== expected) return bounds;
+    bounds.push({ start, end });
+    offset = end;
+  }
+  return bounds;
+}
+
+function parseFrame(bytes: Uint8Array, bound: { start: number; end: number }): LocalFirstSnapshot | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes.subarray(bound.start, bound.end))) as unknown;
+  } catch {
+    return undefined;
+  }
+  return isLocalFirstSnapshot(parsed) ? parsed : undefined;
+}
+
 /**
  * Every COMPLETE frame, oldest first. Reading stops at the first frame that is
  * truncated, mis-checksummed, or not a snapshot — that is the frame a kill cut
@@ -118,31 +150,66 @@ export function isLocalFirstSnapshot(value: unknown): value is LocalFirstSnapsho
  */
 export function decodeJournalFrames(bytes: Uint8Array): LocalFirstSnapshot[] {
   const frames: LocalFirstSnapshot[] = [];
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let offset = 0;
-  while (offset + HEADER_BYTES <= bytes.byteLength) {
-    for (let index = 0; index < MAGIC_BYTES; index += 1) {
-      if (bytes[offset + index] !== JOURNAL_FRAME_MAGIC.charCodeAt(index)) return frames;
-    }
-    const length = view.getUint32(offset + MAGIC_BYTES, false);
-    const expected = view.getUint32(offset + MAGIC_BYTES + 4, false);
-    const start = offset + HEADER_BYTES;
-    const end = start + length;
-    // A short read is the torn tail. Nothing after it can be trusted.
-    if (end > bytes.byteLength) return frames;
-    const body = bytes.subarray(start, end);
-    if (crc32(body) !== expected) return frames;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(new TextDecoder().decode(body)) as unknown;
-    } catch {
-      return frames;
-    }
-    if (!isLocalFirstSnapshot(parsed)) return frames;
+  for (const bound of frameBounds(bytes)) {
+    const parsed = parseFrame(bytes, bound);
+    if (!parsed) return frames;
     frames.push(parsed);
-    offset = end;
   }
   return frames;
+}
+
+/** What an open needs from a journal: the state to open, and where the committed bytes end. */
+export interface JournalScan {
+  /** The last committed snapshot. Undefined when no frame committed. */
+  readonly latest: LocalFirstSnapshot | undefined;
+  /** Committed frames. */
+  readonly frames: number;
+  /** Byte length of the committed prefix. Anything after it is a torn tail. */
+  readonly committedBytes: number;
+}
+
+/**
+ * Open a journal without parsing every frame: frames are walked by header and
+ * crc, and only the LAST one is decoded. A crc-valid frame that still fails to
+ * parse (never seen in practice) falls back to the full decode, so the result
+ * is always exactly what `decodeJournalFrames` would commit.
+ */
+export function scanJournal(bytes: Uint8Array): JournalScan {
+  const bounds = frameBounds(bytes);
+  const last = bounds[bounds.length - 1];
+  if (!last) return { latest: undefined, frames: 0, committedBytes: 0 };
+  const latest = parseFrame(bytes, last);
+  if (latest) return { latest, frames: bounds.length, committedBytes: last.end };
+  const decoded = decodeJournalFrames(bytes);
+  const end = decoded.length > 0 ? bounds[decoded.length - 1]!.end : 0;
+  return { latest: decoded[decoded.length - 1], frames: decoded.length, committedBytes: end };
+}
+
+/**
+ * THE journal compaction policy — every host's journal (this store, and the
+ * VSIX file journal in `clients/vscode`) compacts on the same thresholds, so
+ * "how big may a journal grow" has one answer.
+ */
+export interface JournalCompactionPolicy {
+  /** Compact once this many frames have accumulated. */
+  readonly maxFrames: number;
+  /** Compact once the journal reaches this many bytes. */
+  readonly maxBytes: number;
+}
+
+export const DEFAULT_JOURNAL_COMPACTION: JournalCompactionPolicy = Object.freeze({
+  maxFrames: 32,
+  maxBytes: 8 * 1024 * 1024,
+});
+
+/** True when a journal of `frames` frames and `bytes` bytes must be rewritten as one frame. */
+export function shouldCompactJournal(
+  journal: { readonly frames: number; readonly bytes: number },
+  policy: Partial<JournalCompactionPolicy> = DEFAULT_JOURNAL_COMPACTION,
+): boolean {
+  const maxFrames = policy.maxFrames ?? DEFAULT_JOURNAL_COMPACTION.maxFrames;
+  const maxBytes = policy.maxBytes ?? DEFAULT_JOURNAL_COMPACTION.maxBytes;
+  return journal.frames >= maxFrames || journal.bytes >= maxBytes;
 }
 
 export interface JournaledLocalFirstStoreOptions {
@@ -176,8 +243,10 @@ export interface JournaledLocalFirstStore extends LocalFirstStore {
 export function createJournaledLocalFirstStore(
   options: JournaledLocalFirstStoreOptions,
 ): JournaledLocalFirstStore {
-  const maxFrames = options.maxFrames ?? 32;
-  const maxBytes = options.maxBytes ?? 8 * 1024 * 1024;
+  const compaction: Partial<JournalCompactionPolicy> = {
+    ...(options.maxFrames !== undefined ? { maxFrames: options.maxFrames } : {}),
+    ...(options.maxBytes !== undefined ? { maxBytes: options.maxBytes } : {}),
+  };
   const listeners = new Set<() => void>();
   let memory: LocalFirstStore = createMemoryLocalFirstStore(EMPTY_LOCAL_FIRST_SNAPSHOT);
   let state: LocalFirstSnapshot = EMPTY_LOCAL_FIRST_SNAPSHOT;
@@ -192,11 +261,10 @@ export function createJournaledLocalFirstStore(
 
   const hydrate = async (initial?: LocalFirstSnapshot): Promise<void> => {
     const bytes = await options.io.read();
-    const found = bytes ? decodeJournalFrames(bytes) : [];
-    const latest = found[found.length - 1];
-    if (latest) {
-      reset(structuredClone(latest));
-      frames = found.length;
+    const scan = bytes ? scanJournal(bytes) : undefined;
+    if (scan?.latest) {
+      reset(structuredClone(scan.latest));
+      frames = scan.frames;
       return;
     }
     // No committed frame yet. Import `initial` as the opening state; the first
@@ -243,7 +311,7 @@ export function createJournaledLocalFirstStore(
       }
       state = next;
       frames += 1;
-      if (frames >= maxFrames || (await options.io.size()) >= maxBytes) {
+      if (shouldCompactJournal({ frames, bytes: await options.io.size() }, compaction)) {
         await compactNow();
       }
       notify();

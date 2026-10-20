@@ -441,13 +441,13 @@ describe('G26 web durability: durable across reload', () => {
       expect(snapshot.events[0].localSequence).toBeLessThan(snapshot.events[1].localSequence);
       const ticketEvent = snapshot.events[1];
       expect(ticketEvent.clientEntityId).toBe(tickets[0].id);
-      expect(ticketEvent.dependsOn).toEqual([`project:${projectId}:v1`]);
+      expect(ticketEvent.dependsOn).toEqual([snapshot.events[0].eventId]);
       expect(snapshot.events.every((event) => destinationKey(event.destination) === PARTITION)).toBe(true);
 
       const pending = await reopened.read((tx) => tx.pending(BOUND));
       expect(pending).toHaveLength(2);
-      expect(pending[0].eventId).toBe(`project:${projectId}:v1`);
-      expect(pending[1].eventId).toBe(`ticket:${tickets[0].id}:v1`);
+      expect(pending[0].idempotencyKey).toBe(`project:${projectId}:v1`);
+      expect(pending[1].idempotencyKey).toBe(`ticket:${tickets[0].id}:v1`);
     } finally {
       reopened.close();
     }

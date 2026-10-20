@@ -40,6 +40,7 @@ export function createMemorySearchTool(options: {
   return {
     label: "Memory Search",
     name: "memory_search",
+    idempotent: true,
     description:
       "Mandatory recall step: semantically search .builderforce/MEMORY.md + .builderforce/memory/*.md (and optional session transcripts) before answering questions about prior work, decisions, dates, people, preferences, or todos; returns top snippets with path + lines.",
     parameters: MemorySearchSchema,
@@ -69,6 +70,7 @@ export function createMemoryGetTool(options: {
   return {
     label: "Memory Get",
     name: "memory_get",
+    idempotent: true,
     description:
       "Safe snippet read from .builderforce/MEMORY.md or .builderforce/memory/*.md with optional from/lines; use after memory_search to pull only the needed lines and keep context small.",
     parameters: MemoryGetSchema,

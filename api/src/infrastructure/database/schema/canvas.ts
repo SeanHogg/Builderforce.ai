@@ -966,9 +966,14 @@ export const meetings = pgTable('meetings', {
    *  linked team chat as the durable artifact. Null until summarized. */
   summary:            text('summary'),
   summaryGeneratedAt: timestamp('summary_generated_at', { withTimezone: true }),
+  /** A1 (1249): the `booking_reservations.id` an advisory meeting was provisioned
+   *  for. Unique per tenant, so a concurrent confirm cannot mint a second meeting. */
+  advisoryReservationId: integer('advisory_reservation_id'),
   createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  uniqueIndex('uq_meetings_advisory_reservation').on(t.tenantId, t.advisoryReservationId).where(sql`advisory_reservation_id IS NOT NULL`),
+]);
 
 
 export const meetingAttendees = pgTable('meeting_attendees', {

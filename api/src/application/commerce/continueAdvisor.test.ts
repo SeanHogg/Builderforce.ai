@@ -7,10 +7,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { ActorIdentity } from '../activity/activityLog';
+const reserveForHost = vi.fn(async () => ({ id: 901, status: 'confirmed' }));
+vi.mock('./bookings', () => ({ reserveForHost: (...a: unknown[]) => reserveForHost(...(a as [])) }));
+
 import {
   ContinueAdvisorError,
   continueWithAdvisor,
   recordAdvisorRelation,
+  reserveContinuation,
   type AdvisorSessionRow,
 } from './continueAdvisor';
 
@@ -29,49 +33,30 @@ const actor: ActorIdentity = { type: 'human', ref: founder, name: 'Founder' };
 const env = {} as Env;
 const startsAt = new Date('2026-11-02T15:00:00.000Z');
 
-function sqlText(statement: unknown): string {
-  const chunks = (statement as { queryChunks?: Array<{ value?: unknown }> }).queryChunks ?? [];
-  return chunks
-    .map((chunk) => (Array.isArray(chunk?.value) ? chunk.value.join('') : ''))
-    .join('');
-}
-
-function sqlParams(statement: unknown): unknown[] {
-  const chunks = (statement as { queryChunks?: unknown[] }).queryChunks ?? [];
-  return chunks.flatMap((chunk) => {
-    if (chunk == null || typeof chunk !== 'object') return [chunk];
-    if (!('value' in chunk)) return [];
-    const value = (chunk as { value: unknown }).value;
-    return Array.isArray(value) ? [] : [value];
-  });
-}
-
 function fakeDb(session: AdvisorSessionRow | null, relationId: number | null) {
-  const executed: unknown[] = [];
+  const updates: Array<{ set: Record<string, unknown> }> = [];
   const db = {
-    select: () => {
+    select: (fields: Record<string, unknown>) => {
+      const relation = 'advisorReservationId' in fields;
       const chain = {
         from: () => chain,
         where: () => chain,
-        limit: async () => (session ? [session] : []),
+        limit: async () => (relation ? [{ advisorReservationId: relationId }] : session ? [session] : []),
       };
       return chain;
     },
-    execute: async (statement: unknown) => {
-      executed.push(statement);
-      const text = sqlText(statement);
-      if (text.includes('SELECT') && text.includes('advisor_reservation_id')) {
-        return { rows: [{ advisorReservationId: relationId }] };
-      }
-      return { rows: [] };
-    },
+    update: () => ({
+      set: (set: Record<string, unknown>) => ({
+        where: async () => { updates.push({ set }); },
+      }),
+    }),
   };
-  return { db: db as unknown as Db, executed };
+  return { db: db as unknown as Db, updates };
 }
 
 describe('recordAdvisorRelation', () => {
   it('writes the completed session onto the founder user row', async () => {
-    const { db, executed } = fakeDb(completed, null);
+    const { db, updates } = fakeDb(completed, null);
     const written = await recordAdvisorRelation(db, { founderRef: founder, reservationId: 42 });
 
     expect(written).toMatchObject({
@@ -83,10 +68,8 @@ describe('recordAdvisorRelation', () => {
       serviceId: 7,
       tenantId: 3,
     });
-    expect(executed).toHaveLength(1);
-    expect(sqlText(executed[0])).toContain('UPDATE users');
-    expect(sqlText(executed[0])).toContain('advisor_reservation_id');
-    expect(sqlParams(executed[0])).toEqual([42, founder]);
+    // Through the Drizzle `users.advisorReservationId` column, not raw SQL.
+    expect(updates).toEqual([{ set: { advisorReservationId: 42 } }]);
   });
 
   it('refuses a session that is not completed', async () => {
@@ -130,5 +113,17 @@ describe('continueWithAdvisor', () => {
     await expect(continueWithAdvisor(db, env, actor, { founderRef: founder, startsAt }, book))
       .rejects.toMatchObject({ status: 404, message: 'no continued advisor relationship' });
     expect(book).not.toHaveBeenCalled();
+  });
+});
+
+describe('reserveContinuation', () => {
+  it('books through the Marketplace Book guard + provisioning, pinned to the session tenant', async () => {
+    const { db } = fakeDb(completed, 42);
+    await reserveContinuation(db, env, 3, actor, {
+      serviceId: 7, startsAt, hostRef: advisor, bookerRef: founder, timezone: 'UTC',
+    });
+    expect(reserveForHost).toHaveBeenCalledWith(db, env, actor, advisor, {
+      serviceId: 7, startsAt, bookerRef: founder, timezone: 'UTC',
+    }, { tenantId: 3 });
   });
 });

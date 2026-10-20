@@ -13,7 +13,7 @@ import {
   corruptSnapshotRecoveryPath,
   loadExistingSnapshot,
   planSnapshotLoad,
-} from "./localFirstStore";
+} from "./localFirstSnapshotFile";
 
 const SNAPSHOT = "/globalStorage/local-first-v1.json";
 const TIMESTAMP = 1_710_000_000_000;

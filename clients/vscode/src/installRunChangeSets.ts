@@ -23,13 +23,13 @@
 import type { EntityDestination, LocalFirstStore } from "@builderforce/local-first";
 import {
   readRunChangeSetPhase,
-  recordChangeSetAroundRun,
   recordChangeSetBaseline,
   recordChangeSetFinalization,
   type ChangeSetCompleteness,
   type ChangeSetLifecycle,
-  type RunChangeBaseline,
-} from "./runChangeSets";
+} from "./changeSetLifecycle";
+import type { RunChangeBaseline } from "./runChangeBaseline";
+import { recordChangeSetAroundRun } from "./runChangeSets";
 
 /** The one call `brainRunHostPorts.ts` should add on the host start path. Not present there. */
 export const RUN_HOST_CHANGE_SET_LINE =

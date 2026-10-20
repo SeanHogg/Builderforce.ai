@@ -12,7 +12,7 @@ vi.mock('../agent/provisionBuiltinAgents', () => ({ provisionBuiltinAgents: vi.f
 vi.mock('../observability/caughtErrorReporter', () => ({ reportCaughtError: vi.fn() }));
 
 import { provisionBuiltinAgents as provisionBuiltinAgentsImpl } from '../agent/provisionBuiltinAgents';
-import { createWorkspace, listMyWorkspaces } from './myWorkspaces';
+import { createWorkspace, listMyWorkspaces, reviveWorkspaceRow } from './myWorkspaces';
 import { __clearL1CacheForTests } from '../../infrastructure/cache/readThroughCache';
 
 const provisionBuiltinAgents = vi.mocked(provisionBuiltinAgentsImpl);
@@ -103,5 +103,22 @@ describe('createWorkspace — the one create', () => {
     provisionBuiltinAgents.mockRejectedValueOnce(new Error('seed failed'));
     const result = await createWorkspace(db, service() as never, { name: 'Team', ownerUserId: 'u1' });
     expect(result).toMatchObject({ ok: true, tenant: { id: 42 } });
+  });
+});
+
+describe('reviveWorkspaceRow — a KV hit has the same shape as a miss', () => {
+  const base = { id: 3, name: 'Hogg', slug: 'hogg', role: 'owner' } as never as Parameters<typeof reviveWorkspaceRow>[0];
+
+  it('turns a JSON-decoded trialEndsAt string back into a Date', () => {
+    const row = reviveWorkspaceRow({ ...base, trialEndsAt: '2026-11-01T00:00:00.000Z' as never });
+    expect(row.trialEndsAt).toBeInstanceOf(Date);
+    expect(row.trialEndsAt?.toISOString()).toBe('2026-11-01T00:00:00.000Z');
+  });
+
+  it('leaves a Date or null untouched and drops an unparseable value', () => {
+    const at = new Date('2026-11-01T00:00:00.000Z');
+    expect(reviveWorkspaceRow({ ...base, trialEndsAt: at }).trialEndsAt).toBe(at);
+    expect(reviveWorkspaceRow({ ...base, trialEndsAt: null }).trialEndsAt).toBeNull();
+    expect(reviveWorkspaceRow({ ...base, trialEndsAt: 'soon' as never }).trialEndsAt).toBeNull();
   });
 });

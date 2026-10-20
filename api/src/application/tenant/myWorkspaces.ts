@@ -62,7 +62,19 @@ export async function listMyWorkspaces(
     return { defaultTenantId, tenants };
   }, TENANT_READ_TTL);
   if (result.tenants.length === 0) await invalidateCached(env, cacheKey);
-  return result;
+  return { ...result, tenants: result.tenants.map(reviveWorkspaceRow) };
+}
+
+/**
+ * A KV hit comes back JSON-decoded, so `trialEndsAt` is an ISO string there and a
+ * `Date` on a miss. Revive it so every caller sees ONE shape (and the wire format —
+ * `Date` serialises to the same ISO string — is unchanged either way).
+ */
+export function reviveWorkspaceRow(row: MyWorkspaceRow): MyWorkspaceRow {
+  const raw = row.trialEndsAt as Date | string | null;
+  if (raw == null || raw instanceof Date) return row;
+  const parsed = new Date(raw);
+  return { ...row, trialEndsAt: Number.isNaN(parsed.getTime()) ? null : parsed };
 }
 
 export type CreateWorkspaceResult =

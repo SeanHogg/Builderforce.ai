@@ -3,20 +3,22 @@
  *
  * Writes the `projects` row and nothing else. No board seed, no repo import,
  * no agent roster, no notification. Mapping, projection, change row and receipt
- * stay with the push transaction that calls this use case.
+ * stay with the push transaction that calls this use case — and so does this
+ * write: it goes through that transaction (`tx`) inside a savepoint, so a lost
+ * key race rolls back only the project write.
  */
 
 import { and, eq } from 'drizzle-orm';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
-import type { Db } from '../../../infrastructure/database/connection';
+import type { Tx } from '../../../infrastructure/database/connection';
 import { projects } from '../../../infrastructure/database/schema';
+import { isUniqueViolation } from '../../../infrastructure/database/uniqueViolation';
 import type { SyncEntityMappingRow, SyncEventInput, SyncImportContext, SyncStoreSet } from '../syncPorts';
 import {
   appliedExisting,
   appliedNew,
   conflict,
   insertedId,
-  isUniqueViolation,
   mutateGate,
   preludeRejection,
   rejected,
@@ -83,7 +85,7 @@ async function writeFailure(error: unknown, operation: string): Promise<BoundedI
 async function createProject(
   event: SyncEventInput,
   ctx: SyncImportContext,
-  db: Db,
+  tx: Tx,
   mapping: SyncEntityMappingRow | null,
 ): Promise<BoundedImportOutcome> {
   const parsed = readProject(event.payload);
@@ -97,14 +99,14 @@ async function createProject(
   }
   const key = payload.key ?? derivedKey(payload.name, event.clientEntityId);
   try {
-    const rows = await db.insert(projects).values({
+    const rows = await tx.transaction((savepoint) => savepoint.insert(projects).values({
       tenantId: ctx.auth.tenantId,
       key,
       name: payload.name,
       status: payload.status ?? 'active',
       origin: 'imported',
       updatedAt: ctx.now,
-    }).returning({ id: projects.id });
+    }).returning({ id: projects.id }));
     const id = insertedId(rows);
     if (id === null) return rejected('project_insert_failed');
     const appliedPayload = { name: payload.name, key, status: payload.status ?? 'active' };
@@ -117,7 +119,7 @@ async function createProject(
 async function updateProject(
   event: SyncEventInput,
   ctx: SyncImportContext,
-  db: Db,
+  tx: Tx,
   mapping: SyncEntityMappingRow | null,
 ): Promise<BoundedImportOutcome> {
   const gate = mutateGate(event, ctx, mapping);
@@ -132,12 +134,12 @@ async function updateProject(
   const stored = canonical(payload, payload.status);
   if (sameCanonical(current, stored)) return appliedExisting(current, stored);
   try {
-    const rows = await db.update(projects).set({
+    const rows = await tx.transaction((savepoint) => savepoint.update(projects).set({
       name: payload.name,
       status: payload.status,
       ...(payload.key ? { key: payload.key } : {}),
       updatedAt: ctx.now,
-    }).where(and(eq(projects.id, id), eq(projects.tenantId, ctx.auth.tenantId))).returning({ id: projects.id });
+    }).where(and(eq(projects.id, id), eq(projects.tenantId, ctx.auth.tenantId))).returning({ id: projects.id }));
     if (insertedId(rows) === null) return rejected('project_not_found');
     return appliedNew(current.serverId, current.serverVersion + 1, ctx.destinationKey, stored);
   } catch (error) {
@@ -148,20 +150,20 @@ async function updateProject(
 async function deleteProject(
   event: SyncEventInput,
   ctx: SyncImportContext,
-  db: Db,
+  tx: Tx,
   mapping: SyncEntityMappingRow | null,
 ): Promise<BoundedImportOutcome> {
-  const gate = mutateGate(event, ctx, mapping);
+  const tombstone = { status: 'archived' as const };
+  const gate = mutateGate(event, ctx, mapping, tombstone);
   if (gate) return gate;
   const current = mapping as SyncEntityMappingRow;
   const id = serverNumericId(current.serverId);
   if (id === null) return rejected('server_id_invalid');
-  const tombstone = { status: 'archived' as const };
   try {
-    const rows = await db.update(projects).set({
+    const rows = await tx.transaction((savepoint) => savepoint.update(projects).set({
       status: 'archived',
       updatedAt: ctx.now,
-    }).where(and(eq(projects.id, id), eq(projects.tenantId, ctx.auth.tenantId))).returning({ id: projects.id });
+    }).where(and(eq(projects.id, id), eq(projects.tenantId, ctx.auth.tenantId))).returning({ id: projects.id }));
     if (insertedId(rows) === null) return rejected('project_not_found');
     return appliedNew(current.serverId, current.serverVersion + 1, ctx.destinationKey, tombstone);
   } catch (error) {
@@ -177,14 +179,14 @@ export async function importSyncedProject(
   event: SyncEventInput,
   ctx: SyncImportContext,
   stores: SyncStoreSet,
-  db: Db,
+  tx: Tx,
 ): Promise<BoundedImportOutcome> {
   if (event.entityType !== 'project') return rejected('entity_type_rejected');
   const prelude = preludeRejection(event, ctx);
   if (prelude) return prelude;
   const mapping = await stores.findMapping(ctx.auth.tenantId, event.entityType, event.clientEntityId);
-  if (event.operation === 'delete') return deleteProject(event, ctx, db, mapping);
-  if (event.operation === 'update') return updateProject(event, ctx, db, mapping);
-  if (event.operation === 'create' || event.operation === 'import') return createProject(event, ctx, db, mapping);
+  if (event.operation === 'delete') return deleteProject(event, ctx, tx, mapping);
+  if (event.operation === 'update') return updateProject(event, ctx, tx, mapping);
+  if (event.operation === 'create' || event.operation === 'import') return createProject(event, ctx, tx, mapping);
   return rejected('operation_unsupported');
 }

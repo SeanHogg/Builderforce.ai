@@ -30,7 +30,6 @@ import {
   UNBOUND_DESTINATION,
   type EnqueueEvent,
   type EntityDestination,
-  type JournalIo,
   type JournaledLocalFirstStore,
   type LocalEntityType,
   type LocalFirstStore,
@@ -39,6 +38,7 @@ import {
 import nodeFs from 'node:fs';
 import nodePath from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { JOURNAL_FILE, createNodeJournalIo } from './localFirstJournalIo';
 
 /** The five kinds whose record and journal event must land together. */
 export const OFFLINE_COMMITTED_ENTITY_TYPES: readonly LocalEntityType[] = [
@@ -49,7 +49,6 @@ export const OFFLINE_COMMITTED_ENTITY_TYPES: readonly LocalEntityType[] = [
   'execution',
 ];
 
-const JOURNAL_FILE = 'local-first-v2.journal';
 const SNAPSHOT_FILE = 'local-first-v1.json';
 
 export interface OfflineWrite<T = unknown> {
@@ -63,11 +62,16 @@ export interface OfflineWrite<T = unknown> {
 
 export interface CommittedOfflineWrite {
   readonly records: readonly LocalRecord[];
+  /** The wire `eventId` the store minted (a UUID) for each committed event, in commit order. */
   readonly events: readonly string[];
 }
 
-/** `entityType:clientId:version` — the same id `commitWriteAndEnqueue` plans. */
-export function offlineEventId(record: LocalRecord): string {
+/**
+ * `entityType:clientId:version` — the logical write's `idempotencyKey`. The
+ * store mints the wire `eventId`; a second commit of the same version while the
+ * first is pending returns that first event instead of enqueueing twice.
+ */
+export function offlineIdempotencyKey(record: LocalRecord): string {
   return `${record.entityType}:${record.id}:v${record.version}`;
 }
 
@@ -100,7 +104,7 @@ export async function commitOfflineEntityWrite<T>(
     occurredAt,
   });
   const event: EnqueueEvent<T> = {
-    eventId: offlineEventId(record),
+    idempotencyKey: offlineIdempotencyKey(record),
     clientEntityId: record.id,
     entityType: record.entityType,
     operation: record.version === 1 ? 'create' : 'update',
@@ -139,7 +143,7 @@ export async function commitOfflineEntitySet(
       occurredAt: at,
     });
     const event: EnqueueEvent<OfflinePayload> = {
-      eventId: offlineEventId(record),
+      idempotencyKey: offlineIdempotencyKey(record),
       clientEntityId: record.id,
       entityType: record.entityType,
       operation: 'create',
@@ -163,39 +167,6 @@ export async function commitOfflineEntitySet(
   return {
     records: prepared.map((entry) => entry.record),
     events: committed,
-  };
-}
-
-/** `node:fs` adapter for {@link JournalIo}. Appends are opened in append mode. */
-export function createNodeJournalIo(directory: string, fileName: string = JOURNAL_FILE): JournalIo {
-  const file = nodePath.join(directory, fileName);
-  return {
-    async read(): Promise<Uint8Array | undefined> {
-      try {
-        return new Uint8Array(await nodeFs.promises.readFile(file));
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-        throw error;
-      }
-    },
-    async append(frame: Uint8Array): Promise<void> {
-      await nodeFs.promises.mkdir(directory, { recursive: true });
-      await nodeFs.promises.appendFile(file, frame);
-    },
-    async replace(frame: Uint8Array): Promise<void> {
-      await nodeFs.promises.mkdir(directory, { recursive: true });
-      const temporary = `${file}.${process.pid}.tmp`;
-      await nodeFs.promises.writeFile(temporary, frame);
-      await nodeFs.promises.rename(temporary, file);
-    },
-    async size(): Promise<number> {
-      try {
-        return (await nodeFs.promises.stat(file)).size;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0;
-        throw error;
-      }
-    },
   };
 }
 
@@ -242,7 +213,8 @@ export function createOfflineLocalFirstStore(options: OfflineLocalFirstStoreOpti
   };
 
   store.subscribe(() => {
-    void republish().catch(() => undefined);
+    // The commit is already durable in the journal; a failed cache republish is reported, not fatal.
+    void republish().catch((error: unknown) => console.warn('local-first: snapshot cache republish failed', error));
   });
 
   return Object.assign(store, {

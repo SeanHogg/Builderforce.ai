@@ -27186,7 +27186,8 @@
       "calling": "Enregistrement…",
       "callEarlyFailed": "Impossible d’enregistrer la décision. Réessayez.",
       "readAgain": "Relire avec ce que nous avons appris"
-    }
+    },
+    "memoryLoading": "Lecture du réglage de mémoire de cette conversation…"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -35375,6 +35376,9 @@
     "saveRelation": "Enregistrer comme mon conseiller",
     "relationSaved": "Relation avec le conseiller enregistrée",
     "rosterHeading": "Séances que vous animez",
-    "noRoster": "Rien dans votre planning."
+    "noRoster": "Rien dans votre planning.",
+    "inviteAdvisor": "Inviter le conseiller dans le contexte IA",
+    "inviteAdvisorHint": "Permet à l'IA de lire ce fil restreint et y ajoute votre conseiller.",
+    "advisorInvited": "Conseiller invité dans le contexte IA"
   }
 }

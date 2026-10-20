@@ -27186,7 +27186,8 @@
       "calling": "Wird entschieden…",
       "callEarlyFailed": "Die Entscheidung konnte nicht gespeichert werden. Bitte erneut versuchen.",
       "readAgain": "Mit dem Gelernten neu lesen"
-    }
+    },
+    "memoryLoading": "Speichereinstellung dieser Unterhaltung wird gelesen…"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -35375,6 +35376,9 @@
     "saveRelation": "Als meinen Berater speichern",
     "relationSaved": "Beraterbeziehung gespeichert",
     "rosterHeading": "Sitzungen, die du leitest",
-    "noRoster": "Nichts in deinem Plan."
+    "noRoster": "Nichts in deinem Plan.",
+    "inviteAdvisor": "Berater in den KI-Kontext einladen",
+    "inviteAdvisorHint": "Erlaubt der KI, diesen eingeschränkten Thread zu lesen, und fügt deinen Berater hinzu.",
+    "advisorInvited": "Berater in den KI-Kontext eingeladen"
   }
 }

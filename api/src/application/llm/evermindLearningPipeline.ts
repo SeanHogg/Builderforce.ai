@@ -19,7 +19,8 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { getProjectEvermindHead } from './projectEvermind';
-import { QA_CACHE_SOURCE, upsertProjectFact } from './projectFacts';
+import { QA_CACHE_SOURCE } from './projectFactsStore';
+import { upsertProjectFact } from './projectFactsWrite';
 import {
   extractCandidate,
   pipelineMetrics,
@@ -197,17 +198,40 @@ export async function transferLearningCandidate(
   if (!row) return { ok: false, error: 'candidate not found', status: 404 };
   if (row.status === 'rejected') return { ok: false, error: 'a rejected learning cannot be transferred', status: 409 };
   if (row.transferredAt) return { ok: true, id: row.id };
-  const wrote = await upsertProjectFact(env, db, tenantId, projectId, row.factKey, row.statement, 'evermind-pipeline');
-  if (!wrote) return { ok: false, error: 'project facts store refused the learning', status: 503 };
+  // Only a manager-APPROVED learning reaches project_facts — a pending one must be
+  // reviewed first (reviewLearningCandidate), never promoted by the transfer itself.
+  if (row.status !== 'approved') return { ok: false, error: 'only an approved learning can be transferred', status: 409 };
   const now = new Date();
-  await db.update(evermindLearningCandidates).set({
-    status: 'approved',
+  const candidateRow = (onlyIfApproved: boolean) => scopedToTenant(
+    evermindLearningCandidates,
+    tenantId,
+    eq(evermindLearningCandidates.id, row.id),
+    onlyIfApproved ? eq(evermindLearningCandidates.status, 'approved') : undefined,
+  );
+  // Race-safe CLAIM before the fact write: the status read above is a prior read,
+  // so the UPDATE re-asserts `approved` — a candidate rejected between the read
+  // and this write is neither stamped nor promoted into project_facts.
+  const [claimed] = await db.update(evermindLearningCandidates).set({
     reviewedAt: row.reviewedAt ?? now,
     reviewedBy: row.reviewedBy ?? bench.reviewerId ?? null,
     transferredAt: now,
     ...(typeof bench.before === 'number' ? { benchBefore: bench.before } : {}),
     ...(typeof bench.after === 'number' ? { benchAfter: bench.after } : {}),
-  }).where(scopedToTenant(evermindLearningCandidates, tenantId, eq(evermindLearningCandidates.id, row.id)));
+  }).where(candidateRow(true)).returning({ id: evermindLearningCandidates.id });
+  if (!claimed) return { ok: false, error: 'only an approved learning can be transferred', status: 409 };
+
+  const release = () => db.update(evermindLearningCandidates).set({ transferredAt: null }).where(candidateRow(false));
+  let wrote: boolean;
+  try {
+    wrote = !!await upsertProjectFact(env, db, tenantId, projectId, row.factKey, row.statement, 'evermind-pipeline');
+  } catch (error) {
+    await release();
+    throw error;
+  }
+  if (!wrote) {
+    await release();
+    return { ok: false, error: 'project facts store refused the learning', status: 503 };
+  }
   return { ok: true, id: row.id };
 }
 
