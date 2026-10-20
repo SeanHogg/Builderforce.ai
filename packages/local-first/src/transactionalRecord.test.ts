@@ -72,9 +72,11 @@ describe('transactional record store', () => {
     const sequences = commit.events.map((event) => event.localSequence);
     expect(sequences).toEqual([1, 2, 3, 4, 5]);
     expect(commit.firstSequence).toBe(1);
-    // The ticket depends on the project; the run on the chat and the audit.
-    expect(commit.events[1].dependsOn).toEqual(['project:project-1:v1']);
-    expect(commit.events[4].dependsOn).toEqual(['chat:chat-1:v1', 'audit-run:audit-1:v1']);
+    // The ticket depends on the project; the run on the chat and the audit. A
+    // dependency on a pending event is stored as that event's wire id.
+    const [project, , chat, audit] = commit.events;
+    expect(commit.events[1].dependsOn).toEqual([project.eventId]);
+    expect(commit.events[4].dependsOn).toEqual([chat.eventId, audit.eventId]);
     for (const event of commit.events) expect(event.operation).toBe('create');
   });
 
@@ -250,18 +252,21 @@ describe('transactional record store', () => {
   });
 
   it('leaves the VSIX JSON snapshot as a cache, not the live store', () => {
-    const vsix = readFileSync(
-      new URL('../../../clients/vscode/src/localFirstStore.ts', import.meta.url),
+    const read = (file: string) => readFileSync(
+      new URL(`../../../clients/vscode/src/${file}`, import.meta.url),
       'utf8',
     );
-    // The corrupt-file recovery helpers still read the legacy file.
-    expect(vsix).toContain('"local-first-v1.json"');
-    expect(vsix).toContain('createMemoryLocalFirstStore');
+    const host = read('localFirstStore.ts');
+    const durable = read('durableLocalFirstStore.ts');
     // G03: the host's `localBrainApplication` is wired to the journal-backed
     // store, so the JSON file is republished from it and is never read back
     // as state. This module is still not the host's store.
-    expect(vsix).not.toContain('transactionalRecord');
-    expect(vsix).toContain('createOfflineLocalFirstStore');
-    expect(vsix).toMatch(/const store = createOfflineLocalFirstStore\(\{/);
+    expect(host).not.toContain('transactionalRecord');
+    expect(host).toMatch(/return createDurableLocalFirstStore\(/);
+    expect(host).toMatch(/const store = createVsCodeLocalFirstStore\(/);
+    // The durable store keeps the legacy file only as its republished cache.
+    expect(durable).toContain('"local-first-v1.json"');
+    expect(durable).toContain('createMemoryLocalFirstStore');
+    expect(durable).not.toContain('transactionalRecord');
   });
 });

@@ -904,5 +904,6 @@
   "Remediation tickets": "修复工单",
   "Audit preview. Source review is pending.": "审计预览。源代码审查尚未完成。",
   "Audit source review completed.": "源代码审查已完成。",
+  "This audit was closed locally and will not be relaunched.": "此审计已在本地关闭，不会重新启动。",
   "Could not open the selected audit source file.": "无法打开所选的审计源文件。"
 }

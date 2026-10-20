@@ -90,11 +90,13 @@ describe('local work', () => {
     expect(ticket.destination).toEqual(destination);
 
     const snapshot = await store.export();
+    // A dependency on a pending event is stored as that event's wire id.
+    const projectEvent = snapshot.events.find((event) => event.clientEntityId === 'project-1');
     const ticketEvent = snapshot.events.find((event) => event.clientEntityId === 'ticket-1');
     expect(ticketEvent).toEqual(expect.objectContaining({
       entityType: 'ticket',
       operation: 'create',
-      dependsOn: ['project:project-1:v1'],
+      dependsOn: [projectEvent?.eventId],
     }));
     expect(snapshot.records.filter((record) => record.entityType === 'ticket')).toHaveLength(1);
   });

@@ -904,5 +904,6 @@
   "Remediation tickets": "Remediation tickets",
   "Audit preview. Source review is pending.": "Audit preview. Source review is pending.",
   "Audit source review completed.": "Audit source review completed.",
+  "This audit was closed locally and will not be relaunched.": "This audit was closed locally and will not be relaunched.",
   "Could not open the selected audit source file.": "Could not open the selected audit source file."
 }

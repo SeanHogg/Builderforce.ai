@@ -253,13 +253,14 @@ export async function runNetworkDenialScenario(
     !restored
     || restored.payload.host !== host
     || restored.payload.title !== durable.write.title
-    || event?.eventId !== durable.write.eventId
+    // The store mints the wire id; the write is named by its idempotency key.
+    || event?.idempotencyKey !== durable.write.eventId
   ) {
     throw new Error('write_lost_after_replay');
   }
   const readAfterRestart: NetworkDenialWrite = {
     id: restored.id,
-    eventId: event.eventId,
+    eventId: event.idempotencyKey,
     entityType: 'ticket',
     title: restored.payload.title,
     host: restored.payload.host,

@@ -198,11 +198,13 @@ describe('denied domain tools write the local store', () => {
     expect(spies.fetchCalls).toEqual([]);
     expect(spies.platformCalls).toEqual([]);
     const snapshot = await store.export();
+    // A dependency on a pending event is stored as that event's wire id.
+    const projectEvent = snapshot.events.find((event) => event.clientEntityId === 'project-1');
     expect(snapshot.events.find((event) => event.clientEntityId === 'ticket-1')).toEqual(
       expect.objectContaining({
         entityType: 'ticket',
         operation: 'create',
-        dependsOn: ['project:project-1:v1'],
+        dependsOn: [projectEvent?.eventId],
       }),
     );
   });

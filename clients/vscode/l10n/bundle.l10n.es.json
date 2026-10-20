@@ -904,5 +904,6 @@
   "Remediation tickets": "Tickets de corrección",
   "Audit preview. Source review is pending.": "Vista previa. Revisión del código pendiente.",
   "Audit source review completed.": "Revisión del código completada.",
+  "This audit was closed locally and will not be relaunched.": "Esta auditoría se cerró localmente y no se volverá a iniciar.",
   "Could not open the selected audit source file.": "No se pudo abrir el archivo seleccionado."
 }

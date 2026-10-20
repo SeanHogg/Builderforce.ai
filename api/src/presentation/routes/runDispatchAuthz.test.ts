@@ -154,7 +154,8 @@ function approvalApp() {
         innerJoin: () => ({ where: () => Promise.resolve([]) }),
       }),
     }),
-    update: () => ({ set: (v: unknown) => { updated(v); return { where: () => Promise.resolve(undefined) }; } }),
+    // The decide claims the row with `UPDATE … RETURNING`; one returned row = this decide won.
+    update: () => ({ set: (v: unknown) => { updated(v); return { where: () => ({ returning: () => Promise.resolve([{ id: PENDING_APPROVAL.id }]) }) }; } }),
     insert: () => ({ values: () => Promise.resolve(undefined) }),
   };
   const app = createApprovalRoutes(db as never, {} as never);
