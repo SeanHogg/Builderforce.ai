@@ -92,6 +92,7 @@
     "@builderforce/agent-tools": "link:../packages/agent-tools",
     "@builderforce/learned-routing": "link:../packages/learned-routing",
     "@builderforce/local-inference": "link:../packages/local-inference",
+    "@builderforce/local-first": "link:../packages/local-first",
     "@builderforce/model-catalog": "link:../packages/model-catalog",
     "@builderforce/run-policy": "link:../packages/run-policy",
     "@builderforce/workload": "link:../packages/workload",

@@ -59,6 +59,8 @@ export interface BfiContextShape {
   trainedContext: number;
   kvBudgetBytes?: number;
   f16?: boolean;
+  maxStorageBufferBindingSizeBytes?: number;
+  /** @deprecated Use maxStorageBufferBindingSizeBytes. */
   maxBufferBytes?: number;
 }
 
@@ -123,7 +125,8 @@ function predictedContext(engine: BfiEngineStatic, row: LocalCatalogModel, suppo
         ...row.kv,
         trainedContext: row.contextTokens,
         f16: support.f16,
-        maxBufferBytes: support.maxBufferBytes,
+        maxStorageBufferBindingSizeBytes:
+          support.maxStorageBufferBindingSizeBytes ?? support.maxBufferBytes,
       })
     : 0;
   return planned > 0 ? planned : Math.min(BFI_CONTEXT_FLOOR, row.contextTokens);

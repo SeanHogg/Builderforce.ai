@@ -28,6 +28,7 @@ import { PEOPLE_ENTITIES } from './people/entities';
 import { PLATFORM_ENTITIES } from './platform/entities';
 import { REVENUE_ENTITIES } from './revenue/entities';
 import { SUPPORT_ENTITIES } from './support/entities';
+import { SYNC_ENTITIES } from './sync/entities';
 import type { EntityDef, EntityScope } from './entityDefinition';
 
 export const ENTITY_CATALOG: readonly EntityDef[] = [
@@ -49,6 +50,7 @@ export const ENTITY_CATALOG: readonly EntityDef[] = [
   ...PLATFORM_ENTITIES,
   ...REVENUE_ENTITIES,
   ...SUPPORT_ENTITIES,
+  ...SYNC_ENTITIES,
 ];
 
 const byName = new Map<string, EntityDef>(ENTITY_CATALOG.map((e) => [e.name, e]));

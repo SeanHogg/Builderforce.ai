@@ -140,7 +140,10 @@ function globToRegExp(pattern) {
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i];
     if (c === '*') {
-      if (pattern[i + 1] === '*') { re += '.*'; i++; } else { re += '[^/]*'; }
+      if (pattern[i + 1] === '*') {
+        if (pattern[i + 2] === '/') { re += '(?:.*/)?'; i += 2; }
+        else { re += '.*'; i++; }
+      } else { re += '[^/]*'; }
     } else if (c === '?') {
       re += '[^/]';
     } else {
@@ -171,6 +174,50 @@ function matchGlobScoped(p, pattern, sub) {
   return matchGlob(p, pattern) || matchGlob(p.slice(scope.length + 1), pattern);
 }
 
+/** Mirror of dirMayContainGlobMatch in packages/agent-tools/src/glob.ts. */
+function dirMayContainGlob(dir, pattern, sub) {
+  const norm = (s) => (s ?? '').split('\\\\').join('/').trim().replace(/^\\.\\/+/, '').replace(/^\\/+|\\/+$/g, '');
+  const d = norm(dir);
+  const scope = norm(sub);
+  const pat = String(pattern).split('\\\\').join('/');
+  if (scope && d && d !== scope && !d.startsWith(scope + '/') && !scope.startsWith(d + '/')) return false;
+  const literalPrefix = (p) => {
+    if (!p.includes('/')) return null;
+    const meta = p.search(/[*?\\[]/);
+    if (meta === 0) return null;
+    const head = meta < 0 ? p : p.slice(0, meta);
+    const slash = head.lastIndexOf('/');
+    return slash < 0 ? null : head.slice(0, slash + 1);
+  };
+  const canReach = (directory, prefix) => {
+    if (directory === '') return true;
+    const dirSlash = directory + '/';
+    return prefix.startsWith(dirSlash) || dirSlash.startsWith(prefix);
+  };
+  const readings = [literalPrefix(pat)];
+  if (scope) {
+    const rel = literalPrefix(pat);
+    readings.push(rel == null ? scope + '/' : scope + '/' + rel);
+  }
+  for (const prefix of readings) {
+    if (prefix == null) {
+      if (!scope || d === '' || d === scope || d.startsWith(scope + '/') || scope.startsWith(d + '/')) return true;
+      continue;
+    }
+    if (canReach(d, prefix)) return true;
+  }
+  return false;
+}
+
+function emptyGlobNote(glob, sub, truncated) {
+  const scope = (sub ?? '').split('\\\\').join('/').trim().replace(/^\\.\\/+/, '').replace(/^\\/+|\\/+$/g, '');
+  const base = 'No file matches glob "' + glob + '"' + (scope ? ' under "' + scope + '"' : '') + '.';
+  if (truncated) {
+    return base + ' This is NOT proof the file does not exist: the search was cut off before the tree was fully scanned, so this only means "not among the paths scanned so far". Narrow path to a smaller folder and re-run before concluding anything is missing.';
+  }
+  return base + ' Try a broader pattern, or list_files without a glob to see the tree. 0 matches means no such file exists in the paths scanned — do not claim one is missing without trying a broader glob first.';
+}
+
 /**
  * List repo files under \`dir\` (skipping .git/node_modules), capped. BREADTH-FIRST so
  * shallow files (root docs like ROADMAP.md) are collected before the cap is hit deep
@@ -195,7 +242,13 @@ async function listFiles(dir, sub, glob) {
     for (const e of entries) {
       if (e.name === '.git' || e.name === 'node_modules') continue;
       const full = join(d, e.name);
-      if (e.isDirectory()) { queue.push(full); }
+      if (e.isDirectory()) {
+        if (glob) {
+          const relDir = relative(dir, full).split(sep).join('/');
+          if (!dirMayContainGlob(relDir, glob, sub)) continue;
+        }
+        queue.push(full);
+      }
       else {
         const rel = relative(dir, full).split(sep).join('/');
         if (glob && !matchGlobScoped(rel, glob, sub)) continue;
@@ -205,7 +258,9 @@ async function listFiles(dir, sub, glob) {
     }
   }
   acc.sort((a, b) => a.localeCompare(b));
-  return { ok: true, paths: acc, truncated };
+  const result = { ok: true, paths: acc, truncated };
+  if (glob && acc.length === 0) result.note = emptyGlobNote(glob, sub, truncated);
+  return result;
 }
 
 /**

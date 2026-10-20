@@ -23,10 +23,10 @@
  * routing unchanged.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IntlProvider } from 'use-intl';
 import catalogs from 'virtual:bf-canvas-messages';
-import { BrainProvider, localTransport, type BrainConfig, type BrainPersistenceAdapter, type BrainTransport } from '@seanhogg/builderforce-brain-embedded';
+import { BrainProvider, localTransport, type BrainConfig, type BrainTransport } from '@seanhogg/builderforce-brain-embedded';
 import { CreationCanvas } from '@/components/creation-canvas/CreationCanvas';
 import { ToastProvider } from '@/components/ToastProvider';
 import { ConfirmProvider } from '@/components/ConfirmProvider';
@@ -35,8 +35,7 @@ import { sanitizeCanvasSurface } from '@/lib/canvasSurfaces';
 import { getToken, hostFetch, onInit, onTokenChange, post, refreshToken, type InitData } from './vscodeBridge';
 import { installCanvasHost } from './canvas/hostActions';
 import { invalidateGatewayModelOptions } from '@seanhogg/builderforce-brain-embedded';
-import { createPersistence } from './persistence';
-import { createInMemoryPersistence } from './localPersistence';
+import { createHostPersistence } from './hostPersistence';
 import { installHostRunDriver } from './hostRunDriver';
 import { CanvasBoundary } from './CanvasBoundary';
 import { HostScopeProviders } from './canvas/HostScopeProviders';
@@ -265,21 +264,8 @@ function WorkspaceScreen({ init }: { init: InitData }) {
  * editor exists for.
  */
 function ChatRuntimeProvider({ init, children }: { init: InitData; children: React.ReactNode }) {
-  // The panel only renders signed out on an on-device route, and that conversation has
-  // nowhere durable to go. Hold ONE session store for the life of the panel so
-  // re-rendering — a token re-mint, a grounding refresh — does not silently start a
-  // new empty chat under the user.
-  const signedOut = !init.signedIn || !(init.token || getToken());
-  const memoryRef = useRef<BrainPersistenceAdapter | null>(null);
-  const memoryStore = (t: (key: string, fallback: string) => string): BrainPersistenceAdapter => {
-    memoryRef.current ??= createInMemoryPersistence({
-      summarizeUnavailable: t(
-        'app.summarizeNeedsAccount',
-        'Summarizing a chat needs a BuilderForce account. This conversation is only on this machine.',
-      ),
-    });
-    return memoryRef.current;
-  };
+  // The extension host owns the durable local application store; panel visibility never
+  // decides whether history survives.
 
   // The gateway, as a transport. It funds two DIFFERENT jobs: streaming a turn when no
   // on-device model is pinned, and serving the platform tool catalogue always. Built
@@ -302,22 +288,15 @@ function ChatRuntimeProvider({ init, children }: { init: InitData; children: Rea
       // itself. Everything else is unchanged, so the agent loop and tool-call protocol
       // are identical either way.
       //
-      // Persistence stays on the gateway for a SIGNED-IN local turn: the transcript,
-      // its project links and the audit trail are platform records, and the model that
-      // produced the text has no bearing on where the text is kept. Signed out there is
-      // no account to keep it in, so the conversation lives in this panel and nowhere
-      // else — and is gone when it closes.
-      // The SHARED local transport (brain-embedded `localTransport`): the same rewrite
-      // and null-token rule the host's runs use, with the host's fetch lent to it.
+      // All chat history is host-local first; account synchronization is a separate
+      // permissioned batch job, not a different persistence implementation.
       transport: init.localRoute
         ? { ...localTransport({ baseUrl: init.localRoute.baseUrl }, webviewLocalFetch(hostFetch)), defaultModel: init.localRoute.model }
         : gatewayTransport,
-      persistence: signedOut
-        ? memoryStore(makeT(init.labels))
-        : createPersistence(init.baseUrl, getToken, () => void refreshToken()),
+      persistence: createHostPersistence(),
       resolveSystemPrompt: () => buildIdeSystemPrompt({ hasWorkspace: init.hasWorkspace, grounding: init.grounding }),
     }),
-    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute, signedOut, gatewayTransport],
+    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute, gatewayTransport],
   );
 
   return (

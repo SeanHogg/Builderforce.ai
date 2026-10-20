@@ -14,6 +14,7 @@
 // Injection seam
 export { BrainProvider, resolveBrainStream, useBrainConfig } from './config';
 export type { BrainConfig, BrainRuntime, BrainPersistenceAdapter } from './config';
+export { createLocalBrainPersistence, type LocalBrainPersistenceOptions } from './localFirstPersistence';
 
 // Streaming client + tool/message types
 // RepetitionLoopError: a model stuck repeating one block of prose, cut mid-stream.

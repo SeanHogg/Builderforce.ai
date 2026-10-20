@@ -31,6 +31,8 @@
 export const SHARED_HOST_MESSAGES = [
   /** Re-mint the tenant JWT (the webview cannot reach secret storage). */
   'token.refresh',
+  /** Run a host-local Brain persistence method (request/response). */
+  'local.persistence',
   /** Run the sign-in command (the webview cannot execute commands). */
   'signin',
   /** A non-2xx API answer the webview received, for the output channel — see

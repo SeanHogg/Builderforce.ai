@@ -29,6 +29,7 @@ import { authLabels } from "./authLabels";
 import { subagentLabels } from "./subagentLabels";
 import { workStatusLabels } from "./workStatusLabels";
 import { workspaceCanvasSession, type WorkspaceCanvasSession } from "./workspaceSession";
+import { platformPolicy } from "./platformPolicy";
 
 /** Inbound messages unique to the Brain panel (the shared cases live in the base). */
 interface BrainInbound extends WebviewInbound {
@@ -1046,6 +1047,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       // report of that failure could not say whether the guard against it was even
       // present. Now it travels with every copied diagnostics report.
       posixShell: posixShellReport(),
+      platformPolicy: platformPolicy().snapshot(),
       token,
       // Manual pick > active project's Evermind pin > configured default. Sending the
       // `project_evermind:<id>` pin lets the gateway serve the project's CURRENT learned

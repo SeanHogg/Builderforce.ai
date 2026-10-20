@@ -15,7 +15,7 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import { matchGlobInScope, applyStringEdit, editFacts, normalizeScopeDir } from "@builderforce/agent-tools";
+import { matchGlobInScope, dirMayContainGlobMatch, applyStringEdit, editFacts, normalizeScopeDir } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the agent-runtime Node provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
@@ -119,6 +119,10 @@ async function walkFiles(start: string, root: string, glob?: string, scope?: str
     for (const entry of entries) {
       if (entry.isDirectory()) {
         if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
+        const childRel = path.relative(root, path.join(dir, entry.name)).split(path.sep).join("/");
+        // Prune directories the glob cannot reach so the match budget is not
+        // spent walking unrelated trees (and a truncated miss is not a miss).
+        if (glob && !dirMayContainGlobMatch(childRel, glob, scope)) continue;
         queue.push(path.join(dir, entry.name));
       } else if (entry.isFile()) {
         const rel = path.relative(root, path.join(dir, entry.name)).split(path.sep).join("/");

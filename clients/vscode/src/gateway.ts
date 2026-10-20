@@ -15,6 +15,8 @@ import { type LocalModelsConfig } from "./localModels";
 import { readDesktopModelsEndpoint } from "./desktopContext";
 import { isKimiCodeInstall, loadKimiCodeInstall, type KimiCodeInstallResult } from "./kimiCodeInstall";
 import { localCredentialSnapshot } from "./localProviderCredentials";
+import { classifyQueue } from "@builderforce/write-outbox";
+import { registerDeadLetterQueue } from "./deadLetterCommand";
 import { createDurableOutbox, outboxSecrets, trackReachability } from "./outboxStorage";
 
 /** Single source of truth for the SecretStorage key (DRY). */
@@ -575,9 +577,13 @@ export async function complete(
 /**
  * Settled run outcomes waiting to reach learned routing — durable, so a run finished
  * offline still teaches the router once the gateway answers. Replays are safe: the
- * endpoint is idempotent on the outcome's `clientRunId`. A refusal (4xx) is dropped.
+ * endpoint is idempotent on the outcome's `clientRunId`. A permanent refusal is a dead
+ * letter, not a drop: the outcome is user work.
  */
 const runOutcomes = createDurableOutbox<object>("run-outcomes", {
+  // User work. The queue table leaves "run-outcomes" unclassified (not telemetry);
+  // stamp the durable history kind so a permanent refusal is a dead letter, not a drop.
+  work: classifyQueue("run-outcomes")?.retention === "best-effort" ? "telemetry" : "history",
   maxItems: 1,
   maxWaitMs: 0,
   send: async (_lane, [outcome]) => {
@@ -593,6 +599,9 @@ const runOutcomes = createDurableOutbox<object>("run-outcomes", {
   // Scoped to the editor KEY's tenant (gateway calls act as the key, whatever workspace
   // is selected): outcomes queued under one key are parked, not sent with another.
 }, "key");
+
+/** The queue this module already owns. Export and repair see this object, not a second outbox. */
+registerDeadLetterQueue({ name: "run-outcomes", outbox: runOutcomes });
 
 /**
  * Report a settled run's outcome to learned routing (`POST /llm/v1/run-outcome`, the

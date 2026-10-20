@@ -48,6 +48,14 @@ APP_URL      = "https://builderforce.ai"
 REPLAY_CDN_ORIGIN   = "https://cdn.builderforce.ai"
 REPLAY_MANIFEST_URL = "https://cdn.builderforce.ai/replay/manifest.json"
 NOTIFICATION_EMAIL_FROM = "Builderforce <notifications@builderforce.ai>"
+# CACHE_L2_KV = "false" — set 2026-10-19. Workers KV Free allows 1,000 writes/day, so
+# the L2 semantic cache is pinned off to stop spending that quota on cache writes. L1
+# (in-memory, per-isolate) still works; `cacheL2Kv()` in
+# src/infrastructure/cache/readThroughCache.ts treats false/0/off as "skip L2".
+# Do NOT "fix" this by unbinding AUTH_CACHE_KV — the cron work-gate
+# (`cron:work-pending`, `cron:last-floor-sweep`, …) and cron controls live there.
+# Revert when Workers Paid returns.
+CACHE_L2_KV = "false"
 # CLOUDFLARE_ACCOUNT_ID must be set via: wrangler secret put CLOUDFLARE_ACCOUNT_ID
 #   The Cloudflare Workers AI `/accounts/<id>/ai/run/<model>` path needs it ALONGSIDE
 #   the CLOUDFLARE_AI_API_TOKEN secret — the vendor's apiKeyFrom returns null and

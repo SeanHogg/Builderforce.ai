@@ -33,6 +33,9 @@ importers:
       '@builderforce/learned-routing':
         specifier: link:../packages/learned-routing
         version: link:../packages/learned-routing
+      '@builderforce/local-first':
+        specifier: link:../packages/local-first
+        version: link:../packages/local-first
       '@builderforce/local-inference':
         specifier: link:../packages/local-inference
         version: link:../packages/local-inference

@@ -73,6 +73,14 @@ describe('renderAgentWorkflow', () => {
 describe('renderAgentRunnerScript', () => {
   const script = renderAgentRunnerScript();
 
+  it('mirrors the shared glob: **/ matches zero directories, and a truncated miss is not absence', () => {
+    expect(script).toContain("re += '(?:.*/)?'");
+    expect(script).toContain('function dirMayContainGlob');
+    expect(script).toContain('function emptyGlobNote');
+    expect(script).toContain('NOT proof the file does not exist');
+    expect(script).not.toContain('0 matches means no such file exists in the paths scanned — do not claim one is missing without trying a broader glob first.\n  }\n  if (truncated)');
+  });
+
   it('is syntactically valid JavaScript', () => {
     // The runner is ESM with a top-level await, so `new Function` (which parses as
     // a script body) would reject it for reasons that are not syntax errors.

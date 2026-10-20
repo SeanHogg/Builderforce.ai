@@ -9,8 +9,8 @@ import { registerAuditFindingsSink } from './auditToolCatalog';
 import { findRepository, getGitApi } from './gitApi';
 import { localBrainApplication } from './localFirstStore';
 import { platformPolicy } from './platformPolicy';
+import { closeAuditLocally, readClosedAudit, refuseCloudLaunch, type DurableAuditClose } from './auditCloseCheckpoint';
 import {
-  closeLocalAuditRun,
   ensureLocalAuditDefinitions,
   ensureLocalAuditDeviceId,
   getLocalAuditRun,
@@ -107,6 +107,15 @@ export class AuditExecution implements vscode.Disposable {
       await this.runLocal(auditId, projectId, trigger, runId);
       return;
     }
+    // G08: a run that already closed locally is complete. It must not be relaunched as
+    // cloud work just because a definition and network are both available — that is the
+    // one case where "can we run it?" and "should we run it?" disagree. The refusal is
+    // read from the durable close record, not from an in-memory flag, so it survives a
+    // restart exactly as the close itself does.
+    if (runId && !refuseCloudLaunch(await readClosedAudit((await this.localAuditContext()).store, runId)).launch) {
+      await vscode.window.showInformationMessage(vscode.l10n.t('This audit was closed locally and will not be relaunched.'));
+      return;
+    }
     const chatId = await createBrainChat(this.ctx.secrets, { title: vscode.l10n.t('Audit: {0}', auditId), projectId });
     if (chatId == null) throw new Error(vscode.l10n.t('Sign in to save the audit conversation.'));
     const run = await startSystemAudit(this.ctx.secrets, auditId, projectId, 'local', trigger);
@@ -149,11 +158,20 @@ export class AuditExecution implements vscode.Disposable {
   /** Closing an audit is a local completion. It never calls startSystemAudit or starts a host run. */
   private async closeLocally(intent: CloseIntent): Promise<void> {
     const { store, deviceId } = await this.localAuditContext();
-    await closeLocalAuditRun(store, { deviceId }, {
+    // G08: go through the checkpoint's close, not `closeLocalAuditRun` directly. That
+    // wrapper is what makes the completion DURABLE and self-refusing: it first recovers
+    // interrupted runs (so a close cannot strand one in `running`), then writes the
+    // local-complete record, then re-reads it and refuses the cloud launch. Calling the
+    // store helper directly skipped both, so a closed audit was not actually closed in
+    // the sense the launcher checks. `closeAuditLocally` throws if the record it cannot
+    // verify; that throw is the point — a close that did not stick must not read as one.
+    await closeAuditLocally({
+      store,
+      deviceId,
       auditId: intent.auditId,
       projectId: intent.projectId,
       runId: intent.requestId,
-      source: await this.auditSource('close'),
+      source: await this.closeSource(),
     });
   }
 
@@ -219,6 +237,24 @@ export class AuditExecution implements vscode.Disposable {
     const deviceId = await ensureLocalAuditDeviceId(this.ctx.globalState);
     const local = localBrainApplication(this.ctx);
     return { store: local.store, deviceId, persistence: local.persistence };
+  }
+
+  /**
+   * The close path's provenance, narrowed to the shape `closeAuditLocally` stores.
+   * `auditSource` returns `Record<string, unknown>` because the start path accepts
+   * any trigger; passing that here would let a widened `surface` or `trigger` reach
+   * the durable record. This builds the literal `{ surface: 'vsix', trigger: 'close' }`
+   * and copies only the optional git fields, so the stored source cannot drift.
+   */
+  private async closeSource(): Promise<DurableAuditClose['source']> {
+    const gathered = await this.auditSource('close');
+    return {
+      surface: 'vsix',
+      trigger: 'close',
+      ...(typeof gathered.branch === 'string' ? { branch: gathered.branch } : {}),
+      ...(typeof gathered.commit === 'string' ? { commit: gathered.commit } : {}),
+      ...(typeof gathered.dirty === 'boolean' ? { dirty: gathered.dirty } : {}),
+    };
   }
 
   private async auditSource(trigger: 'manual' | 'startup' | 'close'): Promise<Record<string, unknown>> {

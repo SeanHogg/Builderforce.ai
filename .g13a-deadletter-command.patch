@@ -1,0 +1,84 @@
+diff --git a/clients/vscode/package.json b/clients/vscode/package.json
+--- a/clients/vscode/package.json
++++ b/clients/vscode/package.json
+@@ -394,7 +394,7 @@
+       },
+       {
+         "command": "builderforce.exportDeadLetters",
+-        "title": "BuilderForce: Export Dead Letters",
++        "title": "%command.exportDeadLetters%",
+         "icon": "$(export)"
+       },
+       {
+diff --git a/clients/vscode/package.nls.json b/clients/vscode/package.nls.json
+--- a/clients/vscode/package.nls.json
++++ b/clients/vscode/package.nls.json
+@@ -74,6 +74,7 @@
+   "view.inbox": "Inbox",
+   "command.reviewPullRequests": "BuilderForce: Review Pull Requests",
+   "command.fixErrors": "BuilderForce: Fix Production Errors",
++  "command.exportDeadLetters": "BuilderForce: Export Dead Letters",
+   "command.openPullRequest": "BuilderForce: Open a Pull Request",
+   "command.reviewChanges": "BuilderForce: Review Changes",
+   "command.refreshInbox": "BuilderForce: Refresh Inbox",
+diff --git a/clients/vscode/package.nls.de.json b/clients/vscode/package.nls.de.json
+--- a/clients/vscode/package.nls.de.json
++++ b/clients/vscode/package.nls.de.json
+@@ -73,6 +73,7 @@
+   "view.inbox": "Posteingang",
+   "command.reviewPullRequests": "BuilderForce: Pull Requests prüfen",
+   "command.fixErrors": "BuilderForce: Produktionsfehler beheben",
++  "command.exportDeadLetters": "BuilderForce: Tote Briefe exportieren",
+   "command.openPullRequest": "BuilderForce: Pull Request öffnen",
+   "command.reviewChanges": "BuilderForce: Änderungen prüfen",
+   "command.refreshInbox": "BuilderForce: Posteingang aktualisieren",
+diff --git a/clients/vscode/package.nls.es.json b/clients/vscode/package.nls.es.json
+--- a/clients/vscode/package.nls.es.json
++++ b/clients/vscode/package.nls.es.json
+@@ -73,6 +73,7 @@
+   "view.inbox": "Bandeja de entrada",
+   "command.reviewPullRequests": "BuilderForce: Revisar Pull Requests",
+   "command.fixErrors": "BuilderForce: Corregir errores de producción",
++  "command.exportDeadLetters": "BuilderForce: Exportar letras muertas",
+   "command.openPullRequest": "BuilderForce: Abrir un Pull Request",
+   "command.reviewChanges": "BuilderForce: Revisar cambios",
+   "command.refreshInbox": "BuilderForce: Actualizar bandeja de entrada",
+diff --git a/clients/vscode/package.nls.fr.json b/clients/vscode/package.nls.fr.json
+--- a/clients/vscode/package.nls.fr.json
++++ b/clients/vscode/package.nls.fr.json
+@@ -73,6 +73,7 @@
+   "view.inbox": "Boîte de réception",
+   "command.reviewPullRequests": "BuilderForce : Examiner les pull requests",
+   "command.fixErrors": "BuilderForce : Corriger les erreurs de production",
++  "command.exportDeadLetters": "BuilderForce : Exporter les lettres mortes",
+   "command.openPullRequest": "BuilderForce : Ouvrir une pull request",
+   "command.reviewChanges": "BuilderForce : Examiner les modifications",
+   "command.refreshInbox": "BuilderForce : Actualiser la boîte de réception",
+diff --git a/clients/vscode/package.nls.zh-cn.json b/clients/vscode/package.nls.zh-cn.json
+--- a/clients/vscode/package.nls.zh-cn.json
++++ b/clients/vscode/package.nls.zh-cn.json
+@@ -73,6 +73,7 @@
+   "view.inbox": "收件箱",
+   "command.reviewPullRequests": "BuilderForce：审查拉取请求",
+   "command.fixErrors": "BuilderForce：修复生产错误",
++  "command.exportDeadLetters": "BuilderForce：导出死信",
+   "command.openPullRequest": "BuilderForce：创建拉取请求",
+   "command.reviewChanges": "BuilderForce：审查更改",
+   "command.refreshInbox": "BuilderForce：刷新收件箱",
+diff --git a/clients/vscode/src/extension.ts b/clients/vscode/src/extension.ts
+--- a/clients/vscode/src/extension.ts
++++ b/clients/vscode/src/extension.ts
+@@ -393,6 +393,13 @@ export function activate(context: vscode.ExtensionContext): void {
+   // Editor activity capture — heartbeats + file-open navigation feed the billable
+   // timecard pipeline (source 'vscode'). Best-effort; no-op when signed out.
+   context.subscriptions.push(initActivity());
++
++  // G13a: the person-facing entry point for durable dead letters. `runExportDeadLetters`
++  // exports what is waiting and offers to put exactly ONE back on the queue it came
++  // from; it never sends, flushes or retries, and it never calls the platform. It is
++  // registered HERE, on the activation path, rather than lazily behind a first call,
++  // so a person can always reach it from the Command Palette — the manifest
++  // declaration in package.json is what puts it there, and neither half works alone.
+   context.subscriptions.push(
+     vscode.commands.registerCommand(EXPORT_DEAD_LETTERS_COMMAND, async () => {
+       try {

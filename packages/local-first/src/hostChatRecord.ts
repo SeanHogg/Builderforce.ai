@@ -8,9 +8,16 @@
  *
  * Synchronization is a separate queue. This module does not append a journal
  * event, acknowledge one, or call the network.
+ *
+ * G10: `ensureChat` is the one place a chat is created here, and it resolves
+ * the caller's destination explicitly, so a chat opened offline stores
+ * `UNBOUND_DESTINATION` rather than an absent field. Every turn, run, step,
+ * and approval then copies that snapshot (G11) — including the unbound one,
+ * which is why an offline chat's run is explicitly unbound too.
  */
 
 import type { EntityDestination, LocalEntityType, LocalRecord } from './records.js';
+import { resolveCreateDestination } from './creationDestination.js';
 import { newLocalRecord, type LocalFirstStore, type LocalFirstTransaction } from './store.js';
 
 export interface HostLineage {
@@ -203,7 +210,7 @@ async function ensureChat(
       lineage: { chatId: input.chatId },
     },
     deviceId: input.deviceId,
-    ...(input.destination ? { destination: input.destination } : {}),
+    destination: resolveCreateDestination(input.destination),
     ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
   });
   await tx.put(record);
@@ -216,7 +223,7 @@ async function ensureChat(
  * that creates the chat, here, inside {@link ensureChat}.
  */
 function chatDestination(chat: LocalRecord<HostChatValue>): EntityDestination {
-  return chat.destination;
+  return resolveCreateDestination(chat.destination);
 }
 
 export function createHostChatLog(store: LocalFirstStore): HostChatLog {

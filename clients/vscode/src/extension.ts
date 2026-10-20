@@ -40,6 +40,7 @@ import { confirmChatDelete } from "./chatDeletion";
 import { registerTaskActions } from "./taskActions";
 import { ClosedTasksTreeProvider } from "./closedTasksTree";
 import { createVsCodeRunHost } from "./brainRunHostPorts";
+import { installRunRecovery } from "./installRunRecovery";
 import { AuditExecution } from "./auditExecution";
 import { appUrl } from "./auth";
 import { MeetingsTreeProvider, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
@@ -51,6 +52,8 @@ import { editWorkspaceHooks } from "./hooks/editorDirectives";
 import { buildIdentityReport } from "./buildIdentityReport";
 import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
 import { bindOutboxStorage, durableStepHost } from "./outboxStorage";
+import { EXPORT_DEAD_LETTERS_COMMAND, runExportDeadLetters } from "./deadLetterCommand";
+import { bindOutboxSendPermissionAtActivation } from "./sendPermissionActivation";
 import { installAuditClose } from "./installAuditClose";
 import { bootVsixHost } from "./bootVsixHost";
 // The SAME bundled-React HTML shell every other React surface here boots (the board,
@@ -58,6 +61,7 @@ import { bootVsixHost } from "./bootVsixHost";
 // differs. Used by the Visualization panel.
 import { renderWebviewHtml } from "./webviewShared";
 import { VisualizationPanel } from "./visualizationPanel";
+import { bindPlatformPolicy, platformPolicy, withPlatformAuthentication, outboxSendPermission as platformOutboxSendPermission } from "./platformPolicy";
 import { localBrainApplication } from "./localFirstStore";
 import { configurePolicyGatesPersistence } from "./policyGates";
 import { createPolicyGatesPersistence } from "./policySnapshots";
@@ -120,9 +124,25 @@ async function syncSignedInContext(context: vscode.ExtensionContext): Promise<vo
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  bindPlatformPolicy(context);
+  // G08: install the local audit-close path at activation. `AuditExecution.closeLocally`
+  // now routes through `closeAuditLocally`, which recovers interrupted runs and refuses
+  // the cloud launch, but the helper surface is only reachable once activation has
+  // installed it. Install is idempotent and disposes to nothing — it wires no commands
+  // and starts nothing — so it is safe beside the other policy bindings above.
   context.subscriptions.push(installAuditClose());
   const vsixHost = bootVsixHost({ network: "denied", directory: context.globalStorageUri.fsPath });
   context.subscriptions.push({ dispose: () => vsixHost.stop() });
+  // G12: bind the policy's send permission into the durable outbox store HERE, beside the
+  // fetch guard it comes from, so `builderforce.platform.synchronize` going off actually
+  // stops sends. Without this the store's gate has no administrative source: the outboxes
+  // in `activity.ts` / `bfApi.ts` / `gateway.ts` / `errorReporter.ts` are built at module
+  // load, long before this point, and the step rows below install their host after it —
+  // so the binding is not order-sensitive, but it must happen before any queued backlog is
+  // replayed (`bindOutboxStorage` below does that). Until it runs the store is fail-closed.
+  context.subscriptions.push(
+    bindOutboxSendPermissionAtActivation(platformOutboxSendPermission),
+  );
   // G09: a sign-out drops the in-memory gate cache. The durable snapshot must already
   // be the resolver's fallback, or managed records lose their policy. Same device id
   // localFirstStore mints — read it, never mint a second one here.
@@ -130,6 +150,7 @@ export function activate(context: vscode.ExtensionContext): void {
   configurePolicyGatesPersistence(createPolicyGatesPersistence(localFirst.store, {
     deviceId: context.globalState.get<string>("builderforce.localDeviceId") ?? "",
   }));
+  context.subscriptions.push({ dispose: platformPolicy().subscribe(() => BuilderForcePanel.refresh()) });
   initProjectState(context.workspaceState);
   // Gate the sidebar on auth before anything else registers: until this resolves the
   // key is falsy, so the login (Welcome) panel shows and the feature views stay hidden.
@@ -263,6 +284,7 @@ export function activate(context: vscode.ExtensionContext): void {
     attention.refresh();
     projectContext?.refresh();
   };
+  void installRunRecovery(context);
   const runHost = createVsCodeRunHost(context, { onChatsChanged, onPlatformWrite });
   context.subscriptions.push({ dispose: () => runHost.dispose() });
   BuilderForcePanel.configure({
@@ -278,7 +300,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Storage + credential for the durable write outboxes (activity, error reports,
   // unsaved chat turns, run outcomes) — a backlog from the last session replays now.
   bindOutboxStorage(context);
-  installStepDurability(durableStepHost(bfApi.sendQueuedBrainRows));
+  installStepDurability(durableStepHost((chatId, rows) => localBrainApplication(context).persistence.sendMessages(chatId, rows)));
   // The ONE log surface, owned by errorReporter so any module can write to it and
   // so "log it" and "file it in Quality" can never drift apart.
   const output = initErrorReporter(context);
@@ -371,6 +393,52 @@ export function activate(context: vscode.ExtensionContext): void {
   // Editor activity capture — heartbeats + file-open navigation feed the billable
   // timecard pipeline (source 'vscode'). Best-effort; no-op when signed out.
   context.subscriptions.push(initActivity());
+
+  // G13a: the person-facing entry point for durable dead letters. `runExportDeadLetters`
+  // exports what is waiting and offers to put exactly ONE back on the queue it came
+  // from; it never sends, flushes or retries, and it never calls the platform. It is
+  // registered HERE, on the activation path, rather than lazily behind a first call,
+  // so a person can always reach it from the Command Palette — the manifest
+  // declaration in package.json is what puts it there, and neither half works alone.
+  context.subscriptions.push(
+    vscode.commands.registerCommand(EXPORT_DEAD_LETTERS_COMMAND, async () => {
+      try {
+        await runExportDeadLetters({
+          showExport: async (content) => {
+            const document = await vscode.workspace.openTextDocument({ language: "json", content });
+            await vscode.window.showTextDocument(document, { preview: true });
+          },
+          offerRepair: async (choices) => {
+            const picked = await vscode.window.showQuickPick(
+              choices.map((choice) => ({
+                label: choice.id,
+                description: choice.queue,
+                detail: choice.reason || vscode.l10n.t("Durable dead letter"),
+                letterId: choice.id,
+              })),
+              {
+                title: vscode.l10n.t("Repair a dead letter"),
+                placeHolder: vscode.l10n.t("Put one durable dead letter back on the queue. Nothing is sent."),
+              },
+            );
+            return picked?.letterId;
+          },
+          showInfo: (message) => {
+            void vscode.window.showInformationMessage(message);
+          },
+        }, {
+          storage: {
+            keys: () => context.workspaceState.keys(),
+            get: (key) => context.workspaceState.get(key),
+            update: (key, value) => context.workspaceState.update(key, value),
+          },
+        });
+      } catch (error) {
+        surfaceError(error, "command:exportDeadLetters",
+          vscode.l10n.t("Could not export dead letters: {0}", (error as Error).message));
+      }
+    }),
+  );
 
   context.subscriptions.push(
     participant,
@@ -598,7 +666,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ...["builderforce.openBrain", "builderforce.openChat", "builderforce.editorChat"].map((id) =>
       vscode.commands.registerCommand(id, () => BuilderForcePanel.open(context)),
     ),
-    vscode.commands.registerCommand("builderforce.signIn", () => signIn(context, auth)),
+    vscode.commands.registerCommand("builderforce.signIn", () => withPlatformAuthentication(() => signIn(context, auth))),
     vscode.commands.registerCommand("builderforce.signOut", () => signOut(context, auth)),
     // A stored key the gateway refuses signs the editor OUT (login panel back, Sign in
     // runs the real flow) instead of leaving "signed in" over empty panels.

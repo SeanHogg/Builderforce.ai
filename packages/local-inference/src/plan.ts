@@ -73,7 +73,8 @@ export function localModelUnfitReason(
 /** The ordered attempt list. Empty only when no local model fits AND there is no cloud. */
 export function localFirstPlan(input: LocalFirstInput): LocalFirstAttempt[] {
   const onDevice = new Set(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id));
-  const rank = (id: LocalRuntimeId): number => LOCAL_RUNTIMES.findIndex((r) => r.id === id);
+  const rank = (id: LocalRuntimeId): number =>
+    LOCAL_RUNTIMES.find((r) => r.id === id)?.automaticRank ?? Number.POSITIVE_INFINITY;
   const candidates = input.probes
     .filter((p) => p.reachable && onDevice.has(p.provider))
     .sort((a, b) => rank(a.provider) - rank(b.provider))

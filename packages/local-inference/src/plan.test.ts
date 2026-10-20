@@ -53,6 +53,21 @@ describe('localFirstPlan', () => {
     ).toEqual(['local/synapse/qwen3-8b', 'local/ollama/gemma:2b', 'local/ollama/qwen3:8b', 'cloud:x']);
   });
 
+  it('prefers an installed workload-compatible WebLLM model before other local runtimes', () => {
+    const webllm: LocalRuntimeProbe = {
+      provider: 'webllm',
+      endpoint: { baseUrl: 'http://webllm.local' },
+      reachable: true,
+      models: [{ ref: 'local/webllm/hermes', provider: 'webllm', model: 'hermes', tools: true, contextTokens: 8_000 }],
+    };
+    expect(refs(localFirstPlan({ probes: [SYNAPSE, webllm, OLLAMA], workload: TOOL_TURN, cloud: null }))).toEqual([
+      'local/webllm/hermes',
+    ]);
+    expect(refs(localFirstPlan({ probes: [SYNAPSE, webllm, OLLAMA], workload: TOOL_TURN, cloud: null, preferred: 'local/synapse/qwen3-8b' }))).toEqual([
+      'local/synapse/qwen3-8b',
+    ]);
+  });
+
   it('never hands a tool turn to a model whose tool support is unknown', () => {
     expect(refs(localFirstPlan({ probes: [OLLAMA], workload: TOOL_TURN, cloud: {}, maxLocalAttempts: 5 }))).toEqual([
       'local/ollama/qwen3:8b',

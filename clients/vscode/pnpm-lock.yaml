@@ -16,6 +16,9 @@ importers:
       '@builderforce/creation-canvas-contract':
         specifier: link:../../packages/creation-canvas-contract
         version: link:../../packages/creation-canvas-contract
+      '@builderforce/local-first':
+        specifier: link:../../packages/local-first
+        version: link:../../packages/local-first
       '@huggingface/transformers':
         specifier: ^3.8.1
         version: 3.8.1(@types/node@20.19.43)

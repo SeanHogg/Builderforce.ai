@@ -71,7 +71,7 @@ function nowIso(): string {
  */
 const guestPersistence: BrainPersistenceAdapter = {
   async listChats() {
-    return readJson<BrainChat[]>(CHATS_KEY, []);
+    return readJson<BrainChat[]>(CHATS_KEY, []).filter((c) => !c.isArchived);
   },
   async getChat(id) {
     const chat = readJson<BrainChat[]>(CHATS_KEY, []).find((c) => c.id === id);
@@ -102,6 +102,14 @@ const guestPersistence: BrainPersistenceAdapter = {
     writeJson(CHATS_KEY, chats);
     if (typeof window !== 'undefined') { try { window.localStorage.removeItem(MSGS_KEY(id)); } catch { /* ignore */ } }
     return {};
+  },
+  // Archive hides the chat from the list but keeps its transcript — unlike
+  // `deleteChat`, which drops both. A guest has no server flag, so the row is
+  // marked and `listChats` skips it.
+  async archiveChat(id) {
+    const chats = readJson<BrainChat[]>(CHATS_KEY, []).map((c) => (c.id === id ? { ...c, isArchived: true, updatedAt: nowIso() } : c));
+    writeJson(CHATS_KEY, chats);
+    return { archived: true };
   },
   async summarizeChat(id) {
     const msgs = readJson<BrainMessage[]>(MSGS_KEY(id), []);
@@ -218,6 +226,10 @@ const guestRoomPersistence: BrainPersistenceAdapter = {
     // (see guestRoomApi.leaveGuestRoom), and the room expires on its own.
     return {};
   },
+  async archiveChat() {
+    // Same rule as delete: a shared room is not one person's to put away.
+    return {};
+  },
   async summarizeChat() {
     const code = getActiveGuestRoom();
     const messages = code ? await fetchGuestRoomMessages(code) : null;
@@ -270,6 +282,7 @@ const dispatchingGuestPersistence: BrainPersistenceAdapter = {
   createChat: (...args) => activeGuestPersistence().createChat(...args),
   updateChat: (...args) => activeGuestPersistence().updateChat(...args),
   deleteChat: (...args) => activeGuestPersistence().deleteChat(...args),
+  archiveChat: (...args) => activeGuestPersistence().archiveChat(...args),
   summarizeChat: (...args) => activeGuestPersistence().summarizeChat(...args),
   getMessages: (...args) => activeGuestPersistence().getMessages(...args),
   sendMessages: (...args) => activeGuestPersistence().sendMessages(...args),

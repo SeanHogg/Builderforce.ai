@@ -5,7 +5,7 @@ import {
   stableSyncEventId,
   type PlannedSyncEvent,
 } from './atomicSyncCommit.js';
-import { type JournalEvent, type LocalRecord } from './records.js';
+import { type JournalEvent, type LocalRecord, type SyncReceipt } from './records.js';
 import {
   createMemoryLocalFirstStore,
   newLocalRecord,
@@ -25,6 +25,8 @@ function ticket(id = 'ticket-1', version = 1, title = 'offline'): LocalRecord<{ 
   });
   return { ...record, version, ...(version > 1 ? { baseVersion: version - 1 } : {}) };
 }
+
+const SEED_RECEIPT: SyncReceipt = { eventId: 'ticket:seed-ticket:1', status: 'accepted', receivedAt: AT };
 
 function failingAppendStore(seed?: { records: LocalRecord[]; events: JournalEvent[] }): {
   store: Pick<LocalFirstStore, 'transact'>;
@@ -121,6 +123,35 @@ describe('applyAtomicSyncCommit', () => {
     expect(committed).toEqual(before);
     expect(committed.records.map((row) => row.id)).not.toContain('ticket-2');
     expect(committed.events.map((row) => row.eventId)).not.toContain('ticket:ticket-2:1');
+  });
+
+  it('leaves no partial record, no orphan event, and no receipt when the record write throws', async () => {
+    const seed = createMemoryLocalFirstStore();
+    await seed.transact(async (tx) => {
+      const seeded = planAtomicSyncCommit({ record: ticket('seed-ticket', 1, 'already here') });
+      await tx.put(seeded.record);
+      await tx.append(seeded.event);
+      await tx.putReceipt(SEED_RECEIPT);
+    });
+    const before = await seed.export();
+    const store = createMemoryLocalFirstStore(before);
+    const plan = planAtomicSyncCommit({ record: ticket('ticket-3', 1, 'rolls back') });
+    const receipt: SyncReceipt = { eventId: plan.event.eventId, status: 'accepted', receivedAt: AT };
+
+    await expect(
+      store.transact(async (tx) => {
+        await tx.put(plan.record, 0);
+        await tx.append(plan.event);
+        await tx.putReceipt(receipt);
+      }),
+    ).rejects.toThrow('entity_version_conflict');
+
+    const after = await store.export();
+    expect(after).toEqual(before);
+    expect(after.records.map((row) => row.id)).toEqual(['seed-ticket']);
+    expect(after.events.map((row) => row.eventId)).toEqual(['ticket:seed-ticket:1']);
+    expect(after.receipts).toEqual([SEED_RECEIPT]);
+    expect(after.receipts.map((row) => row.eventId)).not.toContain(receipt.eventId);
   });
 
   it('keeps the same event id when the same version is retried', async () => {

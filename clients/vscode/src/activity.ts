@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
 import * as bfApi from "./bfApi";
+import { classifyQueue } from "@builderforce/write-outbox";
+import { registerDeadLetterQueue } from "./deadLetterCommand";
 import { createDurableOutbox, outboxSecrets, scopeTenantId } from "./outboxStorage";
 
 /**
@@ -27,6 +29,9 @@ const VSIX_STREAM = "vsix";
  * the same five minutes is also one ROW. A batch that fails is kept and retried.
  */
 const signals = createDurableOutbox<bfApi.VsixActivitySignal>("activity", {
+  // User history. The queue table leaves "activity" unclassified; stamp the durable
+  // history kind so a permanent refusal is a dead letter, not a drop.
+  work: classifyQueue("activity")?.retention === "best-effort" ? "telemetry" : "history",
   maxItems: 25,
   maxWaitMs: 5 * 60_000,
   coalesce: (batch) => coalesceSignals(batch),
@@ -34,6 +39,9 @@ const signals = createDurableOutbox<bfApi.VsixActivitySignal>("activity", {
     await bfApi.postActivitySignals(await outboxSecrets(), batch, ctx.idempotencyKey, scopeTenantId(ctx.scope));
   },
 });
+
+/** The queue this module already owns. Export and repair see this object, not a second outbox. */
+registerDeadLetterQueue({ name: "activity", outbox: signals });
 
 /** Emit one activity signal from the editor. */
 export function trackVsix(kind: string, opts: Omit<bfApi.VsixActivitySignal, "kind"> = {}): void {

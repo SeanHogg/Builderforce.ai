@@ -10,6 +10,7 @@ import { isManagerRole, projectMemoryHooks, NOT_SIGNED_IN } from "@seanhogg/buil
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
 import { getApiKey, getBaseUrl } from "./gateway";
 import { ttlCache } from "./ttlCache";
+import { registerDeadLetterQueue } from "./deadLetterCommand";
 import { createDurableOutbox, outboxSecrets, scopeTenantId, setOutboxScope, trackReachability } from "./outboxStorage";
 import { isPermanentHttpFailure } from "@builderforce/write-outbox";
 import { isClosedTask } from "@builderforce/agent-loop";
@@ -1064,6 +1065,9 @@ const pendingTurns = createDurableOutbox<BrainMessageInput, number>("brain-turns
   maxWaitMs: 0,
   send: (chatId, rows, ctx) => sendQueuedBrainRows(chatId, rows, scopeTenantId(ctx.scope)),
 });
+
+/** The queue this module already owns. Export and repair see this object, not a second outbox. */
+registerDeadLetterQueue({ name: "brain-turns", outbox: pendingTurns });
 
 /**
  * Replay queued rows (unsaved chat turns, durable run steps) to a chat, AS the tenant

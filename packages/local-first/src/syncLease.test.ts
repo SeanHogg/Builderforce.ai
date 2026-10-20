@@ -27,16 +27,63 @@ describe('sync lease', () => {
     expect(first.acquire()).toBe(true);
   });
 
-  it('lets the same owner acquire again from another handle and refreshes the expiry', () => {
+  it('does not let a second handle sync or steal a live lease, even with the same owner', () => {
     const first = lease('coordinator-a');
     const again = lease('coordinator-a');
     const other = lease('coordinator-b');
 
     expect(first.acquire()).toBe(true);
     clock += TTL_MS - 1;
-    expect(again.acquire()).toBe(true);
+    expect(again.acquire()).toBe(false);
+    expect(again.renew()).toBe(false);
+    again.release();
+    expect(other.acquire()).toBe(false);
+    expect(first.renew()).toBe(true);
     clock += TTL_MS - 1;
     expect(other.acquire()).toBe(false);
+    expect(again.acquire()).toBe(false);
+  });
+
+  it('does not let a stale token release or renew after another handle takes an expired lease', () => {
+    const first = lease('coordinator-a');
+    const again = lease('coordinator-a');
+
+    expect(first.acquire()).toBe(true);
+    clock += TTL_MS;
+    expect(again.acquire()).toBe(true);
+    expect(first.renew()).toBe(false);
+    first.release();
+    expect(again.acquire()).toBe(true);
+    expect(lease('coordinator-b').acquire()).toBe(false);
+  });
+
+  it('does not steal a live lease because it is 30s old', () => {
+    const first = lease('coordinator-a', 'aged', 120_000);
+    const second = lease('coordinator-b', 'aged', 120_000);
+
+    expect(first.acquire()).toBe(true);
+    clock += 30_000;
+    expect(second.acquire()).toBe(false);
+    clock += 89_999;
+    expect(second.acquire()).toBe(false);
+    clock += 1;
+    expect(second.acquire()).toBe(true);
+    expect(first.renew()).toBe(false);
+    first.release();
+    expect(second.acquire()).toBe(true);
+  });
+
+  it('does not let one device block another', () => {
+    const a = createSyncLease({ owner: 'coordinator-a', deviceId: 'device-a', now, ttlMs: TTL_MS, journal: 'shared' });
+    const b = createSyncLease({ owner: 'coordinator-b', deviceId: 'device-b', now, ttlMs: TTL_MS, journal: 'shared' });
+    const sameDevice = createSyncLease({ owner: 'coordinator-c', deviceId: 'device-a', now, ttlMs: TTL_MS, journal: 'shared' });
+
+    expect(a.acquire()).toBe(true);
+    expect(b.acquire()).toBe(true);
+    expect(sameDevice.acquire()).toBe(false);
+    b.release();
+    expect(a.acquire()).toBe(true);
+    expect(sameDevice.acquire()).toBe(false);
   });
 
   it('release clears only the caller lease', () => {
@@ -88,6 +135,7 @@ describe('sync lease', () => {
     expect(() => createSyncLease({ owner: 'a', now: undefined as unknown as () => number, ttlMs: TTL_MS })).toThrow('sync_lease_clock_required');
     expect(() => createSyncLease({ owner: 'a', now, ttlMs: 0 })).toThrow('sync_lease_ttl_invalid');
     expect(() => createSyncLease({ owner: 'a', now, ttlMs: TTL_MS, journal: '' })).toThrow('sync_lease_journal_required');
+    expect(() => createSyncLease({ owner: 'a', now, ttlMs: TTL_MS, deviceId: '' })).toThrow('sync_lease_device_required');
     const broken = createSyncLease({ owner: 'a', now: () => Number.NaN, ttlMs: TTL_MS, journal: 'bad-clock' });
     expect(() => broken.acquire()).toThrow('sync_lease_clock_invalid');
   });

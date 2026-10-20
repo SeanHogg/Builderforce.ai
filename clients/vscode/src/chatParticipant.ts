@@ -1,17 +1,11 @@
 import * as vscode from "vscode";
-import { formatEvermindLearnStep, runAbortSignal, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
+import { runAbortSignal, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { resolveModelRoute, routeRequiresSignIn, routeStream } from "./modelRouting";
 import { OWNER_NAME, type BrainRunHost } from "./brainRunHost";
 import { permissionMode as resolvePermissionMode } from "./permissionMode";
-import {
-  getCurrentUserId,
-  createBrainChat,
-  appendBrainMessages,
-  fetchRunContextSection,
-  projectEvermindHooks,
-  updateBrainChatProject,
-} from "./bfApi";
+import { getCurrentUserId, fetchRunContextSection, projectEvermindHooks } from "./bfApi";
+import { localBrainApplication } from "./localFirstStore";
 import { formatChatErrorVerdict } from "./upgradeAction";
 import { getGroundingWithHistory } from "./grounding";
 import { getEditorContextLive } from "./editorContext";
@@ -165,10 +159,18 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // work this chat does — created tickets, from_delta code-change captures — links
     // back to a real conversation, exactly like the webview Brain. Best-effort: a null
     // id just runs unlinked (the chat-scoped backstops then have nothing to link to).
+    const localPersistence = localBrainApplication(ctx).persistence;
     let brainChatId = priorChatId;
+    if (brainChatId != null) {
+      try {
+        await localPersistence.getChat(brainChatId);
+      } catch {
+        brainChatId = undefined;
+      }
+    }
     if (brainChatId == null) {
       const title = request.prompt.trim().slice(0, 80) || vscode.l10n.t("VS Code chat");
-      brainChatId = (await createBrainChat(ctx.secrets, { title, projectId: activeProject?.id ?? null })) ?? undefined;
+      brainChatId = (await localPersistence.createChat({ title, projectId: activeProject?.id ?? null })).id;
     }
 
     // The SAME brain as the web: local workspace tools (file edits) + Evermind's
@@ -267,28 +269,12 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
       },
     });
 
-    // Persist the turn into the SAME Brain store the webview + web app read, so the
-    // linked chat carries the actual conversation (not just ticket lineage). This is
-    // ALSO what feeds the project's Evermind: the server's learn gate
-    // (`evaluateBrainLearnGate`) fires on this persist when the chat is attached to a
-    // project — one authoritative learning path for every surface, no separate opt-in
-    // client contribution. Best-effort — swallows its own errors and never blocks the reply.
+    // Persist into the host's local store first; optional account sync imports the
+    // completed history later without replaying its actions or learning side effects.
     if (brainChatId != null) {
       const turns: Array<{ role: string; content: string }> = [{ role: "user", content: request.prompt }];
       if (assistantText.trim()) turns.push({ role: "assistant", content: assistantText });
-      const outcome = await appendBrainMessages(ctx.secrets, brainChatId, turns);
-      // Self-heal: if the server says this chat isn't bound to a project but the IDE has
-      // an active one, adopt it so the NEXT turn trains that project's Evermind (parity
-      // with the webview's adopt-on-open — the native participant otherwise leaves a chat
-      // created before a project was selected permanently project-less). Both are gated on
-      // an ACTIVE project: with none selected there is nothing to adopt.
-      if (outcome?.reason === "not-attached" && activeProject) {
-        await updateBrainChatProject(ctx.secrets, brainChatId, activeProject.id);
-      }
-      // Surface the learn/skip outcome as a trailing status line, so learning is VISIBLE
-      // on the native participant too (it streams Markdown, not the <BrainTimeline>).
-      const learnLine = formatEvermindLearnStep(outcome);
-      if (learnLine) stream.markdown(`\n\n_${learnLine}_\n`);
+      await localPersistence.sendMessages(brainChatId, turns);
     }
 
     // Return the chat id in the result metadata so the NEXT turn of this session

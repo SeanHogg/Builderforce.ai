@@ -117,7 +117,7 @@ import { publishKnowledgeDoc } from '../knowledge/publishKnowledgeDoc';
 import { publicSpecImportResult, SpecImportError } from '../prd/importSpec';
 import { deleteSpec, getSpec, importSpec, listSpecs } from '../prd/specStore';
 import { SecurityTicketAccessService } from '../security/SecurityTicketAccessService';
-import { recallProjectFacts, upsertProjectFact } from './projectFacts';
+import { hostDirectoryHashReader, parseFactFileAnchors, recallProjectFacts, upsertProjectFact, type FactOriginCost } from './projectFacts';
 import type { Task } from '../../domain/task/Task';
 import {
   amendActiveLegalDoc,
@@ -870,6 +870,7 @@ const CATALOG: BuiltinTool[] = [
       const facts = await recallProjectFacts(ctx.env, ctx.db, ctx.tenantId, num(a.projectId), {
         ...(a.query != null ? { query: str(a.query) } : {}),
         ...(a.limit != null ? { limit: num(a.limit) } : {}),
+        readFileHash: hostDirectoryHashReader(ctx.db, ctx.tenantId),
       });
       return { facts };
     },
@@ -877,10 +878,24 @@ const CATALOG: BuiltinTool[] = [
   {
     tool: 'project_facts.remember', mutates: false,
     description: 'Remember a durable fact about a project under a STABLE key (write-through: a new fact for the same key REPLACES the old one, never duplicates). Shared with every agent on the project — use for decisions, conventions, and locations worth recalling across runs and surfaces.',
-    parameters: obj({ projectId: N, key: S, content: S }, ['projectId', 'key', 'content']),
+    parameters: obj({
+      projectId: N, key: S, content: S,
+      fileAnchors: { type: 'array', items: obj({ path: S, contentHash: S, line: N }) },
+    }, ['projectId', 'key', 'content']),
     run: async (ctx, a) => {
       if (!ctx.env) throw new Error('project memory unavailable');
-      const ok = await upsertProjectFact(ctx.env, ctx.db, ctx.tenantId, num(a.projectId), str(a.key), str(a.content), 'brain');
+      // Provenance (ticket 5301): stamp the run and what producing the belief cost,
+      // but ONLY from fields the caller actually has. The Brain reply loop and the
+      // REST gateway relay carry neither, and inventing an execution id or a model
+      // name would record a provenance that never happened. The model goes inside
+      // the existing origin-cost triple — there is no standalone origin-model column,
+      // and a half-known cost is stored as none (see originCostColumns).
+      const fileAnchors = parseFactFileAnchors(a.fileAnchors);
+      const ok = await upsertProjectFact(ctx.env, ctx.db, ctx.tenantId, num(a.projectId), str(a.key), str(a.content), 'brain', {
+        ...(ctx.executionId != null ? { originExecutionId: ctx.executionId } : {}),
+        ...(ctx.origin ? { origin: ctx.origin } : {}),
+        ...(fileAnchors ? { fileAnchors } : {}),
+      });
       return { ok, key: str(a.key) };
     },
   },
@@ -4397,7 +4412,7 @@ export { advertisedName };
 function buildCtx(
   db: Db,
   tenantId: number,
-  opts?: { env?: Env; userId?: string | null; agentRef?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext },
+  opts?: { env?: Env; userId?: string | null; agentRef?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext; executionId?: number | null; origin?: FactOriginCost | null },
 ): BuiltinCtx {
   const projectRepo = new ProjectRepository(db);
   const taskRepo = new TaskRepository(db);
@@ -4421,6 +4436,8 @@ function buildCtx(
     role: opts?.role,
     authToken: opts?.authToken ?? null,
     executionCtx: opts?.executionCtx,
+    executionId: opts?.executionId ?? null,
+    origin: opts?.origin ?? null,
   };
 }
 
@@ -4550,13 +4567,13 @@ async function emitBuiltinToolActivity(env: Env, db: Db, tenantId: number, userI
 /** Run one built-in tool in-process, tenant-scoped. Throws on unknown tool. */
 export async function callBuiltinTool(
   db: Db,
-  args: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null; agentRef?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext },
+  args: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null; agentRef?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext; executionId?: number | null; origin?: FactOriginCost | null },
 ): Promise<unknown> {
   const entry = CATALOG.find((t) => t.tool === args.tool);
   if (!entry) throw new Error(`Unknown built-in tool '${args.tool}'`);
   // Direct-write rows never pass a route gate — refuse a sub-developer caller here.
   assertMayRunBuiltinTool(entry.tool, entry.mutates, args.role);
-  const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, agentRef: args.agentRef, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx });
+  const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, agentRef: args.agentRef, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx, executionId: args.executionId, origin: args.origin });
   const result = await entry.run(ctx, (args.arguments ?? {}) as Json);
   // Unified audit stream: record any mutating tool run (best-effort, off the result).
   if (entry.mutates && args.env) {

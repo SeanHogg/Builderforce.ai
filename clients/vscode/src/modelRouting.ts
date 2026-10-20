@@ -57,6 +57,7 @@ import { probeLocalFirstRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeBrainRun";
 import { hostPageEngines } from "./pageEngineBridge";
+import { assertPlatformCapability, platformPolicy } from "./platformPolicy";
 
 /** Where one turn will run, and with which model. */
 export interface ModelRoute {
@@ -170,7 +171,7 @@ function logLocalFirstAttempt(record: LocalFirstAttemptRecord): void {
  */
 export function routeStream(route: ModelRoute, apiKey: string | undefined): BrainStreamFn {
   if (!apiKey && routeRequiresSignIn(route)) throw new Error(NOT_SIGNED_IN);
-  const cloud = apiKey ? createNativeStream(getBaseUrl(), apiKey) : null;
+  const cloud = apiKey && platformPolicy().allows("gateway-inference") ? createNativeStream(getBaseUrl(), apiKey) : null;
   const local = route.local;
   const pinnedRef = local ? formatLocalModelRef(local.provider, local.model) : null;
   const probes = route.localFirst?.probes ?? [];
@@ -202,15 +203,16 @@ export async function routeComplete(
 ): Promise<string> {
   if (route.local) return completeLocal(route.local.endpoint, route.local.model, messages, signal, hostPageEngines.fetch());
   if (route.localFirst) {
-    const signedIn = Boolean(await getApiKey(secrets));
+    const cloudPermitted = platformPolicy().allows("gateway-inference") && Boolean(await getApiKey(secrets));
     return completeLocalFirst({
       probes: route.localFirst.probes,
       messages,
-      cloud: signedIn ? () => complete(secrets, messages, route.model, signal) : null,
+      cloud: cloudPermitted ? () => complete(secrets, messages, route.model, signal) : null,
       fetch: hostPageEngines.fetch(),
       ...(signal ? { signal } : {}),
       onAttempt: logLocalFirstAttempt,
     });
   }
+  assertPlatformCapability("gateway-inference");
   return complete(secrets, messages, route.model, signal);
 }

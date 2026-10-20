@@ -393,6 +393,11 @@
         "icon": "$(bug)"
       },
       {
+        "command": "builderforce.exportDeadLetters",
+        "title": "%command.exportDeadLetters%",
+        "icon": "$(export)"
+      },
+      {
         "command": "builderforce.openPullRequest",
         "title": "%command.openPullRequest%",
         "icon": "$(git-commit)"
@@ -821,7 +826,7 @@
         },
         "builderforce.localModels.enabled": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "markdownDescription": "%config.localModels.enabled.desc%"
         },
         "builderforce.localModels.ollamaUrl": {
@@ -843,6 +848,41 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "%config.localModels.localFirst.desc%"
+        },
+        "builderforce.platform.synchronize": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.platform.synchronize.desc%"
+        },
+        "builderforce.platform.gatewayInference": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.platform.gatewayInference.desc%"
+        },
+        "builderforce.platform.connectedFeatures": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.platform.connectedFeatures.desc%"
+        },
+        "builderforce.platform.modelDownloads": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.platform.modelDownloads.desc%"
+        },
+        "builderforce.platform.directProviders": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.platform.directProviders.desc%"
+        },
+        "builderforce.platform.externalMcp": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.platform.externalMcp.desc%"
+        },
+        "builderforce.platform.gitRemotes": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.platform.gitRemotes.desc%"
         },
         "builderforce.permissionMode": {
           "type": "string",
@@ -929,6 +969,7 @@
   },
   "devDependencies": {
     "@builderforce/creation-canvas-contract": "link:../../packages/creation-canvas-contract",
+    "@builderforce/local-first": "link:../../packages/local-first",
     "@huggingface/transformers": "^3.8.1",
     "@seanhogg/bfi-web": "link:../../packages/bfi-web",
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",

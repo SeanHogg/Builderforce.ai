@@ -375,6 +375,22 @@ export default {
       'authenticates as the user rather than holding a secret of its own. The `connections` ' +
       'primitive exists to hold that secret.',
 
+  "sync_events":
+      'a DELIVERY RECEIPT journal, and the row IS the replay anchor — deleting it is ' +
+      'what makes an offline client\'s queue replayable again, so it is append-and-' +
+      'expire by retention sweep, not an audit record. `activity_log` records what a ' +
+      'principal of THIS platform did; nobody here did any of this. The row is written ' +
+      'by the ingest before the owning context\'s import use case runs, and it carries ' +
+      'the idempotency key the claim-then-apply compare-and-set filters on: a NOT NULL ' +
+      'UNIQUE (tenant_id, device_id, event_id) is the whole point, because a retried ' +
+      'POST from a reconnecting device must resolve to the SAME row rather than apply ' +
+      'twice. It also holds `payload_hash`, `depends_on`, `local_sequence` and ' +
+      '`base_version` — the four columns the batch planner parks a dependent event on ' +
+      'and stamps its conflict policy from. `activity_log` has a bigserial id with no ' +
+      'caller-supplied uniqueness, no actor, and none of those four; folding it in ' +
+      'would move the replay idempotency key out of an indexed unique constraint and ' +
+      'into an `output` blob, which is exactly the guarantee that stops a duplicate.',
+
   "job_invites":
       'the kernel `invitations` primitive grants ACCESS to something the invitee is not ' +
       'yet inside — it carries a `role`, a NOT NULL UNIQUE `token_hash`, and an ' +

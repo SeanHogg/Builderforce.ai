@@ -41,6 +41,7 @@ import { TaskRepository } from './infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from './infrastructure/repositories/ProjectRepository';
 
 import { runMemoryEmbeddingBackfill } from './application/memory/memoryEmbeddingBackfill';
+import { sweepAllUnrecalledFactDecay } from './application/llm/projectFacts';
 import { runAgentBenchmarkSweep } from './application/eval/agentBenchmarkSweep';
 import { projectRegistry } from './application/kernel/registryProjection';
 import { METRIC_ROLLUPS } from './application/kernel/rollupRegistry';
@@ -403,6 +404,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runMemoryEmbeddingBackfill(env, db);
       if (r.skipped) return null;
       return r.memories + r.projectFacts > 0 ? `memories=${r.memories} facts=${r.projectFacts}` : null;
+    },
+  },
+  {
+    key: 'project-fact-decay',
+    cadence: 'daily',
+    description: 'Expire project facts recall has not returned, so a belief nothing reads stops being served (ticket 5301).',
+    run: async ({ env, db }) => {
+      const expired = await sweepAllUnrecalledFactDecay(db);
+      return expired > 0 ? `expired=${expired}` : null;
     },
   },
   {

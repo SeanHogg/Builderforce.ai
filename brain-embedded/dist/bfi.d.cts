@@ -1,4 +1,4 @@
-import { B as BfiModule } from './bfiEngine-c2iSOBaE.cjs';
+import { B as BfiModule } from './bfiEngine-CFAoUsVV.cjs';
 
 /**
  * THE `bfi-web` loader — the one way a host hands `createPageEngineSet` its `loadBfi`.

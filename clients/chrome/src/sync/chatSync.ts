@@ -22,14 +22,26 @@
  * The service worker is the ONLY owner of this outbox (two contexts draining one store
  * would race); the side panel hands it items over `chrome.runtime` messages.
  */
+import { destinationKey, type EntityDestination } from '@builderforce/local-first';
 import { createOutbox, type Outbox, type OutboxOnlineSignal, type OutboxSendContext, type OutboxStore } from '@builderforce/write-outbox';
 import type { ApiClient } from '../api/apiClient';
 import type { MessageInput, RovrRecords } from '../store/records';
 
-/** One queued write, keyed by its LOCAL chat id. */
+/**
+ * One queued write, keyed by its LOCAL chat id.
+ * A task item carries the destination snapshotted at enqueue (G11). Send reads that
+ * snapshot. A later Settings change is not a rebind — rebind is an explicit write of
+ * `projectId` on the task record, never a side effect of `taskProjectId()`.
+ */
 export type SyncItem =
   | { kind: 'message'; row: MessageInput }
-  | { kind: 'task'; taskId: string };
+  | { kind: 'task'; taskId: string; projectId?: number | null; destinationKey?: string };
+
+/** Destination pinned onto a queued task. `null` stays on this device. */
+interface TaskSnapshot {
+  projectId: number | null;
+  destinationKey: string;
+}
 
 export interface ChatSyncDeps {
   api: ApiClient;
@@ -37,7 +49,10 @@ export interface ChatSyncDeps {
   store: OutboxStore<SyncItem, number>;
   online: OutboxOnlineSignal;
   scope(): string | null;
-  /** The project tasks are filed in (Settings); null keeps tasks on this device. */
+  /**
+   * The live Settings project. Consulted only to pin a task that has no snapshot yet,
+   * and only at enqueue (or the first send of a pre-snapshot row). Never a rebind.
+   */
   taskProjectId(): Promise<number | null>;
   onError?(error: unknown): void;
 }
@@ -79,27 +94,75 @@ async function ensureServerChat(deps: ChatSyncDeps, localId: number, scope: stri
   return created.id;
 }
 
-async function syncTask(deps: ChatSyncDeps, serverChatId: number, taskId: string, linkKey: string, scope: string | undefined): Promise<void> {
-  const task = await deps.records.getTask(taskId);
+type TaskSyncItem = Extract<SyncItem, { kind: 'task' }>;
+
+function snapshotOf(projectId: number | null): TaskSnapshot {
+  const destination: EntityDestination = projectId === null ? { kind: 'unbound' } : { kind: 'bound', projectId: String(projectId) };
+  return { projectId, destinationKey: destinationKey(destination) };
+}
+
+function stamp(item: TaskSyncItem, snap: TaskSnapshot): TaskSnapshot {
+  item.projectId = snap.projectId;
+  item.destinationKey = snap.destinationKey;
+  return snap;
+}
+
+/**
+ * Pins a task's destination. A `projectId` already on the record or the queued item
+ * wins — the live Settings lookup is not applied over it (that would be a rebind).
+ * The lookup promise is started by the caller BEFORE this awaits, so a Settings
+ * change after enqueue cannot be the value observed for an unsnapshotted row.
+ */
+async function pinTaskDestination(deps: ChatSyncDeps, item: TaskSyncItem, live: Promise<number | null> | undefined): Promise<TaskSnapshot> {
+  const task = await deps.records.getTask(item.taskId);
+  if (task && task.projectId !== undefined) return stamp(item, snapshotOf(task.projectId));
+  if (item.projectId !== undefined) {
+    const snap = stamp(item, snapshotOf(item.projectId));
+    if (task) await deps.records.putTask({ ...task, projectId: snap.projectId });
+    return snap;
+  }
+  const projectId = live ? await live : null;
+  const current = await deps.records.getTask(item.taskId);
+  // An explicit write landed while the lookup was in flight. Do not overwrite it.
+  if (current && current.projectId !== undefined) return stamp(item, snapshotOf(current.projectId));
+  const snap = stamp(item, snapshotOf(projectId));
+  if (current) await deps.records.putTask({ ...current, projectId: snap.projectId });
+  return snap;
+}
+
+async function syncTask(
+  deps: ChatSyncDeps,
+  serverChatId: number,
+  item: TaskSyncItem,
+  linkKey: string,
+  scope: string | undefined,
+  destination: Promise<TaskSnapshot>,
+): Promise<void> {
+  const snap = await destination;
+  const task = await deps.records.getTask(item.taskId);
   if (!task || task.state === 'synced') return;
-  const projectId = await deps.taskProjectId();
+  // The record's snapshot wins over the pin, so an explicit rebind after enqueue is
+  // kept and a live lookup cannot move a row that already has a destination.
+  const projectId = task.projectId !== undefined ? task.projectId : snap.projectId;
+  if (task.projectId === undefined) await deps.records.putTask({ ...task, projectId });
+  const filed = (await deps.records.getTask(item.taskId)) ?? { ...task, projectId };
   if (projectId === null) {
     // No project to file it in: it stays a task on this device (the panel says so).
-    await deps.records.putTask({ ...task, state: 'local' });
+    if (filed.state !== 'local' || filed.projectId !== null) await deps.records.putTask({ ...filed, projectId: null, state: 'local' });
     return;
   }
   const asScope = scope !== undefined ? { asScope: scope } : {};
-  let serverTaskId = task.serverTaskId;
+  let serverTaskId = filed.serverTaskId;
   if (serverTaskId === undefined) {
     const created = await deps.api.request<{ id: number }>('/api/tasks', {
       method: 'POST',
-      json: { projectId, title: task.title, ...(task.description ? { description: task.description } : {}) },
-      idempotencyKey: `rovr-task-create:${task.id}`,
+      json: { projectId, title: filed.title, ...(filed.description ? { description: filed.description } : {}) },
+      idempotencyKey: `rovr-task-create:${filed.id}`,
       ...asScope,
     });
     serverTaskId = created.id;
     // Recorded BEFORE the link: a retry of the link never creates the task twice.
-    await deps.records.putTask({ ...task, serverTaskId });
+    await deps.records.putTask({ ...filed, projectId, serverTaskId });
   }
   await deps.api.request(`/api/brain/chats/${serverChatId}/tickets`, {
     method: 'POST',
@@ -107,7 +170,7 @@ async function syncTask(deps: ChatSyncDeps, serverChatId: number, taskId: string
     idempotencyKey: linkKey,
     ...asScope,
   });
-  await deps.records.putTask({ ...task, serverTaskId, state: 'synced' });
+  await deps.records.putTask({ ...filed, projectId, serverTaskId, state: 'synced' });
 }
 
 /**
@@ -133,6 +196,19 @@ export function createChatSync(deps: ChatSyncDeps): ChatSync {
       for (const listener of [...listeners]) listener();
     }, 0);
   };
+  // One pin per task id, started at enqueue so send never re-reads Settings.
+  const pins = new Map<string, Promise<TaskSnapshot>>();
+  const resolveDestination = (item: TaskSyncItem): Promise<TaskSnapshot> => {
+    const existing = pins.get(item.taskId);
+    if (existing) return existing;
+    // Start the live read NOW, before any await, and only when this queued item has
+    // no snapshot of its own. pinTaskDestination discards it if the record already
+    // has one — a lookup is not a rebind.
+    const live = item.projectId === undefined ? deps.taskProjectId() : undefined;
+    const job = pinTaskDestination(deps, item, live);
+    pins.set(item.taskId, job);
+    return job;
+  };
   const outbox = createOutbox<SyncItem, number>({
     maxItems: SYNC_BATCH_MAX,
     maxWaitMs: SYNC_BATCH_WAIT_MS,
@@ -148,7 +224,7 @@ export function createChatSync(deps: ChatSyncDeps): ChatSync {
     async send(localChatId, items, ctx) {
       changed();
       try {
-        await sendBatch(deps, localChatId, items, ctx);
+        await sendBatch(deps, localChatId, items, ctx, resolveDestination);
       } finally {
         changed();
       }
@@ -158,6 +234,7 @@ export function createChatSync(deps: ChatSyncDeps): ChatSync {
   return {
     ...outbox,
     enqueue(key, item) {
+      if (item.kind === 'task') void resolveDestination(item);
       const id = outbox.enqueue(key, item);
       changed();
       return id;
@@ -170,7 +247,13 @@ export function createChatSync(deps: ChatSyncDeps): ChatSync {
 }
 
 /** Send one batch of a local chat's queue: the chat first, then its rows and tasks in order. */
-async function sendBatch(deps: ChatSyncDeps, localChatId: number, items: SyncItem[], ctx: OutboxSendContext): Promise<void> {
+async function sendBatch(
+  deps: ChatSyncDeps,
+  localChatId: number,
+  items: SyncItem[],
+  ctx: OutboxSendContext,
+  destinationFor: (item: TaskSyncItem) => Promise<TaskSnapshot>,
+): Promise<void> {
   const serverChatId = await ensureServerChat(deps, localChatId, ctx.scope);
   // Consecutive message rows travel together; a task is sent in its place in order.
   let rows: Array<MessageInput & { eventKey: string }> = [];
@@ -193,7 +276,7 @@ async function sendBatch(deps: ChatSyncDeps, localChatId: number, items: SyncIte
       continue;
     }
     await flushRows();
-    await syncTask(deps, serverChatId, item.taskId, `rovr-task:${entryId}`, ctx.scope);
+    await syncTask(deps, serverChatId, item, `rovr-task:${entryId}`, ctx.scope, destinationFor(item));
   }
   await flushRows();
 }

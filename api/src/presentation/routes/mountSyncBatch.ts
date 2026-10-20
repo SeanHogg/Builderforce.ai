@@ -465,7 +465,7 @@ async function unmetDependency(
 }
 
 async function persistAccepted(
-  tx: SyncStores,
+  tx: SyncStoreSet,
   event: ParsedEvent,
   batch: ValidBatch,
   deps: SyncPushPullDeps,
@@ -528,7 +528,7 @@ async function persistAccepted(
 }
 
 async function persistConflict(
-  tx: SyncStores,
+  tx: SyncStoreSet,
   event: ParsedEvent,
   batch: ValidBatch,
   deps: SyncPushPullDeps,

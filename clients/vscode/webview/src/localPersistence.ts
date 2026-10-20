@@ -48,7 +48,9 @@ export function createInMemoryPersistence(labels: { summarizeUnavailable: string
 
   return {
     listChats: async (p) => {
-      const all = [...chats.values()].filter((c) => (p?.projectId == null ? true : String(c.projectId) === p.projectId));
+      const all = [...chats.values()]
+        .filter((c) => !c.isArchived)
+        .filter((c) => (p?.projectId == null ? true : String(c.projectId) === p.projectId));
       // Newest first, the order the gateway returns and the chat list assumes.
       const sorted = all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id - a.id);
       const offset = p?.offset ?? 0;
@@ -84,6 +86,14 @@ export function createInMemoryPersistence(labels: { summarizeUnavailable: string
       chats.delete(id);
       messages.delete(id);
       return {};
+    },
+
+    // Archive hides the chat from the list without losing its transcript — the
+    // offline fallback has no server to set `isArchived` on, so it flags the row.
+    archiveChat: async (id) => {
+      const chat = require_(id);
+      chats.set(id, { ...chat, isArchived: true, updatedAt: now() });
+      return { archived: true };
     },
 
     // A summary is a server-side model run against the stored transcript. Say so plainly

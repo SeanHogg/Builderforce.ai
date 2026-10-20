@@ -34,4 +34,20 @@ describe("workspace map cache token", () => {
     await scanCodebase({} as never, root, {} as never, false);
     expect(await tokenOf(root)).not.toBe(before);
   });
+
+  it("does not emit map entries for sibling checkouts that are not this repo", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "bf-scan-"));
+    await fs.mkdir(path.join(root, "src"), { recursive: true });
+    await fs.writeFile(path.join(root, "package.json"), "{\"name\":\"app\"}", "utf8");
+    await fs.mkdir(path.join(root, "bf-verify-fdc"), { recursive: true });
+    await fs.writeFile(path.join(root, "bf-verify-fdc", "package.json"), "{\"name\":\"verify\"}", "utf8");
+    await fs.mkdir(path.join(root, "_cubecl_src", "cubecl-0.10.0"), { recursive: true });
+    await fs.writeFile(path.join(root, "_cubecl_src", "cubecl-0.10.0", "Cargo.toml"), "[package]\n", "utf8");
+
+    const { grounding } = await scanCodebase({} as never, root, {} as never, true);
+    expect(grounding).toContain("package.json");
+    expect(grounding).not.toContain("bf-verify-fdc");
+    expect(grounding).not.toContain("_cubecl_src");
+    expect(grounding).not.toContain("cubecl-0.10.0");
+  });
 });

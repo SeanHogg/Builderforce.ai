@@ -5,10 +5,11 @@
  * and `readClosedAudit`. Nothing is written, and nothing is launched, until a
  * helper is called.
  *
- * Not called from extension activation. `extension.ts` is shared and must not be
- * edited from this slice, so `activate` does not push this installer. A completed
- * local audit therefore still has no durable closed-locally state on the live
- * path, and nothing here stops a cloud audit launch at activation.
+ * Called from extension activation. `activate` already pushes this installer with
+ * `context.subscriptions.push(installAuditClose());` (the first subscription in
+ * `extension.ts` `activate`, not a comment). Do not add a second install. The
+ * helpers stay inert until called: this module writes nothing and launches nothing
+ * on its own.
  *
  * This module imports no editor API, calls no network, and starts no cloud audit.
  */
@@ -20,9 +21,11 @@ import {
 } from "./auditCloseCheckpoint";
 
 /**
- * The line activation would push onto `context.subscriptions`. It is not present
- * in `extension.ts`. Installing remains idempotent and disposable so a later
- * activation edit can hold it without this module importing `vscode`.
+ * The statement `activate` already pushes onto `context.subscriptions`:
+ * `context.subscriptions.push(installAuditClose());`. It is executable code in
+ * `extension.ts`, not a comment that cites the call.
+ * Installing remains idempotent and disposable so activation can hold it without
+ * this module importing `vscode`.
  */
 export const EXTENSION_ACTIVATION_LINE = "context.subscriptions.push(installAuditClose());";
 
@@ -46,8 +49,9 @@ const installed: InstalledAuditClose = {
  *
  * The result is a disposable so activation can hold it for the host's lifetime.
  * Disposal is intentionally a no-op — the helpers are pure module-level bindings
- * with no subscription, listener or handle to release. Calling this does not
- * install the path into activation; that wiring is still missing.
+ * with no subscription, listener or handle to release. Activation already holds
+ * this path via `context.subscriptions.push(installAuditClose());` in `activate`.
+ * Do not install it a second time.
  */
 export function installAuditClose(): InstalledAuditClose & { dispose(): void } {
   return Object.assign(installed, {

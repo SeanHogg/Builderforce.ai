@@ -19,7 +19,15 @@ import { SKIP_DIRS } from "./workspaceSearch";
 /** Watcher-backed, so the full re-walk is a 10-minute backstop rather than per query. */
 const FULL_REFRESH_MS = 10 * 60_000;
 
-const skipDirs: ReadonlySet<string> = new Set([...SYMBOL_INDEX_SKIP_DIRS, ...SKIP_DIRS]);
+/**
+ * Sibling checkouts and vendored trees that sit beside this product when the open
+ * folder is the parent workspace. They are not this repo. The map scan skips them
+ * (`codebaseScan`); the symbol index must too, or grounding re-emits them as a
+ * wall of unrelated definitions.
+ */
+const NOISY_ROOTS = ["bf-verify-fdc", "_cubecl_src"] as const;
+
+const skipDirs: ReadonlySet<string> = new Set([...SYMBOL_INDEX_SKIP_DIRS, ...SKIP_DIRS, ...NOISY_ROOTS]);
 
 /** The process-wide definition index for the workspace folder at `root`. */
 export function workspaceSymbolIndex(root: string): WorkspaceSymbolIndex {

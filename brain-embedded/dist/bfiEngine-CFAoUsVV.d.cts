@@ -7,12 +7,20 @@
 
 /** What the device's WebGPU adapter offers. Never requires creating a device. */
 interface LocalDeviceSupport {
+    /** Version of the cross-language support record. */
+    contractVersion?: 2;
     supported: boolean;
     /** Why WebGPU is unavailable, when `supported` is false. */
     reason?: string;
     f16: boolean;
-    /** The largest storage-buffer binding the adapter grants. */
+    /** Adapter `maxBufferSize`: the largest allocatable GPU buffer. */
+    maxBufferSizeBytes?: number;
+    /** Adapter `maxStorageBufferBindingSize`: the largest storage-buffer binding. */
+    maxStorageBufferBindingSizeBytes?: number;
+    /** @deprecated Version 1 conflated the two limits. Use the explicit fields. */
     maxBufferBytes: number;
+    /** Requested adapter preference, not a claim about the selected hardware. */
+    requestedPowerPreference?: 'high-performance' | 'low-power';
 }
 /** Why a model cannot run here — a stable code a picker maps to copy. */
 type LocalModelUnfit = 'webgpu_unavailable' | 'shader_f16_unavailable' | 'buffer_too_small';
@@ -55,6 +63,8 @@ interface BfiContextShape {
     trainedContext: number;
     kvBudgetBytes?: number;
     f16?: boolean;
+    maxStorageBufferBindingSizeBytes?: number;
+    /** @deprecated Use maxStorageBufferBindingSizeBytes. */
     maxBufferBytes?: number;
 }
 /** A live `BfiEngine` (§3.1) — structurally typed so the wasm package is not a build dep. */

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { destinationKey } from '@builderforce/local-first';
 import { createMemoryOutboxStore, createOnlineSignal } from '@builderforce/write-outbox';
 import type { ApiClient, ApiRequestInit } from '../api/apiClient';
 import { createMemoryRecords, type LocalTask } from '../store/records';
@@ -30,7 +31,7 @@ function fakeApi(opts: { failMessagesOnce?: boolean } = {}): ApiClient & { calls
   };
 }
 
-async function setup(opts: { scope?: string | null; projectId?: number | null; failMessagesOnce?: boolean } = {}) {
+async function setup(opts: { scope?: string | null; projectId?: number | null; failMessagesOnce?: boolean; taskProjectId?: () => Promise<number | null> } = {}) {
   const records = createMemoryRecords();
   const chat = await records.createChat('Plan the trip');
   const api = fakeApi(opts);
@@ -42,7 +43,7 @@ async function setup(opts: { scope?: string | null; projectId?: number | null; f
     store: createMemoryOutboxStore<SyncItem, number>(),
     online,
     scope: () => scope,
-    taskProjectId: async () => (opts.projectId === undefined ? 42 : opts.projectId),
+    taskProjectId: opts.taskProjectId ?? (async () => (opts.projectId === undefined ? 42 : opts.projectId)),
   });
   return { records, chat, api, sync, online, setScope: (s: string | null) => (scope = s) };
 }
@@ -133,5 +134,64 @@ describe('chat sync outbox', () => {
     await sync.flush();
     expect(api.calls.map((c) => c.path)).toEqual(['/api/brain/chats']);
     expect((await records.getTask('task-1'))?.state).toBe('local');
+  });
+
+  it('does not move a queued task when Settings changes after enqueue', async () => {
+    let live: number | null = 7;
+    const lookup = vi.fn(async () => live);
+    const { sync, chat, api, records } = await setup({ taskProjectId: lookup });
+    await records.putTask(task(chat.id));
+    const item: SyncItem = { kind: 'task', taskId: 'task-1' };
+    sync.enqueue(chat.id, item);
+    const callsAtEnqueue = lookup.mock.calls.length;
+    live = 99;
+    await sync.flush();
+
+    expect(api.calls.find((c) => c.path === '/api/tasks')?.init.json).toEqual({ projectId: 7, title: 'Book flights' });
+    expect(await records.getTask('task-1')).toMatchObject({ projectId: 7, state: 'synced', serverTaskId: 9001 });
+    expect(item).toMatchObject({ projectId: 7, destinationKey: destinationKey({ kind: 'bound', projectId: '7' }) });
+    // Send reads the snapshot. It does not look Settings up again, so the change is not a rebind.
+    expect(lookup.mock.calls.length).toBe(callsAtEnqueue);
+    expect(lookup.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it('does not move a record that already has a destination when the live project is read', async () => {
+    const lookup = vi.fn(async () => 99);
+    const { sync, chat, api, records } = await setup({ taskProjectId: lookup });
+    await records.putTask({ ...task(chat.id), projectId: 7 });
+    sync.enqueue(chat.id, { kind: 'task', taskId: 'task-1' });
+    await sync.flush();
+
+    expect(api.calls.find((c) => c.path === '/api/tasks')?.init.json).toEqual({ projectId: 7, title: 'Book flights' });
+    expect((await records.getTask('task-1'))?.projectId).toBe(7);
+  });
+
+  it('does not treat a live project lookup as a rebind of a task that already has a destination', async () => {
+    const lookup = vi.fn(async () => 99);
+    const { sync, chat, api, records } = await setup({ taskProjectId: lookup });
+    await records.putTask({ ...task(chat.id), projectId: 7 });
+    const item: SyncItem = { kind: 'task', taskId: 'task-1', projectId: 7, destinationKey: destinationKey({ kind: 'bound', projectId: '7' }) };
+    sync.enqueue(chat.id, item);
+    await sync.flush();
+
+    expect(lookup).not.toHaveBeenCalled();
+    expect(api.calls.find((c) => c.path === '/api/tasks')?.init.json).toEqual({ projectId: 7, title: 'Book flights' });
+    expect((await records.getTask('task-1'))?.projectId).toBe(7);
+    expect(item.kind === 'task' && item.destinationKey).toBe(destinationKey({ kind: 'bound', projectId: '7' }));
+  });
+
+  it('keeps an unbound snapshot unbound when Settings later picks a project', async () => {
+    let live: number | null = null;
+    const lookup = vi.fn(async () => live);
+    const { sync, chat, api, records } = await setup({ taskProjectId: lookup });
+    await records.putTask(task(chat.id));
+    const item: SyncItem = { kind: 'task', taskId: 'task-1' };
+    sync.enqueue(chat.id, item);
+    live = 99;
+    await sync.flush();
+
+    expect(api.calls.map((c) => c.path)).toEqual(['/api/brain/chats']);
+    expect(await records.getTask('task-1')).toMatchObject({ projectId: null, state: 'local' });
+    expect(item).toMatchObject({ projectId: null, destinationKey: destinationKey({ kind: 'unbound' }) });
   });
 });

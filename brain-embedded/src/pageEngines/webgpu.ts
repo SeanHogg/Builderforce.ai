@@ -13,10 +13,19 @@ interface GpuAdapterLike {
 }
 
 interface GpuLike {
-  requestAdapter(): Promise<GpuAdapterLike | null>;
+  requestAdapter(options?: { powerPreference?: 'high-performance' | 'low-power' }): Promise<GpuAdapterLike | null>;
 }
 
-const UNSUPPORTED = (reason: string): LocalDeviceSupport => ({ supported: false, reason, f16: false, maxBufferBytes: 0 });
+const UNSUPPORTED = (reason: string): LocalDeviceSupport => ({
+  contractVersion: 2,
+  supported: false,
+  reason,
+  f16: false,
+  maxBufferBytes: 0,
+  maxBufferSizeBytes: 0,
+  maxStorageBufferBindingSizeBytes: 0,
+  requestedPowerPreference: 'high-performance',
+});
 
 /** This page's WebGPU entry point, read at call time (SSR safe: none on a server). */
 const pageGpu = (): GpuLike | undefined => (globalThis as { navigator?: { gpu?: GpuLike } }).navigator?.gpu;
@@ -35,12 +44,18 @@ export function hasWebGPU(): boolean {
 export async function webGpuSupport(gpu: GpuLike | undefined = pageGpu()): Promise<LocalDeviceSupport> {
   if (!gpu) return UNSUPPORTED('webgpu_missing');
   try {
-    const adapter = await gpu.requestAdapter();
+    const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });
     if (!adapter) return UNSUPPORTED('no_adapter');
+    const maxBufferSizeBytes = adapter.limits.maxBufferSize ?? 0;
+    const maxStorageBufferBindingSizeBytes = adapter.limits.maxStorageBufferBindingSize ?? 0;
     return {
+      contractVersion: 2,
       supported: true,
       f16: adapter.features.has('shader-f16'),
-      maxBufferBytes: adapter.limits.maxStorageBufferBindingSize ?? 0,
+      maxBufferBytes: maxBufferSizeBytes,
+      maxBufferSizeBytes,
+      maxStorageBufferBindingSizeBytes,
+      requestedPowerPreference: 'high-performance',
     };
   } catch (e) {
     return UNSUPPORTED(e instanceof Error ? e.message : String(e));

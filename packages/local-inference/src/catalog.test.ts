@@ -109,6 +109,18 @@ describe('localModelFit', () => {
     });
   });
 
+  it('uses the storage binding limit rather than the independent allocation limit', () => {
+    const support: LocalDeviceSupport = {
+      contractVersion: 2,
+      supported: true,
+      f16: true,
+      maxBufferBytes: 2 ** 30,
+      maxBufferSizeBytes: 2 ** 40,
+      maxStorageBufferBindingSizeBytes: 2 ** 27,
+    };
+    expect(localModelFit(requires({ minBufferBytes: 2 ** 28 }), support)).toMatchObject({ reason: 'buffer_too_small' });
+  });
+
   it('fits every bfi Bonsai row on a WebGPU-default adapter without shader-f16', () => {
     const baseline: LocalDeviceSupport = { supported: true, f16: false, maxBufferBytes: 128 * 1024 * 1024 };
     for (const m of localCatalogFor('bfi')) expect(localModelFit(m, baseline)).toEqual({ fits: true });

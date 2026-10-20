@@ -10,6 +10,7 @@
     "paths": {
       "@builderforce/agent-tools": ["../../packages/agent-tools/src/index.ts"],
       "@builderforce/device-auth": ["../../packages/device-auth/src/index.ts"],
+      "@builderforce/local-first": ["../../packages/local-first/src/index.ts"],
       "@builderforce/local-inference": ["../../packages/local-inference/src/index.ts"],
       "@builderforce/model-catalog": ["../../packages/model-catalog/src/index.ts"],
       "@builderforce/provider-connect": ["../../packages/provider-connect/src/index.ts"],

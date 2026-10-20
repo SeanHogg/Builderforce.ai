@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { getTenantJwt } from "./bfApi";
 import { logLine } from "./errorReporter";
 import { getBaseUrl, getWebBaseUrl } from "./gateway";
+import { localBrainApplication } from "./localFirstStore";
 import { platformPolicy } from "./platformPolicy";
 import { assertPlatformSocketAllowed, platformPolicyFrame, platformSocketUrl } from "./platformCallGate";
 
@@ -138,6 +139,34 @@ export async function handleSharedHostMessage(
     case "token.refresh": {
       const token = (await getTenantJwt(ctx.secrets)) ?? null;
       respondToWebview(webview, msg.id, true, { token });
+      return true;
+    }
+    case "local.persistence": {
+      const request = msg as WebviewInbound & { method?: string; args?: unknown[] };
+      const persistence = localBrainApplication(ctx).persistence as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+      const allowed = new Set([
+        "listChats",
+        "getChat",
+        "createChat",
+        "updateChat",
+        "deleteChat",
+        "archiveChat",
+        "summarizeChat",
+        "getMessages",
+        "sendMessages",
+        "setMessageFeedback",
+        "upload",
+      ]);
+      if (!request.method || !allowed.has(request.method)) {
+        respondToWebview(webview, msg.id, false, undefined, "Unsupported local persistence operation");
+        return true;
+      }
+      try {
+        const result = await persistence[request.method](...(request.args ?? []));
+        respondToWebview(webview, msg.id, true, result);
+      } catch (error) {
+        respondToWebview(webview, msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+      }
       return true;
     }
     case "signin":

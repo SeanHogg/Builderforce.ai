@@ -8,6 +8,10 @@ import { routeComplete, type ModelRoute } from "./modelRouting";
 const SKIP_DIRS = new Set([
   ".git", "node_modules", "dist", "out", "build", ".next", "coverage", ".turbo",
   ".vscode-test", "vendor", ".venv", "venv", "__pycache__", ".cache", "target", ".idea",
+  // Sibling checkouts that sit beside the product tree when the parent folder is
+  // opened. They are not this repo, and their manifests were landing in the map
+  // as if they were sub-projects.
+  "bf-verify-fdc", "_cubecl_src",
 ]);
 const MANIFEST_FILES = new Set([
   "package.json", "pyproject.toml", "requirements.txt", "Cargo.toml", "go.mod",

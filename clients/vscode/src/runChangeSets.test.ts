@@ -101,11 +101,24 @@ vi.mock("./memoryStaleness", () => ({ withWorkspaceStaleness: (hooks: unknown) =
 import { createVsCodeRunHost } from "./brainRunHostPorts";
 import {
   attributeRunChanges,
+  beginChangeSet,
+  changeSetCompleteness,
   changeSetIdentityForHostRun,
   finalizeRunChangeSets,
+  finishChangeSet,
+  hashRunChangeBaseline,
+  isChangeSetLifecycle,
+  readChangeSetLifecycle,
+  readRunChangeSetPhase,
   recordChangeSetAroundRun,
+  recordChangeSetBaseline,
+  recordChangeSetFinalization,
   type LocalChangeSetValue,
 } from "./runChangeSets";
+
+function attributedChangeSets<T extends { entityType: string; payload: unknown }>(records: T[]): T[] {
+  return records.filter((record) => record.entityType === "change-set" && !isChangeSetLifecycle(record.payload));
+}
 
 const roots: string[] = [];
 
@@ -259,8 +272,9 @@ describe("recordChangeSetAroundRun", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(await fs.readFile(otherFile, "utf8")).toBe("do not apply here\n");
     const snapshot = await store.export();
-    const records = snapshot.records.filter((record) => record.entityType === "change-set");
+    const records = attributedChangeSets(snapshot.records);
     expect(records).toHaveLength(1);
+    expect(await readRunChangeSetPhase(store, "run-1")).toBe("finished");
     expect(records[0]?.provenance?.deviceId).toBe("device-1");
     expect(records[0]?.destination).toEqual({ kind: "unbound" });
     const payload = records[0]?.payload as LocalChangeSetValue;
@@ -292,10 +306,11 @@ describe("recordChangeSetAroundRun", () => {
     );
     expect(again).toEqual([records[0]?.id]);
     const retried = await store.export();
-    expect(retried.records.filter((record) => record.entityType === "change-set")).toHaveLength(1);
-    const kept = (retried.records[0]?.payload as LocalChangeSetValue).files.find((file) => file.path === "edited.ts");
+    const retriedSets = attributedChangeSets(retried.records);
+    expect(retriedSets).toHaveLength(1);
+    const kept = (retriedSets[0]?.payload as LocalChangeSetValue).files.find((file) => file.path === "edited.ts");
     expect(kept?.afterHash).toBe(sha(after));
-    expect((retried.records[0]?.payload as LocalChangeSetValue).author).toBe("agent:brain-host");
+    expect((retriedSets[0]?.payload as LocalChangeSetValue).author).toBe("agent:brain-host");
   });
 
   it("does not finalize a start that does not own the live run", async () => {
@@ -323,7 +338,10 @@ describe("recordChangeSetAroundRun", () => {
       },
       async () => undefined,
     );
-    expect((await store.export()).records).toEqual([]);
+    const snapshot = await store.export();
+    expect(attributedChangeSets(snapshot.records)).toEqual([]);
+    expect(await readRunChangeSetPhase(store, "run-3")).toBe("partial");
+    expect(snapshot.records.find((record) => record.entityType !== "change-set")).toBeUndefined();
   });
 
   it("does not stamp a blank device id, and still finalizes when the run throws", async () => {
@@ -353,8 +371,10 @@ describe("recordChangeSetAroundRun", () => {
       ),
     ).rejects.toThrow("run failed");
     const snapshot = await store.export();
-    expect(snapshot.records).toHaveLength(1);
-    expect((snapshot.records[0]?.payload as LocalChangeSetValue).files[0]?.path).toBe("authored.ts");
+    const records = attributedChangeSets(snapshot.records);
+    expect(records).toHaveLength(1);
+    expect(await readRunChangeSetPhase(store, "run-5")).toBe("finished");
+    expect((records[0]?.payload as LocalChangeSetValue).files[0]?.path).toBe("authored.ts");
   });
 
   it("still runs when the baseline cannot be read", async () => {
@@ -428,7 +448,7 @@ describe("createVsCodeRunHost change sets", () => {
     expect(order).toEqual(["refresh", "detect:baseline", "start", "refresh", "detect:final"]);
     expect(upload).not.toHaveBeenCalled();
     const snapshot = await store.export();
-    const records = snapshot.records.filter((record) => record.entityType === "change-set");
+    const records = attributedChangeSets(snapshot.records);
     expect(records).toHaveLength(1);
     expect(records[0]?.provenance?.deviceId).toBe("device-host");
     const payload = records[0]?.payload as LocalChangeSetValue;
@@ -445,7 +465,9 @@ describe("createVsCodeRunHost change sets", () => {
       }),
     ]);
     expect(payload.files.some((file) => file.path === "untouched.ts")).toBe(false);
-    expect(snapshot.events[0]?.dependsOn).toEqual([`execution:start:${payload.runId}`]);
+    expect(snapshot.events.find((event) => event.entityType === "change-set")?.dependsOn).toEqual([
+      `execution:start:${payload.runId}`,
+    ]);
   });
 
   it("keeps an audit run id when the host starts the run", async () => {
@@ -464,7 +486,7 @@ describe("createVsCodeRunHost change sets", () => {
 
     await installHost().start(startPayload({ audit: { auditId: "soc2", runId: "audit-run-9" } }) as never);
 
-    const payload = (await store.export()).records[0]?.payload as LocalChangeSetValue;
+    const payload = attributedChangeSets((await store.export()).records)[0]?.payload as LocalChangeSetValue;
     expect(payload.runId).toBe("audit-run-9");
     expect(payload.author).toBe("agent:audit");
     expect(payload.files[0]).toEqual(expect.objectContaining({ path: "finding.ts", afterHash: sha(authored) }));
@@ -483,7 +505,7 @@ describe("createVsCodeRunHost change sets", () => {
     expect(hostPorts.innerStart).toHaveBeenCalledOnce();
     expect(git.refresh).not.toHaveBeenCalled();
     expect(git.detect).not.toHaveBeenCalled();
-    expect((await store.export()).records).toEqual([]);
+    expect((await store.export()).records.filter((record) => record.entityType === "change-set")).toEqual([]);
   });
 
   it("still finalizes when the host run throws", async () => {
@@ -502,7 +524,119 @@ describe("createVsCodeRunHost change sets", () => {
     });
 
     await expect(installHost().start(startPayload() as never)).rejects.toThrow("run failed");
-    const payload = (await store.export()).records[0]?.payload as LocalChangeSetValue;
+    const payload = attributedChangeSets((await store.export()).records)[0]?.payload as LocalChangeSetValue;
     expect(payload.files[0]).toEqual(expect.objectContaining({ path: "authored.ts", afterHash: sha(authored) }));
+  });
+});
+
+describe("change set baseline and finalization", () => {
+  it("hashes baseline content independent of clock, key order, and path spelling", () => {
+    const baseline = {
+      capturedAt: "2026-01-01T00:00:00.000Z",
+      repos: [
+        {
+          root: "C:\\repo",
+          name: "repo",
+          repository: "https://example.test/acme/repo.git",
+          branch: "main",
+          baseCommit: "abc",
+          files: { "b.ts": "sha256:2", "a.ts": "sha256:1" },
+        },
+      ],
+    };
+    const reordered = {
+      capturedAt: "different",
+      repos: [
+        {
+          root: "c:/repo",
+          name: "repo",
+          repository: "https://example.test/acme/repo.git",
+          branch: "main",
+          baseCommit: "abc",
+          files: { "a.ts": "sha256:1", "b.ts": "sha256:2" },
+        },
+      ],
+    };
+    expect(hashRunChangeBaseline(baseline)).toBe(hashRunChangeBaseline(reordered));
+    expect(hashRunChangeBaseline(baseline)).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it("treats a baseline without finalization as partial and a finalized set as finished", () => {
+    const open = beginChangeSet({
+      runId: "run-1",
+      author: "agent:brain-host",
+      baseline: { capturedAt: "t", repos: [] },
+    });
+    expect(changeSetCompleteness(open)).toBe("partial");
+    expect(open.baselineHash).toMatch(/^sha256:/);
+    expect(open.finalizedAt).toBeUndefined();
+
+    const finished = finishChangeSet(open, {
+      finalizedAt: "2026-01-02T00:00:00.000Z",
+      changeSetIds: ["changeset:run-1:b", "changeset:run-1:a"],
+    });
+    expect(changeSetCompleteness(finished)).toBe("finished");
+    expect(finished.finalizedAt).toBe("2026-01-02T00:00:00.000Z");
+    expect(finished.changeSetIds).toEqual(["changeset:run-1:a", "changeset:run-1:b"]);
+    expect(finished.finalizationHash).toMatch(/^sha256:/);
+    expect(finishChangeSet(finished, { finalizedAt: "later", changeSetIds: ["other"] })).toEqual(finished);
+    expect(changeSetCompleteness({ finalizedAt: "t" })).toBe("finished");
+    expect(changeSetCompleteness({})).toBe("absent");
+  });
+
+  it("records a content-hashed baseline before the run and a finalization after, with no fetch", async () => {
+    const store = createMemoryLocalFirstStore();
+    git.detect.mockResolvedValue(pending([]));
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const now = new Date("2026-04-01T00:00:00.000Z");
+
+    await recordChangeSetAroundRun(
+      { store, deviceId: "device-1", runId: "run-open", author: "agent:brain-host", now: () => now },
+      async () => {
+        expect(await readRunChangeSetPhase(store, "run-open")).toBe("partial");
+        const open = await readChangeSetLifecycle(store, "run-open");
+        expect(open?.baselineHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+        expect(open?.finalizedAt).toBeUndefined();
+        expect(open?.baselineHash).toBe(hashRunChangeBaseline(open!.baseline));
+        expect(fetchSpy).not.toHaveBeenCalled();
+      },
+    );
+
+    expect(await readRunChangeSetPhase(store, "run-open")).toBe("finished");
+    const closed = await readChangeSetLifecycle(store, "run-open");
+    expect(closed?.finalizedAt).toBe(now.toISOString());
+    expect(closed?.finalizationHash).toMatch(/^sha256:/);
+    expect(closed?.changeSetIds).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("stays partial until finalization, so a restart can tell an unfinished set from a finished one", async () => {
+    const store = createMemoryLocalFirstStore();
+    const baseline = { capturedAt: "2026-04-01T00:00:00.000Z", repos: [] };
+    await recordChangeSetBaseline(
+      store,
+      { deviceId: "device-1" },
+      { runId: "run-partial", baseline, author: "agent:brain-host" },
+    );
+    expect(await readRunChangeSetPhase(store, "run-partial")).toBe("partial");
+    expect(changeSetCompleteness((await readChangeSetLifecycle(store, "run-partial"))!)).toBe("partial");
+
+    const closed = await recordChangeSetFinalization(
+      store,
+      { deviceId: "device-1", now: () => new Date("2026-04-01T01:00:00.000Z") },
+      { runId: "run-partial", baseline, author: "agent:brain-host", changeSetIds: [] },
+    );
+    expect(await readRunChangeSetPhase(store, "run-partial")).toBe("finished");
+    expect(closed.finalizedAt).toBe("2026-04-01T01:00:00.000Z");
+
+    const again = await recordChangeSetFinalization(
+      store,
+      { deviceId: "device-1", now: () => new Date("2026-04-02T00:00:00.000Z") },
+      { runId: "run-partial", baseline, author: "someone-else", changeSetIds: ["new"] },
+    );
+    expect(again.finalizedAt).toBe("2026-04-01T01:00:00.000Z");
+    expect(again.author).toBe("agent:brain-host");
+    expect(again.changeSetIds).toEqual([]);
   });
 });

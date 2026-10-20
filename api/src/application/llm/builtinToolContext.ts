@@ -56,6 +56,15 @@ export interface BuiltinCtx {
   /** The request's ExecutionContext — passed to `app.request` so replayed routes'
    *  `waitUntil` side-effects don't throw. */
   executionCtx?: ExecutionContext;
+  /**
+   * Provenance for a belief written through a tool (ticket 5301). Present only when
+   * the caller actually has them — the Brain reply loop and the REST gateway relay do
+   * not, and a missing field stays unset rather than being invented. `executionId` is
+   * the run that formed the belief; `origin` is what producing it cost, recorded in
+   * the existing origin-cost columns (there is no standalone origin-model column).
+   */
+  executionId?: number | null;
+  origin?: { model: string; promptTokens: number; completionTokens: number } | null;
 }
 
 /**

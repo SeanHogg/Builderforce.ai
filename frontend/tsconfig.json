@@ -35,6 +35,8 @@
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-tools/symbols": ["../packages/agent-tools/src/symbols.ts"],
       "@builderforce/write-outbox": ["../packages/write-outbox/src/index.ts"],
+      "@builderforce/local-first": ["../packages/local-first/src/index.ts"],
+      "@builderforce/local-first/indexed-db": ["../packages/local-first/src/indexedDb.ts"],
       "@builderforce/model-catalog": ["../packages/model-catalog/src/index.ts"],
       "@builderforce/provider-connect": ["../packages/provider-connect/src/index.ts"],
       "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],

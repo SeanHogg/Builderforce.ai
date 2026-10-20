@@ -505,9 +505,9 @@ async function runAgentLoop(args) {
         awaitingInput = { approvalId: result.control.approvalId, question: result.control.question, callId: call2.id };
       }
       if (!result.control) ctx.failureStreak = result.isError ? ctx.failureStreak + 1 : 0;
-      const row = codec.tool(call2, result);
-      ctx.messages.push(row);
-      const post = await hooks.afterDispatch?.(call2, result, row, ctx);
+      const row2 = codec.tool(call2, result);
+      ctx.messages.push(row2);
+      const post = await hooks.afterDispatch?.(call2, result, row2, ctx);
       if (post?.skipRemaining) {
         const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
         for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
@@ -802,16 +802,16 @@ var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
 function openAiChatCodec(serialize = defaultToolRowSerializer) {
   return {
     assistant(turn) {
-      const row = {
+      const row2 = {
         role: "assistant",
         content: turn.content ?? "",
         tool_calls: turn.toolCalls.map(toOpenAiToolCall)
       };
-      return row;
+      return row2;
     },
     tool(call2, result) {
-      const row = { role: "tool", tool_call_id: call2.id, content: serialize(result, call2) };
-      return row;
+      const row2 = { role: "tool", tool_call_id: call2.id, content: serialize(result, call2) };
+      return row2;
     }
   };
 }
@@ -1470,6 +1470,507 @@ function useBrainConfig() {
   return ctx;
 }
 
+// ../packages/local-first/src/capabilityMatrix.ts
+var HOST_CAPABILITIES = [
+  // Meetings: a live session cannot exist without the platform.
+  "meeting",
+  "meeting-join",
+  // Attachments: the blob and the manifest stay local, the upload does not.
+  "attachment-manifest",
+  "attachment-local-blob",
+  "attachment-upload",
+  // Cloud-only tools and cloud execution.
+  "cloud-mcp-tool",
+  "mcp-management",
+  "cloud-execution",
+  "gateway-inference",
+  // Connected account and remote data.
+  "oauth-management",
+  "connected-feature",
+  "remote-creation",
+  "approval-decision",
+  "server-summary",
+  "remote-session-read",
+  "project-panel",
+  // Local files and local runtime.
+  "local-file-read",
+  "local-file-write",
+  "model-download",
+  "direct-provider",
+  "local-inference",
+  "synchronize",
+  // Durable local writes a later sync replays.
+  "local-message-write",
+  "local-project-write",
+  "local-ticket-write",
+  "local-audit",
+  "local-audit-finding",
+  "local-remediation",
+  "local-memory-recall",
+  "local-fact-publish",
+  // Git remotes.
+  "git-push"
+];
+function row(capability, spec) {
+  return Object.freeze({
+    capability,
+    surface: spec.surface,
+    behaviour: spec.behaviour,
+    policyCapability: spec.policyCapability ?? null,
+    entityType: spec.entityType ?? null,
+    freshness: spec.freshness ?? "live",
+    reason: spec.reason
+  });
+}
+var CAPABILITY_MATRIX = Object.freeze({
+  "meeting": row("meeting", {
+    surface: "meeting",
+    behaviour: "connected-only",
+    policyCapability: "connected-feature",
+    reason: "A meeting is a live connected session and is refused offline instead of being queued as history."
+  }),
+  "meeting-join": row("meeting-join", {
+    surface: "meeting",
+    behaviour: "connected-only",
+    policyCapability: "connected-feature",
+    reason: "Joining a meeting opens a connected socket and is refused offline rather than recorded locally."
+  }),
+  "attachment-manifest": row("attachment-manifest", {
+    surface: "attachment",
+    behaviour: "local",
+    entityType: "attachment-manifest",
+    reason: "The manifest describes a local blob held on the device and needs no platform request."
+  }),
+  "attachment-local-blob": row("attachment-local-blob", {
+    surface: "attachment",
+    behaviour: "local",
+    reason: "The attachment bytes are read from local storage and never round-trip through the platform."
+  }),
+  "attachment-upload": row("attachment-upload", {
+    surface: "attachment",
+    behaviour: "connected-only",
+    policyCapability: "connected-feature",
+    reason: "Uploading bytes is a connected job and is refused offline rather than silently retried as history."
+  }),
+  "cloud-mcp-tool": row("cloud-mcp-tool", {
+    surface: "cloud-tool",
+    behaviour: "connected-only",
+    policyCapability: "external-mcp",
+    reason: "A cloud MCP tool runs only while connected and is never enqueued as offline history."
+  }),
+  "mcp-management": row("mcp-management", {
+    surface: "cloud-tool",
+    behaviour: "connected-only",
+    policyCapability: "external-mcp",
+    reason: "Managing an MCP server is a connected account action and is refused offline."
+  }),
+  "cloud-execution": row("cloud-execution", {
+    surface: "cloud-tool",
+    behaviour: "connected-only",
+    policyCapability: "connected-feature",
+    reason: "Cloud execution happens on the platform and is refused offline rather than replaced by a local run."
+  }),
+  "gateway-inference": row("gateway-inference", {
+    surface: "cloud-tool",
+    behaviour: "connected-only",
+    policyCapability: "gateway-inference",
+    reason: "Gateway inference is a connected grant and is refused offline rather than used as a fallback."
+  }),
+  "oauth-management": row("oauth-management", {
+    surface: "account",
+    behaviour: "connected-only",
+    policyCapability: "authenticate",
+    reason: "Managing an OAuth connection needs the platform and is refused offline."
+  }),
+  "connected-feature": row("connected-feature", {
+    surface: "account",
+    behaviour: "connected-only",
+    policyCapability: "connected-feature",
+    reason: "An explicitly connected feature is unavailable while the platform is denied."
+  }),
+  "remote-creation": row("remote-creation", {
+    surface: "account",
+    behaviour: "connected-only",
+    policyCapability: "synchronize",
+    reason: "Creating a remote record needs the platform and is refused offline instead of pretending it succeeded."
+  }),
+  "approval-decision": row("approval-decision", {
+    surface: "account",
+    behaviour: "connected-only",
+    policyCapability: "synchronize",
+    reason: "Deciding a remote approval is a connected action and is refused offline rather than auto-accepted."
+  }),
+  "server-summary": row("server-summary", {
+    surface: "remote-data",
+    behaviour: "local",
+    freshness: "cached-stale",
+    reason: "A server summary is read from the last synchronized snapshot and labelled as cached."
+  }),
+  "remote-session-read": row("remote-session-read", {
+    surface: "remote-data",
+    behaviour: "local",
+    freshness: "cached-stale",
+    reason: "Remote session data is read from the local projection updated by delta sync."
+  }),
+  "project-panel": row("project-panel", {
+    surface: "remote-data",
+    behaviour: "local",
+    freshness: "cached-stale",
+    reason: "A project panel renders the local snapshot with pending changes over the last sync."
+  }),
+  "local-file-read": row("local-file-read", {
+    surface: "local-file",
+    behaviour: "local",
+    reason: "Reading a local file uses the host filesystem and contacts no platform."
+  }),
+  "local-file-write": row("local-file-write", {
+    surface: "local-file",
+    behaviour: "local",
+    reason: "Writing a local file uses the host filesystem and contacts no platform."
+  }),
+  "model-download": row("model-download", {
+    surface: "local-runtime",
+    behaviour: "connected-only",
+    policyCapability: "model-download",
+    reason: "Downloading a model needs a connection and is refused offline rather than started in the background."
+  }),
+  "direct-provider": row("direct-provider", {
+    surface: "local-runtime",
+    behaviour: "connected-only",
+    policyCapability: "direct-provider",
+    reason: "A direct provider call leaves the device and is refused offline rather than queued as a chat turn."
+  }),
+  "local-inference": row("local-inference", {
+    surface: "local-runtime",
+    behaviour: "local",
+    reason: "Local inference runs on the device and is the only inference available while gateway access is denied."
+  }),
+  "synchronize": row("synchronize", {
+    surface: "account",
+    behaviour: "connected-only",
+    policyCapability: "synchronize",
+    reason: "Sending the sync batch needs the platform and is refused offline, which leaves the local queue intact."
+  }),
+  "local-message-write": row("local-message-write", {
+    surface: "chat",
+    behaviour: "queued",
+    policyCapability: "synchronize",
+    entityType: "message",
+    reason: "A chat message is committed locally and a later sync batch replays it to the server."
+  }),
+  "local-project-write": row("local-project-write", {
+    surface: "work",
+    behaviour: "queued",
+    policyCapability: "synchronize",
+    entityType: "project",
+    reason: "A local project is committed on the device and a later sync batch binds it to the server."
+  }),
+  "local-ticket-write": row("local-ticket-write", {
+    surface: "work",
+    behaviour: "queued",
+    policyCapability: "synchronize",
+    entityType: "ticket",
+    reason: "A local ticket is committed on the device and a later sync batch replays its change."
+  }),
+  "local-audit": row("local-audit", {
+    surface: "audit",
+    behaviour: "local",
+    entityType: "audit-run",
+    reason: "A local audit runs packaged definitions on the device and completes without a cloud audit."
+  }),
+  "local-audit-finding": row("local-audit-finding", {
+    surface: "audit",
+    behaviour: "queued",
+    policyCapability: "synchronize",
+    entityType: "audit-finding",
+    reason: "A finding is stored locally and a later sync batch uploads it without rerunning the audit."
+  }),
+  "local-remediation": row("local-remediation", {
+    surface: "audit",
+    behaviour: "queued",
+    policyCapability: "synchronize",
+    entityType: "remediation",
+    reason: "A remediation ticket is created locally and a later sync batch replays the creation once."
+  }),
+  "local-memory-recall": row("local-memory-recall", {
+    surface: "memory",
+    behaviour: "local",
+    reason: "Memory recall reads the local snapshot and needs no platform request."
+  }),
+  "local-fact-publish": row("local-fact-publish", {
+    surface: "memory",
+    behaviour: "queued",
+    policyCapability: "synchronize",
+    entityType: "memory-fact",
+    reason: "A fact is written locally with its provenance and a later sync batch publishes the changed facts."
+  }),
+  "git-push": row("git-push", {
+    surface: "git",
+    behaviour: "connected-only",
+    policyCapability: "git-remote",
+    reason: "Pushing to a Git remote needs a connection and is refused offline rather than rewritten locally."
+  })
+});
+var KNOWN = new Set(HOST_CAPABILITIES);
+var QUEUEABLE_CAPABILITIES = Object.freeze(
+  HOST_CAPABILITIES.filter((capability) => CAPABILITY_MATRIX[capability].behaviour === "queued")
+);
+var QUEUEABLE = new Set(QUEUEABLE_CAPABILITIES);
+var POLICY_CAPABILITY_ROWS = Object.freeze({
+  synchronize: "synchronize",
+  "gateway-inference": "gateway-inference",
+  "connected-feature": "connected-feature",
+  authenticate: "oauth-management",
+  "model-download": "model-download",
+  "direct-provider": "direct-provider",
+  "external-mcp": "cloud-mcp-tool",
+  "git-remote": "git-push"
+});
+
+// ../packages/local-first/src/records.ts
+var UNBOUND_DESTINATION = { kind: "unbound" };
+
+// ../packages/local-first/src/store.ts
+function newLocalRecord(input) {
+  const at = input.occurredAt ?? (/* @__PURE__ */ new Date()).toISOString();
+  return {
+    id: input.id,
+    entityType: input.entityType,
+    schemaVersion: input.schemaVersion ?? 1,
+    version: 1,
+    destination: input.destination ?? UNBOUND_DESTINATION,
+    occurredAt: at,
+    updatedAt: at,
+    payload: input.payload,
+    provenance: { deviceId: input.deviceId, source: "local" }
+  };
+}
+
+// ../packages/local-first/src/policy.ts
+var LOCAL_FIRST_POLICY = Object.freeze({
+  synchronize: false,
+  gatewayInference: false,
+  connectedFeatures: false,
+  authenticate: false,
+  modelDownloads: false,
+  directProviders: false,
+  externalMcp: false,
+  gitRemotes: false
+});
+
+// src/localFirstPersistence.ts
+var chatValue = (record2) => record2.payload.chat;
+function createLocalBrainPersistence(options) {
+  const destination = options.destination ?? UNBOUND_DESTINATION;
+  const now = options.now ?? (() => /* @__PURE__ */ new Date());
+  const newId = options.newId ?? (() => crypto.randomUUID());
+  const blobs = /* @__PURE__ */ new Map();
+  const records = (tx, type) => tx.list(type).then((rows) => rows.filter((row2) => !row2.deletedAt));
+  const chats = (tx) => records(tx, "chat");
+  const messages = (tx) => records(tx, "message");
+  const chatFor = async (tx, id) => {
+    const chat = (await chats(tx)).find((row2) => row2.payload.chat.id === id);
+    if (!chat) throw new Error(`No such local chat: ${id}`);
+    return chat;
+  };
+  const append = async (tx, record2, operation, eventId, dependsOn = []) => {
+    await tx.append({
+      eventId,
+      clientEntityId: record2.id,
+      entityType: record2.entityType,
+      operation,
+      schemaVersion: record2.schemaVersion,
+      occurredAt: record2.occurredAt,
+      ...record2.baseVersion !== void 0 ? { baseVersion: record2.baseVersion } : {},
+      dependsOn,
+      destination: record2.destination,
+      payload: record2.payload
+    });
+  };
+  const nextId = async (tx) => {
+    const [chatRows, messageRows] = await Promise.all([chats(tx), messages(tx)]);
+    return Math.max(
+      0,
+      ...chatRows.map((row2) => row2.payload.chat.id),
+      ...messageRows.map((row2) => row2.payload.message.id)
+    ) + 1;
+  };
+  return {
+    async listChats(params) {
+      return options.store.read(async (tx) => {
+        const all = (await chats(tx)).map(chatValue).filter((chat) => !chat.isArchived).filter((chat) => params?.projectId == null || String(chat.projectId) === params.projectId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id - a.id);
+        const offset = params?.offset ?? 0;
+        return params?.limit != null ? all.slice(offset, offset + params.limit) : all.slice(offset);
+      });
+    },
+    getChat: (id) => options.store.read((tx) => chatFor(tx, id).then(chatValue)),
+    async createChat(body) {
+      return options.store.transact(async (tx) => {
+        const [id, clientId] = [await nextId(tx), newId()];
+        const stamp = now().toISOString();
+        const chat = {
+          id,
+          title: body.title ?? "New chat",
+          projectId: body.projectId ?? null,
+          origin: "local",
+          capability: body.capability ?? null,
+          mode: body.mode ?? null,
+          originalRequest: body.originalRequest ?? null,
+          createdAt: stamp,
+          updatedAt: stamp
+        };
+        const record2 = newLocalRecord({
+          id: clientId,
+          entityType: "chat",
+          payload: { clientId, chat },
+          deviceId: options.deviceId,
+          destination,
+          occurredAt: stamp
+        });
+        await tx.put(record2);
+        await append(tx, record2, "create", `chat:${clientId}`);
+        return chat;
+      });
+    },
+    async updateChat(id, body) {
+      return options.store.transact(async (tx) => {
+        const current = await chatFor(tx, id);
+        const chat = { ...current.payload.chat, ...body, updatedAt: now().toISOString() };
+        const next = {
+          ...current,
+          version: current.version + 1,
+          baseVersion: current.version,
+          updatedAt: chat.updatedAt,
+          payload: { ...current.payload, chat }
+        };
+        await tx.put(next, current.version);
+        await append(tx, next, "update", `chat:${current.id}:v${next.version}`);
+        return chat;
+      });
+    },
+    async deleteChat(id) {
+      return options.store.transact(async (tx) => {
+        const chat = await chatFor(tx, id);
+        const stamp = now().toISOString();
+        const deleted = { ...chat, version: chat.version + 1, baseVersion: chat.version, deletedAt: stamp, updatedAt: stamp };
+        await tx.put(deleted, chat.version);
+        await append(tx, deleted, "delete", `chat:${chat.id}:delete:v${deleted.version}`);
+        const rows = (await messages(tx)).filter((row2) => row2.payload.chatId === id);
+        for (const row2 of rows) {
+          const tombstone = { ...row2, version: row2.version + 1, baseVersion: row2.version, deletedAt: stamp, updatedAt: stamp };
+          await tx.put(tombstone, row2.version);
+          await append(tx, tombstone, "delete", `message:${row2.id}:delete:v${tombstone.version}`, [`chat:${chat.id}:delete:v${deleted.version}`]);
+        }
+        return {};
+      });
+    },
+    /**
+     * Archive, not destroy. Unlike `deleteChat` this does NOT tombstone the row
+     * (which would lose the conversation's summary): it marks the chat archived
+     * and keeps it, mirroring the server's `isArchived` flag. `listChats` hides
+     * archived rows, so the chat leaves the list without being deleted.
+     */
+    async archiveChat(id) {
+      return options.store.transact(async (tx) => {
+        const current = await chatFor(tx, id);
+        const stamp = now().toISOString();
+        const chat = { ...current.payload.chat, isArchived: true, updatedAt: stamp };
+        const next = {
+          ...current,
+          version: current.version + 1,
+          baseVersion: current.version,
+          updatedAt: stamp,
+          payload: { ...current.payload, chat }
+        };
+        await tx.put(next, current.version);
+        await append(tx, next, "update", `chat:${current.id}:archive:v${next.version}`);
+        return { archived: true };
+      });
+    },
+    summarizeChat: async () => ({ error: options.summarizeUnavailable }),
+    async getMessages(chatId, limit) {
+      return options.store.read(async (tx) => {
+        const all = (await messages(tx)).filter((row2) => row2.payload.chatId === chatId).sort((a, b) => a.payload.message.seq - b.payload.message.seq).map((row2) => row2.payload.message);
+        return limit != null ? all.slice(-limit) : all;
+      });
+    },
+    subscribeMessages: (_chatId, onChanged) => options.store.subscribe(onChanged),
+    async sendMessages(chatId, input) {
+      return options.store.transact(async (tx) => {
+        const chat = await chatFor(tx, chatId);
+        const existing = (await messages(tx)).filter((row2) => row2.payload.chatId === chatId);
+        const firstId = await nextId(tx);
+        const stamp = now().toISOString();
+        const added = input.map((message, index) => ({
+          id: firstId + index,
+          role: message.role,
+          content: message.content,
+          metadata: message.metadata ?? null,
+          seq: existing.length + index + 1,
+          createdAt: stamp
+        }));
+        for (const [index, message] of added.entries()) {
+          const source = input[index];
+          const eventKey = source.eventKey ?? `message:${newId()}`;
+          const clientId = newId();
+          const record2 = newLocalRecord({
+            id: clientId,
+            entityType: "message",
+            payload: { clientId, chatId, chatClientId: chat.id, eventKey, message },
+            deviceId: options.deviceId,
+            destination: chat.destination,
+            occurredAt: stamp
+          });
+          await tx.put(record2);
+          await append(tx, record2, "create", eventKey, [`chat:${chat.id}`]);
+        }
+        if (added.length > 0) {
+          const nextChat = { ...chat, version: chat.version + 1, updatedAt: stamp, payload: { ...chat.payload, chat: { ...chat.payload.chat, updatedAt: stamp } } };
+          await tx.put(nextChat, chat.version);
+        }
+        return added;
+      });
+    },
+    async setMessageFeedback(messageId, feedback, context) {
+      return options.store.transact(async (tx) => {
+        const row2 = (await messages(tx)).find((candidate) => candidate.payload.message.id === messageId);
+        if (!row2) return {};
+        const metadata = JSON.parse(row2.payload.message.metadata ?? "{}");
+        metadata.feedback = feedback;
+        if (context?.toolName) metadata.feedbackTool = context.toolName;
+        const next = {
+          ...row2,
+          version: row2.version + 1,
+          baseVersion: row2.version,
+          updatedAt: now().toISOString(),
+          payload: { ...row2.payload, message: { ...row2.payload.message, metadata: JSON.stringify(metadata) } }
+        };
+        await tx.put(next, row2.version);
+        await append(tx, next, "update", `message:${row2.id}:feedback:v${next.version}`);
+        return {};
+      });
+    },
+    async upload(file) {
+      const key = newId();
+      const url = options.createObjectURL?.(file);
+      if (url) blobs.set(key, url);
+      await options.store.transact(async (tx) => {
+        const record2 = newLocalRecord({
+          id: key,
+          entityType: "attachment-manifest",
+          payload: { key, name: file.name, type: file.type, size: file.size },
+          deviceId: options.deviceId,
+          destination
+        });
+        await tx.put(record2);
+        await append(tx, record2, "create", `attachment:${key}`);
+      });
+      return { key, name: file.name, type: file.type };
+    },
+    uploadUrl: (key) => blobs.get(key) ?? ""
+  };
+}
+
 // ../packages/agent-stall/src/requestIntent.ts
 var CHANGE_VERB = /\b(add|change|fix|update|reduce|increase|remove|delete|rename|refactor|implement|create|build|make|move|set|wire|migrate|replace|adjust|enable|disable|improve|write|edit|apply|correct|resolve|shrink|expand|hide|show|bump|revert|restore|install|upgrade|downgrade|rewrite|extract|split|merge)\b/i;
 var QUESTION_SHAPE = /^\s*(what|why|how|where|when|which|who|is|are|was|were|does|do|did|can|could|should|would|will|explain|describe|summar|tell me|show me|list|compare|review|analyse|analyze)\b|\?\s*$/i;
@@ -2108,9 +2609,10 @@ var BROWSER_ENGINE_BASE_URL = "http://browser.local";
 var BFI_ENGINE_BASE_URL = "http://bfi.local";
 var WEBLLM_ENGINE_BASE_URL = "http://webllm.local";
 var LOCAL_RUNTIMES = [
-  { id: "synapse", label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
+  { id: "synapse", automaticRank: 30, label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
   {
     id: "ollama",
+    automaticRank: 40,
     label: "Ollama",
     onDevice: true,
     defaultBaseUrl: "http://127.0.0.1:11434",
@@ -2120,6 +2622,7 @@ var LOCAL_RUNTIMES = [
   },
   {
     id: "freetoken",
+    automaticRank: 50,
     label: "FreeToken",
     onDevice: true,
     defaultBaseUrl: "http://127.0.0.1:1919",
@@ -2127,11 +2630,9 @@ var LOCAL_RUNTIMES = [
     tools: "unknown",
     reach: "http"
   },
-  // Our transformer compiled to WebAssembly over WebGPU (`bfi-web`). Its models are the
-  // catalog's (`LOCAL_MODEL_CATALOG`) that the page has downloaded; like `bfi serve` it
-  // grammar-constrains `tools` for every model it loads.
   {
     id: "bfi",
+    automaticRank: 20,
     label: "Builderforce engine",
     onDevice: true,
     defaultBaseUrl: BFI_ENGINE_BASE_URL,
@@ -2139,10 +2640,9 @@ var LOCAL_RUNTIMES = [
     tools: "all",
     reach: "page"
   },
-  // MLC's WebLLM. Tool support is per MODEL (only its function-calling builds honour
-  // `tools`), so the runtime says `unknown` and each catalog row declares its own.
   {
     id: "webllm",
+    automaticRank: 10,
     label: "WebLLM",
     onDevice: true,
     defaultBaseUrl: WEBLLM_ENGINE_BASE_URL,
@@ -2150,10 +2650,9 @@ var LOCAL_RUNTIMES = [
     tools: "unknown",
     reach: "page"
   },
-  // Chrome's built-in model (Prompt API). Its single model is declared by the page probe,
-  // and it cannot take a tool turn: the Prompt API has no tool-call protocol.
   {
     id: "browser",
+    automaticRank: 60,
     label: "Gemini Nano",
     onDevice: true,
     defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
@@ -2161,7 +2660,7 @@ var LOCAL_RUNTIMES = [
     tools: "unknown",
     reach: "page"
   },
-  { id: "kimi-code", label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http" }
+  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http" }
 ];
 var HTTP_LOCAL_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.reach === "http");
 var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
@@ -2297,7 +2796,8 @@ function localModelFit(model, support) {
     return { fits: false, reason: "webgpu_unavailable", ...support.reason ? { detail: support.reason } : {} };
   }
   if (model.requires.f16 && !support.f16) return { fits: false, reason: "shader_f16_unavailable" };
-  if (support.maxBufferBytes < model.requires.minBufferBytes) return { fits: false, reason: "buffer_too_small" };
+  const bindingBytes = support.maxStorageBufferBindingSizeBytes ?? support.maxBufferBytes;
+  if (bindingBytes < model.requires.minBufferBytes) return { fits: false, reason: "buffer_too_small" };
   return { fits: true };
 }
 
@@ -2311,7 +2811,7 @@ function localModelUnfitReason(model, workload) {
 }
 function localFirstPlan(input) {
   const onDevice = new Set(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id));
-  const rank = (id) => LOCAL_RUNTIMES.findIndex((r) => r.id === id);
+  const rank = (id) => LOCAL_RUNTIMES.find((r) => r.id === id)?.automaticRank ?? Number.POSITIVE_INFINITY;
   const candidates = input.probes.filter((p) => p.reachable && onDevice.has(p.provider)).sort((a, b) => rank(a.provider) - rank(b.provider)).flatMap(
     (p) => p.models.filter((m) => localModelUnfitReason(m, input.workload) === null).map((m) => ({
       kind: "local",
@@ -5358,16 +5858,16 @@ async function probePageEngines(engines, options) {
 }
 
 // src/pageEngines/modelStore.ts
-function backendFor(row, options) {
+function backendFor(row2, options) {
   const { hf, webllm: webllm2 } = options;
-  if (row.source.kind === "hf-file") {
+  if (row2.source.kind === "hf-file") {
     return hf ? {
       ready: async (r) => await hf.status(r.ref) === "ready",
       download: (r, onProgress, signal) => hf.download(r.ref, onProgress, signal),
       remove: (r) => hf.remove(r.ref)
     } : void 0;
   }
-  const { modelId } = row.source;
+  const { modelId } = row2.source;
   return webllm2 ? {
     ready: () => webllm2.has(modelId),
     download: (_r, onProgress, signal) => webllm2.download(modelId, onProgress, signal),
@@ -5386,23 +5886,23 @@ function createLocalModelStore(options) {
     emit2();
   };
   const rowOf = (ref) => {
-    const row = catalog.find((m) => m.ref === ref);
-    if (!row) throw new Error(`unknown_model: ${ref}`);
-    return row;
+    const row2 = catalog.find((m) => m.ref === ref);
+    if (!row2) throw new Error(`unknown_model: ${ref}`);
+    return row2;
   };
-  async function describe(row, supports) {
-    const pending = inFlight.get(row.ref);
-    if (pending) return { ...row, state: "downloading", progress: pending.progress };
-    const backend = backendFor(row, options);
-    const support = supports.get(row.runtime);
-    if (!backend || !support) return { ...row, state: "unsupported", reason: "engine_unavailable" };
-    const fit = localModelFit(row, support);
-    if (!fit.fits) return { ...row, state: "unsupported", reason: fit.reason };
-    const ready = await backend.ready(row).catch((e) => {
-      reportPageEngineFailure(row.runtime, "cache_lookup", e);
+  async function describe(row2, supports) {
+    const pending = inFlight.get(row2.ref);
+    if (pending) return { ...row2, state: "downloading", progress: pending.progress };
+    const backend = backendFor(row2, options);
+    const support = supports.get(row2.runtime);
+    if (!backend || !support) return { ...row2, state: "unsupported", reason: "engine_unavailable" };
+    const fit = localModelFit(row2, support);
+    if (!fit.fits) return { ...row2, state: "unsupported", reason: fit.reason };
+    const ready = await backend.ready(row2).catch((e) => {
+      reportPageEngineFailure(row2.runtime, "cache_lookup", e);
       return false;
     });
-    return { ...row, state: ready ? "ready" : "absent" };
+    return { ...row2, state: ready ? "ready" : "absent" };
   }
   return {
     async listLocalModels() {
@@ -5414,17 +5914,17 @@ function createLocalModelStore(options) {
         })
       );
       const supports = new Map(answers);
-      return Promise.all(catalog.map((row) => describe(row, supports)));
+      return Promise.all(catalog.map((row2) => describe(row2, supports)));
     },
     download(ref, onProgress, signal) {
       const existing = inFlight.get(ref);
       if (existing) return existing.done;
-      const row = rowOf(ref);
-      const backend = backendFor(row, options);
-      if (!backend) return Promise.reject(new Error(`engine_unavailable: ${row.runtime}`));
+      const row2 = rowOf(ref);
+      const backend = backendFor(row2, options);
+      if (!backend) return Promise.reject(new Error(`engine_unavailable: ${row2.runtime}`));
       const entry = { progress: 0, done: Promise.resolve() };
       entry.done = backend.download(
-        row,
+        row2,
         (fraction) => {
           entry.progress = fraction;
           onProgress?.(fraction);
@@ -5440,8 +5940,8 @@ function createLocalModelStore(options) {
       return entry.done;
     },
     async remove(ref) {
-      const row = rowOf(ref);
-      await backendFor(row, options)?.remove(row);
+      const row2 = rowOf(ref);
+      await backendFor(row2, options)?.remove(row2);
       changed();
     },
     subscribe(listener) {
@@ -5471,12 +5971,12 @@ function deferredLocalModelStore(store) {
 }
 
 // src/pageEngines/catalogProbe.ts
-async function catalogProbe(runtime, baseUrl, support, isReady, contextOf = (row) => row.contextTokens) {
+async function catalogProbe(runtime, baseUrl, support, isReady, contextOf = (row2) => row2.contextTokens) {
   if (!support.supported) return null;
-  const fitting = localCatalogFor(runtime).filter((row) => localModelFit(row, support).fits);
+  const fitting = localCatalogFor(runtime).filter((row2) => localModelFit(row2, support).fits);
   const ready = await Promise.all(
     fitting.map(
-      (row) => isReady(row).catch((e) => {
+      (row2) => isReady(row2).catch((e) => {
         reportPageEngineFailure(runtime, "cache_lookup", e);
         return false;
       })
@@ -5488,13 +5988,13 @@ async function catalogProbe(runtime, baseUrl, support, isReady, contextOf = (row
     provider: runtime,
     endpoint: { baseUrl },
     reachable: true,
-    models: rows.map((row) => ({
-      ref: formatLocalModelRef(runtime, row.model),
+    models: rows.map((row2) => ({
+      ref: formatLocalModelRef(runtime, row2.model),
       provider: runtime,
-      model: row.model,
-      label: row.label,
-      tools: row.tools,
-      contextTokens: contextOf(row)
+      model: row2.model,
+      label: row2.label,
+      tools: row2.tools,
+      contextTokens: contextOf(row2)
     }))
   };
 }
@@ -5547,14 +6047,14 @@ function bfiError(e) {
   return code && BFI_STATUS[code] ? new PageEngineError(BFI_STATUS[code], code, message) : e;
 }
 var BFI_CONTEXT_FLOOR = 2048;
-function predictedContext(engine, row, support) {
-  const planned = row.kv ? engine.contextFor({
-    ...row.kv,
-    trainedContext: row.contextTokens,
+function predictedContext(engine, row2, support) {
+  const planned = row2.kv ? engine.contextFor({
+    ...row2.kv,
+    trainedContext: row2.contextTokens,
     f16: support.f16,
-    maxBufferBytes: support.maxBufferBytes
+    maxStorageBufferBindingSizeBytes: support.maxStorageBufferBindingSizeBytes ?? support.maxBufferBytes
   }) : 0;
-  return planned > 0 ? planned : Math.min(BFI_CONTEXT_FLOOR, row.contextTokens);
+  return planned > 0 ? planned : Math.min(BFI_CONTEXT_FLOOR, row2.contextTokens);
 }
 var UNSUPPORTED = { supported: false, reason: "bfi_unavailable", f16: false, maxBufferBytes: 0 };
 function createBfiEngine(options) {
@@ -5566,19 +6066,19 @@ function createBfiEngine(options) {
   });
   const resident = createResidentModel(async () => (await bfi()).BfiEngine.create());
   const served = /* @__PURE__ */ new Map();
-  const residentEngine = (row) => resident.acquire(row.ref, async (engine, previous) => {
+  const residentEngine = (row2) => resident.acquire(row2.ref, async (engine, previous) => {
     if (previous) engine.unload();
-    const { stream, bytes } = await options.store.open(row.ref);
+    const { stream, bytes } = await options.store.open(row2.ref);
     const info = await engine.load(stream, bytes);
-    if (info.contextTokens > 0 && served.get(row.ref) !== info.contextTokens) {
-      served.set(row.ref, info.contextTokens);
+    if (info.contextTokens > 0 && served.get(row2.ref) !== info.contextTokens) {
+      served.set(row2.ref, info.contextTokens);
       prober.invalidate();
     }
   });
   const prober = memoizedProbe("bfi", async () => {
     const rows = localCatalogFor("bfi");
-    const states = await Promise.all(rows.map((row) => options.store.status(row.ref)));
-    const ready = new Set(rows.filter((_, i) => states[i] === "ready").map((row) => row.ref));
+    const states = await Promise.all(rows.map((row2) => options.store.status(row2.ref)));
+    const ready = new Set(rows.filter((_, i) => states[i] === "ready").map((row2) => row2.ref));
     if (ready.size === 0) return null;
     const device = await support();
     const { BfiEngine } = await bfi();
@@ -5586,18 +6086,18 @@ function createBfiEngine(options) {
       "bfi",
       BFI_ENGINE_BASE_URL,
       device,
-      async (row) => ready.has(row.ref),
-      (row) => served.get(row.ref) ?? predictedContext(BfiEngine, row, device)
+      async (row2) => ready.has(row2.ref),
+      (row2) => served.get(row2.ref) ?? predictedContext(BfiEngine, row2, device)
     );
   }, options);
   async function chatCompletions(body, signal) {
-    const row = localCatalogModel(formatLocalModelRef("bfi", typeof body.model === "string" ? body.model : ""));
-    if (!row) throw new PageEngineError(404, "model_not_found");
-    if (await options.store.status(row.ref) !== "ready") throw new PageEngineError(503, "model_not_downloaded");
+    const row2 = localCatalogModel(formatLocalModelRef("bfi", typeof body.model === "string" ? body.model : ""));
+    if (!row2) throw new PageEngineError(404, "model_not_found");
+    if (await options.store.status(row2.ref) !== "ready") throw new PageEngineError(503, "model_not_downloaded");
     if (signal?.aborted) throw abortReason(signal);
     let live2;
     try {
-      live2 = await residentEngine(row);
+      live2 = await residentEngine(row2);
     } catch (e) {
       const mapped = bfiError(e);
       throw mapped instanceof PageEngineError ? mapped : new PageEngineError(503, "bfi_engine_unavailable", errorMessage(e));
@@ -5679,9 +6179,9 @@ function hfResolveUrl(repo, file) {
 }
 var BYTES_HEADER = "x-builderforce-model-bytes";
 function hfRow(ref) {
-  const row = localCatalogModel(ref);
-  if (!row || row.source.kind !== "hf-file") throw new Error(`unknown_model: ${ref}`);
-  return row;
+  const row2 = localCatalogModel(ref);
+  if (!row2 || row2.source.kind !== "hf-file") throw new Error(`unknown_model: ${ref}`);
+  return row2;
 }
 var urlOf = (ref) => {
   const { source } = hfRow(ref);
@@ -5709,12 +6209,12 @@ function createHfModelStore(options = {}) {
       }
     },
     async download(ref, onProgress, signal) {
-      const row = hfRow(ref);
+      const row2 = hfRow(ref);
       const url = urlOf(ref);
       await globalThis.navigator?.storage?.persist?.().catch((e) => reportPageEngineFailure("bfi", "persist", e));
       const res = await fetchImpl(url, { credentials: "omit", ...signal ? { signal } : {} });
       if (!res.ok || !res.body) throw new Error(`download_failed: HTTP ${res.status}`);
-      const total = Number(res.headers.get("content-length")) || row.bytes;
+      const total = Number(res.headers.get("content-length")) || row2.bytes;
       let loaded = 0;
       const counted = res.body.pipeThrough(
         new TransformStream({
@@ -5752,7 +6252,16 @@ function createHfModelStore(options = {}) {
 }
 
 // src/pageEngines/webgpu.ts
-var UNSUPPORTED2 = (reason) => ({ supported: false, reason, f16: false, maxBufferBytes: 0 });
+var UNSUPPORTED2 = (reason) => ({
+  contractVersion: 2,
+  supported: false,
+  reason,
+  f16: false,
+  maxBufferBytes: 0,
+  maxBufferSizeBytes: 0,
+  maxStorageBufferBindingSizeBytes: 0,
+  requestedPowerPreference: "high-performance"
+});
 var pageGpu = () => globalThis.navigator?.gpu;
 function hasWebGPU() {
   return pageGpu() != null;
@@ -5760,12 +6269,18 @@ function hasWebGPU() {
 async function webGpuSupport(gpu = pageGpu()) {
   if (!gpu) return UNSUPPORTED2("webgpu_missing");
   try {
-    const adapter = await gpu.requestAdapter();
+    const adapter = await gpu.requestAdapter({ powerPreference: "high-performance" });
     if (!adapter) return UNSUPPORTED2("no_adapter");
+    const maxBufferSizeBytes = adapter.limits.maxBufferSize ?? 0;
+    const maxStorageBufferBindingSizeBytes = adapter.limits.maxStorageBufferBindingSize ?? 0;
     return {
+      contractVersion: 2,
       supported: true,
       f16: adapter.features.has("shader-f16"),
-      maxBufferBytes: adapter.limits.maxStorageBufferBindingSize ?? 0
+      maxBufferBytes: maxBufferSizeBytes,
+      maxBufferSizeBytes,
+      maxStorageBufferBindingSizeBytes,
+      requestedPowerPreference: "high-performance"
     };
   } catch (e) {
     return UNSUPPORTED2(e instanceof Error ? e.message : String(e));
@@ -5821,14 +6336,14 @@ function createWebLlmEngine(options = {}) {
   };
   const prober = memoizedProbe(
     "webllm",
-    async () => catalogProbe("webllm", WEBLLM_ENGINE_BASE_URL, await support(), (row) => cached2(row.model)),
+    async () => catalogProbe("webllm", WEBLLM_ENGINE_BASE_URL, await support(), (row2) => cached2(row2.model)),
     options
   );
   async function chatCompletions(body, signal) {
     const modelId = typeof body.model === "string" ? body.model : "";
-    const row = localCatalogModel(formatLocalModelRef("webllm", modelId));
-    if (!row) throw new PageEngineError(404, "model_not_found");
-    if (hasTools(body) && !row.tools) throw new PageEngineError(400, "tools_unsupported");
+    const row2 = localCatalogModel(formatLocalModelRef("webllm", modelId));
+    if (!row2) throw new PageEngineError(404, "model_not_found");
+    if (hasTools(body) && !row2.tools) throw new PageEngineError(400, "tools_unsupported");
     const messages = toWebLlmMessages(body.messages);
     const ready = await cached2(modelId).catch((e) => {
       throw new PageEngineError(503, "webllm_cache_unreadable", errorMessage(e));
@@ -6754,13 +7269,13 @@ var CREATE_TOOL_KIND = {
 };
 function workItemLinkFromCreate(toolName, result) {
   if (!result || typeof result !== "object") return null;
-  const row = result;
-  const id = row.id;
+  const row2 = result;
+  const id = row2.id;
   const ref = typeof id === "number" ? String(id) : typeof id === "string" && id.trim() ? id : null;
   if (!ref) return null;
-  const linkType = row.deduped === true ? "linked" : "created";
+  const linkType = row2.deduped === true ? "linked" : "created";
   if (toolName === "builtin_tasks_create") {
-    const t = typeof row.taskType === "string" ? row.taskType : "task";
+    const t = typeof row2.taskType === "string" ? row2.taskType : "task";
     const kind2 = t === "epic" || t === "gap" ? t : "task";
     return { kind: kind2, ref, linkType };
   }
@@ -6853,13 +7368,13 @@ function selectLinkedTasks(listResult, statuses) {
   const out = [];
   for (const r of rows) {
     if (!r || typeof r !== "object") continue;
-    const row = r;
-    if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
-    if (row.exists === false) continue;
-    const ref = typeof row.ref === "number" ? String(row.ref) : typeof row.ref === "string" && row.ref.trim() ? row.ref : null;
+    const row2 = r;
+    if (typeof row2.kind !== "string" || !TASK_TIER_KINDS.has(row2.kind)) continue;
+    if (row2.exists === false) continue;
+    const ref = typeof row2.ref === "number" ? String(row2.ref) : typeof row2.ref === "string" && row2.ref.trim() ? row2.ref : null;
     if (!ref) continue;
-    if (typeof row.status !== "string" || !statuses.has(row.status.toLowerCase())) continue;
-    out.push({ kind: row.kind, ref });
+    if (typeof row2.status !== "string" || !statuses.has(row2.status.toLowerCase())) continue;
+    out.push({ kind: row2.kind, ref });
   }
   return out;
 }
@@ -7113,7 +7628,7 @@ function useBrainChats(options = {}) {
   }, [persistence, reload]);
   const archive = useCallback4(async (id) => {
     try {
-      await persistence.deleteChat(id);
+      await persistence.archiveChat(id);
       setChats((prev) => prev.filter((c) => c.id !== id));
       if (activeIdRef.current === id) setActiveChatId(null);
     } catch (e) {
@@ -7743,6 +8258,39 @@ function applyRemoteRun(chatId, snapshot) {
   emit(c);
 }
 
+// ../packages/write-outbox/src/classification.ts
+var RETENTION_BY_WORK = {
+  history: "durable",
+  histories: "durable",
+  ticket: "durable",
+  tickets: "durable",
+  audit: "durable",
+  audits: "durable",
+  fact: "durable",
+  facts: "durable",
+  telemetry: "best-effort"
+};
+function classifyOutboxWork(work) {
+  if (typeof work !== "string") return void 0;
+  const key = work.trim().toLowerCase();
+  if (!key) return void 0;
+  return RETENTION_BY_WORK[key];
+}
+
+// ../packages/write-outbox/src/deadLetter.ts
+function exportDeadLetters(entries) {
+  return entries.filter((entry) => entry.deadLetter).map((entry) => ({ ...entry, deadLetter: { ...entry.deadLetter } })).sort((a, b) => a.seq - b.seq);
+}
+function repairDeadLetter(entries, id) {
+  if (typeof id !== "string" || id.trim() === "") return null;
+  const entry = entries.find((candidate) => candidate.id === id && candidate.deadLetter);
+  if (!entry) return null;
+  delete entry.deadLetter;
+  delete entry.batch;
+  entry.retention = "durable";
+  return entry;
+}
+
 // ../packages/write-outbox/src/idempotency.ts
 var fallbackCounter = 0;
 function defaultId() {
@@ -7759,7 +8307,6 @@ function batchIdempotencyKey(batch) {
 // ../packages/write-outbox/src/policy.ts
 var OUTBOX_MAX_ITEMS = 25;
 var OUTBOX_MAX_WAIT_MS = 5e3;
-var OUTBOX_MAX_ENTRIES = 1e3;
 var OUTBOX_RETRY_BASE_MS = 1e3;
 var OUTBOX_RETRY_MAX_MS = 5 * 6e4;
 function isPermanentHttpFailure(error) {
@@ -7771,7 +8318,7 @@ function isPermanentHttpFailure(error) {
 // ../packages/write-outbox/src/sealedBatch.ts
 var bySeq = (a, b) => a.seq - b.seq;
 function sendable(e, scope) {
-  return scope === void 0 || e.scope === void 0 || e.scope === scope;
+  return !e.deadLetter && (scope === void 0 || e.scope === void 0 || e.scope === scope);
 }
 function takeBatch(l, scope, upTo, maxItems) {
   const due = (e) => e.seq <= upTo && sendable(e, scope);
@@ -7820,17 +8367,23 @@ function createOutbox(opts) {
     maxMs: opts.retry.maxMs ?? OUTBOX_RETRY_MAX_MS,
     isPermanent: opts.retry.isPermanent ?? isPermanentHttpFailure
   } : null;
+  const retryPolicy = retry ?? {
+    baseMs: OUTBOX_RETRY_BASE_MS,
+    maxMs: OUTBOX_RETRY_MAX_MS,
+    isPermanent: isPermanentHttpFailure
+  };
   const store = opts.store ?? null;
-  const maxEntries = Math.max(
-    maxItems,
-    opts.maxEntries ?? (retry || store ? OUTBOX_MAX_ENTRIES : Number.POSITIVE_INFINITY)
-  );
+  const durable = Boolean(retry || store);
+  const maxEntries = Math.max(maxItems, opts.maxEntries ?? Number.POSITIVE_INFINITY);
   const newId = opts.newId ?? defaultId;
   const lanes = /* @__PURE__ */ new Map();
+  const inFlightControllers = /* @__PURE__ */ new Set();
   let lastSeq = 0;
   let dropped = 0;
   let closed = false;
+  let storeFailure;
   const isOnline = () => opts.online?.isOnline() ?? true;
+  const maySend = () => !closed && (opts.sendPermission?.isAllowed() ?? true);
   const lane = (key) => {
     let l = lanes.get(key);
     if (!l) {
@@ -7851,37 +8404,74 @@ function createOutbox(opts) {
       }
       for (const l of lanes.values()) l.entries.sort(bySeq);
     },
-    (error) => opts.onStoreError?.(error)
+    (error) => {
+      storeFailure ??= error;
+      opts.onStoreError?.(error);
+    }
   ) : Promise.resolve();
   let writes = loaded;
   const persist = (op) => {
-    if (!store) return;
-    writes = writes.then(() => op(store)).catch((error) => opts.onStoreError?.(error));
+    if (!store) return Promise.resolve();
+    writes = writes.then(() => op(store)).catch((error) => {
+      storeFailure ??= error;
+      opts.onStoreError?.(error);
+    });
+    return writes;
   };
   const drop = (key, entries, reason) => {
     if (entries.length === 0) return;
     dropped += entries.length;
     const ids2 = entries.map((e) => e.id);
-    persist((s) => s.remove(ids2));
+    void persist((s) => s.remove(ids2));
     opts.onDrop?.({ key, count: entries.length, reason });
   };
-  const enforceBound = () => {
+  const retentionOf = (entry) => {
+    if (entry.retention) return entry.retention;
+    return durable ? "durable" : "best-effort";
+  };
+  const resolveRetention = (work, path2) => {
+    const classified = classifyOutboxWork(work) ?? classifyOutboxWork(opts.work);
+    if (classified) return classified;
+    if (path2 === "enqueueDurable" || durable) return "durable";
+    return "best-effort";
+  };
+  const totalQueued = () => {
     let total = 0;
     for (const l of lanes.values()) total += l.entries.length;
-    while (total > maxEntries) {
+    return total;
+  };
+  const durableQueued = () => {
+    let n = 0;
+    for (const l of lanes.values()) for (const entry of l.entries) if (retentionOf(entry) === "durable") n += 1;
+    return n;
+  };
+  const evictBestEffortWhileOver = (limit) => {
+    let total = totalQueued();
+    while (total > limit) {
       let oldestKey;
-      let oldest;
+      let oldestLane;
+      let oldestIndex = -1;
+      let oldestSeq = Number.POSITIVE_INFINITY;
       for (const [k, l] of lanes) {
-        const head = l.entries[0];
-        if (head && (!oldest || head.seq < oldest.entries[0].seq)) {
-          oldest = l;
+        for (let i = 0; i < l.entries.length; i += 1) {
+          const entry = l.entries[i];
+          if (retentionOf(entry) !== "best-effort" || entry.seq >= oldestSeq) continue;
+          oldestSeq = entry.seq;
           oldestKey = k;
+          oldestLane = l;
+          oldestIndex = i;
         }
       }
-      if (!oldest) return;
-      drop(oldestKey, oldest.entries.splice(0, 1), "overflow");
+      if (!oldestLane || oldestIndex < 0) {
+        if (total > maxEntries) opts.onCapacity?.(total, maxEntries);
+        return;
+      }
+      drop(oldestKey, oldestLane.entries.splice(oldestIndex, 1), "overflow");
       total -= 1;
     }
+  };
+  const enforceBound = () => {
+    evictBestEffortWhileOver(maxEntries);
   };
   const currentScope = () => opts.scope ? opts.scope() : void 0;
   const take = (l, scope, upTo) => {
@@ -7898,10 +8488,11 @@ function createOutbox(opts) {
     if (l.retryTimer !== null) clearTimeout(l.retryTimer);
     l.retryTimer = null;
   };
-  const scheduleRetry = (key, l) => {
-    if (!retry || closed || l.retryTimer !== null) return;
+  const scheduleRetry = (key, l, force = false) => {
+    if (!retry && !force || !maySend() || l.retryTimer !== null) return;
+    const policy = retry ?? retryPolicy;
     l.attempt += 1;
-    const delay = Math.min(retry.maxMs, retry.baseMs * 2 ** (l.attempt - 1));
+    const delay = Math.min(policy.maxMs, policy.baseMs * 2 ** (l.attempt - 1));
     const jittered = Math.round(delay * (0.8 + Math.random() * 0.4));
     l.retryTimer = setTimeout(() => {
       l.retryTimer = null;
@@ -7909,7 +8500,7 @@ function createOutbox(opts) {
     }, jittered);
   };
   const armTimer = (key, l) => {
-    if (l.timer !== null || maxWaitMs <= 0) return;
+    if (l.timer !== null || maxWaitMs <= 0 || !maySend()) return;
     l.timer = setTimeout(() => {
       l.timer = null;
       void flushKey(key, { final: false, auto: true });
@@ -7920,31 +8511,34 @@ function createOutbox(opts) {
     l.entries.sort(bySeq);
   };
   const sendBatch = async (key, l, batch, final) => {
+    if (!maySend()) {
+      requeue(l, batch);
+      return false;
+    }
     const items = batch.map((e) => e.item);
     const ctx = sendContext(batch);
     const ids2 = ctx.ids;
+    const controller = new AbortController();
+    inFlightControllers.add(controller);
     l.inFlight += batch.length;
     try {
-      await opts.send(key, opts.coalesce ? opts.coalesce(items) : items, { final, ...ctx });
+      await opts.send(key, opts.coalesce ? opts.coalesce(items) : items, { final, ...ctx, signal: controller.signal });
       l.inFlight -= batch.length;
       l.attempt = 0;
-      persist((s) => s.remove(ids2));
+      void persist((s) => s.remove(ids2));
       return true;
     } catch (error) {
       l.inFlight -= batch.length;
       opts.onError?.(error, key);
-      if (retry && !retry.isPermanent(error)) {
-        requeue(l, batch);
-        scheduleRetry(key, l);
-        return false;
-      }
-      drop(key, batch, retry ? "rejected" : "failed");
-      return true;
+      const settled2 = settleFailure(key, l, batch, error);
+      return settled2;
+    } finally {
+      inFlightControllers.delete(controller);
     }
   };
   const flushKey = (key, mode) => {
     const l = lanes.get(key);
-    if (!l) return Promise.resolve();
+    if (!l || !maySend()) return Promise.resolve();
     const upTo = mode.probe ? Number.POSITIVE_INFINITY : lastSeq;
     if (mode.final) {
       const scope = currentScope();
@@ -7956,14 +8550,17 @@ function createOutbox(opts) {
     }
     const run = l.tail.then(async () => {
       await loaded;
+      if (!maySend()) {
+        clearTimer(l);
+        clearRetry(l);
+        return;
+      }
       if (mode.auto && l.retryTimer !== null) return;
       if (mode.auto && !isOnline()) {
         scheduleRetry(key, l);
         return;
       }
-      if (!mode.auto && l.retryTimer !== null) {
-        clearRetry(l);
-      }
+      if (!mode.auto && l.retryTimer !== null) clearRetry(l);
       const scope = currentScope();
       if (scope === null) {
         scheduleRetry(key, l);
@@ -7973,18 +8570,30 @@ function createOutbox(opts) {
       for (let batch = take(l, scope, upTo); batch; batch = take(l, scope, upTo)) {
         if (!await sendBatch(key, l, batch, false)) return;
       }
-      if (l.entries.length > 0) armTimer(key, l);
+      if (l.entries.some((entry) => !entry.deadLetter)) armTimer(key, l);
     });
     l.tail = run;
     return run;
   };
   const flushAll = (final) => Promise.all([...lanes.keys()].map((k) => flushKey(k, { final }))).then(() => void 0);
-  const unsubscribe = opts.online?.subscribe((online) => {
-    if (!online || closed) return;
+  const unsubscribeOnline = opts.online?.subscribe((online) => {
+    if (!online || !maySend()) return;
     for (const l of lanes.values()) {
       clearRetry(l);
       l.attempt = 0;
     }
+    void flushAll(false);
+  });
+  const unsubscribePermission = opts.sendPermission?.subscribe((allowed) => {
+    if (!allowed) {
+      for (const l of lanes.values()) {
+        clearTimer(l);
+        clearRetry(l);
+      }
+      for (const controller of inFlightControllers) controller.abort();
+      return;
+    }
+    for (const l of lanes.values()) l.attempt = 0;
     void flushAll(false);
   });
   if (store) {
@@ -7993,21 +8602,71 @@ function createOutbox(opts) {
       for (const [k, l] of lanes) if (l.entries.length > 0) void flushKey(k, { final: false, auto: true });
     });
   }
-  return {
-    enqueue(key, item) {
-      const l = lane(key);
-      const scope = currentScope();
-      const entry = { id: newId(), key, item, seq: nextSeq(), ...scope ? { scope } : {} };
-      l.entries.push(entry);
-      persist((s) => s.put([entry]));
-      enforceBound();
-      const unsealed = l.entries.reduce((n, e) => e.batch ? n : n + 1, 0);
-      if (unsealed >= maxItems) {
-        void flushKey(key, { final: false, auto: true });
-      } else {
-        armTimer(key, l);
+  const settleFailure = (key, l, batch, error) => {
+    const permanent = retryPolicy.isPermanent(error);
+    const dead = [];
+    const keep = [];
+    const discarded = [];
+    for (const entry of batch) {
+      const userWork = retentionOf(entry) === "durable";
+      if (permanent && userWork) dead.push(entry);
+      else if (!permanent && (userWork || retry)) keep.push(entry);
+      else discarded.push(entry);
+    }
+    if (dead.length) {
+      const at = (/* @__PURE__ */ new Date()).toISOString();
+      const reason = error instanceof Error ? error.message : String(error);
+      for (const entry of dead) {
+        entry.deadLetter = { reason, at };
+        entry.retention = "durable";
       }
-      return entry.id;
+      requeue(l, dead);
+      void persist((s) => s.put(dead));
+      opts.onDeadLetter?.(key, dead, error);
+    }
+    if (keep.length) {
+      requeue(l, keep);
+      scheduleRetry(key, l, !retry && keep.some((entry) => retentionOf(entry) === "durable"));
+    }
+    if (discarded.length) drop(key, discarded, permanent ? "rejected" : "failed");
+    return keep.length === 0;
+  };
+  const enqueueEntry = (key, item, work, path2) => {
+    const retention = resolveRetention(work, path2);
+    if (retention === "durable") {
+      evictBestEffortWhileOver(Math.max(0, maxEntries - 1));
+      if (durableQueued() >= maxEntries) {
+        opts.onCapacity?.(durableQueued(), maxEntries);
+        throw Object.assign(new Error("outbox_capacity"), { code: "OUTBOX_CAPACITY" });
+      }
+    }
+    const l = lane(key);
+    const scope = currentScope();
+    const entry = {
+      id: newId(),
+      key,
+      item,
+      seq: nextSeq(),
+      retention,
+      ...scope ? { scope } : {}
+    };
+    l.entries.push(entry);
+    const persisted = persist((s) => s.put([entry]));
+    if (retention === "best-effort") enforceBound();
+    const unsealed = l.entries.reduce((n, e) => e.batch || e.deadLetter ? n : n + 1, 0);
+    if (unsealed >= maxItems) void flushKey(key, { final: false, auto: true });
+    else armTimer(key, l);
+    return { id: entry.id, persisted };
+  };
+  return {
+    enqueue(key, item, work) {
+      return enqueueEntry(key, item, work, "enqueue").id;
+    },
+    async enqueueDurable(key, item, work) {
+      const enqueued = enqueueEntry(key, item, work, "enqueueDurable");
+      await enqueued.persisted;
+      if (storeFailure) throw storeFailure;
+      return enqueued.id;
     },
     async flush(key, flushOpts) {
       const final = flushOpts?.final ?? false;
@@ -8018,6 +8677,7 @@ function createOutbox(opts) {
       const l = lane(key);
       const run = l.tail.then(async () => {
         await loaded;
+        if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
         clearTimer(l);
         const scope = currentScope();
         const taken = [];
@@ -8027,23 +8687,66 @@ function createOutbox(opts) {
           l.entries = parked;
         }
         const items = taken.map((e) => e.item);
-        const ctx = drainContext(taken, scope, newId);
+        const controller = new AbortController();
+        inFlightControllers.add(controller);
+        const ctx = { ...drainContext(taken, scope, newId), signal: controller.signal };
         const ids2 = ctx.ids;
         l.inFlight += taken.length;
         try {
+          if (!maySend()) throw Object.assign(new Error("platform_send_disabled"), { code: "PLATFORM_SEND_DISABLED" });
           const result = await request(opts.coalesce && items.length ? opts.coalesce(items) : items, ctx);
           l.inFlight -= taken.length;
-          if (taken.length) persist((s) => s.remove(ids2));
+          if (taken.length) void persist((s) => s.remove(ids2));
           return result;
         } catch (error) {
           l.inFlight -= taken.length;
-          if (retry) requeue(l, taken);
-          else drop(key, taken, "failed");
+          settleFailure(key, l, taken, error);
           throw error;
+        } finally {
+          inFlightControllers.delete(controller);
         }
       });
       l.tail = run.catch(() => void 0);
       return run;
+    },
+    async retryDeadLetters() {
+      const retained = [];
+      for (const l of lanes.values()) {
+        for (const entry of l.entries) {
+          if (!entry.deadLetter) continue;
+          delete entry.deadLetter;
+          retained.push(entry);
+        }
+      }
+      if (retained.length) await persist((s) => s.put(retained));
+      await flushAll(false);
+    },
+    exportDeadLetters() {
+      const all = [];
+      for (const l of lanes.values()) all.push(...l.entries);
+      return exportDeadLetters(all);
+    },
+    async repairDeadLetter(id) {
+      if (typeof id !== "string" || id.trim() === "") return false;
+      let target;
+      for (const l of lanes.values()) {
+        target = l.entries.find((entry) => entry.id === id && entry.deadLetter);
+        if (target) break;
+      }
+      if (!target?.deadLetter) return false;
+      const previousLetter = target.deadLetter;
+      const previousBatch = target.batch;
+      const repaired = repairDeadLetter([target], id);
+      if (!repaired) return false;
+      const failureBefore = storeFailure;
+      await persist((s) => s.put([repaired]));
+      if (storeFailure !== failureBefore) {
+        repaired.deadLetter = previousLetter;
+        if (previousBatch !== void 0) repaired.batch = previousBatch;
+        else delete repaired.batch;
+        throw storeFailure;
+      }
+      return true;
     },
     size(key) {
       if (key !== void 0) return lanes.get(key)?.entries.length ?? 0;
@@ -8054,16 +8757,24 @@ function createOutbox(opts) {
     stats() {
       let queued = 0;
       let inFlight = 0;
+      let deadLetters = 0;
       for (const l of lanes.values()) {
         queued += l.entries.length;
         inFlight += l.inFlight;
+        deadLetters += l.entries.filter((entry) => entry.deadLetter).length;
       }
-      return { queued, inFlight, dropped };
+      return { queued, inFlight, dropped, deadLetters };
     },
-    ready: () => loaded.then(() => writes),
+    async ready() {
+      await loaded;
+      await writes;
+      if (storeFailure) throw storeFailure;
+    },
     close() {
       closed = true;
-      unsubscribe?.();
+      unsubscribeOnline?.();
+      unsubscribePermission?.();
+      for (const controller of inFlightControllers) controller.abort();
       for (const l of lanes.values()) {
         clearTimer(l);
         clearRetry(l);
@@ -8145,9 +8856,16 @@ function installStepDurability(next) {
   runKeys.clear();
   replays.clear();
   if (!next) return;
-  stopListening = next.online?.subscribe((online) => {
+  const stopOnline = next.online?.subscribe((online) => {
     if (online) void drainStoredSteps();
-  }) ?? null;
+  });
+  const stopPermission = next.sendPermission?.subscribe((allowed) => {
+    if (allowed) void drainStoredSteps();
+  });
+  stopListening = () => {
+    stopOnline?.();
+    stopPermission?.();
+  };
   void drainStoredSteps();
 }
 var optionsFor = (d, key) => {
@@ -8159,7 +8877,8 @@ var optionsFor = (d, key) => {
   return {
     store,
     ...d.online ? { online: d.online } : {},
-    ...d.scope ? { scope: d.scope } : {}
+    ...d.scope ? { scope: d.scope } : {},
+    ...d.sendPermission ? { sendPermission: d.sendPermission } : {}
   };
 };
 function stepDurabilityFor(chatId, runKey) {
@@ -8170,7 +8889,7 @@ function stepDurabilityFor(chatId, runKey) {
 }
 async function drainStoredSteps() {
   const d = durability;
-  if (!d?.sendRows || !d.storedKeys) return;
+  if (!d?.sendRows || !d.storedKeys || d.sendPermission?.isAllowed() === false) return;
   const sendRows = d.sendRows;
   let keys;
   try {
@@ -8201,6 +8920,7 @@ function batchStepPersistence(base, opts = {}) {
     ...opts.store ? { store: opts.store } : {},
     ...opts.online ? { online: opts.online } : {},
     ...opts.scope ? { scope: opts.scope } : {},
+    ...opts.sendPermission ? { sendPermission: opts.sendPermission } : {},
     send: (chatId, rows, ctx) => base.sendMessages(chatId, withEventKeys(rows, ctx.ids), ctx.scope !== void 0 ? { scope: ctx.scope } : void 0)
   });
   const sendMessages = async (chatId, messages) => {
@@ -8646,7 +9366,7 @@ function modelOf(ev) {
 }
 function modelScorecard(events) {
   const byModel = /* @__PURE__ */ new Map();
-  const row = (model) => {
+  const row2 = (model) => {
     let score2 = byModel.get(model);
     if (!score2) {
       score2 = {
@@ -8669,18 +9389,18 @@ function modelScorecard(events) {
   for (const ev of events) {
     if (ev.label === STOPPED_TURN_STEP) {
       const model2 = modelOf(ev);
-      if (model2) row(model2).stopped += 1;
+      if (model2) row2(model2).stopped += 1;
       continue;
     }
     if (ev.label !== "llm.complete") continue;
     const model = modelOf(ev);
     if (!model) continue;
     if (ev.category === "error") {
-      row(model).failures += 1;
+      row2(model).failures += 1;
       continue;
     }
     if (ev.category !== "llm") continue;
-    const score2 = row(model);
+    const score2 = row2(model);
     const args = ev.args;
     const calls = typeof args?.toolCalls === "number" ? args.toolCalls : 0;
     score2.turns += 1;
@@ -12085,9 +12805,9 @@ ${block}` : block : lead;
 }
 function afterDispatchHook(run) {
   const { c, readCoverage, usedTools } = run;
-  return (call2, _result, row) => {
+  return (call2, _result, row2) => {
     if (run.pendingReplay) {
-      readCoverage.cacheResult(run.pendingReplay.name, run.pendingReplay.args, { result: run.pendingReplay.result, anchor: row });
+      readCoverage.cacheResult(run.pendingReplay.name, run.pendingReplay.args, { result: run.pendingReplay.result, anchor: row2 });
       run.pendingReplay = null;
       return void 0;
     }
@@ -12099,7 +12819,7 @@ function afterDispatchHook(run) {
       pushTrace(c, { ts: nowIso(), category: "tool", label: call2.name, durationMs: nowMs2() - ran.toolStart, args, result: ran.out, isError: true });
       return void 0;
     }
-    if (ran.isReadTool && !isFailedToolResult(ran.out)) readCoverage.cacheResult(call2.name, args, { result: ran.out ?? null, anchor: row });
+    if (ran.isReadTool && !isFailedToolResult(ran.out)) readCoverage.cacheResult(call2.name, args, { result: ran.out ?? null, anchor: row2 });
     pushTrace(c, {
       ts: nowIso(),
       category: "tool",
@@ -14895,6 +15615,13 @@ function createBrainRestPersistence(opts) {
     updateChat: (id, body) => request(`/api/brain/chats/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
     /** Archives rather than destroys — `archived` is what the server reports. */
     deleteChat: (id) => request(`/api/brain/chats/${id}`, { method: "DELETE" }),
+    /**
+     * Archive a chat. The server's archive IS `DELETE /api/brain/chats/:id`
+     * (sets `isArchived` and retains the summary) — there is no second route.
+     * Named apart from `deleteChat` so Archive is not a call to the destroy
+     * method. `deleteChat` is unchanged.
+     */
+    archiveChat: (id) => request(`/api/brain/chats/${id}`, { method: "DELETE" }),
     /** Summarize a chat and store the summary on it. */
     summarizeChat: (id) => request(`/api/brain/chats/${id}/summarize`, { method: "POST" }),
     getMessages: (chatId, limit) => request(
@@ -15510,13 +16237,13 @@ function buildModelItems(options, labels, identity = DEFAULT_MODEL_IDENTITY) {
   return items;
 }
 function withReadyPageModels(options, rows) {
-  const ready = (rows ?? []).filter((row) => row.state === "ready");
+  const ready = (rows ?? []).filter((row2) => row2.state === "ready");
   if (ready.length === 0) return options;
   return {
     ...options,
     local: [
       ...options.local ?? [],
-      ...ready.map((row) => ({ id: row.ref, label: row.label, runtime: localRuntime(row.runtime).label }))
+      ...ready.map((row2) => ({ id: row2.ref, label: row2.label, runtime: localRuntime(row2.runtime).label }))
     ]
   };
 }
@@ -16147,7 +16874,7 @@ function gatewayModelIdentity(surface) {
 }
 function gatewayPlanModels(surface) {
   if (surface.models) return surface.models.filter((id) => typeof id === "string" && !!id);
-  return (surface.data ?? []).map((row) => row.model ?? row.id).filter((id) => !!id);
+  return (surface.data ?? []).map((row2) => row2.model ?? row2.id).filter((id) => !!id);
 }
 function gatewayModelWindows(surface) {
   const windows = /* @__PURE__ */ new Map();
@@ -16632,6 +17359,7 @@ export {
   createComposingActivity,
   createHandoffFit,
   createHostModelStream,
+  createLocalBrainPersistence,
   createLocalFirstStream,
   createLocalStream,
   createPageEngineSet,

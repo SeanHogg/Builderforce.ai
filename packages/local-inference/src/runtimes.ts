@@ -60,6 +60,8 @@ export type LocalRuntimeReach = 'http' | 'page';
 
 export interface LocalRuntime {
   id: LocalRuntimeId;
+  /** Automatic local-first preference. Explicit model pins never consult this value. */
+  automaticRank: number;
   /** Brand token, deliberately NOT localized — "Ollama" is "Ollama" in every catalog. */
   label: string;
   /** Inference runs on the user's own CPU/GPU: residency `local`, zero cost, offline, and
@@ -89,16 +91,12 @@ export const BROWSER_ENGINE_BASE_URL = 'http://browser.local';
 export const BFI_ENGINE_BASE_URL = 'http://bfi.local';
 export const WEBLLM_ENGINE_BASE_URL = 'http://webllm.local';
 
-/**
- * Registry order is preference order for local-first: Synapse first (our engine, and the
- * one that constrains tool calls for every model), then Ollama, then FreeToken — what the
- * user installed — then the page engines: our `bfi` in WebAssembly (it constrains tool
- * calls too), WebLLM, and last the browser's built-in model, the smallest of them.
- */
+/** Runtime metadata. `automaticRank`, not array position, owns automatic preference. */
 export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
-  { id: 'synapse', label: 'Synapse', onDevice: true, catalog: 'probe', tools: 'all', reach: 'http', ownedBy: 'bfi' },
+  { id: 'synapse', automaticRank: 30, label: 'Synapse', onDevice: true, catalog: 'probe', tools: 'all', reach: 'http', ownedBy: 'bfi' },
   {
     id: 'ollama',
+    automaticRank: 40,
     label: 'Ollama',
     onDevice: true,
     defaultBaseUrl: 'http://127.0.0.1:11434',
@@ -108,6 +106,7 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
   },
   {
     id: 'freetoken',
+    automaticRank: 50,
     label: 'FreeToken',
     onDevice: true,
     defaultBaseUrl: 'http://127.0.0.1:1919',
@@ -115,11 +114,9 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
     tools: 'unknown',
     reach: 'http',
   },
-  // Our transformer compiled to WebAssembly over WebGPU (`bfi-web`). Its models are the
-  // catalog's (`LOCAL_MODEL_CATALOG`) that the page has downloaded; like `bfi serve` it
-  // grammar-constrains `tools` for every model it loads.
   {
     id: 'bfi',
+    automaticRank: 20,
     label: 'Builderforce engine',
     onDevice: true,
     defaultBaseUrl: BFI_ENGINE_BASE_URL,
@@ -127,10 +124,9 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
     tools: 'all',
     reach: 'page',
   },
-  // MLC's WebLLM. Tool support is per MODEL (only its function-calling builds honour
-  // `tools`), so the runtime says `unknown` and each catalog row declares its own.
   {
     id: 'webllm',
+    automaticRank: 10,
     label: 'WebLLM',
     onDevice: true,
     defaultBaseUrl: WEBLLM_ENGINE_BASE_URL,
@@ -138,10 +134,9 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
     tools: 'unknown',
     reach: 'page',
   },
-  // Chrome's built-in model (Prompt API). Its single model is declared by the page probe,
-  // and it cannot take a tool turn: the Prompt API has no tool-call protocol.
   {
     id: 'browser',
+    automaticRank: 60,
     label: 'Gemini Nano',
     onDevice: true,
     defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
@@ -149,7 +144,7 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
     tools: 'unknown',
     reach: 'page',
   },
-  { id: 'kimi-code', label: 'Kimi Code', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http' },
+  { id: 'kimi-code', automaticRank: Number.POSITIVE_INFINITY, label: 'Kimi Code', onDevice: false, catalog: 'declared', tools: 'all', reach: 'http' },
 ];
 
 /** The runtimes reached over HTTP — what a prober, a settings form or an endpoint

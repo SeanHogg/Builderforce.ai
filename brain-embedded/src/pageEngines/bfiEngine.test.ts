@@ -82,7 +82,7 @@ describe('bfi probe', () => {
       headDim: 128,
       trainedContext: 32768,
       f16: false,
-      maxBufferBytes: gpu.maxBufferBytes,
+      maxStorageBufferBindingSizeBytes: gpu.maxBufferBytes,
     });
   });
 
