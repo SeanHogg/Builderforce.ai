@@ -59,7 +59,7 @@ afterEach(async () => {
  * which is what a process killed mid-append leaves behind on disk.
  */
 function createMemoryIo(options: { tornAfter?: number } = {}): JournalIo & { bytes: Uint8Array } {
-  let bytes = new Uint8Array(0);
+  let bytes: Uint8Array = new Uint8Array(0);
   let appends = 0;
   return {
     get bytes() {

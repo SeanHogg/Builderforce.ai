@@ -133,24 +133,19 @@ describe("the panel is wired to it", () => {
   // `ChatRuntimeProvider` there. Same wiring, same assertions, one file along.
   const app = readFileSync(join(__dirname, "WorkspaceApp.tsx"), "utf8");
 
-  it("uses the session store when signed out and the gateway when signed in", () => {
-    expect(app).toContain("createInMemoryPersistence");
-    // The branch, not merely the import: a dead import would satisfy the line above.
-    expect(app).toMatch(/persistence:\s*signedOut/);
-    expect(app).toContain("createPersistence(init.baseUrl, getToken");
-  });
-
-  it("recomputes the runtime when the account state changes", () => {
-    // Without `signedOut` in the deps, signing in mid-session leaves the panel writing
-    // to the session store and never persisting the conversation.
-    // Anchored on `init.grounding` so it identifies the RUNTIME memo specifically —
-    // other memos in this file also open with `init.baseUrl`.
-    const deps = app.match(/\[init\.baseUrl,[^\]]*init\.grounding[^\]]*\]/);
-    expect(deps?.[0]).toContain("signedOut");
+  it("writes chat history to the extension host's local store, signed in or out", () => {
+    expect(app).toContain("createHostPersistence");
+    // One store for every account state: a branch back to the gateway adapter would make
+    // a signed-out (on-device) turn 401 on the user-turn write before the model is reached.
+    expect(app).not.toMatch(/persistence:\s*signedOut/);
+    expect(app).not.toContain("createPersistence(init.baseUrl");
   });
 
   it("keeps one store per panel rather than one per render", () => {
-    // A store rebuilt inside the memo would drop the conversation on any re-render.
-    expect(app).toContain("useRef<BrainPersistenceAdapter | null>(null)");
+    // The adapter holds attachment preview URLs; rebuilding it inside the runtime memo
+    // would blank every image already in the conversation on a token re-mint.
+    expect(app).toContain("useState(createHostPersistence)");
+    const deps = app.match(/\[init\.baseUrl,[^\]]*init\.grounding[^\]]*\]/);
+    expect(deps?.[0]).toContain("persistence");
   });
 });

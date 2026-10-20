@@ -49,6 +49,7 @@
  */
 
 import { leaseBusy } from './durabilityContract.js';
+import { redactSnapshotForUploadOrLog } from './redaction.js';
 import type { SyncLease } from './sync.js';
 import { createMemoryLocalFirstStore, type LocalFirstSnapshot, type LocalFirstStore } from './store.js';
 
@@ -93,49 +94,11 @@ export const DEFAULT_BUSY_TIMEOUT_MS = 1_500;
 /** Poll interval between lease attempts while another owner holds it. */
 export const DEFAULT_BUSY_POLL_MS = 25;
 
-/**
- * Keys stripped before a snapshot may be uploaded or logged. A key matches on
- * its lowercase form, so `apiKey`, `APIKEY`, and `apikey` are all secrets.
- */
-export const INDEXEDDB_REDACTED_KEYS = [
-  'token',
-  'password',
-  'authorization',
-  'cookie',
-  'apikey',
-  'clientsecret',
-] as const;
-
-/** The rule in words, for review and for host-facing documentation. */
-export const INDEXEDDB_REDACTION_RULE =
-  'Only exportForUploadOrLog() output may be uploaded or logged. It strips every '
-  + 'secret-shaped key at every depth — a key whose lowercase name is one of '
-  + `${INDEXEDDB_REDACTED_KEYS.join(', ')} or contains token, secret, password, `
-  + 'authorization, cookie, or apikey — so accessToken, client_secret and '
-  + 'sessionCookie are stripped too. The strip is recursive through arrays and '
-  + 'nested objects, the input is not mutated, and a dropped key is absent rather '
-  + 'than blanked. export() is the unfiltered local record and must not leave the device.';
-
-const REDACT_PATTERN = /token|secret|password|authorization|cookie|apikey/i;
-
-/**
- * Strip secret-shaped keys at every depth. The input is not mutated; the result
- * is the only value eligible to be uploaded or logged.
- */
-export function redactSnapshotForUploadOrLog<T>(value: T): T {
-  return redactValue(value) as T;
-}
-
-function redactValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(redactValue);
-  if (value === null || typeof value !== 'object') return value;
-  const out: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (REDACT_PATTERN.test(key)) continue;
-    out[key] = redactValue(child);
-  }
-  return out;
-}
+export {
+  INDEXEDDB_REDACTED_KEYS,
+  INDEXEDDB_REDACTION_RULE,
+  redactSnapshotForUploadOrLog,
+} from './redaction.js';
 
 function request<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -211,7 +174,6 @@ export function createIndexedDbLocalFirstStore(options: IndexedDbLocalFirstOptio
   const busyPollMs = options.busyPollMs ?? DEFAULT_BUSY_POLL_MS;
   let database: IDBDatabase | undefined;
   let opening: Promise<IDBDatabase> | undefined;
-  let state: LocalFirstSnapshot | undefined;
   let recovery: Promise<void> | undefined;
   let tail: Promise<unknown> = Promise.resolve();
   const listeners = new Set<() => void>();
@@ -399,11 +361,7 @@ export function createIndexedDbLocalFirstStore(options: IndexedDbLocalFirstOptio
     await promoteTracked;
   };
 
-  const load = async (): Promise<LocalFirstSnapshot> => {
-    const latest = await readLatest();
-    state = latest;
-    return latest;
-  };
+  const load = (): Promise<LocalFirstSnapshot> => readLatest();
 
   const withLease = async <R>(work: () => Promise<R>): Promise<R> => {
     await acquire();
@@ -427,7 +385,6 @@ export function createIndexedDbLocalFirstStore(options: IndexedDbLocalFirstOptio
         const result = await memory.transact(work);
         const next = await memory.export();
         await persist(next);
-        state = next;
         for (const listener of [...listeners]) listener();
         return result;
       }));
@@ -457,7 +414,6 @@ export function createIndexedDbLocalFirstStore(options: IndexedDbLocalFirstOptio
       database = undefined;
       opening = undefined;
       recovery = undefined;
-      state = undefined;
     },
   };
 }

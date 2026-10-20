@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { leaseBusy } from "../../../packages/local-first/src/durabilityContract.ts";
+import { leaseBusy } from "@builderforce/local-first";
 import {
   LOCAL_FIRST_BUSY_TIMEOUT_MS,
   createVsCodeLocalFirstStore,

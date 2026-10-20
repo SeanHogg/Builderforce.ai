@@ -81,6 +81,12 @@ export interface LocalTask {
   state: TaskSyncState;
   /** The platform task id once created (also what makes a replay skip the create). */
   serverTaskId?: number;
+  /**
+   * The project this task is filed under, pinned the first time sync sees it so a later
+   * project switch cannot move it. `undefined` = not pinned yet; `null` = pinned unbound
+   * (no project: the task stays local and is never sent).
+   */
+  projectId?: number | null;
 }
 
 export type LedgerOutcome = 'done' | 'failed' | 'declined';
@@ -372,4 +378,14 @@ export function createMemoryRecords(): RovrRecords {
       ledger.push(entry);
     },
   };
+}
+
+/**
+ * The chats a surface may LIST: everything not archived. Archive writes `isArchived`
+ * onto the local record and never deletes it (an unsynced transcript must survive),
+ * and the device store has no `archived=exclude` query like the platform list — so
+ * every chat list filters through here. Returns a new array; the input is untouched.
+ */
+export function liveChats(chats: readonly LocalChat[]): LocalChat[] {
+  return chats.filter((chat) => chat.isArchived !== true);
 }

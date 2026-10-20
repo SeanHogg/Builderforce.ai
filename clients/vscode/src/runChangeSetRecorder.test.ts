@@ -7,7 +7,7 @@ const git = vi.hoisted(() => ({
   refresh: vi.fn(() => {
     throw new Error("recorder must not refresh git");
   }),
-  runGit: vi.fn(() => {
+  runGit: vi.fn((_cwd: string, _args: string): never => {
     throw new Error("recorder must not shell out to git");
   }),
 }));

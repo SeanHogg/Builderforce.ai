@@ -168,8 +168,8 @@ function deletedAtOf(row: PullCursorRecordRow): string | undefined {
 }
 
 /** Log operation `delete`, or a non-blank tombstone timestamp. Blank is live. */
-function isTombstone(row: PullCursorRecordRow): boolean {
-  if (row.operation === 'delete') return true;
+function isTombstone(row: PullCursorRecordRow | PullCursorChangeRow): boolean {
+  if ('operation' in row && row.operation === 'delete') return true;
   return deletedAtOf(row) !== undefined;
 }
 
@@ -258,7 +258,7 @@ function readDelta<T>(seq: number, input: PullCursorReadInput<T>): PullCursorRea
   let tip = seq;
   for (const row of ordered) {
     if (row.seq > tip) tip = row.seq;
-    const instruction = toInstruction(row, row.seq);
+    const instruction = toInstruction<T>(row, row.seq);
     if (instruction) instructions.push(instruction);
   }
   return page({ v: 1, kind: 'delta', seq: tip }, instructions);
@@ -290,7 +290,7 @@ function readSnapshot<T>(
   let anchorType = afterEntityType;
   let anchorId = afterClientEntityId;
   for (const row of ordered) {
-    const instruction = toInstruction(row, undefined);
+    const instruction = toInstruction<T>(row, undefined);
     if (!instruction) continue;
     instructions.push(instruction);
     const entityType = rowEntityType(row);

@@ -8,7 +8,7 @@ import type { RunChangeBaseline } from "./runChangeSets";
 const git = vi.hoisted(() => ({
   detect: vi.fn(async () => ({ total: 0, repos: [] })),
   refresh: vi.fn(),
-  runGit: vi.fn(async () => ""),
+  runGit: vi.fn(async (_cwd: string, _args: string) => ""),
 }));
 
 vi.mock("./gitChanges", () => ({

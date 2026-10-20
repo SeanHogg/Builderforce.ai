@@ -80,7 +80,7 @@ describe('applyTombstone', () => {
     expect(tombstone.updatedAt).toBe(live.updatedAt);
     expect('body' in tombstone).toBe(false);
     expect(live.body).toEqual({ title: 'secret' });
-    expect(live.deletedAt).toBeUndefined();
+    expect('deletedAt' in live).toBe(false);
   });
 
   it('keeps the first deletedAt when applied twice, and still has no body', () => {
@@ -128,7 +128,7 @@ describe('pullChanges', () => {
       changes: [stripped, stillHasBody, later],
       cursor: encodeCursor(5),
     });
-    expect(page?.changes.some((change) => change.id === 'a' && change.deletedAt === FIRST)).toBe(true);
+    expect(page?.changes.some((change) => change.id === 'a' && 'deletedAt' in change && change.deletedAt === FIRST)).toBe(true);
     expect(page?.changes.some((change) => change.seq <= 2)).toBe(false);
   });
 

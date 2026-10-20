@@ -1,8 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  LOCAL_RECORD_BUSY_TIMEOUT_MS,
+  localSqliteAvailable,
   openLocalRecordTransaction,
   SURVIVING_OFFLINE_KINDS,
   type SurvivingOfflineRecord,
@@ -31,7 +33,7 @@ function offlineSet(mark = "kept"): SurvivingOfflineRecord[] {
   ];
 }
 
-describe("localRecordTransaction", () => {
+describe("localRecordTransaction source", () => {
   it("does not import the API, vscode, or a JSON snapshot store", () => {
     const source = readFileSync(new URL("./localRecordTransaction.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(/@builderforce\/local-first/);
@@ -43,8 +45,15 @@ describe("localRecordTransaction", () => {
     expect(source).toMatch(/BEGIN IMMEDIATE/);
     expect(source).toMatch(/COMMIT/);
     expect(source).toMatch(/ROLLBACK/);
+    // Loaded at runtime so a Node 20 extension host does not fail activation.
+    expect(source).not.toMatch(/from\s+["']node:sqlite["']/);
+    expect(source).toMatch(/busy_timeout/);
   });
+});
 
+// node:sqlite ships unflagged from Node 22.13 (CI runs Node 24). An older local
+// Node cannot open the store at all, which `localSqliteAvailable` reports.
+describe.skipIf(!localSqliteAvailable())("localRecordTransaction", () => {
   it("commits chat, project, ticket, audit, and run in one transaction and a restart reads them back without the API", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network must not be used"));
     const path = databasePath();
@@ -98,6 +107,28 @@ describe("localRecordTransaction", () => {
       expect(store.read()).toEqual([]);
     } finally {
       store.close();
+    }
+  });
+  it("refuses a corrupt file instead of opening it as an empty store", () => {
+    const path = databasePath();
+    writeFileSync(path, "this is not a sqlite database, it is a torn write".repeat(20));
+    expect(() => openLocalRecordTransaction(path)).toThrow(/local_record_store_corrupt/);
+    // The bytes are left in place for recovery; nothing overwrote them.
+    expect(readFileSync(path, "utf8")).toMatch(/^this is not a sqlite database/);
+  });
+
+  it("lets two connections to one file commit in turn, with a busy timeout set", () => {
+    expect(LOCAL_RECORD_BUSY_TIMEOUT_MS).toBeGreaterThan(0);
+    const path = databasePath();
+    const first = openLocalRecordTransaction(path);
+    const second = openLocalRecordTransaction(path);
+    try {
+      first.commitOfflineSet(offlineSet("first"));
+      second.commitOfflineSet(offlineSet("second"));
+      expect(first.read()).toEqual(offlineSet("second"));
+    } finally {
+      first.close();
+      second.close();
     }
   });
 });

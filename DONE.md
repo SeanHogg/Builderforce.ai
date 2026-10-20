@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-10-19 — CI red across agent-runtime, VSIX, Rovr, frontend and api after the local-first batch
+
+- **Root cause.** `@builderforce/local-first`'s entry did not export names its consumers imported (`JournalOperation` and 16 more). brain-embedded's DTS build failed on that, tsup had already cleaned `dist/`, and every package linking brain-embedded (VSIX, Rovr, frontend) lost its types — hundreds of "no exported member" / implicit-`any` errors. The entry also re-exported `indexedDb.ts`, so the api (no DOM lib) type-checked IndexedDB code.
+- **local-first.** Entry exports the journal, atomic-write, sync-protocol, durability and sync-status names. Redaction moved to a pure `redaction.ts` (ONE rule; `durabilityContract`'s exact-name copy let `accessToken` / `client_secret` through). `journalStore.transact` is generic over its result; strict-index fixes; dead `state` cache dropped from the IndexedDB store.
+- **agent-runtime.** `knowledge-loop.ts` narrows the verify event union on `"type" in event`.
+- **VSIX.** Nine `../../../packages/local-first/src/*.ts` deep imports go through the package (TS5097). Corrupt legacy snapshot is moved aside and the open continues from the journal, instead of failing every open. The webview holds ONE host persistence adapter per panel (rebuilding it on a token re-mint blanked attachment previews); stale signed-out assertions rewritten for the host-local design. `localRecordTransaction.ts` loads `node:sqlite` at runtime (typed `sqlite_unavailable` on Node 20 hosts), sets `busy_timeout` + WAL, and refuses a corrupt file — wiring is logged in the roadmap with its engine-floor blocker.
+- **Rovr.** `records.ts` gains `LocalTask.projectId` and `liveChats`, the half of fe1be2782 that consumers and tests already used.
+- **api.** Sync pull typing (`pullCursorRead` tombstone check, `pullDelta` cursor narrowing) and test-fixture typing in the sync, cache and memory tests.
+
 ## ✅ RESOLVED 2026-10-18 — Kimi K3 from the workspace's own Kimi account, in VS Code, Rovr and the web (api 2026.10.59 · frontend 2026.10.76 · VSIX 2026.10.51 · Rovr 2026.10.14)
 
 - **Gap.** A Kimi Code subscription connected on the web could only run while a separate agent runtime relayed for it (Kimi's edge refuses Cloudflare egress). The VSIX used Kimi only via a local Kimi Code CLI login, and Rovr had no Kimi at all. No surface offered the sign-in when a Kimi turn needed it.

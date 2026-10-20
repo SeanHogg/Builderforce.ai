@@ -43,8 +43,6 @@ export const SECRET_SHAPED_KEYS = [
 
 export type SecretShapedKey = (typeof SECRET_SHAPED_KEYS)[number];
 
-const SECRET_KEY_SET = new Set<string>(SECRET_SHAPED_KEYS.map((key) => key.toLowerCase()));
-
 /**
  * True while `holder` is a non-empty id.
  *
@@ -147,31 +145,12 @@ export function decideRecoveryCopy(
   return { adapter: 'vsix-file', replace: true, value: recovered.value };
 }
 
-/** True when `key` is one of the secret-shaped names, ignoring case. */
-export function isSecretShapedKey(key: string): boolean {
-  return typeof key === 'string' && SECRET_KEY_SET.has(key.toLowerCase());
-}
-
 /**
- * Strip secret-shaped keys before a snapshot is eligible to upload or log.
- *
- * Nested objects and arrays are walked. The input is not mutated. The
- * returned value is what may be uploaded or logged; the original must not be.
- * This does not upload, log, or call the network.
+ * The upload/log redaction rule lives in `redaction.ts` — ONE rule for every
+ * adapter. It strips any key CONTAINING a secret-shaped word (accessToken,
+ * client_secret), a superset of the exact names in SECRET_SHAPED_KEYS.
  */
-export function redactForUploadOrLog<T>(value: T): T {
-  return redactValue(value) as T;
-}
-
-function redactValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(redactValue);
-  if (value !== null && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-      if (isSecretShapedKey(key)) continue;
-      out[key] = redactValue(child);
-    }
-    return out;
-  }
-  return value;
-}
+export {
+  isSecretShapedKey,
+  redactSnapshotForUploadOrLog as redactForUploadOrLog,
+} from './redaction.js';

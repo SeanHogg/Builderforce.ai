@@ -6,7 +6,7 @@
  * A corrupt payload is never recovered as an empty store. Last-good bytes are
  * returned only when they can be redacted. Otherwise the result is unavailable.
  */
-import { BUSY_TIMEOUT, leaseBusy } from "../../../packages/local-first/src/durabilityContract.ts";
+import { BUSY_TIMEOUT, leaseBusy } from "@builderforce/local-first";
 
 /**
  * Busy timeout for a later VSIX store: the contract's `until_release`.

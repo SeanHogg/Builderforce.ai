@@ -10,7 +10,7 @@ import {
   type StoreSyncStatus,
   type SyncStatusStore,
   type SyncStatusStoreEvent,
-} from "../../../packages/local-first/src/syncStatus.ts";
+} from "@builderforce/local-first";
 
 /** Any local chat, ticket, audit, or run. Only `id` is read. */
 export interface SyncStatusEntity {

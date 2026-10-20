@@ -2,19 +2,18 @@ import * as vscode from "vscode";
 import nodeFs from "node:fs";
 import nodePath from "node:path";
 import type { BrainChat, BrainMessage } from "@seanhogg/builderforce-brain-embedded";
-import { leaseBusy } from "../../../packages/local-first/src/durabilityContract.ts";
 import {
   INDEXEDDB_REDACTION_RULE,
-  redactSnapshotForUploadOrLog,
-} from "../../../packages/local-first/src/indexedDb.ts";
-import type { JournalOperation, LocalRecord } from "../../../packages/local-first/src/records.ts";
-import {
   createMemoryLocalFirstStore,
+  leaseBusy,
   newLocalRecord,
+  redactSnapshotForUploadOrLog,
+  type JournalOperation,
   type LocalFirstSnapshot,
   type LocalFirstStore,
   type LocalFirstTransaction,
-} from "../../../packages/local-first/src/store.ts";
+  type LocalRecord,
+} from "@builderforce/local-first";
 
 const fs = nodeFs.promises;
 
@@ -55,8 +54,9 @@ export type SnapshotLoadPlan =
 /**
  * Classify the text of a snapshot file that already exists.
  * Invalid JSON, or a shape `validSnapshot` rejects, is `preserve`: the caller
- * copies the file aside and throws. Classification does not invent an empty
- * snapshot from the bad bytes.
+ * keeps the bytes at `recoveryPath` (the store moves the cache aside and opens
+ * from the journal; `loadExistingSnapshot` copies it and throws). Classification
+ * does not invent an empty snapshot from the bad bytes.
  */
 export function planSnapshotLoad(text: string, snapshotPath: string, timestamp: number): SnapshotLoadPlan {
   const recoveryPath = corruptSnapshotRecoveryPath(snapshotPath, timestamp);
@@ -325,7 +325,16 @@ export function createVsCodeLocalFirstStore(
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
       throw error;
     }
-    return loadExistingSnapshot(text, snapshotFile, Date.now(), (from, to) => fs.copyFile(from, to));
+    // The snapshot is a derived cache / one-way legacy import, not the record (the
+    // journal is). A corrupt copy is MOVED aside — kept whole, exportable — and the
+    // open continues from the journal. Throwing here would fail every later open too,
+    // locking the person out of their local store over a cache file.
+    const plan = planSnapshotLoad(text, snapshotFile, Date.now());
+    if (plan.action === "preserve") {
+      await fs.rename(snapshotFile, plan.recoveryPath);
+      return undefined;
+    }
+    return plan.snapshot;
   };
 
   const ensureOpen = (): Promise<void> => {

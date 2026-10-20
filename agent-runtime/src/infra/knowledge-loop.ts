@@ -408,7 +408,7 @@ export class KnowledgeLoopService {
       }
       const url = `${normalizeBaseUrl(baseUrl ?? DEFAULT_BUILDERFORCE_URL)}/api/agent-hosts/${agentNodeId}/tool-audit`;
       const body =
-        "type" in event && event.type === "verify_started"
+        "type" in event
           ? {
               runId,
               sessionKey,

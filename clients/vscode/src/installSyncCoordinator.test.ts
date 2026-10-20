@@ -125,8 +125,7 @@ describe("installSyncCoordinator", () => {
   });
 
   it("treats a missing grant as not granted", () => {
-    const input = host();
-    delete input.synchronizeGranted;
+    const { synchronizeGranted: _granted, ...input } = host();
     expect(installSyncCoordinator(input)).toEqual({
       installed: false,
       reason: "synchronize_not_granted",
@@ -240,8 +239,7 @@ describe("drainQueuedCreates", () => {
     const store = createMemoryLocalFirstStore();
     await queue(store, { eventId: "evt-create", operation: "create", destination: DESTINATION });
     const recorded = recordingTransport();
-    const input = host({ store, transport: recorded.transport });
-    delete input.synchronizeGranted;
+    const { synchronizeGranted: _granted, ...input } = host({ store, transport: recorded.transport });
     expect(await drainQueuedCreates(input)).toEqual({
       drained: false,
       reason: "synchronize_not_granted",

@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { UNBOUND_DESTINATION, type JournalEvent, type LocalFirstSnapshot, type LocalRecord, type SyncConflict, type SyncReceipt } from "@builderforce/local-first";
-import { deriveRecordSyncStatus } from "../../../packages/local-first/src/syncStatus.ts";
+import { deriveRecordSyncStatus } from "@builderforce/local-first";
 import {
   PRESENTED_SYNC_PRECEDENCE,
   PRESENTED_SYNC_STATUSES,

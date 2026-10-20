@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SyncReceipt } from "@builderforce/local-first";
-import type { SyncStatusStore, SyncStatusStoreEvent } from "../../../packages/local-first/src/syncStatus.ts";
+import type { SyncStatusStore, SyncStatusStoreEvent } from "@builderforce/local-first";
 import { stamp, statusFor } from "./entitySyncState";
 
 function store(
@@ -31,7 +31,7 @@ describe("statusFor", () => {
     ]);
     expect(statusFor(audit, shared)).toBe("conflict");
     expect(statusFor(idleRun, shared)).toBe("idle");
-    expect(statusFor({ id: "chat-9", kind: "chat" }, shared)).toBe("idle");
+    expect(statusFor({ id: "chat-9" }, shared)).toBe("idle");
   });
 
   it("does not take another entity's unsent event or conflict", () => {

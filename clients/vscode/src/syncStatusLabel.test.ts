@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SyncStatusStoreEvent } from "../../../packages/local-first/src/syncStatus.ts";
+import type { SyncStatusStoreEvent } from "@builderforce/local-first";
 import { labelFor } from "./syncStatusLabel";
 
 describe("labelFor", () => {

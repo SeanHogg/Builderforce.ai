@@ -63,7 +63,7 @@ describe('park', () => {
     const empty: ParkedDependency<TestEvent>[] = [];
 
     for (const event of [
-      { eventId: 'missing', dependsOn: undefined } as TestEvent,
+      { eventId: 'missing', dependsOn: undefined } as unknown as TestEvent,
       { eventId: 'null', dependsOn: null } as unknown as TestEvent,
       { eventId: 'blank', dependsOn: '' } as unknown as TestEvent,
       { eventId: 'blank-space', dependsOn: '   ' } as unknown as TestEvent,

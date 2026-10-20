@@ -103,10 +103,10 @@ export function WorkspaceApp() {
   // module token (updated by `token` / `token.refresh` without a new init).
   const hasToken = !!(init.token || getToken());
   // An on-device route needs no account — refusing to render would be gating the user
-  // out of their own hardware. The chat then runs on a session-local store (see
-  // `createInMemoryPersistence`), because the run loop persists the user turn BEFORE
-  // it streams: left on the gateway adapter, that write 401s and the model is never
-  // reached. Other gateway-backed extras degrade on their own.
+  // out of their own hardware. Chat history is written to the extension host's local
+  // store (`createHostPersistence`) signed in or out, so the run loop's write of the user
+  // turn BEFORE it streams never needs an account. Other gateway-backed extras degrade
+  // on their own.
   //
   // Only `!signedIn` is the sign-in wall. `signedIn && !hasToken` is a transient
   // (Connecting… + refreshToken above), NOT another prompt to sign in — conflating
@@ -265,7 +265,10 @@ function WorkspaceScreen({ init }: { init: InitData }) {
  */
 function ChatRuntimeProvider({ init, children }: { init: InitData; children: React.ReactNode }) {
   // The extension host owns the durable local application store; panel visibility never
-  // decides whether history survives.
+  // decides whether history survives. ONE adapter for the life of the panel: it holds the
+  // attachment preview URLs, so rebuilding it on a token re-mint or grounding refresh
+  // would blank every image already in the conversation.
+  const [persistence] = useState(createHostPersistence);
 
   // The gateway, as a transport. It funds two DIFFERENT jobs: streaming a turn when no
   // on-device model is pinned, and serving the platform tool catalogue always. Built
@@ -293,10 +296,10 @@ function ChatRuntimeProvider({ init, children }: { init: InitData; children: Rea
       transport: init.localRoute
         ? { ...localTransport({ baseUrl: init.localRoute.baseUrl }, webviewLocalFetch(hostFetch)), defaultModel: init.localRoute.model }
         : gatewayTransport,
-      persistence: createHostPersistence(),
+      persistence,
       resolveSystemPrompt: () => buildIdeSystemPrompt({ hasWorkspace: init.hasWorkspace, grounding: init.grounding }),
     }),
-    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute, gatewayTransport],
+    [init.baseUrl, init.model, init.hasWorkspace, init.grounding, init.localRoute, gatewayTransport, persistence],
   );
 
   return (

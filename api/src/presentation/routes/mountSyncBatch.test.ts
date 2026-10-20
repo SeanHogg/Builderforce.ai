@@ -121,8 +121,11 @@ function createMemoryStores(): SyncStores {
     payload: unknown;
     provenance: Record<string, unknown>;
   }
+  /** The fake keys its rows the way the real table does: tenant + device + event. */
+  type FakeEventRow = StoredSyncEvent & { tenantId: number; deviceId: string; eventId: string };
+
   interface State {
-    events: StoredSyncEvent[];
+    events: FakeEventRow[];
     mappings: MappingRow[];
     records: RecordRow[];
     changes: { seq: number; record: LocalRecord }[];
@@ -207,7 +210,7 @@ function createMemoryStores(): SyncStores {
         updatedAt: row.occurredAt.toISOString(),
         ...(row.operation === 'delete' ? { deletedAt: row.occurredAt.toISOString() } : {}),
         payload: row.record.payload,
-        provenance: { ...row.record.provenance },
+        ...(row.record.provenance ? { provenance: { ...row.record.provenance } } : {}),
       };
       target.changes.push({ seq: target.seq, record });
     },
@@ -334,7 +337,7 @@ describe('POST /api/sync/v1/push — a batch is applied and every event gets a r
     // One receipt per event, in input order.
     expect(response.receipts.map((r) => r.eventId)).toEqual([TICKET.eventId, PROJECT.eventId, CHAT.eventId]);
     expect(response.receipts.map((r) => r.status)).toEqual(['accepted', 'accepted', 'accepted']);
-    expect(response.receipts[0].serverVersion).toBe(1);
+    expect(response.receipts[0]?.serverVersion).toBe(1);
     for (const receipt of response.receipts) expect(receipt.receivedAt).toBe(NOW.toISOString());
 
     // Ticket went to its owning importer, not to the mirror.

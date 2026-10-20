@@ -330,6 +330,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **~3.3 GB memory after indexing one small package.** *Blocker: an idle-vs-embedding memory profile.*
 - **Phase 3 local browser/VM agent host.** *Blocker: content guardrails + prompt-injection defence first.*
 - **Native apps:** no Evermind recall or agent invite in phone chat; no Approvals screen in `apps/android` / `apps/shared/BuilderforceKit`.
+- **G03 SQLite system of record is built but not wired** (`clients/vscode/src/localRecordTransaction.ts`: one `BEGIN IMMEDIATE` transaction, `busy_timeout`, corrupt file refused; offline-first review step 2). It loads `node:sqlite` at runtime, which exists only on Node ≥ 22.13 (VS Code ≥ 1.101), while `engines.vscode` is `^1.95.0` (Node 20). Wiring it from activation in place of the journaled store needs that floor raised, or a journaled-store fallback kept for older hosts. *Blocker: operator decision on the VS Code engine floor.*
 - **Two plain-Node runners duplicate the loop skeleton** (`server.mjs`, `githubActionsRunner.ts`). Fix = bundle the kernel into both. *Blocker: a container build and an Actions dispatch to verify.*
 - **pi-tui is the last `@mariozechner/pi-*` dependency** — migrate `src/tui/*` to Ink, then remove.
 - **Engine/tool convergence:** converged file tools default OFF; needs a cross-provider smoke, sandbox-aware provider, `read`/`exec` convergence, `RelayTaskEngine` collapse.

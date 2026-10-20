@@ -7,8 +7,17 @@
  * snapshot.
  *
  * Activation wiring belongs to `extension.ts`, which this slice does not edit.
+ *
+ * `node:sqlite` is loaded at RUNTIME, not imported. It exists from Node 22.13 on
+ * (unflagged), and the extension's `engines.vscode` floor still admits hosts on
+ * Node 20, where a static import would fail extension activation. On such a host
+ * `openLocalRecordTransaction` throws `LocalSqliteUnavailableError`, which a caller
+ * catches to keep the journaled store; `localSqliteAvailable()` answers up front.
+ * Per the offline-first review (step 2) the store waits on a held writer
+ * (`busy_timeout`) instead of stealing a lock, and a corrupt file is refused
+ * with `local_record_store_corrupt`, never silently opened as an empty store.
  */
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
 
 export const SURVIVING_OFFLINE_KINDS = ["chat", "project", "ticket", "audit", "run"] as const;
 
@@ -29,6 +38,71 @@ export interface LocalRecordTransaction {
 }
 
 const KIND_SET = new Set<string>(SURVIVING_OFFLINE_KINDS);
+
+/** How long a write waits on another connection's lock before failing busy. */
+export const LOCAL_RECORD_BUSY_TIMEOUT_MS = 5_000;
+
+/** The slice of `node:sqlite`'s `DatabaseSync` this store uses. */
+interface SqliteStatement {
+  run(...params: unknown[]): unknown;
+  all(...params: unknown[]): unknown[];
+}
+interface SqliteDatabase {
+  exec(sql: string): void;
+  prepare(sql: string): SqliteStatement;
+  close(): void;
+}
+type SqliteDatabaseConstructor = new (path: string) => SqliteDatabase;
+
+/** This host's runtime has no `node:sqlite` (Node < 22.13). */
+export class LocalSqliteUnavailableError extends Error {
+  readonly code = "sqlite_unavailable";
+  constructor(cause: unknown) {
+    super("sqlite_unavailable: node:sqlite is not available in this extension host");
+    this.cause = cause;
+  }
+}
+
+let databaseConstructor: SqliteDatabaseConstructor | null | undefined;
+
+function loadDatabaseConstructor(): SqliteDatabaseConstructor {
+  if (databaseConstructor === undefined) {
+    try {
+      const sqlite = createRequire(__filename)("node:sqlite") as { DatabaseSync?: SqliteDatabaseConstructor };
+      databaseConstructor = typeof sqlite.DatabaseSync === "function" ? sqlite.DatabaseSync : null;
+    } catch (error) {
+      databaseConstructor = null;
+      throw new LocalSqliteUnavailableError(error);
+    }
+  }
+  if (databaseConstructor === null) throw new LocalSqliteUnavailableError(undefined);
+  return databaseConstructor;
+}
+
+/** True when this host can open the SQLite store. */
+export function localSqliteAvailable(): boolean {
+  try {
+    loadDatabaseConstructor();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function openDatabase(dbPath: string): SqliteDatabase {
+  const Database = loadDatabaseConstructor();
+  let db: SqliteDatabase;
+  try {
+    db = new Database(dbPath);
+    db.exec(`PRAGMA busy_timeout = ${LOCAL_RECORD_BUSY_TIMEOUT_MS}`);
+    const check = db.prepare("PRAGMA quick_check").all() as Array<Record<string, unknown>>;
+    if (Object.values(check[0] ?? {})[0] !== "ok") throw new Error("quick_check failed");
+    db.exec("PRAGMA journal_mode = WAL");
+  } catch (error) {
+    throw Object.assign(new Error("local_record_store_corrupt"), { cause: error, path: dbPath });
+  }
+  return db;
+}
 
 function assertOfflineSet(records: readonly SurvivingOfflineRecord[]): void {
   if (!Array.isArray(records) || records.length === 0) {
@@ -65,7 +139,7 @@ export function openLocalRecordTransaction(dbPath: string): LocalRecordTransacti
   if (typeof dbPath !== "string" || dbPath.trim() === "") {
     throw new Error("offline_set_path_required");
   }
-  const db = new DatabaseSync(dbPath);
+  const db = openDatabase(dbPath);
   db.exec(`
     CREATE TABLE IF NOT EXISTS local_record (
       kind TEXT NOT NULL,

@@ -39,7 +39,7 @@ import type { Env } from '../../env';
  * they call are these.
  */
 const doubles = vi.hoisted(() => ({
-  embed: vi.fn(async () => { throw new Error('no provider'); }),
+  embed: vi.fn(async (): Promise<number[]> => { throw new Error('no provider'); }),
   ann: vi.fn(async () => [] as unknown[]),
 }));
 

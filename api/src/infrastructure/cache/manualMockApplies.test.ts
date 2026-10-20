@@ -14,5 +14,7 @@ vi.mock('./readThroughCache', () => ({
 const { getOrSetCached } = await import('./readThroughCache');
 
 it('a manual vi.mock replaces the module export', () => {
-  expect(getOrSetCached()).toBe('mocked');
+  // The mock ignores its arguments; the real signature only types the call.
+  const call = getOrSetCached as unknown as () => unknown;
+  expect(call()).toBe('mocked');
 });

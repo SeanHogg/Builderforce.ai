@@ -25,6 +25,7 @@ import {
   createMemoryLocalFirstStore,
   type LocalFirstSnapshot,
   type LocalFirstStore,
+  type LocalFirstTransaction,
 } from './store.js';
 
 /** Frame header is `BFJF1` + u32 length + u32 crc32 of the body. */
@@ -57,7 +58,7 @@ export interface JournalIo {
 function crc32(bytes: Uint8Array): number {
   let crc = 0xffffffff;
   for (let index = 0; index < bytes.length; index += 1) {
-    crc ^= bytes[index];
+    crc ^= bytes[index] ?? 0;
     for (let bit = 0; bit < 8; bit += 1) {
       crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
     }
@@ -192,8 +193,9 @@ export function createJournaledLocalFirstStore(
   const hydrate = async (initial?: LocalFirstSnapshot): Promise<void> => {
     const bytes = await options.io.read();
     const found = bytes ? decodeJournalFrames(bytes) : [];
-    if (found.length > 0) {
-      reset(structuredClone(found[found.length - 1]));
+    const latest = found[found.length - 1];
+    if (latest) {
+      reset(structuredClone(latest));
       frames = found.length;
       return;
     }
@@ -223,19 +225,13 @@ export function createJournaledLocalFirstStore(
     for (const listener of [...listeners]) listener();
   };
 
-  const transact: LocalFirstStore['transact'] = (work) => {
-    const run = tail.then(async () => {
+  const transact = <R,>(work: (transaction: LocalFirstTransaction) => Promise<R>): Promise<R> => {
+    const run = tail.then(async (): Promise<R> => {
       await open();
       const previous = state;
-      let result: unknown;
-      let next: LocalFirstSnapshot;
-      try {
-        result = await memory.transact(work);
-        next = await memory.export();
-      } catch (error) {
-        // The draft was never published by `memory.transact`; nothing to undo.
-        throw error;
-      }
+      // A throw here needs no undo: `memory.transact` never published the draft.
+      const result = await memory.transact(work);
+      const next = await memory.export();
       try {
         await beforeWrite();
         await options.io.append(encodeJournalFrame(next));

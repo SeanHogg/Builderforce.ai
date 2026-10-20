@@ -114,20 +114,23 @@ export async function commitOfflineEntityWrite<T>(
   return { records: [record], events: [committed.eventId] };
 }
 
+/** Each kind in the set carries its own payload shape, so the batch is not one `T`. */
+type OfflinePayload = Record<string, unknown>;
+
 /**
  * The five kinds of ONE offline unit of work — project, ticket, chat, audit
  * and run that belong together — commit in ONE transaction, so a kill cannot
  * leave a chat with no run or an audit with no project.
  */
-export async function commitOfflineEntitySet<T extends Record<string, unknown>>(
+export async function commitOfflineEntitySet(
   store: Pick<LocalFirstStore, 'transact'>,
   deviceId: string,
-  writes: Readonly<Record<string, OfflineWrite<T>>>,
+  writes: Readonly<Record<string, OfflineWrite<OfflinePayload>>>,
 ): Promise<CommittedOfflineWrite> {
   const occurredAt = new Date().toISOString();
   const prepared = Object.values(writes).map((write) => {
     const at = write.occurredAt ?? occurredAt;
-    const record = newLocalRecord<T>({
+    const record = newLocalRecord<OfflinePayload>({
       id: write.id ?? randomUUID(),
       entityType: write.entityType,
       payload: write.payload,
@@ -135,7 +138,7 @@ export async function commitOfflineEntitySet<T extends Record<string, unknown>>(
       destination: write.destination ?? UNBOUND_DESTINATION,
       occurredAt: at,
     });
-    const event: EnqueueEvent<T> = {
+    const event: EnqueueEvent<OfflinePayload> = {
       eventId: offlineEventId(record),
       clientEntityId: record.id,
       entityType: record.entityType,

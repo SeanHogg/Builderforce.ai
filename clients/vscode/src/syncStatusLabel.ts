@@ -5,7 +5,7 @@
  * input: no entity is read, and a cached status field is not an input.
  * The call does not mutate the list.
  */
-import type { SyncStatusStoreEvent } from "../../../packages/local-first/src/syncStatus.ts";
+import type { SyncStatusStoreEvent } from "@builderforce/local-first";
 import { statusFor } from "./entitySyncState";
 
 /**

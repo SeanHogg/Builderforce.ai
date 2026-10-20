@@ -103,13 +103,16 @@ export function queryPull<T>(input: QueryPullInput<T> | null | undefined): Query
     requireDelta: true,
     retainedThroughSeq: input.retainedThroughSeq,
   });
-  if (admitted.resnapshotRequired || admitted.cursor.kind !== 'delta') return RESNAPSHOT;
+  if (admitted.resnapshotRequired) return RESNAPSHOT;
+  // Bound once: a narrowed `admitted.cursor` does not stay narrowed inside the callbacks.
+  const cursor = admitted.cursor;
+  if (cursor.kind !== 'delta') return RESNAPSHOT;
 
   const source = Array.isArray(input.changes) ? input.changes : [];
-  const ordered = source.filter((row) => inWindow(row, admitted.cursor.seq)).sort((left, right) => left.seq - right.seq);
-  const lastSeq = ordered.reduce((max, row) => (row.seq > max ? row.seq : max), admitted.cursor.seq);
+  const ordered = source.filter((row) => inWindow(row, cursor.seq)).sort((left, right) => left.seq - right.seq);
+  const lastSeq = ordered.reduce((max, row) => (row.seq > max ? row.seq : max), cursor.seq);
   return Object.freeze({
-    changes: Object.freeze(ordered.map((row) => copyChange(row))),
+    changes: Object.freeze(ordered.map((row) => copyChange<T>(row))),
     cursor: encodeSyncCursor({ v: 1, kind: 'delta', seq: lastSeq }),
   });
 }

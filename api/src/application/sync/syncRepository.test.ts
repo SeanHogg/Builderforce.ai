@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MAX_FUTURE_CLOCK_SKEW_MS, hashSyncPayload } from '../../domain/sync/syncProtocol';
 import { createMemorySyncApplyStore, type MemorySyncApplyStore } from './idempotentApply';
@@ -53,7 +54,8 @@ function statuses(receipts: readonly AcceptPushReceipt[]): Record<string, string
  * what the module can actually DO, so the comments must not satisfy them.
  */
 function sourceWithoutComments(url: URL): string {
-  return readFileSync(url, 'utf8')
+  // `.href`: the global URL is the DOM/undici one, not node:url's.
+  return readFileSync(fileURLToPath(url.href), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/^[ \t]*\/\/.*$/gm, ' ');
 }

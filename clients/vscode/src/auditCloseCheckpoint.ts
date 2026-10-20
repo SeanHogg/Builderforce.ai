@@ -159,9 +159,10 @@ export async function closeAuditLocally(input: DurableAuditClose): Promise<{
   readonly record: LocalAuditRun;
   readonly cloud: CloudLaunchDecision;
 }> {
+  const fixedNow = input.now;
   const deps = {
     deviceId: input.deviceId,
-    ...(input.now ? { now: () => new Date(input.now) } : {}),
+    ...(fixedNow ? { now: () => new Date(fixedNow) } : {}),
   };
   await recoverInterruptedAuditRuns(input.store, deps);
   const source: Record<string, unknown> = { ...input.source };

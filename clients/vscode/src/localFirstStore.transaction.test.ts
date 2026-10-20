@@ -315,10 +315,8 @@ describe("local-first journal transaction", () => {
       schemaVersion: 1,
       payload: { title: "nope" },
       version: 1,
-      deletedAt: null,
-      createdAt: now,
+      occurredAt: now,
       updatedAt: now,
-      deviceId: "device-1",
       destination: { kind: "unbound" as const },
     };
     await expect(store.transact(async (tx) => {
@@ -390,10 +388,8 @@ describe("local-first journal transaction", () => {
         schemaVersion: 1,
         payload: { title: "recovered" },
         version: 1,
-        deletedAt: null,
-        createdAt: now,
+        occurredAt: now,
         updatedAt: now,
-        deviceId: "device-1",
         destination: { kind: "unbound" },
       });
     });

@@ -18,7 +18,7 @@ import {
   syncShownAsDone,
   type SyncStatus,
   type SyncStatusInput,
-} from "../../../packages/local-first/src/syncStatus.ts";
+} from "@builderforce/local-first";
 
 export const PRESENTED_SYNC_STATUSES = ["pending", "syncing", "synced", "conflict", "dead-letter"] as const;
 
