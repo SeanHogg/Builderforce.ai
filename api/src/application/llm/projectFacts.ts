@@ -372,19 +372,22 @@ export async function upsertProjectFact(
   const originCost = originCostColumns(origin);
   // Content score, then a small lift from how often recall has already returned
   // this key. A brand-new key has no prior count, so it keeps the content score.
-  const prior = await db
-    .select({ recallCount: projectFacts.recallCount })
-    .from(projectFacts)
-    .where(and(eq(projectFacts.tenantId, tenantId), eq(projectFacts.projectId, projectId), eq(projectFacts.key, k)))
-    .limit(1)
-    .catch((err: unknown) => {
-      // A brand-new key has no prior count, which is the normal path here. A FAILED
-      // count read is not, and it would flatter the fact: recallCount 0 skips the
-      // recall-frequency lift. Report it rather than writing a belief whose
-      // importance was computed from a stand-in zero.
-      reportCaughtError(err, { source: 'project-facts', operation: 'prior-recall-count', level: 'warning', context: { tenantId, projectId } });
-      return [] as Array<{ recallCount: number }>;
-    });
+  let prior: Array<{ recallCount: number }> = [];
+  try {
+    const result = await db
+      .select({ recallCount: projectFacts.recallCount })
+      .from(projectFacts)
+      .where(and(eq(projectFacts.tenantId, tenantId), eq(projectFacts.projectId, projectId), eq(projectFacts.key, k)))
+      .limit(1);
+    prior = result;
+  } catch (err) {
+    // A brand-new key has no prior count, which is the normal path here. A FAILED
+    // count read is not, and it would flatter the fact: recallCount 0 skips the
+    // recall-frequency lift. Report it rather than writing a belief whose
+    // importance was computed from a stand-in zero.
+    reportCaughtError(err, { source: 'project-facts', operation: 'prior-recall-count', level: 'warning', context: { tenantId, projectId } });
+    prior = [] as Array<{ recallCount: number }>;
+  }
   const recallCount = prior[0]?.recallCount ?? 0;
   const baseImportance = opts?.importance ?? factImportance(c, opts?.kind);
   const importance = clamp01(baseImportance + Math.min(0.1, recallCount * 0.01));
