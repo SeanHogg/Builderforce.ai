@@ -233,7 +233,13 @@ async function stampAnchorHashes(
       out.push(anchor);
       continue;
     }
-    const hash = await read(anchor.path).catch(() => null);
+    const hash = await read(anchor.path).catch((err: unknown) => {
+      // An anchor with no recorded hash is a real miss, but a FAILED read is not:
+      // it leaves the anchor looking unhashed so the next content check re-reads it.
+      // Report so a broken reader is distinguishable from an unindexed path.
+      reportCaughtError(err, { source: 'project-facts', operation: 'anchor-content-hash-read', level: 'warning', context: { path: anchor.path } });
+      return null;
+    });
     out.push(hash ? { ...anchor, contentHash: hash } : anchor);
   }
   return out;
