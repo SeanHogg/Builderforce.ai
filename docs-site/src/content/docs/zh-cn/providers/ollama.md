@@ -29,7 +29,13 @@ ollama pull llama3.3
 ollama pull qwen2.5-coder:32b
 # 或
 ollama pull deepseek-r1:32b
+# 或 —— JetBrains Mellum 2.1，12B MoE（每个 token 激活 2.5B），131,072 token 上下文
+ollama pull hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Q4_K_M
 ```
+
+> **注意 — Mellum 2.1：** 它和其他模型一样通过 Ollama 提供，因此不是页面引擎，只有当权重文件落到磁盘上之后才会出现在选择器中。上面的拉取命令使用的是 JetBrains 官方推荐的 `Q4_K_M` 量化版本（约 8.1 GB，MMLU-Pro 恢复率 88.0%）；`MXFP4_MOE` 约 7.0 GB，下载体积更小，而 `BF16` 是约 24.3 GB 的参考构建版本，并不适合作为本地默认值。请预留约 8 GB 的磁盘空间，以及一套 12B MoE 权重所需的内存。
+>
+> 它被发现时的标识为 `local/ollama/hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Q4_K_M`。Thinking 版本会以 `<think>` 块的形式输出思维草稿；这些内容在写入对话记录时会被规范化（`canonicalTurnText`），因此推理过程会作为推理内容呈现，而不会混入回答之中——但它确实会输出这些内容，所以请预期在第一个 token 之前会有一段停顿。如果你需要非推理版本，请改用 `…-instruct-…` 变体。
 
 3. 为 BuilderForce Agents 启用 Ollama（任意值即可；Ollama 不需要真实密钥）：
 
