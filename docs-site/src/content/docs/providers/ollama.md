@@ -36,10 +36,13 @@ ollama pull hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Q4_K_M
 > MoE weight set.
 >
 > It is discovered as `local/ollama/hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:Q4_K_M`.
-> The Thinking build emits its scratchpad in `<think>` blocks; those are normalized on the
-> way into the transcript (`canonicalTurnText`), so the reasoning renders as reasoning
-> instead of leaking into the answer — but it does emit them, so expect a pause before the
-> first token. Pull the `…-instruct-…` variant instead if you want a non-reasoning build.
+> The Thinking build does not emit inline `<think>` markers over Ollama's native
+> `POST /api/chat`: the scratchpad arrives in a dedicated `message.thinking` field, kept
+> separate from `message.content` (confirmed against Ollama 0.40.4). The Ollama runtime
+> reads a `message.reasoning` fallback instead, which Ollama does not send — so today the
+> scratchpad is not surfaced in the transcript, and it does not leak into the answer
+> either. It still generates, so expect a pause before the first token. Pull the
+> `…-instruct-…` variant instead if you want a non-reasoning build.
 
 3. Enable Ollama for BuilderForce Agents (any value works; Ollama doesn't require a real key):
 
