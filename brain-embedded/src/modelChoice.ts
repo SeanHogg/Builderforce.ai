@@ -31,6 +31,16 @@ export type ChatModelSelection =
   | { mode: 'byo_pool' }
   | { mode: 'model'; model: string };
 
+/**
+ * The per-turn `routingMode` a selection sends. Only "your keys" is an explicit choice;
+ * `auto` sends NOTHING, so the gateway applies the person's account preference (free
+ * tier first, connected accounts first, or inferred from them — api `fundingOrder.ts`)
+ * instead of a client default overriding it.
+ */
+export function routingModeForSelection(selection: ChatModelSelection): 'byo_pool' | undefined {
+  return selection.mode === 'byo_pool' ? 'byo_pool' : undefined;
+}
+
 /** The selectable model surface, grouped by WHO PAYS (see {@link ModelCategory}). */
 export interface ChatModelOptions {
   /** Tenant-defined named LLM configs (`tenant_model:<slug>`). */

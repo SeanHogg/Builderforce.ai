@@ -465,6 +465,50 @@
     "message": "Ce moteur n’est pas encore disponible ici.",
     "description": "Why a model cannot run: engine missing"
   },
+  "lmReasonVram": {
+    "message": "Nécessite plus de mémoire GPU que cet appareil n’en possède.",
+    "description": "Why a model cannot run: not enough GPU memory"
+  },
+  "lmReasonMemory": {
+    "message": "Sans GPU, nécessite plus de mémoire que cet appareil n’en possède.",
+    "description": "Why a model cannot run: not enough device memory to run without a GPU"
+  },
+  "lmBackendGpu": {
+    "message": "GPU",
+    "description": "Badge: this model runs on the GPU (WebGPU) here"
+  },
+  "lmBackendCpu": {
+    "message": "CPU",
+    "description": "Badge: this model runs on the CPU here (no GPU)"
+  },
+  "lmGroupTools": {
+    "message": "Agents et outils",
+    "description": "Model picker section: models that can use tools (agents)"
+  },
+  "lmGroupChat": {
+    "message": "Discussion",
+    "description": "Model picker section: chat models"
+  },
+  "lmGroupCoding": {
+    "message": "Code",
+    "description": "Model picker section: coding models"
+  },
+  "lmGroupReasoning": {
+    "message": "Raisonnement",
+    "description": "Model picker section: reasoning models"
+  },
+  "lmGroupMath": {
+    "message": "Mathématiques",
+    "description": "Model picker section: math models"
+  },
+  "lmAllModels": {
+    "message": "Tous les modèles ({count})",
+    "description": "Expander over every other model; {count} is how many"
+  },
+  "lmFewerModels": {
+    "message": "Moins de modèles",
+    "description": "Collapses the All models expander"
+  },
   "cmpAdd": {
     "message": "Ajouter",
     "description": "Composer + menu: trigger"
@@ -740,6 +784,86 @@
   "optStatus": {
     "message": "État",
     "description": "Tab: account / usage / Evermind"
+  },
+  "optInferenceMode": {
+    "message": "Exécution des modèles",
+    "description": "Section: where models run"
+  },
+  "optInferenceModeHybrid": {
+    "message": "Hybride",
+    "description": "Inference mode: hybrid"
+  },
+  "optInferenceModeHybridHint": {
+    "message": "D'abord cet appareil, puis le cloud Builderforce si nécessaire",
+    "description": "Hybrid: what it does"
+  },
+  "optInferenceModeLocalOnly": {
+    "message": "Local uniquement",
+    "description": "Inference mode: local only"
+  },
+  "optInferenceModeLocalOnlyHint": {
+    "message": "Uniquement les modèles de cet appareil — rien n'est envoyé au cloud",
+    "description": "Local only: what it does"
+  },
+  "optInferenceModeSpecific": {
+    "message": "Modèle précis",
+    "description": "Inference mode: a specific model"
+  },
+  "optInferenceModeSpecificHint": {
+    "message": "Le modèle choisi s'exécute toujours — cloud, vos comptes connectés ou un modèle local",
+    "description": "Specific model: what it does"
+  },
+  "optInferenceModeRecommended": {
+    "message": "Recommandé",
+    "description": "Tag on the recommended mode"
+  },
+  "optInferenceModeAskTitle": {
+    "message": "Comment Builderforce doit-il exécuter les modèles ?",
+    "description": "First-run question before the first turn"
+  },
+  "optInferenceModeAskBody": {
+    "message": "Vous pouvez le modifier à tout moment dans le menu /, sous Modèle.",
+    "description": "First-run question: it can be changed later"
+  },
+  "noLocalModel": {
+    "message": "Aucun modèle de cet appareil ne peut répondre. Passez en mode Hybride ou téléchargez un modèle local.",
+    "description": "Nothing on this device can answer and the cloud is not an option"
+  },
+  "switchToHybrid": {
+    "message": "Passer en Hybride",
+    "description": "Button: move onto Hybrid"
+  },
+  "downloadLocalModel": {
+    "message": "Télécharger un modèle local",
+    "description": "Button: open where local models are downloaded"
+  },
+  "noSpecificModel": {
+    "message": "« Modèle précis » est activé, mais aucun modèle n’est choisi. Choisissez-en un ou passez en Hybride.",
+    "description": "Banner: Specific model is on and no model is picked"
+  },
+  "pickModel": {
+    "message": "Choisir un modèle",
+    "description": "Button: open the composer's Model tab to pick a model"
+  },
+  "engineCrashed": {
+    "message": "Le modèle sur cet appareil a planté. Renvoyez le message pour le redémarrer.",
+    "description": "Chat error: the on-device model crashed (it restarts on the next send)"
+  },
+  "engineDetached": {
+    "message": "Le modèle sur cet appareil s’est arrêté avant d’avoir terminé. Renvoyez le message pour réessayer.",
+    "description": "Chat error: the on-device model stopped mid-answer"
+  },
+  "modelKeepsCrashing": {
+    "message": "Ce modèle plante sans cesse sur cet appareil. Supprimez-le ou essayez un autre modèle.",
+    "description": "Chat error: this model crashed repeatedly on this device and is refused for now"
+  },
+  "manageLocalModels": {
+    "message": "Gérer les modèles sur l’appareil",
+    "description": "Button: open Settings, where on-device models are managed and removed"
+  },
+  "modelFallback": {
+    "message": "Votre choix $1 a échoué ; réponse donnée avec Auto.",
+    "description": "Notice: the picked model failed (Hybrid) and the turn was answered with Auto; $1 = the picked model"
   },
   "stLoading": {
     "message": "Chargement du compte…",

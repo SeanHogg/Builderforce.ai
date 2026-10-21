@@ -12,6 +12,7 @@ export function usePopover<T extends HTMLElement = HTMLDivElement>() {
   const rootRef = useRef<T>(null);
   const close = useCallback(() => setOpen(false), []);
   const toggle = useCallback(() => setOpen((value) => !value), []);
+  const show = useCallback(() => setOpen(true), []);
 
   useEffect(() => {
     if (!open) return;
@@ -27,5 +28,5 @@ export function usePopover<T extends HTMLElement = HTMLDivElement>() {
     };
   }, [open]);
 
-  return { open, toggle, close, rootRef };
+  return { open, toggle, close, show, rootRef };
 }

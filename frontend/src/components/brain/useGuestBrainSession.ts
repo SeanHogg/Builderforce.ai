@@ -5,11 +5,23 @@
  * A lean view over the SAME package conversation hooks the authed BrainPanel uses
  * (useBrainChats + useBrainConversation), wired to the GUEST runtime: a guest token
  * on the transport and localStorage persistence.
+ *
+ * ANONYMOUS FIRST (operator decision): opening the panel makes NO API call. The visitor
+ * defaults to Local only — turns run on this device's model, and with none here the
+ * shared `no_local_model` remedy shows (download a model / switch to Hybrid), never a
+ * disabled panel. Hybrid is their opt-in: choosing it (the first-run question, the `/`
+ * menu, the remedy) mints the guest allowance, and a Hybrid turn that reaches the
+ * gateway mints on demand (`guestRuntime`). The landing page's one-shot prompt passes
+ * the SAME first-run gate as Send (`modeGate`), so it is never sent before a choice.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { routingModeForSelection, type ChatModelSelection } from '@seanhogg/builderforce-brain-embedded';
+import { useInferenceModeGate } from '@seanhogg/builderforce-brain-ui';
 import { usePolledResource } from '@/hooks/usePolledResource';
+import { useWebInferenceMode } from '@/lib/localFirst/useWebInferenceMode';
+import { webInferenceModeNow } from '@/lib/localFirst/webInferenceMode';
 import { useBrainChats, useBrainConversation, isStepMessage, getBrainCapability, GUEST_ROOM_CHAT_ID, type BrainCapabilityId } from '@/lib/brain';
 import { mintGuestSession, getGuestUsage } from '@/lib/guestChatApi';
 import { onGuestLimit, type GuestLimitRefusal } from '@/lib/guestLimit';
@@ -26,26 +38,25 @@ export function useGuestBrainSession({ initialPrompt, inviteCode }: { initialPro
   const t = useTranslations('guestBrain');
   const tRoom = useTranslations('guestRoom');
 
-  const [ready, setReady] = useState(false);          // guest token minted
-  const [enabled, setEnabled] = useState(true);       // kill switch / mint ok
+  // Ready at once: nothing has to be minted before a Local-only turn can run.
+  const [ready, setReady] = useState(() => !getActiveGuestRoom());
+  const [enabled, setEnabled] = useState(true);       // the guest-chat kill switch (Hybrid)
   const [roomsEnabled, setRoomsEnabled] = useState(false);
-  const [remaining, setRemaining] = useState<number | null>(null);
-  const [limit, setLimit] = useState(0);
+  const [soloRemaining, setSoloRemaining] = useState<number | null>(null);
+  const [soloLimit, setSoloLimit] = useState(0);
   const [input, setInput] = useState('');
 
   // ── Shared-room state ──────────────────────────────────────────────────────
   // `roomCode` is the room this browser is IN; `inviteCode` is one it has been
   // asked to join. They differ exactly while an invite is pending.
-  const [roomCode, setRoomCode] = useState<string | null>(null);
-  const [displayName, setDisplayName] = useState('');
+  // Read from localStorage on first render: this hook only runs client-side (the
+  // panel mounts behind `ssr: false` / an opened drawer), so there is no server
+  // render to mismatch and no reason to paint an empty value first.
+  const [roomCode, setRoomCode] = useState<string | null>(getActiveGuestRoom);
+  const [displayName, setDisplayName] = useState(getGuestDisplayName);
   const [joining, setJoining] = useState(false);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [meetingOn, setMeetingOn] = useState(false);
-
-  useEffect(() => {
-    setRoomCode(getActiveGuestRoom());
-    setDisplayName(getGuestDisplayName());
-  }, []);
 
   const inRoom = !!roomCode;
   const pendingInvite = !!inviteCode && inviteCode !== roomCode;
@@ -60,13 +71,17 @@ export function useGuestBrainSession({ initialPrompt, inviteCode }: { initialPro
   const [refusedWall, setRefusedWall] = useState<GuestLimitRefusal | null>(null);
   useEffect(() => onGuestLimit(setRefusedWall), []);
 
-  const capReached = (remaining !== null && remaining <= 0) || refusedWall !== null;
-
   // Same capability tiles as the signed-in Brain Storm empty state. Guest chats are
   // localStorage-only, so the choice is session state here rather than a persisted
   // chat field; the system-prompt injection is identical.
   const [capability, setCapability] = useState<BrainCapabilityId | null>(null);
   const capabilityPrompt = getBrainCapability(capability)?.systemPrompt;
+
+  // The guest's `/` menu Model tab: Auto, or a model downloaded into THIS browser (the
+  // guest has no gateway catalogue to pick from). Session state, like the capability.
+  // The pick rides on the call strictly — the person's pick, which the inference mode
+  // then decides about (brain-embedded's `createHostModelStream`).
+  const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
 
   const chats = useBrainChats({});
   // In a room the conversation IS the room — one fixed chat id, so every
@@ -76,6 +91,8 @@ export function useGuestBrainSession({ initialPrompt, inviteCode }: { initialPro
     chatId: activeChatId,
     modality: 'llm',
     extraSystem: capabilityPrompt,
+    ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
+    routingMode: routingModeForSelection(modelSelection),
     ensureChatId: async () => {
       if (inRoom) return GUEST_ROOM_CHAT_ID;
       const chat = await chats.create({ title: t('newChatTitle') });
@@ -96,54 +113,69 @@ export function useGuestBrainSession({ initialPrompt, inviteCode }: { initialPro
     relayStream(streamingText);
   }, [inRoom, streamingText, relayStream]);
 
-  // Mint the guest token on mount so the first send is authenticated. A null
-  // result means guest chat is disabled or unreachable → show the sign-in CTA.
-  // A visitor already in a room keeps their room-bound token.
+  // Where models run — THE web mode (anonymous default: Local only) — and THE first-run
+  // gate the composer's Send and the landing prompt both pass.
+  const inference = useWebInferenceMode();
+  const modeGate = useInferenceModeGate(inference);
+  const reachesGateway = inference.value !== 'local-only';
+  // The kill switch closes only what it governs — the gateway allowance. Local only runs
+  // on this device whatever the switch says.
+  const usable = enabled || !reachesGateway;
+
+  // NEVER MINT ON OPEN. A visitor already in a room opted in and keeps their room-bound
+  // token: their room's allowance is read. Anyone else starts with nothing sent.
   useEffect(() => {
+    if (!getActiveGuestRoom()) return;
     let cancelled = false;
-    if (getActiveGuestRoom()) {
-      void getGuestUsage().then((usage) => {
-        if (cancelled) return;
-        setEnabled(usage?.enabled ?? true);
-        setRoomsEnabled(usage?.roomsEnabled ?? true);
-        setReady(true);
-      });
-      return () => { cancelled = true; };
-    }
-    void mintGuestSession().then((usage) => {
+    void getGuestUsage().then((usage) => {
       if (cancelled) return;
-      if (!usage) { setEnabled(false); setReady(true); return; }
-      setRemaining(usage.remaining);
-      setLimit(usage.limit);
-      setRoomsEnabled(usage.roomsEnabled);
+      setEnabled(usage?.enabled ?? true);
+      setRoomsEnabled(usage?.roomsEnabled ?? true);
       setReady(true);
     });
     return () => { cancelled = true; };
   }, []);
 
-  // Keep the guest token alive past its one-hour life; the poll pauses while the
-  // tab is hidden and renews once on return.
+  // Hybrid / Specific chosen (now, or on an earlier visit): the guest allowance is theirs
+  // to see — the "N left" counter, the kill switch, rooms. Read, never minted (the opt-in
+  // mints; a Hybrid turn mints on demand). Local only reads nothing.
+  useEffect(() => {
+    if (!reachesGateway || getActiveGuestRoom()) return;
+    let cancelled = false;
+    void getGuestUsage().then((usage) => {
+      if (cancelled || !usage) return;
+      setSoloRemaining(usage.remaining);
+      setSoloLimit(usage.limit);
+      setEnabled(usage.enabled);
+      setRoomsEnabled(usage.roomsEnabled);
+    });
+    return () => { cancelled = true; };
+  }, [reachesGateway]);
+
+  // Keep the guest token alive past its one-hour life — only while the visitor runs a
+  // mode that reaches the gateway; the poll pauses while the tab is hidden and renews
+  // once on return.
   usePolledResource(
     (signal) => refreshGuestCredentials().then((state) => {
       if (signal.aborted) return;
       // A room that has ended drops us back to solo.
       setRoomCode(getActiveGuestRoom());
-      if (state) { setRemaining(state.remaining); setLimit(state.limit); }
+      if (state) { setSoloRemaining(state.remaining); setSoloLimit(state.limit); }
     }),
-    { intervalMs: CREDENTIAL_REFRESH_MS, enabled: ready && enabled, immediate: false },
+    { intervalMs: CREDENTIAL_REFRESH_MS, enabled: ready && enabled && reachesGateway, immediate: false },
   );
 
   // In a room the COMBINED counter is the truth — it is what everyone is spending.
-  useEffect(() => {
-    if (!inRoom) return;
-    if (room.remaining !== null) setRemaining(room.remaining);
-    if (room.limit) setLimit(room.limit);
-  }, [inRoom, room.remaining, room.limit]);
+  // Derived, not copied into state: the room's numbers win while they are known.
+  const remaining = inRoom && room.remaining !== null ? room.remaining : soloRemaining;
+  const limit = inRoom && room.limit ? room.limit : soloLimit;
+  // The allowance only walls a turn that would spend it: Local only runs on this device.
+  const capReached = reachesGateway && ((remaining !== null && remaining <= 0) || refusedWall !== null);
 
   const refreshUsage = useCallback(async () => {
     if (getActiveGuestRoom()) { await room.refresh(); return; }
     const usage = await getGuestUsage();
-    if (usage) { setRemaining(usage.remaining); setLimit(usage.limit); setEnabled(usage.enabled); setRoomsEnabled(usage.roomsEnabled); }
+    if (usage) { setSoloRemaining(usage.remaining); setSoloLimit(usage.limit); setEnabled(usage.enabled); setRoomsEnabled(usage.roomsEnabled); }
     // Allowances reset daily. A refusal-raised wall has no counter to retire it, so
     // it is retired HERE, the moment the server says there are turns again.
     if (usage && usage.remaining > 0) setRefusedWall(null);
@@ -155,21 +187,27 @@ export function useGuestBrainSession({ initialPrompt, inviteCode }: { initialPro
     const ok = await conv.send(text);
     if (getActiveGuestRoom()) room.setBusy(false);
     // The server consumed one message either way — refresh the counter so the wall
-    // appears the instant the allowance is spent.
-    void refreshUsage();
+    // appears the instant the allowance is spent. Local only spent nothing and sends
+    // nothing (read live: the mode may have been chosen this very turn).
+    if (webInferenceModeNow() !== 'local-only') void refreshUsage();
     return ok;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conv, refreshUsage, room]);
 
-  // Auto-send the one-shot initial prompt exactly once, after the token is ready.
+  // Auto-send the one-shot initial prompt exactly once — through THE first-run gate, so a
+  // visitor who never chose where models run is asked first and the prompt is sent the
+  // moment they answer (Local only: on this device; Hybrid: minted, then sent).
+  const doSendRef = useRef(doSend);
+  doSendRef.current = doSend;
   const sentInitialRef = useRef(false);
+  const { request: requestTurn } = modeGate;
   useEffect(() => {
-    if (!ready || !enabled || capReached || pendingInvite) return;
+    if (!ready || !usable || capReached || pendingInvite) return;
     if (sentInitialRef.current || !initialPrompt?.trim()) return;
     sentInitialRef.current = true;
-    void doSend(initialPrompt.trim());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, enabled, capReached, pendingInvite, initialPrompt]);
+    const text = initialPrompt.trim();
+    requestTurn(() => { void doSendRef.current(text); });
+  }, [ready, usable, capReached, pendingInvite, initialPrompt, requestTurn]);
 
   // A turn mid-run is not supported by the guest conversation: the box stays
   // writable and the text stays put until the run ends (or is stopped).
@@ -185,8 +223,8 @@ export function useGuestBrainSession({ initialPrompt, inviteCode }: { initialPro
 
   const adoptRoom = useCallback((state: GuestRoomState) => {
     setRoomCode(state.code);
-    setRemaining(state.remaining);
-    setLimit(state.limit);
+    setSoloRemaining(state.remaining);
+    setSoloLimit(state.limit);
     setRoomError(null);
     reloadMessages();
   }, [reloadMessages]);
@@ -225,19 +263,21 @@ export function useGuestBrainSession({ initialPrompt, inviteCode }: { initialPro
     setMeetingOn(false);
     setRoomCode(null);
     if (code) await leaveGuestRoom(code);
-    // Back to a solo guest: mint a fresh, room-less token and reload the local
-    // transcript this browser still owns.
-    const usage = await mintGuestSession();
-    if (usage) { setRemaining(usage.remaining); setLimit(usage.limit); setRoomsEnabled(usage.roomsEnabled); }
+    // Back to a solo guest: mint a fresh, room-less token (only for a mode that reaches
+    // the gateway — Local only needs none) and reload the local transcript this browser
+    // still owns.
+    const usage = webInferenceModeNow() !== 'local-only' ? await mintGuestSession() : null;
+    if (usage) { setSoloRemaining(usage.remaining); setSoloLimit(usage.limit); setRoomsEnabled(usage.roomsEnabled); }
     reloadMessages();
   }, [reloadMessages]);
 
   const visibleMessages = useMemo(() => conv.messages.filter((m) => !isStepMessage(m)), [conv.messages]);
 
   return {
-    ready, enabled, roomsEnabled, remaining, limit, input, setInput, submit,
+    ready, enabled: usable, roomsEnabled: roomsEnabled && reachesGateway, remaining, limit, input, setInput, submit,
     roomCode, inRoom, pendingInvite, displayName, joining, roomError, setRoomError,
     meetingOn, setMeetingOn, refusedWall, capReached, capability, setCapability,
     activeChatId, conv, room, visibleMessages, joinRoom, startRoom, exitRoom,
+    modelSelection, setModelSelection, modeGate,
   };
 }

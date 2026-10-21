@@ -67,7 +67,7 @@ import {
 import { captureLearningBaseline, learningPipelineReport, recordLearningRun, reviewLearningCandidate, transferLearningCandidate } from '../../application/llm/evermindLearningPipeline';
 import { projectInTenantCached } from '../../application/project/projectOwnership';
 import { MAX_DELTA_B64_CHARS, parseDeltaLearnPayload } from '@seanhogg/builderforce-memory-engine';
-import { deltaParseStatus } from '../../application/llm/evermindDeltaLearn';
+import { deltaParseRefusal } from '../../application/llm/evermindDeltaLearn';
 import { dispatchProjectEvermindLearn } from '../../application/llm/evermindDeltaDispatch';
 import { codingEvalFromReports, evermindQualifiesForCoding } from '../../application/llm/evermindCodingGate';
 import { recordProjectEvermindCodingEval } from '../../application/llm/evermindCodingEvalStore';
@@ -296,8 +296,13 @@ async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, 
   }
   // The engine's `parseDeltaLearnPayload` owns the delta contract (and reads an absent
   // body as `{}`); the route only refuses a body that is not a JSON object.
+  // It also refuses an ML-head delta (`target: 'ml:<task>'`): this door merges into the
+  // model checkpoint only. The refusal has the coordinator's `{ ok: false, error }` shape.
   const parsed = parseDeltaLearnPayload(await parseOptionalBody(c, zJsonObject));
-  if (!parsed.ok) return json({ error: parsed.error }, deltaParseStatus(parsed.reason));
+  if (!parsed.ok) {
+    const refused = deltaParseRefusal(parsed);
+    return json(refused.body, refused.status);
+  }
   const result = await dispatchProjectEvermindLearn(env, tenantId, projectId, parsed.payload);
   return json(result.body, result.status);
 }

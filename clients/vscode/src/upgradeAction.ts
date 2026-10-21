@@ -1,6 +1,7 @@
 import { chatErrorAction, type ChatErrorAction } from "@seanhogg/builderforce-brain-embedded/chatError";
 import * as vscode from "vscode";
 import { getWebBaseUrl } from "./gateway";
+import { noLocalModelMessage } from "./noLocalModelPrompt";
 
 /**
  * Turn an entitlement failure into somewhere the user can actually GO — the host
@@ -40,8 +41,18 @@ export interface UpgradeAction {
  * throw-carrying one instead of re-deriving it from error prose.
  */
 export function upgradeActionForVerdict(action: ChatErrorAction | null): UpgradeAction | null {
-  // `auth` and `sign_in` have no pricing page: the host signs in instead.
-  if (!action || action.kind === "auth" || action.kind === "sign_in") return null;
+  // `auth` and `sign_in` have no pricing page: the host signs in instead; nor do
+  // `no_local_model` (Hybrid / a download), `no_specific_model` (pick a model) and
+  // `local_engine_failed` (pick another / manage local models), whose remedies are
+  // `noLocalModelPrompt`'s.
+  if (
+    !action ||
+    action.kind === "auth" ||
+    action.kind === "sign_in" ||
+    action.kind === "no_local_model" ||
+    action.kind === "no_specific_model" ||
+    action.kind === "local_engine_failed"
+  ) return null;
 
   const url = `${getWebBaseUrl()}${PATHS[action.kind]}`;
   if (action.kind === "validate_card") {
@@ -69,6 +80,8 @@ export function formatChatError(error: unknown): string {
 /** {@link formatChatError} for a message whose verdict was classified elsewhere (the
  *  shared run loop's `errorAction`). One renderer for both entry points. */
 export function formatChatErrorVerdict(message: string, action: ChatErrorAction | null): string {
+  // The raw `no_local_model` / `no_specific_model` sentinel is never what a person reads.
+  if (action?.kind === "no_local_model" || action?.kind === "no_specific_model") return noLocalModelMessage(action.kind);
   const cta = upgradeActionForVerdict(action);
   return cta ? `${message}\n\n[${cta.label}](${cta.url})` : message;
 }

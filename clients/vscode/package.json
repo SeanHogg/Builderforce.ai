@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.55",
+  "version": "2026.10.56",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -358,6 +358,11 @@
         "command": "builderforce.pickModel",
         "title": "%command.pickModel%",
         "icon": "$(list-selection)"
+      },
+      {
+        "command": "builderforce.setInferenceMode",
+        "title": "%command.setInferenceMode%",
+        "icon": "$(server-environment)"
       },
       {
         "command": "builderforce.installSynapseModel",
@@ -849,37 +854,65 @@
           "default": true,
           "markdownDescription": "%config.localModels.localFirst.desc%"
         },
+        "builderforce.inferenceMode": {
+          "scope": "application",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "hybrid",
+            "local-only",
+            "specific",
+            null
+          ],
+          "default": null,
+          "markdownEnumDescriptions": [
+            "%config.inferenceMode.hybrid%",
+            "%config.inferenceMode.localOnly%",
+            "%config.inferenceMode.specific%",
+            "%config.inferenceMode.unset%"
+          ],
+          "markdownDescription": "%config.inferenceMode.desc%"
+        },
         "builderforce.platform.synchronize": {
+          "scope": "application",
           "type": "boolean",
           "default": false,
           "description": "%config.platform.synchronize.desc%"
         },
         "builderforce.platform.gatewayInference": {
+          "scope": "application",
           "type": "boolean",
           "default": false,
           "description": "%config.platform.gatewayInference.desc%"
         },
         "builderforce.platform.connectedFeatures": {
+          "scope": "application",
           "type": "boolean",
           "default": false,
           "description": "%config.platform.connectedFeatures.desc%"
         },
         "builderforce.platform.modelDownloads": {
+          "scope": "application",
           "type": "boolean",
           "default": false,
           "description": "%config.platform.modelDownloads.desc%"
         },
         "builderforce.platform.directProviders": {
+          "scope": "application",
           "type": "boolean",
           "default": false,
           "description": "%config.platform.directProviders.desc%"
         },
         "builderforce.platform.externalMcp": {
+          "scope": "application",
           "type": "boolean",
           "default": false,
           "description": "%config.platform.externalMcp.desc%"
         },
         "builderforce.platform.gitRemotes": {
+          "scope": "application",
           "type": "boolean",
           "default": false,
           "description": "%config.platform.gitRemotes.desc%"
@@ -974,15 +1007,15 @@
     "@seanhogg/bfi-web": "link:../../packages/bfi-web",
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
     "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",
-    "@seanhogg/builderforce-memory": "^2026.9.34",
-    "@seanhogg/builderforce-memory-engine": "^2026.9.34",
-    "@seanhogg/builderforce-memory-mcp": "^2026.9.34",
+    "@seanhogg/builderforce-memory": "^2026.10.3",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.3",
+    "@seanhogg/builderforce-memory-mcp": "^2026.10.3",
     "@seanhogg/builderforce-studio": "link:../../studio",
     "@seanhogg/builderforce-voice": "link:../../voice",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.14.0",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/vscode": "^1.95.0",
     "@typescript/native-preview": "7.0.0-dev.20260627.2",
     "@vitejs/plugin-react": "^4.3.4",
@@ -997,8 +1030,8 @@
     "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
     "ovsx": "^0.10.0",
     "postcss": "^8.4.49",
-    "react": "^18",
-    "react-dom": "^18",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "tailwindcss": "^3.4.17",

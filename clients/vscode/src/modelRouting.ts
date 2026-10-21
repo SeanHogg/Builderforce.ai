@@ -21,7 +21,7 @@
  * picked, what the project pins); this module owns the consequence.
  *
  * What deliberately does NOT route through here: the gateway's server-side services —
- * the limbic/personality block, builder insights, platform MCP tools, the model catalog.
+ * the personality block, builder insights, platform MCP tools, the model catalog.
  * Those are not completions a local runtime could serve; they are products of the
  * gateway. Telemetry, error reports and traces likewise keep going to the gateway
  * regardless of where inference ran.
@@ -33,11 +33,15 @@ import {
   completeLocalFirst,
   createHostModelStream,
   localFirstApplies,
+  NO_LOCAL_MODEL,
+  NO_SPECIFIC_MODEL,
   NOT_SIGNED_IN,
   pageRuntimePin,
   type BrainStreamFn,
+  type ModelFallbackEvent,
 } from "@seanhogg/builderforce-brain-embedded";
 import {
+  localRuntime,
   formatLocalModelRef,
   parseLocalModelRef,
   type LocalEndpoint,
@@ -57,14 +61,18 @@ import { probeLocalFirstRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeBrainRun";
 import { hostPageEngines } from "./pageEngineBridge";
+import { localSuccessStore } from "./localSuccessStorage";
 import { assertPlatformCapability, platformPolicy } from "./platformPolicy";
+import { currentInferenceMode } from "./inferenceModeSetting";
+import type { InferenceMode } from "@builderforce/local-first";
 
 /** Where one turn will run, and with which model. */
 export interface ModelRoute {
   /** The ref to send. Undefined means "let the gateway route". */
   model?: string;
   modelStrict?: boolean;
-  routingMode: "auto" | "byo_pool";
+  /** Absent = let the gateway route by the account's `cloudOrder` (see `modelState`). */
+  routingMode?: "auto" | "byo_pool";
   /**
    * Present when this turn is served by a runtime on THIS machine. Carrying the resolved
    * endpoint and bare model id (rather than re-parsing the ref downstream) is what keeps
@@ -77,6 +85,12 @@ export interface ModelRoute {
    * (see `createLocalFirstStream`). Mutually exclusive with `local` — a pin is a pin.
    */
   localFirst?: { probes: readonly LocalRuntimeProbe[] };
+  /**
+   * The person's inference mode for this turn (`inferenceModeSetting`). `local-only`
+   * never reaches the gateway: the turn is served on this machine or fails
+   * `no_local_model`, and it never needs an account.
+   */
+  inferenceMode?: InferenceMode;
 }
 
 /**
@@ -85,16 +99,36 @@ export interface ModelRoute {
  * required (see {@link routeRequiresSignIn}).
  */
 export async function resolveModelRoute(secrets: vscode.SecretStorage): Promise<ModelRoute> {
-  const choice = await resolveEffectiveModelChoice(secrets);
+  const route = await resolveChoiceRoute(secrets, { ...(await resolveEffectiveModelChoice(secrets)), inferenceMode: currentInferenceMode() });
+  return route.inferenceMode === "local-only" && !route.local && !route.localFirst ? onDeviceOnly(route) : route;
+}
+
+/**
+ * LOCAL ONLY with no local route yet — a gateway model chosen, or a pin this machine
+ * cannot serve: the turn still runs on this machine, on whatever the runtimes offer (the
+ * shared stream sets the gateway pick aside). Nothing probed ⇒ the route stays as it is,
+ * and `routeStream` fails it `no_local_model`.
+ */
+async function onDeviceOnly(route: ModelRoute): Promise<ModelRoute> {
+  const probes = await probeLocalFirstRuntimes(getLocalModelsConfig());
+  return probes.some((p) => p.models.length > 0) ? { ...route, localFirst: { probes } } : route;
+}
+
+async function resolveChoiceRoute(secrets: vscode.SecretStorage, choice: ModelRoute): Promise<ModelRoute> {
   const config = getLocalModelsConfig();
   const pin = parseLocalModelRef(choice.model);
   if (!pin) return withLocalFirst(choice, config);
-  // A model the chat webview runs on WebGPU (`local/bfi/…`, `local/webllm/…`) is served
-  // over the page-engine bridge: it needs the webview, not a configured endpoint. With
-  // the panel closed it cannot be served here, so the turn goes to the gateway rather
-  // than failing — exactly like a pin whose runtime was removed.
+  // A model the chat webview runs (`local/bfi/…`, `local/webllm/…`) is served over the
+  // page-engine bridge: it needs a port for its runtime, not a configured endpoint — the
+  // webview, or for a runtime the registry lets fall back to the host (`bfi`) the
+  // extension host's own worker once a model file is cached (`hostBfi/`). With neither,
+  // the turn goes to the gateway rather than failing — exactly like a pin whose runtime
+  // was removed.
+  // Local only: a runtime that leaves this machine (the registry's `onDevice: false` —
+  // Kimi Code) is never dispatched or authorized; the caller routes the turn on-device.
+  if (choice.inferenceMode === "local-only" && !localRuntime(pin.provider).onDevice) return choice;
   const page = pageRuntimePin(choice.model);
-  if (page) return hostPageEngines.connected() ? { ...choice, local: page } : choice;
+  if (page) return hostPageEngines.connected(page.provider) ? { ...choice, local: page } : choice;
   // A pin can outlive the thing it points at — an on-device runtime removed from
   // settings. No endpoint means no local route, so the turn falls back to the gateway
   // rather than dispatching at `undefined`. Kimi is the exception: its endpoint comes
@@ -142,7 +176,32 @@ export function localWindowProbes(): Promise<LocalRuntimeProbe[]> {
  * cloud to fall back to.
  */
 export function routeRequiresSignIn(route: ModelRoute): boolean {
-  return route.local === undefined && route.localFirst === undefined;
+  // Local only never reaches the gateway, so it never owes an account either.
+  return route.inferenceMode !== "local-only" && route.local === undefined && route.localFirst === undefined;
+}
+
+/** Whether this route may never reach the gateway (Local only). */
+function localOnly(route: ModelRoute): boolean {
+  return route.inferenceMode === "local-only";
+}
+
+/**
+ * Whether this route has nowhere to run: Local only, with nothing on this machine that
+ * could take the turn. A surface asks it BEFORE the sign-in gate and offers the
+ * `no_local_model` remedies (`noLocalModelPrompt.ts`) — signing in would not help.
+ */
+export function routeNeedsLocalModel(route: ModelRoute): boolean {
+  return localOnly(route) && !route.local && !route.localFirst;
+}
+
+/**
+ * Whether this route is Specific model with nothing picked — no model, no local pin and
+ * not the BYO pool. Specific promises the pick and nothing else, so the turn fails
+ * `no_specific_model` (the shared stream throws it too) and a surface asks it BEFORE the
+ * sign-in gate to offer "Pick a model" (`noLocalModelPrompt.ts`).
+ */
+export function routeNeedsSpecificModel(route: ModelRoute): boolean {
+  return route.inferenceMode === "specific" && !route.model && !route.local && route.routingMode !== "byo_pool";
 }
 
 /**
@@ -168,24 +227,41 @@ function logLocalFirstAttempt(record: LocalFirstAttemptRecord): void {
  * `apiKey` may be undefined only when the route is local; a gateway route without a key
  * is a caller that skipped {@link routeRequiresSignIn}, and throwing here is better than
  * sending an unauthenticated turn that fails opaquely at the gateway.
+ *
+ * `onFallback` is told when Hybrid's pick failed (transport-class) and the turn was
+ * answered with Auto — the surface that started the turn shows the one-line notice
+ * (the webview through its run host, the chat participant in its response stream).
  */
-export function routeStream(route: ModelRoute, apiKey: string | undefined): BrainStreamFn {
+export function routeStream(
+  route: ModelRoute,
+  apiKey: string | undefined,
+  onFallback?: (event: ModelFallbackEvent) => void,
+): BrainStreamFn {
+  if (routeNeedsLocalModel(route)) throw new Error(NO_LOCAL_MODEL);
   if (!apiKey && routeRequiresSignIn(route)) throw new Error(NOT_SIGNED_IN);
-  const cloud = apiKey && platformPolicy().allows("gateway-inference") ? createNativeStream(getBaseUrl(), apiKey) : null;
+  const cloud = !localOnly(route) && apiKey && platformPolicy().allows("gateway-inference") ? createNativeStream(getBaseUrl(), apiKey) : null;
   const local = route.local;
   const pinnedRef = local ? formatLocalModelRef(local.provider, local.model) : null;
-  const probes = route.localFirst?.probes ?? [];
   return createHostModelStream({
     // The model POLICY (and its strictness) rides on the call from `modelState`; the only
     // host pin is the resolved local one.
     pinned: () => pinnedRef,
     localPin: (ref) => (ref === pinnedRef ? local : null),
-    probes: async () => probes,
+    // The turn's local-first probes; for a picked route (none resolved up front) the SAME
+    // memoized probe, read only when Hybrid falls back from a failed pick to Auto.
+    probes: async () => route.localFirst?.probes ?? localWindowProbes(),
     cloud: () => cloud,
     // The bridge's fetch answers a page runtime's root (`http://bfi.local`, …) from the
     // webview's engines and passes every other runtime's request to the global fetch.
     fetch: hostPageEngines.fetch(),
     onAttempt: logLocalFirstAttempt,
+    // The mode shapes the step; signed in, a turn nothing can serve is `no_local_model`
+    // (never a sign-in prompt for someone already signed in).
+    mode: () => route.inferenceMode ?? "hybrid",
+    signedIn: () => !!apiKey,
+    // Hybrid's local-success predictor, trained on this machine's routed turns.
+    localSuccess: localSuccessStore,
+    ...(onFallback ? { onFallback } : {}),
   });
 }
 
@@ -202,17 +278,21 @@ export async function routeComplete(
   signal?: AbortSignal,
 ): Promise<string> {
   if (route.local) return completeLocal(route.local.endpoint, route.local.model, messages, signal, hostPageEngines.fetch());
+  if (routeNeedsSpecificModel(route)) throw new Error(NO_SPECIFIC_MODEL);
+  const signedIn = Boolean(await getApiKey(secrets));
   if (route.localFirst) {
-    const cloudPermitted = platformPolicy().allows("gateway-inference") && Boolean(await getApiKey(secrets));
+    const cloudPermitted = !localOnly(route) && platformPolicy().allows("gateway-inference") && signedIn;
     return completeLocalFirst({
       probes: route.localFirst.probes,
       messages,
       cloud: cloudPermitted ? () => complete(secrets, messages, route.model, signal) : null,
+      noModel: localOnly(route) || signedIn ? NO_LOCAL_MODEL : NOT_SIGNED_IN,
       fetch: hostPageEngines.fetch(),
       ...(signal ? { signal } : {}),
       onAttempt: logLocalFirstAttempt,
     });
   }
+  if (localOnly(route)) throw new Error(NO_LOCAL_MODEL);
   assertPlatformCapability("gateway-inference");
   return complete(secrets, messages, route.model, signal);
 }

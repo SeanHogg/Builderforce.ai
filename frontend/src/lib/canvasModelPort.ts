@@ -86,7 +86,8 @@ export function canvasModelPort(run: CanvasRun): LoopPorts<ChatCompletionMessage
       resolvedModel: result.resolvedModel ?? null,
       resolvedVendor: result.resolvedVendor ?? null,
       account: result.account ?? null,
-      routingMode: options.routingMode ?? 'auto',
+      // Absent = the account's funding order applied (an unpicked turn sends no routingMode).
+      routingMode: options.routingMode ?? 'account',
       toolsAdvertised: selection.tools.length,
       toolCalls: result.toolCalls.map((call) => call.name),
       finishReason: result.finishReason,

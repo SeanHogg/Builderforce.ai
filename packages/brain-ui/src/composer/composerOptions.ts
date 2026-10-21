@@ -15,7 +15,8 @@ import type {
   PromptOptionsSession,
 } from '../promptOptions/ModePane';
 import type { PromptOptionsModel } from '../promptOptions/ModelPane';
-import type { PromptOptionsMenuProps } from '../promptOptions/PromptOptionsMenu';
+import type { PromptOptionsInferenceMode } from '../inferenceMode/InferenceModeControl';
+import type { PromptOptionsMenuProps, PromptOptionsOpenRequest } from '../promptOptions/PromptOptionsMenu';
 import type { ComposerLabels } from './labels';
 
 export interface ComposerOptions {
@@ -29,6 +30,11 @@ export interface ComposerOptions {
   effort?: { value: Effort; onChange: (effort: Effort) => void; minAnswerTokens?: number };
   thinking?: { value: boolean; onChange: (on: boolean) => void };
   model?: PromptOptionsModel;
+  /** Where models run (Hybrid · Local only · Specific). `needsChoice` holds the next turn
+   *  behind the first-run question. */
+  inferenceMode?: PromptOptionsInferenceMode;
+  /** Open the `/` menu on a tab (a remedy sending the person to the Model tab). */
+  openMenu?: PromptOptionsOpenRequest;
   autoMode?: { enabled: boolean; onChange: (on: boolean) => void };
   session?: PromptOptionsSession;
 }
@@ -36,12 +42,12 @@ export interface ComposerOptions {
 type OptionGroups = Pick<
   PromptOptionsMenuProps,
   'mode' | 'memory' | 'autoMode' | 'session' | 'effort' | 'onEffortChange' | 'describeEffort'
-  | 'thinking' | 'onThinkingChange' | 'describeThinking' | 'model'
+  | 'thinking' | 'onThinkingChange' | 'describeThinking' | 'model' | 'inferenceMode' | 'openOn'
 >;
 
 /** Build the `/` menu's sections from the host's state. Pure. */
 export function composerOptionGroups(options: ComposerOptions, labels: ComposerLabels): OptionGroups {
-  const { mode, memory, effort, thinking, model, autoMode, session } = options;
+  const { mode, memory, effort, thinking, model, inferenceMode, openMenu, autoMode, session } = options;
   const thinkingOn = thinking?.value ?? false;
   const modeGroup: PromptOptionsMode | undefined = mode
     ? {
@@ -89,5 +95,7 @@ export function composerOptionGroups(options: ComposerOptions, labels: ComposerL
         }
       : {}),
     model,
+    inferenceMode,
+    openOn: openMenu,
   };
 }

@@ -325,6 +325,17 @@
     "localReasonF16": "Nécessite les shaders WebGPU 16 bits, que ce GPU ne propose pas.",
     "localReasonBuffer": "Nécessite des tampons GPU plus grands que ce que cet appareil autorise.",
     "localReasonEngine": "Ce moteur n’est pas encore disponible ici.",
+    "localReasonVram": "Nécessite plus de mémoire GPU que cet appareil n’en possède.",
+    "localReasonMemory": "Sans GPU, nécessite plus de mémoire que cet appareil n’en possède.",
+    "localBackendGpu": "GPU",
+    "localBackendCpu": "CPU",
+    "localGroupTools": "Agents et outils",
+    "localGroupChat": "Discussion",
+    "localGroupCoding": "Code",
+    "localGroupReasoning": "Raisonnement",
+    "localGroupMath": "Mathématiques",
+    "localAllModels": "Tous les modèles ({count})",
+    "localFewerModels": "Moins de modèles",
     "assessmentClosedBook": "Une évaluation sans documents est en cours — l'assistant est indisponible jusqu'à sa clôture.",
     "assessmentAssisted": "Évaluation assistée — chaque réponse de l'assistant est consignée dans le registre d'intégrité.",
     "ticketTagTitle": "Associer un ticket",
@@ -335,7 +346,17 @@
     "placeholder": "Message…",
     "send": "Envoyer",
     "queueSend": "Mettre en file d’attente — envoyé à la fin de l’exécution en cours",
-    "uploading": "Envoi en cours…"
+    "uploading": "Envoi en cours…",
+    "inferenceMode": "Exécution des modèles",
+    "inferenceModeHybrid": "Hybride",
+    "inferenceModeHybridHint": "Cet appareil d’abord, puis le cloud BuilderForce si nécessaire",
+    "inferenceModeLocalOnly": "Local uniquement",
+    "inferenceModeLocalOnlyHint": "Uniquement les modèles de cet appareil — rien n’est envoyé vers le cloud",
+    "inferenceModeSpecific": "Modèle précis",
+    "inferenceModeSpecificHint": "Le modèle que vous choisissez s’exécute toujours — dans le cloud, via vos comptes connectés ou en local",
+    "inferenceModeRecommended": "Recommandé",
+    "inferenceModeAskTitle": "Comment BuilderForce doit-il exécuter les modèles ?",
+    "inferenceModeAskBody": "Vous pouvez modifier ce choix à tout moment dans le menu /, sous Modèle."
   },
   "repoContext": {
     "title": "Ajouter le contexte du dépôt",
@@ -629,6 +650,27 @@
         "payments": "Paiements et versements"
       },
       "paymentsIntro": "Connectez un compte bancaire, PayPal, Stripe ou Wise. Les sommes qui vous sont dues sont versées sur votre destination par défaut."
+    },
+    "cloudFunding": {
+      "title": "Quel cloud exécute vos tours en premier",
+      "intro": "Lorsqu'un tour n'est pas associé à un modèle et ne peut pas s'exécuter sur cet appareil, BuilderForce l'envoie au cloud dans cet ordre.",
+      "option": {
+        "inferred": {
+          "label": "Automatique",
+          "description": "Vos comptes connectés d'abord si vous en avez ; sinon le niveau gratuit."
+        },
+        "free_first": {
+          "label": "Niveau gratuit d'abord",
+          "description": "Les modèles gratuits et le quota gratuit de Cloudflare d'abord, puis vos comptes connectés."
+        },
+        "byo_first": {
+          "label": "Mes comptes connectés d'abord",
+          "description": "Vos propres comptes fournisseur s'exécutent d'abord ; s'ils échouent, le tour passe au niveau gratuit et aux modèles de votre forfait."
+        }
+      },
+      "freeTwinNote": "Lorsqu'un modèle gratuit et un modèle payant sont identiques, le gratuit est essayé en premier — dans tous les ordres sauf le pool strict limité aux comptes connectés, et jamais à la place des modèles que vous servez depuis vos propres comptes connectés.",
+      "saveFailed": "Impossible d'enregistrer votre choix. Réessayez.",
+      "loadFailed": "Impossible de charger votre choix actuel. Rechargez la page pour réessayer."
     }
   },
   "nav": {
@@ -2732,7 +2774,31 @@
       "model": "Modèle",
       "byActionType": "Par type de travail",
       "workType": "Type de travail",
-      "noRuns": "Aucune exécution notée sur cette période."
+      "noRuns": "Aucune exécution notée sur cette période.",
+      "anomaly": {
+        "title": "Anomalies d'exécution",
+        "summary": "{flagged} des {scored} exécutions notées sont sorties nettement de la plage des exécutions précédentes",
+        "summarySampled": "≈ {flagged} des {scored} exécutions notées sont sorties nettement de la plage des exécutions précédentes (échantillon des exécutions les plus récentes)",
+        "notEnough": "Historique encore insuffisant — une exécution est évaluée dès que {minRuns} exécutions l'ont précédée.",
+        "none": "Aucune valeur aberrante parmi {scored} exécutions notées.",
+        "colIssue": "Problème",
+        "colRuns": "Exécutions",
+        "colShare": "Part",
+        "colExcess": "Surcoût",
+        "colWorst": "Pires exécutions",
+        "metric": {
+          "cost": "Coût bien au-dessus de la normale",
+          "duration": "Bien plus long que la normale",
+          "toolFailures": "Échecs d'outils inhabituels"
+        },
+        "hint": {
+          "cost": "Vérifiez le modèle sur lequel ces exécutions se sont fixées et leur nombre d’étapes.",
+          "duration": "Cherchez des blocages, des relances ou de longues attentes dans la trace d'exécution.",
+          "toolFailures": "Ouvrez la trace des outils — la cause habituelle est un outil défaillant ou une autorisation manquante."
+        },
+        "example": "{value} contre ≈ {typical} · {model}",
+        "exampleTask": "tâche #{id}"
+      }
     },
     "dora": {
       "title": "Métriques DORA",
@@ -12078,7 +12144,17 @@
       "review": "Examiner les modifications",
       "open": "Ouvrir {path}",
       "more": "+ {count} de plus"
-    }
+    },
+    "noLocalModel": "Aucun modèle de cet appareil ne peut répondre. Passez en Hybride ou téléchargez un modèle local.",
+    "modelFallback": "Votre choix {model} a échoué ; réponse donnée avec Auto.",
+    "switchToHybrid": "Passer en Hybride",
+    "downloadLocalModel": "Télécharger un modèle local",
+    "noSpecificModel": "« Modèle précis » est activé, mais aucun modèle n’est choisi. Choisissez-en un ou passez en Hybride.",
+    "pickModel": "Choisir un modèle",
+    "engineCrashed": "Le modèle sur cet appareil a planté. Renvoyez le message pour le redémarrer.",
+    "engineDetached": "Le modèle sur cet appareil s’est arrêté avant d’avoir terminé. Renvoyez le message pour réessayer.",
+    "modelKeepsCrashing": "Ce modèle plante sans cesse sur cet appareil. Supprimez-le ou essayez un autre modèle.",
+    "manageLocalModels": "Gérer les modèles sur l’appareil"
   },
   "chatMessage": {
     "copy": "Copier",
@@ -16821,6 +16897,7 @@
     "emptyBody": "Décrivez une idée, une fonctionnalité ou un problème — Brain vous aide à l'approfondir. Aucun compte requis pour commencer.",
     "placeholder": "Posez n'importe quelle question à Brain…",
     "loading": "Démarrage de Brain…",
+    "aiUnavailable": "Le mode Hybride n’a pas pu démarrer pour le moment. Réessayez dans un instant, ou passez en Local uniquement pour répondre sur cet appareil.",
     "send": "Envoyer",
     "remaining": "{count, plural, =0 {Aucun message gratuit restant} one {# message gratuit restant} other {# messages gratuits restants}}",
     "tagline": "Essayez Brain gratuitement — sans inscription",

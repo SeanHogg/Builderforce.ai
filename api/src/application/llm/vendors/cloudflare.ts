@@ -48,8 +48,8 @@ import {
 // retired). Keep in sync with the live catalog, not from memory.
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
   // General utility (function-calling capable, but not curated coders).
-  { id: '@cf/meta/llama-3.1-8b-instruct-fp8', tier: 'STANDARD', label: 'Llama 3.1 8B FP8 (Cloudflare)',  brand: 'Meta',   capabilities: ['tools'] },
-  { id: '@cf/google/gemma-4-26b-a4b-it',      tier: 'STANDARD', label: 'Gemma 4 26B A4B (Cloudflare)',   brand: 'Google', capabilities: ['tools'] },
+  { id: '@cf/meta/llama-3.1-8b-instruct-fp8', tier: 'STANDARD', weights: 'llama-3.1-8b-instruct', label: 'Llama 3.1 8B FP8 (Cloudflare)',  brand: 'Meta',   capabilities: ['tools'] },
+  { id: '@cf/google/gemma-4-26b-a4b-it',      tier: 'STANDARD', weights: 'gemma-4-26b-a4b-it', label: 'Gemma 4 26B A4B (Cloudflare)',   brand: 'Google', capabilities: ['tools'] },
   // Agentic coders — tool-capable, drive the multi-turn coding loop on free neurons.
   // `contextWindow` is the LIVE per-model limit (verified via `wrangler ai models`).
   // ALL are kept — the small-window ones are great first-pass picks for small tasks

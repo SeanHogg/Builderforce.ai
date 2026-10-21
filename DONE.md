@@ -1,3 +1,164 @@
+## ✅ RESOLVED 2026-10-21 — bfi CPU threads and the CPU-backend review fixes (builderforce-inference 2026.10.9)
+
+- **Threads:** `wasm-bindgen-rayon` 1.3, built behind the `threads` feature on pinned `nightly-2026-10-15`.
+  - Headless-Chrome proof under COOP/COEP: 16 threads, bit-identical results, 11 ms sequential vs 4 ms parallel.
+  - The web app is already cross-origin isolated and serves the threaded build.
+  - Rovr and the VSIX webview run single-threaded on purpose: neither is isolated, and MV3's CSP blocks the pool's `blob:` workers.
+- **Fit and engine agree:** `createBfiEngine` opens `create({ backend: fit.backend })`.
+- **CPU memory rule lives in Rust only:** `kv_plan::cpu_memory_ceiling` (min of 4 GiB, half of device RAM, or 2 GiB assumed) is generated into `bfiLimits.generated.ts` and held by `--check`.
+- **Engine crashes recover:** a wasm trap drops the module and its resident models, and the worker posts a fatal message and is respawned.
+- **Race and lifecycle fixes:**
+  - `hostBfi/runtime.ts` `refresh()` runs one at a time and checks `disposed` after the await.
+  - One `createEngineWorker`/`serveEngineWorker` lifecycle, shared by the host worker and the web Worker, with a 5-minute idle teardown and `dispose()`.
+- **VSIX GPU/CPU split:** the webview takes WebGPU turns only; CPU turns go to the extension host worker, so there is a single CPU copy.
+- **Vendoring:**
+  - The dirty check covers every wasm input crate plus the lockfiles and config.
+  - Threads are optional (`--threads`), and the `threads/` files are recorded.
+  - `copy-bfi-threads` clears stale output.
+- **Picker:** a downloaded, active or pinned model always shows (with its unfit reason and Remove).
+- **Smaller fixes:** model-file readers are closed when the panel closes; the dead `'host'` reach is removed; the WebLLM generator warns about the models it skips.
+- **Verified:** Rust (bfi-core 33 tests plus the threads test, bfi-models 28); local-inference 69, brain-embedded 48, brain-ui 14, VSIX 72, Rovr 20; a real 248 MB Bonsai 1.7B CPU turn through the host worker. Commit `09a7667`.
+
+## ✅ RESOLVED 2026-10-21 — Cloud funding order review fixes
+
+- **Free twins:** expanded on the seed *before* `composeFreeCappedCascade`, so a free twin counts against `freeBudget`. Twins are included in the cooldown prefetch (`cheaperTwinsOf`, `freeTier.ts`).
+- **Owner-served models** (the tenant's own accounts): never free-capped, never given or used as a twin, and skipped entirely under `byoStrict`.
+- **`byo_first`:** now means connected accounts first, then the pool (`{ allowGatewayAuto: true }`), not strict. Strict applies only to an explicit `byo_pool` request and to the server callers via `strictWhenConnected` (`tenantProxy`, `cloudLlmTurn`, `cloudAgentEngine`), which behave as before.
+- **VS Code:** `modelState.ts` and `VsCodeChatSurface` no longer send `routingMode: 'auto'` (they use `routingModeForSelection`), so editor turns read `cloudOrder`.
+- **Preference read:** a failed read falls back to inferred (`reportCaughtError`) instead of failing the completion.
+- **Shared list:** `CLOUD_ORDERS` / `CloudOrder` / `isCloudOrder` are now a single copy in `packages/model-catalog`.
+- **Settings card:** separate `loadFailed` / `saveFailed` messages and corrected copy, in all five locales.
+- **Verified:** api typecheck plus 199/199 tests (fundingOrder, freeTier, the new proxySeed, accountBrainPreferences, all 22 `LlmProxyService.*`, tenantProxy, cloudAgentEngine); model-catalog test; frontend typecheck, hooks ratchet and i18n keys; VSIX host typecheck.
+
+## ✅ RESOLVED 2026-10-21 — Evermind ML task catalog wired into Builderforce.ai (memory ^2026.10.3)
+
+- **(a) Dependencies:** api, frontend, brain-embedded, the VSIX and agent-runtime are on `^2026.10.3`, installed.
+- **(b) run.local-success in Hybrid:**
+  - The seam is `hostModelStream.ts` (`localSuccess?: LocalSuccessStore`), consulted only in Hybrid Auto.
+  - It skips local when P(fail) > 0.8, with 10% exploration, once the head is trained (8+ samples, held-out loss < ln 2). Cold start always tries local.
+  - Every outcome is a label, cloud fallbacks included.
+  - Stores: localStorage (web), `chrome.storage.local` (Rovr), globalState (VSIX).
+  - No API call. Federation is logged as its own entry.
+- **(c) run.anomaly in Insights:**
+  - `GET /api/insights/run-anomalies` serves `summarizeRunAnomalies` (the engine's `fitRunAnomaly`), grouped as one issue per metric.
+  - Cached through `getOrSetCached` on `outcomesVersionKey`, capped at 1000 rows (≈ when sampled).
+  - `RunAnomaliesCard` sits in the Engineering lens, in 5 locales.
+- **(d) Affect computed locally:**
+  - `turnAffectBlock` and `personalitySetpoints` (brain-embedded) replace the per-turn `/api/limbic/block` call on web and the VSIX.
+  - The personality is fetched once per session, and the turn text never leaves the device. Anonymous and offline users get neutral setpoints.
+  - The VSIX personality code moved out of `gateway.ts` into `personalityLimbic.ts`. The dead `fetchLimbicBlock` was deleted.
+- **(e) LM delta merge gated on eval:**
+  - `ProjectEvermindCoordinatorDO` merges through `gateEvermindMerge` (`mergeCheckpointDiffsGated` + `meanEvalLoss`).
+  - A merge that raises eval loss is refused with 409 (`mergeRegressionRefusal`, the `DeltaRefusal` shape), and nothing is published.
+  - Unscored merges (no held-out set yet) are accepted.
+- **Also:** the guest gateway fetch goes through `fetchWithTransportReport` (the `check:api-transport` guard).
+
+## ✅ RESOLVED 2026-10-21 — Inference modes (rounds one and two), anonymous-first, cloud funding round two, bfi CPU round two, VSIX React 19
+
+- **Inference modes, round one** (all 9 findings):
+  - web Local only guards recall and limbic;
+  - the VSIX mode is user-scoped only;
+  - Specific is strict and a Hybrid pick tries local;
+  - the guest download menu works and opens one composer;
+  - there is one definition of signed in;
+  - the VSIX policy refresh runs after the key read;
+  - dead code removed, the a11y gaps closed, and the Rovr flash, `/token` rule and duplicate labels fixed.
+- **Anonymous-first** (operator 2026-10-21; Rovr and Studio are used anonymously):
+  - Opening Studio, the canvas or the guest panel makes no API call and creates no guest session. Local only is fully offline.
+  - The guest token is not a session (`webSignedIn`). Choosing Hybrid creates the guest session through `ensureGuestToken`, and only then is the held landing prompt sent (`useInferenceModeGate` in brain-ui, shared by every composer).
+- **Web gate:**
+  - `content` tag plus `isContentRequest` in `@builderforce/local-first` platformRoutes.
+  - Local only refuses content and gateway-inference requests, credentialed or anonymous, and error reports are dropped.
+  - Every WebSocket goes through `openSocket`, which asks the gate and parks quietly.
+  - `/api/brain/stream` is now `gateway-inference`.
+- **Fallback after a pick:**
+  - Only local engine failures, transport and stream errors, and 5xx fall back (`isFallbackFailure`). 401/402/403 are final.
+  - `onFallback` drives one `ModelFallbackNotice` on Web, the VSIX (`run.modelFallback`) and Rovr, in 5 locales.
+- **Cloud funding, round two:**
+  - `unpicked` no longer stamps `routingMode`;
+  - `OWNER_SERVED_VENDOR_ATTEMPT_CAP` = 3;
+  - twin cooldowns are prefetched for the whole seed;
+  - `requestFundingOrder` is shared by `/v1/chat/completions` and `/v1/messages`;
+  - `isOwnerServed` is required;
+  - the `freeTwinNote` copy is fixed and the telemetry records `account`;
+  - `useRovingRadioGroup` (brain-ui) is used by the mode control and the funding card.
+- **bfi CPU, round two (inference 2026.10.10):**
+  - The VSIX picker is the webview GPU plus the host CPU (`withPeerBackends`, `modelFile.support`).
+  - bfi runs in a Worker on every host. There is no sticky crash flag; a trap restarts the worker.
+  - The thread-pool start times out at 10 s and restarts single-threaded.
+  - Loads are queued per engine (`engineQueue`).
+  - When the device reports no memory, desktop assumes 8 GiB and mobile 2 GiB (Rust `ASSUMED_DESKTOP_MEMORY_BYTES`).
+  - Bridge: probes are merged per model, with probe and chat-idle timeouts, a heartbeat, and dormant ports.
+  - A crash breaker stops a model after 2 crashes in 10 minutes.
+  - A failed load cancels its store stream.
+  - `vendor-bfi-web --check` is hardened.
+  - The engine-failure i18n (`local_engine_failed`) is on all three hosts.
+- **VSIX canvas React 19:** React 19.3.1 everywhere. `tsconfig.canvas.json` paths point at the VSIX's own `@types/react`, and the canvas typecheck passes with 0 errors.
+- **Verified (Sonnet), targeted runs:**
+  - vendor `--check` against inference e88f94a, and memory-engine 2026.10.3 in all 5 consumers;
+  - brain-embedded tsc, tsgo, build and 100/100 tests;
+  - brain-ui tsc and 18/18 tests; local-first 61/61; local-inference 27/27;
+  - VSIX: src, webview and canvas tsc, 50/50 tests, and the webview build emits the bfi worker;
+  - Rovr tsc and 17/17 tests;
+  - frontend typecheck, 109/109 tests and `check:i18n-keys`;
+  - api type-check and 50/50 funding tests.
+
+## ✅ RESOLVED 2026-10-21 — Evermind round-two review fixes (builderforce-memory 2026.10.3 · api)
+
+- **run.anomaly floors per feature:** `minScale` is a number or one value per feature (robust-z, EWMA, composite). The floors come from a 3× jump: cost 0.0530, duration 0.0243, failures 0.1. A 10 s → 15 min run now flags; a 1.5× wobble does not.
+- **experience.quality is leave-one-out:** `KnnModel.excluding(i)`. A document no longer votes for itself, and at 5 or more finished runs the observed rate decides (`QUALITY_OBSERVED_MIN_RUNS`).
+- **Curation is persisted and bounded:** `curated_out` records (`recordCuration`) are skipped while their verdict stands and returned as `alreadyDropped`. Training is capped at `CURATION_KNOWN_LIMIT` (200), and the LM loaded for curation is reused by the first adaptation pass.
+- **Non-finite gradients are skipped:** AdamW (CPU and the WGSL kernel) skips a NaN/Inf element. `HeadTrainer` reports `skippedNonFinite`/`diverged`, and clipping uses finite elements only.
+- **api:** the unreachable `refuseNonModelTarget` was deleted. Delta parse failures go through one `deltaParseRefusal()` shared by the route and the DO.
+- **Verified (Sonnet):**
+  - engine tsc and 158/158 tests (ml_tasks, ml_classical, ml_runner, experience, kernels);
+  - memory-mcp tsc and experience 10/10;
+  - api type-check and 48/48 tests (delta learn, coordinator DO, learn route).
+
+## ✅ RESOLVED 2026-10-21 — Evermind ML catalog review fixes (builderforce-memory 2026.10.2 · api guard)
+
+- **Head delta could overwrite the LM checkpoint:** `parseDeltaLearnPayload` takes the expected target and refuses an `ml:<task>` delta at the LM door. The api refuses it too once it runs engine ≥ 2026.10.2, which it pins (400). A separate api guard was added, then removed in round two as unreachable.
+- **HeadTrainer:** packs the full 48-byte `AdamParams` uniform, and the CPU path uses the shared `adamwUpdateInPlace` with its NaN guard.
+- **experience.quality:** unscored items are kept, the label leak is removed, and it uses kNN with k = ⌊√n⌋ and `minSamples` 12. Curation is wired into `experience_train { curate }` and dedupes against the 200 most recently learned documents.
+- **Naive Bayes:** masks unseen classes.
+- **run.anomaly:** one `anomaly-composite` engine with a 0.1 minimum scale, so one or two failures after a clean history are normal and three or more are flagged.
+- **ML-head merge gate:** fails closed on a null or NaN loss.
+- **Runner:** falls through to the next engine on a failed predict or extract; unknown modes throw.
+- **Edge cases and structure:** k-means++, GBM and logistic edge cases fixed; one `sigmoid` and one `mlEvalLoss`; the evermind↔ml import cycle broken via `evermind/ml_head.ts`; `.gitattributes` forces LF.
+- **Verified:** release check green (engine 556, memory 886, mcp 54); api typecheck plus guard tests 38/38. Commit `c06fcda`, tag `v2026.10.2`. Consumers moved to `^2026.10.2`.
+
+## ✅ RESOLVED 2026-10-20 — Evermind ML task catalog shipped in builderforce-memory 2026.10.1
+
+- `memory-engine` `src/ml/`: one registry, one runner (Local only / Hybrid / Specific pick the engine), `HeadTrainer` extracted from `LimbicTrainer` (now a thin registration; limbic tests unchanged), nine classical algorithms (kNN, naive Bayes, logistic, linear, k-means, robust-z, EWMA, isolation forest, small GBM).
+- Tasks: `limbic.affect`, `experience.quality`, `experience.dedupe`, `run.anomaly`, `run.local-success`.
+- Trained heads federate over the existing delta wire (`ml:<task>` target); `mergeCheckpointDiffsGated` refuses a merge that worsens held-out loss. The Evermind package manifest carries `mlHeads`; memory-mcp training takes an opt-in `curate` step.
+- Release check green (engine 530, memory 886, mcp 53 tests); commit `7394064`, tag `v2026.10.1` (CI publishes to npm). Design: `builderforce-memory/docs/ml-task-catalog.md`. The Builderforce.ai consumer wiring stays open in ROADMAP.
+
+## ✅ RESOLVED 2026-10-20 — Inference modes Local only · Hybrid · Specific on Web, Rovr and VSIX + VSIX offline review fixes
+
+- ONE `InferenceMode` (`packages/local-first/src/inferenceMode.ts`): `defaultInferenceMode` = Hybrid signed in, Local only signed out; `policyForInferenceMode` / `resolveInferencePolicy` derive the platform capabilities (the seven per-capability settings stay as advanced overrides; Local only can never reach the gateway).
+- ONE route rule in brain-embedded `createHostModelStream`: Local only never builds a cloud stream and refuses any runtime the registry marks `onDevice: false` (Kimi Code included, VSIX + Rovr too); a turn nothing local can serve fails `no_local_model` (Switch to Hybrid / Download a local model) — a signed-in person no longer sees the sign-in prompt.
+- Shared UI: `InferenceModeControl` in the `/` menu MODEL tab and `InferenceModeFirstRun` on a signed-in person's first turn (brain-ui), on all three hosts; `PromptOptionsMenu` `openOn` opens the menu on a tab (replaces a DOM-click workaround); guest panel gets the remedies. Localized in every host catalog.
+- Hosts persist the mode (VSIX `builderforce.inferenceMode`, Rovr `policy.inferenceMode`, web `bf_inference_mode_v1`), so existing signed-in users land on Hybrid and keep heartbeat / assigned work / attention / insights.
+- ONE platform route table (`packages/local-first/src/platformRoutes.ts`): read-style POSTs (limbic block, recall, search, dashboard queries, model catalog, connect heartbeat) are `connected-feature`, real writes `synchronize`; all three hosts classify through it.
+- VSIX: a failed personality fetch is no longer cached for the session (`personalityBlockCache.ts`).
+- Verified: every package type-check (brain-embedded tsgo+tsc, brain-ui, chrome, frontend, VSIX main/webview/harness/test-integration); 339 targeted tests across local-first, brain-embedded, brain-ui, VSIX, Rovr, frontend; frontend guards. Open, tracked separately: VSIX `webview/tsconfig.canvas.json` errors (pre-existing / other slices / duplicate `@types/react`).
+
+## ✅ RESOLVED 2026-10-20 — WebLLM catalog: 80 generated models, grouped by use on all three hosts
+
+- `scripts/gen-webllm-catalog.mjs` generates `packages/local-inference/src/webllmCatalog.generated.ts` from `@mlc-ai/web-llm@0.2.84` (`prebuiltAppConfig`): q4f16 + `-1k` builds, embedders kept, >24 GB VRAM dropped; `tools` only for WebLLM's `functionCallingModelIds` (Hermes 2 Pro / Hermes 3 8B). `--check` drift guard wired as `check:webllm-catalog` in `frontend/scripts/checks.manifest.mjs`.
+- `LocalCatalogModel` gains `uses` (chat · coding · reasoning · math · vision · embedding), `recommended`, `requires.vramBytes`; `localCatalogFor` offers chat rows only (vision-only + embedding rows stay data). `localModelFit` adds `vram_too_small`.
+- ONE picker rule `catalogPicker.ts` `localPickerView` (curated rows by section — Agents & tools · Chat · Coding · Reasoning · Math — "All models (N)" for the rest, unfit rows hidden, downloaded/pinned rows never buried), rendered by brain-ui `LocalModelList` on web, VSIX webview and Rovr; labels localized in all five languages on every host.
+- Verified: generator `--check`; local-inference, brain-embedded, brain-ui, chrome type-check; 249 targeted tests across local-inference, brain-embedded, brain-ui, chrome, vscode, frontend; frontend i18n keys.
+
+## ✅ RESOLVED 2026-10-20 — Cloud funding order: free tier first, account preference, free twins (api · frontend · brain-embedded)
+
+- **ONE rule** `api/src/application/llm/fundingOrder.ts` `resolveFundingOrder`: per-turn `routingMode` → the person's account `cloudOrder` (`inferred | free_first | byo_first`) → inference (BYO connected ⇒ BYO first, else free first). Replaces the four inline BYO-required copies (completions route, `tenantProxy`, `cloudLlmTurn`, `cloudAgentEngine`); agent runs keep BYO-first when a provider is connected.
+- **Free first** (`freeTier.ts` `orderFreeFirst`): FREE models + the Cloudflare allowance, then connected accounts, then the plan pool (`proxySeed.ts`, `freeFirst` on `ProxyConfig`).
+- **Free twins** (`freeTier.ts` `preferFreeTwins`, `vendors/modelTwins.ts`): `VendorModelEntry.weights` marks the same open weights across vendors; a paid model's cheapest capable twin is tried directly ahead of it, the paid one kept as fallback.
+- **Account setting**: `cloudOrder` on account Brain preferences (cached read, invalidated on save; saves are partial merges); `CloudFundingPreference` card on Settings › Integrations, five locales. Web clients no longer send `routingMode: 'auto'` (`routingModeForSelection`), so all three hosts honour the preference.
+- Verified: api + brain-embedded + frontend type-check; 12 routing/preference test files (189 tests); frontend guards incl. design-scale at baseline.
+
 ## ✅ RESOLVED 2026-10-20 — Release CI red on main after the review fixes (api 2026.10.63 · VSIX 2026.10.55 · local-first 2026.10.21)
 
 - `packages/local-first` tests asserted dependency keys (`project:project-1:v1`) where the store now writes the dependency's minted event id (`store.ts` `resolveDependencies`); `transactionalRecord`, `localTools`, `localWork` assert the wire id. `networkDenialScenario.ts` matched the restored event by `eventId` against the logical key — it now matches by `idempotencyKey`.

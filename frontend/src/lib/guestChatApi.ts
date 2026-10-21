@@ -16,6 +16,8 @@ import { apiRequestStream } from './apiClient';
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getVisitorId, getFirstTouch } from './visitor';
 
+/** A guest token is a Hybrid opt-in's gateway allowance — NOT a session: it never makes
+ *  the visitor "signed in" for the inference mode's default (`webSignedIn`). */
 const GUEST_TOKEN_KEY = 'bf_guest_token';
 const GUEST_TOKEN_EXP_KEY = 'bf_guest_token_exp'; // unix ms
 

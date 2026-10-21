@@ -19,6 +19,7 @@ import { apiRequestStream } from './apiClient';
 import { apiSocketUrl } from './apiSocket';
 import { getVisitorId, getExistingVisitorId, getFirstTouch } from './visitor';
 import { storeGuestToken, clearGuestToken, getStoredGuestToken, mintGuestSession } from './guestChatApi';
+import { webInferenceModeNow } from './localFirst/webInferenceMode';
 import type { MediaRoomTransport } from './useMediaRoom';
 
 const ROOM_CODE_KEY = 'bf_guest_room';
@@ -181,10 +182,16 @@ export async function joinGuestRoom(code: string, name: string): Promise<GuestRo
  * ROOM, not handed a fresh solo token. Minting a plain one would quietly move them
  * off the room's combined allowance and out of its relay, and the only symptom
  * would be that everyone else stopped seeing their work.
+ *
+ * Mints ONLY off Local only (see the body) — a guest token is the gateway allowance a
+ * Hybrid opt-in buys, so on Local only this answers the stored token or null.
  */
 export async function ensureGuestToken(): Promise<string | null> {
   const existing = getStoredGuestToken();
   if (existing) return existing;
+  // The mint is the Hybrid opt-in's, never a side effect of using the product: an
+  // anonymous visitor on Local only (the default) sends nothing — not even a mint.
+  if (webInferenceModeNow() === 'local-only') return null;
   await refreshGuestCredentials();
   return getStoredGuestToken();
 }

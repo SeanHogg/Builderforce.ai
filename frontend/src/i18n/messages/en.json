@@ -325,6 +325,17 @@
     "localReasonF16": "Needs WebGPU 16-bit shaders, which this GPU does not offer.",
     "localReasonBuffer": "Needs larger GPU buffers than this device allows.",
     "localReasonEngine": "This engine is not available here yet.",
+    "localReasonVram": "Needs more GPU memory than this device has.",
+    "localReasonMemory": "Needs more memory than this device has to run without a GPU.",
+    "localBackendGpu": "GPU",
+    "localBackendCpu": "CPU",
+    "localGroupTools": "Agents & tools",
+    "localGroupChat": "Chat",
+    "localGroupCoding": "Coding",
+    "localGroupReasoning": "Reasoning",
+    "localGroupMath": "Math",
+    "localAllModels": "All models ({count})",
+    "localFewerModels": "Fewer models",
     "assessmentClosedBook": "A closed-book assessment is live — the assistant is unavailable until it closes.",
     "assessmentAssisted": "Assisted assessment — every assistant turn is recorded on the integrity ledger.",
     "ticketTagTitle": "Tag a ticket",
@@ -335,7 +346,17 @@
     "placeholder": "Message…",
     "send": "Send",
     "queueSend": "Queue message — sends when the current run finishes",
-    "uploading": "Uploading…"
+    "uploading": "Uploading…",
+    "inferenceMode": "Run models",
+    "inferenceModeHybrid": "Hybrid",
+    "inferenceModeHybridHint": "This device first, then BuilderForce cloud when it needs to",
+    "inferenceModeLocalOnly": "Local only",
+    "inferenceModeLocalOnlyHint": "Only models on this device — nothing is sent to the cloud",
+    "inferenceModeSpecific": "Specific model",
+    "inferenceModeSpecificHint": "The model you pick always runs — cloud, your connected accounts or one local model",
+    "inferenceModeRecommended": "Recommended",
+    "inferenceModeAskTitle": "How should BuilderForce run models?",
+    "inferenceModeAskBody": "You can change this any time in the / menu, under Model."
   },
   "repoContext": {
     "title": "Add repository context",
@@ -629,6 +650,27 @@
         "payments": "Payments & payouts"
       },
       "paymentsIntro": "Connect a bank account, PayPal, Stripe or Wise. Money owed to you is sent through your default destination."
+    },
+    "cloudFunding": {
+      "title": "Which cloud runs your turns first",
+      "intro": "When a turn isn't pinned to a model and can't run on this device, BuilderForce sends it to the cloud in this order.",
+      "option": {
+        "inferred": {
+          "label": "Automatic",
+          "description": "Your connected accounts first if you have any; otherwise the free tier."
+        },
+        "free_first": {
+          "label": "Free tier first",
+          "description": "Free models and the Cloudflare free allowance first, then your connected accounts."
+        },
+        "byo_first": {
+          "label": "My connected accounts first",
+          "description": "Your own provider accounts run first; if they can't, the turn falls back to the free tier and your plan's models."
+        }
+      },
+      "freeTwinNote": "When a free model and a paid model are the same, the free one is tried first — in every order except the strict connected-accounts-only pool, and never in place of models you serve from your own connected accounts.",
+      "saveFailed": "Couldn't save your choice. Try again.",
+      "loadFailed": "Couldn't load your current choice. Reload the page to try again."
     }
   },
   "nav": {
@@ -2732,7 +2774,31 @@
       "model": "Model",
       "byActionType": "By work type",
       "workType": "Work type",
-      "noRuns": "No scored runs in this window yet."
+      "noRuns": "No scored runs in this window yet.",
+      "anomaly": {
+        "title": "Run anomalies",
+        "summary": "{flagged} of {scored} scored runs were far outside the range of the runs before them",
+        "summarySampled": "≈ {flagged} of {scored} scored runs were far outside the range of the runs before them (a sample of the most recent runs)",
+        "notEnough": "Not enough history yet — a run is judged once {minRuns} runs have come before it.",
+        "none": "No outliers among {scored} scored runs.",
+        "colIssue": "Issue",
+        "colRuns": "Runs",
+        "colShare": "Share",
+        "colExcess": "Excess cost",
+        "colWorst": "Worst runs",
+        "metric": {
+          "cost": "Cost far above normal",
+          "duration": "Took far longer than normal",
+          "toolFailures": "Unusual tool failures"
+        },
+        "hint": {
+          "cost": "Check the model these runs locked onto and how many steps they took.",
+          "duration": "Look for stalls, retries or long waits in the run trace.",
+          "toolFailures": "Open the tool trace — a broken tool or a missing permission is the usual cause."
+        },
+        "example": "{value} vs ≈ {typical} · {model}",
+        "exampleTask": "task #{id}"
+      }
     },
     "dora": {
       "title": "DORA Metrics",
@@ -12078,7 +12144,17 @@
       "review": "Review changes",
       "open": "Open {path}",
       "more": "+ {count} more"
-    }
+    },
+    "noLocalModel": "No model on this device can answer. Switch to Hybrid, or download a local model.",
+    "modelFallback": "Your pick {model} failed; answered with Auto.",
+    "switchToHybrid": "Switch to Hybrid",
+    "downloadLocalModel": "Download a local model",
+    "noSpecificModel": "Specific model is on, but no model is picked. Pick one, or switch to Hybrid.",
+    "pickModel": "Pick a model",
+    "engineCrashed": "The on-device model crashed. Send again to restart it.",
+    "engineDetached": "The on-device model stopped before it finished. Send again to retry.",
+    "modelKeepsCrashing": "This model keeps crashing on this device. Remove it, or try another model.",
+    "manageLocalModels": "Manage on-device models"
   },
   "chatMessage": {
     "copy": "Copy",
@@ -16821,6 +16897,7 @@
     "emptyBody": "Describe an idea, a feature, or a problem — Brain will help you think it through. No account needed to start.",
     "placeholder": "Ask Brain anything…",
     "loading": "Starting Brain…",
+    "aiUnavailable": "Hybrid could not start right now. Try again in a moment, or switch to Local only to answer on this device.",
     "send": "Send",
     "remaining": "{count, plural, =0 {No free messages left} one {# free message left} other {# free messages left}}",
     "tagline": "Try Brain free — no sign-up needed",

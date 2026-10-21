@@ -325,6 +325,17 @@
     "localReasonF16": "Erfordert WebGPU-16-Bit-Shader, die diese GPU nicht bietet.",
     "localReasonBuffer": "Erfordert größere GPU-Puffer, als dieses Gerät zulässt.",
     "localReasonEngine": "Diese Engine ist hier noch nicht verfügbar.",
+    "localReasonVram": "Benötigt mehr GPU-Speicher, als dieses Gerät hat.",
+    "localReasonMemory": "Benötigt ohne GPU mehr Arbeitsspeicher, als dieses Gerät hat.",
+    "localBackendGpu": "GPU",
+    "localBackendCpu": "CPU",
+    "localGroupTools": "Agenten & Tools",
+    "localGroupChat": "Chat",
+    "localGroupCoding": "Programmieren",
+    "localGroupReasoning": "Logisches Denken",
+    "localGroupMath": "Mathematik",
+    "localAllModels": "Alle Modelle ({count})",
+    "localFewerModels": "Weniger Modelle",
     "assessmentClosedBook": "Eine Prüfung ohne Hilfsmittel läuft – der Assistent ist bis zu ihrem Ende nicht verfügbar.",
     "assessmentAssisted": "Unterstützte Prüfung – jede Antwort des Assistenten wird im Integritätsprotokoll festgehalten.",
     "ticketTagTitle": "Ticket verknüpfen",
@@ -335,7 +346,17 @@
     "placeholder": "Nachricht…",
     "send": "Senden",
     "queueSend": "Nachricht einreihen — wird gesendet, wenn der aktuelle Lauf endet",
-    "uploading": "Wird hochgeladen…"
+    "uploading": "Wird hochgeladen…",
+    "inferenceMode": "Modelle ausführen",
+    "inferenceModeHybrid": "Hybrid",
+    "inferenceModeHybridHint": "Zuerst dieses Gerät, bei Bedarf die BuilderForce-Cloud",
+    "inferenceModeLocalOnly": "Nur lokal",
+    "inferenceModeLocalOnlyHint": "Nur Modelle auf diesem Gerät – nichts wird in die Cloud gesendet",
+    "inferenceModeSpecific": "Bestimmtes Modell",
+    "inferenceModeSpecificHint": "Das gewählte Modell läuft immer – in der Cloud, über deine verbundenen Konten oder lokal",
+    "inferenceModeRecommended": "Empfohlen",
+    "inferenceModeAskTitle": "Wie soll BuilderForce Modelle ausführen?",
+    "inferenceModeAskBody": "Du kannst das jederzeit im /-Menü unter „Modell“ ändern."
   },
   "repoContext": {
     "title": "Repository-Kontext hinzufügen",
@@ -629,6 +650,27 @@
         "payments": "Zahlungen & Auszahlungen"
       },
       "paymentsIntro": "Verbinden Sie ein Bankkonto, PayPal, Stripe oder Wise. Ihnen zustehendes Geld wird an Ihr Standardziel gesendet."
+    },
+    "cloudFunding": {
+      "title": "Welche Cloud Ihre Anfragen zuerst ausführt",
+      "intro": "Wenn eine Anfrage an kein Modell gebunden ist und nicht auf diesem Gerät laufen kann, sendet BuilderForce sie in dieser Reihenfolge an die Cloud.",
+      "option": {
+        "inferred": {
+          "label": "Automatisch",
+          "description": "Zuerst Ihre verbundenen Konten, falls vorhanden; sonst die kostenlose Stufe."
+        },
+        "free_first": {
+          "label": "Kostenlose Stufe zuerst",
+          "description": "Zuerst kostenlose Modelle und das kostenlose Cloudflare-Kontingent, dann Ihre verbundenen Konten."
+        },
+        "byo_first": {
+          "label": "Meine verbundenen Konten zuerst",
+          "description": "Zuerst laufen Ihre eigenen Anbieterkonten; wenn sie nicht können, weicht die Anfrage auf die kostenlose Stufe und die Modelle Ihres Tarifs aus."
+        }
+      },
+      "freeTwinNote": "Sind ein kostenloses und ein kostenpflichtiges Modell identisch, wird zuerst das kostenlose versucht – in jeder Reihenfolge außer dem strikten Pool nur mit verbundenen Konten und nie anstelle von Modellen, die Sie über Ihre eigenen verbundenen Konten nutzen.",
+      "saveFailed": "Ihre Auswahl konnte nicht gespeichert werden. Bitte erneut versuchen.",
+      "loadFailed": "Ihre aktuelle Auswahl konnte nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen."
     }
   },
   "nav": {
@@ -2732,7 +2774,31 @@
       "model": "Modell",
       "byActionType": "Nach Arbeitstyp",
       "workType": "Arbeitstyp",
-      "noRuns": "Noch keine bewerteten Durchläufe in diesem Zeitraum."
+      "noRuns": "Noch keine bewerteten Durchläufe in diesem Zeitraum.",
+      "anomaly": {
+        "title": "Lauf-Anomalien",
+        "summary": "{flagged} von {scored} bewerteten Läufen lagen weit außerhalb des Bereichs der vorherigen Läufe",
+        "summarySampled": "≈ {flagged} von {scored} bewerteten Läufen lagen weit außerhalb des Bereichs der vorherigen Läufe (Stichprobe der jüngsten Läufe)",
+        "notEnough": "Noch zu wenig Verlauf — ein Lauf wird bewertet, sobald ihm {minRuns} Läufe vorausgegangen sind.",
+        "none": "Keine Ausreißer unter {scored} bewerteten Läufen.",
+        "colIssue": "Problem",
+        "colRuns": "Läufe",
+        "colShare": "Anteil",
+        "colExcess": "Mehrkosten",
+        "colWorst": "Schlimmste Läufe",
+        "metric": {
+          "cost": "Kosten weit über normal",
+          "duration": "Dauerte weit länger als normal",
+          "toolFailures": "Ungewöhnliche Tool-Fehler"
+        },
+        "hint": {
+          "cost": "Prüfe, auf welches Modell sich diese Läufe festgelegt haben und wie viele Schritte sie brauchten.",
+          "duration": "Suche im Lauf-Trace nach Hängern, Wiederholungen oder langen Wartezeiten.",
+          "toolFailures": "Öffne den Tool-Trace — meist ist ein defektes Tool oder eine fehlende Berechtigung die Ursache."
+        },
+        "example": "{value} statt ≈ {typical} · {model}",
+        "exampleTask": "Aufgabe #{id}"
+      }
     },
     "dora": {
       "title": "DORA-Kennzahlen",
@@ -12078,7 +12144,17 @@
       "review": "Änderungen prüfen",
       "open": "{path} öffnen",
       "more": "+ {count} weitere"
-    }
+    },
+    "noLocalModel": "Kein Modell auf diesem Gerät kann antworten. Wechsle zu Hybrid oder lade ein lokales Modell herunter.",
+    "modelFallback": "Deine Wahl {model} ist fehlgeschlagen; mit Auto beantwortet.",
+    "switchToHybrid": "Zu Hybrid wechseln",
+    "downloadLocalModel": "Lokales Modell herunterladen",
+    "noSpecificModel": "„Bestimmtes Modell“ ist aktiv, aber kein Modell ist ausgewählt. Wähle eines aus oder wechsle zu Hybrid.",
+    "pickModel": "Modell auswählen",
+    "engineCrashed": "Das Modell auf diesem Gerät ist abgestürzt. Sende die Nachricht erneut, um es neu zu starten.",
+    "engineDetached": "Das Modell auf diesem Gerät hat vor dem Ende aufgehört. Sende die Nachricht erneut, um es noch einmal zu versuchen.",
+    "modelKeepsCrashing": "Dieses Modell stürzt auf diesem Gerät immer wieder ab. Entferne es oder probiere ein anderes Modell.",
+    "manageLocalModels": "Modelle auf diesem Gerät verwalten"
   },
   "chatMessage": {
     "copy": "Kopieren",
@@ -16821,6 +16897,7 @@
     "emptyBody": "Beschreibe eine Idee, eine Funktion oder ein Problem — Brain hilft dir, sie zu durchdenken. Zum Starten ist kein Konto nötig.",
     "placeholder": "Frag Brain alles…",
     "loading": "Brain wird gestartet…",
+    "aiUnavailable": "Hybrid konnte gerade nicht starten. Versuche es gleich noch einmal oder wechsle zu „Nur lokal“, um auf diesem Gerät zu antworten.",
     "send": "Senden",
     "remaining": "{count, plural, =0 {Keine kostenlosen Nachrichten übrig} one {# kostenlose Nachricht übrig} other {# kostenlose Nachrichten übrig}}",
     "tagline": "Brain kostenlos testen — ohne Registrierung",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BrainRequestError, brainRequestError, chatErrorAction } from './chatError';
+import { BrainRequestError, brainRequestError, chatErrorAction, LOCAL_ENGINE_FAILURE_CODES, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, NOT_SIGNED_IN } from './chatError';
 
 describe('brainRequestError', () => {
   it('keeps the human sentence AND the structured entitlement fields', () => {
@@ -21,6 +21,12 @@ describe('brainRequestError', () => {
     expect(brainRequestError(500, { message: 'boom' }).message).toBe('boom');
     expect(brainRequestError(503, {}, 'Service Unavailable').message).toBe('Service Unavailable');
     expect(brainRequestError(503, {}).message).toBe('Request failed (503)');
+  });
+
+  it('reads the nested OpenAI-shaped body a page engine refuses with', () => {
+    const err = brainRequestError(503, { error: { code: 'model_keeps_crashing', message: 'model_keeps_crashing: bonsai-8b trapped twice' } });
+    expect(err.code).toBe('model_keeps_crashing');
+    expect(err.message).toBe('model_keeps_crashing: bonsai-8b trapped twice');
   });
 
   it('ignores non-string / empty fields rather than surfacing junk', () => {
@@ -65,5 +71,32 @@ describe('chatErrorAction', () => {
     expect(chatErrorAction(new Error('The model timed out.'))).toBeNull();
     expect(chatErrorAction(brainRequestError(500, { error: 'Upstream exploded' }))).toBeNull();
     expect(chatErrorAction(undefined)).toBeNull();
+  });
+
+  it('tells "sign in" apart from "nothing on this device" (Local only, or signed in with no cloud)', () => {
+    expect(chatErrorAction(new Error(NOT_SIGNED_IN))?.kind).toBe('sign_in');
+    expect(chatErrorAction(new Error(NO_LOCAL_MODEL))?.kind).toBe('no_local_model');
+  });
+
+  it('names Specific-with-no-pick as its own verdict — never a sign-in or a Hybrid remedy', () => {
+    expect(chatErrorAction(new Error(NO_SPECIFIC_MODEL))?.kind).toBe('no_specific_model');
+  });
+
+  it('names each on-device engine failure — from the structured code first, else the code in the message', () => {
+    for (const code of LOCAL_ENGINE_FAILURE_CODES) {
+      expect(chatErrorAction(brainRequestError(503, { error: { code, message: 'x' } }))).toEqual({ kind: 'local_engine_failed', engineCode: code });
+    }
+    // A stream that failed mid-answer carries only prose, with the code as a word in it.
+    expect(chatErrorAction(new Error('the model failed mid-answer: page_engine_detached: The engine stopped'))).toEqual({
+      kind: 'local_engine_failed',
+      engineCode: 'page_engine_detached',
+    });
+    expect(chatErrorAction(new Error('bfi_engine_crashed: RuntimeError: unreachable'))?.engineCode).toBe('bfi_engine_crashed');
+    // Only the whole word: a longer identifier is not the code.
+    expect(chatErrorAction(new Error('xbfi_engine_crashed_y'))).toBeNull();
+  });
+
+  it('keeps the gateway verdicts ahead of an engine code in the prose', () => {
+    expect(chatErrorAction(brainRequestError(401, { error: 'page_engine_detached' }))?.kind).toBe('auth');
   });
 });

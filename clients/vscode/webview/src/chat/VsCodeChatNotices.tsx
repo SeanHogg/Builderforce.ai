@@ -7,7 +7,9 @@
  * - a BYO provider key that hit its usage cap, so the run fell back to the shared pool;
  * - the failed turn itself, with the server-decided remedy (`chatErrorAction`);
  * - a failed history action (summarize, rename, delete) — the shared `useBrainChats`
- *   reports those through its own `error`, which nothing else on this surface shows.
+ *   reports those through its own `error`, which nothing else on this surface shows;
+ * - Hybrid's pick failed and the turn was answered with Auto — brain-ui's one-line
+ *   `ModelFallbackNotice`, fed by the host's `run.modelFallback` (`hostRunDriver`).
  *
  * The first two are passive (`role="status"`) and dismissible until a NEW occurrence —
  * the shared `useDismissibleNotice` rule the web's provider-cap banner uses too. They
@@ -16,18 +18,24 @@
 
 import { useMemo } from 'react';
 import { parseByoUnresolved, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
-import { ChatErrorBanner, useDismissibleNotice } from '@seanhogg/builderforce-brain-ui';
+import { ChatErrorBanner, ModelFallbackNotice, useDismissibleNotice } from '@seanhogg/builderforce-brain-ui';
+import { hostModelFallback } from '../hostRunDriver';
 import { openUpgrade } from '../accountPlan';
 import { invalidatePlanSnapshot } from '../planSnapshot';
-import { post, refreshToken, type LabelBundle } from '../vscodeBridge';
+import { post, refreshToken, type InitData, type LabelBundle } from '../vscodeBridge';
 import { chatErrorLabels, makeT } from './chatLabels';
+import { modelRemedies } from './inferenceModeOption';
 
-export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundle }: {
+export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundle, init, composerId }: {
   conv: UseBrainConversation;
   chatsError: string;
   onDismissChatsError: () => void;
   /** The host's label bundle. */
   bundle: LabelBundle;
+  /** The host's `init` frame — the inference mode decides the `no_local_model` remedies. */
+  init?: InitData;
+  /** The composer beside this banner — "Pick a model" opens ITS `/` menu. */
+  composerId: string;
 }) {
   const t = makeT(bundle);
   const errorLabels = useMemo(() => chatErrorLabels(bundle), [bundle]);
@@ -72,6 +80,13 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundl
           ).replace('{providers}', conv.providerCap.join(', '))}
         />
       )}
+      <ModelFallbackNotice
+        channel={hostModelFallback}
+        labels={{
+          fallback: t('app.modelFallback', 'Your pick {model} failed; answered with Auto.'),
+          dismiss: errorLabels.dismiss,
+        }}
+      />
       {/* A chat the first send could not create fails the turn too — show that once. */}
       <ChatErrorBanner className="bf-error" error={chatsError === conv.error ? '' : chatsError} action={null} onDismiss={onDismissChatsError} labels={errorLabels} />
       <ChatErrorBanner
@@ -83,6 +98,9 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundl
         onUpgrade={() => { invalidatePlanSnapshot(); openUpgrade('pricing'); }}
         onValidateCard={() => { invalidatePlanSnapshot(); openUpgrade('billing'); }}
         onSignIn={() => post('signin')}
+        // Nothing can take the turn for a reason sign-in won't fix: Hybrid (only while on
+        // Local only), a local model, or — Specific with nothing picked — the Model tab.
+        {...modelRemedies(init, composerId, conv.clearError)}
         onDismiss={conv.clearError}
         labels={errorLabels}
       />

@@ -67,6 +67,7 @@ export function BrainComposer() {
     ticketables,
     handleTicketTag,
     composerFocusToken,
+    composerId,
     persona,
     capabilitySurface,
     capabilityId,
@@ -114,6 +115,7 @@ export function BrainComposer() {
       effectiveModel={effectiveModel}
       account={account}
       onModelSelectionChange={prefs.setModelSelection}
+      composerId={composerId}
       autoMode={autoApprove}
       onAutoModeChange={setAutoApproveMode}
       // Chat | Work moved into the composer's `/` menu, which names the armed mode on

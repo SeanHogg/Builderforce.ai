@@ -32,7 +32,12 @@ C'est la fonctionnalité phare du guide, et c'est un moteur à part entière dan
 import { createPageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 
 // Bonsai, WebLLM and the Prompt API — one set per page, one fetch shim, one model store.
-const engines = createPageEngineSet({ loadBfi });
+const engines = createPageEngineSet({
+  bfiWorker: {
+    create: () => new Worker(new URL('./bfi.worker.ts', import.meta.url), { type: 'module' }),
+    wasmUrl: async () => (await import('@seanhogg/bfi-web/wasm-url')).bfiWasmUrl,
+  },
+});
 ```
 
 Le moteur détecte l'API, gère les états `downloadable`/`downloading`/`available` signalés par le navigateur, et chaque moteur annonce sa véritable fenêtre de contexte : une conversation est donc ajustée *avant* d'atteindre un modèle local plus petit.

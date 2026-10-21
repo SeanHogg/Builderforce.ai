@@ -7,18 +7,17 @@
  */
 import { createLocalRuntimeProber, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import { createOnlineSignal } from '@builderforce/write-outbox';
-import { createPageEngineSet, installIndexedDbStepDurability, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
-import { bfiWebLoader } from '@seanhogg/builderforce-brain-embedded/bfi';
+import { createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 import { createApiClient, type ApiClient } from '../api/apiClient';
 import { createSession, type Session } from '../auth/session';
-import { BFI_WASM_FILE, DEFAULT_BASE_URL, LOCAL_DB, STEP_OUTBOX_DB } from '../config';
+import { BFI_WASM_FILE, BFI_WORKER_FILE, DEFAULT_BASE_URL, LOCAL_DB, STEP_OUTBOX_DB } from '../config';
 import { KIMI_API_ORIGINS, createConnectedAccount, type ConnectedAccount } from '../inference/connectedAccount';
 import { loopbackEndpoints, resolveLoopbackProbes } from '../inference/localRuntimes';
 import { createRovrStream } from '../inference/route';
 import { createLocalFirstPersistence } from '../persistence/localFirstPersistence';
 import { chromeKeyValue } from '../platform/keyValue';
 import { createRovrGuardedFetch } from '../platform/guardedFetch';
-import { createRovrPlatformPolicy } from '../platform/policy';
+import { createRovrPlatformPolicy, type RovrPlatformPolicy } from '../platform/policy';
 import { createSettings, type RovrSettings } from '../platform/settings';
 import { createSitePermissions, type SitePermissions } from '../platform/sitePermissions';
 import { createPlaybookStore, renderPlaybooks, type PlaybookStore } from '../playbooks/playbooks';
@@ -36,9 +35,14 @@ import { createElementCache, createWorkingTab, type TabPort, type WorkingTab } f
 import { createRovrRunHost, type RovrRunHost } from './rovrRunHost';
 import { createRunOptions } from './runOptions';
 
+/** `chrome.storage.local` key of Hybrid's local-success predictor (brain-embedded). */
+const LOCAL_SUCCESS_KEY = 'ml.run.local-success';
+
 export interface PanelServices {
   host: RovrRunHost;
   session: Session;
+  /** The mode-derived platform policy — the `/` menu's Run models control reads and sets it. */
+  policy: RovrPlatformPolicy;
   api: ApiClient;
   records: RovrRecords;
   ledger: ActionLedger;
@@ -60,6 +64,9 @@ export interface PanelServices {
   pageEngines: PageEngineSet;
   /** The workspace's Kimi account, called from this browser (Settings → Model, the Connect card). */
   kimi: ConnectedAccount;
+  /** Hybrid's pick failed and the turn was answered with Auto — the chat's one-line notice
+   *  (brain-ui `ModelFallbackNotice`) reads this. */
+  modelFallback: ModelFallbackChannel;
   sendRuntime(message: RovrRuntimeMessage): Promise<unknown>;
   reportError(error: unknown, operation: string): void;
 }
@@ -146,8 +153,17 @@ export async function createPanelServices(): Promise<PanelServices> {
   // ── Local first, failover to the gateway ───────────────────────────────────────
   const prober = createLocalRuntimeProber(fetchImpl, { capabilities: true });
   // The engines inside the panel (it has the Prompt API and WebGPU): Gemini Nano, WebLLM
-  // and the WebGPU `bfi`, whose binary `build.mjs` copies into the extension root.
-  const pageEngines = createPageEngineSet({ loadBfi: bfiWebLoader(() => chrome.runtime.getURL(BFI_WASM_FILE)) });
+  // and `bfi` — in its own Web Worker (`bfiWorker.ts`, built beside the panel), so its CPU
+  // backend never blocks the panel — whose binary `build.mjs` copies into the extension root.
+  const pageEngines = createPageEngineSet({
+    bfiWorker: {
+      create: () => new Worker(chrome.runtime.getURL(BFI_WORKER_FILE), { type: 'module', name: 'bfi' }),
+      wasmUrl: () => chrome.runtime.getURL(BFI_WASM_FILE),
+      // No `threads`: single-threaded on purpose. The side panel is not cross-origin
+      // isolated (no COEP in the manifest, so no SharedArrayBuffer), and MV3's extension
+      // CSP admits no `blob:` workers, which the threaded build's pool spawns.
+    },
+  });
   const endpoints = async () => loopbackEndpoints(await settings.synapseUrl());
   const kimi = createConnectedAccount({
     api,
@@ -160,6 +176,7 @@ export async function createPanelServices(): Promise<PanelServices> {
   session.subscribe(() => {
     if (!session.isSignedIn()) void kimi.store.clear();
   });
+  const modelFallback = createModelFallbackChannel();
   const stream = createRovrStream({
     baseUrl,
     fetch: fetchImpl,
@@ -170,6 +187,14 @@ export async function createPanelServices(): Promise<PanelServices> {
     // The side panel's model picker persists its pin here (Settings → Model).
     pinned: () => settings.pinnedModel(),
     accountPin: (ref) => kimi.pinFor(ref),
+    mode: () => rovrPolicy.inferenceMode().mode,
+    gatewayAllowed: () => rovrPolicy.allows('gateway-inference'),
+    onFallback: modelFallback.report,
+    // Hybrid's local-success predictor, kept beside the panel's other local state.
+    localSuccess: {
+      load: () => local.get<unknown>(LOCAL_SUCCESS_KEY),
+      save: (snapshot) => local.set(LOCAL_SUCCESS_KEY, snapshot),
+    },
     onAttempt: (record: LocalFirstAttemptRecord) => {
       if (record.outcome !== 'served' && record.attempt.kind === 'local') {
         console.warn(`Rovr local-first: ${record.attempt.ref} ${record.outcome}${record.detail ? ` (${record.detail})` : ''}`);
@@ -234,6 +259,7 @@ export async function createPanelServices(): Promise<PanelServices> {
   return {
     host,
     session,
+    policy: rovrPolicy,
     api,
     records,
     ledger,
@@ -255,6 +281,7 @@ export async function createPanelServices(): Promise<PanelServices> {
     },
     pageEngines,
     kimi,
+    modelFallback,
     sendRuntime,
     reportError,
   };

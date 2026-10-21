@@ -24,15 +24,57 @@ type ChatErrorActionKind =
 /** Plan is fine, but billing needs a validated card — send them to billing. */
  | 'validate_card'
 /** No model can serve the turn: signed out and nothing local fits — sign in or start one. */
- | 'sign_in';
+ | 'sign_in'
+/**
+ * The person may not (or chose not to) reach the gateway — Local only, or signed in
+ * with the cloud route unavailable — and nothing on this device can take the turn.
+ * Never a sign-in prompt: offer "Switch to Hybrid" / "Download a local model".
+ */
+ | 'no_local_model'
+/**
+ * The person runs Specific model and picked none — Specific promises the pick and
+ * nothing else, so the turn is refused rather than quietly run as Hybrid. Offer
+ * "Pick a model" (the composer's Model tab).
+ */
+ | 'no_specific_model'
+/**
+ * This device's engine failed the turn — it crashed, went away mid-answer, or keeps
+ * crashing on this model ({@link ChatErrorAction.engineCode} says which). Never a
+ * sign-in or upgrade prompt: the banner names the failure in the person's language and,
+ * for a model that keeps crashing, offers "Pick a model" and "Manage on-device models".
+ */
+ | 'local_engine_failed';
 /**
  * The ONE sentinel a transport throws when no model can serve a turn: signed out and
  * nothing runs on this device. Hosts never match it themselves — {@link chatErrorAction}
  * turns it into the `sign_in` verdict the shared banner acts on.
  */
 declare const NOT_SIGNED_IN = "not_signed_in";
+/**
+ * The sentinel a transport throws when nothing ON THIS DEVICE can serve a turn and the
+ * gateway is not an option for a reason sign-in would not fix: the person runs Local
+ * only, or is signed in and the cloud route is unavailable. {@link chatErrorAction}
+ * turns it into the `no_local_model` verdict.
+ */
+declare const NO_LOCAL_MODEL = "no_local_model";
+/**
+ * The sentinel a transport throws when the person runs Specific model with no model
+ * picked (`createHostModelStream`). {@link chatErrorAction} turns it into the
+ * `no_specific_model` verdict.
+ */
+declare const NO_SPECIFIC_MODEL = "no_specific_model";
+/**
+ * The page-engine failure codes the banner names (brain-embedded `pageEngines/`): the
+ * engine crashed (a wasm trap — it restarts on the next send), the engine serving the
+ * model went away or went silent mid-answer, and the circuit breaker refusing a model
+ * that trapped twice within ten minutes on this device.
+ */
+declare const LOCAL_ENGINE_FAILURE_CODES: readonly ["bfi_engine_crashed", "page_engine_detached", "model_keeps_crashing"];
+type LocalEngineFailureCode = (typeof LOCAL_ENGINE_FAILURE_CODES)[number];
 interface ChatErrorAction {
     kind: ChatErrorActionKind;
+    /** For `local_engine_failed`: which engine failure it was. */
+    engineCode?: LocalEngineFailureCode;
     /** Plan that WOULD satisfy the request ('pro'), when the server named one. */
     requiredPlan?: string;
     /** Entitlement key that was refused ('premiumModels'), when the server named one. */
@@ -70,4 +112,4 @@ declare function brainRequestError(status: number, body: unknown, statusText?: s
  */
 declare function chatErrorAction(err: unknown): ChatErrorAction | null;
 
-export { BrainRequestError, type ChatErrorAction, type ChatErrorActionKind, NOT_SIGNED_IN, brainRequestError, chatErrorAction };
+export { BrainRequestError, type ChatErrorAction, type ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, type LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, brainRequestError, chatErrorAction };

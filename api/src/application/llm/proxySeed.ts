@@ -6,8 +6,9 @@
  *      reorders of the plan pool, context fit, the caller hint, and the tenant's
  *      connected-account seed merged by shared precedence.
  *   2. `loadSeedCooldowns` — the bounded cooldown prefetch for that seed.
- *   3. `buildCandidateChain` — the free-capped cascade, cooldown-filtered, with the
- *      BYO execution boundary applied.
+ *   3. `buildCandidateChain` — free twins folded into the seed, then the free-capped
+ *      cascade, cooldown-filtered, with the BYO execution boundary applied and each
+ *      owner-served vendor capped at `OWNER_SERVED_VENDOR_ATTEMPT_CAP` models.
  */
 
 import type { ActionModelRankStat } from '@builderforce/learned-routing';
@@ -29,6 +30,7 @@ import { COOLDOWN_PREFETCH_LIMIT, byoAutoSeedModels, explicitModelPreemptsByo } 
 import { rankConnectedForRole } from './modelRoles';
 import { registryCatalogView, type PriceBook } from './catalogView';
 import { fundedFloorHintDemoted, modelsFittingContext } from './requestFit';
+import { cheaperTwinsOf, orderFreeFirst, preferFreeTwins } from './freeTier';
 import type { ChatCompletionRequest } from './proxyTypes';
 import type { ProxyRuntime } from './proxyConfig';
 
@@ -37,6 +39,38 @@ import type { ProxyRuntime } from './proxyConfig';
  *  in place, so chat and image cascades both contribute to the same rotation
  *  on a single Worker isolate (no contention, just a counter). */
 const chatRequestCursor: { value: number } = { value: 0 };
+
+/** How the free cap classifies an owner-served model: any non-FREE tier (see
+ *  `buildCandidateChain`). Only the FREE-vs-not split is read there. */
+const OWNER_SERVED_TIER = 'STANDARD' as const;
+
+/**
+ * The most models ONE owner-served vendor contributes to a chain, strict BYO or not.
+ *
+ * Owner-served models are exempt from the cooldown keyspace (`isOwnerServedVendor`) and
+ * from the free cap (`OWNER_SERVED_TIER`), so nothing else bounds them: a connected vendor
+ * that is DOWN (an Ollama Cloud outage, a revoked key) would otherwise be walked model by
+ * model — every one of its pool models a doomed attempt, each spending a subrequest and a
+ * timeout — before the chain reached anything that could answer. Three is enough to ride
+ * out one model being unavailable on a healthy account and short enough that a dead
+ * account costs three attempts, not the whole catalog. Earlier positions win: the cap
+ * keeps the vendor's FIRST models in chain order (the tenant's own ranking / the pin).
+ */
+export const OWNER_SERVED_VENDOR_ATTEMPT_CAP = 3;
+
+/** Keep at most {@link OWNER_SERVED_VENDOR_ATTEMPT_CAP} owner-served models per vendor,
+ *  in chain order. Models the operator funds are untouched (their cooldowns bound them). */
+function capOwnerServedPerVendor(chain: readonly string[], ownerServed: (model: string) => boolean): string[] {
+  const used = new Map<VendorId, number>();
+  return chain.filter((model) => {
+    if (!ownerServed(model)) return true;
+    const vendor = vendorForModel(model);
+    const n = used.get(vendor) ?? 0;
+    if (n >= OWNER_SERVED_VENDOR_ATTEMPT_CAP) return false;
+    used.set(vendor, n + 1);
+    return true;
+  });
+}
 
 /** The routing evidence a caller may thread into seed composition. */
 export interface SeedRoutingOptions {
@@ -237,6 +271,18 @@ export async function composeCompletionSeed(
   const basePool: readonly string[] = (hasCallerModel && !callerLeads && !fittedPool.includes(callerModel as string))
     ? (hintIsFundedFloor ? [...fittedPool, callerModel as string] : [callerModel as string, ...fittedPool])
     : fittedPool;
+  // FREE FIRST (`fundingOrder.ts`): the free tier leads and the connected accounts follow
+  // it instead of heading the chain. Only an honoured caller pin stays ahead of the free
+  // tier — that is the person naming a model, not the gateway choosing one.
+  // Owner-served pool models are the tenant's account, not the operator's free tier, so
+  // they wait with the connected accounts; the cascade exempts them from the free cap.
+  if (cfg.freeFirst && byoSeeds.length > 0) {
+    const pinHead: readonly string[] = callerLeads ? [callerModel as string] : [];
+    return {
+      seed: orderFreeFirst(pinHead, basePool, byoSeeds, (m) => funding.isOwnerServedModel(m)),
+      seedHead: pinHead,
+    };
+  }
   const seed: readonly string[] = seedHead.length > 0
     ? [...seedHead, ...basePool.filter((m) => !seedHead.includes(m))]
     : basePool;
@@ -244,10 +290,13 @@ export async function composeCompletionSeed(
 }
 
 /**
- * Pre-fetch cooldown state for the leading seed slice + premium fallback
- * (KV-backed when bound, in-memory fallback otherwise). The seed is
- * truncated to `COOLDOWN_PREFETCH_LIMIT` entries to bound subrequest
- * cost — see that constant for the trade-off rationale. Vendor
+ * Pre-fetch cooldown state for the leading seed slice, the cheaper twins of EVERY
+ * seed entry, and the premium fallback (KV-backed when bound, in-memory fallback
+ * otherwise). The seed's own models are truncated to `COOLDOWN_PREFETCH_LIMIT`
+ * entries — see that constant for the trade-off rationale. The twins are read for
+ * the whole seed because `buildCandidateChain` may insert one ahead of ANY seed
+ * model (`preferFreeTwins`); reads are one per distinct vendor, so a twin costs at
+ * most one more read when it brings a new vendor. Vendor
  * cooldown short-circuits the per-model walk when one upstream's key
  * is globally throttled; the fallback models are included so the
  * chain composer skips any individually cooled entry instead of
@@ -257,7 +306,15 @@ export async function loadSeedCooldowns(
   { cfg, funding }: SeedRuntime,
   seed: readonly string[],
 ): Promise<[Set<string>, Set<VendorId>]> {
-  const seedPrefix = seed.slice(0, COOLDOWN_PREFETCH_LIMIT);
+  const leading = seed.slice(0, COOLDOWN_PREFETCH_LIMIT);
+  const ownerServed = (m: string) => funding.isOwnerServedModel(m);
+  // Twins of EVERY seed entry, not just the leading slice: `preferFreeTwins` expands the
+  // whole seed, so a twin of a deep entry that was never read would be inserted cooled.
+  // Bounded anyway — the reads are one per DISTINCT VENDOR (`loadCooldownExpiries`), so a
+  // twin only costs a read when it brings a vendor the slice did not.
+  // No twins under the BYO boundary — `buildCandidateChain` does not insert them there.
+  const twins = funding.byoStrict ? [] : seed.flatMap((m) => cheaperTwinsOf(m, ownerServed));
+  const seedPrefix = [...new Set([...leading, ...twins])];
   const fallbackPairs = funding.premiumFallback.map((m) => ({ vendor: vendorForModel(m), model: m }));
   const seedVendors = Array.from(new Set([
     ...seedPrefix.map((m) => vendorForModel(m)),
@@ -306,26 +363,40 @@ export function buildCandidateChain(
   pinnedModel?: string,
   head?: readonly string[],
 ): string[] {
+  const isUnavailable = buildCooldownPredicate({
+    cooledModels:  cooledSet,
+    cooledVendors,
+    vendorOf:      vendorForModel,
+    ...(pinnedModel !== undefined ? { pinnedModel } : {}),
+  });
+  const ownerServed = (m: string) => funding.isOwnerServedModel(m);
+  // Same model, cheaper vendor first (`freeTier.ts`): a paid seed entry with a free twin
+  // gets the twin directly ahead of it. Folded into the SEED, before the cascade, so a
+  // FREE twin counts against `freeBudget` like any FREE model and the paid original stays
+  // behind it. Never under the BYO boundary: there the chain is the tenant's own accounts
+  // in the tenant's own order, and "free" (free to the operator) does not apply.
+  const twinSeed = funding.byoStrict ? seed : preferFreeTwins(seed, isUnavailable, ownerServed);
   const candidates = composeFreeCappedCascade({
-    seed,
+    seed: twinSeed,
     ...(head && head.length ? { head } : {}),
     premiumFallback: funding.premiumFallback,
     freeBudget: cfg.freeBudget,
-    tierOf: tierForModel,
-    isUnavailable: buildCooldownPredicate({
-      cooledModels:  cooledSet,
-      cooledVendors,
-      vendorOf:      vendorForModel,
-      ...(pinnedModel !== undefined ? { pinnedModel } : {}),
-    }),
+    // The free cap protects the OPERATOR's free pool. A model the tenant serves from their
+    // own account is not part of it, even when the catalog tags it FREE (a connected Ollama
+    // Cloud key), so it is never capped out — it keeps its seed position with the paid ones.
+    tierOf: (m) => (ownerServed(m) ? OWNER_SERVED_TIER : tierForModel(m)),
+    isUnavailable,
     cursor: chatRequestCursor,
   });
   // BYO is an execution boundary, not merely a preference. Once at least one
   // tenant credential resolves, remove every shared/operator-funded vendor from
   // the chain. Multiple connected providers may still fail over among themselves.
-  return funding.byoStrict
+  const bounded = funding.byoStrict
     ? candidates.filter((model) =>
         funding.connectedByoVendors.has(vendorForModel(model))
         || cfg.openRouterConnectionModels.has(model))
     : candidates;
+  // Owner-served models answer to no cooldown and no free cap, so a down connected
+  // vendor is bounded HERE — in strict and non-strict chains alike.
+  return capOwnerServedPerVendor(bounded, ownerServed);
 }

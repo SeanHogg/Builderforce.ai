@@ -200,7 +200,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoAlertedVendors?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoSelectedModels?: Readonly<Record<string, readonly string[]>>; byoRequired?: boolean; allowGatewayAuto?: boolean; byoDiagnostics?: ByoDiagnostics },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoAlertedVendors?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoSelectedModels?: Readonly<Record<string, readonly string[]>>; byoRequired?: boolean; allowGatewayAuto?: boolean; freeFirst?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): LlmProxyService {
   const routing = resolveRouting(effectivePlan, premiumOverride);
   const { productName, modelPool } = routing;
@@ -222,6 +222,7 @@ export function llmProxyForPlan(
     ...(opts?.backstopModels ? { backstopModels: opts.backstopModels } : {}),
     ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
     ...(opts?.allowGatewayAuto ? { allowGatewayAuto: true } : {}),
+    ...(opts?.freeFirst ? { freeFirst: true } : {}),
     ...(opts?.hostEgress ? { hostEgress: opts.hostEgress } : {}),
     // A coding run walks the WHOLE free coding pool before any paid/metered coder
     // (cost over latency), so the funded direct-Anthropic floor is genuine last-resort.

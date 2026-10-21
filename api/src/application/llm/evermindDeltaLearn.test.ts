@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { admitDeltaAgainstHead, deltaParseStatus } from './evermindDeltaLearn';
+import { admitDeltaAgainstHead, deltaParseRefusal, deltaParseStatus } from './evermindDeltaLearn';
 
 /**
  * The gateway's answers for the delta door. The payload contract itself is tested in
@@ -28,5 +28,13 @@ describe('admitDeltaAgainstHead', () => {
     expect(unseeded?.status).toBe(409);
     expect(unseeded?.body.headVersion).toBeUndefined();
     expect(admitDeltaAgainstHead({ baseVersion: 2 }, { version: 3, mode: 'offline-frozen' })?.status).toBe(423);
+  });
+});
+
+describe('deltaParseRefusal', () => {
+  it('answers a refused body with the door\'s one { ok: false, error } shape and its status', () => {
+    expect(deltaParseRefusal({ ok: false, reason: 'invalid', error: 'baseVersion required' }))
+      .toEqual({ status: 400, body: { ok: false, error: 'baseVersion required' } });
+    expect(deltaParseRefusal({ ok: false, reason: 'too-large', error: 'delta too large' }).status).toBe(413);
   });
 });

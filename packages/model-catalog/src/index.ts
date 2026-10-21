@@ -5,7 +5,9 @@
  * Owns the words, not the model data: tier (and THE tier rule), price, residency and the
  * CatalogView port. Each host keeps its own registry and binds it to the port. The two
  * tables it does own are ones every host must agree on word for word: the BYO provider
- * list (`providers.ts`) and Anthropic's release line (`anthropic.ts`). Pure and I/O-free.
+ * list (`providers.ts`) and Anthropic's release line (`anthropic.ts`) — plus the account's
+ * cloud funding order (`cloudOrder.ts`), the free tier vs connected providers. Pure and
+ * I/O-free.
  */
 
 export {
@@ -54,3 +56,4 @@ export {
   type AnthropicFamily,
   type ParsedAnthropicId,
 } from './anthropic.js';
+export { CLOUD_ORDERS, isCloudOrder, type CloudOrder } from './cloudOrder.js';

@@ -4,13 +4,15 @@
  * runtime's `/v1/models`. Shared by the WebLLM and `bfi` engines, so "what does a page
  * engine serve" is answered one way. `isReady` must only LOOK in a cache — never fetch.
  * `contextOf` lets an engine report the window it will SERVE when that is smaller than
- * the trained one (`bfi` sizes its KV cache to the device); hand-off packs to it.
+ * the trained one (`bfi` sizes its KV cache to the device — and to the backend the fit
+ * chose, WebGPU or its CPU); hand-off packs to it.
  */
 
 import {
   formatLocalModelRef,
   localCatalogFor,
   localModelFit,
+  type LocalBackend,
   type LocalCatalogModel,
   type LocalDeviceSupport,
   type LocalRuntimeId,
@@ -23,14 +25,17 @@ export async function catalogProbe(
   baseUrl: string,
   support: LocalDeviceSupport,
   isReady: (row: LocalCatalogModel) => Promise<boolean>,
-  contextOf: (row: LocalCatalogModel) => number = (row) => row.contextTokens,
+  contextOf: (row: LocalCatalogModel, backend: LocalBackend) => number = (row) => row.contextTokens,
 ): Promise<LocalRuntimeProbe | null> {
-  if (!support.supported) return null;
-  const fitting = localCatalogFor(runtime).filter((row) => localModelFit(row, support).fits);
+  // The fit decides — WebGPU, or (for a row that declares one) the engine's CPU backend.
+  const fitting = localCatalogFor(runtime).flatMap((row) => {
+    const fit = localModelFit(row, support);
+    return fit.fits ? [{ row, backend: fit.backend }] : [];
+  });
   // One row whose cache lookup fails is not offered — and the reason is reported — while
   // the rest still are.
   const ready = await Promise.all(
-    fitting.map((row) =>
+    fitting.map(({ row }) =>
       isReady(row).catch((e: unknown) => {
         reportPageEngineFailure(runtime, 'cache_lookup', e);
         return false;
@@ -43,13 +48,13 @@ export async function catalogProbe(
     provider: runtime,
     endpoint: { baseUrl },
     reachable: true,
-    models: rows.map((row) => ({
+    models: rows.map(({ row, backend }) => ({
       ref: formatLocalModelRef(runtime, row.model),
       provider: runtime,
       model: row.model,
       label: row.label,
       tools: row.tools,
-      contextTokens: contextOf(row),
+      contextTokens: contextOf(row, backend),
     })),
   };
 }

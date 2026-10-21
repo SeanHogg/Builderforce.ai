@@ -1,9 +1,54 @@
 import {
   BrainRequestError,
+  LOCAL_ENGINE_FAILURE_CODES,
   NOT_SIGNED_IN,
+  NO_LOCAL_MODEL,
+  NO_SPECIFIC_MODEL,
   brainRequestError,
   chatErrorAction
-} from "./chunk-67SSAVEK.mjs";
+} from "./chunk-ZV73UMUH.mjs";
+import {
+  BROWSER_ENGINE_BASE_URL,
+  ENGINE_WORKER_FATAL,
+  ENGINE_WORKER_IDLE_MS,
+  ENGINE_WORKER_INVALIDATE,
+  LOCAL_MODEL_CATALOG,
+  LOCAL_PICKER_GROUPS,
+  PAGE_ENGINE_REPLY_TYPES,
+  PAGE_ENGINE_REQUEST_TYPES,
+  PageEngineError,
+  WEBLLM_ENGINE_BASE_URL,
+  abortReason,
+  catalogProbe,
+  createBfiWorkerEngine,
+  createEngineWorker,
+  createHfModelStore,
+  createPageEngineClient,
+  errorMessage,
+  formatLocalModelRef,
+  hasTools,
+  hasWebGPU,
+  isLocalModelRef,
+  isPageEngineReply,
+  isPageEngineRequest,
+  isWasmTrap,
+  localAuthHeaders,
+  localCatalogModel,
+  localChatCompletionsUrl,
+  localFirstPlan,
+  localModelFit,
+  localPickerView,
+  localRuntime,
+  memoizedProbe,
+  normalizeLocalBaseUrl,
+  parseLocalModelRef,
+  reportPageEngineFailure,
+  rewriteToLocalUrl,
+  runLocalFirst,
+  serveEngineWorker,
+  servePageEngines,
+  webGpuSupport
+} from "./chunk-TQONCF7B.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useMemo } from "react";
@@ -1501,6 +1546,51 @@ var LOCAL_FIRST_POLICY = Object.freeze({
   gitRemotes: false
 });
 
+// ../packages/local-first/src/inferenceMode.ts
+var INFERENCE_MODES = Object.freeze(["hybrid", "local-only", "specific"]);
+function isInferenceMode(value) {
+  return typeof value === "string" && INFERENCE_MODES.includes(value);
+}
+function defaultInferenceMode(context) {
+  return context.signedIn ? "hybrid" : "local-only";
+}
+
+// ../packages/local-first/src/platformRoutes.ts
+var PLATFORM_ROUTE_RULES = Object.freeze([
+  { path: "/api/auth", match: "contains", capability: "authenticate", note: "token exchange and session" },
+  { path: "/api/vscode/tenants/*/token", capability: "authenticate", note: "the editor's tenant token exchange" },
+  { path: "/chat/completions", match: "contains", capability: "gateway-inference", content: true, note: "a gateway completion \u2014 the prompt" },
+  { path: "/api/brain/stream", capability: "gateway-inference", content: true, note: "the Brain's streamed turn \u2014 the prompt" },
+  { path: "/llm/v1/models", capability: "connected-feature", note: "the model catalog" },
+  { path: "/api/llm/models", capability: "connected-feature", note: "the model catalog" },
+  { path: "/api/limbic/block", capability: "connected-feature", content: true, note: "personality block \u2014 once per session; the per-turn affect is appraised on the device" },
+  { path: "/api/limbic", match: "prefix", capability: "connected-feature", content: true, note: "the personality / affect store" },
+  { path: "/api/projects/*/evermind/recall", capability: "connected-feature", content: true, note: "memory recall \u2014 a read that sends the prompt" },
+  { path: "/api/projects/*/evermind", match: "contains", capability: "connected-feature", content: true, note: "a project's Evermind memory" },
+  { path: "/api/evermind", match: "contains", capability: "connected-feature", content: true, note: "Evermind memory" },
+  { path: "/api/sync", match: "prefix", capability: "synchronize", content: true, note: "the local-first sync transport \u2014 the records themselves" },
+  { path: "/api/brain/chats/*/messages", content: true, note: "a Brain chat's transcript" },
+  { path: "/api/chats/*/messages", content: true, note: "a chat's transcript" },
+  { path: "/api/brain/upload", content: true, note: "an uploaded file" },
+  { path: "/api/brain/fetch-url", content: true, note: "a page fetched for the Brain \u2014 the URL the person gave" },
+  { path: "/product-report", match: "suffix", content: true, note: "an error report \u2014 what was on screen" },
+  // Sockets that carry the person's content (an upgrade is a GET, so these keep the
+  // read default): live canvas sync, rooms and meetings, an execution's stream, an
+  // agent host's chat. A socket that only says "something changed" is not tagged.
+  { path: "/api/creation-sessions/*/ws", content: true, note: "a canvas session's live sync" },
+  { path: "/api/guest/rooms/*/ws", content: true, note: "a guest room's shared transcript and meeting" },
+  { path: "/api/agile/ceremonies/rooms/*/ws", content: true, note: "a ceremony room's live conversation" },
+  { path: "/api/meetings/rooms/*/ws", content: true, note: "a meeting room's signalling" },
+  { path: "/api/runtime/executions/*/stream", content: true, note: "an execution's live stream \u2014 messages, tool results, file changes" },
+  { path: "/api/agent-hosts/*/ws", content: true, note: "an agent host's chat" },
+  { path: "/api/guest/research", match: "prefix", content: true, note: "a guest canvas's research call \u2014 the query" },
+  { path: "/api/guest/career", match: "prefix", content: true, note: "a guest canvas's career tool \u2014 the r\xE9sum\xE9 / job text" },
+  { path: "/search", match: "suffix", capability: "connected-feature", note: "a search \u2014 a read" },
+  { path: "/api/dashboards/query", capability: "connected-feature", note: "a dashboard query \u2014 a read" },
+  { path: "/api/data-sources/*/query", capability: "connected-feature", note: "a data-source query \u2014 a read" },
+  { path: "/api/vscode/connect", capability: "connected-feature", note: "the editor presence beat" }
+]);
+
 // ../packages/local-first/src/records.ts
 var UNBOUND_DESTINATION = { kind: "unbound" };
 
@@ -2465,265 +2555,6 @@ function providerFailureTrace(ts, step, model, error, durationMs) {
     result: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
     isError: true
   };
-}
-
-// ../packages/local-inference/src/runtimes.ts
-var BROWSER_ENGINE_BASE_URL = "http://browser.local";
-var BFI_ENGINE_BASE_URL = "http://bfi.local";
-var WEBLLM_ENGINE_BASE_URL = "http://webllm.local";
-var LOCAL_RUNTIMES = [
-  { id: "synapse", automaticRank: 30, label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
-  {
-    id: "ollama",
-    automaticRank: 40,
-    label: "Ollama",
-    onDevice: true,
-    defaultBaseUrl: "http://127.0.0.1:11434",
-    catalog: "probe",
-    tools: "probe",
-    reach: "http"
-  },
-  {
-    id: "freetoken",
-    automaticRank: 50,
-    label: "FreeToken",
-    onDevice: true,
-    defaultBaseUrl: "http://127.0.0.1:1919",
-    catalog: "probe",
-    tools: "unknown",
-    reach: "http"
-  },
-  {
-    id: "bfi",
-    automaticRank: 20,
-    label: "Builderforce engine",
-    onDevice: true,
-    defaultBaseUrl: BFI_ENGINE_BASE_URL,
-    catalog: "declared",
-    tools: "all",
-    reach: "page"
-  },
-  {
-    id: "webllm",
-    automaticRank: 10,
-    label: "WebLLM",
-    onDevice: true,
-    defaultBaseUrl: WEBLLM_ENGINE_BASE_URL,
-    catalog: "declared",
-    tools: "unknown",
-    reach: "page"
-  },
-  {
-    id: "browser",
-    automaticRank: 60,
-    label: "Gemini Nano",
-    onDevice: true,
-    defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
-    catalog: "declared",
-    tools: "unknown",
-    reach: "page"
-  },
-  { id: "kimi-code", automaticRank: Number.POSITIVE_INFINITY, label: "Kimi Code", onDevice: false, catalog: "declared", tools: "all", reach: "http" }
-];
-var HTTP_LOCAL_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.reach === "http");
-var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
-function isLocalRuntimeId(value) {
-  return typeof value === "string" && LOCAL_RUNTIME_IDS.includes(value);
-}
-function localRuntime(id) {
-  return LOCAL_RUNTIMES.find((r) => r.id === id);
-}
-
-// ../packages/local-inference/src/ref.ts
-var LOCAL_MODEL_PREFIX = "local/";
-function formatLocalModelRef(runtime, model) {
-  return `${LOCAL_MODEL_PREFIX}${runtime}/${model}`;
-}
-function parseLocalModelRef(ref) {
-  if (!ref || !ref.startsWith(LOCAL_MODEL_PREFIX)) return null;
-  const rest = ref.slice(LOCAL_MODEL_PREFIX.length);
-  const slash = rest.indexOf("/");
-  if (slash <= 0) return null;
-  const provider = rest.slice(0, slash);
-  const model = rest.slice(slash + 1);
-  if (!model || !isLocalRuntimeId(provider)) return null;
-  return { provider, model };
-}
-function isLocalModelRef(ref) {
-  return parseLocalModelRef(ref) !== null;
-}
-
-// ../packages/local-inference/src/endpoint.ts
-function normalizeLocalBaseUrl(raw) {
-  return raw.trim().replace(/\/+$/, "").replace(/\/v1$/i, "");
-}
-function localChatCompletionsUrl(baseUrl) {
-  return `${normalizeLocalBaseUrl(baseUrl)}/v1/chat/completions`;
-}
-var GATEWAY_COMPLETIONS_PATH = "/llm/v1/chat/completions";
-var LOCAL_COMPLETIONS_PATH = "/v1/chat/completions";
-function rewriteToLocalUrl(url) {
-  return url.endsWith(GATEWAY_COMPLETIONS_PATH) ? `${url.slice(0, -GATEWAY_COMPLETIONS_PATH.length)}${LOCAL_COMPLETIONS_PATH}` : url;
-}
-function localAuthHeaders(endpoint) {
-  return endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {};
-}
-
-// ../packages/local-inference/src/catalog.ts
-var MIB = 1024 * 1024;
-var WEBGPU_DEFAULT_BINDING_BYTES = 128 * MIB;
-var WEBLLM_FULL_BINDING_BYTES = 1024 * MIB;
-function bonsai(size, params, bytes, contextTokens, layers) {
-  const model = `bonsai-${size.toLowerCase()}-q1_0`;
-  return {
-    ref: formatLocalModelRef("bfi", model),
-    runtime: "bfi",
-    model,
-    label: `Bonsai ${size} (1-bit)`,
-    family: "bonsai",
-    params,
-    bytes,
-    contextTokens,
-    kv: { layers, kvHeads: 8, headDim: 128 },
-    tools: true,
-    source: { kind: "hf-file", repo: `prism-ml/Bonsai-${size}-gguf`, file: `Bonsai-${size}-Q1_0.gguf` },
-    requires: { minBufferBytes: WEBGPU_DEFAULT_BINDING_BYTES }
-  };
-}
-function webllm(modelId, fields) {
-  return {
-    ref: formatLocalModelRef("webllm", modelId),
-    runtime: "webllm",
-    model: modelId,
-    label: fields.label,
-    family: fields.family,
-    params: fields.params,
-    bytes: fields.bytes,
-    contextTokens: fields.contextTokens,
-    tools: fields.tools,
-    source: { kind: "webllm", modelId },
-    requires: { f16: true, minBufferBytes: fields.lowResource ? WEBGPU_DEFAULT_BINDING_BYTES : WEBLLM_FULL_BINDING_BYTES }
-  };
-}
-var LOCAL_MODEL_CATALOG = [
-  bonsai("1.7B", 17e8, 248302272, 32768, 28),
-  bonsai("4B", 4e9, 572270624, 32768, 36),
-  bonsai("8B", 819e7, 1158654496, 65536, 36),
-  webllm("Qwen3-1.7B-q4f16_1-MLC", {
-    label: "Qwen3 1.7B",
-    family: "qwen3",
-    params: 17e8,
-    bytes: 984156278,
-    contextTokens: 4096,
-    tools: false,
-    lowResource: true
-  }),
-  webllm("Llama-3.2-3B-Instruct-q4f16_1-MLC", {
-    label: "Llama 3.2 3B Instruct",
-    family: "llama-3.2",
-    params: 321e7,
-    bytes: 1816811105,
-    contextTokens: 4096,
-    tools: false,
-    lowResource: true
-  }),
-  webllm("Qwen3-4B-q4f16_1-MLC", {
-    label: "Qwen3 4B",
-    family: "qwen3",
-    params: 4e9,
-    bytes: 2279167154,
-    contextTokens: 4096,
-    tools: false,
-    lowResource: true
-  }),
-  webllm("Hermes-3-Llama-3.1-8B-q4f16_1-MLC", {
-    label: "Hermes 3 Llama 3.1 8B",
-    family: "hermes-3",
-    params: 803e7,
-    bytes: 4526847881,
-    contextTokens: 4096,
-    tools: true,
-    lowResource: false
-  })
-];
-function localCatalogModel(ref) {
-  return LOCAL_MODEL_CATALOG.find((m) => m.ref === ref);
-}
-function localCatalogFor(runtime) {
-  return LOCAL_MODEL_CATALOG.filter((m) => m.runtime === runtime);
-}
-
-// ../packages/local-inference/src/fit.ts
-function localModelFit(model, support) {
-  if (!support.supported) {
-    return { fits: false, reason: "webgpu_unavailable", ...support.reason ? { detail: support.reason } : {} };
-  }
-  if (model.requires.f16 && !support.f16) return { fits: false, reason: "shader_f16_unavailable" };
-  const bindingBytes = support.maxStorageBufferBindingSizeBytes ?? support.maxBufferBytes;
-  if (bindingBytes < model.requires.minBufferBytes) return { fits: false, reason: "buffer_too_small" };
-  return { fits: true };
-}
-
-// ../packages/local-inference/src/plan.ts
-function localModelUnfitReason(model, workload) {
-  if (workload.agentic && model.tools !== true) return "tools";
-  if (model.contextTokens !== void 0 && model.contextTokens < workload.inputTokens + workload.outputTokens) {
-    return "context";
-  }
-  return null;
-}
-function localFirstPlan(input) {
-  const onDevice = new Set(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id));
-  const rank = (id) => LOCAL_RUNTIMES.find((r) => r.id === id)?.automaticRank ?? Number.POSITIVE_INFINITY;
-  const candidates = input.probes.filter((p) => p.reachable && onDevice.has(p.provider)).sort((a, b) => rank(a.provider) - rank(b.provider)).flatMap(
-    (p) => p.models.filter((m) => localModelUnfitReason(m, input.workload) === null).map((m) => ({
-      kind: "local",
-      ref: m.ref,
-      provider: p.provider,
-      model: m.model,
-      endpoint: p.endpoint
-    }))
-  );
-  const preferredIndex = input.preferred ? candidates.findIndex((c) => c.kind === "local" && c.ref === input.preferred) : -1;
-  if (preferredIndex > 0) candidates.unshift(...candidates.splice(preferredIndex, 1));
-  const local = candidates.slice(0, Math.max(0, input.maxLocalAttempts ?? 1));
-  return input.cloud ? [...local, { kind: "cloud", ...input.cloud.model ? { model: input.cloud.model } : {} }] : local;
-}
-
-// ../packages/local-inference/src/failover.ts
-var LocalFirstUnavailableError = class extends Error {
-  constructor() {
-    super("local_first_unavailable: no local model fits this call and no cloud fallback is available");
-    this.name = "LocalFirstUnavailableError";
-  }
-};
-async function runLocalFirst(plan, run, options = {}) {
-  if (plan.length === 0) throw new LocalFirstUnavailableError();
-  const attempts = [];
-  const record2 = (entry) => {
-    attempts.push(entry);
-    options.onAttempt?.(entry);
-  };
-  for (let i = 0; i < plan.length; i++) {
-    const attempt = plan[i];
-    const isLast = i === plan.length - 1;
-    const state = { committed: false };
-    try {
-      const result = await run(attempt, () => {
-        state.committed = true;
-      });
-      if (state.committed || isLast || (options.accept?.(result) ?? true)) {
-        record2({ attempt, outcome: "served" });
-        return { result, served: attempt, attempts };
-      }
-      record2({ attempt, outcome: "refused", detail: "empty_response" });
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      record2({ attempt, outcome: "failed", detail });
-      if (options.signal?.aborted || state.committed || isLast) throw e;
-    }
-  }
-  throw new LocalFirstUnavailableError();
 }
 
 // ../packages/learned-routing/src/actionTypes.ts
@@ -4610,6 +4441,74 @@ var CORE_TOOLS = [
   finishTool
 ];
 
+// ../packages/agent-tools/src/psychometric-dims.ts
+var PSYCH_DIM = {
+  // HEXACO spine
+  honesty: "hexaco.honesty",
+  emotionality: "hexaco.emotionality",
+  extraversion: "hexaco.extraversion",
+  agreeableness: "hexaco.agreeableness",
+  conscientiousness: "hexaco.conscientiousness",
+  openness: "hexaco.openness",
+  // Regulatory focus (0 = prevention, 100 = promotion)
+  regulatoryFocus: "regfocus.orientation",
+  // Cognition / dual-process (0 = intuitive/System-1, 100 = deliberate/System-2)
+  needForCognition: "cognition.need_for_cognition",
+  reflection: "cognition.reflection",
+  // Decision style (GDMS) + maximizing
+  decisionRational: "decision.rational",
+  decisionIntuitive: "decision.intuitive",
+  decisionDependent: "decision.dependent",
+  decisionSpontaneous: "decision.spontaneous",
+  maximizing: "decision.maximizing",
+  // Moral Foundations
+  moralCare: "moral.care",
+  moralFairness: "moral.fairness",
+  moralLoyalty: "moral.loyalty",
+  moralAuthority: "moral.authority",
+  moralSanctity: "moral.sanctity",
+  moralLiberty: "moral.liberty",
+  // Thomas-Kilmann conflict axes (mode is derived from the two)
+  conflictAssertiveness: "conflict.assertiveness",
+  conflictCooperativeness: "conflict.cooperativeness",
+  // Schwartz basic values
+  valSelfDirection: "values.self_direction",
+  valStimulation: "values.stimulation",
+  valHedonism: "values.hedonism",
+  valAchievement: "values.achievement",
+  valPower: "values.power",
+  valSecurity: "values.security",
+  valConformity: "values.conformity",
+  valTradition: "values.tradition",
+  valBenevolence: "values.benevolence",
+  valUniversalism: "values.universalism",
+  // Dispositional
+  grit: "disp.grit",
+  locusInternal: "disp.locus_internal",
+  riskTolerance: "disp.risk_tolerance"
+};
+var NEUTRAL = 50;
+function score(vector, id) {
+  const raw = vector?.[id];
+  if (typeof raw !== "number" || Number.isNaN(raw)) return NEUTRAL;
+  return Math.max(0, Math.min(100, raw));
+}
+
+// ../packages/agent-tools/src/psychometrics.ts
+function limbicTraits(profile) {
+  const v = profile?.vector;
+  return {
+    openness: score(v, PSYCH_DIM.openness),
+    emotionality: score(v, PSYCH_DIM.emotionality),
+    conscientiousness: score(v, PSYCH_DIM.conscientiousness),
+    extraversion: score(v, PSYCH_DIM.extraversion),
+    regulatoryFocus: score(v, PSYCH_DIM.regulatoryFocus),
+    riskTolerance: score(v, PSYCH_DIM.riskTolerance),
+    grit: score(v, PSYCH_DIM.grit),
+    stimulation: score(v, PSYCH_DIM.valStimulation)
+  };
+}
+
 // ../packages/agent-tools/src/skill-tools.ts
 var skillProposeTool = defineTool({
   name: "skill_propose",
@@ -5072,7 +4971,7 @@ function createLocalFirstStream(input) {
   return async (opts, handlers = {}) => {
     if (!localFirstApplies(opts)) {
       if (!opts.model || !isLocalModelRef(opts.model)) {
-        if (!input.cloud) throw new Error(NOT_SIGNED_IN);
+        if (!input.cloud) throw new Error(input.noModel ?? NOT_SIGNED_IN);
         return input.cloud(opts, handlers);
       }
       const local = probedTarget(opts.model, input.probes);
@@ -5083,12 +4982,13 @@ function createLocalFirstStream(input) {
       }
     }
     const routed = opts.model ? { ...opts, model: void 0 } : opts;
-    const plan = localFirstPlan({
+    const planned = localFirstPlan({
       probes: input.probes,
       workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
       cloud: input.cloud ? {} : null
     });
-    if (plan.length === 0) throw new Error(NOT_SIGNED_IN);
+    const plan = input.gate ? await input.gate(planned, routed) : planned;
+    if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
     const { result, attempts } = await runLocalFirst(
       plan,
       async (attempt, commit) => {
@@ -5123,7 +5023,7 @@ async function completeLocalFirst(input) {
     workload: localFirstWorkload({ messages: input.messages }),
     cloud: input.cloud ? {} : null
   });
-  if (plan.length === 0) throw new Error(NOT_SIGNED_IN);
+  if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
   const { result } = await runLocalFirst(
     plan,
     (attempt) => attempt.kind === "cloud" ? input.cloud() : completeLocal(attempt.endpoint, attempt.model, input.messages, input.signal, input.fetch),
@@ -5341,77 +5241,363 @@ function pageRuntimePin(ref) {
   return { ...pin, endpoint: { baseUrl: runtime.defaultBaseUrl } };
 }
 
+// src/localSuccess/turnFeatures.ts
+var CODE_HEAVY = /```|^diff --git |^@@ [-+]\d|^\s+at \S+ \(?\S+:\d+:\d+\)?$|Traceback \(most recent call last\)/m;
+function contentText(content) {
+  if (typeof content === "string") return content;
+  return content.map((p) => p.type === "text" ? p.text : "").join("\n");
+}
+function contentChars(content) {
+  return typeof content === "string" ? content.length : JSON.stringify(content).length;
+}
+function localTurnFeatures(call2, servedContextTokens) {
+  const users = call2.messages.filter((m) => m.role === "user");
+  const last = users[users.length - 1];
+  const promptChars = last ? contentChars(last.content) : 0;
+  const totalChars = call2.messages.reduce((n, m) => n + contentChars(m.content), 0) + (call2.tools?.length ? JSON.stringify(call2.tools).length : 0);
+  const promptTokens = estimateTokensFromChars(promptChars);
+  const attachments = last && typeof last.content !== "string" ? last.content.filter((p) => p.type !== "text").length : 0;
+  return {
+    promptTokens,
+    contextTokens: Math.max(0, estimateTokensFromChars(totalChars) - promptTokens),
+    servedContextTokens: Math.max(0, servedContextTokens ?? 0),
+    tools: call2.tools?.length ?? 0,
+    turnIndex: Math.max(0, users.length - 1),
+    attachments,
+    codeHeavy: last ? CODE_HEAVY.test(contentText(last.content)) : false
+  };
+}
+
+// src/localSuccess/hybridLocalSuccess.ts
+function cloudResult(records, error) {
+  const cloud = records.find((r) => r.attempt.kind === "cloud");
+  if (!cloud) return void 0;
+  if (cloud.outcome === "served") return "succeeded";
+  if (error instanceof BrainRequestError && error.status >= 400 && error.status < 500) return void 0;
+  return "failed";
+}
+function hybridLocalSuccessTurn(router, probes, signal) {
+  let assessed = null;
+  const records = [];
+  return {
+    async gate(plan, call2) {
+      const local = plan.find((a) => a.kind === "local");
+      if (!local || !plan.some((a) => a.kind === "cloud")) return plan;
+      try {
+        const verdict = await router.assess(local.ref, localTurnFeatures(call2, contextWindowOf(local.ref, { probes })));
+        assessed = { ref: local.ref, outcome: { turn: verdict.turn } };
+        return verdict.skip ? plan.filter((a) => a.kind === "cloud") : plan;
+      } catch {
+        return plan;
+      }
+    },
+    onAttempt(record2) {
+      records.push(record2);
+    },
+    settle(error) {
+      if (!assessed || signal?.aborted) return;
+      const local = records.find((r) => r.attempt.kind === "local" && r.attempt.ref === assessed.ref);
+      const cloud = cloudResult(records, error);
+      const outcome = {
+        ...assessed.outcome,
+        ...local ? { local: local.outcome === "served" ? "succeeded" : "failed" } : {},
+        ...local && local.outcome !== "served" && records.some((r) => r.attempt.kind === "cloud") ? { fellBack: true } : {},
+        ...cloud ? { cloud } : {}
+      };
+      void router.record(assessed.ref, outcome).catch(() => void 0);
+    }
+  };
+}
+
+// src/localSuccess/localSuccessRouter.ts
+import {
+  InMemoryMlModels,
+  LOCAL_SUCCESS_FEATURES,
+  LOCAL_SUCCESS_TASK,
+  LogisticModel,
+  createMlRegistry,
+  engineKey,
+  localSuccessExamples,
+  runMlTask,
+  trainMlTask
+} from "@seanhogg/builderforce-memory-engine";
+var LOCAL_SKIP_CONFIDENCE = 0.8;
+var LOCAL_SKIP_EXPLORE = 0.1;
+var LOCAL_SUCCESS_HISTORY = 300;
+var registry = createMlRegistry();
+var ENGINE_KEY = engineKey(LOCAL_SUCCESS_TASK.engines[0]);
+var DIM = LOCAL_SUCCESS_FEATURES.length;
+var CLASSES = LOCAL_SUCCESS_TASK.output.labels.length;
+function parseSnapshot(raw) {
+  const empty = { v: 1, outcomes: [] };
+  if (!raw || typeof raw !== "object" || raw.v !== 1) return empty;
+  const s = raw;
+  const outcomes = Array.isArray(s.outcomes) ? s.outcomes.filter((o) => !!o && typeof o.ref === "string" && !!o.turn && typeof o.turn === "object") : [];
+  const head = s.head && Array.isArray(s.head.params) && s.head.params.length === DIM * CLASSES + CLASSES ? s.head : void 0;
+  return { v: 1, outcomes: outcomes.slice(-LOCAL_SUCCESS_HISTORY), ...head ? { head } : {} };
+}
+function modelsFor(params) {
+  const model = new LogisticModel(DIM, CLASSES);
+  model.importParams(params);
+  const models = new InMemoryMlModels();
+  models.set(LOCAL_SUCCESS_TASK.id, ENGINE_KEY, model);
+  return models;
+}
+function trusted(head) {
+  return !!head && head.holdoutLoss != null && head.holdoutLoss < Math.LN2;
+}
+function priorRate(outcomes, ref) {
+  let ran = 0;
+  let ok = 0;
+  for (const o of outcomes) {
+    if (o.ref !== ref || !o.local) continue;
+    ran++;
+    if (o.local === "succeeded") ok++;
+  }
+  return ran > 0 ? ok / ran : void 0;
+}
+function createLocalSuccessRouter(store, opts = {}) {
+  const random = opts.random ?? Math.random;
+  const now = opts.now ?? Date.now;
+  let snapshot = { v: 1, outcomes: [] };
+  let models = null;
+  const loaded = (async () => {
+    try {
+      snapshot = parseSnapshot(await store.load());
+      models = snapshot.head ? modelsFor(snapshot.head.params) : null;
+    } catch {
+    }
+  })();
+  let writes = loaded;
+  return {
+    async assess(ref, base) {
+      await loaded;
+      const prior = priorRate(snapshot.outcomes, ref);
+      const turn = { ...base, ...prior != null ? { priorLocalSuccessRate: prior } : {} };
+      if (!models || !trusted(snapshot.head)) return { turn, skip: false, probability: null };
+      try {
+        const { output } = await runMlTask(LOCAL_SUCCESS_TASK.id, turn, { registry, mode: "local-only", models });
+        const skip = 1 - output.probability > LOCAL_SKIP_CONFIDENCE && random() >= LOCAL_SKIP_EXPLORE;
+        return { turn, skip, probability: output.probability };
+      } catch {
+        return { turn, skip: false, probability: null };
+      }
+    },
+    record(ref, outcome) {
+      const done = writes.then(() => append(ref, outcome));
+      writes = done.catch(() => void 0);
+      return done;
+    }
+  };
+  async function append(ref, outcome) {
+    const outcomes = [...snapshot.outcomes, { ...outcome, ref, at: now() }].slice(-LOCAL_SUCCESS_HISTORY);
+    const fresh = new InMemoryMlModels();
+    let head;
+    let nextModels = null;
+    try {
+      const fit = await trainMlTask(LOCAL_SUCCESS_TASK, localSuccessExamples(outcomes), {
+        models: fresh,
+        classical: { logistic: { classes: CLASSES } }
+      });
+      const params = fit?.predictor.exportParams?.();
+      if (fit && params) {
+        head = { params: Array.from(params), holdoutLoss: fit.holdoutLoss, samples: fit.samples };
+        nextModels = fresh;
+      }
+    } catch {
+      head = snapshot.head;
+      nextModels = models;
+    }
+    snapshot = { v: 1, outcomes, ...head ? { head } : {} };
+    models = nextModels;
+    try {
+      await store.save(snapshot);
+    } catch {
+    }
+  }
+}
+function webStorageLocalSuccessStore(key = "bf.ml.run.local-success") {
+  return {
+    load() {
+      try {
+        const raw = globalThis.localStorage?.getItem(key);
+        return raw ? JSON.parse(raw) : void 0;
+      } catch {
+        return void 0;
+      }
+    },
+    save(snapshot) {
+      try {
+        globalThis.localStorage?.setItem(key, JSON.stringify(snapshot));
+      } catch {
+      }
+    }
+  };
+}
+var routers = /* @__PURE__ */ new WeakMap();
+function localSuccessRouterFor(store) {
+  let r = routers.get(store);
+  if (!r) {
+    r = createLocalSuccessRouter(store);
+    routers.set(store, r);
+  }
+  return r;
+}
+
 // src/hostModelStream.ts
 var handoffFit = createHandoffFit();
 function createHostModelStream(input) {
   const resolveLocal = input.localPin ?? pageRuntimePin;
   const fit = input.fit ?? handoffFit;
-  return async (opts, handlers = {}) => {
+  return async (callOpts, handlers = {}) => {
+    const mode = await input.mode?.() ?? "hybrid";
+    const localOnly = mode === "local-only";
     const hostPin = await input.pinned?.() ?? null;
-    const localRef = hostPin ?? opts.model;
-    const local = localRef ? resolveLocal(localRef) : null;
-    const cloud = await input.cloud();
-    if (local && localRef) {
-      return createLocalStream(local.endpoint, local.model, input.fetch, { ref: localRef, cloud, fit })(opts, handlers);
-    }
-    if (hostPin && !isLocalModelRef(hostPin) && cloud) {
-      return cloud({ ...opts, model: hostPin, modelStrict: true }, handlers);
-    }
-    const probes = input.probes ? await input.probes() : [];
-    if (probes.length === 0) {
-      if (!cloud) throw new Error(NOT_SIGNED_IN);
-      return cloud(opts, handlers);
-    }
-    return createLocalFirstStream({
-      probes,
-      cloud,
-      fit,
-      ...input.fetch ? { fetch: input.fetch } : {},
-      ...input.onAttempt ? { onAttempt: input.onAttempt } : {}
-    })(opts, handlers);
-  };
-}
-
-// src/pageEngines/engineFailure.ts
-function reportPageEngineFailure(runtime, stage, error) {
-  console.warn(`BuilderForce page engine: ${runtime} ${stage} failed (${errorMessage(error)})`);
-}
-
-// src/pageEngines/types.ts
-var PageEngineError = class extends Error {
-  status;
-  code;
-  constructor(status2, code, message = code) {
-    super(message);
-    this.name = "PageEngineError";
-    this.status = status2;
-    this.code = code;
-  }
-};
-var abortReason = (signal) => signal.reason ?? new DOMException("Aborted", "AbortError");
-var errorMessage = (e) => e instanceof Error ? e.message : String(e);
-var hasTools = (body) => Array.isArray(body.tools) && body.tools.length > 0;
-function memoizedProbe(runtime, run, config = {}) {
-  const ttlMs = config.ttlMs ?? PAGE_ENGINE_PROBE_TTL_MS;
-  const now = config.now ?? (() => Date.now());
-  let memo;
-  return {
-    probe(options = {}) {
-      const at = now();
-      if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
-      const value = run().catch((e) => {
-        reportPageEngineFailure(runtime, "probe", e);
-        return null;
+    const opts = localOnly ? onDeviceOnly(callOpts) : callOpts;
+    const pick = localOnly ? hostPin && runsOnDevice(hostPin) ? hostPin : null : hostPin ?? (opts.modelStrict && opts.model ? opts.model : null);
+    const byoPool = !localOnly && opts.routingMode === "byo_pool";
+    if (mode === "specific" && !pick && !byoPool) throw new Error(NO_SPECIFIC_MODEL);
+    const cloud = localOnly ? null : await input.cloud();
+    const noModel = localOnly || (input.signedIn ? await input.signedIn() : cloud !== null) ? NO_LOCAL_MODEL : NOT_SIGNED_IN;
+    const auto = async (call2, h) => {
+      const localRef = call2.model;
+      const local2 = localRef ? resolveLocal(localRef) : null;
+      if (local2 && localRef) return createLocalStream(local2.endpoint, local2.model, input.fetch, { ref: localRef, cloud, fit })(call2, h);
+      const probes = input.probes ? await input.probes() : [];
+      if (probes.length === 0) {
+        if (!cloud) throw new Error(noModel);
+        return cloud(call2, h);
+      }
+      const learned = mode === "hybrid" && cloud && input.localSuccess ? hybridLocalSuccessTurn(localSuccessRouterFor(input.localSuccess), probes, call2.signal) : null;
+      const onAttempt = learned || input.onAttempt ? (record2) => {
+        learned?.onAttempt(record2);
+        input.onAttempt?.(record2);
+      } : void 0;
+      const stream = createLocalFirstStream({
+        probes,
+        cloud,
+        fit,
+        noModel,
+        ...input.fetch ? { fetch: input.fetch } : {},
+        ...onAttempt ? { onAttempt } : {},
+        ...learned ? { gate: learned.gate } : {}
       });
-      memo = { at, value };
-      return value;
+      if (!learned) return stream(call2, h);
+      try {
+        const result = await stream(call2, h);
+        learned.settle();
+        return result;
+      } catch (err) {
+        learned.settle(err);
+        throw err;
+      }
+    };
+    const strict = mode === "specific";
+    if (!pick) {
+      if (strict) {
+        if (!cloud) throw new Error(noModel);
+        return cloud(opts, handlers);
+      }
+      return auto(opts, handlers);
+    }
+    const local = resolveLocal(pick);
+    const pinned = (h) => {
+      if (local) {
+        return createLocalStream(local.endpoint, local.model, input.fetch, { ref: pick, cloud: strict ? null : cloud, fit })(opts, h);
+      }
+      if (isLocalModelRef(pick) || !cloud) throw new Error(isLocalModelRef(pick) ? NO_LOCAL_MODEL : noModel);
+      return cloud({ ...opts, model: pick, modelStrict: strict }, h);
+    };
+    if (strict) return pinned(handlers);
+    if (!local && (isLocalModelRef(pick) || !cloud)) return auto(unpicked(opts), handlers);
+    return pickThenAuto(pinned, () => auto(unpicked(opts), handlers), handlers, opts.signal, {
+      from: pick,
+      local: !!local,
+      ...input.onFallback ? { onFallback: input.onFallback } : {}
+    });
+  };
+}
+function isFallbackFailure(err, local) {
+  if (local) return true;
+  if (err instanceof BrainRequestError) return err.status >= 500;
+  return err instanceof TransportError || err instanceof StreamInterruptedError;
+}
+async function pickThenAuto(pinned, fallback, handlers, signal, pick) {
+  let committed = false;
+  const watched = {
+    ...handlers,
+    onTextDelta: (delta) => {
+      committed = true;
+      handlers.onTextDelta?.(delta);
     },
-    invalidate() {
-      memo = void 0;
+    onToolCallDelta: (index, partial) => {
+      committed = true;
+      handlers.onToolCallDelta?.(index, partial);
+    }
+  };
+  try {
+    return await pinned(watched);
+  } catch (err) {
+    if (committed || signal?.aborted || !isFallbackFailure(err, pick.local)) throw err;
+    pick.onFallback?.({ from: pick.from, reason: err instanceof Error ? err.message : String(err) });
+    return fallback();
+  }
+}
+function unpicked(opts) {
+  const { modelStrict: _strict, model: _model, routingMode: _routing, ...rest } = opts;
+  return rest;
+}
+function runsOnDevice(ref) {
+  const parsed = parseLocalModelRef(ref);
+  return !!parsed && localRuntime(parsed.provider).onDevice;
+}
+function onDeviceOnly(opts) {
+  const offDevice = !!opts.model && !runsOnDevice(opts.model);
+  if (!offDevice && (opts.routingMode ?? "auto") === "auto") return opts;
+  const { modelStrict: _strict, model, ...rest } = opts;
+  return { ...rest, ...offDevice || !model ? {} : { model }, routingMode: "auto" };
+}
+
+// src/modelFallback.ts
+function createModelFallbackChannel() {
+  let current = null;
+  const listeners = /* @__PURE__ */ new Set();
+  const notify = () => {
+    for (const listener of [...listeners]) listener();
+  };
+  return {
+    report: (event) => {
+      current = event;
+      notify();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    latest: () => current,
+    clear: () => {
+      if (current === null) return;
+      current = null;
+      notify();
     }
   };
 }
-var PAGE_ENGINE_PROBE_TTL_MS = 3e4;
+function modelFallbackText(template, event) {
+  return template.replace("{model}", event.from);
+}
+var DEFAULT_MODEL_FALLBACK_TEMPLATE = "Your pick {model} failed; answered with Auto.";
+
+// src/limbicAffect.ts
+import { appraiseTask, buildLimbicBlock, limbicSetpoints, neutralLimbicState } from "@seanhogg/builderforce-memory-engine/limbic";
+function personalitySetpoints(profile) {
+  return profile ? limbicSetpoints(limbicTraits(profile)) : neutralLimbicState();
+}
+function turnAffectBlock(text, setpoints) {
+  if (!text.trim()) return "";
+  return buildLimbicBlock(appraiseTask(text, setpoints ?? neutralLimbicState()));
+}
 
 // src/pageEngines/messages.ts
 function messageText(content) {
@@ -5619,6 +5805,10 @@ function refusalFor(engine, e) {
   if (e instanceof PageEngineError) return refusal(e.status, e.code, e.message);
   return refusal(500, `${engine.runtime}_engine_failed`, errorMessage(e));
 }
+function inBandError(e) {
+  if (!(e instanceof PageEngineError)) return { message: errorMessage(e) };
+  return { code: e.code, message: e.message.includes(e.code) ? e.message : `${e.code}: ${e.message}` };
+}
 var encoder = new TextEncoder();
 var sseFrame = (data) => encoder.encode(`data: ${JSON.stringify(data)}
 
@@ -5642,7 +5832,7 @@ function sseBody(first, chunks, signal) {
           controller.error(e);
           return;
         }
-        controller.enqueue(sseFrame({ error: { message: errorMessage(e) } }));
+        controller.enqueue(sseFrame({ error: inBandError(e) }));
         controller.close();
       }
     },
@@ -5728,7 +5918,7 @@ async function probePageEngines(engines, options) {
 
 // src/pageEngines/modelStore.ts
 function backendFor(row, options) {
-  const { hf, webllm: webllm2 } = options;
+  const { hf, webllm } = options;
   if (row.source.kind === "hf-file") {
     return hf ? {
       ready: async (r) => await hf.status(r.ref) === "ready",
@@ -5737,10 +5927,10 @@ function backendFor(row, options) {
     } : void 0;
   }
   const { modelId } = row.source;
-  return webllm2 ? {
-    ready: () => webllm2.has(modelId),
-    download: (_r, onProgress, signal) => webllm2.download(modelId, onProgress, signal),
-    remove: () => webllm2.remove(modelId)
+  return webllm ? {
+    ready: () => webllm.has(modelId),
+    download: (_r, onProgress, signal) => webllm.download(modelId, onProgress, signal),
+    remove: () => webllm.remove(modelId)
   } : void 0;
 }
 function createLocalModelStore(options) {
@@ -5766,12 +5956,12 @@ function createLocalModelStore(options) {
     const support = supports.get(row.runtime);
     if (!backend || !support) return { ...row, state: "unsupported", reason: "engine_unavailable" };
     const fit = localModelFit(row, support);
-    if (!fit.fits) return { ...row, state: "unsupported", reason: fit.reason };
     const ready = await backend.ready(row).catch((e) => {
       reportPageEngineFailure(row.runtime, "cache_lookup", e);
       return false;
     });
-    return { ...row, state: ready ? "ready" : "absent" };
+    if (!fit.fits) return { ...row, state: "unsupported", reason: fit.reason, ...ready ? { downloaded: true } : {} };
+    return { ...row, state: ready ? "ready" : "absent", backend: fit.backend };
   }
   return {
     async listLocalModels() {
@@ -5839,35 +6029,6 @@ function deferredLocalModelStore(store) {
   };
 }
 
-// src/pageEngines/catalogProbe.ts
-async function catalogProbe(runtime, baseUrl, support, isReady, contextOf = (row) => row.contextTokens) {
-  if (!support.supported) return null;
-  const fitting = localCatalogFor(runtime).filter((row) => localModelFit(row, support).fits);
-  const ready = await Promise.all(
-    fitting.map(
-      (row) => isReady(row).catch((e) => {
-        reportPageEngineFailure(runtime, "cache_lookup", e);
-        return false;
-      })
-    )
-  );
-  const rows = fitting.filter((_, i) => ready[i]);
-  if (rows.length === 0) return null;
-  return {
-    provider: runtime,
-    endpoint: { baseUrl },
-    reachable: true,
-    models: rows.map((row) => ({
-      ref: formatLocalModelRef(runtime, row.model),
-      provider: runtime,
-      model: row.model,
-      label: row.label,
-      tools: row.tools,
-      contextTokens: contextOf(row)
-    }))
-  };
-}
-
 // src/pageEngines/residentModel.ts
 var settled = () => void 0;
 function createResidentModel(create) {
@@ -5903,259 +6064,6 @@ function createResidentModel(create) {
   };
 }
 
-// src/pageEngines/bfiEngine.ts
-var BFI_STATUS = {
-  webgpu_unavailable: 503,
-  context_exceeded: 413,
-  invalid_request: 400
-};
-function bfiError(e) {
-  if (e instanceof PageEngineError) return e;
-  const message = errorMessage(e);
-  const code = /^([a-z_]+):/.exec(message)?.[1];
-  return code && BFI_STATUS[code] ? new PageEngineError(BFI_STATUS[code], code, message) : e;
-}
-var BFI_CONTEXT_FLOOR = 2048;
-function predictedContext(engine, row, support) {
-  const planned = row.kv ? engine.contextFor({
-    ...row.kv,
-    trainedContext: row.contextTokens,
-    f16: support.f16,
-    maxStorageBufferBindingSizeBytes: support.maxStorageBufferBindingSizeBytes ?? support.maxBufferBytes
-  }) : 0;
-  return planned > 0 ? planned : Math.min(BFI_CONTEXT_FLOOR, row.contextTokens);
-}
-var UNSUPPORTED = { supported: false, reason: "bfi_unavailable", f16: false, maxBufferBytes: 0 };
-function createBfiEngine(options) {
-  let module;
-  const bfi = () => module ??= options.loadBfi();
-  const support = () => bfi().then((m) => m.BfiEngine.support()).catch((e) => {
-    reportPageEngineFailure("bfi", "support", e);
-    return UNSUPPORTED;
-  });
-  const resident = createResidentModel(async () => (await bfi()).BfiEngine.create());
-  const served = /* @__PURE__ */ new Map();
-  const residentEngine = (row) => resident.acquire(row.ref, async (engine, previous) => {
-    if (previous) engine.unload();
-    const { stream, bytes } = await options.store.open(row.ref);
-    const info = await engine.load(stream, bytes);
-    if (info.contextTokens > 0 && served.get(row.ref) !== info.contextTokens) {
-      served.set(row.ref, info.contextTokens);
-      prober.invalidate();
-    }
-  });
-  const prober = memoizedProbe("bfi", async () => {
-    const rows = localCatalogFor("bfi");
-    const states = await Promise.all(rows.map((row) => options.store.status(row.ref)));
-    const ready = new Set(rows.filter((_, i) => states[i] === "ready").map((row) => row.ref));
-    if (ready.size === 0) return null;
-    const device = await support();
-    const { BfiEngine } = await bfi();
-    return catalogProbe(
-      "bfi",
-      BFI_ENGINE_BASE_URL,
-      device,
-      async (row) => ready.has(row.ref),
-      (row) => served.get(row.ref) ?? predictedContext(BfiEngine, row, device)
-    );
-  }, options);
-  async function chatCompletions(body, signal) {
-    const row = localCatalogModel(formatLocalModelRef("bfi", typeof body.model === "string" ? body.model : ""));
-    if (!row) throw new PageEngineError(404, "model_not_found");
-    if (await options.store.status(row.ref) !== "ready") throw new PageEngineError(503, "model_not_downloaded");
-    if (signal?.aborted) throw abortReason(signal);
-    let live2;
-    try {
-      live2 = await residentEngine(row);
-    } catch (e) {
-      const mapped = bfiError(e);
-      throw mapped instanceof PageEngineError ? mapped : new PageEngineError(503, "bfi_engine_unavailable", errorMessage(e));
-    }
-    return bfiChunks(live2, JSON.stringify({ ...body, stream: true }), signal);
-  }
-  return { runtime: "bfi", baseUrl: BFI_ENGINE_BASE_URL, ...prober, support, chatCompletions };
-}
-function closingChunk(finalJson) {
-  try {
-    const final = JSON.parse(finalJson);
-    const finish = final.choices?.[0]?.finish_reason ?? null;
-    if (!finish && !final.usage) return null;
-    return {
-      ...final.model ? { model: final.model } : {},
-      choices: [{ index: 0, delta: {}, finish_reason: finish }],
-      ...final.usage ? { usage: final.usage } : {}
-    };
-  } catch {
-    return null;
-  }
-}
-async function* bfiChunks(engine, requestJson, signal) {
-  const controller = new AbortController();
-  const onAbort = () => controller.abort(signal?.reason);
-  signal?.addEventListener("abort", onAbort, { once: true });
-  const queue = [];
-  let wake;
-  const state = {};
-  const notify = () => {
-    wake?.();
-    wake = void 0;
-  };
-  engine.chat(
-    requestJson,
-    (json) => {
-      try {
-        queue.push(JSON.parse(json));
-        notify();
-      } catch (e) {
-        reportPageEngineFailure("bfi", "chunk", e);
-      }
-    },
-    controller.signal
-  ).then(
-    (final) => {
-      state.outcome = { ok: true, final };
-      notify();
-    },
-    (error) => {
-      state.outcome = { ok: false, error };
-      notify();
-    }
-  );
-  try {
-    for (; ; ) {
-      const next = queue.shift();
-      if (next) {
-        yield next;
-        continue;
-      }
-      if (state.outcome) break;
-      await new Promise((resolve) => wake = resolve);
-    }
-    const settled2 = state.outcome;
-    if (!settled2.ok) throw signal?.aborted ? abortReason(signal) : bfiError(settled2.error);
-    const closing = closingChunk(settled2.final);
-    if (closing) yield closing;
-  } finally {
-    signal?.removeEventListener("abort", onAbort);
-    if (!state.outcome) controller.abort();
-  }
-}
-
-// src/pageEngines/hfModelStore.ts
-var LOCAL_MODEL_CACHE = "builderforce-local-models";
-function hfResolveUrl(repo, file) {
-  return `https://huggingface.co/${repo}/resolve/main/${file}`;
-}
-var BYTES_HEADER = "x-builderforce-model-bytes";
-function hfRow(ref) {
-  const row = localCatalogModel(ref);
-  if (!row || row.source.kind !== "hf-file") throw new Error(`unknown_model: ${ref}`);
-  return row;
-}
-var urlOf = (ref) => {
-  const { source } = hfRow(ref);
-  return hfResolveUrl(source.repo, source.file);
-};
-function createHfModelStore(options = {}) {
-  const storage = () => {
-    const caches = options.caches ?? globalThis.caches;
-    if (!caches) throw new Error("cache_storage_unavailable");
-    return caches;
-  };
-  const fetchImpl = options.fetch ?? ((input, init) => fetch(input, init));
-  const entry = async (ref) => {
-    const caches = storage();
-    if (!await caches.has(LOCAL_MODEL_CACHE)) return void 0;
-    return (await caches.open(LOCAL_MODEL_CACHE)).match(urlOf(ref));
-  };
-  return {
-    async status(ref) {
-      try {
-        return await entry(ref) ? "ready" : "absent";
-      } catch (e) {
-        reportPageEngineFailure("bfi", "cache_lookup", e);
-        return "absent";
-      }
-    },
-    async download(ref, onProgress, signal) {
-      const row = hfRow(ref);
-      const url = urlOf(ref);
-      await globalThis.navigator?.storage?.persist?.().catch((e) => reportPageEngineFailure("bfi", "persist", e));
-      const res = await fetchImpl(url, { credentials: "omit", ...signal ? { signal } : {} });
-      if (!res.ok || !res.body) throw new Error(`download_failed: HTTP ${res.status}`);
-      const total = Number(res.headers.get("content-length")) || row.bytes;
-      let loaded = 0;
-      const counted = res.body.pipeThrough(
-        new TransformStream({
-          transform(chunk2, controller) {
-            loaded += chunk2.byteLength;
-            onProgress?.(Math.min(1, loaded / total));
-            controller.enqueue(chunk2);
-          }
-        })
-      );
-      const cache2 = await storage().open(LOCAL_MODEL_CACHE);
-      await cache2.put(
-        url,
-        new Response(counted, {
-          headers: { "content-type": "application/octet-stream", [BYTES_HEADER]: String(total) }
-        })
-      );
-      if (loaded !== total) {
-        await cache2.delete(url);
-        throw new Error(`download_incomplete: ${loaded} of ${total} bytes`);
-      }
-    },
-    async remove(ref) {
-      const caches = storage();
-      if (!await caches.has(LOCAL_MODEL_CACHE)) return;
-      await (await caches.open(LOCAL_MODEL_CACHE)).delete(urlOf(ref));
-    },
-    async open(ref) {
-      const res = await entry(ref);
-      if (!res?.body) throw new Error(`model_not_downloaded: ${ref}`);
-      const bytes = Number(res.headers.get(BYTES_HEADER)) || hfRow(ref).bytes;
-      return { stream: res.body, bytes };
-    }
-  };
-}
-
-// src/pageEngines/webgpu.ts
-var UNSUPPORTED2 = (reason) => ({
-  contractVersion: 2,
-  supported: false,
-  reason,
-  f16: false,
-  maxBufferBytes: 0,
-  maxBufferSizeBytes: 0,
-  maxStorageBufferBindingSizeBytes: 0,
-  requestedPowerPreference: "high-performance"
-});
-var pageGpu = () => globalThis.navigator?.gpu;
-function hasWebGPU() {
-  return pageGpu() != null;
-}
-async function webGpuSupport(gpu = pageGpu()) {
-  if (!gpu) return UNSUPPORTED2("webgpu_missing");
-  try {
-    const adapter = await gpu.requestAdapter({ powerPreference: "high-performance" });
-    if (!adapter) return UNSUPPORTED2("no_adapter");
-    const maxBufferSizeBytes = adapter.limits.maxBufferSize ?? 0;
-    const maxStorageBufferBindingSizeBytes = adapter.limits.maxStorageBufferBindingSize ?? 0;
-    return {
-      contractVersion: 2,
-      supported: true,
-      f16: adapter.features.has("shader-f16"),
-      maxBufferBytes: maxBufferSizeBytes,
-      maxBufferSizeBytes,
-      maxStorageBufferBindingSizeBytes,
-      requestedPowerPreference: "high-performance"
-    };
-  } catch (e) {
-    return UNSUPPORTED2(e instanceof Error ? e.message : String(e));
-  }
-}
-
 // src/pageEngines/webllmEngine.ts
 var WEBLLM_MODEL_CACHE = "webllm/model";
 var FORWARDED_FIELDS = [
@@ -6189,9 +6097,9 @@ function createWebLlmEngine(options = {}) {
   const load = options.loadWebLlm ?? defaultLoader;
   const support = options.support ?? (() => webGpuSupport());
   let module;
-  const webllm2 = () => module ??= load();
+  const webllm = () => module ??= load();
   const resident = createResidentModel(async () => {
-    const lib = await webllm2();
+    const lib = await webllm();
     return options.workerUrl ? new lib.WebWorkerMLCEngine(new Worker(options.workerUrl, { type: "module" })) : new lib.MLCEngine();
   });
   const residentEngine = (modelId, onProgress) => resident.acquire(modelId, async (engine) => {
@@ -6201,7 +6109,7 @@ function createWebLlmEngine(options = {}) {
   const cached2 = async (modelId) => {
     const storage = options.caches ?? globalThis.caches;
     if (storage && !await storage.has(WEBLLM_MODEL_CACHE)) return false;
-    return (await webllm2()).hasModelInCache(modelId);
+    return (await webllm()).hasModelInCache(modelId);
   };
   const prober = memoizedProbe(
     "webllm",
@@ -6251,7 +6159,7 @@ function createWebLlmEngine(options = {}) {
     },
     async remove(modelId) {
       await resident.evict(modelId)?.unload();
-      await (await webllm2()).deleteModelAllInfoInCache(modelId);
+      await (await webllm()).deleteModelAllInfoInCache(modelId);
       prober.invalidate();
     }
   };
@@ -6273,13 +6181,13 @@ async function* interruptible(stream, engine, signal) {
 
 // src/pageEngines/pageEngineSet.ts
 function createPageEngineSet(options = {}) {
-  const hf = createHfModelStore();
-  const bfi = options.loadBfi ? createBfiEngine({ loadBfi: options.loadBfi, store: hf }) : void 0;
-  const webllm2 = createWebLlmEngine(options.webllmWorkerUrl ? { workerUrl: options.webllmWorkerUrl } : {});
-  const engines = [...bfi ? [bfi] : [], webllm2, promptApiEngine];
+  const hf = options.hf ?? createHfModelStore();
+  const bfi = options.bfiWorker ? createBfiWorkerEngine({ ...options.bfiWorker, store: hf }) : void 0;
+  const webllm = createWebLlmEngine(options.webllmWorkerUrl ? { workerUrl: options.webllmWorkerUrl } : {});
+  const engines = [...bfi ? [bfi] : [], webllm, promptApiEngine];
   const store = createLocalModelStore({
     ...bfi ? { hf } : {},
-    webllm: webllm2.models,
+    webllm: webllm.models,
     support: { webllm: () => webGpuSupport(), ...bfi ? { bfi: bfi.support } : {} },
     engines
   });
@@ -6831,25 +6739,25 @@ import { jsx as jsx2 } from "react/jsx-runtime";
 var BrainActionsContext = createContext2(null);
 var BrainRegistrarContext = createContext2(null);
 function BrainActionsProvider({ children }) {
-  const registry = useRef2(/* @__PURE__ */ new Map());
+  const registry2 = useRef2(/* @__PURE__ */ new Map());
   const [version, setVersion] = useState2(0);
   const bump = useCallback2(() => setVersion((v) => v + 1), []);
   const register = useCallback2((actions) => {
     const token = /* @__PURE__ */ Symbol("brain-action-registration");
     for (const action of actions) {
-      registry.current.set(action.name, { action, token });
+      registry2.current.set(action.name, { action, token });
     }
     bump();
     return () => {
       for (const action of actions) {
-        const cur = registry.current.get(action.name);
-        if (cur && cur.token === token) registry.current.delete(action.name);
+        const cur = registry2.current.get(action.name);
+        if (cur && cur.token === token) registry2.current.delete(action.name);
       }
       bump();
     };
   }, [bump]);
   const runTool = useCallback2(async (name, args) => {
-    const entry = registry.current.get(name);
+    const entry = registry2.current.get(name);
     if (!entry) {
       return { error: `Unknown tool: ${name}` };
     }
@@ -6860,7 +6768,7 @@ function BrainActionsProvider({ children }) {
     }
   }, []);
   const isMutating = useCallback2((name, args) => {
-    const entry = registry.current.get(name);
+    const entry = registry2.current.get(name);
     if (!entry) return false;
     const m = entry.action.mutates;
     if (typeof m === "function") {
@@ -6873,7 +6781,7 @@ function BrainActionsProvider({ children }) {
     return !!m;
   }, []);
   const toolSpecs = useMemo2(() => {
-    return toolSpecsFor([...registry.current.values()].map((e) => e.action));
+    return toolSpecsFor([...registry2.current.values()].map((e) => e.action));
   }, [version]);
   const value = useMemo2(
     () => ({ toolSpecs, runTool, isMutating, register }),
@@ -16192,6 +16100,9 @@ function displayModelName(model, identity, opts) {
 
 // src/modelChoice.ts
 var PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
+function routingModeForSelection(selection) {
+  return selection.mode === "byo_pool" ? "byo_pool" : void 0;
+}
 var DEFAULT_MODEL_CHOICE_LABELS = {
   categoryAuto: "Auto",
   categoryByo: "BYO",
@@ -17291,11 +17202,15 @@ export {
   DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS,
+  DEFAULT_MODEL_FALLBACK_TEMPLATE,
   DEFAULT_MODEL_IDENTITY,
   DEFAULT_PERSONA,
   DEFAULT_TOOL_FAILURE_STREAK,
   DEFAULT_TOOL_LIMIT,
   EMPTY_GATEWAY_MODEL_OPTIONS,
+  ENGINE_WORKER_FATAL,
+  ENGINE_WORKER_IDLE_MS,
+  ENGINE_WORKER_INVALIDATE,
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,
   FILE_DELIVERY_RULE,
@@ -17303,6 +17218,11 @@ export {
   HAND_OFF_TOOL,
   HAND_OFF_TOOL_SPEC,
   HISTORY_TOKEN_BUDGET,
+  INFERENCE_MODES,
+  LOCAL_ENGINE_FAILURE_CODES,
+  LOCAL_PICKER_GROUPS,
+  LOCAL_SKIP_CONFIDENCE,
+  LOCAL_SKIP_EXPLORE,
   LOCAL_WORKSPACE_TOOLS,
   MAX_STOP_HOOK_ROUNDS,
   MAX_TOOL_RESULT_CHARS,
@@ -17311,7 +17231,11 @@ export {
   NEW_CHAT_MODE,
   NOT_SIGNED_IN,
   NOT_STARTED_TASK_STATUSES,
+  NO_LOCAL_MODEL,
+  NO_SPECIFIC_MODEL,
   ON_DEVICE_ANSWER_THRESHOLD,
+  PAGE_ENGINE_REPLY_TYPES,
+  PAGE_ENGINE_REQUEST_TYPES,
   PERSONA_MODALITY_IDS,
   PMO_FOCUS_PARAM,
   PREVIEW_REVIEW_TOOL,
@@ -17406,18 +17330,23 @@ export {
   consolidationMetadata,
   contextWindowOf,
   countReconciledMemories2 as countReconciledMemories,
+  createBfiWorkerEngine,
   createBrainRestPersistence,
   createBrowserEngineProber,
   createComposingActivity,
+  createEngineWorker,
   createHandoffFit,
   createHostModelStream,
   createLocalBrainPersistence,
   createLocalFirstStream,
   createLocalStream,
+  createModelFallbackChannel,
+  createPageEngineClient,
   createPageEngineSet,
   createPayloadBudget,
   declinesReview,
   declinesShipping,
+  defaultInferenceMode,
   deferredLocalModelStore,
   deriveChatTitle,
   describeLiveStep,
@@ -17487,10 +17416,14 @@ export {
   isEffort,
   isEvermindModel,
   isFailedToolResult,
+  isFallbackFailure,
+  isInferenceMode,
   isLocalWorkspaceTool,
   isMalformedToolCall,
   isManagerRole,
   isMutationTool,
+  isPageEngineReply,
+  isPageEngineRequest,
   isReadOnlyShellCall,
   isRepoPublishTool,
   isRouterTool,
@@ -17503,6 +17436,7 @@ export {
   isUnscopedMutationTool,
   isUsageSurface,
   isUserConfiguredModelRef,
+  isWasmTrap,
   lastConsolidationIndex,
   lastServedModel,
   leftChangeUnreviewed,
@@ -17516,6 +17450,7 @@ export {
   localFallbackTrace,
   localFirstApplies,
   localFirstWorkload,
+  localPickerView,
   localStorageConfirmationPersistence,
   localToolsIn,
   localTransport,
@@ -17525,6 +17460,7 @@ export {
   modalityPersonaChoice,
   modelCategoryLabel,
   modelFailoversInTrace,
+  modelFallbackText,
   modelInUse,
   modelScorecard,
   modelTurnLog,
@@ -17553,6 +17489,7 @@ export {
   personaModel,
   personaOverlay,
   personaSystemPrompt,
+  personalitySetpoints,
   placeholderAdvisory,
   placeholdersWritten,
   planMessage,
@@ -17591,6 +17528,7 @@ export {
   revealsModelId,
   revisitAdvisory,
   routerToolSpecs,
+  routingModeForSelection,
   routingQueryForTurn,
   runAbortSignal,
   startRun as runBrainLoop,
@@ -17601,6 +17539,8 @@ export {
   selectToolsForTurn,
   selfReviewShipDirective,
   serializeAskUser,
+  serveEngineWorker,
+  servePageEngines,
   setLastResolvedModel,
   setMcpToolStatus,
   shippedToBaseBranch,
@@ -17635,6 +17575,7 @@ export {
   transcriptSeedFrom,
   transportRetryTrace,
   trimToolResult,
+  turnAffectBlock,
   turnInterruption,
   turnOptimizationDirective,
   unreviewedChangeNudge,
@@ -17655,6 +17596,7 @@ export {
   useRunSnapshot,
   useToolConfirmationGate,
   utf8ByteLength2 as utf8ByteLength,
+  webStorageLocalSuccessStore,
   withAdvisory,
   withDirectedMetadata,
   withObservedModel,

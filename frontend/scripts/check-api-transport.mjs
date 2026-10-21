@@ -194,7 +194,6 @@ const CACHE_ALLOWED = new Map([
   ['infrastructure/http/readThrough.ts', 'It is the shared cache implementation.'],
   ['lib/meshPreviewCache.ts', 'Bounded computational geometry memoization, not an API response cache.'],
   ['lib/pendingWork.ts', 'Single-flight for destructive local-draft claims; it stores no HTTP read result.'],
-  ['lib/localFirst/platformPolicy.ts', 'A registry of AbortControllers for platform requests IN FLIGHT, so Disconnect can abort them. It holds controllers, never a response, and entries are removed when the request settles.'],
   ['lib/workspace/localFileStore.ts', 'The browser-held workspace store (guest apps): an in-memory working copy plus single-flight IndexedDB loading. It stores no HTTP read result.'],
 ]);
 const CACHE_DECLARATION = /^(?:const|let)\s+\w*(?:cache|cached|inflight|inFlight)\w*\s*=/;

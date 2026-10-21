@@ -128,6 +128,32 @@ describe('createLocalModelStore', () => {
     });
   });
 
+  it('labels each runnable row with the backend the fit chose — the CPU for bfi without WebGPU', async () => {
+    const caches = new FakeCacheStorage();
+    const hf = createHfModelStore({ caches: caches.asCacheStorage(), fetch: hfFetch([2], 2) });
+    await hf.download(BONSAI);
+    const noGpu: LocalDeviceSupport = {
+      supported: false,
+      reason: 'navigator.gpu is missing',
+      f16: false,
+      maxBufferBytes: 0,
+      backends: { cpu: { supported: true, simd: true, threads: 1, kvBudgetBytes: 2 ** 29, maxMemoryBytes: 2 ** 32 } },
+    };
+    const store = createLocalModelStore({
+      hf,
+      webllm: webllmCache(['Qwen3-1.7B-q4f16_1-MLC']),
+      support: { bfi: async () => noGpu, webllm: gpu({ maxBufferBytes: 2 ** 27 }) },
+    });
+    // A phone: an unreported RAM reads as 2 GiB there (a desktop assumes 8 GiB).
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile Safari/537.36' });
+    const rows = new Map((await store.listLocalModels().finally(() => vi.unstubAllGlobals())).map((r) => [r.ref, r]));
+    expect(rows.get(BONSAI)).toMatchObject({ state: 'ready', backend: 'cpu' });
+    // 4B (4 GiB floor) and 8B (8 GiB) cannot run on that phone.
+    expect(rows.get('local/bfi/bonsai-4b-q1_0')).toMatchObject({ state: 'unsupported', reason: 'memory_insufficient' });
+    expect(rows.get('local/bfi/bonsai-8b-q1_0')).toMatchObject({ state: 'unsupported', reason: 'memory_insufficient' });
+    expect(rows.get(QWEN)).toMatchObject({ state: 'ready', backend: 'webgpu' });
+  });
+
   it('marks the rows of an engine the host does not carry as engine_unavailable', async () => {
     const store = createLocalModelStore({ webllm: webllmCache(), support: { webllm: gpu() } });
     const bonsai = (await store.listLocalModels()).find((r) => r.ref === BONSAI);

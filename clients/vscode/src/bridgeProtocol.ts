@@ -38,6 +38,11 @@ export const SHARED_HOST_MESSAGES = [
   /** A non-2xx API answer the webview received, for the output channel — see
    *  `webview/src/apiFailureRelay.ts`. Fire-and-forget. */
   'api.failure',
+  /** Choose where models run (`mode`: hybrid · local-only · specific) — the `/` menu's
+   *  control and the first-run question. Applied by the host, back in `init`. */
+  'setInferenceMode',
+  /** Open the model picker's on-device list (the `no_local_model` banner's remedy). */
+  'downloadLocalModel',
 ] as const;
 
 /** The Brain panel: the run loop, the tool bridge and the editor's own state. */
@@ -79,6 +84,22 @@ export const PAGE_ENGINE_HOST_MESSAGES = [
   'pageEngine.chunk',
   'pageEngine.end',
   'pageEngine.error',
+  'pageEngine.alive',
+] as const;
+
+/**
+ * The model-file frames (`pageEngineBridgeProtocol.ts`): the webview's `bfi` model store
+ * is a view of the extension host's file cache — the ONE copy of a model in the editor.
+ */
+export const MODEL_FILE_HOST_MESSAGES = [
+  'modelFile.status',
+  'modelFile.open',
+  'modelFile.read',
+  'modelFile.remove',
+  'modelFile.download',
+  'modelFile.support',
+  'modelFile.close',
+  'modelFile.cancel',
 ] as const;
 
 /** Project 360 and the project pages. */
@@ -90,6 +111,9 @@ export const EVERMIND_HOST_MESSAGES = [
   'evermind.compactMemory',
   'evermind.copyText',
 ] as const;
+
+/** The audit-results panel (`auditResultsPanel.ts`): open a finding's source location. */
+export const AUDIT_HOST_MESSAGES = ['audit.source'] as const;
 
 /** The canvas surface of the workspace panel. */
 export const CANVAS_HOST_MESSAGES = [
@@ -111,8 +135,10 @@ export const HOST_MESSAGES = [
   ...SHARED_HOST_MESSAGES,
   ...BRAIN_HOST_MESSAGES,
   ...PAGE_ENGINE_HOST_MESSAGES,
+  ...MODEL_FILE_HOST_MESSAGES,
   ...PROJECT_HOST_MESSAGES,
   ...EVERMIND_HOST_MESSAGES,
+  ...AUDIT_HOST_MESSAGES,
   ...CANVAS_HOST_MESSAGES,
 ] as const;
 
@@ -121,6 +147,7 @@ export type BrainHostMessage = (typeof BRAIN_HOST_MESSAGES)[number];
 export type PageEngineHostMessage = (typeof PAGE_ENGINE_HOST_MESSAGES)[number];
 export type ProjectHostMessage = (typeof PROJECT_HOST_MESSAGES)[number];
 export type EvermindHostMessage = (typeof EVERMIND_HOST_MESSAGES)[number];
+export type AuditHostMessage = (typeof AUDIT_HOST_MESSAGES)[number];
 export type CanvasHostMessage = (typeof CANVAS_HOST_MESSAGES)[number];
 
 /** The name of any message the webview sends to the host. */

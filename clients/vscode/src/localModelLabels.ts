@@ -7,8 +7,8 @@
  * own module so the panel does not grow for it.
  *
  * Typed as `LocalModelLabels`, so a field the shared list gains is a compile error here
- * rather than a silently English row in the editor. `{size}`, `{percent}` and `{tokens}`
- * are filled per row by the shared list, so the catalog strings keep them literal. Model
+ * rather than a silently English row in the editor. `{size}`, `{percent}`, `{tokens}` and
+ * `{count}` are filled per row by the shared list, so the catalog strings keep them literal. Model
  * and engine names are brands, not copy.
  */
 
@@ -33,7 +33,18 @@ export function localModelLabels(): Record<string, string> {
     localReasonWebgpu: t("Needs WebGPU, which this editor or GPU does not offer."),
     localReasonF16: t("Needs WebGPU 16-bit shaders, which this GPU does not offer."),
     localReasonBuffer: t("Needs larger GPU buffers than this device allows."),
+    localReasonVram: t("Needs more GPU memory than this device has."),
+    localReasonMemory: t("Needs more memory than this device has to run without a GPU."),
     localReasonEngine: t("This engine is not available here yet."),
+    localBackendGpu: t("GPU"),
+    localBackendCpu: t("CPU"),
+    localGroupTools: t("Agents & tools"),
+    localGroupChat: t("Chat"),
+    localGroupCoding: t("Coding"),
+    localGroupReasoning: t("Reasoning"),
+    localGroupMath: t("Math"),
+    localAllModels: t("All models ({count})"),
+    localFewerModels: t("Fewer models"),
   };
   return Object.fromEntries(
     (Object.keys(copy) as Array<keyof LocalModelLabels>).map((field) => [localModelBundleKey(field), copy[field]]),

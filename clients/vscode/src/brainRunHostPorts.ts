@@ -7,7 +7,7 @@
  */
 
 import * as vscode from "vscode";
-import { getRunSnapshot, isRunning, type BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
+import { getRunSnapshot, isRunning, type BrainStreamFn, type ModelFallbackEvent } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, projectEvermindHooks, rememberProjectFact } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
@@ -260,8 +260,8 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   // (lazy on purpose: localBrainApplication mints the device id only after
   // globalState persists it, so an eager bind at construction would throw
   // local_device_id_required and crash the extension host on first activation).
-  const streamForRoute = async (): Promise<BrainStreamFn> =>
-    routeStream(await resolveModelRoute(secrets), await getApiKey(secrets));
+  const streamForRoute = async (onFallback?: (event: ModelFallbackEvent) => void): Promise<BrainStreamFn> =>
+    routeStream(await resolveModelRoute(secrets), await getApiKey(secrets), onFallback);
   const host = createBrainRunHost({
     tools: async (projectId, children, signal, opts) => {
       const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts);

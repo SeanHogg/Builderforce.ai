@@ -72,7 +72,7 @@ async function openModelTab(
 }
 
 describe('<PromptOptionsMenu> Model tab — on-device models', () => {
-  it('offers the on-device chip and renders every store state', async () => {
+  it('offers the on-device chip and renders every runnable store state, hiding what cannot run', async () => {
     const onChange = vi.fn();
     const { el } = await openModelTab(onChange, true);
     const chip = byText(el, '.bf-pmenu__filter', 'On this device');
@@ -81,14 +81,37 @@ describe('<PromptOptionsMenu> Model tab — on-device models', () => {
     await flush();
 
     const rows = [...el.querySelectorAll('.bf-lmodel')];
-    expect(rows.map((row) => row.getAttribute('data-state'))).toEqual(['ready', 'absent', 'downloading', 'unsupported']);
+    expect(rows.map((row) => row.getAttribute('data-state'))).toEqual(['ready', 'absent', 'downloading']);
     expect(byText(el, '.bf-lmodel__action', 'Download (1.2')).toBeTruthy();
     expect(el.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('50');
     expect(byText(el, '.bf-lmodel__action', 'Cancel')).toBeTruthy();
-    expect(byText(el, '.bf-lmodel__reason', '16-bit')).toBeTruthy();
-    const unsupported = rows[3]!.querySelector('.bf-lmodel__main') as HTMLButtonElement;
-    expect(unsupported.disabled).toBe(true);
+    // A model this device cannot run is not offered at all (`localPickerView`).
+    expect(byText(el, '.bf-lmodel__name', 'Hermes')).toBeFalsy();
+    expect(el.querySelector('.bf-lmodels__notice')).toBeNull();
     expect(byText(el, '.bf-lmodel__badge', 'Tools')).toBeTruthy();
+  });
+
+  it('says why when no on-device model can run here', async () => {
+    const fake = fakeLocalModelStore([
+      catalogRow({ ref: UNSUPPORTED, label: 'Hermes 3 Llama 3.1 8B', runtime: 'webllm', state: 'unsupported', reason: 'shader_f16_unavailable' }),
+    ]);
+    const el = mount(
+      <PromptOptionsMenu
+        model={{
+          selection: { mode: 'auto' },
+          options: { byo: [], free: ['meta/llama'], plan: [], paid: [] },
+          onChange: vi.fn(),
+          identity: { product: 'pro', canChoose: true },
+          localStore: fake.store,
+        }}
+      />,
+    );
+    click(el.querySelector('.bf-pmenu__trigger'));
+    await flush();
+    click(byText(el, '.bf-pmenu__filter', 'On this device'));
+    await flush();
+    expect(el.querySelectorAll('.bf-lmodel').length).toBe(0);
+    expect(el.querySelector('.bf-lmodels__notice')?.textContent).toContain('16-bit');
   });
 
   it('pins a ready model through the SAME onChange a cloud model uses', async () => {
@@ -152,6 +175,7 @@ describe('<PromptOptionsMenu> Model tab — on-device models', () => {
     cleanup = undefined;
     const pending = await openModelTab(vi.fn(), false, true);
     expect(pending.el.textContent).not.toContain('Model choice needs a paid plan');
-    expect(pending.el.querySelectorAll('.bf-lmodel').length).toBe(4);
+    // Every runnable row; the unsupported one is hidden (`localPickerView`).
+    expect(pending.el.querySelectorAll('.bf-lmodel').length).toBe(3);
   });
 });

@@ -25,10 +25,10 @@ import {
 const ENDPOINT = 'https://ollama.com/api/chat';
 
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  { id: 'gpt-oss:120b',            tier: 'FREE', label: 'GPT-OSS 120B (Ollama Cloud)',         brand: 'Ollama' },
+  { id: 'gpt-oss:120b',            tier: 'FREE', weights: 'gpt-oss-120b', label: 'GPT-OSS 120B (Ollama Cloud)',         brand: 'Ollama' },
   { id: 'kimi-k2.6:cloud',         tier: 'FREE', label: 'Kimi K2.6 (Ollama Cloud)',            brand: 'Ollama' },
   { id: 'glm-5.1:cloud',           tier: 'FREE', label: 'GLM 5.1 (Ollama Cloud)',              brand: 'Ollama' },
-  { id: 'deepseek-v4-flash:cloud', tier: 'FREE', label: 'DeepSeek V4 Flash (Ollama Cloud)',    brand: 'Ollama' },
+  { id: 'deepseek-v4-flash:cloud', tier: 'FREE', weights: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash (Ollama Cloud)',    brand: 'Ollama' },
   { id: 'gemma4',                  tier: 'FREE', label: 'Gemma 4 (Ollama)',                    brand: 'Ollama' },
   { id: 'qwen3.5',                 tier: 'FREE', label: 'Qwen 3.5 (Ollama)',                   brand: 'Ollama' },
   { id: 'qwen3-coder-next',        tier: 'FREE', label: 'Qwen 3 Coder (Ollama · code)',        brand: 'Ollama' },

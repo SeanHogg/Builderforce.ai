@@ -38,3 +38,7 @@ next-env.d.ts
 # writes (src/lib/blogIndex.generated.json) is committed — see that script.
 # src/content/blog/ is the source of truth.
 /public/blog-i18n/
+
+# The threaded bfi-web artifact, published by scripts/copy-bfi-threads.mjs (prebuild/dev)
+# from packages/bfi-web/threads — never committed.
+/public/bfi-threads/

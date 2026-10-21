@@ -6,6 +6,7 @@ import PageContainer from '@/components/PageContainer';
 import { type ViewMode } from '@/components/ViewToggle';
 import { CatalogToolbar } from '@/components/CatalogToolbar';
 import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
+import { CloudFundingPreference } from '@/components/integrations/CloudFundingPreference';
 import { IntegrationsGallery } from '@/components/integrations/IntegrationsGallery';
 import { MailboxIntegrations } from '@/components/integrations/MailboxIntegrations';
 import { ConnectorsGallery } from '@/components/connectors/ConnectorsGallery';
@@ -81,7 +82,7 @@ export default function SettingsIntegrationsPage() {
         )}
       </CatalogToolbar>
 
-      {show('models') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.models')}</h2><ProviderKeysSettings search={search} viewMode={viewMode} priorityOpen={priorityOpen} onPriorityClose={() => setPriorityOpen(false)} onLeaderChange={setPriorityLeader} /></section>}
+      {show('models') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.models')}</h2><CloudFundingPreference /><ProviderKeysSettings search={search} viewMode={viewMode} priorityOpen={priorityOpen} onPriorityClose={() => setPriorityOpen(false)} onLeaderChange={setPriorityLeader} /></section>}
       {show('connectors') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.connectors')}</h2><ConnectorsGallery search={search} viewMode={viewMode} />{/* Bring-your-own MCP servers sit with connectors: both are "an external
           system this workspace may call". The gallery gates itself to owners. */}
         <McpServersGallery search={search} viewMode={viewMode} /></section>}

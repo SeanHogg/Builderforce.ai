@@ -17,8 +17,38 @@ export function deltaParseStatus(reason: Extract<DeltaParseResult, { ok: false }
 
 /** Why a delta was not admitted, as the HTTP answer the producer branches on. */
 export interface DeltaRefusal {
-  status: 409 | 423;
+  status: 400 | 409 | 413 | 423;
   body: Record<string, unknown>;
+}
+
+/**
+ * The answer to a body `parseDeltaLearnPayload` refused — the SAME `{ ok: false, error }`
+ * shape every other delta-door refusal has, from the gateway route and from the
+ * coordinator alike. That includes a delta aimed at an ML head (`target: 'ml:<task>'`):
+ * the engine's parse (≥ 2026.10.2) refuses any target at this door, which merges into
+ * the model checkpoint only, so it never reaches the LM merge.
+ */
+export function deltaParseRefusal(refused: Extract<DeltaParseResult, { ok: false }>): DeltaRefusal {
+  return { status: deltaParseStatus(refused.reason), body: { ok: false, error: refused.error } };
+}
+
+/**
+ * The answer to a merge the held-out gate refused (`gateEvermindMerge`: the merged
+ * model's mean eval loss rose above the base's) — the SAME `{ ok: false, error }` shape
+ * as every other refusal here, carrying both losses so the console can say by how much.
+ * 409: the batch conflicts with what the head already knows; nothing was published.
+ */
+export function mergeRegressionRefusal(losses: { baseLoss: number | null; newLoss: number | null }): DeltaRefusal {
+  const fmt = (l: number | null): string => (l == null ? 'unknown' : l.toFixed(4));
+  return {
+    status: 409,
+    body: {
+      ok: false,
+      error: `merge refused — held-out eval loss rose from ${fmt(losses.baseLoss)} to ${fmt(losses.newLoss)}`,
+      baseLoss: losses.baseLoss,
+      newLoss: losses.newLoss,
+    },
+  };
 }
 
 /**

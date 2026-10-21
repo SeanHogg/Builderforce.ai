@@ -40,6 +40,7 @@ export interface ProxyConfig {
   readonly byoSelectedModels: Readonly<Record<string, readonly string[]>>;
   readonly byoRequired: boolean;
   readonly allowGatewayAuto: boolean;
+  readonly freeFirst: boolean;
   readonly byoDiagnostics: ByoDiagnostics;
 }
 
@@ -72,6 +73,7 @@ export function resolveProxyConfig(env: ProxyEnv, options?: LlmProxyOptions): Pr
     byoSelectedModels: options?.byoSelectedModels ?? {},
     byoRequired: options?.byoRequired ?? false,
     allowGatewayAuto: options?.allowGatewayAuto ?? false,
+    freeFirst: options?.freeFirst ?? false,
     byoDiagnostics: options?.byoDiagnostics ?? {},
   };
 }

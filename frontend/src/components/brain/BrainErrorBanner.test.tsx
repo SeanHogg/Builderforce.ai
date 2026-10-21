@@ -30,13 +30,13 @@ describe('BrainErrorBanner', () => {
   });
 
   it('renders nothing without an error', () => {
-    const { container } = render(<BrainErrorBanner error="" action={null} onDismiss={vi.fn()} />);
+    const { container } = render(<BrainErrorBanner composerId="test-composer" error="" action={null} onDismiss={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('offers no remedy for a failure that is not an entitlement problem', () => {
     const { getByRole } = render(
-      <BrainErrorBanner error="Something broke" action={null} onDismiss={vi.fn()} />,
+      <BrainErrorBanner composerId="test-composer" error="Something broke" action={null} onDismiss={vi.fn()} />,
     );
     const alert = getByRole('alert');
     expect(alert.textContent).toContain('Something broke');
@@ -46,7 +46,7 @@ describe('BrainErrorBanner', () => {
 
   it('routes to pricing on an upgrade verdict', () => {
     const { getByText } = render(
-      <BrainErrorBanner error="Plan limit reached" action={{ kind: 'upgrade' }} onDismiss={vi.fn()} />,
+      <BrainErrorBanner composerId="test-composer" error="Plan limit reached" action={{ kind: 'upgrade' }} onDismiss={vi.fn()} />,
     );
     fireEvent.click(getByText('brain.upgrade'));
     expect(push).toHaveBeenCalledWith('/pricing?upgrade=pro');
@@ -54,7 +54,7 @@ describe('BrainErrorBanner', () => {
 
   it('names the required plan when the server supplied one', () => {
     const { getByText } = render(
-      <BrainErrorBanner
+      <BrainErrorBanner composerId="test-composer"
         error="Requires a paid plan"
         action={{ kind: 'upgrade', requiredPlan: 'pro' }}
         onDismiss={vi.fn()}
@@ -67,7 +67,7 @@ describe('BrainErrorBanner', () => {
 
   it('starts card validation instead of navigating on a card verdict', () => {
     const { getByText } = render(
-      <BrainErrorBanner error="Card required" action={{ kind: 'validate_card' }} onDismiss={vi.fn()} />,
+      <BrainErrorBanner composerId="test-composer" error="Card required" action={{ kind: 'validate_card' }} onDismiss={vi.fn()} />,
     );
     fireEvent.click(getByText('brain.addCard'));
     expect(startCardValidation).toHaveBeenCalledOnce();
@@ -81,7 +81,7 @@ describe('BrainErrorBanner', () => {
       error: 'Card declined',
     });
     const { getByRole } = render(
-      <BrainErrorBanner error="Card required" action={{ kind: 'validate_card' }} onDismiss={vi.fn()} />,
+      <BrainErrorBanner composerId="test-composer" error="Card required" action={{ kind: 'validate_card' }} onDismiss={vi.fn()} />,
     );
     expect(getByRole('alert').textContent).toContain('Card declined');
   });
@@ -93,14 +93,14 @@ describe('BrainErrorBanner', () => {
       error: '',
     });
     const { getByRole } = render(
-      <BrainErrorBanner error="Card required" action={{ kind: 'validate_card' }} onDismiss={vi.fn()} />,
+      <BrainErrorBanner composerId="test-composer" error="Card required" action={{ kind: 'validate_card' }} onDismiss={vi.fn()} />,
     );
     expect(getByRole('alert').textContent).toContain('brain.cardValidationFailed');
   });
 
   it('offers no reconnect button (web redirects to sign-in globally)', () => {
     const { getByRole } = render(
-      <BrainErrorBanner error="Invalid or expired token" action={{ kind: 'auth' }} onDismiss={vi.fn()} />,
+      <BrainErrorBanner composerId="test-composer" error="Invalid or expired token" action={{ kind: 'auth' }} onDismiss={vi.fn()} />,
     );
     expect(getByRole('alert').querySelectorAll('button')).toHaveLength(1);
   });
@@ -108,7 +108,7 @@ describe('BrainErrorBanner', () => {
   it('dismisses', () => {
     const onDismiss = vi.fn();
     const { getByLabelText } = render(
-      <BrainErrorBanner error="Something broke" action={null} onDismiss={onDismiss} />,
+      <BrainErrorBanner composerId="test-composer" error="Something broke" action={null} onDismiss={onDismiss} />,
     );
     fireEvent.click(getByLabelText('common.dismiss'));
     expect(onDismiss).toHaveBeenCalledOnce();

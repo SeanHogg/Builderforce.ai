@@ -69,6 +69,7 @@ export interface CompletionProxyOptions {
   byoRouting?: ByoRoutingOptions;
   byoRequired?: boolean;
   allowGatewayAuto?: boolean;
+  freeFirst?: boolean;
   byoDiagnostics?: ByoDiagnostics;
 }
 
@@ -104,6 +105,7 @@ export function proxyForCompletion(
     ...(opts.byoRouting ?? {}),
     ...(opts.byoRequired ? { byoRequired: true } : {}),
     ...(opts.allowGatewayAuto ? { allowGatewayAuto: true } : {}),
+    ...(opts.freeFirst ? { freeFirst: true } : {}),
     // Diagnostics only — so a fail-closed BYO 503 names the connected providers and
     // why each was unusable, matching `x-builderforce-byo-unresolved`.
     ...(opts.byoDiagnostics ? { byoDiagnostics: opts.byoDiagnostics } : {}),

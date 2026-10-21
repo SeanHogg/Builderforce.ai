@@ -3,8 +3,9 @@
 /**
  * THE COMPOSITION ROOT for the platform policy (G01/G02, web).
  *
- * `bootWebPlatformPolicy` restores the person's explicit choices, or — when they
- * have never been asked — leaves every capability REFUSED, then sets the flag
+ * `bootWebPlatformPolicy` derives the snapshot from the person's inference mode
+ * and explicit overrides — signed out and never asked, Local only: every
+ * capability REFUSED; signed in and never asked, Hybrid — then sets the flag
  * the root layout's head script waits on. Setting that flag RELEASES the
  * platform-origin requests the head script held while this chunk loaded; from
  * then on the real policy decides them. It writes no durable record and no-ops

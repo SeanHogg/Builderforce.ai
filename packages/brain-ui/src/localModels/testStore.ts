@@ -14,6 +14,8 @@ export function catalogRow(overrides: Partial<LocalModelRow> & Pick<LocalModelRo
     bytes: 1_158_654_496,
     contextTokens: 65_536,
     tools: true,
+    uses: ['chat'],
+    recommended: true,
     source: { kind: 'hf-file', repo: 'prism-ml/Bonsai-8B-gguf', file: 'Bonsai-8B-Q1_0.gguf' },
     requires: { minBufferBytes: 128 * 1024 * 1024 },
     state: 'absent',

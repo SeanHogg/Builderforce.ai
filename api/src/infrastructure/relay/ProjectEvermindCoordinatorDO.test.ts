@@ -19,13 +19,15 @@ const mocks = vi.hoisted(() => ({
   head: vi.fn(),
   buildDatabase: vi.fn(() => ({})),
   merge: vi.fn(),
+  evalLoss: vi.fn(),
   fromBlob: vi.fn(),
   fromLM: vi.fn(),
   unusable: vi.fn((): string | null => null),
 }));
 
 // The engine's pure wire contract (parse/decode) runs for real; the model, the merge
-// and the per-delta structural check are stubbed so these tests stay about the DO.
+// and the per-delta structural check are stubbed so these tests stay about the DO. The
+// eval-gate tests swap the REAL gated merge back in (`realGatedMerge`).
 vi.mock('@seanhogg/builderforce-memory-engine', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@seanhogg/builderforce-memory-engine')>();
   return {
@@ -34,10 +36,10 @@ vi.mock('@seanhogg/builderforce-memory-engine', async (importOriginal) => {
     base64ToBytes: actual.base64ToBytes,
     bytesToBase64: actual.bytesToBase64,
     EvermindModelPackage: { fromBlob: mocks.fromBlob, fromLM: mocks.fromLM },
-    BPETokenizer: class {},
+    BPETokenizer: class { loadFromObjects() {} },
     adaptAndDiff: vi.fn(),
-    meanEvalLoss: vi.fn(),
-    mergeCheckpointDiffs: mocks.merge,
+    meanEvalLoss: mocks.evalLoss,
+    mergeCheckpointDiffsGated: mocks.merge,
     deltaUnusableReason: mocks.unusable,
   };
 });
@@ -527,6 +529,20 @@ describe('/learn — the pre-diffed weight-delta door (on-prem runner) and its s
     expect(map.get('pending')).toBeUndefined();
   });
 
+  it('refuses an ML-head delta (target ml:<task>) before it can reach the LM merge, and queues nothing', async () => {
+    const { doInstance, map } = makeDO();
+    // The refusal is the engine's own (`parseDeltaLearnPayload` refuses any target at
+    // this door). A matching baseVersion is exactly the dangerous case: every other
+    // check passes.
+    mocks.head.mockResolvedValue({ version: 8, ref: 'ref-8', mode: 'connected' });
+
+    const res = await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff: 'AAAA', baseVersion: 8, target: 'ml:run.local-success' }));
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ ok: false, error: expect.stringContaining('ml:run.local-success') });
+    expect(map.get('pending')).toBeUndefined();
+  });
+
   /** A DO whose R2 store serves a head, and an engine that loads it. */
   function mergingDO() {
     const { state, map } = fakeState();
@@ -546,7 +562,9 @@ describe('/learn — the pre-diffed weight-delta door (on-prem runner) and its s
       loadLM: () => ({ loadWeights: vi.fn() }),
     });
     mocks.fromLM.mockReturnValue({ toBlob: () => new ArrayBuffer(0) });
-    mocks.merge.mockReturnValue({ checkpoint: new ArrayBuffer(16), contributors: 1, mergedRows: 1, deltaNorm: 0.5 });
+    mocks.merge.mockReturnValue({
+      checkpoint: new ArrayBuffer(16), contributors: 1, mergedRows: 1, deltaNorm: 0.5, accepted: true, baseLoss: null, newLoss: null,
+    });
     return { doInstance, map };
   }
 
@@ -584,6 +602,83 @@ describe('/learn — the pre-diffed weight-delta door (on-prem runner) and its s
     expect(mocks.merge.mock.calls[0]![1]).toHaveLength(1);
     expect(map.get('mem:000000000003')).toMatchObject({ kind: 'delta', prompt: 'good' });
     expect(map.get('mem:000000000001')).toBeUndefined();
+  });
+
+  describe('the held-out eval gate on the LM merge (mergeCheckpointDiffsGated + meanEvalLoss)', () => {
+    /**
+     * A REAL merge on a REAL checkpoint: a 4-element head the delta moves from 0 to 1,
+     * an `evermind-lm` package whose `loadLM()` copies hold whatever weights were loaded,
+     * and `meanEvalLoss` scoring the base copy as `baseLoss` and the merged one as `newLoss`.
+     */
+    async function lmMergingDO(losses: { baseLoss: number; newLoss: number }) {
+      const engine = await vi.importActual<typeof import('@seanhogg/builderforce-memory-engine')>('@seanhogg/builderforce-memory-engine');
+      const base = engine.headCheckpoint([0, 0, 0, 0]);
+      const diff = engine.bytesToBase64(engine.diffCheckpoints(base, engine.headCheckpoint([1, 1, 1, 1])));
+      const { doInstance, map } = mergingDO();
+      mocks.fromBlob.mockReturnValue({
+        manifest: { modelType: 'evermind-lm', name: 'n' },
+        checkpoint: base,
+        loadLM: () => ({ weights: null as ArrayBuffer | null, loadWeights(ck: ArrayBuffer) { this.weights = ck; } }),
+      });
+      mocks.merge.mockImplementation(engine.mergeCheckpointDiffsGated);
+      mocks.evalLoss.mockImplementation((lm: { weights: ArrayBuffer | null }) => (lm.weights ? losses.newLoss : losses.baseLoss));
+      mocks.unusable.mockReturnValue(null);
+      // The held-out set a prior merge left behind — what the gate scores on.
+      map.set('eval', [{ prompt: 'earlier task', text: 'the answer the model was taught' }]);
+      await doInstance.fetch(learn({ tenantId: 1, projectId: 2, diff, baseVersion: 8, label: 'ticket 12' }));
+      return { doInstance, map };
+    }
+
+    it('REFUSES a delta that raises held-out eval loss, in the { ok: false, error } shape, and publishes nothing', async () => {
+      const { doInstance, map } = await lmMergingDO({ baseLoss: 1.25, newLoss: 1.75 });
+
+      const flushed = await doInstance.fetch(new Request('https://coordinator/flush', { method: 'POST' }));
+
+      expect(flushed.status).toBe(409);
+      expect(await flushed.json()).toMatchObject({
+        ok: false,
+        error: expect.stringContaining('held-out eval loss rose from 1.2500 to 1.7500'),
+        baseLoss: 1.25,
+        newLoss: 1.75,
+        merged: 0,
+        version: 8,
+        pending: 0,
+      });
+      // The gate scored BOTH sides with meanEvalLoss on the stored held-out set.
+      expect(mocks.evalLoss).toHaveBeenCalledTimes(2);
+      expect(mocks.evalLoss.mock.calls[0]![2]).toEqual([{ prompt: 'earlier task', text: 'the answer the model was taught' }]);
+      const pe = await import('../../application/llm/projectEvermind');
+      expect(pe.putProjectEvermindVersion).not.toHaveBeenCalled();
+      expect(pe.recordProjectEvermindMerge).not.toHaveBeenCalled();
+      // Consumed, not learned: no memory row, no ▼ eval point for a version that never existed.
+      expect(map.get('pending')).toBeUndefined();
+      expect(map.get('mem:000000000001')).toBeUndefined();
+      expect(map.get('evalPoints')).toBeUndefined();
+    });
+
+    it("publishes a delta that lowers held-out eval loss, from the scorer's merged weights, and records the ▲ point", async () => {
+      const { doInstance, map } = await lmMergingDO({ baseLoss: 1.75, newLoss: 1.25 });
+
+      const flushed = await doInstance.fetch(new Request('https://coordinator/flush', { method: 'POST' }));
+
+      expect(await flushed.json()).toMatchObject({ ok: true, merged: 1, version: 9, pending: 0 });
+      // Repackaged from the model the gate already loaded with the merged checkpoint.
+      const [lm] = mocks.fromLM.mock.calls[0]!;
+      expect(new Float32Array((lm as { weights: ArrayBuffer }).weights, 0, 4)).toEqual(new Float32Array([1, 1, 1, 1]));
+      expect(map.get('evalPoints')).toEqual([expect.objectContaining({ version: 9, baseLoss: 1.75, newLoss: 1.25, delta: 0.5, evalSize: 1 })]);
+      expect(map.get('mem:000000000001')).toMatchObject({ kind: 'delta', version: 9 });
+    });
+
+    it("merges unscored when there is no held-out set yet (a project's first merges)", async () => {
+      const { doInstance, map } = await lmMergingDO({ baseLoss: 1, newLoss: 99 });
+      map.delete('eval');
+
+      const flushed = await doInstance.fetch(new Request('https://coordinator/flush', { method: 'POST' }));
+
+      expect(await flushed.json()).toMatchObject({ ok: true, merged: 1, version: 9 });
+      expect(mocks.evalLoss).not.toHaveBeenCalled();
+      expect(map.get('evalPoints')).toBeUndefined();
+    });
   });
 
   it('still routes /learn-text, whose path also ends in /learn', async () => {

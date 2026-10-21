@@ -1284,3 +1284,33 @@ describe('runCreationCanvasAi', () => {
     });
   });
 });
+
+/**
+ * Operator decision: Studio is used ANONYMOUSLY. An anonymous board defaults to Local only,
+ * and its turn makes ZERO API calls — no guest mint on open, no career catalogue read; the
+ * answer comes from the stream (this device's model in the real config).
+ */
+describe('an anonymous Local-only canvas turn', () => {
+  it('makes no fetch and never asks for a guest token', async () => {
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    try {
+      mocks.streamChatCompletion.mockReset().mockResolvedValueOnce({ text: 'Answered on this device.', toolCalls: [] });
+      mocks.ensureGuestToken.mockClear();
+      const answer = await runTurn({
+        prompt: 'what is a canvas?',
+        canvasSnapshot: '{"objects":[]}',
+        persistence: 'local',
+        canvasActions: [],
+      });
+      expect(answer).toBe('Answered on this device.');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(mocks.ensureGuestToken).not.toHaveBeenCalled();
+      // No career pack under Local only: just the three research tools a guest board gets.
+      const advertised = mocks.streamChatCompletion.mock.calls[0][0].tools.map((t: { function: { name: string } }) => t.function.name);
+      expect(advertised).toEqual(['builtin_web_search', 'builtin_web_fetch', 'builtin_geo_geocode']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

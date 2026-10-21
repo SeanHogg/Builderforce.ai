@@ -9,15 +9,17 @@
  * creates the chat through THE shared `useChatCreation`. Which chat is open is chosen from
  * the header's History lever (`RovrChatHistory`).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import {
   AiSurface,
   BrainTimeline,
   ChatErrorBanner,
   DEFAULT_ASK_USER_LABELS,
+  ModelFallbackNotice,
   DEFAULT_QUEUED_TURN_LABELS,
   PendingQuestionBanner,
   QueuedTurnChips,
+  requestComposerMenu,
   StarterGroup,
   StarterTile,
   SurfaceEmptyState,
@@ -27,6 +29,7 @@ import {
   stringsFrom,
   timelineCatalogLookup,
   timelineLabelsFrom,
+  useModelFallback,
 } from '@seanhogg/builderforce-brain-ui';
 import catalogs from 'virtual:rovr-timeline-catalogs';
 import { deriveChatTitle, useChatCreation, useChatTurns, type BrainMessage } from '@seanhogg/builderforce-brain-embedded';
@@ -37,7 +40,7 @@ import { ChatInfoStrip } from './ChatInfoStrip';
 import { ConfirmCard } from './ConfirmCard';
 import { connectRequiredProvider } from '../inference/connectedAccount';
 import { KimiConnectCard } from './KimiConnect';
-import { useLoaded, useRun, useServices } from './hooks';
+import { useInferenceModeState, useLoaded, useRun, useServices } from './hooks';
 import { rovrLookup } from './labels/rovrLookup';
 import { RovrComposer } from './RovrComposer';
 import { ROVR_STARTERS } from './rovrStarters';
@@ -56,6 +59,19 @@ export interface ChatViewProps {
 
 export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSettings }: ChatViewProps) {
   const services = useServices();
+  const inferenceMode = useInferenceModeState();
+  // The notice names the chat it happened in; opening another chat retires it.
+  useEffect(() => { services.modelFallback.clear(); }, [chatId, services.modelFallback]);
+  const fallback = useModelFallback(services.modelFallback);
+  const fallbackNotice = fallback ? (
+    <ModelFallbackNotice
+      channel={services.modelFallback}
+      // Chrome substitutes `$1`; brain-ui fills its `{model}` token — one translation.
+      labels={{ fallback: t('modelFallback', '{model}'), dismiss: t('dismiss') }}
+    />
+  ) : null;
+  // The composer below, as the error banner names it to open its `/` menu.
+  const composerId = useId();
   const run = useRun(chatId);
   const [draft, setDraft] = useState('');
   const chat = chats.find((c) => c.id === chatId);
@@ -196,30 +212,54 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
           )}
         />
       ) : undefined}
-      notices={run.error && connectRequiredProvider(run.error) === 'kimi' ? (
-        // A Kimi turn whose account is not connected (or not granted to Rovr yet): offer
-        // the connect right here — clearing the failed turn once it lands.
-        <KimiConnectCard onConnected={() => chatId !== null && services.host.clearError(chatId)} />
-      ) : run.error ? (
-        <ChatErrorBanner
-          className="rovr-chat__error"
-          error={t('runFailed', run.error)}
-          action={run.errorAction}
-          onDismiss={() => chatId !== null && services.host.clearError(chatId)}
-          onSignIn={onOpenSettings}
-          onReconnect={onOpenSettings}
-          onUpgrade={() => void chrome.tabs.create({ url: PRICING_URL })}
-          onValidateCard={() => void chrome.tabs.create({ url: PRICING_URL })}
-          labels={{
-            signIn: t('signIn'),
-            reconnect: t('signIn'),
-            noModel: t('needModelOrSignIn'),
-            upgrade: t('upgrade'),
-            upgradeToPlan: t('upgradeToPlan'),
-            addCard: t('addCard'),
-            dismiss: t('dismiss'),
-          }}
-        />
+      notices={fallbackNotice || run.error ? (
+        <>
+          {/* Hybrid's pick failed and the turn was answered with Auto — said in one line. */}
+          {fallbackNotice}
+          {run.error && connectRequiredProvider(run.error) === 'kimi' ? (
+            // A Kimi turn whose account is not connected (or not granted to Rovr yet): offer
+            // the connect right here — clearing the failed turn once it lands.
+            <KimiConnectCard onConnected={() => chatId !== null && services.host.clearError(chatId)} />
+          ) : run.error ? (
+            <ChatErrorBanner
+              className="rovr-chat__error"
+              error={t('runFailed', run.error)}
+              action={run.errorAction}
+              onDismiss={() => chatId !== null && services.host.clearError(chatId)}
+              onSignIn={onOpenSettings}
+              // Nothing on this device could answer: on Local only, offer Hybrid; always offer
+              // Settings, where the on-device models are downloaded.
+              {...(inferenceMode.loaded && inferenceMode.mode === 'local-only' ? { onSwitchToHybrid: () => void services.policy.setInferenceMode('hybrid') } : {})}
+              onDownloadLocalModel={onOpenSettings}
+              // Specific model with nothing picked: this composer's Model tab.
+              onPickModel={() => {
+                requestComposerMenu(composerId, 'model');
+                if (chatId !== null) services.host.clearError(chatId);
+              }}
+              onReconnect={onOpenSettings}
+              onUpgrade={() => void chrome.tabs.create({ url: PRICING_URL })}
+              onValidateCard={() => void chrome.tabs.create({ url: PRICING_URL })}
+              labels={{
+                signIn: t('signIn'),
+                reconnect: t('signIn'),
+                noModel: t('needModelOrSignIn'),
+                noLocalModel: t('noLocalModel'),
+                switchToHybrid: t('switchToHybrid'),
+                downloadLocalModel: t('downloadLocalModel'),
+                noSpecificModel: t('noSpecificModel'),
+                pickModel: t('pickModel'),
+            engineCrashed: t('engineCrashed'),
+            engineDetached: t('engineDetached'),
+            modelKeepsCrashing: t('modelKeepsCrashing'),
+            manageLocalModels: t('manageLocalModels'),
+                upgrade: t('upgrade'),
+                upgradeToPlan: t('upgradeToPlan'),
+                addCard: t('addCard'),
+                dismiss: t('dismiss'),
+              }}
+            />
+          ) : null}
+        </>
       ) : null}
       footer={(
         <SurfaceFooter
@@ -235,6 +275,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
           )}
           composer={(
             <RovrComposer
+              composerId={composerId}
               value={draft}
               onChange={setDraft}
               onSubmit={send}

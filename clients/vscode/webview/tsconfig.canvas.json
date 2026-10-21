@@ -26,7 +26,19 @@
     "allowJs": true,
     "noEmit": true,
     "ignoreDeprecations": "6.0",
+    // React types resolve to ONE copy: this package's own `@types/react` and
+    // `@types/react-dom`. Ordinary node resolution would not do it — a frontend source
+    // (and every library under frontend/node_modules) finds frontend/node_modules'
+    // `@types/react`, this package's files find clients/vscode/node_modules', and TS
+    // treats the two installs as distinct types even at the same version (ref and
+    // SVGProps mismatches at the seam). The bundle runs this package's React 19 too
+    // (Vite `dedupe` in vite.config.ts), so types and runtime agree. Never point these
+    // at the frontend's copy.
     "paths": {
+      "react": ["../node_modules/@types/react/index.d.ts"],
+      "react/*": ["../node_modules/@types/react/*"],
+      "react-dom": ["../node_modules/@types/react-dom/index.d.ts"],
+      "react-dom/*": ["../node_modules/@types/react-dom/*"],
       "@/*": ["../../../frontend/src/*"],
       // Every source-only package the frontend sources reach through `@/*` above,
       // not just the canvas contract. This project compiles FRONTEND files, so it
@@ -58,6 +70,10 @@
       "@builderforce/run-policy": ["../../../packages/run-policy/src/index.ts"],
       "@builderforce/agent-stall": ["../../../packages/agent-stall/src/index.ts"],
       "@builderforce/agent-tools": ["../../../packages/agent-tools/src/index.ts"],
+      "@builderforce/local-first": ["../../../packages/local-first/src/index.ts"],
+      // `WorkspaceApp.tsx` reaches the page engines (`src/pageEngines.ts`), and through
+      // them the page-engine bridge protocol, which names catalog types.
+      "@builderforce/local-inference": ["../../../packages/local-inference/src/index.ts"],
       // The three Next couplings, resolved to the shims the bundler also uses —
       // so types and runtime agree on what `useTranslations` / `useRouter` are.
       "next-intl": ["./src/shims/next-intl.ts"],
@@ -69,6 +85,8 @@
     "src/canvas",
     "src/shims",
     "src/vscodeBridge.ts",
+    // Vite's ambient `?url` asset modules (the `bfi` wasm URL in `src/pageEngines.ts`).
+    "src/vite-env.d.ts",
     // The root screen and the entry: they mount the frontend's `<CreationCanvas>`
     // and reach it through `@/*`, so they are checked under the options that source
     // is written against — the same reason `src/canvas` is here.

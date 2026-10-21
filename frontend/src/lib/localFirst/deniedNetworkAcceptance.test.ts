@@ -28,8 +28,9 @@ import { bootLocalWorkManagement, type LocalWorkManagementBoot } from './workMan
 import {
   WEB_REPLAY_KIND,
   bootWebHost,
+  WEB_PLATFORM_POLICY_STORAGE_KEY,
   bootWebPlatformPolicy,
-  connectAccountSync,
+  refreshWebPlatformPolicy,
   resetWebPlatformPolicyForTests,
   webPlatformFetch,
   webPlatformPolicy,
@@ -225,9 +226,15 @@ describe('G27 web network denial', () => {
     expect(attempts).toEqual([]);
     expect(sockets).toEqual([]);
 
-    connectAccountSync();
+    // The person signs in (an undecided signed-in person runs Hybrid, which leaves
+    // sync to its own grant), then the explicit sync grant is stored.
+    window.localStorage.setItem('bf_web_token', 'present');
+    refreshWebPlatformPolicy();
+    expect(webPlatformPolicy().allows('synchronize')).toBe(false);
+    window.localStorage.setItem(WEB_PLATFORM_POLICY_STORAGE_KEY, JSON.stringify({ synchronize: true }));
+    refreshWebPlatformPolicy();
     expect(webPlatformPolicy().allows('synchronize')).toBe(true);
-    expect(webPlatformPolicy().allows('gateway-inference')).toBe(false);
+    expect(webPlatformPolicy().allows('direct-provider')).toBe(false);
 
     const replayed: string[] = [];
     const coordinator = createSyncCoordinator({

@@ -18,7 +18,10 @@
 import type { KeyValueStore } from '../platform/keyValue';
 import { revokeKey } from '@builderforce/device-auth';
 
-const KEY = 'session.key';
+/** Where the credential lives in `chrome.storage.local` — read by the platform policy
+ *  too, which derives the default inference mode from "signed in". */
+export const SESSION_CREDENTIAL_KEY = 'session.key';
+const KEY = SESSION_CREDENTIAL_KEY;
 const TENANT = 'session.tenantId';
 
 export interface SessionDeps {

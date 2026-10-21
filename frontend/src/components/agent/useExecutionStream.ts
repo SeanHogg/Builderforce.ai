@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { runtimeApi, type Execution, type ToolAuditEvent } from '@/lib/builderforceApi';
 import { usePolledResource } from '@/hooks/usePolledResource';
+import { openSocket } from '@/lib/polling/reconnectPolicy';
 
 /**
  * Live event stream for a single execution. Subscribes to the runtime WebSocket
@@ -127,10 +128,11 @@ export function useExecutionStream(executionId: number | null): ExecutionStreamS
       return () => { cancelled = true; };
     }
 
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(url);
-    } catch {
+    // THE socket opener — the platform gate first (Local only never constructs this
+    // content-carrying stream), then the constructor. Null = no live stream: the
+    // reconcile poll below is the liveness path, quietly.
+    const ws = openSocket(url);
+    if (!ws) {
       return () => { cancelled = true; };
     }
     wsRef.current = ws;

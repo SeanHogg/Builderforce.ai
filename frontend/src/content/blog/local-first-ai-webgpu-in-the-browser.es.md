@@ -32,7 +32,12 @@ Es la función estrella de la guía, y es un motor de primera clase en Builderfo
 import { createPageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 
 // Bonsai, WebLLM and the Prompt API — one set per page, one fetch shim, one model store.
-const engines = createPageEngineSet({ loadBfi });
+const engines = createPageEngineSet({
+  bfiWorker: {
+    create: () => new Worker(new URL('./bfi.worker.ts', import.meta.url), { type: 'module' }),
+    wasmUrl: async () => (await import('@seanhogg/bfi-web/wasm-url')).bfiWasmUrl,
+  },
+});
 ```
 
 El motor detecta la API, gestiona los estados `downloadable`/`downloading`/`available` que informa el navegador, y cada motor declara su ventana de contexto real, de modo que una conversación se ajusta *antes* de llegar a un modelo local más pequeño.

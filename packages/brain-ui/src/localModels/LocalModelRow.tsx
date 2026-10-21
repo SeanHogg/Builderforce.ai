@@ -11,7 +11,7 @@ import { useState } from 'react';
 import type { LocalModelRow as LocalModelRowData } from '@seanhogg/builderforce-brain-embedded';
 import type { LocalModelLabels } from './labels';
 import { fill } from '../spend/format';
-import { formatDownloadSize, localModelMeta, progressPercent, unsupportedReason } from './localModelView';
+import { backendBadge, formatDownloadSize, localModelMeta, progressPercent, unsupportedReason } from './localModelView';
 
 export interface LocalModelRowProps {
   row: LocalModelRowData;
@@ -31,8 +31,11 @@ export interface LocalModelRowProps {
 export function LocalModelRow({ row, labels, active, failed, locale, onSelect, onDownload, onCancel, onRemove }: LocalModelRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const ready = row.state === 'ready';
+  /** Its bytes are here: Remove is offered (an unfit model the person downloaded too). */
+  const removable = ready || (row.state === 'unsupported' && row.downloaded === true);
   const percent = progressPercent(row);
   const meta = localModelMeta(row, labels, locale);
+  const backend = backendBadge(row, labels);
 
   return (
     <li className={`bf-lmodel${active ? ' is-active' : ''}${row.state === 'unsupported' ? ' is-unsupported' : ''}`} data-state={row.state}>
@@ -46,6 +49,7 @@ export function LocalModelRow({ row, labels, active, failed, locale, onSelect, o
         <span className="bf-lmodel__name">
           {row.label}
           {row.tools && <span className="bf-lmodel__badge">{labels.localTools}</span>}
+          {backend && <span className="bf-lmodel__badge" data-backend={row.backend}>{backend}</span>}
         </span>
         <span className="bf-lmodel__meta">{meta}</span>
         {row.state === 'unsupported' && <span className="bf-lmodel__reason">{unsupportedReason(row, labels)}</span>}
@@ -77,7 +81,7 @@ export function LocalModelRow({ row, labels, active, failed, locale, onSelect, o
         </div>
       )}
 
-      {ready && (
+      {removable && (
         <div className="bf-lmodel__more">
           <button
             type="button"

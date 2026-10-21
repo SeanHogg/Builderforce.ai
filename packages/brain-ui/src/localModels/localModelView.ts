@@ -8,7 +8,7 @@
  */
 import type { LocalModelRow } from '@seanhogg/builderforce-brain-embedded';
 import { fill } from '../spend/format';
-import { LOCAL_UNSUPPORTED_LABEL, type LocalModelLabels } from './labels';
+import { LOCAL_BACKEND_LABEL, LOCAL_UNSUPPORTED_LABEL, type LocalModelLabels } from './labels';
 
 const GB = 1_000_000_000;
 const MB = 1_000_000;
@@ -46,4 +46,14 @@ export function unsupportedReason(row: LocalModelRow, labels: LocalModelLabels):
 /** Download progress as a whole percentage, clamped. */
 export function progressPercent(row: LocalModelRow): number {
   return Math.max(0, Math.min(100, Math.round((row.progress ?? 0) * 100)));
+}
+
+/**
+ * Where a row runs on this device ("GPU" / "CPU"), for a model that has a choice — one
+ * whose catalog row declares a CPU fallback (`requires.cpu`: the `bfi` Bonsai rows).
+ * WebGPU-only rows carry no badge; saying "GPU" on every WebLLM row would be noise.
+ */
+export function backendBadge(row: LocalModelRow, labels: LocalModelLabels): string | null {
+  if (!row.requires.cpu || !row.backend || row.state === 'unsupported') return null;
+  return labels[LOCAL_BACKEND_LABEL[row.backend]];
 }

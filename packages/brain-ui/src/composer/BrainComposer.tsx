@@ -14,7 +14,9 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react';
 import { PromptPanel } from '../PromptPanel';
 import { PromptOptionsMenu } from '../promptOptions/PromptOptionsMenu';
-import type { PromptOptionsLabels } from '../promptOptions/types';
+import { promptOptionsLabels, type PromptOptionsLabels } from '../promptOptions/types';
+import { InferenceModeFirstRun } from '../inferenceMode/InferenceModeFirstRun';
+import { useInferenceModeGate, type InferenceModeGate } from '../inferenceMode/useInferenceModeGate';
 import { useMentionAutocomplete, type UseMentionAutocompleteOptions } from '../mention/MentionAutocomplete';
 import { useTicketAutocomplete, type UseTicketAutocompleteOptions } from '../mention/TicketAutocomplete';
 import { WorkStatusPanel } from '../workStatus/WorkStatusPanel';
@@ -95,6 +97,12 @@ export interface BrainComposerProps {
   suggestions?: { items: readonly ComposerSuggestion[]; label: string };
   /** Shown under the box (a queued-turns receipt, a secondary link). */
   below?: ReactNode;
+  /**
+   * The first-run gate, when the HOST owns it (`useInferenceModeGate`) because it also
+   * starts turns itself — the guest panel's landing prompt. The question then shows here
+   * for either kind of send. Omit and the composer keeps its own.
+   */
+  modeGate?: InferenceModeGate;
   labels?: BrainComposerLabels;
   className?: string;
 }
@@ -108,7 +116,7 @@ export function BrainComposer(props: BrainComposerProps) {
     value, onChange, onSubmit, running = false, onStop, disabled = false, blockedNotice,
     placeholder, ariaLabel, rows = 2, submitOnEnter = true, focusToken, options, account,
     onAccountSettings, attachments, onAddContext, webBrowsing, addMenuItems, mentions, tickets,
-    pickersDisabled = false, voice = false, context, above, suggestions, below, labels: labelBundle, className,
+    pickersDisabled = false, voice = false, context, above, suggestions, below, modeGate, labels: labelBundle, className,
   } = props;
   const labels = composerLabels(labelBundle?.composer);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -136,7 +144,17 @@ export function BrainComposer(props: BrainComposerProps) {
   });
 
   const canSubmit = value.trim().length > 0 && !disabled;
-  const submit = () => { if (canSubmit) onSubmit(); };
+  // The first-run question: a turn sent before the person chose where models run is held
+  // behind it and sent the moment they answer (the mode applies first) — THE shared gate,
+  // the host's when it owns one.
+  const ownGate = useInferenceModeGate(options.inferenceMode);
+  const gate = modeGate ?? ownGate;
+  const onSubmitRef = useRef(onSubmit);
+  onSubmitRef.current = onSubmit;
+  const submit = () => {
+    if (!canSubmit) return;
+    gate.request(() => onSubmitRef.current());
+  };
 
   const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     if (!attachments) return;
@@ -182,8 +200,11 @@ export function BrainComposer(props: BrainComposerProps) {
 
   const chips = attachments ? <AttachmentChips items={attachments.items} onRemove={attachments.onRemove} labels={labels} /> : null;
   const showSuggestions = !!suggestions?.items.length && !value.trim() && !running;
-  const aboveBox = above || showSuggestions || (attachments && attachments.items.length > 0)
-    ? <>{above}{showSuggestions && <SuggestionRow items={suggestions!.items} ariaLabel={suggestions!.label} />}{chips}</>
+  const modeQuestion = gate.asking
+    ? <InferenceModeFirstRun labels={promptOptionsLabels(labelBundle?.options)} onChoose={gate.choose} />
+    : null;
+  const aboveBox = modeQuestion || above || showSuggestions || (attachments && attachments.items.length > 0)
+    ? <>{modeQuestion}{above}{showSuggestions && <SuggestionRow items={suggestions!.items} ariaLabel={suggestions!.label} />}{chips}</>
     : undefined;
 
   return (

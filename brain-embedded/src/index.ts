@@ -43,7 +43,22 @@ export type { LocalAttemptFit, LocalChatMessage, LocalFetch, LocalFirstStreamInp
 // The ONE host routing step over those two streams — pin, gateway pin, or local first —
 // that the web app, Rovr and the editor each supply only their pin, probes and cloud to.
 export { createHostModelStream } from './hostModelStream';
-export type { HostLocalPin, HostModelStreamInput } from './hostModelStream';
+export { isFallbackFailure } from './hostModelStream';
+export { createModelFallbackChannel, modelFallbackText, DEFAULT_MODEL_FALLBACK_TEMPLATE } from './modelFallback';
+export type { ModelFallbackChannel } from './modelFallback';
+export type { HostLocalPin, HostModelStreamInput, ModelFallbackEvent } from './hostModelStream';
+// Hybrid's `run.local-success` predictor (the engine's ML task catalog): the ONE store port
+// a host lends `createHostModelStream({ localSuccess })`, and the Web Storage adapter.
+export { webStorageLocalSuccessStore, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE } from './localSuccess/localSuccessRouter';
+export type { LocalSuccessStore, LocalSuccessSnapshot } from './localSuccess/localSuccessRouter';
+// The per-turn affect block, appraised on this device by Evermind's local limbic — the
+// replacement for the per-turn `/api/limbic/block` call on every host.
+export { personalitySetpoints, turnAffectBlock } from './limbicAffect';
+export type { LimbicState } from './limbicAffect';
+// THE inference mode (Local only · Hybrid · Specific) — `@builderforce/local-first` owns
+// it; re-exported so the shared UI and every host read one contract.
+export { INFERENCE_MODES, defaultInferenceMode, isInferenceMode } from '@builderforce/local-first';
+export type { InferenceMode } from '@builderforce/local-first';
 // Window fit: fit a transcript into the NEXT model's window with the
 // `@seanhogg/builderforce-memory/handoff` packer — the run loop's gate, and the
 // per-attempt `fit` a local-first host lends `createLocalFirstStream`.
@@ -68,9 +83,49 @@ export type { BrowserEngineProber } from './browserEngine';
 export { PageEngineError } from './pageEngines/types';
 export type { ChatCompletionChunk, ChatCompletionsRequest, PageEngine } from './pageEngines/types';
 export { pageEnginesFetch, probePageEngines } from './pageEngines/fetchShim';
+// Reaching a page engine across a boundary (editor host ↔ webview / worker, page ↔ Web Worker).
+export {
+  PAGE_ENGINE_REPLY_TYPES,
+  PAGE_ENGINE_REQUEST_TYPES,
+  isPageEngineReply,
+  isPageEngineRequest,
+  type PageEngineReply,
+  type PageEngineRequest,
+} from './pageEngines/remote/protocol';
+export { servePageEngines, type PageEngineServerIo } from './pageEngines/remote/serve';
+export {
+  createPageEngineClient,
+  type PageEngineClient,
+  type PageEngineClientOptions,
+  type PageEnginePort,
+} from './pageEngines/remote/client';
+export {
+  ENGINE_WORKER_FATAL,
+  ENGINE_WORKER_IDLE_MS,
+  ENGINE_WORKER_INVALIDATE,
+  createEngineWorker,
+  isWasmTrap,
+  serveEngineWorker,
+  type EngineWorker,
+  type EngineWorkerEndpoint,
+  type EngineWorkerEvents,
+  type EngineWorkerHandle,
+  type EngineWorkerOptions,
+} from './pageEngines/remote/engineWorker';
+export {
+  createBfiWorkerEngine,
+  type BfiWorkerEngine,
+  type BfiWorkerEngineOptions,
+  type WorkerLike,
+} from './pageEngines/bfiWorkerEngine';
+export type { HfModelStore } from './pageEngines/hfModelStore';
 export type { BfiEngineInstance, BfiEngineStatic, BfiModelInfo, BfiModule } from './pageEngines/bfiEngine';
 export { deferredLocalModelStore } from './pageEngines/modelStore';
 export type { LocalModelRow, LocalModelState, LocalModelStore } from './pageEngines/modelStore';
+// How a picker lays that catalog out (curated rows by use, the rest behind "All models",
+// unfit rows hidden) — the ONE rule brain-ui's `LocalModelList` renders in every host.
+export { LOCAL_PICKER_GROUPS, localPickerView } from '@builderforce/local-inference';
+export type { LocalPickerGroup, LocalPickerView } from '@builderforce/local-inference';
 export { createPageEngineSet } from './pageEngines/pageEngineSet';
 export { hasWebGPU } from './pageEngines/webgpu';
 export { pageRuntimePin } from './pageEngines/pageRuntimePin';
@@ -116,8 +171,8 @@ export type { TurnInterruption } from './finishReason';
 // Actionable chat errors: the gateway's structured entitlement fields survive the
 // fetch boundary, and ONE classifier turns any failure into the fix a user can take
 // (reconnect / upgrade / add a card). Consumed by the run store AND the banner UI.
-export { BrainRequestError, brainRequestError, chatErrorAction, NOT_SIGNED_IN } from './chatError';
-export type { ChatErrorAction, ChatErrorActionKind } from './chatError';
+export { BrainRequestError, brainRequestError, chatErrorAction, LOCAL_ENGINE_FAILURE_CODES, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, NOT_SIGNED_IN } from './chatError';
+export type { ChatErrorAction, ChatErrorActionKind, LocalEngineFailureCode } from './chatError';
 
 // Composer Effort → real request params (max_tokens + vendor-neutral reasoning
 // intent) + the level's prose nudge. The ONE effort table: hosts render their
@@ -647,6 +702,7 @@ export {
   MODEL_CATEGORIES,
   DEFAULT_MODEL_CHOICE_LABELS,
   PROJECT_EVERMIND_MODEL_PREFIX,
+  routingModeForSelection,
 } from './modelChoice';
 export type {
   ChatModelOptions,

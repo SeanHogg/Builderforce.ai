@@ -1,4 +1,5 @@
 import {
+  classifyPlatformRequest,
   createGuardedPlatformFetch,
   createPlatformPolicy,
   type PlatformCapability,
@@ -62,10 +63,9 @@ function asHttpUrl(raw: string): URL | null {
 
 function capabilityFor(url: URL, method: string): PlatformCapability | null {
   if (!origins.has(url.origin)) return null;
-  if (url.pathname.includes('/api/auth/') || url.pathname.endsWith('/token')) return 'authenticate';
-  if (url.pathname.includes('/chat/completions')) return 'gateway-inference';
-  const normalized = method.toUpperCase();
-  return normalized === 'GET' || normalized === 'HEAD' ? 'connected-feature' : 'synchronize';
+  // THE shared route table — the host's guard reads the same one, so a path is one
+  // capability in both realms.
+  return classifyPlatformRequest(url.pathname, method);
 }
 
 export function installWebviewPlatformPolicy(): void {

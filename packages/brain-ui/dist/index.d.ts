@@ -1,6 +1,6 @@
 import * as react from 'react';
-import react__default, { ReactNode, HTMLAttributes } from 'react';
-import { BrainRunActivity, ChatActivityLabels, BrainMessage, BrainTraceEvent, ModelIdentityContext, AskUserPayload, ChatErrorAction, QueuedItem, LocalModelRow as LocalModelRow$1, ModelChoiceLabels, ChatModelSelection, ChatModelOptions, LocalModelStore, Effort, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, SavingsSourceKey, SpendSavingsSummary, ChatTicket, ChatDiagnosticsSources, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment, ChatDiagnosticsPlanSnapshot, ChatMode } from '@seanhogg/builderforce-brain-embedded';
+import react__default, { ReactNode, HTMLAttributes, KeyboardEvent } from 'react';
+import { BrainRunActivity, ChatActivityLabels, BrainMessage, BrainTraceEvent, ModelIdentityContext, AskUserPayload, ChatErrorAction, ModelFallbackChannel, ModelFallbackEvent, QueuedItem, LocalModelRow as LocalModelRow$1, InferenceMode, ModelChoiceLabels, ChatModelSelection, ChatModelOptions, LocalModelStore, Effort, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, SavingsSourceKey, SpendSavingsSummary, ChatTicket, ChatDiagnosticsSources, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment, ChatDiagnosticsPlanSnapshot, ChatMode } from '@seanhogg/builderforce-brain-embedded';
 export { AskUserMessageLike, AskUserOption, AskUserPayload, BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, PendingAskUser, QueuedItem, QueuedTurns, QueuedTurnsOptions, RoutedProduct, activeModelKey, askUserAnchorId, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, isManagerRole, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId, selectPendingAskUser, serializeAskUser, stripAskUser } from '@seanhogg/builderforce-brain-embedded';
 
 /**
@@ -679,6 +679,27 @@ interface ChatErrorBannerLabels {
     signIn: string;
     /** What the banner says for that case — replaces the raw `not_signed_in` code. */
     noModel: string;
+    /** What the banner says when nothing on this device can serve and the gateway is not
+     *  an option (Local only, or signed in with no cloud route) — replaces `no_local_model`. */
+    noLocalModel: string;
+    /** Move this person onto Hybrid (local first, then the cloud). */
+    switchToHybrid: string;
+    /** Open where a model for this device is downloaded. */
+    downloadLocalModel: string;
+    /** What the banner says when the person runs Specific model with nothing picked —
+     *  replaces `no_specific_model`. */
+    noSpecificModel: string;
+    /** Open the composer's Model tab, where a model is picked. */
+    pickModel: string;
+    /** The on-device engine crashed (a wasm trap) — replaces `bfi_engine_crashed`. */
+    engineCrashed: string;
+    /** The engine serving the model went away mid-answer — replaces `page_engine_detached`. */
+    engineDetached: string;
+    /** The model trapped repeatedly and is refused this session — replaces `model_keeps_crashing`. */
+    modelKeepsCrashing: string;
+    /** Open where on-device models are managed (removed) — offered beside "Pick a model"
+     *  for a model that keeps crashing. */
+    manageLocalModels: string;
     dismiss: string;
 }
 declare const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels;
@@ -702,6 +723,16 @@ interface ChatErrorBannerProps {
     onValidateCard?: () => void;
     /** Sign in (or open where a local model is started) — for the `sign_in` verdict. */
     onSignIn?: () => void;
+    /** For the `no_local_model` verdict: move onto Hybrid. Omit when the person already
+     *  runs Hybrid (the cloud route is out for another reason) — the button then isn't offered. */
+    onSwitchToHybrid?: () => void;
+    /** For the `no_local_model` verdict: open where a local model is downloaded. Also the
+     *  "Manage on-device models" remedy for a model that keeps crashing (it is removed there). */
+    onDownloadLocalModel?: () => void;
+    /** For the `no_specific_model` verdict: open the composer's Model tab (the one that
+     *  raised it), where a model is picked or the mode changed. Also "try another model"
+     *  for a model that keeps crashing. */
+    onPickModel?: () => void;
     labels?: Partial<ChatErrorBannerLabels>;
     /** Extra styles merged into the banner container, for host-specific chrome. */
     style?: react__default.CSSProperties;
@@ -714,7 +745,22 @@ interface ChatErrorBannerProps {
      */
     role?: 'alert' | 'status';
 }
-declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, labels: labelOverrides, style, className, role, }: ChatErrorBannerProps): react__default.JSX.Element | null;
+declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, onSwitchToHybrid, onDownloadLocalModel, onPickModel, labels: labelOverrides, style, className, role, }: ChatErrorBannerProps): react__default.JSX.Element | null;
+
+interface ModelFallbackNoticeLabels {
+    /** The line — must contain the literal `{model}` token. */
+    fallback: string;
+    dismiss: string;
+}
+declare const DEFAULT_MODEL_FALLBACK_LABELS: ModelFallbackNoticeLabels;
+/** The channel's latest undismissed fallback, re-rendering on each report / dismiss. */
+declare function useModelFallback(channel: ModelFallbackChannel | null | undefined): ModelFallbackEvent | null;
+interface ModelFallbackNoticeProps {
+    channel: ModelFallbackChannel | null | undefined;
+    labels?: Partial<ModelFallbackNoticeLabels>;
+    className?: string;
+}
+declare function ModelFallbackNotice({ channel, labels: partial, className }: ModelFallbackNoticeProps): react.JSX.Element | null;
 
 /**
  * The human-in-the-loop approval — ONE bar for every surface that pauses a run on a
@@ -1349,7 +1395,8 @@ declare function useVoiceDictation(getValue: () => string, onChange: (value: str
  * from the catalog untranslated.
  *
  * Placeholders are substituted by the list itself: `{size}` (a formatted byte count),
- * `{percent}` (0–100) and `{tokens}` (a formatted context window).
+ * `{percent}` (0–100), `{tokens}` (a formatted context window) and `{count}` (a number
+ * of models).
  */
 
 interface LocalModelLabels {
@@ -1371,7 +1418,23 @@ interface LocalModelLabels {
     localReasonWebgpu: string;
     localReasonF16: string;
     localReasonBuffer: string;
+    localReasonVram: string;
+    /** Runs without a GPU only on a device with more memory than this one has. */
+    localReasonMemory: string;
     localReasonEngine: string;
+    /** Badge on a `bfi` row saying where it runs here: on the GPU (WebGPU) or the CPU. */
+    localBackendGpu: string;
+    localBackendCpu: string;
+    /** Section headings: what the curated models are for. */
+    localGroupTools: string;
+    localGroupChat: string;
+    localGroupCoding: string;
+    localGroupReasoning: string;
+    localGroupMath: string;
+    /** The expander over every other model, e.g. "All models (63)". */
+    localAllModels: string;
+    /** Collapses that expander again. */
+    localFewerModels: string;
 }
 declare const DEFAULT_LOCAL_MODEL_LABELS: LocalModelLabels;
 /** Every field of {@link LocalModelLabels} — the ONE key table hosts read their catalog by. */
@@ -1380,7 +1443,7 @@ declare const LOCAL_MODEL_LABEL_FIELDS: ReadonlyArray<keyof LocalModelLabels>;
 type LocalModelLabelLookup = (field: keyof LocalModelLabels) => string | undefined;
 /**
  * The on-device list's copy from a host catalog. Each host used to hand-map the same
- * thirteen fields onto its own keys (next-intl, `vscode.l10n`, `chrome.i18n`); a host now
+ * fields onto its own keys (next-intl, `vscode.l10n`, `chrome.i18n`); a host now
  * passes a lookup by field and every label it lacks falls back to the English default.
  * Placeholders (`{size}`, `{percent}`, `{tokens}`) must come back literal.
  */
@@ -1388,6 +1451,40 @@ declare function localModelLabelsFrom(lookup: LocalModelLabelLookup): LocalModel
 /** Why a row is unsupported → the label that says so. A registry, so a new fit code
  *  is one entry here rather than a branch in the row. */
 declare const LOCAL_UNSUPPORTED_LABEL: Record<NonNullable<LocalModelRow$1['reason']>, keyof LocalModelLabels>;
+/** Where a row runs → its badge. A registry, so a new backend is one entry here. */
+declare const LOCAL_BACKEND_LABEL: Record<NonNullable<LocalModelRow$1['backend']>, keyof LocalModelLabels>;
+
+/**
+ * The copy of the INFERENCE MODE control (the `/` menu's Model tab) and its first-run
+ * prompt — the same strings on the web app, Rovr and the VS Code webview. Hosts read them
+ * through the `/` menu's key table (`promptOptionsLabelsFrom` — these fields are part of
+ * `PromptOptionsLabels`), so a host maps each canonical key onto its own catalog once.
+ */
+
+interface InferenceModeLabels {
+    /** Heading of the control in the Model tab. */
+    inferenceMode: string;
+    inferenceModeHybrid: string;
+    inferenceModeHybridHint: string;
+    inferenceModeLocalOnly: string;
+    inferenceModeLocalOnlyHint: string;
+    inferenceModeSpecific: string;
+    inferenceModeSpecificHint: string;
+    /** Tag beside the recommended mode. */
+    inferenceModeRecommended: string;
+    /** The first-run prompt's question. */
+    inferenceModeAskTitle: string;
+    /** One line under it: that the choice can be changed later, and where. */
+    inferenceModeAskBody: string;
+}
+declare const DEFAULT_INFERENCE_MODE_LABELS: InferenceModeLabels;
+/** The canonical key fields, for a host's catalog-coverage test. */
+declare const INFERENCE_MODE_LABEL_FIELDS: ReadonlyArray<keyof InferenceModeLabels>;
+/** A mode's name and one-line description. */
+declare function inferenceModeCopy(mode: InferenceMode, labels: InferenceModeLabels): {
+    name: string;
+    hint: string;
+};
 
 /**
  * The contract for the composer's `/` control — the ONE place a prompt panel
@@ -1410,7 +1507,7 @@ declare const LOCAL_UNSUPPORTED_LABEL: Record<NonNullable<LocalModelRow$1['reaso
  * (the web app via next-intl, the VS Code webview via the host's `vscode.l10n`
  * bundle); the English defaults below keep the component usable unmapped.
  */
-interface PromptOptionsLabels extends ModelChoiceLabels, LocalModelLabels {
+interface PromptOptionsLabels extends ModelChoiceLabels, LocalModelLabels, InferenceModeLabels {
     /** Trigger title/aria — the menu as a whole. */
     options: string;
     /** Section heading for the conversation-mode block (Chat | Work). */
@@ -1554,6 +1651,27 @@ interface PromptOptionsModel {
     identityPending?: boolean;
 }
 
+/** The mode wiring a host hands the composer. */
+interface PromptOptionsInferenceMode {
+    /** The mode in force (the chosen one, else the host's derived default). */
+    value: InferenceMode;
+    onChange: (mode: InferenceMode) => void | Promise<void>;
+    /**
+     * The person has not chosen yet and should be asked before their next turn (a first run —
+     * the host decides who is asked: signed in everywhere, and on the web an anonymous
+     * visitor too, for whom it is the Hybrid opt-in). THE first-run gate
+     * (`useInferenceModeGate`) then holds that turn behind the question.
+     */
+    needsChoice?: boolean;
+}
+interface InferenceModeControlProps {
+    inferenceMode?: PromptOptionsInferenceMode;
+    labels: InferenceModeLabels;
+    /** Called after a pick (the menu closes itself). */
+    onPicked?: () => void;
+}
+declare function InferenceModeControl({ inferenceMode, labels, onPicked }: InferenceModeControlProps): react.JSX.Element | null;
+
 interface PromptOptionsMenuProps {
     labels?: Partial<PromptOptionsLabels>;
     disabled?: boolean;
@@ -1570,6 +1688,14 @@ interface PromptOptionsMenuProps {
     onThinkingChange?: (on: boolean) => void;
     describeThinking?: (on: boolean) => string;
     model?: PromptOptionsModel;
+    /** Where models run (Hybrid · Local only · Specific) — the top of the Model tab. */
+    inferenceMode?: PromptOptionsInferenceMode;
+    /**
+     * A host's request to OPEN the menu on a tab (e.g. a "Download a local model" remedy
+     * sending the person to the Model tab). Each new `token` opens it once; the same token
+     * again does nothing, so a re-render never re-opens a menu the person closed.
+     */
+    openOn?: PromptOptionsOpenRequest;
     /**
      * Host-owned account / usage / Evermind details for the Status tab. The menu
      * never fetches billing itself — each host already has its own plan snapshot.
@@ -1583,6 +1709,12 @@ interface PromptOptionsMenuProps {
     };
     onAccountSettings?: () => void;
     className?: string;
+}
+type PromptOptionsTab = 'mode' | 'effort' | 'model' | 'status' | 'spend';
+/** Open the `/` menu on `tab`; bump `token` for each new request. */
+interface PromptOptionsOpenRequest {
+    tab: PromptOptionsTab;
+    token: number;
 }
 /**
  * The composer's `/` control: everything that shapes the NEXT TURN — the mode it
@@ -1598,7 +1730,7 @@ interface PromptOptionsMenuProps {
  *
  * Self-gating: renders nothing until a host wires at least one section.
  */
-declare function PromptOptionsMenu({ labels: labelOverrides, disabled, mode, memory, autoMode, session, effort, onEffortChange, describeEffort, thinking, onThinkingChange, describeThinking, model, status, spend, onAccountSettings, className, }: PromptOptionsMenuProps): react.JSX.Element | null;
+declare function PromptOptionsMenu({ labels: labelOverrides, disabled, mode, memory, autoMode, session, effort, onEffortChange, describeEffort, thinking, onThinkingChange, describeThinking, model, inferenceMode, openOn, status, spend, onAccountSettings, className, }: PromptOptionsMenuProps): react.JSX.Element | null;
 
 interface LocalModelRowProps {
     row: LocalModelRow$1;
@@ -1638,6 +1770,52 @@ interface LocalModelListProps {
     onSelect(ref: string): void;
 }
 declare function LocalModelList({ state, labels, activeRef, locale, hideHeading, onSelect }: LocalModelListProps): react.JSX.Element | null;
+
+declare function requestComposerMenu(composerId: string, tab?: PromptOptionsTab): void;
+/** The latest open request for THIS composer, for `ComposerOptions.openMenu`. */
+declare function useComposerMenuRequest(composerId: string | undefined): PromptOptionsOpenRequest | undefined;
+
+interface InferenceModeFirstRunProps {
+    labels: InferenceModeLabels;
+    onChoose: (mode: InferenceMode) => void;
+}
+declare function InferenceModeFirstRun({ labels, onChoose }: InferenceModeFirstRunProps): react.JSX.Element;
+
+interface InferenceModeGate {
+    /** The question is showing (a send is held behind it). */
+    asking: boolean;
+    /** Run `send` now, or hold it behind the question. True = it ran now. */
+    request: (send: () => void) => boolean;
+    /** The person's answer: apply the mode, then run the held send. */
+    choose: (mode: InferenceMode) => void;
+}
+declare function useInferenceModeGate(inferenceMode: PromptOptionsInferenceMode | undefined): InferenceModeGate;
+
+/**
+ * THE keyboard model for a `role="radiogroup"` of buttons — ONE tab stop (the checked
+ * radio, or the first when none is checked: roving `tabIndex`), Arrow keys move focus
+ * between the radios (and wrap), Home / End jump to the first / last. Moving focus does
+ * not choose — Space / Enter (the button's own click) does, because on these groups a
+ * choice changes something real (where the next turn runs, how the cloud is funded).
+ *
+ * Shared by the inference-mode control and the web's cloud-funding card, so the two
+ * radio groups a person meets on the same settings journey behave identically.
+ */
+
+/** Where a key moves focus from `index`, or null for a key the group does not handle. */
+declare function rovingRadioNextIndex(key: string, index: number, count: number): number | null;
+interface RovingRadioItemProps<T extends HTMLElement> {
+    ref: (el: T | null) => void;
+    tabIndex: 0 | -1;
+    onKeyDown: (event: KeyboardEvent<T>) => void;
+}
+/**
+ * `count` radios, `checkedIndex` the checked one (-1 / out of range = none). Spread
+ * `itemProps(index)` on each radio button.
+ */
+declare function useRovingRadioGroup<T extends HTMLElement = HTMLButtonElement>(count: number, checkedIndex: number): {
+    itemProps: (index: number) => RovingRadioItemProps<T>;
+};
 
 /**
  * Pure formatting for an on-device model row — what the row SAYS, separated from how it
@@ -1703,7 +1881,8 @@ declare function usePopover<T extends HTMLElement = HTMLDivElement>(): {
     open: boolean;
     toggle: () => void;
     close: () => void;
-    rootRef: react.RefObject<T>;
+    show: () => void;
+    rootRef: react.RefObject<T | null>;
 };
 
 interface RecipientPickerLabels {
@@ -4080,6 +4259,11 @@ interface ComposerOptions {
         onChange: (on: boolean) => void;
     };
     model?: PromptOptionsModel;
+    /** Where models run (Hybrid · Local only · Specific). `needsChoice` holds the next turn
+     *  behind the first-run question. */
+    inferenceMode?: PromptOptionsInferenceMode;
+    /** Open the `/` menu on a tab (a remedy sending the person to the Model tab). */
+    openMenu?: PromptOptionsOpenRequest;
     autoMode?: {
         enabled: boolean;
         onChange: (on: boolean) => void;
@@ -4155,6 +4339,12 @@ interface BrainComposerProps {
     };
     /** Shown under the box (a queued-turns receipt, a secondary link). */
     below?: ReactNode;
+    /**
+     * The first-run gate, when the HOST owns it (`useInferenceModeGate`) because it also
+     * starts turns itself — the guest panel's landing prompt. The question then shows here
+     * for either kind of send. Omit and the composer keeps its own.
+     */
+    modeGate?: InferenceModeGate;
     labels?: BrainComposerLabels;
     className?: string;
 }
@@ -4303,4 +4493,4 @@ interface ComposerModelInput {
 /** `ComposerOptions.model` for one host. Pure — memoize on its inputs. */
 declare function composerModel(input: ComposerModelInput): PromptOptionsModel;
 
-export { type AgentOptionVM, AiSurface, type AiSurfaceProps, type AskUserLabels, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainMark, type BrainMarkProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatHistoryChat, type ChatHistoryLabels, ChatHistoryList, type ChatHistoryListProps, ChatHistoryRow, type ChatHistoryRowProps, type ChatOptionVM, type ChatRowActionProps, type ChatRowActions, type ChatRowRef, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerLabels, type ComposerModelCatalog, type ComposerModelInput, type ComposerOptions, type ComposerSuggestion, type ConsumptionSnapshot, ContextChip, type ContextChipOption, type ContextChipProps, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_HISTORY_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_INLINE_CHAT_TITLE_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_MENTION_LABELS, DEFAULT_MODEL_MOVE_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_QUEUED_TURN_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_SURFACE_HEADER_LABELS, DEFAULT_TICKET_TAG_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_TOOL_CONFIRM_LABELS, DEFAULT_WORK_STATUS_LABELS, EXPAND_ICON_PATH, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, type FullBrainComposerLabels, HeaderIcon, HealthRing, type HealthRingProps, type HealthTier, InlineChatTitle, type InlineChatTitleLabels, type InlineChatTitleProps, type JsonRequest, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, type LabelLookup, type LabelValues, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabelLookup, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, type ModelMove, type ModelMoveLabels, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, QuestionCard, QueuedTurnChips, type QueuedTurnChipsLabels, type QueuedTurnChipsProps, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, StarterGroup, StarterTile, type StarterTileProps, SuggestionRow, Sunburst, type SunburstProps, SurfaceEmptyState, type SurfaceEmptyStateProps, SurfaceFooter, type SurfaceFooterProps, SurfaceHeader, type SurfaceHeaderHistory, type SurfaceHeaderLabels, type SurfaceHeaderProps, SurfaceLauncher, type SurfaceLauncherBadge, type SurfaceLauncherProps, type SurfaceTab, SurfaceTabs, type SurfaceTabsProps, TICKET_KINDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineImage, type TimelineNode, ToolConfirmBar, type ToolConfirmBarLabels, type ToolConfirmBarProps, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UpgradeTarget, type UseChatRowActionsOptions, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, WorkSpendPanel, type WorkSpendPanelProps, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentsOf, avatarColor, brainComposerLabelsFrom, buildSettledTimeline, buildTimeline, bundleLookup, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatHistoryLabelsFrom, chatSwitcherLabel, chatTicketsLabelsFrom, chatTicketsLabelsFromBundle, commandOf, composerCatalogLoaded, composerLabels, composerLabelsFrom, composerModel, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, initialsOf, invalidateConsumptionSnapshot, liveActivityLabelsFrom, loadEvermindBuilds, localModelLabelsFrom, modelMoveLine, modelMoveOf, modelSelectionFrom, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, promptOptionsLabelsFrom, promptTrailingAction, publishedEvermindModels, resolvePendingChangesLabels, resolveTeacherOptions, shellOutcomeOf, spendLabels, spendLabelsFrom, strandedReplyKey, streamingNode, stringsFrom, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolConfirmLabelsFrom, toolConfirmPreview, toolPreview, toolStepView, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useChatRowActions, useConsumptionSnapshot, useDismissibleNotice, useLocalModels, useMentionAutocomplete, usePopover, useRecipientChoice, useTicketAutocomplete, useVoiceDictation, withLocalModels, workStatusLabels, workStatusLabelsFrom };
+export { type AgentOptionVM, AiSurface, type AiSurfaceProps, type AskUserLabels, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainMark, type BrainMarkProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatHistoryChat, type ChatHistoryLabels, ChatHistoryList, type ChatHistoryListProps, ChatHistoryRow, type ChatHistoryRowProps, type ChatOptionVM, type ChatRowActionProps, type ChatRowActions, type ChatRowRef, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerLabels, type ComposerModelCatalog, type ComposerModelInput, type ComposerOptions, type ComposerSuggestion, type ConsumptionSnapshot, ContextChip, type ContextChipOption, type ContextChipProps, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_HISTORY_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_INFERENCE_MODE_LABELS, DEFAULT_INLINE_CHAT_TITLE_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_MENTION_LABELS, DEFAULT_MODEL_FALLBACK_LABELS, DEFAULT_MODEL_MOVE_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_QUEUED_TURN_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_SURFACE_HEADER_LABELS, DEFAULT_TICKET_TAG_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_TOOL_CONFIRM_LABELS, DEFAULT_WORK_STATUS_LABELS, EXPAND_ICON_PATH, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, type FullBrainComposerLabels, HeaderIcon, HealthRing, type HealthRingProps, type HealthTier, INFERENCE_MODE_LABEL_FIELDS, InferenceModeControl, type InferenceModeControlProps, InferenceModeFirstRun, type InferenceModeFirstRunProps, type InferenceModeGate, type InferenceModeLabels, InlineChatTitle, type InlineChatTitleLabels, type InlineChatTitleProps, type JsonRequest, LOCAL_BACKEND_LABEL, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, type LabelLookup, type LabelValues, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabelLookup, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, ModelFallbackNotice, type ModelFallbackNoticeLabels, type ModelFallbackNoticeProps, type ModelMove, type ModelMoveLabels, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsInferenceMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsOpenRequest, type PromptOptionsSession, type PromptOptionsTab, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, QuestionCard, QueuedTurnChips, type QueuedTurnChipsLabels, type QueuedTurnChipsProps, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, type RovingRadioItemProps, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, StarterGroup, StarterTile, type StarterTileProps, SuggestionRow, Sunburst, type SunburstProps, SurfaceEmptyState, type SurfaceEmptyStateProps, SurfaceFooter, type SurfaceFooterProps, SurfaceHeader, type SurfaceHeaderHistory, type SurfaceHeaderLabels, type SurfaceHeaderProps, SurfaceLauncher, type SurfaceLauncherBadge, type SurfaceLauncherProps, type SurfaceTab, SurfaceTabs, type SurfaceTabsProps, TICKET_KINDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineImage, type TimelineNode, ToolConfirmBar, type ToolConfirmBarLabels, type ToolConfirmBarProps, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UpgradeTarget, type UseChatRowActionsOptions, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, WorkSpendPanel, type WorkSpendPanelProps, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentsOf, avatarColor, brainComposerLabelsFrom, buildSettledTimeline, buildTimeline, bundleLookup, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatHistoryLabelsFrom, chatSwitcherLabel, chatTicketsLabelsFrom, chatTicketsLabelsFromBundle, commandOf, composerCatalogLoaded, composerLabels, composerLabelsFrom, composerModel, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, inferenceModeCopy, initialsOf, invalidateConsumptionSnapshot, liveActivityLabelsFrom, loadEvermindBuilds, localModelLabelsFrom, modelMoveLine, modelMoveOf, modelSelectionFrom, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, promptOptionsLabelsFrom, promptTrailingAction, publishedEvermindModels, requestComposerMenu, resolvePendingChangesLabels, resolveTeacherOptions, rovingRadioNextIndex, shellOutcomeOf, spendLabels, spendLabelsFrom, strandedReplyKey, streamingNode, stringsFrom, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolConfirmLabelsFrom, toolConfirmPreview, toolPreview, toolStepView, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useChatRowActions, useComposerMenuRequest, useConsumptionSnapshot, useDismissibleNotice, useInferenceModeGate, useLocalModels, useMentionAutocomplete, useModelFallback, usePopover, useRecipientChoice, useRovingRadioGroup, useTicketAutocomplete, useVoiceDictation, withLocalModels, workStatusLabels, workStatusLabelsFrom };

@@ -246,10 +246,14 @@ export interface LlmProxyOptions {
    *  put a hard ceiling on overflow spend (a Free tenant's primary free pool
    *  still runs — only the funded overflow path is closed). */
   disablePaidOverflow?: boolean;
-  /** Explicit interactive Auto selection: keep connected accounts at the head,
-   * but allow the gateway to continue into entitled shared routes. Absent keeps
-   * the legacy BYO execution boundary used by autonomous callers. */
+  /** Connected accounts first as ORDER, not a boundary (`fundingOrder.ts` byo_first /
+   * free_first): keep connected accounts at the head (or behind the free tier with
+   * `freeFirst`), but allow the gateway to continue into entitled shared routes. Absent
+   * keeps the BYO execution boundary used by autonomous callers. */
   allowGatewayAuto?: boolean;
+  /** The free tier (FREE models + the Cloudflare daily allowance) leads the chain and
+   *  connected accounts follow it — see `fundingOrder.ts` (`resolveFundingOrder`). */
+  freeFirst?: boolean;
   /** When true, this proxy is serving a CODING run: the appended premium fallback
    *  chain is the coding-capable one (`CODING_PREMIUM_FALLBACK_MODELS`, paid
    *  coders) instead of the general non-coder gemini chain, so an exhausted coding

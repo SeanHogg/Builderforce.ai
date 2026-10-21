@@ -15,6 +15,7 @@
 import {
   LOCAL_MODEL_CATALOG,
   localModelFit,
+  type LocalBackend,
   type LocalCatalogModel,
   type LocalDeviceSupport,
   type LocalModelUnfit,
@@ -29,11 +30,16 @@ export type LocalModelState = 'absent' | 'downloading' | 'ready' | 'unsupported'
 
 export type LocalModelRow = LocalCatalogModel & {
   state: LocalModelState;
+  /** Where it runs on this device (the fit's choice), when it can: `webgpu` or the
+   *  engine's `cpu`. The picker labels `bfi` rows by it. */
+  backend?: LocalBackend;
   /** 0..1 while `downloading`. */
   progress?: number;
   /** Why it is `unsupported`: a fit code, or `engine_unavailable` when this host does not
    *  carry the engine. */
   reason?: LocalModelUnfit | 'engine_unavailable';
+  /** An `unsupported` row whose bytes are still cached here — listed, and removable. */
+  downloaded?: boolean;
 };
 
 export interface LocalModelStore {
@@ -113,12 +119,12 @@ export function createLocalModelStore(options: LocalModelStoreOptions): LocalMod
     // Fit first, as the engines' probes do: a model this device cannot run is never
     // offered, even when its bytes are cached (`remove` still clears them).
     const fit = localModelFit(row, support);
-    if (!fit.fits) return { ...row, state: 'unsupported' as const, reason: fit.reason };
     const ready = await backend.ready(row).catch((e: unknown) => {
       reportPageEngineFailure(row.runtime, 'cache_lookup', e);
       return false;
     });
-    return { ...row, state: ready ? ('ready' as const) : ('absent' as const) };
+    if (!fit.fits) return { ...row, state: 'unsupported' as const, reason: fit.reason, ...(ready ? { downloaded: true } : {}) };
+    return { ...row, state: ready ? ('ready' as const) : ('absent' as const), backend: fit.backend };
   }
 
   return {

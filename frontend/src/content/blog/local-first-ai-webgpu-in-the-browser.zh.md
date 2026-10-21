@@ -32,7 +32,12 @@ SitePoint 最近发布了一份出色的蓝图，讲解如何完全在浏览器�
 import { createPageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 
 // Bonsai, WebLLM and the Prompt API — one set per page, one fetch shim, one model store.
-const engines = createPageEngineSet({ loadBfi });
+const engines = createPageEngineSet({
+  bfiWorker: {
+    create: () => new Worker(new URL('./bfi.worker.ts', import.meta.url), { type: 'module' }),
+    wasmUrl: async () => (await import('@seanhogg/bfi-web/wasm-url')).bfiWasmUrl,
+  },
+});
 ```
 
 该引擎会检测 API 是否可用，处理浏览器报告的 `downloadable`/`downloading`/`available` 状态，而且每个引擎都会报告真实的上下文窗口，因此对话会在到达较小的本地模型*之前*被裁剪到合适大小。

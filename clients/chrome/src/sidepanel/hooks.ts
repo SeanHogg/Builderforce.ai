@@ -4,7 +4,9 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { getRunSnapshot, subscribeRun, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
+import type { PromptOptionsInferenceMode } from '@seanhogg/builderforce-brain-ui';
 import type { PanelServices } from '../host/panelServices';
+import type { RovrInferenceModeState } from '../platform/policy';
 import type { RovrSettings } from '../platform/settings';
 import { onSyncStatsChanged, type SyncStats } from '../sync/runtimeMessages';
 import { originOf } from '../tools/safety';
@@ -53,6 +55,29 @@ export function useSignedIn(): boolean {
   return useSyncExternalStore(
     (listener) => session.subscribe(listener),
     () => session.isSignedIn(),
+  );
+}
+
+/** Where models run (Local only · Hybrid · Specific), kept current across contexts. */
+export function useInferenceModeState(): RovrInferenceModeState {
+  const { policy } = useServices();
+  return useSyncExternalStore(
+    (listener) => policy.subscribeMode(listener),
+    () => policy.inferenceMode(),
+  );
+}
+
+/** The composer's `/` menu wiring for the mode — and the first-run question, asked only
+ *  of a signed-in person who has not chosen. Undefined until the policy's first read has
+ *  landed: the control renders nothing rather than the refused placeholder (Local only). */
+export function useInferenceModeOption(): PromptOptionsInferenceMode | undefined {
+  const { policy } = useServices();
+  const state = useInferenceModeState();
+  return useMemo<PromptOptionsInferenceMode | undefined>(
+    () => (state.loaded
+      ? { value: state.mode, onChange: (mode) => policy.setInferenceMode(mode), needsChoice: state.signedIn && !state.chosen }
+      : undefined),
+    [policy, state],
   );
 }
 

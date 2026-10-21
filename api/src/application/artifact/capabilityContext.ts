@@ -202,8 +202,9 @@ export async function resolvePsychometricProfile(
   const inline = parsePsychometricProfile(source.psychometric as string | PsychProfile | null | undefined);
   if (inline) return inline;
 
-  // CACHED, like the persona leg below it already was. `POST /api/limbic/block` is a
-  // PER-TURN call — the VS Code chat participant makes one on every message — and this
+  // CACHED, like the persona leg below it already was. `POST /api/limbic/block` was a
+  // PER-TURN call (the VS Code chat participant made one on every message; since
+  // 2026-10-21 clients appraise the turn locally and call it once per session) and this
   // was an uncached `users` SELECT behind each of them, on data that changes only when
   // somebody retakes a psychometric assessment. Two minutes is long enough that a
   // conversation costs one read instead of one per turn, and short enough that a fresh

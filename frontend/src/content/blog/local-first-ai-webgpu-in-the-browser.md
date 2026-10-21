@@ -42,7 +42,12 @@ This is the guide's headline feature, and it's a first-class engine in Builderfo
 import { createPageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 
 // Bonsai, WebLLM and the Prompt API — one set per page, one fetch shim, one model store.
-const engines = createPageEngineSet({ loadBfi });
+const engines = createPageEngineSet({
+  bfiWorker: {
+    create: () => new Worker(new URL('./bfi.worker.ts', import.meta.url), { type: 'module' }),
+    wasmUrl: async () => (await import('@seanhogg/bfi-web/wasm-url')).bfiWasmUrl,
+  },
+});
 ```
 
 The engine feature-detects the API, handles the `downloadable`/`downloading`/`available` states the browser reports, and every engine reports its real context window, so a conversation is packed to fit *before* it reaches a smaller on-device model.

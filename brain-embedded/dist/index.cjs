@@ -58,11 +58,15 @@ __export(src_exports, {
   DEFAULT_CHAT_ACTIVITY_LABELS: () => DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS: () => DEFAULT_MODEL_CHOICE_LABELS,
+  DEFAULT_MODEL_FALLBACK_TEMPLATE: () => DEFAULT_MODEL_FALLBACK_TEMPLATE,
   DEFAULT_MODEL_IDENTITY: () => DEFAULT_MODEL_IDENTITY,
   DEFAULT_PERSONA: () => DEFAULT_PERSONA,
   DEFAULT_TOOL_FAILURE_STREAK: () => DEFAULT_TOOL_FAILURE_STREAK,
   DEFAULT_TOOL_LIMIT: () => DEFAULT_TOOL_LIMIT,
   EMPTY_GATEWAY_MODEL_OPTIONS: () => EMPTY_GATEWAY_MODEL_OPTIONS,
+  ENGINE_WORKER_FATAL: () => ENGINE_WORKER_FATAL,
+  ENGINE_WORKER_IDLE_MS: () => ENGINE_WORKER_IDLE_MS,
+  ENGINE_WORKER_INVALIDATE: () => ENGINE_WORKER_INVALIDATE,
   FAILURE_HARD_AT: () => FAILURE_HARD_AT,
   FAILURE_NUDGE_AT: () => FAILURE_NUDGE_AT,
   FILE_DELIVERY_RULE: () => FILE_DELIVERY_RULE,
@@ -70,6 +74,11 @@ __export(src_exports, {
   HAND_OFF_TOOL: () => HAND_OFF_TOOL,
   HAND_OFF_TOOL_SPEC: () => HAND_OFF_TOOL_SPEC,
   HISTORY_TOKEN_BUDGET: () => HISTORY_TOKEN_BUDGET,
+  INFERENCE_MODES: () => INFERENCE_MODES,
+  LOCAL_ENGINE_FAILURE_CODES: () => LOCAL_ENGINE_FAILURE_CODES,
+  LOCAL_PICKER_GROUPS: () => LOCAL_PICKER_GROUPS,
+  LOCAL_SKIP_CONFIDENCE: () => LOCAL_SKIP_CONFIDENCE,
+  LOCAL_SKIP_EXPLORE: () => LOCAL_SKIP_EXPLORE,
   LOCAL_WORKSPACE_TOOLS: () => LOCAL_WORKSPACE_TOOLS,
   MAX_STOP_HOOK_ROUNDS: () => MAX_STOP_HOOK_ROUNDS,
   MAX_TOOL_RESULT_CHARS: () => MAX_TOOL_RESULT_CHARS,
@@ -78,7 +87,11 @@ __export(src_exports, {
   NEW_CHAT_MODE: () => NEW_CHAT_MODE,
   NOT_SIGNED_IN: () => NOT_SIGNED_IN,
   NOT_STARTED_TASK_STATUSES: () => NOT_STARTED_TASK_STATUSES,
+  NO_LOCAL_MODEL: () => NO_LOCAL_MODEL,
+  NO_SPECIFIC_MODEL: () => NO_SPECIFIC_MODEL,
   ON_DEVICE_ANSWER_THRESHOLD: () => ON_DEVICE_ANSWER_THRESHOLD,
+  PAGE_ENGINE_REPLY_TYPES: () => PAGE_ENGINE_REPLY_TYPES,
+  PAGE_ENGINE_REQUEST_TYPES: () => PAGE_ENGINE_REQUEST_TYPES,
   PERSONA_MODALITY_IDS: () => PERSONA_MODALITY_IDS,
   PMO_FOCUS_PARAM: () => PMO_FOCUS_PARAM,
   PREVIEW_REVIEW_TOOL: () => PREVIEW_REVIEW_TOOL,
@@ -173,18 +186,23 @@ __export(src_exports, {
   consolidationMetadata: () => consolidationMetadata,
   contextWindowOf: () => contextWindowOf,
   countReconciledMemories: () => import_evermind3.countReconciledMemories,
+  createBfiWorkerEngine: () => createBfiWorkerEngine,
   createBrainRestPersistence: () => createBrainRestPersistence,
   createBrowserEngineProber: () => createBrowserEngineProber,
   createComposingActivity: () => createComposingActivity,
+  createEngineWorker: () => createEngineWorker,
   createHandoffFit: () => createHandoffFit,
   createHostModelStream: () => createHostModelStream,
   createLocalBrainPersistence: () => createLocalBrainPersistence,
   createLocalFirstStream: () => createLocalFirstStream,
   createLocalStream: () => createLocalStream,
+  createModelFallbackChannel: () => createModelFallbackChannel,
+  createPageEngineClient: () => createPageEngineClient,
   createPageEngineSet: () => createPageEngineSet,
   createPayloadBudget: () => createPayloadBudget,
   declinesReview: () => declinesReview,
   declinesShipping: () => declinesShipping,
+  defaultInferenceMode: () => defaultInferenceMode,
   deferredLocalModelStore: () => deferredLocalModelStore,
   deriveChatTitle: () => deriveChatTitle,
   describeLiveStep: () => describeLiveStep,
@@ -254,10 +272,14 @@ __export(src_exports, {
   isEffort: () => isEffort,
   isEvermindModel: () => isEvermindModel,
   isFailedToolResult: () => isFailedToolResult,
+  isFallbackFailure: () => isFallbackFailure,
+  isInferenceMode: () => isInferenceMode,
   isLocalWorkspaceTool: () => isLocalWorkspaceTool,
   isMalformedToolCall: () => isMalformedToolCall,
   isManagerRole: () => isManagerRole,
   isMutationTool: () => isMutationTool,
+  isPageEngineReply: () => isPageEngineReply,
+  isPageEngineRequest: () => isPageEngineRequest,
   isReadOnlyShellCall: () => isReadOnlyShellCall,
   isRepoPublishTool: () => isRepoPublishTool,
   isRouterTool: () => isRouterTool,
@@ -270,6 +292,7 @@ __export(src_exports, {
   isUnscopedMutationTool: () => isUnscopedMutationTool,
   isUsageSurface: () => isUsageSurface,
   isUserConfiguredModelRef: () => isUserConfiguredModelRef,
+  isWasmTrap: () => isWasmTrap,
   lastConsolidationIndex: () => lastConsolidationIndex,
   lastServedModel: () => lastServedModel,
   leftChangeUnreviewed: () => leftChangeUnreviewed,
@@ -283,6 +306,7 @@ __export(src_exports, {
   localFallbackTrace: () => localFallbackTrace,
   localFirstApplies: () => localFirstApplies,
   localFirstWorkload: () => localFirstWorkload,
+  localPickerView: () => localPickerView,
   localStorageConfirmationPersistence: () => localStorageConfirmationPersistence,
   localToolsIn: () => localToolsIn,
   localTransport: () => localTransport,
@@ -292,6 +316,7 @@ __export(src_exports, {
   modalityPersonaChoice: () => modalityPersonaChoice,
   modelCategoryLabel: () => modelCategoryLabel,
   modelFailoversInTrace: () => modelFailoversInTrace,
+  modelFallbackText: () => modelFallbackText,
   modelInUse: () => modelInUse,
   modelScorecard: () => modelScorecard,
   modelTurnLog: () => modelTurnLog,
@@ -320,6 +345,7 @@ __export(src_exports, {
   personaModel: () => personaModel,
   personaOverlay: () => personaOverlay,
   personaSystemPrompt: () => personaSystemPrompt,
+  personalitySetpoints: () => personalitySetpoints,
   placeholderAdvisory: () => placeholderAdvisory,
   placeholdersWritten: () => placeholdersWritten,
   planMessage: () => planMessage,
@@ -358,6 +384,7 @@ __export(src_exports, {
   revealsModelId: () => revealsModelId,
   revisitAdvisory: () => revisitAdvisory,
   routerToolSpecs: () => routerToolSpecs,
+  routingModeForSelection: () => routingModeForSelection,
   routingQueryForTurn: () => routingQueryForTurn,
   runAbortSignal: () => runAbortSignal,
   runBrainLoop: () => startRun,
@@ -368,6 +395,8 @@ __export(src_exports, {
   selectToolsForTurn: () => selectToolsForTurn,
   selfReviewShipDirective: () => selfReviewShipDirective,
   serializeAskUser: () => serializeAskUser,
+  serveEngineWorker: () => serveEngineWorker,
+  servePageEngines: () => servePageEngines,
   setLastResolvedModel: () => setLastResolvedModel,
   setMcpToolStatus: () => setMcpToolStatus,
   shippedToBaseBranch: () => shippedToBaseBranch,
@@ -402,6 +431,7 @@ __export(src_exports, {
   transcriptSeedFrom: () => transcriptSeedFrom,
   transportRetryTrace: () => transportRetryTrace,
   trimToolResult: () => trimToolResult,
+  turnAffectBlock: () => turnAffectBlock,
   turnInterruption: () => turnInterruption,
   turnOptimizationDirective: () => turnOptimizationDirective,
   unreviewedChangeNudge: () => unreviewedChangeNudge,
@@ -422,6 +452,7 @@ __export(src_exports, {
   useRunSnapshot: () => useRunSnapshot,
   useToolConfirmationGate: () => useToolConfirmationGate,
   utf8ByteLength: () => utf8ByteLength2,
+  webStorageLocalSuccessStore: () => webStorageLocalSuccessStore,
   withAdvisory: () => withAdvisory,
   withDirectedMetadata: () => withDirectedMetadata,
   withObservedModel: () => withObservedModel,
@@ -1202,14 +1233,14 @@ function detailsText(details) {
     return item && (item.type === void 0 || item.type === "reasoning.text") && typeof item.text === "string" ? item.text : "";
   }).filter(Boolean).join("\n");
 }
-function splitVendorReasoning(message) {
-  const rawContent = typeof message?.content === "string" ? message.content : "";
+function splitVendorReasoning(message2) {
+  const rawContent = typeof message2?.content === "string" ? message2.content : "";
   const inlineThought = thoughtTextOf(rawContent);
   const content = inlineThought ? answerTextOf(rawContent) : rawContent;
   const structured = [
-    typeof message?.reasoning_content === "string" ? message.reasoning_content : "",
-    typeof message?.reasoning === "string" ? message.reasoning : "",
-    detailsText(message?.reasoning_details)
+    typeof message2?.reasoning_content === "string" ? message2.reasoning_content : "",
+    typeof message2?.reasoning === "string" ? message2.reasoning : "",
+    detailsText(message2?.reasoning_details)
   ].map((s) => s.trim()).filter(Boolean);
   const reasoning = [...structured, ...inlineThought ? [inlineThought] : []].join("\n\n").trim();
   return { content, reasoning };
@@ -1441,6 +1472,14 @@ function selectPendingAskUser(messages) {
 
 // src/chatError.ts
 var NOT_SIGNED_IN = "not_signed_in";
+var NO_LOCAL_MODEL = "no_local_model";
+var NO_SPECIFIC_MODEL = "no_specific_model";
+var LOCAL_ENGINE_FAILURE_CODES = ["bfi_engine_crashed", "page_engine_detached", "model_keeps_crashing"];
+var LOCAL_ENGINE_CODE_RE = new RegExp(`\\b(${LOCAL_ENGINE_FAILURE_CODES.join("|")})\\b`);
+function localEngineCode(code, message2) {
+  if (code && LOCAL_ENGINE_FAILURE_CODES.includes(code)) return code;
+  return LOCAL_ENGINE_CODE_RE.exec(message2)?.[1];
+}
 var BrainRequestError = class extends Error {
   status;
   code;
@@ -1448,8 +1487,8 @@ var BrainRequestError = class extends Error {
   unlock;
   requiredPlan;
   feature;
-  constructor(message, init) {
-    super(message);
+  constructor(message2, init) {
+    super(message2);
     this.name = "BrainRequestError";
     this.status = init.status;
     this.code = init.code;
@@ -1464,10 +1503,11 @@ function str(v) {
 }
 function brainRequestError(status2, body, statusText) {
   const b = body ?? {};
-  const message = str(b.error) || str(b.message) || statusText || `Request failed (${status2})`;
-  return new BrainRequestError(message, {
+  const nested = b.error && typeof b.error === "object" ? b.error : void 0;
+  const message2 = str(b.error) || str(nested?.message) || str(b.message) || statusText || `Request failed (${status2})`;
+  return new BrainRequestError(message2, {
     status: status2,
-    code: str(b.code),
+    code: str(b.code) ?? str(nested?.code),
     reason: str(b.reason),
     unlock: str(b.unlock),
     requiredPlan: str(b.requiredPlan),
@@ -1478,7 +1518,7 @@ var AUTH_PROSE = /invalid or expired token|unauthor/i;
 var CARD_PROSE = /validated card|add a card|card on file/i;
 var UPGRADE_PROSE = /requires? a paid plan|upgrade to (pro|teams)|plan (token )?limit|not included in your plan/i;
 function chatErrorAction(err) {
-  const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  const message2 = err instanceof Error ? err.message : typeof err === "string" ? err : "";
   if (err instanceof BrainRequestError) {
     const base = { requiredPlan: err.requiredPlan, feature: err.feature };
     if (err.status === 401) return { kind: "auth", ...base };
@@ -1492,11 +1532,15 @@ function chatErrorAction(err) {
       return { kind: "upgrade", ...base };
     }
   }
-  if (!message) return null;
-  if (message === NOT_SIGNED_IN) return { kind: "sign_in" };
-  if (AUTH_PROSE.test(message)) return { kind: "auth" };
-  if (CARD_PROSE.test(message)) return { kind: "validate_card" };
-  if (UPGRADE_PROSE.test(message)) return { kind: "upgrade" };
+  if (!message2) return null;
+  if (message2 === NOT_SIGNED_IN) return { kind: "sign_in" };
+  if (message2 === NO_LOCAL_MODEL) return { kind: "no_local_model" };
+  if (message2 === NO_SPECIFIC_MODEL) return { kind: "no_specific_model" };
+  const engineCode = localEngineCode(err instanceof BrainRequestError ? err.code : void 0, message2);
+  if (engineCode) return { kind: "local_engine_failed", engineCode };
+  if (AUTH_PROSE.test(message2)) return { kind: "auth" };
+  if (CARD_PROSE.test(message2)) return { kind: "validate_card" };
+  if (UPGRADE_PROSE.test(message2)) return { kind: "upgrade" };
   return null;
 }
 
@@ -1514,9 +1558,9 @@ function causeChain(e) {
 function describeOne(e) {
   if (!(e instanceof Error)) return String(e);
   const code = e.code;
-  const message = e.message.trim();
-  if (!message) return typeof code === "string" && code ? code : e.name;
-  return typeof code === "string" && code && !message.includes(code) ? `${code}: ${message}` : message;
+  const message2 = e.message.trim();
+  if (!message2) return typeof code === "string" && code ? code : e.name;
+  return typeof code === "string" && code && !message2.includes(code) ? `${code}: ${message2}` : message2;
 }
 function describeNetworkError(e) {
   const parts = [];
@@ -1661,8 +1705,8 @@ function readUpstreamEvidence(frame) {
 }
 var StreamInterruptedError = class extends Error {
   model;
-  constructor(message, model) {
-    super(message);
+  constructor(message2, model) {
+    super(message2);
     this.name = "StreamInterruptedError";
     this.model = model;
   }
@@ -1675,8 +1719,8 @@ var TransportError = class extends Error {
    * reports the outage instead of retrying.
    */
   unreachable;
-  constructor(message, model = void 0, options) {
-    super(message, options?.cause !== void 0 ? { cause: options.cause } : void 0);
+  constructor(message2, model = void 0, options) {
+    super(message2, options?.cause !== void 0 ? { cause: options.cause } : void 0);
     this.name = "TransportError";
     this.model = model;
     this.unreachable = options?.unreachable === true;
@@ -1900,9 +1944,9 @@ async function runStreamChatCompletion(opts, handlers, request) {
         continue;
       }
       if (parsed.error) {
-        const message = typeof parsed.error === "string" ? parsed.error : parsed.error.message ?? "unknown error";
+        const message2 = typeof parsed.error === "string" ? parsed.error : parsed.error.message ?? "unknown error";
         reader.cancel().catch(() => void 0);
-        throw new StreamInterruptedError(`the model failed mid-answer: ${message}`, resolvedModel());
+        throw new StreamInterruptedError(`the model failed mid-answer: ${message2}`, resolvedModel());
       }
       if (!streamModel && typeof parsed.model === "string" && parsed.model) streamModel = parsed.model;
       announceModel();
@@ -1990,6 +2034,51 @@ var LOCAL_FIRST_POLICY = Object.freeze({
   externalMcp: false,
   gitRemotes: false
 });
+
+// ../packages/local-first/src/inferenceMode.ts
+var INFERENCE_MODES = Object.freeze(["hybrid", "local-only", "specific"]);
+function isInferenceMode(value) {
+  return typeof value === "string" && INFERENCE_MODES.includes(value);
+}
+function defaultInferenceMode(context) {
+  return context.signedIn ? "hybrid" : "local-only";
+}
+
+// ../packages/local-first/src/platformRoutes.ts
+var PLATFORM_ROUTE_RULES = Object.freeze([
+  { path: "/api/auth", match: "contains", capability: "authenticate", note: "token exchange and session" },
+  { path: "/api/vscode/tenants/*/token", capability: "authenticate", note: "the editor's tenant token exchange" },
+  { path: "/chat/completions", match: "contains", capability: "gateway-inference", content: true, note: "a gateway completion \u2014 the prompt" },
+  { path: "/api/brain/stream", capability: "gateway-inference", content: true, note: "the Brain's streamed turn \u2014 the prompt" },
+  { path: "/llm/v1/models", capability: "connected-feature", note: "the model catalog" },
+  { path: "/api/llm/models", capability: "connected-feature", note: "the model catalog" },
+  { path: "/api/limbic/block", capability: "connected-feature", content: true, note: "personality block \u2014 once per session; the per-turn affect is appraised on the device" },
+  { path: "/api/limbic", match: "prefix", capability: "connected-feature", content: true, note: "the personality / affect store" },
+  { path: "/api/projects/*/evermind/recall", capability: "connected-feature", content: true, note: "memory recall \u2014 a read that sends the prompt" },
+  { path: "/api/projects/*/evermind", match: "contains", capability: "connected-feature", content: true, note: "a project's Evermind memory" },
+  { path: "/api/evermind", match: "contains", capability: "connected-feature", content: true, note: "Evermind memory" },
+  { path: "/api/sync", match: "prefix", capability: "synchronize", content: true, note: "the local-first sync transport \u2014 the records themselves" },
+  { path: "/api/brain/chats/*/messages", content: true, note: "a Brain chat's transcript" },
+  { path: "/api/chats/*/messages", content: true, note: "a chat's transcript" },
+  { path: "/api/brain/upload", content: true, note: "an uploaded file" },
+  { path: "/api/brain/fetch-url", content: true, note: "a page fetched for the Brain \u2014 the URL the person gave" },
+  { path: "/product-report", match: "suffix", content: true, note: "an error report \u2014 what was on screen" },
+  // Sockets that carry the person's content (an upgrade is a GET, so these keep the
+  // read default): live canvas sync, rooms and meetings, an execution's stream, an
+  // agent host's chat. A socket that only says "something changed" is not tagged.
+  { path: "/api/creation-sessions/*/ws", content: true, note: "a canvas session's live sync" },
+  { path: "/api/guest/rooms/*/ws", content: true, note: "a guest room's shared transcript and meeting" },
+  { path: "/api/agile/ceremonies/rooms/*/ws", content: true, note: "a ceremony room's live conversation" },
+  { path: "/api/meetings/rooms/*/ws", content: true, note: "a meeting room's signalling" },
+  { path: "/api/runtime/executions/*/stream", content: true, note: "an execution's live stream \u2014 messages, tool results, file changes" },
+  { path: "/api/agent-hosts/*/ws", content: true, note: "an agent host's chat" },
+  { path: "/api/guest/research", match: "prefix", content: true, note: "a guest canvas's research call \u2014 the query" },
+  { path: "/api/guest/career", match: "prefix", content: true, note: "a guest canvas's career tool \u2014 the r\xE9sum\xE9 / job text" },
+  { path: "/search", match: "suffix", capability: "connected-feature", note: "a search \u2014 a read" },
+  { path: "/api/dashboards/query", capability: "connected-feature", note: "a dashboard query \u2014 a read" },
+  { path: "/api/data-sources/*/query", capability: "connected-feature", note: "a data-source query \u2014 a read" },
+  { path: "/api/vscode/connect", capability: "connected-feature", note: "the editor presence beat" }
+]);
 
 // ../packages/local-first/src/records.ts
 var UNBOUND_DESTINATION = { kind: "unbound" };
@@ -2222,22 +2311,22 @@ function createLocalBrainPersistence(options) {
         const existing = (await messages(tx)).filter((row) => row.payload.chatId === chatId);
         const firstId = await nextId(tx);
         const stamp = now().toISOString();
-        const added = input.map((message, index) => ({
+        const added = input.map((message2, index) => ({
           id: firstId + index,
-          role: message.role,
-          content: message.content,
-          metadata: message.metadata ?? null,
+          role: message2.role,
+          content: message2.content,
+          metadata: message2.metadata ?? null,
           seq: existing.length + index + 1,
           createdAt: stamp
         }));
-        for (const [index, message] of added.entries()) {
+        for (const [index, message2] of added.entries()) {
           const source = input[index];
           const eventKey = source.eventKey ?? `message:${newId()}`;
           const clientId = newId();
           const record2 = newLocalRecord({
             id: clientId,
             entityType: "message",
-            payload: { clientId, chatId, chatClientId: chat.id, eventKey, message },
+            payload: { clientId, chatId, chatClientId: chat.id, eventKey, message: message2 },
             deviceId: options.deviceId,
             destination: chat.destination,
             occurredAt: stamp
@@ -2927,14 +3016,14 @@ function modelFailoverTrace(ts, step, from, outcome, shape) {
     result: modelFailoverNotice(from, outcome.to, shape)
   };
 }
-function transportRetryTrace(ts, step, outcome, message) {
+function transportRetryTrace(ts, step, outcome, message2) {
   if (outcome.broken) {
     return {
       ts,
       category: "message",
       label: "llm.stream_interrupted",
       args: { model: outcome.broken, step },
-      result: `${message} \u2014 retrying this turn on another connected model. ${outcome.broken} is left out for the rest of this run.`
+      result: `${message2} \u2014 retrying this turn on another connected model. ${outcome.broken} is left out for the rest of this run.`
     };
   }
   return {
@@ -2942,7 +3031,7 @@ function transportRetryTrace(ts, step, outcome, message) {
     category: "message",
     label: "llm.transport_error",
     args: { step },
-    result: `${message} \u2014 retrying this turn on another connected model.`
+    result: `${message2} \u2014 retrying this turn on another connected model.`
   };
 }
 function providerFailureTrace(ts, step, model, error, durationMs) {
@@ -2991,7 +3080,8 @@ var LOCAL_RUNTIMES = [
     defaultBaseUrl: BFI_ENGINE_BASE_URL,
     catalog: "declared",
     tools: "all",
-    reach: "page"
+    reach: "page",
+    fallbackReach: "host"
   },
   {
     id: "webllm",
@@ -3023,6 +3113,7 @@ function isLocalRuntimeId(value) {
 function localRuntime(id) {
   return LOCAL_RUNTIMES.find((r) => r.id === id);
 }
+var HOST_FALLBACK_RUNTIMES = LOCAL_RUNTIMES.filter((r) => r.fallbackReach === "host");
 
 // ../packages/local-inference/src/ref.ts
 var LOCAL_MODEL_PREFIX = "local/";
@@ -3059,11 +3150,106 @@ function localAuthHeaders(endpoint) {
   return endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {};
 }
 
+// ../packages/local-inference/src/bfiLimits.generated.ts
+var BFI_CPU_LIMITS = {
+  cpuKvBudgetBytes: 536870912,
+  cpuWorkingSetBytes: 268435456,
+  wasm32MemoryBytes: 4294967296,
+  deviceMemoryShareDivisor: 2,
+  assumedDeviceMemoryBytes: 2147483648,
+  assumedDesktopMemoryBytes: 8589934592
+};
+
+// ../packages/local-inference/src/webllmCatalog.generated.ts
+var WEBLLM_CATALOG = [
+  { modelId: "snowflake-arctic-embed-s-q0f32-MLC-b4", label: "Snowflake Arctic Embed S \xB7 B4", family: "snowflake-arctic-embed", params: 33e6, bytes: 132e6, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 250305577, f16: false, uses: ["embedding"], recommended: true },
+  { modelId: "SmolLM2-135M-Instruct-q0f16-MLC", label: "SmolLM2 135M Instruct", family: "smollm2", params: 135e6, bytes: 27e7, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 377162301, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "SmolLM2-360M-Instruct-q4f16_1-MLC", label: "SmolLM2 360M Instruct", family: "smollm2", params: 36e7, bytes: 2025e5, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 394327491, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "snowflake-arctic-embed-m-q0f32-MLC-b4", label: "Snowflake Arctic Embed M \xB7 B4", family: "snowflake-arctic-embed", params: 109e6, bytes: 436e6, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 565601894, f16: false, uses: ["embedding"], recommended: true },
+  { modelId: "TinyLlama-1.1B-Chat-v0.4-q4f16_1-MLC-1k", label: "TinyLlama 1.1B Chat v0.4 \xB7 1K", family: "tinyllama", params: 11e8, bytes: 61875e4, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 708040458, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC-1k", label: "TinyLlama 1.1B Chat v1.0 \xB7 1K", family: "tinyllama", params: 11e8, bytes: 61875e4, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 708040458, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "TinyLlama-1.1B-Chat-v0.4-q4f16_1-MLC", label: "TinyLlama 1.1B Chat v0.4", family: "tinyllama", params: 11e8, bytes: 61875e4, contextTokens: 2048, tools: false, lowResource: true, vramBytes: 731109130, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC", label: "TinyLlama 1.1B Chat v1.0", family: "tinyllama", params: 11e8, bytes: 61875e4, contextTokens: 2048, tools: false, lowResource: true, vramBytes: 731109130, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "gemma3-1b-it-q4f16_1-MLC", label: "Gemma3 1B IT", family: "gemma3", params: 1e9, bytes: 5625e5, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 745610936, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Llama-3.2-1B-Instruct-q4f16_1-MLC", label: "Llama 3.2 1B Instruct", family: "llama-3.2", params: 1e9, bytes: 5625e5, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 921740247, f16: true, uses: ["chat"], recommended: true },
+  { modelId: "Qwen2-0.5B-Instruct-q4f16_1-MLC", label: "Qwen2 0.5B Instruct", family: "qwen2", params: 5e8, bytes: 28125e4, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 990505861, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC", label: "Qwen2.5 0.5B Instruct", family: "qwen2.5", params: 5e8, bytes: 28125e4, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 990505861, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen2.5-Coder-0.5B-Instruct-q4f16_1-MLC", label: "Qwen2.5 Coder 0.5B Instruct", family: "qwen2.5-coder", params: 5e8, bytes: 28125e4, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 990505861, f16: true, uses: ["coding"], recommended: false },
+  { modelId: "snowflake-arctic-embed-s-q0f32-MLC-b32", label: "Snowflake Arctic Embed S \xB7 B32", family: "snowflake-arctic-embed", params: 33e6, bytes: 132e6, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 1072504504, f16: false, uses: ["embedding"], recommended: false },
+  { modelId: "phi-1_5-q4f16_1-MLC", label: "Phi 1.5", family: "phi-1_5", params: 142e7, bytes: 79875e4, contextTokens: 2048, tools: false, lowResource: true, vramBytes: 1268871332, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "phi-1_5-q4f16_1-MLC-1k", label: "Phi 1.5 \xB7 1K", family: "phi-1_5", params: 142e7, bytes: 79875e4, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 1268871332, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen3-0.6B-q4f16_1-MLC", label: "Qwen3 0.6B", family: "qwen3", params: 6e8, bytes: 3375e5, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 1471508644, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "snowflake-arctic-embed-m-q0f32-MLC-b32", label: "Snowflake Arctic Embed M \xB7 B32", family: "snowflake-arctic-embed", params: 109e6, bytes: 436e6, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 1475881206, f16: false, uses: ["embedding"], recommended: false },
+  { modelId: "gemma-2b-it-q4f16_1-MLC", label: "Gemma 2B IT", family: "gemma", params: 2e9, bytes: 1125e6, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 1548243436, f16: true, bufferBytes: 262144e3, uses: ["chat"], recommended: false },
+  { modelId: "gemma-2b-it-q4f16_1-MLC-1k", label: "Gemma 2B IT \xB7 1K", family: "gemma", params: 2e9, bytes: 1125e6, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 1548243436, f16: true, bufferBytes: 262144e3, uses: ["chat"], recommended: false },
+  { modelId: "stablelm-2-zephyr-1_6b-q4f16_1-MLC-1k", label: "StableLM 2 Zephyr 1.6B \xB7 1K", family: "stablelm-2-zephyr", params: 16e8, bytes: 9e8, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 1585090396, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "gemma-2-2b-it-q4f16_1-MLC-1k", label: "Gemma 2 2B IT \xB7 1K", family: "gemma-2", params: 2e9, bytes: 1125e6, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 1660210381, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen3.5-0.8B-q4f16_1-MLC", label: "Qwen3.5 0.8B", family: "qwen3.5", params: 8e8, bytes: 45e7, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 1708644106, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen2-1.5B-Instruct-q4f16_1-MLC", label: "Qwen2 1.5B Instruct", family: "qwen2", params: 15e8, bytes: 84375e4, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 1708916736, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen2-Math-1.5B-Instruct-q4f16_1-MLC", label: "Qwen2 Math 1.5B Instruct", family: "qwen2-math", params: 15e8, bytes: 84375e4, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 1708916736, f16: true, uses: ["math"], recommended: false },
+  { modelId: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", label: "Qwen2.5 1.5B Instruct", family: "qwen2.5", params: 15e8, bytes: 84375e4, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 1708916736, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC", label: "Qwen2.5 Coder 1.5B Instruct", family: "qwen2.5-coder", params: 15e8, bytes: 84375e4, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 1708916736, f16: true, uses: ["coding"], recommended: true },
+  { modelId: "Qwen2.5-Math-1.5B-Instruct-q4f16_1-MLC", label: "Qwen2.5 Math 1.5B Instruct", family: "qwen2.5-math", params: 15e8, bytes: 84375e4, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 1708916736, f16: true, uses: ["math"], recommended: true },
+  { modelId: "SmolLM2-1.7B-Instruct-q4f16_1-MLC", label: "SmolLM2 1.7B Instruct", family: "smollm2", params: 17e8, bytes: 95625e4, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 1860373053, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "OLMo-2-0425-1B-Instruct-q4f16_1-MLC", label: "OLMo 2 0425 1B Instruct", family: "olmo-2-0425", params: 1e9, bytes: 5625e5, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 1863057408, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "gemma-2-2b-it-q4f16_1-MLC", label: "Gemma 2 2B IT", family: "gemma-2", params: 2e9, bytes: 1125e6, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 1987366093, f16: true, uses: ["chat"], recommended: true },
+  { modelId: "gemma-2-2b-jpn-it-q4f16_1-MLC", label: "Gemma 2 2B JPN IT", family: "gemma-2", params: 2e9, bytes: 1125e6, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 1987366093, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen3-1.7B-q4f16_1-MLC", label: "Qwen3 1.7B", family: "qwen3", params: 17e8, bytes: 984156278, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 2135592796, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "RedPajama-INCITE-Chat-3B-v1-q4f16_1-MLC-1k", label: "RedPajama INCITE Chat 3B v1 \xB7 1K", family: "redpajama-incite-chat", params: 3e9, bytes: 16875e5, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 2140237988, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "stablelm-2-zephyr-1_6b-q4f16_1-MLC", label: "StableLM 2 Zephyr 1.6B", family: "stablelm-2-zephyr", params: 16e8, bytes: 9e8, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 2189070172, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "phi-2-q4f16_1-MLC-1k", label: "Phi 2 \xB7 1K", family: "phi-2", params: 278e7, bytes: 156375e4, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 2235532575, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen3.5-2B-q4f16_1-MLC", label: "Qwen3.5 2B", family: "qwen3.5", params: 2e9, bytes: 1125e6, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 2354514493, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Hermes-3-Llama-3.2-3B-q4f16_1-MLC", label: "Hermes 3 Llama 3.2 3B", family: "hermes-3-llama-3.2", params: 3e9, bytes: 16875e5, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 2373651005, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Llama-3.2-3B-Instruct-q4f16_1-MLC", label: "Llama 3.2 3B Instruct", family: "llama-3.2", params: 321e7, bytes: 1816811105, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 2373651005, f16: true, uses: ["chat"], recommended: true },
+  { modelId: "Qwen2.5-3B-Instruct-q4f16_1-MLC", label: "Qwen2.5 3B Instruct", family: "qwen2.5", params: 3e9, bytes: 16875e5, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 2626431222, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC", label: "Qwen2.5 Coder 3B Instruct", family: "qwen2.5-coder", params: 3e9, bytes: 16875e5, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 2626431222, f16: true, uses: ["coding"], recommended: true },
+  { modelId: "Phi-3-mini-4k-instruct-q4f16_1-MLC-1k", label: "Phi 3 Mini 4k Instruct \xB7 1K", family: "phi-3-mini-4k", params: 382e7, bytes: 214875e4, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 2642484920, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Phi-3.5-mini-instruct-q4f16_1-MLC-1k", label: "Phi 3.5 Mini Instruct \xB7 1K", family: "phi-3.5-mini", params: 382e7, bytes: 214875e4, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 2642484920, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Ministral-3-3B-Base-2512-q4f16_1-MLC", label: "Ministral 3 3B Base 2512", family: "ministral-3", params: 3e9, bytes: 16875e5, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 3002796605, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC", label: "Ministral 3 3B Instruct 2512 BF16", family: "ministral-3", params: 3e9, bytes: 16875e5, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 3002796605, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Ministral-3-3B-Reasoning-2512-q4f16_1-MLC", label: "Ministral 3 3B Reasoning 2512", family: "ministral-3", params: 3e9, bytes: 16875e5, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 3002796605, f16: true, uses: ["reasoning"], recommended: true },
+  { modelId: "RedPajama-INCITE-Chat-3B-v1-q4f16_1-MLC", label: "RedPajama INCITE Chat 3B v1", family: "redpajama-incite-chat", params: 3e9, bytes: 16875e5, contextTokens: 2048, tools: false, lowResource: false, vramBytes: 3116462244, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "phi-2-q4f16_1-MLC", label: "Phi 2", family: "phi-2", params: 278e7, bytes: 156375e4, contextTokens: 2048, tools: false, lowResource: false, vramBytes: 3202319647, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen3-4B-q4f16_1-MLC", label: "Qwen3 4B", family: "qwen3", params: 4e9, bytes: 2279167154, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 3598282916, f16: true, uses: ["chat"], recommended: true },
+  { modelId: "Phi-4-mini-instruct-q4f16_1-MLC", label: "Phi 4 Mini Instruct", family: "phi-4-mini", params: 384e7, bytes: 216e7, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 3604563886, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Phi-3-mini-4k-instruct-q4f16_1-MLC", label: "Phi 3 Mini 4k Instruct", family: "phi-3-mini-4k", params: 382e7, bytes: 214875e4, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 3850444472, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Phi-3.5-mini-instruct-q4f16_1-MLC", label: "Phi 3.5 Mini Instruct", family: "phi-3.5-mini", params: 382e7, bytes: 214875e4, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 3850444472, f16: true, uses: ["chat"], recommended: true },
+  { modelId: "Qwen3.5-4B-q4f16_1-MLC", label: "Qwen3.5 4B", family: "qwen3.5", params: 4e9, bytes: 225e7, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 4055703224, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Phi-3.5-vision-instruct-q4f16_1-MLC", label: "Phi 3.5 Vision Instruct", family: "phi-3.5-vision", params: 415e7, bytes: 2334375e3, contextTokens: 4096, tools: false, lowResource: true, vramBytes: 4144161096, f16: true, uses: ["vision"], recommended: false },
+  { modelId: "Hermes-2-Pro-Mistral-7B-q4f16_1-MLC", label: "Hermes 2 Pro Mistral 7B", family: "hermes-2-pro-mistral", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: true, lowResource: false, vramBytes: 4229200609, f16: true, uses: ["chat"], recommended: true },
+  { modelId: "Mistral-7B-Instruct-v0.2-q4f16_1-MLC", label: "Mistral 7B Instruct v0.2", family: "mistral", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 4795546993, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Mistral-7B-Instruct-v0.3-q4f16_1-MLC", label: "Mistral 7B Instruct v0.3", family: "mistral", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 4795546993, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "NeuralHermes-2.5-Mistral-7B-q4f16_1-MLC", label: "NeuralHermes 2.5 Mistral 7B", family: "neuralhermes-2.5-mistral", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 4795546993, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "OpenHermes-2.5-Mistral-7B-q4f16_1-MLC", label: "OpenHermes 2.5 Mistral 7B", family: "openhermes-2.5-mistral", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 4795546993, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "WizardMath-7B-V1.1-q4f16_1-MLC", label: "WizardMath 7B V1.1", family: "wizardmath", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 4795546993, f16: true, uses: ["math"], recommended: false },
+  { modelId: "Llama-3-8B-Instruct-q4f16_1-MLC-1k", label: "Llama 3 8B Instruct \xB7 1K", family: "llama-3", params: 8e9, bytes: 45e8, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 4821708964, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Llama-3.1-8B-Instruct-q4f16_1-MLC-1k", label: "Llama 3.1 8B Instruct \xB7 1K", family: "llama-3.1", params: 8e9, bytes: 45e8, contextTokens: 1024, tools: false, lowResource: true, vramBytes: 4821708964, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Llama-2-7b-chat-hf-q4f16_1-MLC-1k", label: "Llama 2 7B Chat HF \xB7 1K", family: "llama-2", params: 7e9, bytes: 39375e5, contextTokens: 1024, tools: false, lowResource: false, vramBytes: 4842869228, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Hermes-3-Llama-3.1-8B-q4f16_1-MLC", label: "Hermes 3 Llama 3.1 8B", family: "hermes-3-llama-3.1", params: 803e7, bytes: 4526847881, contextTokens: 4096, tools: true, lowResource: false, vramBytes: 5112992891, f16: true, uses: ["chat"], recommended: true },
+  { modelId: "Hermes-2-Pro-Llama-3-8B-q4f16_1-MLC", label: "Hermes 2 Pro Llama 3 8B", family: "hermes-2-pro-llama-3", params: 8e9, bytes: 45e8, contextTokens: 4096, tools: true, lowResource: false, vramBytes: 5217850491, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Hermes-2-Theta-Llama-3-8B-q4f16_1-MLC", label: "Hermes 2 Theta Llama 3 8B", family: "hermes-2-theta-llama-3", params: 8e9, bytes: 45e8, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 5217850491, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC", label: "DeepSeek R1 Distill Llama 8B", family: "deepseek-r1-distill-llama", params: 8e9, bytes: 45e8, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 5243928576, f16: true, uses: ["reasoning"], recommended: false },
+  { modelId: "Llama-3-8B-Instruct-q4f16_1-MLC", label: "Llama 3 8B Instruct", family: "llama-3", params: 8e9, bytes: 45e8, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 5243928576, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Llama-3.1-8B-Instruct-q4f16_1-MLC", label: "Llama 3.1 8B Instruct", family: "llama-3.1", params: 8e9, bytes: 45e8, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 5243928576, f16: true, uses: ["chat"], recommended: true },
+  { modelId: "DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC", label: "DeepSeek R1 Distill Qwen 7B", family: "deepseek-r1-distill-qwen", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 5354731602, f16: true, uses: ["reasoning"], recommended: true },
+  { modelId: "Qwen2-7B-Instruct-q4f16_1-MLC", label: "Qwen2 7B Instruct", family: "qwen2", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 5354731602, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen2-Math-7B-Instruct-q4f16_1-MLC", label: "Qwen2 Math 7B Instruct", family: "qwen2-math", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 5354731602, f16: true, uses: ["math"], recommended: false },
+  { modelId: "Qwen2.5-7B-Instruct-q4f16_1-MLC", label: "Qwen2.5 7B Instruct", family: "qwen2.5", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 5354731602, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC", label: "Qwen2.5 Coder 7B Instruct", family: "qwen2.5-coder", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 5354731602, f16: true, uses: ["coding"], recommended: true },
+  { modelId: "Qwen3-8B-q4f16_1-MLC", label: "Qwen3 8B", family: "qwen3", params: 8e9, bytes: 45e8, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 5972458209, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "gemma-2-9b-it-q4f16_1-MLC", label: "Gemma 2 9B IT", family: "gemma-2", params: 9e9, bytes: 50625e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 6733965558, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Qwen3.5-9B-q4f16_1-MLC", label: "Qwen3.5 9B", family: "qwen3.5", params: 9e9, bytes: 50625e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 6745499894, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "OLMo-2-1124-7B-Instruct-q4f16_1-MLC", label: "OLMo 2 1124 7B Instruct", family: "olmo-2-1124", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 6793734390, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Llama-2-7b-chat-hf-q4f16_1-MLC", label: "Llama 2 7B Chat HF", family: "llama-2", params: 7e9, bytes: 39375e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 7076860396, f16: true, uses: ["chat"], recommended: false },
+  { modelId: "Llama-2-13b-chat-hf-q4f16_1-MLC", label: "Llama 2 13B Chat HF", family: "llama-2", params: 13e9, bytes: 73125e5, contextTokens: 4096, tools: false, lowResource: false, vramBytes: 12387971236, f16: true, uses: ["chat"], recommended: false }
+];
+
 // ../packages/local-inference/src/catalog.ts
 var MIB = 1024 * 1024;
 var WEBGPU_DEFAULT_BINDING_BYTES = 128 * MIB;
 var WEBLLM_FULL_BINDING_BYTES = 1024 * MIB;
-function bonsai(size, params, bytes, contextTokens, layers) {
+var GIB = 1024 * MIB;
+function bonsai(size, params, bytes, contextTokens, layers, cpuMinMemory) {
   const model = `bonsai-${size.toLowerCase()}-q1_0`;
   return {
     ref: formatLocalModelRef("bfi", model),
@@ -3076,82 +3262,130 @@ function bonsai(size, params, bytes, contextTokens, layers) {
     contextTokens,
     kv: { layers, kvHeads: 8, headDim: 128 },
     tools: true,
+    uses: ["chat"],
+    recommended: true,
     source: { kind: "hf-file", repo: `prism-ml/Bonsai-${size}-gguf`, file: `Bonsai-${size}-Q1_0.gguf` },
-    requires: { minBufferBytes: WEBGPU_DEFAULT_BINDING_BYTES }
+    requires: { minBufferBytes: WEBGPU_DEFAULT_BINDING_BYTES, cpu: { minDeviceMemoryBytes: cpuMinMemory } }
   };
 }
-function webllm(modelId, fields) {
+function webllm(entry) {
+  const binding = entry.lowResource ? WEBGPU_DEFAULT_BINDING_BYTES : WEBLLM_FULL_BINDING_BYTES;
   return {
-    ref: formatLocalModelRef("webllm", modelId),
+    ref: formatLocalModelRef("webllm", entry.modelId),
     runtime: "webllm",
-    model: modelId,
-    label: fields.label,
-    family: fields.family,
-    params: fields.params,
-    bytes: fields.bytes,
-    contextTokens: fields.contextTokens,
-    tools: fields.tools,
-    source: { kind: "webllm", modelId },
-    requires: { f16: true, minBufferBytes: fields.lowResource ? WEBGPU_DEFAULT_BINDING_BYTES : WEBLLM_FULL_BINDING_BYTES }
+    model: entry.modelId,
+    label: entry.label,
+    family: entry.family,
+    params: entry.params,
+    bytes: entry.bytes,
+    contextTokens: entry.contextTokens,
+    tools: entry.tools,
+    uses: entry.uses,
+    recommended: entry.recommended,
+    source: { kind: "webllm", modelId: entry.modelId },
+    requires: {
+      ...entry.f16 ? { f16: true } : {},
+      minBufferBytes: Math.max(binding, entry.bufferBytes ?? 0),
+      vramBytes: entry.vramBytes
+    }
   };
 }
 var LOCAL_MODEL_CATALOG = [
-  bonsai("1.7B", 17e8, 248302272, 32768, 28),
-  bonsai("4B", 4e9, 572270624, 32768, 36),
-  bonsai("8B", 819e7, 1158654496, 65536, 36),
-  webllm("Qwen3-1.7B-q4f16_1-MLC", {
-    label: "Qwen3 1.7B",
-    family: "qwen3",
-    params: 17e8,
-    bytes: 984156278,
-    contextTokens: 4096,
-    tools: false,
-    lowResource: true
-  }),
-  webllm("Llama-3.2-3B-Instruct-q4f16_1-MLC", {
-    label: "Llama 3.2 3B Instruct",
-    family: "llama-3.2",
-    params: 321e7,
-    bytes: 1816811105,
-    contextTokens: 4096,
-    tools: false,
-    lowResource: true
-  }),
-  webllm("Qwen3-4B-q4f16_1-MLC", {
-    label: "Qwen3 4B",
-    family: "qwen3",
-    params: 4e9,
-    bytes: 2279167154,
-    contextTokens: 4096,
-    tools: false,
-    lowResource: true
-  }),
-  webllm("Hermes-3-Llama-3.1-8B-q4f16_1-MLC", {
-    label: "Hermes 3 Llama 3.1 8B",
-    family: "hermes-3",
-    params: 803e7,
-    bytes: 4526847881,
-    contextTokens: 4096,
-    tools: true,
-    lowResource: false
-  })
+  // CPU floors: the device RAM a row needs to run without a GPU. An unreported RAM reads
+  // as 2 GiB on a phone or tablet (Rust `kv_plan`), so there only 1.7B is offered, and as
+  // 8 GiB on a desktop (`assumedDeviceMemoryBytes`); 4B needs 4 GiB, 8B 8 GiB — and every
+  // row must also fit `cpuMemoryCeiling` (half the RAM, wasm32's cap).
+  bonsai("1.7B", 17e8, 248302272, 32768, 28, 2 * GIB),
+  bonsai("4B", 4e9, 572270624, 32768, 36, 4 * GIB),
+  bonsai("8B", 819e7, 1158654496, 65536, 36, 8 * GIB),
+  ...WEBLLM_CATALOG.map(webllm)
 ];
+function isLocalChatModel(row) {
+  return row.uses.some((use) => use !== "vision" && use !== "embedding");
+}
 function localCatalogModel(ref) {
   return LOCAL_MODEL_CATALOG.find((m) => m.ref === ref);
 }
 function localCatalogFor(runtime) {
-  return LOCAL_MODEL_CATALOG.filter((m) => m.runtime === runtime);
+  return LOCAL_MODEL_CATALOG.filter((m) => m.runtime === runtime && isLocalChatModel(m));
+}
+
+// ../packages/local-inference/src/catalogPicker.ts
+var LOCAL_PICKER_GROUPS = ["tools", "chat", "coding", "reasoning", "math"];
+function localPickerGroup(row) {
+  if (row.tools) return "tools";
+  for (const group2 of ["coding", "reasoning", "math"]) if (row.uses.includes(group2)) return group2;
+  return "chat";
+}
+function localPickerView(rows, options = {}) {
+  const { fits = () => true, pinned = () => false } = options;
+  const byGroup = /* @__PURE__ */ new Map();
+  const more = [];
+  const hidden = [];
+  for (const row of rows) {
+    if (!isLocalChatModel(row)) continue;
+    const held = pinned(row);
+    if (!fits(row) && !held) {
+      hidden.push(row);
+      continue;
+    }
+    if (!row.recommended && !held) {
+      more.push(row);
+      continue;
+    }
+    const group2 = localPickerGroup(row);
+    byGroup.set(group2, [...byGroup.get(group2) ?? [], row]);
+  }
+  const groups = LOCAL_PICKER_GROUPS.flatMap((group2) => {
+    const listed = byGroup.get(group2);
+    return listed ? [{ group: group2, rows: listed }] : [];
+  });
+  return { groups, more, hidden };
 }
 
 // ../packages/local-inference/src/fit.ts
-function localModelFit(model, support) {
+var VRAM_PER_MAX_BUFFER = 8;
+var MOBILE_UA = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|BlackBerry|Opera Mini|IEMobile/i;
+function isMobileDevice(nav) {
+  if (!nav) return false;
+  const hinted = nav.userAgentData?.mobile;
+  if (typeof hinted === "boolean") return hinted;
+  const ua = nav.userAgent ?? "";
+  return MOBILE_UA.test(ua) || /Macintosh/.test(ua) && (nav.maxTouchPoints ?? 0) > 1;
+}
+function assumedDeviceMemoryBytes(nav = globalThis.navigator) {
+  return isMobileDevice(nav) ? BFI_CPU_LIMITS.assumedDeviceMemoryBytes : BFI_CPU_LIMITS.assumedDesktopMemoryBytes;
+}
+function cpuMemoryCeiling(deviceMemoryBytes) {
+  const device = deviceMemoryBytes && deviceMemoryBytes > 0 ? deviceMemoryBytes : assumedDeviceMemoryBytes();
+  return Math.min(BFI_CPU_LIMITS.wasm32MemoryBytes, Math.floor(device / BFI_CPU_LIMITS.deviceMemoryShareDivisor));
+}
+function webGpuFit(model, support) {
   if (!support.supported) {
     return { fits: false, reason: "webgpu_unavailable", ...support.reason ? { detail: support.reason } : {} };
   }
   if (model.requires.f16 && !support.f16) return { fits: false, reason: "shader_f16_unavailable" };
   const bindingBytes = support.maxStorageBufferBindingSizeBytes ?? support.maxBufferBytes;
   if (bindingBytes < model.requires.minBufferBytes) return { fits: false, reason: "buffer_too_small" };
-  return { fits: true };
+  const { vramBytes } = model.requires;
+  const maxBuffer = support.maxBufferSizeBytes;
+  if (vramBytes && maxBuffer && vramBytes > maxBuffer * VRAM_PER_MAX_BUFFER) return { fits: false, reason: "vram_too_small" };
+  return { fits: true, backend: "webgpu" };
+}
+function cpuFits(model, cpu) {
+  const floor = model.requires.cpu?.minDeviceMemoryBytes;
+  if (floor === void 0 || !cpu.supported) return false;
+  if ((cpu.deviceMemoryBytes ?? assumedDeviceMemoryBytes()) < floor) return false;
+  const need = model.bytes + (cpu.kvBudgetBytes ?? BFI_CPU_LIMITS.cpuKvBudgetBytes) + BFI_CPU_LIMITS.cpuWorkingSetBytes;
+  return need <= (cpu.maxMemoryBytes ?? cpuMemoryCeiling(cpu.deviceMemoryBytes));
+}
+function localModelFit(model, support) {
+  const gpu = webGpuFit(model, support);
+  if (gpu.fits) return gpu;
+  const cpu = support.backends?.cpu;
+  if (!model.requires.cpu || !cpu?.supported) return gpu;
+  if (cpuFits({ requires: model.requires, bytes: model.bytes ?? 0 }, cpu)) return { fits: true, backend: "cpu" };
+  return { fits: false, reason: "memory_insufficient" };
 }
 
 // ../packages/local-inference/src/plan.ts
@@ -3916,8 +4150,8 @@ var gitCommitTool = defineTool({
   },
   requires: ["git.write"],
   execute: (args, ctx) => {
-    const message = typeof args.message === "string" ? args.message.trim() : "";
-    if (!message) return Promise.resolve({ data: { ok: false, action: "commit", error: "message is required" } });
+    const message2 = typeof args.message === "string" ? args.message.trim() : "";
+    if (!message2) return Promise.resolve({ data: { ok: false, action: "commit", error: "message is required" } });
     const paths = Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string" && p.trim() !== "") : [];
     if (paths.length === 0) {
       return Promise.resolve({ data: { ok: false, action: "commit", error: "paths is required \u2014 list the exact files you changed. Run git_status to see them. Do not pass '.' or '-A': the working tree may hold changes that are not yours." } });
@@ -3925,7 +4159,7 @@ var gitCommitTool = defineTool({
     const repo = typeof args.repo === "string" ? args.repo : void 0;
     return runPublishTool(
       "commit",
-      buildCommitCommand({ message, paths, branch: typeof args.branch === "string" ? args.branch : void 0, allowBaseBranch: args.allowBaseBranch === true, repo }),
+      buildCommitCommand({ message: message2, paths, branch: typeof args.branch === "string" ? args.branch : void 0, allowBaseBranch: args.allowBaseBranch === true, repo }),
       repo,
       ctx
     );
@@ -5100,6 +5334,74 @@ var CORE_TOOLS = [
   finishTool
 ];
 
+// ../packages/agent-tools/src/psychometric-dims.ts
+var PSYCH_DIM = {
+  // HEXACO spine
+  honesty: "hexaco.honesty",
+  emotionality: "hexaco.emotionality",
+  extraversion: "hexaco.extraversion",
+  agreeableness: "hexaco.agreeableness",
+  conscientiousness: "hexaco.conscientiousness",
+  openness: "hexaco.openness",
+  // Regulatory focus (0 = prevention, 100 = promotion)
+  regulatoryFocus: "regfocus.orientation",
+  // Cognition / dual-process (0 = intuitive/System-1, 100 = deliberate/System-2)
+  needForCognition: "cognition.need_for_cognition",
+  reflection: "cognition.reflection",
+  // Decision style (GDMS) + maximizing
+  decisionRational: "decision.rational",
+  decisionIntuitive: "decision.intuitive",
+  decisionDependent: "decision.dependent",
+  decisionSpontaneous: "decision.spontaneous",
+  maximizing: "decision.maximizing",
+  // Moral Foundations
+  moralCare: "moral.care",
+  moralFairness: "moral.fairness",
+  moralLoyalty: "moral.loyalty",
+  moralAuthority: "moral.authority",
+  moralSanctity: "moral.sanctity",
+  moralLiberty: "moral.liberty",
+  // Thomas-Kilmann conflict axes (mode is derived from the two)
+  conflictAssertiveness: "conflict.assertiveness",
+  conflictCooperativeness: "conflict.cooperativeness",
+  // Schwartz basic values
+  valSelfDirection: "values.self_direction",
+  valStimulation: "values.stimulation",
+  valHedonism: "values.hedonism",
+  valAchievement: "values.achievement",
+  valPower: "values.power",
+  valSecurity: "values.security",
+  valConformity: "values.conformity",
+  valTradition: "values.tradition",
+  valBenevolence: "values.benevolence",
+  valUniversalism: "values.universalism",
+  // Dispositional
+  grit: "disp.grit",
+  locusInternal: "disp.locus_internal",
+  riskTolerance: "disp.risk_tolerance"
+};
+var NEUTRAL = 50;
+function score(vector, id) {
+  const raw = vector?.[id];
+  if (typeof raw !== "number" || Number.isNaN(raw)) return NEUTRAL;
+  return Math.max(0, Math.min(100, raw));
+}
+
+// ../packages/agent-tools/src/psychometrics.ts
+function limbicTraits(profile) {
+  const v = profile?.vector;
+  return {
+    openness: score(v, PSYCH_DIM.openness),
+    emotionality: score(v, PSYCH_DIM.emotionality),
+    conscientiousness: score(v, PSYCH_DIM.conscientiousness),
+    extraversion: score(v, PSYCH_DIM.extraversion),
+    regulatoryFocus: score(v, PSYCH_DIM.regulatoryFocus),
+    riskTolerance: score(v, PSYCH_DIM.riskTolerance),
+    grit: score(v, PSYCH_DIM.grit),
+    stimulation: score(v, PSYCH_DIM.valStimulation)
+  };
+}
+
 // ../packages/agent-tools/src/skill-tools.ts
 var skillProposeTool = defineTool({
   name: "skill_propose",
@@ -5562,7 +5864,7 @@ function createLocalFirstStream(input) {
   return async (opts, handlers = {}) => {
     if (!localFirstApplies(opts)) {
       if (!opts.model || !isLocalModelRef(opts.model)) {
-        if (!input.cloud) throw new Error(NOT_SIGNED_IN);
+        if (!input.cloud) throw new Error(input.noModel ?? NOT_SIGNED_IN);
         return input.cloud(opts, handlers);
       }
       const local = probedTarget(opts.model, input.probes);
@@ -5573,12 +5875,13 @@ function createLocalFirstStream(input) {
       }
     }
     const routed = opts.model ? { ...opts, model: void 0 } : opts;
-    const plan = localFirstPlan({
+    const planned = localFirstPlan({
       probes: input.probes,
       workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
       cloud: input.cloud ? {} : null
     });
-    if (plan.length === 0) throw new Error(NOT_SIGNED_IN);
+    const plan = input.gate ? await input.gate(planned, routed) : planned;
+    if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
     const { result, attempts } = await runLocalFirst(
       plan,
       async (attempt, commit) => {
@@ -5613,7 +5916,7 @@ async function completeLocalFirst(input) {
     workload: localFirstWorkload({ messages: input.messages }),
     cloud: input.cloud ? {} : null
   });
-  if (plan.length === 0) throw new Error(NOT_SIGNED_IN);
+  if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
   const { result } = await runLocalFirst(
     plan,
     (attempt) => attempt.kind === "cloud" ? input.cloud() : completeLocal(attempt.endpoint, attempt.model, input.messages, input.signal, input.fetch),
@@ -5827,35 +6130,352 @@ function pageRuntimePin(ref) {
   return { ...pin, endpoint: { baseUrl: runtime.defaultBaseUrl } };
 }
 
+// src/localSuccess/turnFeatures.ts
+var CODE_HEAVY = /```|^diff --git |^@@ [-+]\d|^\s+at \S+ \(?\S+:\d+:\d+\)?$|Traceback \(most recent call last\)/m;
+function contentText(content) {
+  if (typeof content === "string") return content;
+  return content.map((p) => p.type === "text" ? p.text : "").join("\n");
+}
+function contentChars(content) {
+  return typeof content === "string" ? content.length : JSON.stringify(content).length;
+}
+function localTurnFeatures(call2, servedContextTokens) {
+  const users = call2.messages.filter((m) => m.role === "user");
+  const last = users[users.length - 1];
+  const promptChars = last ? contentChars(last.content) : 0;
+  const totalChars = call2.messages.reduce((n, m) => n + contentChars(m.content), 0) + (call2.tools?.length ? JSON.stringify(call2.tools).length : 0);
+  const promptTokens = estimateTokensFromChars(promptChars);
+  const attachments = last && typeof last.content !== "string" ? last.content.filter((p) => p.type !== "text").length : 0;
+  return {
+    promptTokens,
+    contextTokens: Math.max(0, estimateTokensFromChars(totalChars) - promptTokens),
+    servedContextTokens: Math.max(0, servedContextTokens ?? 0),
+    tools: call2.tools?.length ?? 0,
+    turnIndex: Math.max(0, users.length - 1),
+    attachments,
+    codeHeavy: last ? CODE_HEAVY.test(contentText(last.content)) : false
+  };
+}
+
+// src/localSuccess/hybridLocalSuccess.ts
+function cloudResult(records, error) {
+  const cloud = records.find((r) => r.attempt.kind === "cloud");
+  if (!cloud) return void 0;
+  if (cloud.outcome === "served") return "succeeded";
+  if (error instanceof BrainRequestError && error.status >= 400 && error.status < 500) return void 0;
+  return "failed";
+}
+function hybridLocalSuccessTurn(router, probes, signal) {
+  let assessed = null;
+  const records = [];
+  return {
+    async gate(plan, call2) {
+      const local = plan.find((a) => a.kind === "local");
+      if (!local || !plan.some((a) => a.kind === "cloud")) return plan;
+      try {
+        const verdict = await router.assess(local.ref, localTurnFeatures(call2, contextWindowOf(local.ref, { probes })));
+        assessed = { ref: local.ref, outcome: { turn: verdict.turn } };
+        return verdict.skip ? plan.filter((a) => a.kind === "cloud") : plan;
+      } catch {
+        return plan;
+      }
+    },
+    onAttempt(record2) {
+      records.push(record2);
+    },
+    settle(error) {
+      if (!assessed || signal?.aborted) return;
+      const local = records.find((r) => r.attempt.kind === "local" && r.attempt.ref === assessed.ref);
+      const cloud = cloudResult(records, error);
+      const outcome = {
+        ...assessed.outcome,
+        ...local ? { local: local.outcome === "served" ? "succeeded" : "failed" } : {},
+        ...local && local.outcome !== "served" && records.some((r) => r.attempt.kind === "cloud") ? { fellBack: true } : {},
+        ...cloud ? { cloud } : {}
+      };
+      void router.record(assessed.ref, outcome).catch(() => void 0);
+    }
+  };
+}
+
+// src/localSuccess/localSuccessRouter.ts
+var import_builderforce_memory_engine = require("@seanhogg/builderforce-memory-engine");
+var LOCAL_SKIP_CONFIDENCE = 0.8;
+var LOCAL_SKIP_EXPLORE = 0.1;
+var LOCAL_SUCCESS_HISTORY = 300;
+var registry = (0, import_builderforce_memory_engine.createMlRegistry)();
+var ENGINE_KEY = (0, import_builderforce_memory_engine.engineKey)(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.engines[0]);
+var DIM = import_builderforce_memory_engine.LOCAL_SUCCESS_FEATURES.length;
+var CLASSES = import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.output.labels.length;
+function parseSnapshot(raw) {
+  const empty = { v: 1, outcomes: [] };
+  if (!raw || typeof raw !== "object" || raw.v !== 1) return empty;
+  const s = raw;
+  const outcomes = Array.isArray(s.outcomes) ? s.outcomes.filter((o) => !!o && typeof o.ref === "string" && !!o.turn && typeof o.turn === "object") : [];
+  const head = s.head && Array.isArray(s.head.params) && s.head.params.length === DIM * CLASSES + CLASSES ? s.head : void 0;
+  return { v: 1, outcomes: outcomes.slice(-LOCAL_SUCCESS_HISTORY), ...head ? { head } : {} };
+}
+function modelsFor(params) {
+  const model = new import_builderforce_memory_engine.LogisticModel(DIM, CLASSES);
+  model.importParams(params);
+  const models = new import_builderforce_memory_engine.InMemoryMlModels();
+  models.set(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.id, ENGINE_KEY, model);
+  return models;
+}
+function trusted(head) {
+  return !!head && head.holdoutLoss != null && head.holdoutLoss < Math.LN2;
+}
+function priorRate(outcomes, ref) {
+  let ran = 0;
+  let ok = 0;
+  for (const o of outcomes) {
+    if (o.ref !== ref || !o.local) continue;
+    ran++;
+    if (o.local === "succeeded") ok++;
+  }
+  return ran > 0 ? ok / ran : void 0;
+}
+function createLocalSuccessRouter(store, opts = {}) {
+  const random = opts.random ?? Math.random;
+  const now = opts.now ?? Date.now;
+  let snapshot = { v: 1, outcomes: [] };
+  let models = null;
+  const loaded = (async () => {
+    try {
+      snapshot = parseSnapshot(await store.load());
+      models = snapshot.head ? modelsFor(snapshot.head.params) : null;
+    } catch {
+    }
+  })();
+  let writes = loaded;
+  return {
+    async assess(ref, base) {
+      await loaded;
+      const prior = priorRate(snapshot.outcomes, ref);
+      const turn = { ...base, ...prior != null ? { priorLocalSuccessRate: prior } : {} };
+      if (!models || !trusted(snapshot.head)) return { turn, skip: false, probability: null };
+      try {
+        const { output } = await (0, import_builderforce_memory_engine.runMlTask)(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.id, turn, { registry, mode: "local-only", models });
+        const skip = 1 - output.probability > LOCAL_SKIP_CONFIDENCE && random() >= LOCAL_SKIP_EXPLORE;
+        return { turn, skip, probability: output.probability };
+      } catch {
+        return { turn, skip: false, probability: null };
+      }
+    },
+    record(ref, outcome) {
+      const done = writes.then(() => append(ref, outcome));
+      writes = done.catch(() => void 0);
+      return done;
+    }
+  };
+  async function append(ref, outcome) {
+    const outcomes = [...snapshot.outcomes, { ...outcome, ref, at: now() }].slice(-LOCAL_SUCCESS_HISTORY);
+    const fresh = new import_builderforce_memory_engine.InMemoryMlModels();
+    let head;
+    let nextModels = null;
+    try {
+      const fit = await (0, import_builderforce_memory_engine.trainMlTask)(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK, (0, import_builderforce_memory_engine.localSuccessExamples)(outcomes), {
+        models: fresh,
+        classical: { logistic: { classes: CLASSES } }
+      });
+      const params = fit?.predictor.exportParams?.();
+      if (fit && params) {
+        head = { params: Array.from(params), holdoutLoss: fit.holdoutLoss, samples: fit.samples };
+        nextModels = fresh;
+      }
+    } catch {
+      head = snapshot.head;
+      nextModels = models;
+    }
+    snapshot = { v: 1, outcomes, ...head ? { head } : {} };
+    models = nextModels;
+    try {
+      await store.save(snapshot);
+    } catch {
+    }
+  }
+}
+function webStorageLocalSuccessStore(key = "bf.ml.run.local-success") {
+  return {
+    load() {
+      try {
+        const raw = globalThis.localStorage?.getItem(key);
+        return raw ? JSON.parse(raw) : void 0;
+      } catch {
+        return void 0;
+      }
+    },
+    save(snapshot) {
+      try {
+        globalThis.localStorage?.setItem(key, JSON.stringify(snapshot));
+      } catch {
+      }
+    }
+  };
+}
+var routers = /* @__PURE__ */ new WeakMap();
+function localSuccessRouterFor(store) {
+  let r = routers.get(store);
+  if (!r) {
+    r = createLocalSuccessRouter(store);
+    routers.set(store, r);
+  }
+  return r;
+}
+
 // src/hostModelStream.ts
 var handoffFit = createHandoffFit();
 function createHostModelStream(input) {
   const resolveLocal = input.localPin ?? pageRuntimePin;
   const fit = input.fit ?? handoffFit;
-  return async (opts, handlers = {}) => {
+  return async (callOpts, handlers = {}) => {
+    const mode = await input.mode?.() ?? "hybrid";
+    const localOnly = mode === "local-only";
     const hostPin = await input.pinned?.() ?? null;
-    const localRef = hostPin ?? opts.model;
-    const local = localRef ? resolveLocal(localRef) : null;
-    const cloud = await input.cloud();
-    if (local && localRef) {
-      return createLocalStream(local.endpoint, local.model, input.fetch, { ref: localRef, cloud, fit })(opts, handlers);
+    const opts = localOnly ? onDeviceOnly(callOpts) : callOpts;
+    const pick2 = localOnly ? hostPin && runsOnDevice(hostPin) ? hostPin : null : hostPin ?? (opts.modelStrict && opts.model ? opts.model : null);
+    const byoPool = !localOnly && opts.routingMode === "byo_pool";
+    if (mode === "specific" && !pick2 && !byoPool) throw new Error(NO_SPECIFIC_MODEL);
+    const cloud = localOnly ? null : await input.cloud();
+    const noModel = localOnly || (input.signedIn ? await input.signedIn() : cloud !== null) ? NO_LOCAL_MODEL : NOT_SIGNED_IN;
+    const auto = async (call2, h) => {
+      const localRef = call2.model;
+      const local2 = localRef ? resolveLocal(localRef) : null;
+      if (local2 && localRef) return createLocalStream(local2.endpoint, local2.model, input.fetch, { ref: localRef, cloud, fit })(call2, h);
+      const probes = input.probes ? await input.probes() : [];
+      if (probes.length === 0) {
+        if (!cloud) throw new Error(noModel);
+        return cloud(call2, h);
+      }
+      const learned = mode === "hybrid" && cloud && input.localSuccess ? hybridLocalSuccessTurn(localSuccessRouterFor(input.localSuccess), probes, call2.signal) : null;
+      const onAttempt = learned || input.onAttempt ? (record2) => {
+        learned?.onAttempt(record2);
+        input.onAttempt?.(record2);
+      } : void 0;
+      const stream = createLocalFirstStream({
+        probes,
+        cloud,
+        fit,
+        noModel,
+        ...input.fetch ? { fetch: input.fetch } : {},
+        ...onAttempt ? { onAttempt } : {},
+        ...learned ? { gate: learned.gate } : {}
+      });
+      if (!learned) return stream(call2, h);
+      try {
+        const result = await stream(call2, h);
+        learned.settle();
+        return result;
+      } catch (err) {
+        learned.settle(err);
+        throw err;
+      }
+    };
+    const strict = mode === "specific";
+    if (!pick2) {
+      if (strict) {
+        if (!cloud) throw new Error(noModel);
+        return cloud(opts, handlers);
+      }
+      return auto(opts, handlers);
     }
-    if (hostPin && !isLocalModelRef(hostPin) && cloud) {
-      return cloud({ ...opts, model: hostPin, modelStrict: true }, handlers);
-    }
-    const probes = input.probes ? await input.probes() : [];
-    if (probes.length === 0) {
-      if (!cloud) throw new Error(NOT_SIGNED_IN);
-      return cloud(opts, handlers);
-    }
-    return createLocalFirstStream({
-      probes,
-      cloud,
-      fit,
-      ...input.fetch ? { fetch: input.fetch } : {},
-      ...input.onAttempt ? { onAttempt: input.onAttempt } : {}
-    })(opts, handlers);
+    const local = resolveLocal(pick2);
+    const pinned = (h) => {
+      if (local) {
+        return createLocalStream(local.endpoint, local.model, input.fetch, { ref: pick2, cloud: strict ? null : cloud, fit })(opts, h);
+      }
+      if (isLocalModelRef(pick2) || !cloud) throw new Error(isLocalModelRef(pick2) ? NO_LOCAL_MODEL : noModel);
+      return cloud({ ...opts, model: pick2, modelStrict: strict }, h);
+    };
+    if (strict) return pinned(handlers);
+    if (!local && (isLocalModelRef(pick2) || !cloud)) return auto(unpicked(opts), handlers);
+    return pickThenAuto(pinned, () => auto(unpicked(opts), handlers), handlers, opts.signal, {
+      from: pick2,
+      local: !!local,
+      ...input.onFallback ? { onFallback: input.onFallback } : {}
+    });
   };
+}
+function isFallbackFailure(err, local) {
+  if (local) return true;
+  if (err instanceof BrainRequestError) return err.status >= 500;
+  return err instanceof TransportError || err instanceof StreamInterruptedError;
+}
+async function pickThenAuto(pinned, fallback, handlers, signal, pick2) {
+  let committed = false;
+  const watched = {
+    ...handlers,
+    onTextDelta: (delta) => {
+      committed = true;
+      handlers.onTextDelta?.(delta);
+    },
+    onToolCallDelta: (index, partial) => {
+      committed = true;
+      handlers.onToolCallDelta?.(index, partial);
+    }
+  };
+  try {
+    return await pinned(watched);
+  } catch (err) {
+    if (committed || signal?.aborted || !isFallbackFailure(err, pick2.local)) throw err;
+    pick2.onFallback?.({ from: pick2.from, reason: err instanceof Error ? err.message : String(err) });
+    return fallback();
+  }
+}
+function unpicked(opts) {
+  const { modelStrict: _strict, model: _model, routingMode: _routing, ...rest } = opts;
+  return rest;
+}
+function runsOnDevice(ref) {
+  const parsed = parseLocalModelRef(ref);
+  return !!parsed && localRuntime(parsed.provider).onDevice;
+}
+function onDeviceOnly(opts) {
+  const offDevice = !!opts.model && !runsOnDevice(opts.model);
+  if (!offDevice && (opts.routingMode ?? "auto") === "auto") return opts;
+  const { modelStrict: _strict, model, ...rest } = opts;
+  return { ...rest, ...offDevice || !model ? {} : { model }, routingMode: "auto" };
+}
+
+// src/modelFallback.ts
+function createModelFallbackChannel() {
+  let current = null;
+  const listeners = /* @__PURE__ */ new Set();
+  const notify = () => {
+    for (const listener of [...listeners]) listener();
+  };
+  return {
+    report: (event) => {
+      current = event;
+      notify();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    latest: () => current,
+    clear: () => {
+      if (current === null) return;
+      current = null;
+      notify();
+    }
+  };
+}
+function modelFallbackText(template, event) {
+  return template.replace("{model}", event.from);
+}
+var DEFAULT_MODEL_FALLBACK_TEMPLATE = "Your pick {model} failed; answered with Auto.";
+
+// src/limbicAffect.ts
+var import_limbic = require("@seanhogg/builderforce-memory-engine/limbic");
+function personalitySetpoints(profile) {
+  return profile ? (0, import_limbic.limbicSetpoints)(limbicTraits(profile)) : (0, import_limbic.neutralLimbicState)();
+}
+function turnAffectBlock(text, setpoints) {
+  if (!text.trim()) return "";
+  return (0, import_limbic.buildLimbicBlock)((0, import_limbic.appraiseTask)(text, setpoints ?? (0, import_limbic.neutralLimbicState)()));
 }
 
 // src/pageEngines/engineFailure.ts
@@ -5867,8 +6487,8 @@ function reportPageEngineFailure(runtime, stage, error) {
 var PageEngineError = class extends Error {
   status;
   code;
-  constructor(status2, code, message = code) {
-    super(message);
+  constructor(status2, code, message2 = code) {
+    super(message2);
     this.name = "PageEngineError";
     this.status = status2;
     this.code = code;
@@ -6095,8 +6715,8 @@ var promptApiEngine = {
 
 // src/pageEngines/fetchShim.ts
 var globalFetch2 = (input, init) => fetch(input, init);
-function refusal(status2, code, message = code) {
-  return new Response(JSON.stringify({ error: { code, message } }), {
+function refusal(status2, code, message2 = code) {
+  return new Response(JSON.stringify({ error: { code, message: message2 } }), {
     status: status2,
     headers: { "content-type": "application/json" }
   });
@@ -6104,6 +6724,10 @@ function refusal(status2, code, message = code) {
 function refusalFor(engine, e) {
   if (e instanceof PageEngineError) return refusal(e.status, e.code, e.message);
   return refusal(500, `${engine.runtime}_engine_failed`, errorMessage(e));
+}
+function inBandError(e) {
+  if (!(e instanceof PageEngineError)) return { message: errorMessage(e) };
+  return { code: e.code, message: e.message.includes(e.code) ? e.message : `${e.code}: ${e.message}` };
 }
 var encoder = new TextEncoder();
 var sseFrame = (data) => encoder.encode(`data: ${JSON.stringify(data)}
@@ -6128,7 +6752,7 @@ function sseBody(first, chunks, signal) {
           controller.error(e);
           return;
         }
-        controller.enqueue(sseFrame({ error: { message: errorMessage(e) } }));
+        controller.enqueue(sseFrame({ error: inBandError(e) }));
         controller.close();
       }
     },
@@ -6162,11 +6786,11 @@ async function foldChunks(chunks) {
     }
   }
   const toolCalls = [...calls.entries()].sort(([a], [b]) => a - b).map(([, call2]) => call2);
-  const message = { role: "assistant", content, ...toolCalls.length > 0 ? { tool_calls: toolCalls } : {} };
+  const message2 = { role: "assistant", content, ...toolCalls.length > 0 ? { tool_calls: toolCalls } : {} };
   return {
     object: "chat.completion",
     ...model ? { model } : {},
-    choices: [{ index: 0, message, finish_reason: finish ?? (toolCalls.length > 0 ? "tool_calls" : "stop") }],
+    choices: [{ index: 0, message: message2, finish_reason: finish ?? (toolCalls.length > 0 ? "tool_calls" : "stop") }],
     ...usage ? { usage } : {}
   };
 }
@@ -6212,6 +6836,684 @@ async function probePageEngines(engines, options) {
   return probes.filter((p) => p !== null);
 }
 
+// src/pageEngines/remote/protocol.ts
+var PAGE_ENGINE_REQUEST_TYPES = ["pageEngine.probe", "pageEngine.chat", "pageEngine.abort"];
+var PAGE_ENGINE_REPLY_TYPES = ["pageEngine.probed", "pageEngine.chunk", "pageEngine.end", "pageEngine.error", "pageEngine.alive"];
+var PAGE_ENGINE_HEARTBEAT_MS = 3e4;
+var has = (types, message2, idRequired) => {
+  if (!message2 || typeof message2 !== "object") return false;
+  const { type, id } = message2;
+  return typeof type === "string" && types.includes(type) && (!idRequired || typeof id === "string");
+};
+function isPageEngineReply(message2) {
+  return has(PAGE_ENGINE_REPLY_TYPES, message2, true);
+}
+function isPageEngineRequest(message2) {
+  return has(PAGE_ENGINE_REQUEST_TYPES, message2, true);
+}
+
+// src/pageEngines/remote/serve.ts
+var message = (e) => e instanceof Error ? e.message : String(e);
+function servePageEngines(engines, io) {
+  const running = /* @__PURE__ */ new Map();
+  const engineFor = (runtime) => engines().find((engine) => engine.runtime === runtime);
+  async function chat(request) {
+    const { id, runtime } = request;
+    const engine = engineFor(runtime);
+    if (!engine) {
+      io.reply("pageEngine.error", { id, status: 503, code: `${runtime}_unavailable`, message: `${runtime} is not available here` });
+      return;
+    }
+    const controller = new AbortController();
+    running.set(id, controller);
+    const heartbeat = setInterval(() => io.reply("pageEngine.alive", { id }), PAGE_ENGINE_HEARTBEAT_MS);
+    try {
+      const chunks = await engine.chatCompletions(request.body, controller.signal);
+      for await (const chunk2 of chunks) {
+        if (controller.signal.aborted) break;
+        io.reply("pageEngine.chunk", { id, chunk: chunk2 });
+      }
+      if (!controller.signal.aborted) io.reply("pageEngine.end", { id });
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      const status2 = e instanceof PageEngineError ? e.status : 500;
+      const code = e instanceof PageEngineError ? e.code : `${runtime}_engine_failed`;
+      io.reply("pageEngine.error", { id, status: status2, code, message: message(e) });
+    } finally {
+      clearInterval(heartbeat);
+      running.delete(id);
+    }
+  }
+  return io.listen((request) => {
+    switch (request.type) {
+      case "pageEngine.probe": {
+        const engine = engineFor(request.runtime);
+        const asked = engine ? engine.probe(request.fresh ? { fresh: true } : void 0) : Promise.resolve(null);
+        void asked.catch(() => null).then((probe) => io.reply("pageEngine.probed", { id: request.id, probe }));
+        return;
+      }
+      case "pageEngine.chat":
+        void chat(request);
+        return;
+      case "pageEngine.abort":
+        running.get(request.id)?.abort();
+        return;
+    }
+  });
+}
+
+// src/pageEngines/remote/client.ts
+var PAGE_ENGINE_CHAT_IDLE_MS = 12e4;
+var PAGE_ENGINE_DETACHED = "page_engine_detached";
+var ChunkQueue = class {
+  items = [];
+  finished = false;
+  failure;
+  waiter;
+  get settled() {
+    return this.finished || this.failure !== void 0;
+  }
+  push(chunk2) {
+    if (this.settled) return;
+    if (this.waiter) {
+      const { resolve } = this.waiter;
+      this.waiter = void 0;
+      resolve({ done: false, value: chunk2 });
+    } else this.items.push(chunk2);
+  }
+  end() {
+    if (this.settled) return;
+    this.finished = true;
+    if (this.waiter && this.items.length === 0) {
+      const { resolve } = this.waiter;
+      this.waiter = void 0;
+      resolve({ done: true, value: void 0 });
+    }
+  }
+  fail(error) {
+    if (this.settled) return;
+    this.failure = { error };
+    if (this.waiter) {
+      const { reject } = this.waiter;
+      this.waiter = void 0;
+      reject(error);
+    }
+  }
+  next() {
+    const item = this.items.shift();
+    if (item) return Promise.resolve({ done: false, value: item });
+    if (this.failure) return Promise.reject(this.failure.error);
+    if (this.finished) return Promise.resolve({ done: true, value: void 0 });
+    return new Promise((resolve, reject) => {
+      this.waiter = { resolve, reject };
+    });
+  }
+};
+var LATE_PROBES_KEPT = 64;
+function createPageEngineClient(options) {
+  let seq = 0;
+  const newId = options.newId ?? (() => `pe${++seq}`);
+  const chatIdleMs = options.chatIdleMs ?? PAGE_ENGINE_CHAT_IDLE_MS;
+  const pending = /* @__PURE__ */ new Map();
+  const late = /* @__PURE__ */ new Map();
+  let clock = 0;
+  const heardAt = /* @__PURE__ */ new Map();
+  const heard = (port) => {
+    heardAt.set(port, ++clock);
+    options.onHeard?.(port);
+  };
+  const detached = (message2) => new PageEngineError(503, PAGE_ENGINE_DETACHED, `${PAGE_ENGINE_DETACHED}: ${message2}`);
+  return {
+    engine(runtime, baseUrl, portFor, proxy = {}) {
+      const probeTimeoutMs = proxy.probeTimeoutMs ?? options.probeTimeoutMs;
+      return {
+        runtime,
+        baseUrl,
+        // The far side's engines memoize their own probes; asking across the port per
+        // turn is one message, and a fresh one when the picker asks.
+        probe(probeOptions = {}) {
+          const port = portFor();
+          if (!port) return Promise.resolve(null);
+          const id = newId();
+          const sentAt = clock;
+          return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+              settle(null);
+              late.set(id, port);
+              if (late.size > LATE_PROBES_KEPT) late.delete(late.keys().next().value);
+              if ((heardAt.get(port) ?? -1) <= sentAt) options.onProbeTimeout?.(port);
+            }, probeTimeoutMs);
+            function settle(probe) {
+              clearTimeout(timer);
+              pending.delete(id);
+              resolve(probe);
+            }
+            pending.set(id, { kind: "probe", port, settle });
+            port.post({ type: "pageEngine.probe", id, runtime, ...probeOptions.fresh ? { fresh: true } : {} });
+          });
+        },
+        invalidate() {
+        },
+        async chatCompletions(body, signal) {
+          if (signal?.aborted) throw abortReason(signal);
+          const port = portFor();
+          if (!port) throw new PageEngineError(503, `${runtime}_unavailable`, options.unavailableMessage ?? `${runtime} is not available here.`);
+          const id = newId();
+          const queue = new ChunkQueue();
+          let idle;
+          const disarm = () => {
+            if (idle) clearTimeout(idle);
+            idle = void 0;
+          };
+          const stop = (reason) => {
+            disarm();
+            if (!pending.has(id)) return;
+            pending.delete(id);
+            port.post({ type: "pageEngine.abort", id });
+            queue.fail(reason);
+          };
+          const arm = () => {
+            disarm();
+            if (chatIdleMs > 0 && Number.isFinite(chatIdleMs)) {
+              idle = setTimeout(() => stop(detached(`no reply from the engine for ${Math.round(chatIdleMs / 1e3)} s`)), chatIdleMs);
+            }
+          };
+          pending.set(id, { kind: "chat", port, queue, arm, disarm });
+          arm();
+          signal?.addEventListener("abort", () => stop(abortReason(signal)), { once: true });
+          port.post({ type: "pageEngine.chat", id, runtime, body });
+          return {
+            [Symbol.asyncIterator]: () => ({
+              next: () => queue.next(),
+              // The consumer let go early (a cancelled body): stop the far engine.
+              return: async () => {
+                stop(new DOMException("Aborted", "AbortError"));
+                return { done: true, value: void 0 };
+              }
+            })
+          };
+        }
+      };
+    },
+    receive(message2) {
+      if (!isPageEngineReply(message2)) return false;
+      const entry = pending.get(message2.id);
+      if (!entry) {
+        const port = late.get(message2.id);
+        if (port) {
+          late.delete(message2.id);
+          heard(port);
+        }
+        return true;
+      }
+      heard(entry.port);
+      switch (message2.type) {
+        case "pageEngine.probed":
+          if (entry.kind === "probe") entry.settle(message2.probe);
+          break;
+        case "pageEngine.chunk":
+          if (entry.kind === "chat") {
+            entry.arm();
+            entry.queue.push(message2.chunk);
+          }
+          break;
+        case "pageEngine.alive":
+          if (entry.kind === "chat") entry.arm();
+          break;
+        case "pageEngine.end":
+          if (entry.kind === "chat") {
+            entry.disarm();
+            pending.delete(message2.id);
+            entry.queue.end();
+          }
+          break;
+        case "pageEngine.error":
+          pending.delete(message2.id);
+          if (entry.kind === "chat") {
+            entry.disarm();
+            entry.queue.fail(new PageEngineError(message2.status, message2.code, message2.message));
+          } else entry.settle(null);
+          break;
+      }
+      return true;
+    },
+    drop(port) {
+      heardAt.delete(port);
+      for (const [id, entry] of [...pending]) {
+        if (entry.port !== port) continue;
+        if (entry.kind === "probe") entry.settle(null);
+        else {
+          entry.disarm();
+          pending.delete(id);
+          entry.queue.fail(detached(options.detachedMessage ?? "The engine serving this model went away."));
+        }
+      }
+    }
+  };
+}
+
+// src/pageEngines/remote/engineWorker.ts
+var ENGINE_WORKER_IDLE_MS = 5 * 6e4;
+var ENGINE_WORKER_INVALIDATE = "engineWorker.invalidate";
+var ENGINE_WORKER_FATAL = "engineWorker.fatal";
+var ENGINE_WORKER_CRASH_LIMIT = 2;
+var ENGINE_WORKER_CRASH_WINDOW_MS = 10 * 6e4;
+var MODEL_KEEPS_CRASHING = "model_keeps_crashing";
+var ORDERLY = /* @__PURE__ */ new Set(["idle", "disposed", "spawn_failed", "restart"]);
+var modelKey = (runtime, model) => `${String(runtime)}/${typeof model === "string" ? model : ""}`;
+function createEngineWorker(options) {
+  const idleMs = options.idleMs ?? ENGINE_WORKER_IDLE_MS;
+  const warn = options.warn ?? ((message2) => console.warn(message2));
+  const now = options.now ?? (() => Date.now());
+  let live2;
+  const crashes = /* @__PURE__ */ new Map();
+  const failed = /* @__PURE__ */ new Set();
+  const recordCrash = (key) => {
+    const at = now();
+    const recent = (crashes.get(key) ?? []).filter((t) => at - t < ENGINE_WORKER_CRASH_WINDOW_MS);
+    recent.push(at);
+    crashes.set(key, recent);
+    if (recent.length >= ENGINE_WORKER_CRASH_LIMIT && !failed.has(key)) {
+      failed.add(key);
+      warn(`engine worker: ${key} crashed ${recent.length}\xD7 in ${ENGINE_WORKER_CRASH_WINDOW_MS / 6e4} min; not loading it again this session`);
+    }
+  };
+  const stop = (gen, reason) => {
+    if (live2 !== gen) return;
+    live2 = void 0;
+    if (gen.timer) clearTimeout(gen.timer);
+    if (!ORDERLY.has(reason)) for (const key of new Set(gen.open.values())) recordCrash(key);
+    void gen.handle.then((h) => h.terminate(), () => void 0);
+    options.onStopped(gen.port, reason);
+  };
+  const touch = (gen) => {
+    if (gen.timer) clearTimeout(gen.timer);
+    gen.timer = void 0;
+    if (gen.open.size === 0 && idleMs > 0 && Number.isFinite(idleMs)) gen.timer = setTimeout(() => stop(gen, "idle"), idleMs);
+  };
+  const withoutFailed = (message2) => {
+    const probe = message2.probe;
+    if (!probe || failed.size === 0) return message2;
+    const models = probe.models.filter((m) => !failed.has(modelKey(probe.provider, m.model)));
+    if (models.length === probe.models.length) return message2;
+    return { ...message2, probe: models.length > 0 ? { ...probe, models } : null };
+  };
+  const start = () => {
+    const gen = { open: /* @__PURE__ */ new Map() };
+    const events = {
+      onMessage(message2) {
+        if (live2 !== gen) return;
+        const m = message2;
+        if (m && m.type === ENGINE_WORKER_FATAL) {
+          warn(`engine worker trapped (${String(m.message ?? "fatal")}); starting a fresh one on the next request`);
+          stop(gen, "fatal");
+          return;
+        }
+        if (m && (m.type === "pageEngine.end" || m.type === "pageEngine.error") && typeof m.id === "string") gen.open.delete(m.id);
+        options.onMessage(m && m.type === "pageEngine.probed" ? withoutFailed(m) : message2);
+        touch(gen);
+      },
+      onGone(reason) {
+        if (live2 !== gen) return;
+        warn(`engine worker stopped (${reason})`);
+        stop(gen, reason);
+      }
+    };
+    gen.handle = Promise.resolve().then(() => options.spawn(events));
+    gen.handle.catch((e) => {
+      warn(`engine worker could not start (${e instanceof Error ? e.message : String(e)})`);
+      stop(gen, "spawn_failed");
+    });
+    gen.port = {
+      post(message2) {
+        const m = message2;
+        if (m.type === "pageEngine.chat" && typeof m.id === "string") {
+          const key = modelKey(m.runtime, m.body?.model);
+          if (failed.has(key)) {
+            const id = m.id;
+            queueMicrotask(
+              () => options.onMessage({
+                type: "pageEngine.error",
+                id,
+                status: 503,
+                code: MODEL_KEEPS_CRASHING,
+                message: `${MODEL_KEEPS_CRASHING}: ${key} crashed this device's engine ${ENGINE_WORKER_CRASH_LIMIT} times; remove it or try another model`
+              })
+            );
+            return;
+          }
+          gen.open.set(m.id, key);
+        }
+        if (m.type === "pageEngine.abort" && typeof m.id === "string") gen.open.delete(m.id);
+        touch(gen);
+        void gen.handle.then((h) => h.post(message2), () => void 0);
+      }
+    };
+    live2 = gen;
+    touch(gen);
+    return gen;
+  };
+  return {
+    port: () => (live2 ?? start()).port,
+    running: () => live2 !== void 0,
+    invalidate() {
+      live2?.port.post({ type: ENGINE_WORKER_INVALIDATE });
+    },
+    dispose() {
+      if (live2) stop(live2, "disposed");
+    },
+    restart(reason) {
+      if (!live2) return;
+      warn(`engine worker restarting (${reason})`);
+      stop(live2, "restart");
+    }
+  };
+}
+function serveEngineWorker(endpoint, engines, onOther = () => void 0, options = {}) {
+  servePageEngines(engines, {
+    reply: (type, payload) => endpoint.post({ type, ...payload }),
+    listen: (onRequest) => endpoint.listen((message2) => {
+      if (isPageEngineRequest(message2)) onRequest(message2);
+    })
+  });
+  endpoint.listen((message2) => {
+    if (isPageEngineRequest(message2)) return;
+    if (message2?.type === ENGINE_WORKER_INVALIDATE) {
+      for (const engine of engines()) engine.invalidate();
+      return;
+    }
+    onOther(message2);
+  });
+  let reported = false;
+  const fatal = (error) => {
+    if (reported) return;
+    reported = true;
+    options.onFatal?.();
+    endpoint.post({ type: ENGINE_WORKER_FATAL, message: error instanceof Error ? error.message : String(error) });
+  };
+  endpoint.onUncaught?.((error) => {
+    if (!isWasmTrap(error)) return false;
+    fatal(error);
+    return true;
+  });
+  return { fatal };
+}
+function isWasmTrap(e) {
+  const RuntimeError = globalThis.WebAssembly?.RuntimeError;
+  return RuntimeError !== void 0 && e instanceof RuntimeError || e instanceof Error && e.name === "RuntimeError";
+}
+
+// src/pageEngines/webgpu.ts
+var UNSUPPORTED = (reason) => ({
+  contractVersion: 2,
+  supported: false,
+  reason,
+  f16: false,
+  maxBufferBytes: 0,
+  maxBufferSizeBytes: 0,
+  maxStorageBufferBindingSizeBytes: 0,
+  requestedPowerPreference: "high-performance"
+});
+var pageGpu = () => globalThis.navigator?.gpu;
+function hasWebGPU() {
+  return pageGpu() != null;
+}
+async function webGpuSupport(gpu = pageGpu()) {
+  if (!gpu) return UNSUPPORTED("webgpu_missing");
+  try {
+    const adapter = await gpu.requestAdapter({ powerPreference: "high-performance" });
+    if (!adapter) return UNSUPPORTED("no_adapter");
+    const maxBufferSizeBytes = adapter.limits.maxBufferSize ?? 0;
+    const maxStorageBufferBindingSizeBytes = adapter.limits.maxStorageBufferBindingSize ?? 0;
+    return {
+      contractVersion: 2,
+      supported: true,
+      f16: adapter.features.has("shader-f16"),
+      maxBufferBytes: maxBufferSizeBytes,
+      maxBufferSizeBytes,
+      maxStorageBufferBindingSizeBytes,
+      requestedPowerPreference: "high-performance"
+    };
+  } catch (e) {
+    return UNSUPPORTED(e instanceof Error ? e.message : String(e));
+  }
+}
+
+// src/pageEngines/bfiSupport.ts
+var BFI_UNSUPPORTED = { supported: false, reason: "bfi_unavailable", f16: false, maxBufferBytes: 0 };
+async function anyBfiModelDownloaded(store) {
+  const states = await Promise.all(localCatalogFor("bfi").map((row) => store.status(row.ref).catch(() => "absent")));
+  return states.includes("ready");
+}
+function restrictBackends(s, backends) {
+  const gpu = backends.includes("webgpu");
+  const out = gpu ? { ...s } : { ...s, supported: false, reason: "webgpu_not_used_here" };
+  const { cpu, webgpu } = s.backends ?? {};
+  out.backends = {
+    ...webgpu ? { webgpu: gpu ? webgpu : { ...webgpu, supported: false, reason: "webgpu_not_used_here" } } : {},
+    ...cpu && backends.includes("cpu") ? { cpu } : {}
+  };
+  return out;
+}
+function withPeerBackends(own, backends, peer) {
+  const local = restrictBackends(own, backends);
+  if (!peer) return local;
+  const top = backends.includes("webgpu") ? local : { ...local, ...topLevel(peer) };
+  return {
+    ...top,
+    backends: {
+      ...backends.includes("webgpu") ? pick(local, "webgpu") : pick(peer, "webgpu"),
+      ...backends.includes("cpu") ? pick(local, "cpu") : pick(peer, "cpu")
+    }
+  };
+}
+function topLevel(s) {
+  const { backends: _backends, ...rest } = s;
+  return rest;
+}
+function pick(s, key) {
+  const value = s.backends?.[key];
+  return value ? { [key]: value } : {};
+}
+var SIMD_PROBE = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11]);
+function wasmSimdSupported() {
+  try {
+    return typeof WebAssembly === "object" && WebAssembly.validate(SIMD_PROBE);
+  } catch {
+    return false;
+  }
+}
+function reportedDeviceMemoryBytes() {
+  const gb = globalThis.navigator?.deviceMemory;
+  return typeof gb === "number" && gb > 0 ? gb * 1024 ** 3 : void 0;
+}
+async function bfiSupportWithoutWasm(deviceMemoryBytes = reportedDeviceMemoryBytes()) {
+  const simd = wasmSimdSupported();
+  const gpu = await webGpuSupport();
+  const webgpu = simd ? gpu : { ...gpu, supported: false, reason: "wasm_simd_unavailable" };
+  return {
+    ...webgpu,
+    backends: {
+      webgpu: {
+        supported: webgpu.supported,
+        ...webgpu.reason ? { reason: webgpu.reason } : {},
+        maxBufferBytes: webgpu.maxBufferBytes,
+        maxStorageBufferBindingSizeBytes: webgpu.maxStorageBufferBindingSizeBytes ?? 0,
+        f16: webgpu.f16
+      },
+      cpu: {
+        supported: simd,
+        simd,
+        threads: 1,
+        kvBudgetBytes: BFI_CPU_LIMITS.cpuKvBudgetBytes,
+        maxMemoryBytes: cpuMemoryCeiling(deviceMemoryBytes),
+        ...deviceMemoryBytes ? { deviceMemoryBytes } : {}
+      }
+    }
+  };
+}
+
+// src/pageEngines/bfiWorkerEngine.ts
+var bfiWorkerFrame = (data) => data && typeof data === "object" && typeof data.type === "string" && data.type.startsWith("bfi.") ? data : void 0;
+function createBfiWorkerEngine(options) {
+  const timeoutMs = options.timeoutMs ?? 2e4;
+  const backends = options.backends ?? ["webgpu", "cpu"];
+  const client = createPageEngineClient({
+    probeTimeoutMs: timeoutMs,
+    unavailableMessage: "The bfi worker could not start.",
+    detachedMessage: "The bfi worker stopped while answering."
+  });
+  const supports = /* @__PURE__ */ new Map();
+  let seq = 0;
+  let threadsOffered = true;
+  let threadRestarts = 0;
+  const reads = /* @__PURE__ */ new Map();
+  const replyToStore = async (f) => {
+    const store = options.store;
+    if (!store) throw new Error("no store on this page");
+    switch (f.op) {
+      case "status":
+        return store.status(f.ref);
+      case "open": {
+        if (!store.open) throw new Error("this page store cannot be read");
+        const { stream, bytes } = await store.open(f.ref);
+        const handle = `r${++seq}`;
+        reads.set(handle, stream.getReader());
+        return { handle, bytes };
+      }
+      case "read": {
+        const reader = reads.get(f.handle);
+        if (!reader) return null;
+        const next = await reader.read();
+        if (next.done) {
+          reads.delete(f.handle);
+          return null;
+        }
+        return next.value instanceof Uint8Array ? next.value : new Uint8Array(next.value);
+      }
+      case "close": {
+        const reader = reads.get(f.handle);
+        reads.delete(f.handle);
+        await reader?.cancel().catch(() => void 0);
+        return void 0;
+      }
+    }
+  };
+  const closeReads = () => {
+    for (const reader of reads.values()) void reader.cancel().catch(() => void 0);
+    reads.clear();
+  };
+  const worker = createEngineWorker({
+    async spawn(events) {
+      const w = options.create();
+      w.addEventListener("message", (event) => events.onMessage(event.data));
+      w.addEventListener("error", (event) => events.onGone(event.message ?? "error"));
+      w.addEventListener("messageerror", () => events.onGone("messageerror"));
+      const threads = threadsOffered ? await options.threads?.() : void 0;
+      const init = {
+        type: "bfi.init",
+        wasmUrl: String(await options.wasmUrl()),
+        ...threads ? { threads } : {},
+        ...options.backends ? { backends: options.backends } : {},
+        ...options.relayStore ? { relayStore: true } : {}
+      };
+      w.postMessage(init);
+      return { post: (message2) => w.postMessage(message2), terminate: () => w.terminate() };
+    },
+    onMessage(message2) {
+      const f = bfiWorkerFrame(message2);
+      if (!f) {
+        client.receive(message2);
+        return;
+      }
+      if (f.type === "bfi.supported") {
+        supports.get(f.id)?.(f.support ?? BFI_UNSUPPORTED);
+        supports.delete(f.id);
+      } else if (f.type === "bfi.store") {
+        void replyToStore(f).then(
+          (result) => f.id && worker.running() && worker.port().post({ type: "bfi.stored", id: f.id, ok: true, result }),
+          (e) => f.id && worker.running() && worker.port().post({ type: "bfi.stored", id: f.id, ok: false, error: errorMessage(e) })
+        );
+      } else if (f.type === "bfi.threadsFailed") {
+        console.warn(`bfi: the threaded build did not start (${f.message}); restarting single-threaded`);
+        threadsOffered = false;
+        threadRestarts++;
+        worker.restart("threads_failed");
+      }
+    },
+    onStopped(port) {
+      client.drop(port);
+      closeReads();
+      for (const settle of [...supports.values()]) settle(BFI_UNSUPPORTED);
+      supports.clear();
+    },
+    ...options.idleMs !== void 0 ? { idleMs: options.idleMs } : {}
+  });
+  const anyDownloaded = () => options.store ? anyBfiModelDownloaded(options.store) : Promise.resolve(true);
+  const onceMore = async (ask, failed) => {
+    const before = threadRestarts;
+    const value = await ask();
+    return failed(value) && threadRestarts !== before ? ask() : value;
+  };
+  const ownSupport = () => {
+    const id = `s${++seq}`;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => settle(BFI_UNSUPPORTED), timeoutMs);
+      function settle(support) {
+        clearTimeout(timer);
+        supports.delete(id);
+        resolve(support);
+      }
+      supports.set(id, settle);
+      worker.port().post({ type: "bfi.support", id });
+    });
+  };
+  const engine = client.engine("bfi", BFI_ENGINE_BASE_URL, () => worker.port());
+  async function* retried(body, signal) {
+    for (let attempt = 0; ; attempt++) {
+      const before = threadRestarts;
+      let yielded = false;
+      try {
+        for await (const chunk2 of await engine.chatCompletions(body, signal)) {
+          yielded = true;
+          yield chunk2;
+        }
+        return;
+      } catch (e) {
+        const cutOff = e instanceof PageEngineError && e.code === "page_engine_detached" && threadRestarts !== before;
+        if (yielded || attempt > 0 || !cutOff || signal?.aborted) throw e;
+      }
+    }
+  }
+  return {
+    ...engine,
+    async probe(probeOptions) {
+      if (!await anyDownloaded()) return null;
+      return onceMore(() => engine.probe(probeOptions), (probe) => probe === null);
+    },
+    invalidate() {
+      worker.invalidate();
+    },
+    // A refusal surfaces on the first `next()`, before anything streamed — where the
+    // shim answers it with its status, exactly as an in-place engine's would.
+    chatCompletions: async (body, signal) => retried(body, signal),
+    async support() {
+      const [own, peer] = await Promise.all([
+        (async () => {
+          if (!await anyDownloaded()) return bfiSupportWithoutWasm();
+          return onceMore(ownSupport, (s) => s === BFI_UNSUPPORTED);
+        })(),
+        options.peerSupport?.().catch(() => void 0)
+      ]);
+      return withPeerBackends(own, backends, peer);
+    },
+    dispose() {
+      worker.dispose();
+      closeReads();
+    }
+  };
+}
+
 // src/pageEngines/modelStore.ts
 function backendFor(row, options) {
   const { hf, webllm: webllm2 } = options;
@@ -6252,12 +7554,12 @@ function createLocalModelStore(options) {
     const support = supports.get(row.runtime);
     if (!backend || !support) return { ...row, state: "unsupported", reason: "engine_unavailable" };
     const fit = localModelFit(row, support);
-    if (!fit.fits) return { ...row, state: "unsupported", reason: fit.reason };
     const ready = await backend.ready(row).catch((e) => {
       reportPageEngineFailure(row.runtime, "cache_lookup", e);
       return false;
     });
-    return { ...row, state: ready ? "ready" : "absent" };
+    if (!fit.fits) return { ...row, state: "unsupported", reason: fit.reason, ...ready ? { downloaded: true } : {} };
+    return { ...row, state: ready ? "ready" : "absent", backend: fit.backend };
   }
   return {
     async listLocalModels() {
@@ -6323,208 +7625,6 @@ function deferredLocalModelStore(store) {
       };
     }
   };
-}
-
-// src/pageEngines/catalogProbe.ts
-async function catalogProbe(runtime, baseUrl, support, isReady, contextOf = (row) => row.contextTokens) {
-  if (!support.supported) return null;
-  const fitting = localCatalogFor(runtime).filter((row) => localModelFit(row, support).fits);
-  const ready = await Promise.all(
-    fitting.map(
-      (row) => isReady(row).catch((e) => {
-        reportPageEngineFailure(runtime, "cache_lookup", e);
-        return false;
-      })
-    )
-  );
-  const rows = fitting.filter((_, i) => ready[i]);
-  if (rows.length === 0) return null;
-  return {
-    provider: runtime,
-    endpoint: { baseUrl },
-    reachable: true,
-    models: rows.map((row) => ({
-      ref: formatLocalModelRef(runtime, row.model),
-      provider: runtime,
-      model: row.model,
-      label: row.label,
-      tools: row.tools,
-      contextTokens: contextOf(row)
-    }))
-  };
-}
-
-// src/pageEngines/residentModel.ts
-var settled = () => void 0;
-function createResidentModel(create) {
-  let engine;
-  let resident;
-  let tail = Promise.resolve();
-  return {
-    acquire(id, load) {
-      const run = tail.then(async () => {
-        engine ??= await create();
-        if (resident !== id) {
-          const previous = resident;
-          resident = void 0;
-          await load(engine, previous);
-          resident = id;
-        }
-        return engine;
-      });
-      tail = run.then(settled, settled);
-      return run;
-    },
-    get engine() {
-      return engine;
-    },
-    get resident() {
-      return resident;
-    },
-    evict(id) {
-      if (resident !== id || !engine) return void 0;
-      resident = void 0;
-      return engine;
-    }
-  };
-}
-
-// src/pageEngines/bfiEngine.ts
-var BFI_STATUS = {
-  webgpu_unavailable: 503,
-  context_exceeded: 413,
-  invalid_request: 400
-};
-function bfiError(e) {
-  if (e instanceof PageEngineError) return e;
-  const message = errorMessage(e);
-  const code = /^([a-z_]+):/.exec(message)?.[1];
-  return code && BFI_STATUS[code] ? new PageEngineError(BFI_STATUS[code], code, message) : e;
-}
-var BFI_CONTEXT_FLOOR = 2048;
-function predictedContext(engine, row, support) {
-  const planned = row.kv ? engine.contextFor({
-    ...row.kv,
-    trainedContext: row.contextTokens,
-    f16: support.f16,
-    maxStorageBufferBindingSizeBytes: support.maxStorageBufferBindingSizeBytes ?? support.maxBufferBytes
-  }) : 0;
-  return planned > 0 ? planned : Math.min(BFI_CONTEXT_FLOOR, row.contextTokens);
-}
-var UNSUPPORTED = { supported: false, reason: "bfi_unavailable", f16: false, maxBufferBytes: 0 };
-function createBfiEngine(options) {
-  let module2;
-  const bfi = () => module2 ??= options.loadBfi();
-  const support = () => bfi().then((m) => m.BfiEngine.support()).catch((e) => {
-    reportPageEngineFailure("bfi", "support", e);
-    return UNSUPPORTED;
-  });
-  const resident = createResidentModel(async () => (await bfi()).BfiEngine.create());
-  const served = /* @__PURE__ */ new Map();
-  const residentEngine = (row) => resident.acquire(row.ref, async (engine, previous) => {
-    if (previous) engine.unload();
-    const { stream, bytes } = await options.store.open(row.ref);
-    const info = await engine.load(stream, bytes);
-    if (info.contextTokens > 0 && served.get(row.ref) !== info.contextTokens) {
-      served.set(row.ref, info.contextTokens);
-      prober.invalidate();
-    }
-  });
-  const prober = memoizedProbe("bfi", async () => {
-    const rows = localCatalogFor("bfi");
-    const states = await Promise.all(rows.map((row) => options.store.status(row.ref)));
-    const ready = new Set(rows.filter((_, i) => states[i] === "ready").map((row) => row.ref));
-    if (ready.size === 0) return null;
-    const device = await support();
-    const { BfiEngine } = await bfi();
-    return catalogProbe(
-      "bfi",
-      BFI_ENGINE_BASE_URL,
-      device,
-      async (row) => ready.has(row.ref),
-      (row) => served.get(row.ref) ?? predictedContext(BfiEngine, row, device)
-    );
-  }, options);
-  async function chatCompletions(body, signal) {
-    const row = localCatalogModel(formatLocalModelRef("bfi", typeof body.model === "string" ? body.model : ""));
-    if (!row) throw new PageEngineError(404, "model_not_found");
-    if (await options.store.status(row.ref) !== "ready") throw new PageEngineError(503, "model_not_downloaded");
-    if (signal?.aborted) throw abortReason(signal);
-    let live2;
-    try {
-      live2 = await residentEngine(row);
-    } catch (e) {
-      const mapped = bfiError(e);
-      throw mapped instanceof PageEngineError ? mapped : new PageEngineError(503, "bfi_engine_unavailable", errorMessage(e));
-    }
-    return bfiChunks(live2, JSON.stringify({ ...body, stream: true }), signal);
-  }
-  return { runtime: "bfi", baseUrl: BFI_ENGINE_BASE_URL, ...prober, support, chatCompletions };
-}
-function closingChunk(finalJson) {
-  try {
-    const final = JSON.parse(finalJson);
-    const finish = final.choices?.[0]?.finish_reason ?? null;
-    if (!finish && !final.usage) return null;
-    return {
-      ...final.model ? { model: final.model } : {},
-      choices: [{ index: 0, delta: {}, finish_reason: finish }],
-      ...final.usage ? { usage: final.usage } : {}
-    };
-  } catch {
-    return null;
-  }
-}
-async function* bfiChunks(engine, requestJson, signal) {
-  const controller = new AbortController();
-  const onAbort = () => controller.abort(signal?.reason);
-  signal?.addEventListener("abort", onAbort, { once: true });
-  const queue = [];
-  let wake;
-  const state = {};
-  const notify = () => {
-    wake?.();
-    wake = void 0;
-  };
-  engine.chat(
-    requestJson,
-    (json) => {
-      try {
-        queue.push(JSON.parse(json));
-        notify();
-      } catch (e) {
-        reportPageEngineFailure("bfi", "chunk", e);
-      }
-    },
-    controller.signal
-  ).then(
-    (final) => {
-      state.outcome = { ok: true, final };
-      notify();
-    },
-    (error) => {
-      state.outcome = { ok: false, error };
-      notify();
-    }
-  );
-  try {
-    for (; ; ) {
-      const next = queue.shift();
-      if (next) {
-        yield next;
-        continue;
-      }
-      if (state.outcome) break;
-      await new Promise((resolve) => wake = resolve);
-    }
-    const settled2 = state.outcome;
-    if (!settled2.ok) throw signal?.aborted ? abortReason(signal) : bfiError(settled2.error);
-    const closing = closingChunk(settled2.final);
-    if (closing) yield closing;
-  } finally {
-    signal?.removeEventListener("abort", onAbort);
-    if (!state.outcome) controller.abort();
-  }
 }
 
 // src/pageEngines/hfModelStore.ts
@@ -6606,40 +7706,70 @@ function createHfModelStore(options = {}) {
   };
 }
 
-// src/pageEngines/webgpu.ts
-var UNSUPPORTED2 = (reason) => ({
-  contractVersion: 2,
-  supported: false,
-  reason,
-  f16: false,
-  maxBufferBytes: 0,
-  maxBufferSizeBytes: 0,
-  maxStorageBufferBindingSizeBytes: 0,
-  requestedPowerPreference: "high-performance"
-});
-var pageGpu = () => globalThis.navigator?.gpu;
-function hasWebGPU() {
-  return pageGpu() != null;
+// src/pageEngines/catalogProbe.ts
+async function catalogProbe(runtime, baseUrl, support, isReady, contextOf = (row) => row.contextTokens) {
+  const fitting = localCatalogFor(runtime).flatMap((row) => {
+    const fit = localModelFit(row, support);
+    return fit.fits ? [{ row, backend: fit.backend }] : [];
+  });
+  const ready = await Promise.all(
+    fitting.map(
+      ({ row }) => isReady(row).catch((e) => {
+        reportPageEngineFailure(runtime, "cache_lookup", e);
+        return false;
+      })
+    )
+  );
+  const rows = fitting.filter((_, i) => ready[i]);
+  if (rows.length === 0) return null;
+  return {
+    provider: runtime,
+    endpoint: { baseUrl },
+    reachable: true,
+    models: rows.map(({ row, backend }) => ({
+      ref: formatLocalModelRef(runtime, row.model),
+      provider: runtime,
+      model: row.model,
+      label: row.label,
+      tools: row.tools,
+      contextTokens: contextOf(row, backend)
+    }))
+  };
 }
-async function webGpuSupport(gpu = pageGpu()) {
-  if (!gpu) return UNSUPPORTED2("webgpu_missing");
-  try {
-    const adapter = await gpu.requestAdapter({ powerPreference: "high-performance" });
-    if (!adapter) return UNSUPPORTED2("no_adapter");
-    const maxBufferSizeBytes = adapter.limits.maxBufferSize ?? 0;
-    const maxStorageBufferBindingSizeBytes = adapter.limits.maxStorageBufferBindingSize ?? 0;
-    return {
-      contractVersion: 2,
-      supported: true,
-      f16: adapter.features.has("shader-f16"),
-      maxBufferBytes: maxBufferSizeBytes,
-      maxBufferSizeBytes,
-      maxStorageBufferBindingSizeBytes,
-      requestedPowerPreference: "high-performance"
-    };
-  } catch (e) {
-    return UNSUPPORTED2(e instanceof Error ? e.message : String(e));
-  }
+
+// src/pageEngines/residentModel.ts
+var settled = () => void 0;
+function createResidentModel(create) {
+  let engine;
+  let resident;
+  let tail = Promise.resolve();
+  return {
+    acquire(id, load) {
+      const run = tail.then(async () => {
+        engine ??= await create();
+        if (resident !== id) {
+          const previous = resident;
+          resident = void 0;
+          await load(engine, previous);
+          resident = id;
+        }
+        return engine;
+      });
+      tail = run.then(settled, settled);
+      return run;
+    },
+    get engine() {
+      return engine;
+    },
+    get resident() {
+      return resident;
+    },
+    evict(id) {
+      if (resident !== id || !engine) return void 0;
+      resident = void 0;
+      return engine;
+    }
+  };
 }
 
 // src/pageEngines/webllmEngine.ts
@@ -6662,11 +7792,11 @@ function toWebLlmMessages(messages) {
   const system = [];
   const rest = [];
   for (const raw of messages) {
-    const message = raw ?? {};
-    const text = messageText(message.content);
+    const message2 = raw ?? {};
+    const text = messageText(message2.content);
     if (text === null) throw new PageEngineError(400, "non_text_content_unsupported");
-    if (message.role === "system") system.push(text);
-    else rest.push({ ...message, content: text });
+    if (message2.role === "system") system.push(text);
+    else rest.push({ ...message2, content: text });
   }
   const joined = system.filter((s) => s.trim().length > 0).join("\n\n");
   return [...joined ? [{ role: "system", content: joined }] : [], ...rest];
@@ -6759,8 +7889,8 @@ async function* interruptible(stream, engine, signal) {
 
 // src/pageEngines/pageEngineSet.ts
 function createPageEngineSet(options = {}) {
-  const hf = createHfModelStore();
-  const bfi = options.loadBfi ? createBfiEngine({ loadBfi: options.loadBfi, store: hf }) : void 0;
+  const hf = options.hf ?? createHfModelStore();
+  const bfi = options.bfiWorker ? createBfiWorkerEngine({ ...options.bfiWorker, store: hf }) : void 0;
   const webllm2 = createWebLlmEngine(options.webllmWorkerUrl ? { workerUrl: options.webllmWorkerUrl } : {});
   const engines = [...bfi ? [bfi] : [], webllm2, promptApiEngine];
   const store = createLocalModelStore({
@@ -7317,25 +8447,25 @@ var import_jsx_runtime2 = require("react/jsx-runtime");
 var BrainActionsContext = (0, import_react3.createContext)(null);
 var BrainRegistrarContext = (0, import_react3.createContext)(null);
 function BrainActionsProvider({ children }) {
-  const registry = (0, import_react3.useRef)(/* @__PURE__ */ new Map());
+  const registry2 = (0, import_react3.useRef)(/* @__PURE__ */ new Map());
   const [version, setVersion] = (0, import_react3.useState)(0);
   const bump = (0, import_react3.useCallback)(() => setVersion((v) => v + 1), []);
   const register = (0, import_react3.useCallback)((actions) => {
     const token = /* @__PURE__ */ Symbol("brain-action-registration");
     for (const action of actions) {
-      registry.current.set(action.name, { action, token });
+      registry2.current.set(action.name, { action, token });
     }
     bump();
     return () => {
       for (const action of actions) {
-        const cur = registry.current.get(action.name);
-        if (cur && cur.token === token) registry.current.delete(action.name);
+        const cur = registry2.current.get(action.name);
+        if (cur && cur.token === token) registry2.current.delete(action.name);
       }
       bump();
     };
   }, [bump]);
   const runTool = (0, import_react3.useCallback)(async (name, args) => {
-    const entry = registry.current.get(name);
+    const entry = registry2.current.get(name);
     if (!entry) {
       return { error: `Unknown tool: ${name}` };
     }
@@ -7346,7 +8476,7 @@ function BrainActionsProvider({ children }) {
     }
   }, []);
   const isMutating = (0, import_react3.useCallback)((name, args) => {
-    const entry = registry.current.get(name);
+    const entry = registry2.current.get(name);
     if (!entry) return false;
     const m = entry.action.mutates;
     if (typeof m === "function") {
@@ -7359,7 +8489,7 @@ function BrainActionsProvider({ children }) {
     return !!m;
   }, []);
   const toolSpecs = (0, import_react3.useMemo)(() => {
-    return toolSpecsFor([...registry.current.values()].map((e) => e.action));
+    return toolSpecsFor([...registry2.current.values()].map((e) => e.action));
   }, [version]);
   const value = (0, import_react3.useMemo)(
     () => ({ toolSpecs, runTool, isMutating, register }),
@@ -8317,14 +9447,14 @@ function pushTrace(c, ev) {
 function runTrace(c) {
   return c.trace.slice(c.runTraceFrom);
 }
-function recordRunFailure(c, label, message) {
+function recordRunFailure(c, label, message2) {
   const last = runTrace(c).at(-1);
-  if (last?.isError && typeof last.result === "string" && last.result.endsWith(message)) return;
+  if (last?.isError && typeof last.result === "string" && last.result.endsWith(message2)) return;
   pushTrace(c, {
     ts: nowIso(),
     category: "error",
     label,
-    result: message,
+    result: message2,
     isError: true
   });
 }
@@ -8394,8 +9524,8 @@ function withProvenanceMetadata(provenance, base) {
   if (provenance) meta[PROVENANCE_META_KEY] = provenance;
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
 }
-function formatAssistantTranscriptHeading(assistantName, message) {
-  const prov = parseMessageProvenance(message);
+function formatAssistantTranscriptHeading(assistantName, message2) {
+  const prov = parseMessageProvenance(message2);
   if (!prov?.model) return `## ${assistantName}`;
   if (prov.requestedModel) return `## ${assistantName} \xB7 ${prov.model} (requested ${prov.requestedModel})`;
   return `## ${assistantName} \xB7 ${prov.model}`;
@@ -9543,16 +10673,16 @@ function traceWithPersistedSteps(messages, trace) {
   const seen = /* @__PURE__ */ new Set();
   for (const ev of trace) seen.add(stepSig(ev.category, ev.label, ev.ts));
   const fromMessages = [];
-  for (const message of messages) {
-    if (!isStepMessage(message)) continue;
-    const parsed = parseStepMessage(message.metadata);
+  for (const message2 of messages) {
+    if (!isStepMessage(message2)) continue;
+    const parsed = parseStepMessage(message2.metadata);
     if (!parsed) continue;
     const sig2 = stepSig(parsed.step.category, parsed.step.label, parsed.tsIso);
     if (seen.has(sig2)) continue;
     seen.add(sig2);
     const s = parsed.step;
     fromMessages.push({
-      ts: parsed.tsIso ?? message.createdAt ?? "",
+      ts: parsed.tsIso ?? message2.createdAt ?? "",
       recovered: true,
       category: s.category,
       label: s.label,
@@ -11783,7 +12913,7 @@ function textContent(content) {
   return content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
 }
 function routingQueryForTurn(messages) {
-  const turns = messages.filter((message) => message.role === "user").map((message) => textContent(message.content).trim()).filter(Boolean).slice(-ROUTING_USER_TURNS);
+  const turns = messages.filter((message2) => message2.role === "user").map((message2) => textContent(message2.content).trim()).filter(Boolean).slice(-ROUTING_USER_TURNS);
   return turns.join("\n").slice(-MAX_ROUTING_QUERY_CHARS);
 }
 function turnOptimizationDirective() {
@@ -13020,8 +14150,8 @@ function dispatchToolPort(run) {
     try {
       out = await runTool(call2.name, withObservedModel(chatId, call2.name, args));
     } catch (e) {
-      const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-      out = { ok: false, error: message };
+      const message2 = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+      out = { ok: false, error: message2 };
       const repeat = failureAdvisoryFor(run, call2.name, args, out, iter);
       if (!isReadTool) writeLedger.record(call2.name, args, { ok: false, unscoped: isUnscopedMutation(call2.name, args) });
       run.pendingRun = { out, toolStart, isReadTool, threw: true };
@@ -14722,8 +15852,8 @@ function readAdvisoryThreadState(metadata) {
   };
 }
 function advisoryThreadHistoryAdmitted(messages, boundary = "aiContext") {
-  for (const message of messages) {
-    const state = readAdvisoryThreadState(message.metadata);
+  for (const message2 of messages) {
+    const state = readAdvisoryThreadState(message2.metadata);
     if (!state) continue;
     return advisoryThreadAdmitted(state, boundary);
   }
@@ -15710,9 +16840,9 @@ function priorResearchDigest(history) {
   const seen = /* @__PURE__ */ new Set();
   let size = HEADER.length;
   for (let i = history.length - 1; i >= 0 && entries.length < MAX_ENTRIES; i -= 1) {
-    const message = history[i];
-    if (!isStepMessage(message)) continue;
-    const parsed = parseStepMessage(message.metadata);
+    const message2 = history[i];
+    if (!isStepMessage(message2)) continue;
+    const parsed = parseStepMessage(message2.metadata);
     if (!parsed || parsed.step.category !== "tool") continue;
     const { label, args, result, isError } = parsed.step;
     if (args == null && result == null) continue;
@@ -15734,17 +16864,17 @@ function ratedTurnTool(messages, messageId) {
   const index = messages.findIndex((m) => m.id === messageId);
   if (index < 0) return null;
   for (let i = index - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (!isStepMessage(message)) return null;
-    const parsed = parseStepMessage(message.metadata ?? null);
+    const message2 = messages[i];
+    if (!isStepMessage(message2)) return null;
+    const parsed = parseStepMessage(message2.metadata ?? null);
     if (parsed?.step.category === "tool") return parsed.step.label || null;
   }
   return null;
 }
 function ratedTurnContext(messages, messageId) {
-  const message = messages.find((m) => m.id === messageId);
+  const message2 = messages.find((m) => m.id === messageId);
   return {
-    model: message && parseMessageProvenance(message)?.model || "",
+    model: message2 && parseMessageProvenance(message2)?.model || "",
     toolName: ratedTurnTool(messages, messageId)
   };
 }
@@ -16678,6 +17808,9 @@ function displayModelName(model, identity, opts) {
 
 // src/modelChoice.ts
 var PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
+function routingModeForSelection(selection) {
+  return selection.mode === "byo_pool" ? "byo_pool" : void 0;
+}
 var DEFAULT_MODEL_CHOICE_LABELS = {
   categoryAuto: "Auto",
   categoryByo: "BYO",
@@ -17778,11 +18911,15 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS,
+  DEFAULT_MODEL_FALLBACK_TEMPLATE,
   DEFAULT_MODEL_IDENTITY,
   DEFAULT_PERSONA,
   DEFAULT_TOOL_FAILURE_STREAK,
   DEFAULT_TOOL_LIMIT,
   EMPTY_GATEWAY_MODEL_OPTIONS,
+  ENGINE_WORKER_FATAL,
+  ENGINE_WORKER_IDLE_MS,
+  ENGINE_WORKER_INVALIDATE,
   FAILURE_HARD_AT,
   FAILURE_NUDGE_AT,
   FILE_DELIVERY_RULE,
@@ -17790,6 +18927,11 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   HAND_OFF_TOOL,
   HAND_OFF_TOOL_SPEC,
   HISTORY_TOKEN_BUDGET,
+  INFERENCE_MODES,
+  LOCAL_ENGINE_FAILURE_CODES,
+  LOCAL_PICKER_GROUPS,
+  LOCAL_SKIP_CONFIDENCE,
+  LOCAL_SKIP_EXPLORE,
   LOCAL_WORKSPACE_TOOLS,
   MAX_STOP_HOOK_ROUNDS,
   MAX_TOOL_RESULT_CHARS,
@@ -17798,7 +18940,11 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   NEW_CHAT_MODE,
   NOT_SIGNED_IN,
   NOT_STARTED_TASK_STATUSES,
+  NO_LOCAL_MODEL,
+  NO_SPECIFIC_MODEL,
   ON_DEVICE_ANSWER_THRESHOLD,
+  PAGE_ENGINE_REPLY_TYPES,
+  PAGE_ENGINE_REQUEST_TYPES,
   PERSONA_MODALITY_IDS,
   PMO_FOCUS_PARAM,
   PREVIEW_REVIEW_TOOL,
@@ -17893,18 +19039,23 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   consolidationMetadata,
   contextWindowOf,
   countReconciledMemories,
+  createBfiWorkerEngine,
   createBrainRestPersistence,
   createBrowserEngineProber,
   createComposingActivity,
+  createEngineWorker,
   createHandoffFit,
   createHostModelStream,
   createLocalBrainPersistence,
   createLocalFirstStream,
   createLocalStream,
+  createModelFallbackChannel,
+  createPageEngineClient,
   createPageEngineSet,
   createPayloadBudget,
   declinesReview,
   declinesShipping,
+  defaultInferenceMode,
   deferredLocalModelStore,
   deriveChatTitle,
   describeLiveStep,
@@ -17974,10 +19125,14 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   isEffort,
   isEvermindModel,
   isFailedToolResult,
+  isFallbackFailure,
+  isInferenceMode,
   isLocalWorkspaceTool,
   isMalformedToolCall,
   isManagerRole,
   isMutationTool,
+  isPageEngineReply,
+  isPageEngineRequest,
   isReadOnlyShellCall,
   isRepoPublishTool,
   isRouterTool,
@@ -17990,6 +19145,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   isUnscopedMutationTool,
   isUsageSurface,
   isUserConfiguredModelRef,
+  isWasmTrap,
   lastConsolidationIndex,
   lastServedModel,
   leftChangeUnreviewed,
@@ -18003,6 +19159,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   localFallbackTrace,
   localFirstApplies,
   localFirstWorkload,
+  localPickerView,
   localStorageConfirmationPersistence,
   localToolsIn,
   localTransport,
@@ -18012,6 +19169,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   modalityPersonaChoice,
   modelCategoryLabel,
   modelFailoversInTrace,
+  modelFallbackText,
   modelInUse,
   modelScorecard,
   modelTurnLog,
@@ -18040,6 +19198,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   personaModel,
   personaOverlay,
   personaSystemPrompt,
+  personalitySetpoints,
   placeholderAdvisory,
   placeholdersWritten,
   planMessage,
@@ -18078,6 +19237,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   revealsModelId,
   revisitAdvisory,
   routerToolSpecs,
+  routingModeForSelection,
   routingQueryForTurn,
   runAbortSignal,
   runBrainLoop,
@@ -18088,6 +19248,8 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   selectToolsForTurn,
   selfReviewShipDirective,
   serializeAskUser,
+  serveEngineWorker,
+  servePageEngines,
   setLastResolvedModel,
   setMcpToolStatus,
   shippedToBaseBranch,
@@ -18122,6 +19284,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   transcriptSeedFrom,
   transportRetryTrace,
   trimToolResult,
+  turnAffectBlock,
   turnInterruption,
   turnOptimizationDirective,
   unreviewedChangeNudge,
@@ -18142,6 +19305,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   useRunSnapshot,
   useToolConfirmationGate,
   utf8ByteLength,
+  webStorageLocalSuccessStore,
   withAdvisory,
   withDirectedMetadata,
   withObservedModel,

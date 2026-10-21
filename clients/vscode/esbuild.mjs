@@ -7,6 +7,7 @@ import * as esbuild from "esbuild";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { computeBuildId } from "./buildId.mjs";
 import { sourcePackageAliasMap, sourcePackageRoots } from "../../scripts/sourcePackages.mjs";
 
@@ -148,10 +149,31 @@ const options = integration
       logLevel: "info",
     };
 
+/**
+ * The extension host's `bfi` worker (`src/hostBfi/worker.ts`, PRD 34 §3.1): a SECOND
+ * entry beside `extension.js`, started by `worker_threads`, plus the vendored wasm it
+ * loads by path (`out/bfi_web_bg.wasm`; `out/` ships in the .vsix). Same options as the
+ * extension bundle — it is Node, CJS, and needs the same `import.meta.url` shim.
+ */
+const hostWorker = harness || integration ? null : { ...options, entryPoints: ["src/hostBfi/worker.ts"], outfile: "out/bfiHostWorker.js" };
+function copyBfiWasm() {
+  const wasm = createRequire(import.meta.url).resolve("@seanhogg/bfi-web/bfi_web_bg.wasm");
+  fs.mkdirSync("out", { recursive: true });
+  fs.copyFileSync(wasm, path.join("out", "bfi_web_bg.wasm"));
+}
+
 if (watch) {
   const ctx = await esbuild.context(options);
   await ctx.watch();
+  if (hostWorker) {
+    await (await esbuild.context(hostWorker)).watch();
+    copyBfiWasm();
+  }
   console.log("[esbuild] watching…");
 } else {
   await esbuild.build(options);
+  if (hostWorker) {
+    await esbuild.build(hostWorker);
+    copyBfiWasm();
+  }
 }

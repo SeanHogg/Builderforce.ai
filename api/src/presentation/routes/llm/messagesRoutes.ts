@@ -41,6 +41,7 @@ import { proxyForCompletion, tenantCanSelfFund } from '../../../application/llm/
 import { isPaidOverflowExhausted, logFailovers, logProviderAuthAlerts, logUsage } from '../../../application/llm/gatewayUsageLog';
 import { enforceTokenCaps, resolveUsageSurface, resolveWorkHints } from './gatewayGuards';
 import { requireTenantAccess, respondToAccessError, type TenantAccess } from './access';
+import { requestFundingOrder } from './requestFundingOrder';
 
 export function mountMessagesRoutes(router: Hono<HonoEnv>): void {
   // OpenAI Responses-compatible surface backed by the tenant's own ChatGPT/Codex
@@ -244,7 +245,16 @@ export function mountMessagesRoutes(router: Hono<HonoEnv>): void {
     // Same routing path as /v1/chat/completions: a translated Anthropic request that
     // carried `tools` is an agentic turn and floors onto the paid coder backstop
     // rather than the lite general backstop. (BYO-Claude turns were served above.)
-    const service = proxyForCompletion(c.env, access, openaiBody as unknown as ChatCompletionRequest, { disablePaidOverflow, tenantVendorKeys, hostEgress: await buildHostEgressForVendors(c.env, access.tenantId, byoVendors) });
+    // Free tier first, connected accounts first, or inferred — the SAME funding order the
+    // chat endpoint resolves (`requestFundingOrder`). Without it this surface ignored the
+    // person's `cloudOrder` and ran every connected tenant BYO-strict.
+    const requestedRouting = (parsed as { routingMode?: unknown }).routingMode;
+    const fundingOrder = await requestFundingOrder(c, access, {
+      ...(requestedRouting === 'auto' || requestedRouting === 'byo_pool' ? { requested: requestedRouting } : {}),
+      byoConfigured: byoVendors.size > 0,
+      source: 'presentation/routes/llm/messagesRoutes.ts',
+    });
+    const service = proxyForCompletion(c.env, access, openaiBody as unknown as ChatCompletionRequest, { disablePaidOverflow, tenantVendorKeys, hostEgress: await buildHostEgressForVendors(c.env, access.tenantId, byoVendors), ...fundingOrder });
     const result = await service.complete(openaiBody as unknown as ChatCompletionRequest, undefined, traceId);
     logFailovers(c.env, c.executionCtx, result.failovers, { tenantId: access.tenantId, requestId: traceId });
     logProviderAuthAlerts(c.env, c.executionCtx, access.tenantId, result.failovers);

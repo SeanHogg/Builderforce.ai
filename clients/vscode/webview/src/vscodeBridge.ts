@@ -15,7 +15,8 @@
  *                    'changes.open'{changePath,changeStatus}, 'changes.review'
  *   host → webview : 'init'{…}, 'token'{token}, 'response'{id,ok,result|error}, 'intent'{intent},
  *                    'editorContext'{editorContext}, 'pendingChanges'{pendingChanges}, 'refresh',
- *                    'run.sync' / 'run.settled' / 'run.failed' / 'run.tool' / 'run.tools' (see onHostMessage)
+ *                    'run.sync' / 'run.settled' / 'run.failed' / 'run.tool' / 'run.tools' /
+ *                    'run.modelFallback'{chatId,from} (see onHostMessage)
  *
  * This file is the PUBLIC ENTRY — every caller imports from `./vscodeBridge`. The parts:
  *   bridgeTypes.ts     — `InitData`, `BrainIntent`, `LabelBundle` (pure types)

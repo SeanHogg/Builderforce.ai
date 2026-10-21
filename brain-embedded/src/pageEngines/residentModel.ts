@@ -1,11 +1,13 @@
 /**
- * ONE engine instance with ONE model resident — the shape both catalog engines (WebLLM,
- * `bfi`) have: the engine is created on first use, a call naming a different model swaps
- * it in, and every load is chained so two never race (a second load would otherwise start
- * while the first is still streaming weights into the same device).
+ * ONE engine instance with ONE model resident — WebLLM's shape: the engine is created on
+ * first use, a call naming a different model swaps it in, and every load is chained so
+ * two never race (a second load would otherwise start while the first is still streaming
+ * weights into the same device).
  *
- * How a model is loaded is the engine's own (`reload(id)` for WebLLM; unload + stream the
- * cached file for `bfi`); this only owns the instance, the resident id and the chain.
+ * How a model is loaded is the engine's own (`reload(id)` for WebLLM); this only owns the
+ * instance, the resident id and the chain. `bfi` has an engine PER BACKEND with one model
+ * resident across them, so it serializes loads, evictions AND streams through one queue
+ * of its own (`engineQueue.ts`).
  */
 
 export interface ResidentModel<E> {

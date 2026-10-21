@@ -1,5 +1,6 @@
 export * from './types';
 export * from './registry';
+export { capableTwinsOf } from './modelTwins';
 export { openRouterModule } from './openrouter';
 export { anthropicModule }  from './anthropic';
 export { cerebrasModule }   from './cerebras';

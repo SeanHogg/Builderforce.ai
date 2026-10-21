@@ -5,6 +5,9 @@ import { getBaseUrl, getWebBaseUrl } from "./gateway";
 import { localBrainApplication } from "./localFirstStore";
 import { platformPolicy } from "./platformPolicy";
 import { assertPlatformSocketAllowed, platformPolicyFrame, platformSocketUrl } from "./platformCallGate";
+import { isInferenceMode } from "@builderforce/local-first";
+import { setInferenceMode } from "./inferenceModeSetting";
+import { DOWNLOAD_LOCAL_MODEL_COMMAND } from "./noLocalModelPrompt";
 
 /**
  * The host half of the webview bridge — the three things EVERY bundled-React
@@ -212,6 +215,17 @@ export async function handleSharedHostMessage(
     }
     case "signin":
       void vscode.commands.executeCommand("builderforce.signIn");
+      return true;
+    // The `/` menu's mode control and the first-run question: applied at once (the turn
+    // the question held runs in it), persisted, and re-pushed to every panel via `init`.
+    case "setInferenceMode": {
+      const mode = (msg as WebviewInbound & { mode?: unknown }).mode;
+      if (isInferenceMode(mode)) void setInferenceMode(mode);
+      return true;
+    }
+    // "Download a local model" from the chat banner: the model picker's on-device list.
+    case "downloadLocalModel":
+      void vscode.commands.executeCommand(DOWNLOAD_LOCAL_MODEL_COMMAND);
       return true;
     case "api.failure":
       logLine(apiFailureLine(msg as ApiFailureMessage));

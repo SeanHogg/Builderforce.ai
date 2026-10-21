@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { activeModelKey, buildModelItems, filterModelItems, modelInUse, withReadyPageModels, DEFAULT_MODEL_CHOICE_LABELS as L, type ChatModelOptions } from './modelChoice';
-import { LOCAL_MODEL_CATALOG } from '@builderforce/local-inference';
+import { LOCAL_MODEL_CATALOG, localCatalogModel } from '@builderforce/local-inference';
 import type { LocalModelRow } from './pageEngines/modelStore';
 import { BUILDERFORCE_PRODUCT_NAME, type ModelIdentityContext } from './modelIdentity';
 
@@ -137,7 +137,8 @@ describe('buildModelItems · routed row', () => {
 });
 
 describe('on-device page models', () => {
-  const [bonsai, , , qwen] = LOCAL_MODEL_CATALOG;
+  const [bonsai] = LOCAL_MODEL_CATALOG;
+  const qwen = localCatalogModel('local/webllm/Qwen3-1.7B-q4f16_1-MLC');
   const rows: LocalModelRow[] = [
     { ...bonsai!, state: 'ready' },
     { ...qwen!, state: 'absent' },

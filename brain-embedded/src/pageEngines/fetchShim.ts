@@ -46,6 +46,14 @@ function refusalFor(engine: PageEngine, e: unknown): Response {
   return refusal(500, `${engine.runtime}_engine_failed`, errorMessage(e));
 }
 
+/** A failure after the stream opened, as its in-band frame. An engine's code rides in
+ *  the message too — a streamer keeps only the message, and the chat's error banner
+ *  localizes by the code (`chatErrorAction`). */
+function inBandError(e: unknown): { message: string; code?: string } {
+  if (!(e instanceof PageEngineError)) return { message: errorMessage(e) };
+  return { code: e.code, message: e.message.includes(e.code) ? e.message : `${e.code}: ${e.message}` };
+}
+
 const encoder = new TextEncoder();
 const sseFrame = (data: unknown): Uint8Array => encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
 const DONE_FRAME = encoder.encode('data: [DONE]\n\n');
@@ -77,7 +85,7 @@ function sseBody(
           controller.error(e);
           return;
         }
-        controller.enqueue(sseFrame({ error: { message: errorMessage(e) } }));
+        controller.enqueue(sseFrame({ error: inBandError(e) }));
         controller.close();
       }
     },

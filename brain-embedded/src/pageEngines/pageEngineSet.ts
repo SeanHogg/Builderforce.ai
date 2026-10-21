@@ -2,19 +2,20 @@
  * Every page engine a host carries, composed ONCE — so the web app, Rovr and the editor's
  * webview do not each wire the same three engines, cache and store.
  *
- * What a host supplies is only what differs between hosts: the vendored `bfi-web` loader
- * (`bfiWebLoader(wasmUrl)` from the `/bfi` entry — every host passes one; absent = the
- * `bfi` engine is not offered, and its catalog rows read
- * `engine_unavailable`) and an optional WebLLM worker. What it gets back is the probe and
+ * What a host supplies is only what differs between hosts: how to start its `bfi` Web
+ * Worker (`bfiWorker` — a worker module calling `runBfiWorker()`, plus the wasm URLs;
+ * every host passes one, and absent = the `bfi` engine is not offered and its catalog
+ * rows read `engine_unavailable`) and an optional WebLLM worker. `bfi` never runs on the
+ * page's own thread (`bfiWorkerEngine.ts`). What it gets back is the probe and
  * fetch the local-first stream takes, and the model store the picker drives.
  */
 
 import type { LocalRuntimeProbe } from '@builderforce/local-inference';
 import { promptApiEngine } from '../browserEngine';
 import type { LocalFetch } from '../localFirstTransport';
-import { createBfiEngine, type BfiModule } from './bfiEngine';
+import { createBfiWorkerEngine, type BfiWorkerEngineOptions } from './bfiWorkerEngine';
 import { pageEnginesFetch, probePageEngines } from './fetchShim';
-import { createHfModelStore } from './hfModelStore';
+import { createHfModelStore, type HfModelStore } from './hfModelStore';
 import { createLocalModelStore, type LocalModelStore } from './modelStore';
 import type { PageEngine } from './types';
 import { webGpuSupport } from './webgpu';
@@ -31,15 +32,20 @@ export interface PageEngineSet {
 }
 
 export interface PageEngineSetOptions {
-  /** The vendored `bfi-web` module loader; absent = no `bfi` engine on this host. */
-  loadBfi?: () => Promise<BfiModule>;
+  /** `bfi` in a dedicated Web Worker (every host: the web app, Rovr, the editor's
+   *  webview — which also passes `backends: ['webgpu']`, its host's CPU `peerSupport` and
+   *  `relayStore`). Absent = no `bfi` engine here. */
+  bfiWorker?: Omit<BfiWorkerEngineOptions, 'store'>;
+  /** Where `hf-file` models are stored; default this origin's Cache Storage. The editor
+   *  webview passes the extension host's file cache, so a model is downloaded once. */
+  hf?: HfModelStore;
   /** A module worker running WebLLM's `WebWorkerMLCEngineHandler`; absent = in-page. */
   webllmWorkerUrl?: string | URL;
 }
 
 export function createPageEngineSet(options: PageEngineSetOptions = {}): PageEngineSet {
-  const hf = createHfModelStore();
-  const bfi = options.loadBfi ? createBfiEngine({ loadBfi: options.loadBfi, store: hf }) : undefined;
+  const hf = options.hf ?? createHfModelStore();
+  const bfi = options.bfiWorker ? createBfiWorkerEngine({ ...options.bfiWorker, store: hf }) : undefined;
   const webllm = createWebLlmEngine(options.webllmWorkerUrl ? { workerUrl: options.webllmWorkerUrl } : {});
   const engines: PageEngine[] = [...(bfi ? [bfi] : []), webllm, promptApiEngine];
   const store = createLocalModelStore({

@@ -44,6 +44,7 @@ import { recordAvoidedCall } from './savingsLedger';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { strictWhenConnected } from './fundingOrder';
 
 /** The routing-ORDER options a tenant's credentials contribute to any proxy. */
 export type ByoRoutingOptions = Pick<
@@ -163,7 +164,8 @@ export async function tenantProxyForPlan(
     ...(creds.xaiOAuthToken ? { xaiOAuthToken: creds.xaiOAuthToken } : {}),
     ...(hasVendorKeys(creds.vendorKeys) ? { tenantVendorKeys: creds.vendorKeys } : {}),
     ...byoRoutingOptions(creds),
-    ...(creds.configuredProviders.length ? { byoRequired: true } : {}),
+    // No person's preference here (agent/tenant call): a configured provider is strict.
+    ...strictWhenConnected(creds.configuredProviders.length > 0),
     // Carry configured-vs-resolved state into the proxy so a fail-closed BYO 503 can
     // NAME the providers (and why each was unusable) rather than claiming none exists —
     // the same fields that drive `x-builderforce-byo-unresolved`, so the header and the

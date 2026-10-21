@@ -1,12 +1,22 @@
 {
   "repository": "SeanHogg/builderforce-inference",
   "crate": "crates/bfi-web",
-  "commit": "585061d2e575380db842aa9affecc4e2905e4cb6",
-  "version": "2026.10.6",
+  "commit": "e88f94a4ad9047a6377c5d6a503280b5297db0e2",
+  "version": "2026.10.10",
   "build": "wasm-pack build crates/bfi-web --target web --release --out-dir pkg",
+  "threadsBuild": "node crates/bfi-web/build-threads.mjs",
+  "threadsCommit": "e88f94a4ad9047a6377c5d6a503280b5297db0e2",
   "files": {
-    "bfi_web.js": "ee9e2c38c78a26277e02baba7a3a2876851f1786ebfe5826b82621b44aa1cbb5",
-    "bfi_web.d.ts": "d23739d0b7d301dd7d2f1e3b62ff7ce55e6dab4176213ff6091f971e0decf0d2",
-    "bfi_web_bg.wasm": "ca51249b90ff41c06e49692204fb7c14e4d42147f0077754ad08881395b4fefa"
+    "bfi_web.js": "e66c815d36de3edb65e23be61733c1567d9f8d9830425e91be2735c6e42f0508",
+    "bfi_web.d.ts": "df6a19ef9d2a7d3dc67daedc3755deaad5aac449c52a14b68c63fa731f6255e6",
+    "bfi_web_bg.wasm": "cc6200f3210d37462ae881081238fa8943f78152fccaa50141d911ebdf7934cd",
+    "threads/bfi_web.d.ts": "52b634d7e1a0afb2b5a30e37c9cb0ac94d1f8c72ffcdefbfe612cf41d3912ecd",
+    "threads/bfi_web.js": "7643da45980e1f5a1686bf5fd75a080c4db0c4b9424c970fec2e990b793d42f0",
+    "threads/bfi_web_bg.wasm": "2d20dde0dbea4e6f7ce78cf3d379acd93d62fd0b7386bf5d593be95ed6428209",
+    "threads/snippets/wasm-bindgen-rayon-38edf6e439f6d70d/src/workerHelpers.js": "ea9b3e16cef0500d99d5aed177f72e7dc84762e78fa915c628f7aa460cd26ea0",
+    "threads/snippets/wasm-bindgen-rayon-38edf6e439f6d70d/src/workerHelpers.no-bundler.js": "91c38c810291e74887036a1eb1a0d599c3af5cb2cb28b62e396e27e661e21228"
+  },
+  "generated": {
+    "packages/local-inference/src/bfiLimits.generated.ts": "812ca418fc706169470eb40107091fef32c892e9ec0f3060fef212e933420980"
   }
 }

@@ -16,8 +16,12 @@
  * ONE fetch shim answers their chat routes. The registry ranks them after every installed
  * runtime, and the plan hands a tool turn only to a model that can take one.
  *
- * Signed out with nothing local that fits, the stream throws `not_signed_in` — the panel
- * answers it with "sign in, or start a local model".
+ * The person's INFERENCE MODE (`policy.ts`) rides on every call: Local only never builds
+ * the gateway stream, and the gateway leg exists only while the platform policy allows
+ * gateway inference. With nothing local that fits, the stream throws `not_signed_in`
+ * signed out ("sign in, or start a local model") and `no_local_model` on Local only or
+ * signed in with no cloud route ("switch to Hybrid, or download a local model") — a
+ * signed-in person is never asked to sign in.
  */
 import {
   createHostModelStream,
@@ -27,7 +31,10 @@ import {
   type BrainStreamFn,
   type BrainTransport,
   type HostLocalPin,
+  type LocalSuccessStore,
+  type ModelFallbackEvent,
 } from '@seanhogg/builderforce-brain-embedded';
+import type { InferenceMode } from '@builderforce/local-first';
 import type {
   LocalEndpoints,
   LocalFirstAttemptRecord,
@@ -63,6 +70,15 @@ export interface RovrRouteDeps {
    */
   accountPin?(ref: string): Promise<HostLocalPin | null>;
   onAttempt?(record: LocalFirstAttemptRecord): void;
+  /** The person's inference mode, read per call; absent = Hybrid. */
+  mode?(): InferenceMode;
+  /** Whether the platform policy lets this turn reach the gateway; absent = yes. */
+  gatewayAllowed?(): boolean;
+  /** Hybrid's pick failed (transport-class) and the turn was answered with Auto — the
+   *  panel shows the one-line notice. */
+  onFallback?(event: ModelFallbackEvent): void;
+  /** Where Hybrid's local-success predictor is kept (the panel's extension storage). */
+  localSuccess?: LocalSuccessStore;
 }
 
 /**
@@ -85,12 +101,15 @@ export function createRovrStream(deps: RovrRouteDeps): BrainStreamFn {
   const accountPins = new Map<string, HostLocalPin>();
   return createHostModelStream({
     // The picker's pick: a page model (`local/bfi/…`, `local/webllm/…`) runs in this panel
-    // through the engines' fetch — a pin is a pin, no probe of anything else; a gateway
-    // model goes to the gateway hard-pinned. A page pin this panel cannot serve (no page
-    // engines) routes automatically.
+    // through the engines' fetch; a gateway model goes to the gateway. What the pick means
+    // is the mode's (the shared step): Hybrid tries it first and falls back to Auto,
+    // Specific hard-pins it with no fallback. A page pin this panel cannot serve (no page
+    // engines) routes automatically under Hybrid.
     pinned: async () => {
       const ref = deps.pinned ? await deps.pinned() : null;
-      const account = ref && deps.accountPin ? await deps.accountPin(ref) : null;
+      // A connected account's endpoint is hosted — it leaves the device — so Local only
+      // never resolves (or fetches a token for) one; the shared step sets the pin aside.
+      const account = ref && deps.accountPin && deps.mode?.() !== 'local-only' ? await deps.accountPin(ref) : null;
       if (ref && account) accountPins.set(ref, account);
       return ref;
     },
@@ -104,9 +123,14 @@ export function createRovrStream(deps: RovrRouteDeps): BrainStreamFn {
     },
     cloud: async () => {
       const key = await deps.key();
-      return key ? gatewayStream(deps.baseUrl, key, deps.fetch) : null;
+      if (!key || (deps.gatewayAllowed && !deps.gatewayAllowed())) return null;
+      return gatewayStream(deps.baseUrl, key, deps.fetch);
     },
+    signedIn: async () => (await deps.key()) !== null,
+    ...(deps.mode ? { mode: deps.mode } : {}),
     fetch: deps.page?.fetch ?? deps.fetch,
     ...(deps.onAttempt ? { onAttempt: deps.onAttempt } : {}),
+    ...(deps.onFallback ? { onFallback: deps.onFallback } : {}),
+    ...(deps.localSuccess ? { localSuccess: deps.localSuccess } : {}),
   });
 }

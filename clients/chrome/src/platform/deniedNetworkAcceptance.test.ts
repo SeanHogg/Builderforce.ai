@@ -225,11 +225,16 @@ describe('G27 Rovr packaged network denial', () => {
     const pendingBeforeGrant = await restarted.read((tx) => tx.pending(DESTINATION));
     expect(pendingBeforeGrant.map((event) => event.eventId)).toEqual(eventIds);
 
+    // Sync opens only on the person's acts: signing in (Hybrid — sync still off) and then
+    // granting sync. Local only (signed out) would hold it off whatever was granted.
+    await fileKeyValue(policyFile).set('session.key', 'bfk_live_example');
+    await deniedPolicy.refresh();
+    expect(deniedPolicy.allows('synchronize')).toBe(false);
     await deniedPolicy.setCapability('synchronize', true);
     const granted = createRovrPlatformPolicy(fileKeyValue(policyFile));
     await granted.ready();
     expect(granted.allows('synchronize')).toBe(true);
-    expect(granted.allows('gateway-inference')).toBe(false);
+    expect(granted.inferenceMode()).toMatchObject({ mode: 'hybrid', chosen: false });
     expect(JSON.parse(readFileSync(policyFile, 'utf8'))).toMatchObject({ 'policy.synchronize': true });
 
     const pushedBatches: Array<{ events: ReadonlyArray<{ eventId: string }> }> = [];

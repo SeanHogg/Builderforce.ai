@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { webviewInferenceMode } from './inferenceModeOption';
 import {
   DEFAULT_PERSONA,
   type BrainPersonaAgent,
@@ -26,6 +27,7 @@ import {
   QueuedTurnChips,
   RecipientPicker,
   composerModel,
+  useComposerMenuRequest,
   type ComposerOptions,
   type QueuedItem,
   type RecipientPickerProps,
@@ -51,6 +53,8 @@ export interface QueuedTurn {
 }
 
 export interface VsCodeComposerProps {
+  /** This composer's id — the key the chat's error banner opens ITS `/` menu with. */
+  composerId: string;
   init: InitData;
   apiReq: AuthedFetch;
   conv: UseBrainConversation;
@@ -95,7 +99,7 @@ export interface VsCodeComposerProps {
 
 export function VsCodeComposer(props: VsCodeComposerProps) {
   const {
-    init, apiReq, conv, value, onChange, onSubmit, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
+    composerId, init, apiReq, conv, value, onChange, onSubmit, onStop, onPickStarter, focusToken, chatId, projectId, ensureChatId,
     ticketAdapter, ticketRefresh, onTicketLinked, participants, mentionable, hasLiveChildren,
     recipient, chooseRecipient, persona, onPersona, personaAgents, queue, onRemoveQueued,
     mode, memory, shaping, models, servedModel, autoMode, session, suggest = true,
@@ -155,6 +159,8 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
   }, [conv]);
 
   const { composerModels, modelSelection, chooseModel, catalogLoaded } = models;
+  // "Pick a model" (the error banner beside this composer) opens this menu's Model tab.
+  const openMenu = useComposerMenuRequest(composerId);
   const options: ComposerOptions = {
     mode,
     // No project memory behind this chat ⇒ the switch gates nothing; it shows, and says so.
@@ -162,6 +168,8 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
     effort: { value: shaping.effort, onChange: shaping.setEffort },
     thinking: { value: shaping.thinking, onChange: shaping.setThinking },
     model: composerModel({ catalog: composerModels, selection: modelSelection, onChange: chooseModel, effective: servedModel ?? init.model, localStore: webviewLocalModelStore, identityPending: !catalogLoaded }),
+    inferenceMode: webviewInferenceMode(init),
+    ...(openMenu ? { openMenu } : {}),
     autoMode,
     session,
   };

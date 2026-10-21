@@ -47,15 +47,18 @@ export function useBoardLiveRuns(boardId: string | undefined, enabled: boolean, 
   const [executions, setExecutions] = useState<TaskRun[]>([]);
   const [dispatches, setDispatches] = useState<BoardDispatch[]>([]);
 
-  // Keep the freshest board id in a ref so the poll loop (set up once per
-  // enable/board change) reads the current value without re-subscribing.
-  const boardRef = useRef(boardId);
-  boardRef.current = boardId;
-
   // One version-gated reader per project scope (a project switch starts a fresh one).
   const reader = useMemo(() => createLiveRunsReader({ taskRuns: projectId ?? 'all' }), [projectId]);
+
+  // Keep the freshest board id and reader in refs so the poll loop (set up once per
+  // enable/board change) reads the current values without re-subscribing. Synced in
+  // an effect (never during render), declared BEFORE the poll so it runs first.
+  const boardRef = useRef(boardId);
   const readerRef = useRef(reader);
-  readerRef.current = reader;
+  useEffect(() => {
+    boardRef.current = boardId;
+    readerRef.current = reader;
+  });
 
   // Whether anything is still active — picks the backstop cadence.
   const [active, setActive] = useState(false);
@@ -85,12 +88,21 @@ export function useBoardLiveRuns(boardId: string | undefined, enabled: boolean, 
 
   const refresh = useCallback(() => { void load(); }, [load]);
 
+  // Disabling clears the board's run state. Adjusted during render on the
+  // enabled -> disabled transition (React's "reset state when a prop changes"
+  // pattern) rather than in an effect, so the stale runs never paint first.
+  const [wasEnabled, setWasEnabled] = useState(enabled);
+  if (wasEnabled !== enabled) {
+    setWasEnabled(enabled);
+    if (!enabled) {
+      setExecutions([]);
+      setDispatches([]);
+      setActive(false);
+    }
+  }
+  // ...and forgets the last load, so re-enabling never skips its first tick.
   useEffect(() => {
-    if (enabled) return;
-    setExecutions([]);
-    setDispatches([]);
-    setActive(false);
-    lastLoad.current = { at: 0, boardId: undefined };
+    if (!enabled) lastLoad.current = { at: 0, boardId: undefined };
   }, [enabled]);
 
   const intervalMs = active ? FAST_MS : IDLE_MS;

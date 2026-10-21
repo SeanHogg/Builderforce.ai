@@ -465,6 +465,50 @@
     "message": "此处暂不支持该引擎。",
     "description": "Why a model cannot run: engine missing"
   },
+  "lmReasonVram": {
+    "message": "所需的 GPU 显存超出此设备的容量。",
+    "description": "Why a model cannot run: not enough GPU memory"
+  },
+  "lmReasonMemory": {
+    "message": "无 GPU 运行时所需的内存超出此设备的容量。",
+    "description": "Why a model cannot run: not enough device memory to run without a GPU"
+  },
+  "lmBackendGpu": {
+    "message": "GPU",
+    "description": "Badge: this model runs on the GPU (WebGPU) here"
+  },
+  "lmBackendCpu": {
+    "message": "CPU",
+    "description": "Badge: this model runs on the CPU here (no GPU)"
+  },
+  "lmGroupTools": {
+    "message": "智能体与工具",
+    "description": "Model picker section: models that can use tools (agents)"
+  },
+  "lmGroupChat": {
+    "message": "聊天",
+    "description": "Model picker section: chat models"
+  },
+  "lmGroupCoding": {
+    "message": "编程",
+    "description": "Model picker section: coding models"
+  },
+  "lmGroupReasoning": {
+    "message": "推理",
+    "description": "Model picker section: reasoning models"
+  },
+  "lmGroupMath": {
+    "message": "数学",
+    "description": "Model picker section: math models"
+  },
+  "lmAllModels": {
+    "message": "全部模型（{count}）",
+    "description": "Expander over every other model; {count} is how many"
+  },
+  "lmFewerModels": {
+    "message": "收起模型",
+    "description": "Collapses the All models expander"
+  },
   "cmpAdd": {
     "message": "添加",
     "description": "Composer + menu: trigger"
@@ -740,6 +784,86 @@
   "optStatus": {
     "message": "状态",
     "description": "Tab: account / usage / Evermind"
+  },
+  "optInferenceMode": {
+    "message": "模型运行方式",
+    "description": "Section: where models run"
+  },
+  "optInferenceModeHybrid": {
+    "message": "混合",
+    "description": "Inference mode: hybrid"
+  },
+  "optInferenceModeHybridHint": {
+    "message": "优先使用本设备，需要时再使用 Builderforce 云",
+    "description": "Hybrid: what it does"
+  },
+  "optInferenceModeLocalOnly": {
+    "message": "仅本地",
+    "description": "Inference mode: local only"
+  },
+  "optInferenceModeLocalOnlyHint": {
+    "message": "仅使用本设备上的模型——不会向云端发送任何内容",
+    "description": "Local only: what it does"
+  },
+  "optInferenceModeSpecific": {
+    "message": "指定模型",
+    "description": "Inference mode: a specific model"
+  },
+  "optInferenceModeSpecificHint": {
+    "message": "始终运行你选择的模型——云端、已连接的账户或某个本地模型",
+    "description": "Specific model: what it does"
+  },
+  "optInferenceModeRecommended": {
+    "message": "推荐",
+    "description": "Tag on the recommended mode"
+  },
+  "optInferenceModeAskTitle": {
+    "message": "Builderforce 应如何运行模型？",
+    "description": "First-run question before the first turn"
+  },
+  "optInferenceModeAskBody": {
+    "message": "你可以随时在 / 菜单的“模型”中更改此设置。",
+    "description": "First-run question: it can be changed later"
+  },
+  "noLocalModel": {
+    "message": "本设备上没有可回答的模型。请切换到混合模式，或下载本地模型。",
+    "description": "Nothing on this device can answer and the cloud is not an option"
+  },
+  "switchToHybrid": {
+    "message": "切换到混合模式",
+    "description": "Button: move onto Hybrid"
+  },
+  "downloadLocalModel": {
+    "message": "下载本地模型",
+    "description": "Button: open where local models are downloaded"
+  },
+  "noSpecificModel": {
+    "message": "已开启“指定模型”，但尚未选择模型。请选择一个模型，或切换到混合模式。",
+    "description": "Banner: Specific model is on and no model is picked"
+  },
+  "pickModel": {
+    "message": "选择模型",
+    "description": "Button: open the composer's Model tab to pick a model"
+  },
+  "engineCrashed": {
+    "message": "设备上的模型已崩溃。请重新发送以重启它。",
+    "description": "Chat error: the on-device model crashed (it restarts on the next send)"
+  },
+  "engineDetached": {
+    "message": "设备上的模型在完成前停止了。请重新发送以重试。",
+    "description": "Chat error: the on-device model stopped mid-answer"
+  },
+  "modelKeepsCrashing": {
+    "message": "此模型在本设备上反复崩溃。请将其移除，或换用其他模型。",
+    "description": "Chat error: this model crashed repeatedly on this device and is refused for now"
+  },
+  "manageLocalModels": {
+    "message": "管理设备上的模型",
+    "description": "Button: open Settings, where on-device models are managed and removed"
+  },
+  "modelFallback": {
+    "message": "您选择的 $1 失败；已改用自动模式回答。",
+    "description": "Notice: the picked model failed (Hybrid) and the turn was answered with Auto; $1 = the picked model"
   },
   "stLoading": {
     "message": "正在加载账户…",

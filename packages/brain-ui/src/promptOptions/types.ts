@@ -15,6 +15,7 @@
  */
 import { DEFAULT_MODEL_CHOICE_LABELS, type ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
 import { DEFAULT_LOCAL_MODEL_LABELS, type LocalModelLabels } from '../localModels/labels';
+import { DEFAULT_INFERENCE_MODE_LABELS, type InferenceModeLabels } from '../inferenceMode/labels';
 import { stringsFrom, type LabelLookup } from '../labelCatalog';
 
 export type {
@@ -30,7 +31,7 @@ export type {
  * (the web app via next-intl, the VS Code webview via the host's `vscode.l10n`
  * bundle); the English defaults below keep the component usable unmapped.
  */
-export interface PromptOptionsLabels extends ModelChoiceLabels, LocalModelLabels {
+export interface PromptOptionsLabels extends ModelChoiceLabels, LocalModelLabels, InferenceModeLabels {
   /** Trigger title/aria — the menu as a whole. */
   options: string;
   /** Section heading for the conversation-mode block (Chat | Work). */
@@ -78,6 +79,7 @@ export interface PromptOptionsLabels extends ModelChoiceLabels, LocalModelLabels
 export const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels = {
   ...DEFAULT_MODEL_CHOICE_LABELS,
   ...DEFAULT_LOCAL_MODEL_LABELS,
+  ...DEFAULT_INFERENCE_MODE_LABELS,
   options: 'Options',
   mode: 'Mode',
   memory: 'Memory',

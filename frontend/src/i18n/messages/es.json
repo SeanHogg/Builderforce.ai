@@ -325,6 +325,17 @@
     "localReasonF16": "Requiere sombreadores WebGPU de 16 bits, que esta GPU no ofrece.",
     "localReasonBuffer": "Requiere búferes de GPU más grandes de los que permite este dispositivo.",
     "localReasonEngine": "Este motor aún no está disponible aquí.",
+    "localReasonVram": "Requiere más memoria de GPU de la que tiene este dispositivo.",
+    "localReasonMemory": "Sin GPU, necesita más memoria de la que tiene este dispositivo.",
+    "localBackendGpu": "GPU",
+    "localBackendCpu": "CPU",
+    "localGroupTools": "Agentes y herramientas",
+    "localGroupChat": "Chat",
+    "localGroupCoding": "Programación",
+    "localGroupReasoning": "Razonamiento",
+    "localGroupMath": "Matemáticas",
+    "localAllModels": "Todos los modelos ({count})",
+    "localFewerModels": "Menos modelos",
     "assessmentClosedBook": "Hay una evaluación a libro cerrado en curso: el asistente no está disponible hasta que termine.",
     "assessmentAssisted": "Evaluación asistida: cada turno del asistente queda registrado en el historial de integridad.",
     "ticketTagTitle": "Etiquetar un tique",
@@ -335,7 +346,17 @@
     "placeholder": "Mensaje…",
     "send": "Enviar",
     "queueSend": "Poner en cola — se envía cuando termine la ejecución actual",
-    "uploading": "Subiendo…"
+    "uploading": "Subiendo…",
+    "inferenceMode": "Ejecutar modelos",
+    "inferenceModeHybrid": "Híbrido",
+    "inferenceModeHybridHint": "Primero este dispositivo y, cuando haga falta, la nube de BuilderForce",
+    "inferenceModeLocalOnly": "Solo local",
+    "inferenceModeLocalOnlyHint": "Solo modelos de este dispositivo: no se envía nada a la nube",
+    "inferenceModeSpecific": "Modelo concreto",
+    "inferenceModeSpecificHint": "Siempre se ejecuta el modelo que elijas: en la nube, de tus cuentas conectadas o un modelo local",
+    "inferenceModeRecommended": "Recomendado",
+    "inferenceModeAskTitle": "¿Cómo debe ejecutar BuilderForce los modelos?",
+    "inferenceModeAskBody": "Puedes cambiarlo cuando quieras en el menú /, en Modelo."
   },
   "repoContext": {
     "title": "Añadir contexto del repositorio",
@@ -629,6 +650,27 @@
         "payments": "Pagos y cobros"
       },
       "paymentsIntro": "Conecta una cuenta bancaria, PayPal, Stripe o Wise. El dinero que se te debe se envía a tu destino predeterminado."
+    },
+    "cloudFunding": {
+      "title": "Qué nube ejecuta primero tus turnos",
+      "intro": "Cuando un turno no está fijado a un modelo y no puede ejecutarse en este dispositivo, BuilderForce lo envía a la nube en este orden.",
+      "option": {
+        "inferred": {
+          "label": "Automático",
+          "description": "Primero tus cuentas conectadas si tienes alguna; si no, el nivel gratuito."
+        },
+        "free_first": {
+          "label": "Primero el nivel gratuito",
+          "description": "Primero los modelos gratuitos y la cuota gratuita de Cloudflare; después tus cuentas conectadas."
+        },
+        "byo_first": {
+          "label": "Primero mis cuentas conectadas",
+          "description": "Primero se usan tus propias cuentas de proveedor; si no pueden, el turno recurre al nivel gratuito y a los modelos de tu plan."
+        }
+      },
+      "freeTwinNote": "Cuando un modelo gratuito y uno de pago son el mismo, se prueba primero el gratuito: en cualquier orden salvo el grupo estricto de solo cuentas conectadas, y nunca en lugar de los modelos que usas desde tus propias cuentas conectadas.",
+      "saveFailed": "No se pudo guardar tu elección. Inténtalo de nuevo.",
+      "loadFailed": "No se pudo cargar tu elección actual. Recarga la página para intentarlo de nuevo."
     }
   },
   "nav": {
@@ -2732,7 +2774,31 @@
       "model": "Modelo",
       "byActionType": "Por tipo de trabajo",
       "workType": "Tipo de trabajo",
-      "noRuns": "Aún no hay ejecuciones puntuadas en este período."
+      "noRuns": "Aún no hay ejecuciones puntuadas en este período.",
+      "anomaly": {
+        "title": "Anomalías de ejecución",
+        "summary": "{flagged} de {scored} ejecuciones puntuadas quedaron muy fuera del rango de las anteriores",
+        "summarySampled": "≈ {flagged} de {scored} ejecuciones puntuadas quedaron muy fuera del rango de las anteriores (muestra de las ejecuciones más recientes)",
+        "notEnough": "Aún no hay historial suficiente: una ejecución se evalúa cuando la preceden {minRuns} ejecuciones.",
+        "none": "Ningún valor atípico entre {scored} ejecuciones puntuadas.",
+        "colIssue": "Problema",
+        "colRuns": "Ejecuciones",
+        "colShare": "Proporción",
+        "colExcess": "Coste excedente",
+        "colWorst": "Peores ejecuciones",
+        "metric": {
+          "cost": "Coste muy por encima de lo normal",
+          "duration": "Tardó mucho más de lo normal",
+          "toolFailures": "Fallos de herramientas inusuales"
+        },
+        "hint": {
+          "cost": "Revisa el modelo que fijaron estas ejecuciones y cuántos pasos dieron.",
+          "duration": "Busca bloqueos, reintentos o esperas largas en la traza de la ejecución.",
+          "toolFailures": "Abre la traza de herramientas: la causa habitual es una herramienta rota o un permiso que falta."
+        },
+        "example": "{value} frente a ≈ {typical} · {model}",
+        "exampleTask": "tarea #{id}"
+      }
     },
     "dora": {
       "title": "Métricas DORA",
@@ -12078,7 +12144,17 @@
       "review": "Revisar cambios",
       "open": "Abrir {path}",
       "more": "+ {count} más"
-    }
+    },
+    "noLocalModel": "Ningún modelo de este dispositivo puede responder. Cambia a Híbrido o descarga un modelo local.",
+    "modelFallback": "Tu elección {model} falló; se respondió con Auto.",
+    "switchToHybrid": "Cambiar a Híbrido",
+    "downloadLocalModel": "Descargar un modelo local",
+    "noSpecificModel": "«Modelo concreto» está activado, pero no hay ningún modelo elegido. Elige uno o cambia a Híbrido.",
+    "pickModel": "Elegir un modelo",
+    "engineCrashed": "El modelo de este dispositivo se ha bloqueado. Vuelve a enviar para reiniciarlo.",
+    "engineDetached": "El modelo de este dispositivo se detuvo antes de terminar. Vuelve a enviar para reintentarlo.",
+    "modelKeepsCrashing": "Este modelo se bloquea una y otra vez en este dispositivo. Quítalo o prueba otro modelo.",
+    "manageLocalModels": "Gestionar modelos del dispositivo"
   },
   "chatMessage": {
     "copy": "Copiar",
@@ -16821,6 +16897,7 @@
     "emptyBody": "Describe una idea, una función o un problema: Brain te ayudará a desarrollarlo. No necesitas cuenta para empezar.",
     "placeholder": "Pregúntale lo que sea a Brain…",
     "loading": "Iniciando Brain…",
+    "aiUnavailable": "Híbrido no pudo iniciarse ahora. Inténtalo de nuevo en un momento o cambia a Solo local para responder en este dispositivo.",
     "send": "Enviar",
     "remaining": "{count, plural, =0 {No quedan mensajes gratis} one {# mensaje gratis restante} other {# mensajes gratis restantes}}",
     "tagline": "Prueba Brain gratis, sin registrarte",

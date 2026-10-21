@@ -6,7 +6,8 @@ import { BUILD_ID, BUILT_AT } from "./buildInfo";
 import { posixShellReport } from "./posixShell";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import type { BrainRunHost, WebviewRunStart } from "./brainRunHost";
-import { getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
+import { getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY, getSessionTabMode, type SessionTabMode } from "./gateway";
+import { fetchPersonalityBlock, turnLimbicBlock } from "./personalityLimbic";
 import { authorizeLocalEndpoint } from "./localEndpointAuth";
 import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { confirmChatDelete } from "./chatDeletion";
@@ -17,7 +18,10 @@ import { setSelectedModel, setSelectedModelPool } from "./modelState";
 import { resolveModelRoute } from "./modelRouting";
 import { resolveLocalChatEndpoint } from "./localModels";
 import { hostPageEngines } from "./pageEngineBridge";
+import type { ModelFileServer } from "./hostBfi/modelFileServer";
 import { localModelLabels } from "./localModelLabels";
+import { inferenceModeLabels } from "./inferenceModeLabels";
+import { inferenceModeInit } from "./inferenceModeSetting";
 import { chatTicketsLabels } from "./chatTicketsLabels";
 import { chatSurfaceLabels } from "./chatSurfaceLabels";
 import { modelChoiceLabels } from "./modelChoiceLabels";
@@ -127,6 +131,8 @@ export interface BuilderForcePanelHooks {
    * than keeping a second copy; the change returns to every panel through `init`.
    */
   onSelectProject?: (projectId: number | null) => void;
+  /** The host's model file cache, which the webview's `bfi` model store is a view of. */
+  modelFiles?: ModelFileServer;
 }
 
 /**
@@ -572,6 +578,8 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
         // host's pinned and local-first routes for as long as it is up.
         this.detachPageEngines?.();
         this.detachPageEngines = hostPageEngines.attach({ post: (m) => this.post(m) });
+        // A reloaded webview abandoned any model load it was streaming.
+        BuilderForcePanel.hooks.modelFiles?.release(this);
         await this.sendInit();
         if (this.pendingIntent) {
           this.sendIntent(this.pendingIntent);
@@ -731,17 +739,16 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
         this.respond(msg.id, true, picked);
         break;
       }
-      // Per-turn LIMBIC parity: the webview can't call the gateway's affective
-      // endpoint with the user's personality directly, so it round-trips the turn's
-      // text here. We fetch the fresh affect + PERSONALITY block (signed-in user's
-      // id → their tone) so the next turn runs under the SAME limbic layer as the
-      // native participant + cloud/on-prem agents. Best-effort: '' on any failure so
-      // the run proceeds unaugmented.
+      // Per-turn LIMBIC parity: the webview round-trips the turn's text here, where the
+      // session's personality (signed-in user's id → their tone and setpoints) is cached.
+      // The affect is appraised on this machine — no request per turn — so the next turn
+      // runs under the SAME limbic layer as the native participant + cloud/on-prem agents.
+      // Best-effort: '' on any failure so the run proceeds unaugmented.
       case "fetchLimbic": {
         let block = "";
         try {
           const userId = (await getCurrentUserId(this.ctx.secrets)) ?? undefined;
-          block = await fetchLimbicBlock(
+          block = await turnLimbicBlock(
             this.ctx.secrets,
             typeof msg.text === "string" ? msg.text : "",
             userId ? { userId } : undefined,
@@ -770,7 +777,23 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       case "pageEngine.chunk":
       case "pageEngine.end":
       case "pageEngine.error":
+      case "pageEngine.alive":
         hostPageEngines.receive(msg);
+        break;
+      // The webview's bfi model store, backed by the host's file cache (hostBfi/modelFileServer.ts).
+      case "modelFile.status":
+      case "modelFile.open":
+      case "modelFile.read":
+      case "modelFile.remove":
+      case "modelFile.download":
+      case "modelFile.support":
+      case "modelFile.close":
+      case "modelFile.cancel":
+        BuilderForcePanel.hooks.modelFiles?.handle(msg, {
+          respond: (id, ok, result, error) => this.respond(id, ok, result, error),
+          post: (m) => this.post(m),
+          owner: this,
+        });
         break;
     }
   }
@@ -1013,7 +1036,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       }
     }
     // The signed-in user's PERSONALITY-only directive block — fetched once per
-    // session (cached in the gateway helper) and injected into the webview's
+    // session (cached in `personalityLimbic.ts`) and injected into the webview's
     // ambient system channel, so the Brain chat's tone reflects the user. The
     // webview can't bundle the shared compiler (--no-dependencies), so the host
     // fetches the compiled block from the gateway. '' when the user has no
@@ -1048,6 +1071,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       // present. Now it travels with every copied diagnostics report.
       posixShell: posixShellReport(),
       platformPolicy: platformPolicy().snapshot(),
+      ...inferenceModeInit(),
       token,
       // Manual pick > active project's Evermind pin > configured default. Sending the
       // `project_evermind:<id>` pin lets the gateway serve the project's CURRENT learned
@@ -1094,7 +1118,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
       personalityBlock,
       // BOTH label sets: one panel renders the chat surface AND the board, so both
       // have to be present whichever surface it opens at.
-      labels: { ...authLabels(), ...buildLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...chatTicketsLabels(), ...chatSurfaceLabels(), ...workStatusLabels() },
+      labels: { ...authLabels(), ...buildLabels(), ...canvasLabels(), ...subagentLabels(), ...localModelLabels(), ...inferenceModeLabels(), ...chatTicketsLabels(), ...chatSurfaceLabels(), ...workStatusLabels() },
       // The editor's display language: how the shared components format numbers,
       // money and relative times (the strings themselves are already translated above).
       locale: vscode.env.language,
@@ -1114,6 +1138,7 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
     this.detachRuns = undefined;
     this.detachPageEngines?.();
     this.detachPageEngines = undefined;
+    BuilderForcePanel.hooks.modelFiles?.release(this);
     if (BuilderForcePanel.reused === this) BuilderForcePanel.reused = undefined;
     if (this.ownChatId != null && BuilderForcePanel.byChat.get(this.ownChatId) === this) {
       BuilderForcePanel.byChat.delete(this.ownChatId);

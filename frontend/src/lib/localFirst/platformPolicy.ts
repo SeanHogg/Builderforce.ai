@@ -3,82 +3,68 @@
  * BuilderForce right now?", per capability, for the local-first architecture
  * (docs/design/vsix-offline-first-architecture-review.md, G01/G02/G12).
  *
- * The policy object itself is the shared `@builderforce/local-first` one with its
- * API-denied default: every capability starts REFUSED and only an explicit grant
- * opens it. What this module adds is the web composition:
+ * The policy object is the shared `@builderforce/local-first` one. What a person
+ * sees is ONE choice, the INFERENCE MODE (Local only · Hybrid · Specific), and the
+ * capabilities are derived from it by the shared `resolveInferencePolicy`:
  *
- *   - BOOTSTRAP. There is NO composition-time grant. A profile with no stored
- *     choice boots to the shared `LOCAL_FIRST_POLICY` — every capability
- *     REFUSED — and the only way one opens is the person's explicit choice:
- *     `grantWebPlatformCapabilities`, and for sync of durable local work the
- *     `connectAccountSync` action. Internet connectivity and a sign-in grant
- *     NOTHING; a stored explicit choice is the only thing that survives a
- *     reload. (There used to be a `WEB_CONNECTED_GRANTS` constant the boot path
- *     fell back to — authenticate, connected features, gateway inference, model
- *     downloads — which made the default permissive for exactly the people who
- *     had never chosen, so G01 was false on the web however `bootWebPlatformPolicy`
- *     was called. It is gone rather than merely unused: the architecture says the
- *     default is denied, and a named grant list beside the default is an
- *     invitation to reinstate it.)
- *   - ENFORCEMENT. `webPlatformFetch` is the guarded transport for platform
- *     requests the local-first surface issues (sync push/pull). A denied
- *     capability is BLOCKED BEFORE the request is attempted — the underlying
- *     fetch is never called — and every decision, attempted or blocked, is
- *     recorded for the request account.
- *   - DISCONNECT. `disconnectWebPlatform` revokes every grant and aborts the
- *     requests this module has in flight. Queued local work is untouched: it is
- *     in the durable store, not here.
+ *   - BOOTSTRAP. Signed out and never asked = Local only = the denied default:
+ *     every capability REFUSED, nothing leaves for the platform. Signed in and
+ *     never asked = Hybrid (gateway inference + connected features; sync per its
+ *     own grant), so an existing person's chat, heartbeat and insights keep
+ *     working; the composer asks them once, on their first turn, and stores the
+ *     answer. Connectivity alone grants nothing. The signed-in fact is THE web's
+ *     one definition, `webSignedIn` (a stored web or tenant session — a guest token
+ *     is NOT one: an anonymous visitor stays Local only until they choose Hybrid),
+ *     read live;
+ *     the auth provider calls `refreshWebPlatformPolicy` when its session changes.
+ *     This module never reads a token's contents and never sends one.
+ *   - ADVANCED OVERRIDES. Per-capability choices stored under
+ *     `bf_platform_policy_v1` (written by the retired per-capability switches) still
+ *     apply over the mode — except what Local only promises (no gateway, connected
+ *     features, sync or direct providers).
+ *   - ENFORCEMENT. Every request the web app makes to the BuilderForce API passes
+ *     `assertWebApiRequest` — `apiClient`'s one transport calls it before the
+ *     network — and the local-first sync surface uses `webPlatformFetch`. A denied
+ *     capability is BLOCKED BEFORE the request is attempted — the underlying fetch
+ *     is never called — and every block is recorded for the request account. What
+ *     a path MEANS is the shared route table (`classifyPlatformRequest`), so one URL
+ *     is one capability on every host.
  *
- * Grants are the person's explicit choices, persisted (`bf_platform_policy_v1`)
- * and mirrored across tabs through the storage event, so Disconnect in one tab
- * is Disconnect in all of them. Identity is never inferred from whichever
- * session happens to be stored — this module reads no tokens.
+ * The mode, the overrides and the session are mirrored across tabs through the
+ * storage event, so a choice in one tab is the choice in all of them.
  */
 
 import {
-  LOCAL_FIRST_POLICY,
   PlatformAccessDenied,
   createGuardedPlatformFetch,
   createPlatformPolicy,
-  platformSendPermission,
+  type InferenceMode,
   type MutablePlatformPolicy,
   type PlatformCapability,
   type PlatformPolicySnapshot,
   type PlatformRequestRecord,
 } from '@builderforce/local-first';
-import { API_ORIGIN } from '../apiOrigin';
-import { readLocal, removeLocal, writeLocal } from '../storage';
+import { isSessionStorageKey } from '../auth';
 import { bootWebHostStore, type BootWebHostOptions, type WebHostBoot } from './bootWebHost';
+import {
+  WEB_INFERENCE_MODE_STORAGE_KEY,
+  notifyWebInferenceMode,
+  webSignedIn,
+  writeStoredInferenceMode,
+} from './webInferenceMode';
+import {
+  GRANTABLE,
+  WEB_PLATFORM_POLICY_STORAGE_KEY,
+  webApiRequestRefusal,
+  webInferencePolicyFor,
+  webPlatformCapabilityFor,
+  webSocketRefusal,
+} from './webRequestGate';
 
-export const WEB_PLATFORM_POLICY_STORAGE_KEY = 'bf_platform_policy_v1';
-
-/**
- * THE DENIED DEFAULT (G01) — every capability starts REFUSED, on every surface.
- *
- * A profile that has never been asked boots to this: no grant is applied at
- * composition time, and none of the states that are not a person's decision —
- * a live network, a signed-in session, a reachable API — opens one. Only
- * `grantWebPlatformCapabilities` does, and its result is what a reload restores.
- *
- * This was the web's `WEB_CONNECTED_GRANTS` — authenticate, connected features,
- * gateway inference, model downloads — which the boot path applied as a fallback
- * when storage held no choice. It is deleted rather than left unused: a named
- * permissive list sitting beside the denied default reads, months later, as
- * "these are the ones we decided are fine", which is exactly the decision G01
- * says nobody has made.
- */
-const DENIED_DEFAULT: Readonly<Partial<PlatformPolicySnapshot>> = Object.freeze(LOCAL_FIRST_POLICY);
-
-const GRANTABLE: readonly (keyof PlatformPolicySnapshot)[] = [
-  'synchronize',
-  'gatewayInference',
-  'connectedFeatures',
-  'authenticate',
-  'modelDownloads',
-  'directProviders',
-  'externalMcp',
-  'gitRemotes',
-];
+export { webSignedIn };
+// THE gate's decisions live in the light `./webRequestGate` (socket openers import it
+// synchronously); this module enforces, records and boots them.
+export { WEB_PLATFORM_POLICY_STORAGE_KEY, webApiRequestRefusal, webInferencePolicyFor, webPlatformCapabilityFor, webSocketRefusal };
 
 const policy: MutablePlatformPolicy = createPlatformPolicy();
 
@@ -109,60 +95,9 @@ export function resetWebPlatformRequestAccount(): void {
   requests.length = 0;
 }
 
-/**
- * The origins classified as platform traffic: the platform API, plus the origin
- * that served this bundle.
- *
- * The page origin IS here, deliberately. It is not a claim that the host running
- * the app is the platform — it is that a same-origin request is this app talking
- * to its own backend. The web app's sync endpoints are served from the page
- * origin, so a relative `/api/sync/push` resolves there and must still pass the
- * gate. Dropping it would not merely mis-label those calls: `webPlatformFetch`
- * reads a null classification as "not the platform's business" and skips the
- * check entirely, so every relative sync POST would sail past a denied policy
- * — the exact bypass the review calls out at L252 ("a direct `fetch` that is not
- * a platform-origin request … is unaffected").
- *
- * This is why the page origin is scoped to membership rather than used as a
- * blanket claim: a genuinely third-party host (a CDN, a direct model provider) is
- * still a different origin and still classifies as null.
- */
-function platformOrigins(): Set<string> {
-  const origins = new Set<string>([API_ORIGIN]);
-  if (typeof window !== 'undefined') origins.add(window.location.origin);
-  return origins;
-}
-
-/**
- * The capability a request to the platform exercises, or null for a request that
- * is not the platform's (a CDN, a direct provider, a model registry — those carry
- * their own declared policies and are not judged here). Mirrors the VSIX host's
- * classifier so one URL means the same capability in every modality.
- */
-export function webPlatformCapabilityFor(input: string | URL, init?: RequestInit): PlatformCapability | null {
-  let url: URL;
-  try {
-    url = new URL(typeof input === 'string' ? input : input.toString(), typeof window === 'undefined' ? API_ORIGIN : window.location.origin);
-  } catch {
-    return null;
-  }
-  if (!platformOrigins().has(url.origin)) return null;
-  if (url.pathname.includes('/api/auth/') || url.pathname.endsWith('/token')) return 'authenticate';
-  if (url.pathname.includes('/chat/completions')) return 'gateway-inference';
-  const method = (init?.method ?? 'GET').toUpperCase();
-  return method === 'GET' || method === 'HEAD' ? 'connected-feature' : 'synchronize';
-}
-
-const inFlight = new Set<AbortController>();
-
 const guarded = createGuardedPlatformFetch({
   policy,
-  fetch: (input, init) => {
-    const controller = new AbortController();
-    inFlight.add(controller);
-    return globalThis.fetch(input, { ...init, signal: init?.signal ?? controller.signal })
-      .finally(() => inFlight.delete(controller));
-  },
+  fetch: (input, init) => globalThis.fetch(input, init),
   onRequest: recordRequest,
 });
 
@@ -180,56 +115,46 @@ export function webPlatformFetch(
 }
 
 // ---------------------------------------------------------------------------
-// Explicit grants — the only way a capability opens
+// The ONE gate for the web app's API transport
 // ---------------------------------------------------------------------------
 
-function readStoredGrants(): Partial<PlatformPolicySnapshot> | null {
-  const raw = readLocal(WEB_PLATFORM_POLICY_STORAGE_KEY);
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as Partial<PlatformPolicySnapshot>;
-    const grants: Partial<PlatformPolicySnapshot> = {};
-    for (const key of GRANTABLE) {
-      if (typeof parsed[key] === 'boolean') grants[key] = parsed[key];
-    }
-    return grants;
-  } catch {
-    return null;
-  }
+/**
+ * {@link webApiRequestRefusal}, enforced: throws {@link PlatformAccessDenied} — before
+ * the request exists — and records the block. `apiClient`'s transport calls this for
+ * every request; a caller that treats its feature as best-effort (memory recall, the
+ * personality block) already turns the throw into "nothing", so Local only shows no
+ * error for them.
+ */
+export function assertWebApiRequest(input: string, method: string, credentialed: boolean): void {
+  const refused = webApiRequestRefusal(input, method, credentialed);
+  if (!refused) return;
+  recordRequest({ capability: refused, url: input, outcome: 'blocked', at: new Date().toISOString() });
+  throw new PlatformAccessDenied(refused);
 }
 
-function persistGrants(): void {
-  const snapshot = policy.snapshot();
-  const grants: Partial<PlatformPolicySnapshot> = {};
-  for (const key of GRANTABLE) grants[key] = snapshot[key];
-  writeLocal(WEB_PLATFORM_POLICY_STORAGE_KEY, JSON.stringify(grants));
+// ---------------------------------------------------------------------------
+// The mode, the advanced overrides and the session — composed into the snapshot
+// ---------------------------------------------------------------------------
+
+/** Re-derive the snapshot from the stored mode, the overrides and the session. */
+function applyPolicy(): void {
+  policy.set(webInferencePolicyFor(webSignedIn()).snapshot);
+  notifyWebInferenceMode();
 }
 
-/** Apply an explicit choice and remember it. The only writer of the stored grants. */
-export function grantWebPlatformCapabilities(patch: Partial<PlatformPolicySnapshot>): void {
-  policy.set(patch);
-  persistGrants();
-}
-
-/** The explicit Connect action: this browser may synchronize local work with the account. */
-export function connectAccountSync(): void {
-  grantWebPlatformCapabilities({ synchronize: true });
+/** The person's explicit mode choice: stored, then applied. */
+export function setWebInferenceMode(mode: InferenceMode): void {
+  writeStoredInferenceMode(mode);
+  applyPolicy();
 }
 
 /**
- * Disconnect: every capability revoked, in-flight requests aborted, the stored
- * grants erased. Queued local work is untouched — it is in the durable store,
- * not here — and a later Connect resumes it.
+ * Re-apply the policy after the session changed in THIS tab (the auth provider's
+ * sign-in / sign-out). Other tabs follow through the storage event.
  */
-export function disconnectWebPlatform(): void {
-  for (const controller of [...inFlight]) controller.abort();
-  const denied = Object.fromEntries(GRANTABLE.map((key) => [key, false])) as Partial<PlatformPolicySnapshot>;
-  policy.set(denied);
-  removeLocal(WEB_PLATFORM_POLICY_STORAGE_KEY);
+export function refreshWebPlatformPolicy(): void {
+  applyPolicy();
 }
-
-/** The absolute send gate for sync transports and outboxes (G12). */
-export const webPlatformSendPermission = platformSendPermission(policy);
 
 // ---------------------------------------------------------------------------
 // Bootstrap — once per page, free of module-load side effects for SSR
@@ -238,29 +163,32 @@ export const webPlatformSendPermission = platformSendPermission(policy);
 let booted = false;
 
 /**
- * Set by `bootWebPlatformPolicy` only after the denied default (or the stored
- * choice) is applied. The root layout's head script holds platform-origin
- * `fetch` until this is true, so a request cannot leave before the policy runs.
- * The continuing gate for every transport is G02; this flag is the ordering.
+ * Set by `bootWebPlatformPolicy` only after the derived snapshot is applied. The
+ * root layout's head script holds platform-origin `fetch` until this is true, so
+ * a request cannot leave before the policy runs. The continuing gate for every
+ * transport is G02; this flag is the ordering.
  */
 export const WEB_PLATFORM_POLICY_BOOTED = '__bfPlatformPolicyBooted';
 
 /**
- * Boot the policy for this tab: restore the person's explicit choices, or — when
- * they have never been asked — leave every capability REFUSED. Signing in,
- * coming online and mounting this module all grant nothing; `connectAccountSync`
- * and `grantWebPlatformCapabilities` are the only ways a capability opens. Then
- * mirror cross-tab changes, so a Disconnect in one tab is a Disconnect in all.
- * The boot flag is set last, after the snapshot is in place.
+ * Boot the policy for this tab: derive the snapshot from the stored mode, the
+ * stored overrides and whether a session is present (signed out and never asked:
+ * every capability REFUSED). Then mirror cross-tab changes — the mode, the
+ * overrides, a sign-in/out elsewhere. The boot flag is set last,
+ * after the snapshot is in place.
  */
 export function bootWebPlatformPolicy(): void {
   if (booted || typeof window === 'undefined') return;
   booted = true;
-  const stored = readStoredGrants();
-  policy.set(stored ?? DENIED_DEFAULT);
+  applyPolicy();
   window.addEventListener('storage', (event) => {
-    if (event.key !== null && event.key !== WEB_PLATFORM_POLICY_STORAGE_KEY) return;
-    policy.set(readStoredGrants() ?? DENIED_DEFAULT);
+    // A guest token is not a session: minting one (the Hybrid opt-in) changes nothing
+    // the policy derives from — the stored mode does.
+    const relevant = event.key === null
+      || isSessionStorageKey(event.key)
+      || event.key === WEB_PLATFORM_POLICY_STORAGE_KEY
+      || event.key === WEB_INFERENCE_MODE_STORAGE_KEY;
+    if (relevant) applyPolicy();
   });
   (window as unknown as Record<string, boolean>)[WEB_PLATFORM_POLICY_BOOTED] = true;
 }

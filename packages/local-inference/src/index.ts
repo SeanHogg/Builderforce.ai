@@ -9,8 +9,9 @@
  *  - the runtime REGISTRY (Synapse/bfi, Ollama, FreeToken, the page engines — WebGPU
  *    `bfi`, WebLLM, the browser's built-in model — and Kimi Code) and the
  *    `local/<runtime>/<model>` ref grammar;
- *  - the page engines' model CATALOG and the device FIT check a picker runs before a
- *    download;
+ *  - the page engines' model CATALOG (WebLLM's rows generated from the library), the
+ *    device FIT check a picker runs before a download, and the PICKER layout (curated
+ *    rows by use, the rest behind "All models");
  *  - a never-throwing PROBE of what each runtime serves and can do;
  *  - the `CatalogView` binding that makes `@builderforce/model-router` price local at 0;
  *  - the PLAN (capable local model first, then the cloud) and the FAILOVER rule that
@@ -26,6 +27,7 @@ export {
   BFI_ENGINE_BASE_URL,
   BROWSER_ENGINE_BASE_URL,
   WEBLLM_ENGINE_BASE_URL,
+  HOST_FALLBACK_RUNTIMES,
   HTTP_LOCAL_RUNTIMES,
   LOCAL_RUNTIMES,
   LOCAL_RUNTIME_IDS,
@@ -62,14 +64,39 @@ export {
   type LocalRuntimeProber,
 } from './probe.js';
 export { localCatalogView } from './catalogView.js';
+export { BFI_CPU_LIMITS } from './bfiLimits.generated.js';
 export {
   LOCAL_MODEL_CATALOG,
+  LOCAL_MODEL_USES,
+  isLocalChatModel,
   localCatalogFor,
   localCatalogModel,
   type LocalCatalogModel,
   type LocalModelSource,
+  type LocalModelUse,
 } from './catalog.js';
-export { localModelFit, type LocalDeviceSupport, type LocalModelFit, type LocalModelUnfit } from './fit.js';
+export {
+  LOCAL_PICKER_GROUPS,
+  localPickerGroup,
+  localPickerView,
+  type LocalPickerGroup,
+  type LocalPickerOptions,
+  type LocalPickerRow,
+  type LocalPickerView,
+} from './catalogPicker.js';
+export {
+  VRAM_PER_MAX_BUFFER,
+  assumedDeviceMemoryBytes,
+  cpuMemoryCeiling,
+  localModelFit,
+  type LocalBackend,
+  type DeviceNavigatorLike,
+  type LocalCpuSupport,
+  type LocalDeviceSupport,
+  type LocalModelFit,
+  type LocalModelUnfit,
+  type LocalWebGpuSupport,
+} from './fit.js';
 export {
   localFirstPlan,
   localModelUnfitReason,

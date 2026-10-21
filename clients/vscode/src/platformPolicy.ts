@@ -1,11 +1,17 @@
 import * as vscode from "vscode";
 import {
+  classifyPlatformRequest,
   createGuardedPlatformFetch,
   createPlatformPolicy,
+  platformRequestMethod,
+  platformRequestUrl,
   platformSendPermission,
+  resolveInferencePolicy,
   type PlatformCapability,
+  type PlatformPolicySnapshot,
   type PlatformRequestRecord,
 } from "@builderforce/local-first";
+import { bindInferenceMode, inferenceModeState, onDidChangeInferenceMode } from "./inferenceModeSetting";
 
 const policy = createPlatformPolicy();
 const requests: PlatformRequestRecord[] = [];
@@ -39,23 +45,16 @@ function configuredOrigins(): Set<string> {
   return origins;
 }
 
-function requestUrl(input: string | URL | Request): string {
-  return typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-}
-
+/** The capability a request needs — the shared route table, for this editor's origins. */
 export function platformCapabilityFor(input: string | URL | Request, init?: RequestInit): PlatformCapability | null {
-  const raw = requestUrl(input);
   let url: URL;
   try {
-    url = new URL(raw);
+    url = new URL(platformRequestUrl(input));
   } catch {
     return null;
   }
   if (!configuredOrigins().has(url.origin)) return null;
-  if (url.pathname.includes("/api/auth/") || url.pathname.endsWith("/token")) return "authenticate";
-  if (url.pathname.includes("/chat/completions")) return "gateway-inference";
-  const method = (init?.method ?? (typeof Request !== "undefined" && input instanceof Request ? input.method : "GET")).toUpperCase();
-  return method === "GET" || method === "HEAD" ? "connected-feature" : "synchronize";
+  return classifyPlatformRequest(url.pathname, platformRequestMethod(input, init));
 }
 
 const guarded = createGuardedPlatformFetch({
@@ -81,17 +80,32 @@ export function assertPlatformCapability(capability: PlatformCapability): void {
 
 export const outboxSendPermission = platformSendPermission(policy);
 
-function refreshPolicy(): void {
+/** The advanced `builderforce.platform.*` overrides — the capabilities whose setting the
+ *  person EXPLICITLY set in their USER settings; an unset one follows the inference mode.
+ *  Each is `"scope": "application"` and is read from `globalValue` only: a cloned
+ *  repository's `.vscode/settings.json` must never open a capability (or undo Local only). */
+const OVERRIDABLE: readonly (keyof PlatformPolicySnapshot)[] = [
+  "synchronize", "gatewayInference", "connectedFeatures", "modelDownloads", "directProviders", "externalMcp", "gitRemotes",
+];
+
+function explicitOverrides(): Partial<PlatformPolicySnapshot> {
   const config = vscode.workspace.getConfiguration("builderforce");
-  policy.set({
-    synchronize: config.get<boolean>("platform.synchronize") === true,
-    gatewayInference: config.get<boolean>("platform.gatewayInference") === true,
-    connectedFeatures: config.get<boolean>("platform.connectedFeatures") === true,
-    modelDownloads: config.get<boolean>("platform.modelDownloads") === true,
-    directProviders: config.get<boolean>("platform.directProviders") === true,
-    externalMcp: config.get<boolean>("platform.externalMcp") === true,
-    gitRemotes: config.get<boolean>("platform.gitRemotes") === true,
-  });
+  const overrides: Partial<PlatformPolicySnapshot> = {};
+  for (const field of OVERRIDABLE) {
+    const seen = config.inspect?.<boolean>(`platform.${field}`);
+    const value = seen?.globalValue;
+    if (typeof value === "boolean") overrides[field] = value;
+  }
+  return overrides;
+}
+
+/** The mode-derived policy (`resolveInferencePolicy`), then the explicit overrides. The
+ *  scoped `authenticate` grant of a sign-in in flight is left as it stands. */
+function refreshPolicy(): void {
+  const { mode, chosen, signedIn } = inferenceModeState();
+  const { snapshot } = resolveInferencePolicy({ mode: chosen ? mode : null, signedIn, overrides: explicitOverrides() });
+  const { authenticate: _authenticate, ...derived } = snapshot;
+  policy.set(derived);
 }
 
 export async function withPlatformAuthentication<R>(work: () => Promise<R>): Promise<R> {
@@ -103,16 +117,42 @@ export async function withPlatformAuthentication<R>(work: () => Promise<R>): Pro
   }
 }
 
-export function bindPlatformPolicy(context: vscode.ExtensionContext): void {
-  refreshPolicy();
+let markResolved: () => void = () => undefined;
+const resolved = new Promise<void>((resolve) => {
+  markResolved = resolve;
+});
+
+/**
+ * Resolves once the policy reflects the person's real state — the first signed-in read
+ * has landed and the mode-derived snapshot is applied. Every platform call activation
+ * starts (the heartbeat, the assigned-work poll, the codebase scan) waits on it: before
+ * it, a signed-in person would read as signed out and be refused as Local only.
+ */
+export function platformPolicyResolved(): Promise<void> {
+  return resolved;
+}
+
+/**
+ * `secretKey`: the editor key's SecretStorage name — signed in decides the default mode.
+ * The fetch guard is installed at once (the snapshot starts refused, so nothing leaks
+ * meanwhile); the policy is resolved — {@link platformPolicyResolved} — only after the
+ * secret read, never computed from a not-yet-read signed-out default.
+ */
+export function bindPlatformPolicy(context: vscode.ExtensionContext, secretKey?: string): Promise<void> {
+  const signedInRead = bindInferenceMode(context, secretKey);
+  void signedInRead.then(() => {
+    refreshPolicy();
+    markResolved();
+  });
+  context.subscriptions.push(onDidChangeInferenceMode(refreshPolicy));
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
     if (event.affectsConfiguration("builderforce.platform")) refreshPolicy();
   }));
-  if (restoreFetch) return;
+  if (restoreFetch) return resolved;
   const guardedGlobal: typeof fetch = (input, init) => {
     const capability = platformCapabilityFor(input, init);
     if (!capability) return nativeFetch(input, init);
-    const url = requestUrl(input);
+    const url = platformRequestUrl(input);
     return guarded(url, { ...init, redirect: "error" }, capability);
   };
   globalThis.fetch = guardedGlobal;
@@ -121,4 +161,5 @@ export function bindPlatformPolicy(context: vscode.ExtensionContext): void {
     restoreFetch = undefined;
   };
   context.subscriptions.push({ dispose: () => restoreFetch?.() });
+  return resolved;
 }

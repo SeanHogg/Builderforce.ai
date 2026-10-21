@@ -68,10 +68,11 @@ export function bootRovrServiceWorker(options: BootRovrServiceWorkerOptions = {}
   const local = options.storage ?? chromeKeyValue('local');
 
   // The PLATFORM POLICY is composed here, before anything can reach the network (G01/G02):
-  // the worker reads the persisted `policy.*` capabilities at startup and refuses every
-  // platform request and every outbox send while they are denied. On a fresh install there
-  // are no keys, so the default is API-denied — connectivity and signing in grant nothing.
-  // `ready()` is the FIRST read of storage, awaited below before any fetch or flush runs.
+  // the worker derives it at startup from the person's inference mode, sign-in and any
+  // advanced `policy.*` override, and refuses every platform request and every outbox send
+  // it denies. A fresh, signed-out install is Local only — nothing leaves; signed in and
+  // unchosen it is Hybrid, where sync still waits for its own grant. `ready()` is the FIRST
+  // read of storage, awaited below before any fetch or flush runs.
   const platformPolicy = createRovrPlatformPolicy(local);
 
   // Every platform call the worker makes goes through this: a BuilderForce origin is

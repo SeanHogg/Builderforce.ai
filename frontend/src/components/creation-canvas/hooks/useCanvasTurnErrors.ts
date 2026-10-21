@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import type { useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
+import { chatErrorAction } from '@seanhogg/builderforce-brain-embedded';
 import { trackActivity } from '@/lib/activity/tracker';
 import { canvasSurface } from '@/lib/canvasHost';
 import { GuestAiUnavailableError } from '@/lib/canvasAiErrors';
@@ -19,6 +20,7 @@ export function useCanvasTurnErrors({ sessionId, t }: UseCanvasTurnErrorsDeps) {
    * tab and comes back to a working canvas is not still being sold an account.
    */
   const [guestLimit, setGuestLimit] = useState<GuestLimitRefusal | null>(null);
+  const tBrain = useTranslations('brain');
   /**
    * The one place a failed AI turn becomes words. Known failures the visitor can
    * act on are said in their own language; anything else keeps the underlying
@@ -27,6 +29,12 @@ export function useCanvasTurnErrors({ sessionId, t }: UseCanvasTurnErrorsDeps) {
    */
   const describeTurnError = useCallback((error: unknown, fallbackKey: 'noticeBrainFailed' | 'noticeAgentTestFailed' | 'noticeAgentGroupFailed') => {
     if (error instanceof GuestAiUnavailableError) return t('noticeGuestAiUnavailable');
+    // Nothing on this device can take the turn and the gateway is not an option (an
+    // anonymous board runs Local only by default): THE shared remedy sentence — switch to
+    // Hybrid or download a local model, both in the composer's `/` menu — never a raw code.
+    const verdict = chatErrorAction(error)?.kind;
+    if (verdict === 'no_local_model') return tBrain('noLocalModel');
+    if (verdict === 'no_specific_model') return tBrain('noSpecificModel');
     // A guest who has spent their free turns: the gateway sends `guest_limit_reached`
     // with the cap on the body (GUEST_CHAT_LIMITS), and its own English prose. Say it
     // in the visitor's language, and ARM the conversion CTA in the same step — the
@@ -44,6 +52,6 @@ export function useCanvasTurnErrors({ sessionId, t }: UseCanvasTurnErrorsDeps) {
       return t('noticeGuestLimitReached', { limit: refusal.limit ?? 0 });
     }
     return error instanceof Error && error.message ? error.message : t(fallbackKey);
-  }, [sessionId, t]);
+  }, [sessionId, t, tBrain]);
   return { guestLimit, setGuestLimit, describeTurnError };
 }

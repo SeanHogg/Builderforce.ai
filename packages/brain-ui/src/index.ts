@@ -55,6 +55,9 @@ export type { AskUserPayload, AskUserOption, AskUserLabels, PendingAskUser, AskU
 // upgrade / add a card). Shared so the VS Code webview and the web app's BrainPanel
 // can't drift on what a given entitlement failure lets the user do about it.
 export { ChatErrorBanner, DEFAULT_CHAT_ERROR_LABELS } from './ChatErrorBanner';
+// "Your pick X failed; answered with Auto" — every host's one-line Hybrid fallback notice.
+export { ModelFallbackNotice, useModelFallback, DEFAULT_MODEL_FALLBACK_LABELS } from './ModelFallbackNotice';
+export type { ModelFallbackNoticeProps, ModelFallbackNoticeLabels } from './ModelFallbackNotice';
 // The ONE human-in-the-loop approval bar (a run paused on `pendingConfirm`) — web panel,
 // VS Code chat + sub-agent strip and Rovr all render this, each with its own copy/slots.
 export { ToolConfirmBar, DEFAULT_TOOL_CONFIRM_LABELS, toolConfirmPreview } from './ToolConfirmBar';
@@ -125,7 +128,28 @@ export { LocalModelList } from './localModels/LocalModelList';
 export type { LocalModelListProps } from './localModels/LocalModelList';
 export { useLocalModels } from './localModels/useLocalModels';
 export type { LocalModelsState } from './localModels/useLocalModels';
-export { DEFAULT_LOCAL_MODEL_LABELS, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, localModelLabelsFrom } from './localModels/labels';
+export {
+  DEFAULT_LOCAL_MODEL_LABELS,
+  LOCAL_BACKEND_LABEL,
+  LOCAL_MODEL_LABEL_FIELDS,
+  LOCAL_UNSUPPORTED_LABEL,
+  localModelLabelsFrom,
+} from './localModels/labels';
+// Where models run — Hybrid · Local only · Specific — the Model tab's control and the
+// first-run question every host's composer asks through `ComposerOptions.inferenceMode`.
+export { InferenceModeControl } from './inferenceMode/InferenceModeControl';
+export type { InferenceModeControlProps, PromptOptionsInferenceMode } from './inferenceMode/InferenceModeControl';
+export type { PromptOptionsOpenRequest, PromptOptionsTab } from './promptOptions/PromptOptionsMenu';
+export { requestComposerMenu, useComposerMenuRequest } from './promptOptions/composerMenuRequest';
+export { InferenceModeFirstRun } from './inferenceMode/InferenceModeFirstRun';
+// THE first-run gate (Send and a host's own send alike) and THE radio-group keyboard model.
+export { useInferenceModeGate } from './inferenceMode/useInferenceModeGate';
+export type { InferenceModeGate } from './inferenceMode/useInferenceModeGate';
+export { useRovingRadioGroup, rovingRadioNextIndex } from './useRovingRadioGroup';
+export type { RovingRadioItemProps } from './useRovingRadioGroup';
+export type { InferenceModeFirstRunProps } from './inferenceMode/InferenceModeFirstRun';
+export { DEFAULT_INFERENCE_MODE_LABELS, INFERENCE_MODE_LABEL_FIELDS, inferenceModeCopy } from './inferenceMode/labels';
+export type { InferenceModeLabels } from './inferenceMode/labels';
 export type { LocalModelLabels, LocalModelLabelLookup } from './localModels/labels';
 export { formatDownloadSize, formatParams, formatContextTokens } from './localModels/localModelView';
 export type { PromptOptionsLabels } from './promptOptions/types';

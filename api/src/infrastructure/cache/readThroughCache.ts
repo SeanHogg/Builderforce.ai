@@ -215,8 +215,9 @@ export async function bumpTicketSearchVersion(env: Env, tenantId: number): Promi
 }
 
 /** Version key for tenant-scoped derivations of the run-outcome ledger
- *  (`run_model_outcomes`): the SFT/DPO training-dataset export and the
- *  fine-tune-vs-base variant-eval comparison. Both fold this token into their
+ *  (`run_model_outcomes`): the SFT/DPO training-dataset export, the
+ *  fine-tune-vs-base variant-eval comparison, and the run-anomalies lens
+ *  (`application/insights/runAnomalyInsights.ts`). Each folds this token into its
  *  cache keys; the run scorer bumps it (via {@link bumpOutcomesVersion}) whenever
  *  a new labeled outcome lands, so a fresh run re-materializes the derived views.
  *  The keyspace (per filter/window/variant) is unbounded, so a version token is

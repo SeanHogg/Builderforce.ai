@@ -180,6 +180,7 @@ export { recordCloudToolEvent };
 
 export { parseLlmChoice, recordCloudUsage } from './cloudAgent/cloudLlmTurn';
 import { imageRunTurn, recordCloudLlmTurn } from './cloudAgent/cloudLlmTurn';
+import { strictWhenConnected } from '../llm/fundingOrder';
 
 /**
  * Handle one container-op call from the long-lived Container executor. The container
@@ -925,7 +926,7 @@ async function runCloudToolLoop(
   // `codingOnly` keeps the failover cascade inside the curated coding pool, so an
   // exhausted free run escalates to the paid coding backstop instead of degrading
   // onto a non-coder (gemini-flash-lite) or a tool-unreliable vendor (Ollama).
-  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...byoRoutingOptions(loopCreds),...(loopCreds.configuredProviders.length ? { byoRequired: true } : {}) });
+  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...byoRoutingOptions(loopCreds), ...strictWhenConnected(loopCreds.configuredProviders.length > 0) });
 
   // Per-run model pin. A coding agent must drive the WHOLE task on one model, not
   // hop between pool models per turn (the gateway's round-robin cursor would

@@ -131,7 +131,7 @@ describe('Rovr model route — local first, failover to the gateway', () => {
     expect(seen).toEqual(['http://127.0.0.1:11434/v1/chat/completions']);
   });
 
-  it('sends a PINNED gateway model straight to the gateway, hard-pinned and tagged rovr', async () => {
+  it('sends a PINNED gateway model to the gateway first, tagged rovr — hard-pinned only under Specific', async () => {
     const bodies: Array<Record<string, unknown>> = [];
     const headers: Array<Record<string, string>> = [];
     const gateway = vi.fn(async (_url: string, init: RequestInit) => {
@@ -152,8 +152,42 @@ describe('Rovr model route — local first, failover to the gateway', () => {
     expect(result.text).toBe('from-cloud');
     expect(gateway).toHaveBeenCalledWith(`${BASE}/llm/v1/chat/completions`, expect.anything());
     expect(bodies[0]!.model).toBe('anthropic/claude-sonnet-4');
+    // Hybrid (no mode given): the pick is tried first, never hard-pinned.
+    expect(bodies[0]!.strict).toBeUndefined();
     expect(headers[0]!['x-builderforce-surface']).toBe('rovr');
     expect(probeHttp).not.toHaveBeenCalled();
+
+    const specific = createRovrStream({
+      baseUrl: BASE,
+      fetch: gateway,
+      prober: { probe: probeHttp, invalidate: () => undefined },
+      endpoints: async () => loopbackEndpoints(null),
+      key: async () => 'bfk_test',
+      pinned: async () => 'anthropic/claude-sonnet-4',
+      mode: () => 'specific',
+    });
+    await specific(hello);
+    expect(bodies[1]!.strict).toBe(true);
+  });
+
+  it('tells the panel (onFallback) when a Hybrid pick fails 503 and Auto answers', async () => {
+    const gateway = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { model?: string };
+      return body.model ? new Response(JSON.stringify({ error: 'down' }), { status: 503 }) : sse('from-auto');
+    });
+    const onFallback = vi.fn();
+    const stream = createRovrStream({
+      baseUrl: BASE,
+      fetch: gateway,
+      prober: prober(nothing),
+      endpoints: async () => loopbackEndpoints(null),
+      key: async () => 'bfk_test',
+      pinned: async () => 'anthropic/claude-sonnet-4',
+      onFallback,
+    });
+    expect((await stream(hello)).text).toBe('from-auto');
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    expect(onFallback.mock.calls[0]![0]).toMatchObject({ from: 'anthropic/claude-sonnet-4' });
   });
 
   it('routes a pinned gateway model automatically when signed out', async () => {
@@ -178,6 +212,63 @@ describe('Rovr model route — local first, failover to the gateway', () => {
   it('asks for sign-in when signed out with nothing local that fits', async () => {
     const { stream } = route(nothing, null);
     await expect(stream(hello)).rejects.toThrow('not_signed_in');
+  });
+
+  describe('inference mode', () => {
+    const modeRoute = (probes: LocalRuntimeProbe[], key: string | null, mode: 'local-only' | 'hybrid', gatewayAllowed = true) => {
+      const seen: string[] = [];
+      const fetchImpl = vi.fn(async (url: string) => {
+        seen.push(url);
+        return sse(url.startsWith(BASE) ? 'from-cloud' : 'from-device');
+      });
+      const stream = createRovrStream({
+        baseUrl: BASE,
+        fetch: fetchImpl,
+        prober: prober(probes),
+        endpoints: async () => loopbackEndpoints(null),
+        key: async () => key,
+        mode: () => mode,
+        gatewayAllowed: () => gatewayAllowed,
+      });
+      return { stream, seen };
+    };
+
+    it('Local only never reaches the gateway, signed in or not', async () => {
+      const { stream, seen } = modeRoute([ollama], 'bfk_test', 'local-only');
+      await stream({ ...hello, tools: [{ type: 'function', function: { name: 'browser_click', description: 'click', parameters: {} } }] }).catch(() => undefined);
+      await stream(hello);
+      expect(seen.some((url) => url.startsWith(BASE))).toBe(false);
+    });
+
+    it('Local only with nothing on this device fails no_local_model — never a sign-in prompt', async () => {
+      await expect(modeRoute(nothing, 'bfk_test', 'local-only').stream(hello)).rejects.toThrow('no_local_model');
+      await expect(modeRoute(nothing, null, 'local-only').stream(hello)).rejects.toThrow('no_local_model');
+    });
+
+    it('Local only never resolves a connected-account pin (it leaves the device)', async () => {
+      const accountPin = vi.fn(async () => ({ endpoint: { baseUrl: 'https://api.kimi.com/coding/v1' }, model: 'kimi-k2' }));
+      const seen: string[] = [];
+      const stream = createRovrStream({
+        baseUrl: BASE,
+        fetch: vi.fn(async (url: string) => { seen.push(url); return sse('from-device'); }),
+        prober: prober([ollama]),
+        endpoints: async () => loopbackEndpoints(null),
+        key: async () => 'bfk_test',
+        pinned: async () => 'local/kimi-code/kimi-k2',
+        accountPin,
+        mode: () => 'local-only',
+        gatewayAllowed: () => true,
+      });
+      await stream(hello);
+      expect(accountPin).not.toHaveBeenCalled();
+      expect(seen.every((url) => url.startsWith('http://127.0.0.1'))).toBe(true);
+    });
+
+    it('a signed-in person whose gateway the policy holds off is not asked to sign in', async () => {
+      const { stream, seen } = modeRoute(nothing, 'bfk_test', 'hybrid', false);
+      await expect(stream(hello)).rejects.toThrow('no_local_model');
+      expect(seen).toEqual([]);
+    });
   });
 });
 

@@ -19,8 +19,10 @@
  * whenever `!hasTenant`, inside a BrainProvider configured with guestBrainConfig.
  */
 
+import { useId } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { EMPTY_GATEWAY_MODEL_OPTIONS } from '@seanhogg/builderforce-brain-embedded';
 import { BrainTimeline, ChatErrorBanner, SurfaceEmptyState, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
 import { WebAiSurface } from '@/components/ai-surface/WebAiSurface';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
@@ -32,6 +34,10 @@ import { GuestRoomJoinCard } from '@/components/guest/GuestRoomJoinCard';
 import { GuestRoomMeeting } from '@/components/brain/GuestRoomMeeting';
 import { GuestCapWall, GuestDisabledCTA } from './GuestBrainWalls';
 import { useGuestBrainSession } from './useGuestBrainSession';
+import { useModelRemedies } from './useModelRemedies';
+
+/** `GuestAiUnavailableError`'s message — the guest transport's "no token to be had". */
+const GUEST_AI_UNAVAILABLE = 'guest-ai-unavailable';
 
 interface GuestBrainPanelProps {
   variant: 'page' | 'docked';
@@ -51,6 +57,11 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
   const timelineLabels = useBrainTimelineLabels();
   const s = useGuestBrainSession({ initialPrompt, inviteCode });
   const { conv, room } = s;
+  // A guest gets the same remedies as the Brain — "Download a local model" / "Pick a
+  // model" open THIS composer's Model tab (keyed by its id), which exists because the
+  // composer below is handed the on-device model list.
+  const composerId = useId();
+  const { labels: remedyLabels, ...remedies } = useModelRemedies(conv.clearError, composerId);
   const isPage = variant === 'page';
   const layout = isPage ? 'page' : 'docked';
 
@@ -142,7 +153,8 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
         )}
         notices={gate ? undefined : (
           <>
-            {!s.capReached && <ChatErrorBanner className="gb-error" error={conv.error} action={conv.errorAction ?? null} onDismiss={conv.clearError} labels={{ dismiss: tCommon('dismiss') }} />}
+            {/* A Hybrid turn that could not get a guest token says so in the visitor's language. */}
+            {!s.capReached && <ChatErrorBanner className="gb-error" error={conv.error === GUEST_AI_UNAVAILABLE ? t('aiUnavailable') : conv.error} action={conv.errorAction ?? null} onDismiss={conv.clearError} {...remedies} labels={{ ...remedyLabels, dismiss: tCommon('dismiss') }} />}
             {s.roomError && <ChatErrorBanner className="gb-error" error={s.roomError} action={null} onDismiss={() => s.setRoomError(null)} labels={{ dismiss: tCommon('dismiss') }} />}
           </>
         )}
@@ -168,6 +180,15 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
                 onStop={conv.stop}
                 // A guest has no workspace behind the box: no plan, meters or Evermind to show.
                 account={null}
+                // The Model tab: no gateway catalogue for a guest — the models downloaded
+                // into THIS browser (the composer's on-device list) and the mode control.
+                modelOptions={EMPTY_GATEWAY_MODEL_OPTIONS.options}
+                modelSelection={s.modelSelection}
+                onModelSelectionChange={s.setModelSelection}
+                composerId={composerId}
+                // THE first-run gate, shared with the landing prompt's auto-send — so the
+                // question shows here for either, and nothing is sent before a choice.
+                modeGate={s.modeGate}
                 showVoice
                 rows={isPage ? 3 : 2}
                 // Inviting people is only offered when this deployment can host a

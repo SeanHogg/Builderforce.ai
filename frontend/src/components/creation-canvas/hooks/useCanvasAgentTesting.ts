@@ -11,6 +11,7 @@ import type { Edge } from '@xyflow/react';
 import type { useTranslations } from 'next-intl';
 import type { CanvasNotices } from '@/lib/canvasNotices';
 import type { ChatModelSelection } from '@/components/ChatInput';
+import { routingModeForSelection } from '@seanhogg/builderforce-brain-embedded';
 
 export interface UseCanvasAgentTestingDeps {
   brainRuntimeRef: RefObject<{ completions: CanvasAiCompletion[]; disabledModels: string[]; }>;
@@ -66,7 +67,7 @@ export function useCanvasAgentTesting({ brainRuntimeRef, canEdit, canvasNotices,
         disabledModels: brainRuntimeRef.current.disabledModels,
         onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
         ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
-        routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+        routingMode: routingModeForSelection(modelSelection),
         participant: { ref: agent.data.resourceId || agent.id, name: agent.data.title, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
       });
       const score = scoreAgentTestResponse(response, expected);

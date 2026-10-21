@@ -381,7 +381,9 @@ function VisualizationScreen({ init }: { init: InitData }) {
       notice={init.labels['canvas.degraded'] ?? 'The board could not be drawn.'}
       retryLabel={init.labels['canvas.retry'] ?? 'Try again'}
     >
-      <VisualizationPanel labels={init.labels} chatId={init.chatId}>
+      {/* No `chatId`: the visualization frame (`buildVisualizationInitFrame`) names no
+          chat, so every run drives the canvas/changes swap. */}
+      <VisualizationPanel labels={init.labels}>
         {canvas}
       </VisualizationPanel>
     </CanvasBoundary>

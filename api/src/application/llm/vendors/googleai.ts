@@ -29,7 +29,7 @@ const GEMINI_CAPS: VendorModelEntry['capabilities'] = ['tools', 'structured_outp
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'gemini-2.5-flash',      tier: 'PREMIUM', label: 'Gemini 2.5 Flash (Google AI)',      brand: 'Google', capabilities: GEMINI_CAPS },
   { id: 'gemini-2.5-flash-lite', tier: 'PREMIUM', label: 'Gemini 2.5 Flash Lite (Google AI)', brand: 'Google', capabilities: GEMINI_CAPS },
-  { id: 'gemini-2.5-pro',        tier: 'PREMIUM', label: 'Gemini 2.5 Pro (Google AI)',        brand: 'Google', capabilities: GEMINI_CAPS },
+  { id: 'gemini-2.5-pro',        tier: 'PREMIUM', weights: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Google AI)',        brand: 'Google', capabilities: GEMINI_CAPS },
 ];
 
 // Google AI is a plain OpenAI-compatible endpoint (Bearer key, standard chat body

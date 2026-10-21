@@ -38,7 +38,7 @@ export function ChatInput(props: ChatInputProps) {
     modeVocabulary, memoryUnavailableReason, showBrainIcon = false, showVoice = false,
     pendingAttachments = NO_ATTACHMENTS, onRemoveAttachment, secondaryContent,
     mentionables, onMention, ticketables, onTicketTag, contextControls, addMenuItems,
-    starters, suggestions, account, className, focusToken,
+    starters, suggestions, account, className, focusToken, modeGate,
   } = props;
   const t = useTranslations('chatInput');
   const tBrain = useTranslations('brain');
@@ -151,6 +151,7 @@ export function ChatInput(props: ChatInputProps) {
         submitOnEnter={submitOnEnter}
         focusToken={focusToken}
         options={options}
+        modeGate={modeGate}
         account={accountPort}
         onAccountSettings={accountSettingsHref ? openAccountSettings : undefined}
         attachments={attachments}

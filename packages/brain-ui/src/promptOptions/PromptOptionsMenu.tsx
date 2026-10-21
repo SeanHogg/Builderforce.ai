@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   buildModelItems,
   DEFAULT_MODEL_IDENTITY,
@@ -15,6 +15,7 @@ import {
   type PromptOptionsSession,
 } from './ModePane';
 import { ModelPane, type PromptOptionsModel } from './ModelPane';
+import { InferenceModeControl, type PromptOptionsInferenceMode } from '../inferenceMode/InferenceModeControl';
 
 export type {
   PromptOptionsAutoMode,
@@ -24,6 +25,7 @@ export type {
   PromptOptionsSession,
 } from './ModePane';
 export type { PromptOptionsModel } from './ModelPane';
+export type { PromptOptionsInferenceMode } from '../inferenceMode/InferenceModeControl';
 
 export interface PromptOptionsMenuProps {
   labels?: Partial<PromptOptionsLabels>;
@@ -41,6 +43,14 @@ export interface PromptOptionsMenuProps {
   onThinkingChange?: (on: boolean) => void;
   describeThinking?: (on: boolean) => string;
   model?: PromptOptionsModel;
+  /** Where models run (Hybrid · Local only · Specific) — the top of the Model tab. */
+  inferenceMode?: PromptOptionsInferenceMode;
+  /**
+   * A host's request to OPEN the menu on a tab (e.g. a "Download a local model" remedy
+   * sending the person to the Model tab). Each new `token` opens it once; the same token
+   * again does nothing, so a re-render never re-opens a menu the person closed.
+   */
+  openOn?: PromptOptionsOpenRequest;
   /**
    * Host-owned account / usage / Evermind details for the Status tab. The menu
    * never fetches billing itself — each host already has its own plan snapshot.
@@ -61,7 +71,13 @@ const EFFORT_LABEL: Record<Effort, 'effortQuick' | 'effortBalanced' | 'effortTho
   thorough: 'effortThorough',
 };
 
-type PromptOptionsTab = 'mode' | 'effort' | 'model' | 'status' | 'spend';
+export type PromptOptionsTab = 'mode' | 'effort' | 'model' | 'status' | 'spend';
+
+/** Open the `/` menu on `tab`; bump `token` for each new request. */
+export interface PromptOptionsOpenRequest {
+  tab: PromptOptionsTab;
+  token: number;
+}
 
 /**
  * The composer's `/` control: everything that shapes the NEXT TURN — the mode it
@@ -91,14 +107,26 @@ export function PromptOptionsMenu({
   onThinkingChange,
   describeThinking,
   model,
+  inferenceMode,
+  openOn,
   status,
   spend,
   onAccountSettings,
   className,
 }: PromptOptionsMenuProps) {
   const labels = useMemo(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
-  const { open, toggle, close, rootRef } = usePopover<HTMLDivElement>();
+  const { open, toggle, close, show, rootRef } = usePopover<HTMLDivElement>();
   const [tab, setTab] = useState<PromptOptionsTab>('mode');
+  const openTab = openOn?.tab;
+  const openToken = openOn?.token;
+  // The token this menu mounted with was answered before it existed — only NEWER ones open it.
+  const handledToken = useRef(openToken);
+  useEffect(() => {
+    if (openToken === undefined || !openTab || openToken === handledToken.current) return;
+    handledToken.current = openToken;
+    setTab(openTab);
+    show();
+  }, [openToken, openTab, show]);
 
   const identity = model?.identity ?? DEFAULT_MODEL_IDENTITY;
   const items = useMemo(() => (model ? buildModelItems(model.options, labels, identity) : []), [model, labels, identity]);
@@ -109,7 +137,7 @@ export function PromptOptionsMenu({
 
   const hasModeTab = !!(mode || memory || autoMode || session);
   const hasEffortTab = !!(onEffortChange || onThinkingChange);
-  const hasModelTab = !!model;
+  const hasModelTab = !!(model || inferenceMode);
   const hasStatusTab = !!(status || onAccountSettings);
   const hasSpendTab = !!spend;
 
@@ -225,8 +253,12 @@ export function PromptOptionsMenu({
               </>
             )}
 
-            {activeTab === 'model' && model && (
-              <ModelPane model={model} labels={labels} identity={identity} inUse={inUse} onPicked={close} />
+            {activeTab === 'model' && (
+              <>
+                <InferenceModeControl inferenceMode={inferenceMode} labels={labels} onPicked={close} />
+                {inferenceMode && model && <div className="bf-pmenu__sep" />}
+                {model && <ModelPane model={model} labels={labels} identity={identity} inUse={inUse} onPicked={close} />}
+              </>
             )}
 
             {activeTab === 'status' && (

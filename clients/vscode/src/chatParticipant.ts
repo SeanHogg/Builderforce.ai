@@ -1,7 +1,9 @@
 import * as vscode from "vscode";
 import { runAbortSignal, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
-import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
-import { resolveModelRoute, routeRequiresSignIn, routeStream } from "./modelRouting";
+import { ChatMessage, SECRET_KEY } from "./gateway";
+import { turnLimbicBlock } from "./personalityLimbic";
+import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn, routeStream } from "./modelRouting";
+import { streamNoLocalModel } from "./noLocalModelPrompt";
 import { OWNER_NAME, type BrainRunHost } from "./brainRunHost";
 import { permissionMode as resolvePermissionMode } from "./permissionMode";
 import { getCurrentUserId, fetchRunContextSection, projectEvermindHooks } from "./bfApi";
@@ -80,6 +82,17 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // applies at all: an on-device model is served by this machine, so a local turn owes
     // nothing to an account. Safe signed out — every lookup inside is best-effort.
     const modelChoice = await resolveModelRoute(ctx.secrets);
+    // Local only with nothing on this machine: signing in would not help — offer Hybrid
+    // or a download instead.
+    if (routeNeedsLocalModel(modelChoice)) {
+      streamNoLocalModel(stream);
+      return {};
+    }
+    // Specific model with nothing picked: Specific promises the pick, so it asks for one.
+    if (routeNeedsSpecificModel(modelChoice)) {
+      streamNoLocalModel(stream, "no_specific_model");
+      return {};
+    }
     if (!key && routeRequiresSignIn(modelChoice)) {
       stream.markdown(vscode.l10n.t("You're not signed in to BuilderForce."));
       stream.markdown("\n\n");
@@ -91,12 +104,12 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     const cfg = vscode.workspace.getConfiguration("builderforce");
     const permissionMode = resolvePermissionMode();
 
-    // Limbic affective layer + PERSONALITY (gateway-injected) — parity with the
-    // webview chat and the cloud (V3) / on-prem agents. Passing the signed-in
-    // user's id (session-cached) makes the returned block carry their personality
-    // TONE, not just the affective appraisal. Best-effort; '' at rest or offline.
+    // Limbic affective layer + PERSONALITY — parity with the webview chat and the cloud
+    // (V3) / on-prem agents. The affect is appraised on this machine from the turn's text;
+    // the signed-in user's id (session-cached) adds their personality TONE and setpoints.
+    // No request per turn; '' at rest with no personality.
     const userId = (await getCurrentUserId(ctx.secrets)) ?? undefined;
-    const limbicBlock = await fetchLimbicBlock(ctx.secrets, request.prompt, userId ? { userId } : undefined);
+    const limbicBlock = await turnLimbicBlock(ctx.secrets, request.prompt, userId ? { userId } : undefined);
     // Live editor context (active file / selection / open tabs) PLUS the absolute
     // workspace root and its git repo, so the agent resolves "this file" / "the
     // selection" to what's open and knows where the code lives instead of asking.
@@ -245,7 +258,11 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
       ...(directives ? { directives } : {}),
       // The transport for this route — gateway or on-device — decided in `modelRouting`,
       // never here. The sign-in gate above guarantees a key on the gateway branch.
-      stream: routeStream(modelChoice, key),
+      // A Hybrid pick that failed (transport-class) and was answered with Auto says so in
+      // the response — the same one line the panel shows; never a silent swap.
+      stream: routeStream(modelChoice, key, (event) => {
+        stream.markdown(`_${vscode.l10n.t("Your pick {0} failed; answered with Auto.", event.from)}_\n\n`);
+      }),
       signal: abort.signal,
       approve: (req: NativeApprovalRequest) => confirmToolCall(req),
       labels: {
@@ -264,8 +281,16 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         // An entitlement failure gets the fix appended as a link (Upgrade / Add a
         // card) — same verdict the webview banner renders as a button, so the two
         // chat surfaces never disagree about what a block means.
-        onError: (message, action) =>
-          stream.markdown(`\n\n**${vscode.l10n.t("Error:")}** ${formatChatErrorVerdict(message, action)}\n`),
+        onError: (message, action) => {
+          // A turn nothing could take for a reason sign-in won't fix (`no_local_model`,
+          // `no_specific_model`) gets its remedies as buttons, not just the sentence.
+          if (action?.kind === "no_local_model" || action?.kind === "no_specific_model") {
+            stream.markdown("\n\n");
+            streamNoLocalModel(stream, action.kind);
+            return;
+          }
+          stream.markdown(`\n\n**${vscode.l10n.t("Error:")}** ${formatChatErrorVerdict(message, action)}\n`);
+        },
       },
     });
 

@@ -1,4 +1,4 @@
-import{dj as rU,by as DU,cF as RI,r as CA,j as lA,dk as Kp,au as Np,bA as Fp,bM as hU,v as cU,dl as pp}from"./index.js";import{s as Be}from"./chunk-world.module.js";import{A as Jp}from"./chunk-Avatar.js";/**
+import{dk as rU,bz as DU,cF as RI,r as CA,j as lA,dl as Kp,at as Np,bB as Fp,bN as hU,v as cU,dm as pp}from"./index.js";import{s as Be}from"./chunk-world.module.js";import{A as Jp}from"./chunk-Avatar.js";/**
  * @license
  * Copyright 2010-2026 Three.js Authors
  * SPDX-License-Identifier: MIT

@@ -178,4 +178,59 @@ describe("the platform stays on the gateway when the model does not", () => {
     // The whole point: the completion goes to the machine, the catalogue does not.
     expect(ports).toMatch(/routeStream\(await resolveModelRoute\(secrets\)/);
   });
+
+  it("never lets a Hybrid fallback be silent — both chat surfaces hear onFallback", () => {
+    const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
+    const participant = stripComments(fs.readFileSync(path.join(SRC, "chatParticipant.ts"), "utf8"));
+    const host = stripComments(fs.readFileSync(path.join(SRC, "brainRunHost.ts"), "utf8"));
+    // The seam hands the shared step the surface's handler…
+    expect(routing).toContain("...(onFallback ? { onFallback } : {})");
+    // …the panel's run host passes one that announces the notice to that chat's panel…
+    expect(ports).toMatch(/routeStream\(await resolveModelRoute\(secrets\), await getApiKey\(secrets\), onFallback\)/);
+    expect(host).toContain('type: "run.modelFallback"');
+    // …and the participant writes the line into its own response.
+    expect(participant).toMatch(/routeStream\(modelChoice, key, \(event\) =>/);
+    expect(participant).toContain('"Your pick {0} failed; answered with Auto."');
+  });
+});
+
+/**
+ * The INFERENCE MODE rides on the route: Local only never reaches the gateway and never
+ * asks for an account, and a turn nothing can serve fails `no_local_model` — the
+ * signed-in person whose cloud is unavailable is never shown the sign-in prompt.
+ */
+describe("the inference mode is decided by the seam", () => {
+  const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
+
+  it("stamps the mode on every route from the one setting module", () => {
+    expect(routing).toContain("inferenceMode: currentInferenceMode()");
+    const readers = sourceFiles()
+      .filter(({ text }) => text.includes('"inferenceMode"'))
+      .map(({ name }) => name);
+    expect(readers).toEqual(["inferenceModeSetting.ts"]);
+  });
+
+  it("never owes an account, nor builds a cloud stream, on Local only", () => {
+    expect(routing).toContain('route.inferenceMode !== "local-only" && route.local === undefined');
+    expect(routing).toContain('!localOnly(route) && apiKey && platformPolicy().allows("gateway-inference")');
+    expect(routing).toContain("if (localOnly(route)) throw new Error(NO_LOCAL_MODEL);");
+  });
+
+  it("tells the shared step the mode and whether the person is signed in", () => {
+    expect(routing).toContain('mode: () => route.inferenceMode ?? "hybrid"');
+    expect(routing).toContain("signedIn: () => !!apiKey");
+    expect(routing).toContain("noModel: localOnly(route) || signedIn ? NO_LOCAL_MODEL : NOT_SIGNED_IN");
+  });
+
+  it("Specific model with nothing picked is refused no_specific_model — never quietly run local-first", () => {
+    expect(routing).toContain('route.inferenceMode === "specific" && !route.model && !route.local && route.routingMode !== "byo_pool"');
+    expect(routing).toContain("if (routeNeedsSpecificModel(route)) throw new Error(NO_SPECIFIC_MODEL);");
+    // The scanner's local-first cloud leg names the route's model as it stands.
+    expect(routing).not.toContain("localOnly(route) ? undefined : route.model");
+  });
+
+  it("on Local only never dispatches or authorizes a runtime that leaves the machine (registry data, not a Kimi branch)", () => {
+    expect(routing).toContain('choice.inferenceMode === "local-only" && !localRuntime(pin.provider).onDevice');
+    expect(routing.indexOf("!localRuntime(pin.provider).onDevice")).toBeLessThan(routing.indexOf("authorizeLocalEndpoint(pin.provider"));
+  });
 });

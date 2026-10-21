@@ -3,7 +3,7 @@
  * re-exported from `./vscodeBridge`, which is the import path callers use.
  */
 
-import type { PlatformPolicySnapshot } from '@builderforce/local-first';
+import type { InferenceMode, PlatformPolicySnapshot } from '@builderforce/local-first';
 import type { ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
 import type { EditorContext } from '../../src/idePersona';
 import type { PendingChangeSet } from '../../src/gitChangeModel';
@@ -45,6 +45,11 @@ export interface InitData {
   token: string | null;
   /** Host-owned capability permissions; internet reachability alone enables nothing. */
   platformPolicy: PlatformPolicySnapshot;
+  /** Where models run (`builderforce.inferenceMode`) — the chosen mode, else the derived
+   *  default (Hybrid signed in, Local only signed out). Absent from an older host. */
+  inferenceMode?: InferenceMode;
+  /** Whether the person chose it; signed in and not chosen ⇒ the composer asks first. */
+  inferenceModeChosen?: boolean;
   model?: string;
   modelStrict?: boolean;
   routingMode?: 'auto' | 'byo_pool';

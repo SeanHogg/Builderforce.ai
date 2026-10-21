@@ -33,6 +33,27 @@ export interface ChatErrorBannerLabels {
   signIn: string;
   /** What the banner says for that case — replaces the raw `not_signed_in` code. */
   noModel: string;
+  /** What the banner says when nothing on this device can serve and the gateway is not
+   *  an option (Local only, or signed in with no cloud route) — replaces `no_local_model`. */
+  noLocalModel: string;
+  /** Move this person onto Hybrid (local first, then the cloud). */
+  switchToHybrid: string;
+  /** Open where a model for this device is downloaded. */
+  downloadLocalModel: string;
+  /** What the banner says when the person runs Specific model with nothing picked —
+   *  replaces `no_specific_model`. */
+  noSpecificModel: string;
+  /** Open the composer's Model tab, where a model is picked. */
+  pickModel: string;
+  /** The on-device engine crashed (a wasm trap) — replaces `bfi_engine_crashed`. */
+  engineCrashed: string;
+  /** The engine serving the model went away mid-answer — replaces `page_engine_detached`. */
+  engineDetached: string;
+  /** The model trapped repeatedly and is refused this session — replaces `model_keeps_crashing`. */
+  modelKeepsCrashing: string;
+  /** Open where on-device models are managed (removed) — offered beside "Pick a model"
+   *  for a model that keeps crashing. */
+  manageLocalModels: string;
   dismiss: string;
 }
 
@@ -43,6 +64,15 @@ export const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels = {
   addCard: 'Add a card',
   signIn: 'Sign in',
   noModel: 'No model is available. Sign in, or start a model on this device.',
+  noLocalModel: 'No model on this device can answer. Switch to Hybrid, or download a local model.',
+  switchToHybrid: 'Switch to Hybrid',
+  downloadLocalModel: 'Download a local model',
+  noSpecificModel: 'Specific model is on, but no model is picked. Pick one, or switch to Hybrid.',
+  pickModel: 'Pick a model',
+  engineCrashed: 'The on-device model crashed. Send again to restart it.',
+  engineDetached: 'The on-device model stopped before it finished. Send again to retry.',
+  modelKeepsCrashing: 'This model keeps crashing on this device. Remove it, or try another model.',
+  manageLocalModels: 'Manage on-device models',
   dismiss: 'Dismiss',
 };
 
@@ -66,6 +96,16 @@ export interface ChatErrorBannerProps {
   onValidateCard?: () => void;
   /** Sign in (or open where a local model is started) — for the `sign_in` verdict. */
   onSignIn?: () => void;
+  /** For the `no_local_model` verdict: move onto Hybrid. Omit when the person already
+   *  runs Hybrid (the cloud route is out for another reason) — the button then isn't offered. */
+  onSwitchToHybrid?: () => void;
+  /** For the `no_local_model` verdict: open where a local model is downloaded. Also the
+   *  "Manage on-device models" remedy for a model that keeps crashing (it is removed there). */
+  onDownloadLocalModel?: () => void;
+  /** For the `no_specific_model` verdict: open the composer's Model tab (the one that
+   *  raised it), where a model is picked or the mode changed. Also "try another model"
+   *  for a model that keeps crashing. */
+  onPickModel?: () => void;
   labels?: Partial<ChatErrorBannerLabels>;
   /** Extra styles merged into the banner container, for host-specific chrome. */
   style?: React.CSSProperties;
@@ -77,6 +117,20 @@ export interface ChatErrorBannerProps {
    * which a screen reader should announce politely rather than interrupt with.
    */
   role?: 'alert' | 'status';
+}
+
+/** The banner's sentence for an on-device engine failure, by its code. */
+function engineMessage(code: ChatErrorAction['engineCode'], labels: ChatErrorBannerLabels, fallback: string): string {
+  switch (code) {
+    case 'bfi_engine_crashed':
+      return labels.engineCrashed;
+    case 'page_engine_detached':
+      return labels.engineDetached;
+    case 'model_keeps_crashing':
+      return labels.modelKeepsCrashing;
+    default:
+      return fallback;
+  }
 }
 
 /** Title-case a plan key for display ('pro' → 'Pro'). */
@@ -92,6 +146,9 @@ export function ChatErrorBanner({
   onUpgrade,
   onValidateCard,
   onSignIn,
+  onSwitchToHybrid,
+  onDownloadLocalModel,
+  onPickModel,
   labels: labelOverrides,
   style,
   className,
@@ -101,6 +158,7 @@ export function ChatErrorBanner({
   if (!error) return null;
 
   const kind = action?.kind;
+  const keepsCrashing = kind === 'local_engine_failed' && action?.engineCode === 'model_keeps_crashing';
   // A named plan makes the ask concrete ("Upgrade to Pro" beats "Upgrade").
   const plan = action?.requiredPlan ? planLabel(action.requiredPlan) : null;
 
@@ -118,9 +176,43 @@ export function ChatErrorBanner({
           ? { label: labels.addCard, onClick: onValidateCard }
           : kind === 'sign_in' && onSignIn
             ? { label: labels.signIn, onClick: onSignIn }
-            : null;
+            : kind === 'no_local_model' && onSwitchToHybrid
+              ? { label: labels.switchToHybrid, onClick: onSwitchToHybrid }
+              : kind === 'no_local_model' && onDownloadLocalModel
+                ? { label: labels.downloadLocalModel, onClick: onDownloadLocalModel }
+                : (kind === 'no_specific_model' || keepsCrashing) && onPickModel
+                  ? { label: labels.pickModel, onClick: onPickModel }
+                  : keepsCrashing && onDownloadLocalModel
+                    ? { label: labels.manageLocalModels, onClick: onDownloadLocalModel }
+                    : null;
+  // "Download a local model" rides beside "Switch to Hybrid" when both are offered.
+  // "Manage on-device models" (where it is removed) rides beside "Pick a model".
+  const secondary = kind === 'no_local_model' && onSwitchToHybrid && onDownloadLocalModel
+    ? { label: labels.downloadLocalModel, onClick: onDownloadLocalModel }
+    : keepsCrashing && onPickModel && onDownloadLocalModel
+      ? { label: labels.manageLocalModels, onClick: onDownloadLocalModel }
+      : null;
   // The verdict names the case; the raw sentinel is never what a person reads.
-  const message = kind === 'sign_in' ? labels.noModel : error;
+  const message = kind === 'sign_in'
+    ? labels.noModel
+    : kind === 'no_local_model'
+      ? labels.noLocalModel
+      : kind === 'no_specific_model'
+        ? labels.noSpecificModel
+        : kind === 'local_engine_failed'
+          ? engineMessage(action?.engineCode, labels, error)
+          : error;
+  const actionStyle: React.CSSProperties = {
+    flex: '0 0 auto',
+    padding: '4px 10px',
+    fontSize: 12,
+    fontWeight: 700,
+    color: 'inherit',
+    background: 'transparent',
+    border: '1px solid currentColor',
+    borderRadius: 6,
+    cursor: 'pointer',
+  };
 
   return (
     <div
@@ -136,25 +228,11 @@ export function ChatErrorBanner({
       }}
     >
       <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{message}</span>
-      {primary && (
-        <button
-          type="button"
-          onClick={primary.onClick}
-          style={{
-            flex: '0 0 auto',
-            padding: '4px 10px',
-            fontSize: 12,
-            fontWeight: 700,
-            color: 'inherit',
-            background: 'transparent',
-            border: '1px solid currentColor',
-            borderRadius: 6,
-            cursor: 'pointer',
-          }}
-        >
-          {primary.label}
+      {[primary, secondary].map((entry) => entry && (
+        <button key={entry.label} type="button" onClick={entry.onClick} style={actionStyle}>
+          {entry.label}
         </button>
-      )}
+      ))}
       <button
         type="button"
         onClick={onDismiss}

@@ -43,6 +43,7 @@ import {
   type BrainRunPersistence,
   type BrainStreamFn,
   type EvermindRunHooks,
+  type ModelFallbackEvent,
 } from "@seanhogg/builderforce-brain-embedded";
 import type { LocalRuntimeProbe } from "@builderforce/local-inference";
 import type { ToolDef } from "./fileTools";
@@ -100,8 +101,11 @@ export interface BrainRunHostPorts {
   tools(projectId: number | undefined, children: ChildControls, signal: () => AbortSignal | undefined, opts: { memory: boolean; audit?: { auditId: string; runId: string } }): Promise<readonly ToolDef[]>;
   /** Workspace root the local tools resolve against; '' when no folder is open. */
   workspaceRoot(): string;
-  /** The transport-bound streamer for the CURRENT route (gateway or on-device). */
-  stream(): Promise<BrainStreamFn>;
+  /**
+   * The transport-bound streamer for the CURRENT route (gateway or on-device).
+   * `onFallback` is told when Hybrid's pick failed and the turn was answered with Auto.
+   */
+  stream(onFallback?: (event: ModelFallbackEvent) => void): Promise<BrainStreamFn>;
   /** The live on-device runtimes, asked only when a turn moves onto a local model so the
    *  window gate packs for that runtime's real window. Omitted ⇒ the catalog row. */
   localProbes?(): Promise<readonly LocalRuntimeProbe[]>;
@@ -326,7 +330,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       nativeNeedsConfirm(defs, flag.autoApprove ? "acceptEdits" : "ask", gates)(req);
     approvals.describeWith(key, (name, args) => approvalRequestFor(defs, gates, name, args));
     // A sub-agent's turns are routed for ITS role (explore / code / verify), not its owner's.
-    const transport = await ports.stream();
+    // A Hybrid pick that failed and was answered with Auto is announced to THIS chat's
+    // panel, which shows the one-line notice — a fallback is never silent.
+    const transport = await ports.stream((event) => broadcast({ type: "run.modelFallback", chatId: key, from: event.from }));
     const role = p.child?.role;
     const stream: BrainStreamFn = role ? (opts, handlers) => transport({ ...opts, role }, handlers) : transport;
     const surface = p.modelSurface ?? null;

@@ -325,6 +325,17 @@
     "localReasonF16": "需要 WebGPU 16 位着色器，但此 GPU 不支持。",
     "localReasonBuffer": "所需的 GPU 缓冲区超出此设备的上限。",
     "localReasonEngine": "此处暂不支持该引擎。",
+    "localReasonVram": "所需的 GPU 显存超出此设备的容量。",
+    "localReasonMemory": "无 GPU 运行时所需的内存超出此设备的容量。",
+    "localBackendGpu": "GPU",
+    "localBackendCpu": "CPU",
+    "localGroupTools": "智能体与工具",
+    "localGroupChat": "聊天",
+    "localGroupCoding": "编程",
+    "localGroupReasoning": "推理",
+    "localGroupMath": "数学",
+    "localAllModels": "全部模型（{count}）",
+    "localFewerModels": "收起模型",
     "assessmentClosedBook": "闭卷考核进行中 — 结束前助手不可用。",
     "assessmentAssisted": "辅助考核 — 助手的每一轮回复都会记录在诚信记录中。",
     "ticketTagTitle": "标记工单",
@@ -335,7 +346,17 @@
     "placeholder": "输入消息…",
     "send": "发送",
     "queueSend": "排队发送 — 当前运行结束后发送",
-    "uploading": "正在上传…"
+    "uploading": "正在上传…",
+    "inferenceMode": "运行模型",
+    "inferenceModeHybrid": "混合",
+    "inferenceModeHybridHint": "优先使用本设备，需要时再使用 BuilderForce 云端",
+    "inferenceModeLocalOnly": "仅本地",
+    "inferenceModeLocalOnlyHint": "只使用本设备上的模型——不会向云端发送任何内容",
+    "inferenceModeSpecific": "指定模型",
+    "inferenceModeSpecificHint": "始终运行你选择的模型——云端模型、你关联的账户或某个本地模型",
+    "inferenceModeRecommended": "推荐",
+    "inferenceModeAskTitle": "BuilderForce 应如何运行模型？",
+    "inferenceModeAskBody": "你可以随时在 / 菜单的“模型”中更改此设置。"
   },
   "repoContext": {
     "title": "添加仓库上下文",
@@ -629,6 +650,27 @@
         "payments": "支付与收款"
       },
       "paymentsIntro": "连接银行账户、PayPal、Stripe 或 Wise。应付给您的款项将通过默认收款方式发送。"
+    },
+    "cloudFunding": {
+      "title": "优先使用哪个云来运行您的对话",
+      "intro": "当某个对话未指定模型且无法在本设备上运行时，BuilderForce 会按此顺序将其发送到云端。",
+      "option": {
+        "inferred": {
+          "label": "自动",
+          "description": "如果您已连接账户，则优先使用；否则使用免费层。"
+        },
+        "free_first": {
+          "label": "优先免费层",
+          "description": "先使用免费模型和 Cloudflare 免费额度，然后再使用您连接的账户。"
+        },
+        "byo_first": {
+          "label": "优先使用我连接的账户",
+          "description": "先由您自己的服务商账户运行；如果无法运行，对话会回退到免费层和您套餐中的模型。"
+        }
+      },
+      "freeTwinNote": "当免费模型和付费模型是同一个模型时，会先尝试免费模型——适用于除“仅限已连接账户”严格模式之外的所有顺序，并且绝不会替代您通过自己已连接账户使用的模型。",
+      "saveFailed": "无法保存您的选择，请重试。",
+      "loadFailed": "无法加载您当前的选择。请刷新页面重试。"
     }
   },
   "nav": {
@@ -2732,7 +2774,31 @@
       "model": "模型",
       "byActionType": "按工作类型",
       "workType": "工作类型",
-      "noRuns": "此时间范围内暂无已评分的运行。"
+      "noRuns": "此时间范围内暂无已评分的运行。",
+      "anomaly": {
+        "title": "运行异常",
+        "summary": "{scored} 次已评分运行中有 {flagged} 次远超此前运行的正常范围",
+        "summarySampled": "{scored} 次已评分运行中约有 {flagged} 次远超此前运行的正常范围（基于最近运行的样本）",
+        "notEnough": "历史数据尚不足 — 一次运行需在其之前已有 {minRuns} 次运行后才会被评判。",
+        "none": "{scored} 次已评分运行中没有异常值。",
+        "colIssue": "问题",
+        "colRuns": "运行数",
+        "colShare": "占比",
+        "colExcess": "超额成本",
+        "colWorst": "最严重的运行",
+        "metric": {
+          "cost": "成本远高于正常水平",
+          "duration": "耗时远超正常水平",
+          "toolFailures": "工具失败异常"
+        },
+        "hint": {
+          "cost": "检查这些运行锁定的模型以及它们执行的步骤数。",
+          "duration": "在运行轨迹中查找停滞、重试或长时间等待。",
+          "toolFailures": "打开工具轨迹 — 常见原因是工具损坏或缺少权限。"
+        },
+        "example": "{value}，典型值约 {typical} · {model}",
+        "exampleTask": "任务 #{id}"
+      }
     },
     "dora": {
       "title": "DORA 指标",
@@ -12078,7 +12144,17 @@
       "review": "查看更改",
       "open": "打开 {path}",
       "more": "另外 {count} 个"
-    }
+    },
+    "noLocalModel": "本设备上没有可以回答的模型。请切换到混合模式，或下载一个本地模型。",
+    "modelFallback": "你选择的 {model} 失败了；已改用自动模式回答。",
+    "switchToHybrid": "切换到混合模式",
+    "downloadLocalModel": "下载本地模型",
+    "noSpecificModel": "已开启“指定模型”，但尚未选择模型。请选择一个模型，或切换到混合模式。",
+    "pickModel": "选择模型",
+    "engineCrashed": "设备上的模型已崩溃。请重新发送以重启它。",
+    "engineDetached": "设备上的模型在完成前停止了。请重新发送以重试。",
+    "modelKeepsCrashing": "此模型在本设备上反复崩溃。请将其移除，或换用其他模型。",
+    "manageLocalModels": "管理设备上的模型"
   },
   "chatMessage": {
     "copy": "复制",
@@ -16821,6 +16897,7 @@
     "emptyBody": "描述一个想法、一项功能或一个问题——Brain 会帮你理清思路。无需账户即可开始。",
     "placeholder": "向 Brain 提问……",
     "loading": "正在启动 Brain……",
+    "aiUnavailable": "混合模式暂时无法启动。请稍后再试，或切换到“仅本地”在本设备上回答。",
     "send": "发送",
     "remaining": "{count, plural, =0 {没有剩余的免费消息} other {还剩 # 条免费消息}}",
     "tagline": "免费试用 Brain——无需注册",

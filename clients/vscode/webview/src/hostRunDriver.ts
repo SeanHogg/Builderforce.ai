@@ -20,6 +20,7 @@
 
 import {
   applyRemoteRun,
+  createModelFallbackChannel,
   getRunTrace,
   installRunDriver,
   setMcpToolStatus,
@@ -49,6 +50,13 @@ export interface HostRunContext {
 let context: HostRunContext = { chatId: null, autoApprove: false, modelSurface: null };
 
 /**
+ * The panel's Hybrid-fallback notice ("Your pick X failed; answered with Auto"): the host's
+ * `run.modelFallback` for the chat this panel shows lands here, and `VsCodeChatNotices`
+ * renders it through brain-ui's `ModelFallbackNotice`.
+ */
+export const hostModelFallback = createModelFallbackChannel();
+
+/**
  * Keep the host's view of the panel's switches current. Cheap; called on change.
  *
  * Posts on a switch flip AND on a change of chat. The second is not bookkeeping: with
@@ -60,6 +68,8 @@ let context: HostRunContext = { chatId: null, autoApprove: false, modelSurface: 
  */
 export function setHostRunContext(next: HostRunContext): void {
   const changed = next.autoApprove !== context.autoApprove || next.chatId !== context.chatId;
+  // A notice names the chat it happened in; walking to another chat retires it.
+  if (next.chatId !== context.chatId) hostModelFallback.clear();
   context = next;
   if (changed && next.chatId != null) post('run.autoApprove', { chatId: next.chatId, on: next.autoApprove });
 }
@@ -124,6 +134,13 @@ export function installHostRunDriver(): () => void {
     setMcpToolStatus({ count: m.count, error: null, loading: false });
   });
 
+  // Hybrid's pick failed and the turn was answered with Auto — shown only for the chat
+  // this panel is showing (runs for other chats keep going out in the host).
+  const offFallback = onHostMessage<{ chatId: number; from: string }>('run.modelFallback', (m) => {
+    if (context.chatId != null && m.chatId !== context.chatId) return;
+    hostModelFallback.report({ from: m.from, reason: '' });
+  });
+
   // Which runs are a chat's live sub-agents. Each child's own run is mirrored by `run.sync`
   // under its run key, like any other run.
   const offChildren = onHostMessage<{ chatId: number; children: ChildView[] }>('run.children', (m) => {
@@ -148,6 +165,7 @@ export function installHostRunDriver(): () => void {
     offSettled();
     offFailed();
     offTools();
+    offFallback();
     offChildren();
     installRunDriver(null);
   };

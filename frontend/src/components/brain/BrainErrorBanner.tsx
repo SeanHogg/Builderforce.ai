@@ -4,6 +4,7 @@ import { ChatErrorBanner } from '@seanhogg/builderforce-brain-ui';
 import type { ChatErrorAction } from '@seanhogg/builderforce-brain-embedded';
 import { useStartCardValidation } from '@/lib/useCardValidation';
 import { invalidateConsumption } from '@/lib/useConsumption';
+import { useModelRemedies } from './useModelRemedies';
 
 /**
  * Web wiring for the SHARED chat error banner.
@@ -22,15 +23,20 @@ export function BrainErrorBanner({
   error,
   action,
   onDismiss,
+  composerId,
 }: {
   error: string;
   action: ChatErrorAction | null;
   onDismiss: () => void;
+  /** The composer beside this banner — the one a "Pick a model" / "Download a local
+   *  model" remedy opens the `/` menu of. */
+  composerId: string;
 }) {
   const t = useTranslations('brain');
   const tCommon = useTranslations('common');
   const router = useRouter();
   const { start: startCardValidation, error: cardError } = useStartCardValidation();
+  const { labels: remedyLabels, ...remedies } = useModelRemedies(onDismiss, composerId);
 
   // A failed card attempt belongs with the message it was meant to fix, not in a
   // second banner the user has to correlate.
@@ -58,12 +64,16 @@ export function BrainErrorBanner({
       }}
       onValidateCard={() => { void startCardValidation(); }}
       onSignIn={() => router.push('/login')}
+      // Nothing can take the turn for a reason sign-in won't fix: nothing on this device
+      // (Local only, or no cloud route), or Specific model with nothing picked.
+      {...remedies}
       labels={{
         upgrade: t('upgrade'),
         ...(plan ? { upgradeToPlan: t('upgradeToPlan', { plan }) } : {}),
         addCard: t('addCard'),
         signIn: t('signIn'),
         noModel: t('noModel'),
+        ...remedyLabels,
         dismiss: tCommon('dismiss'),
       }}
       style={{

@@ -61,6 +61,8 @@ function AccountSection() {
       setCode(start.userCode);
       const result = await completeDeviceSignIn(deps, start, controller.signal);
       await services.session.signIn(result);
+      // Signing in moves an undecided person onto Hybrid; apply it before the exchange.
+      await services.policy.refresh();
       await services.session.jwt(); // learn the workspace, so the sync outboxes can send
     } catch (e) {
       const reason = e instanceof DeviceAuthError ? e.reason : 'failed';

@@ -11,13 +11,13 @@ import { parseOptionalBody, zJsonObject } from './requestBody';
 export function createAccountBrainPreferenceRoutes(db: Db) {
   const router = new Hono<HonoEnv>();
   router.get('/', authMiddleware, async (c) => {
-    const preferences = await getAccountBrainPreferences(db, c.get('tenantId'), c.get('userId') as UserId);
+    const preferences = await getAccountBrainPreferences(c.env, db, c.get('tenantId'), c.get('userId') as UserId);
     return c.json({ preferences });
   });
   router.put('/', authMiddleware, async (c) => {
     // `parseAccountBrainPreferences` owns the per-field rules; the route only refuses a non-object.
     const body = await parseOptionalBody(c, zJsonObject);
-    const preferences = await setAccountBrainPreferences(db, c.get('tenantId'), c.get('userId') as UserId, body);
+    const preferences = await setAccountBrainPreferences(c.env, db, c.get('tenantId'), c.get('userId') as UserId, body);
     return c.json({ preferences });
   });
   return router;

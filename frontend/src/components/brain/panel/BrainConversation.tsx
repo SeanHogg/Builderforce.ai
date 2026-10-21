@@ -57,6 +57,7 @@ export function BrainConversation() {
     modelIdentity,
     repoContext,
     approveAll,
+    composerId,
   } = useBrainPanel();
   const tBrain = useTranslations('brain');
   const activeChat = chats.activeChatId == null ? null : chats.activeChat;
@@ -185,7 +186,7 @@ export function BrainConversation() {
         // banner self-gates on the shared consumption snapshot.
         notices={(
           <>
-            <BrainErrorBanner error={error} action={conv.error ? conv.errorAction : null} onDismiss={dismissError} />
+            <BrainErrorBanner error={error} action={conv.error ? conv.errorAction : null} onDismiss={dismissError} composerId={composerId} />
             <AllowanceBanner />
             {showProviderCapBanner && <BrainProviderCapBanner providers={conv.providerCap} onDismiss={dismissProviderCap} />}
           </>

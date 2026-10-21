@@ -55,6 +55,10 @@ export type LocalToolSupport = 'all' | 'probe' | 'unknown';
  *    host asks the page API directly and answers the chat route with an in-page shim
  *    (brain-embedded's `pageEnginesFetch`). Every HTTP prober, settings form and endpoint
  *    builder skips it by reading this field, never by comparing ids.
+ *
+ * A page runtime may also declare {@link LocalRuntime.fallbackReach} `host`: the SAME
+ * engine run by the client host process itself, with no page (the editor's extension
+ * host loads `bfi-web`'s wasm, CPU backend, in a worker thread).
  */
 export type LocalRuntimeReach = 'http' | 'page';
 
@@ -76,6 +80,10 @@ export interface LocalRuntime {
   tools: LocalToolSupport;
   /** How it is reached — see {@link LocalRuntimeReach}. */
   reach: LocalRuntimeReach;
+  /** How a host may still serve it when its primary reach is unavailable — `host`: a
+   *  page runtime whose engine the host can run itself (`bfi`, whose wasm has a CPU
+   *  backend), so a pinned model keeps running locally with the page closed. */
+  fallbackReach?: 'host';
   /** The `owned_by` this runtime stamps on its `/v1/models` rows, when distinctive.
    *  `bfi serve` starts at Ollama's port 11434 and walks upward when it is taken, so the
    *  Ollama URL can be answered by bfi; this is how a probe tells them apart. */
@@ -123,6 +131,7 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
     catalog: 'declared',
     tools: 'all',
     reach: 'page',
+    fallbackReach: 'host',
   },
   {
     id: 'webllm',
@@ -161,3 +170,6 @@ export function isLocalRuntimeId(value: unknown): value is LocalRuntimeId {
 export function localRuntime(id: LocalRuntimeId): LocalRuntime {
   return LOCAL_RUNTIMES.find((r) => r.id === id)!;
 }
+
+/** The page runtimes a host process can serve itself when no page is open. */
+export const HOST_FALLBACK_RUNTIMES: readonly LocalRuntime[] = LOCAL_RUNTIMES.filter((r) => r.fallbackReach === 'host');

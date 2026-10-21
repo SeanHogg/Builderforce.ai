@@ -1,7 +1,7 @@
 /* @ts-self-types="./bfi_web.d.ts" */
 
 /**
- * bfi on WebGPU. See the crate docs and `README.md` for the JS contract.
+ * bfi in the browser, on WebGPU or the CPU. See `README.md` for the JS contract.
  */
 export class BfiEngine {
     static __wrap(ptr) {
@@ -21,6 +21,26 @@ export class BfiEngine {
         wasm.__wbg_bfiengine_free(ptr, 0);
     }
     /**
+     * The backend this engine runs on.
+     * @returns {BfiBackend}
+     */
+    get backend() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.bfiengine_backend(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            deferred1_0 = r0;
+            deferred1_1 = r1;
+            return getStringFromWasm0(r0, r1);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
      * OpenAI `chat.completions` request JSON → OpenAI chunk JSON strings via
      * `onChunk` (when `stream: true`); resolves with the final completion JSON
      * (`usage`, `finish_reason`, `tool_calls`). Rejects with `aborted` on `signal`.
@@ -37,9 +57,12 @@ export class BfiEngine {
     }
     /**
      * Predict the context `load` will serve for a model shape, before
-     * downloading it (pure; same function the engine uses). Defaults:
-     * `kvBudgetBytes` 2 GiB, `f16` false, `maxBufferBytes` 128 MiB (WebGPU's
-     * guaranteed binding). The engine may serve less if allocation fails.
+     * downloading it (pure; same function the engine uses). WebGPU defaults:
+     * `kvBudgetBytes` 2 GiB, `f16` false, buffer cap 128 MiB (WebGPU's
+     * guaranteed binding); the cap is `min(maxStorageBufferBindingSizeBytes,
+     * maxBufferSizeBytes ?? maxBufferBytes)` of whichever are given, exactly as
+     * `load` caps the adapter. `backend: 'cpu'`: f32 KV, 512 MiB default budget, no
+     * cap. The engine may serve less if a WebGPU allocation fails.
      * @param {BfiContextShape} shape
      * @returns {number}
      */
@@ -48,17 +71,18 @@ export class BfiEngine {
         return ret;
     }
     /**
-     * WebGPU adapter + device (`shader-f16` is requested when offered).
-     * Rejects with `webgpu_unavailable: <reason>` when there is no adapter.
+     * Open a backend: `webgpu` (adapter + device, `shader-f16` when offered; rejects
+     * `webgpu_unavailable: <reason>` without an adapter), `cpu`, or `auto` (default).
+     * @param {BfiCreateOptions} options
      * @returns {Promise<BfiEngine>}
      */
-    static create() {
-        const ret = wasm.bfiengine_create();
+    static create(options) {
+        const ret = wasm.bfiengine_create(isLikeNone(options) ? 0 : addHeapObject(options));
         return takeObject(ret);
     }
     /**
      * Load a GGUF streamed by the host (the host owns download + cache).
-     * Weights stay packed on the GPU, one buffer per tensor.
+     * Weights stay packed — one GPU buffer per tensor, or packed in wasm memory.
      * @param {ReadableStream<Uint8Array>} chunks
      * @param {number} totalBytes
      * @param {(loaded: number, total: number) => void} onProgress
@@ -70,7 +94,8 @@ export class BfiEngine {
         return takeObject(ret);
     }
     /**
-     * Adapter probe only — no device — safe to call on every capability check.
+     * Every backend's capabilities; requests a WebGPU adapter only — no device — so it
+     * is safe on every capability check.
      * @returns {Promise<BfiSupport>}
      */
     static support() {
@@ -78,8 +103,8 @@ export class BfiEngine {
         return takeObject(ret);
     }
     /**
-     * Drop the model and its GPU buffers. During a `chat`, the chat rejects
-     * with `aborted` and the model is dropped when it unwinds.
+     * Drop the model and its memory. During a `chat`, the chat rejects with
+     * `aborted` and the model is dropped when it unwinds.
      */
     unload() {
         wasm.bfiengine_unload(this.__wbg_ptr);
@@ -280,6 +305,16 @@ function __wbg_get_imports() {
             const ret = result;
             return ret;
         },
+        __wbg_instanceof_GpuDeviceLostInfo_c0ebce29b32e81e8: function(arg0) {
+            let result;
+            try {
+                result = getObject(arg0) instanceof GPUDeviceLostInfo;
+            } catch (_) {
+                result = false;
+            }
+            const ret = result;
+            return ret;
+        },
         __wbg_instanceof_GpuOutOfMemoryError_5ac5c50ce9ee21d2: function(arg0) {
             let result;
             try {
@@ -327,6 +362,10 @@ function __wbg_get_imports() {
         },
         __wbg_limits_50a8c5e629dbfe40: function(arg0) {
             const ret = getObject(arg0).limits;
+            return addHeapObject(ret);
+        },
+        __wbg_lost_7b1065bddc80e8ac: function(arg0) {
+            const ret = getObject(arg0).lost;
             return addHeapObject(ret);
         },
         __wbg_mapAsync_bb0029907dd91181: function(arg0, arg1, arg2, arg3) {
@@ -445,6 +484,13 @@ function __wbg_get_imports() {
             const ret = getObject(arg0).maxVertexBuffers;
             return ret;
         },
+        __wbg_message_09714b1dbee17e65: function(arg0, arg1) {
+            const ret = getObject(arg1).message;
+            const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len1 = WASM_VECTOR_LEN;
+            getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
+            getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+        },
         __wbg_message_6769962f0009c864: function(arg0, arg1) {
             const ret = getObject(arg1).message;
             const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_export, wasm.__wbindgen_export2);
@@ -480,6 +526,24 @@ function __wbg_get_imports() {
             const ret = new Error(getStringFromWasm0(arg0, arg1));
             return addHeapObject(ret);
         },
+        __wbg_new_5502aad30c185fc8: function(arg0, arg1) {
+            try {
+                var state0 = {a: arg0, b: arg1};
+                var cb0 = (arg0, arg1) => {
+                    const a = state0.a;
+                    state0.a = 0;
+                    try {
+                        return __wasm_bindgen_func_elem_4571(a, state0.b, arg0, arg1);
+                    } finally {
+                        state0.a = a;
+                    }
+                };
+                const ret = new Promise(cb0);
+                return addHeapObject(ret);
+            } finally {
+                state0.a = 0;
+            }
+        },
         __wbg_new_617a8cdb8bb1130e: function() {
             const ret = new Object();
             return addHeapObject(ret);
@@ -495,7 +559,7 @@ function __wbg_get_imports() {
                     const a = state0.a;
                     state0.a = 0;
                     try {
-                        return __wasm_bindgen_func_elem_4375(a, state0.b, arg0, arg1);
+                        return __wasm_bindgen_func_elem_4571(a, state0.b, arg0, arg1);
                     } finally {
                         state0.a = a;
                     }
@@ -550,6 +614,10 @@ function __wbg_get_imports() {
         __wbg_queue_65d985f3e6d786a6: function(arg0) {
             const ret = getObject(arg0).queue;
             return addHeapObject(ret);
+        },
+        __wbg_reason_21c585c1cbc2cc8f: function(arg0) {
+            const ret = getObject(arg0).reason;
+            return (__wbindgen_enum_GpuDeviceLostReason.indexOf(ret) + 1 || 3) - 1;
         },
         __wbg_requestAdapter_9ff5c9d1ff271165: function(arg0, arg1) {
             const ret = getObject(arg0).requestAdapter(getObject(arg1));
@@ -778,6 +846,10 @@ function __wbg_get_imports() {
             const ret = getObject(arg0).then(getObject(arg1), getObject(arg2));
             return addHeapObject(ret);
         },
+        __wbg_then_c8a35d4ad59c6b8e: function(arg0, arg1) {
+            const ret = getObject(arg0).then(getObject(arg1));
+            return addHeapObject(ret);
+        },
         __wbg_then_c949d5a25a4e78f8: function(arg0, arg1, arg2) {
             const ret = getObject(arg0).then(getObject(arg1), getObject(arg2));
             return addHeapObject(ret);
@@ -797,13 +869,13 @@ function __wbg_get_imports() {
             getObject(arg0).writeBuffer(getObject(arg1), arg2, getArrayU8FromWasm0(arg3, arg4), arg5, arg6);
         }, arguments); },
         __wbindgen_generic_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1412, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2894);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1521, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_3086);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1582, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_4357);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1694, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_4553);
             return addHeapObject(ret);
         },
         __wbindgen_generic_0000000000000003: function(arg0) {
@@ -835,18 +907,18 @@ function __wbg_get_imports() {
     };
 }
 
-function __wasm_bindgen_func_elem_2894(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_2894(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_3086(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_3086(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_4375(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_4375(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_4571(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_4571(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
-function __wasm_bindgen_func_elem_4357(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_4553(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.__wasm_bindgen_func_elem_4357(retptr, arg0, arg1, addHeapObject(arg2));
+        wasm.__wasm_bindgen_func_elem_4553(retptr, arg0, arg1, addHeapObject(arg2));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -859,6 +931,9 @@ function __wasm_bindgen_func_elem_4357(arg0, arg1, arg2) {
 
 
 const __wbindgen_enum_GpuBufferBindingType = ["uniform", "storage", "read-only-storage"];
+
+
+const __wbindgen_enum_GpuDeviceLostReason = ["unknown", "destroyed"];
 
 
 const __wbindgen_enum_GpuErrorFilter = ["validation", "out-of-memory", "internal"];

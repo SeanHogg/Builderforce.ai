@@ -8,12 +8,16 @@
  * gateway "injects" the affective directive block; the client prepends it to its
  * system prompt.
  *
- * Two layers are returned:
+ * Three layers are returned:
  *   • `block` — the DYNAMIC affective directive (the live limbic state after appraising
  *     the task text). Empty at rest.
  *   • `personaBlock` — the STATIC personality directives (personality = homeostatic
  *     setpoints) when the caller resolves a profile, so a client gets personality TONE,
  *     not just neutral affect.
+ *   • `setpoints` — that profile's limbic setpoints, so a client that cannot read the
+ *     stored profile itself (the VS Code extension resolves it by `userId`) appraises
+ *     each turn LOCALLY from them (brain-embedded `turnAffectBlock`). Clients call this
+ *     once per session for the personality; the per-turn affect never comes from here.
  *
  * When a profile is supplied (inline `psychometric`, or a `userId`/`agentId`/`personaId`
  * to load one), the task appraisal is seeded from that profile's derived limbic setpoints
@@ -66,6 +70,7 @@ export function createLimbicRoutes(db: Db): Hono<HonoEnv> {
    * Returns: {
    *   block: string,        // dynamic affective directive ('' at rest)
    *   personaBlock: string, // static personality directives ('' when no profile)
+   *   setpoints?: object,   // the profile's limbic setpoints (absent when no profile)
    * }
    */
   router.post('/block', authMiddleware, async (c) => {
@@ -79,14 +84,15 @@ export function createLimbicRoutes(db: Db): Hono<HonoEnv> {
     const profile = await resolvePsychometricProfile(c.env as Env, db, tenantId, body).catch(() => undefined);
     // Personality = homeostatic setpoints: seed the appraisal from the profile's derived
     // setpoints so the affect reflects personality; neutral resting state when none.
-    const base = profile ? limbicSetpoints(limbicTraits(profile)) : neutralLimbicState();
-    const state = appraiseTask(text, base);
+    const setpoints = profile ? limbicSetpoints(limbicTraits(profile)) : null;
+    const state = appraiseTask(text, setpoints ?? neutralLimbicState());
 
     return c.json({
       block: buildLimbicBlock(state),
       // Static personality directive block (tone), so callers get personality — not just
       // neutral affect. '' when no profile resolved (backward-compatible).
       personaBlock: profile ? buildPsychometricBlock(profile) : '',
+      ...(setpoints ? { setpoints } : {}),
     });
   });
 

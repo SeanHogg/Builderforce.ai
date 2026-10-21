@@ -4,6 +4,7 @@ import type { CreationNodeData } from '../types';
 import type { BuiltinAgentSurfaceIntent } from '@/lib/team/builtinAgentSurface';
 import { type CanvasResumeShare, tasksApi } from '@/lib/builderforceApi';
 import type { IdeProject } from '@/lib/types';
+import type { JSX } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from '../styles/inspector.module.css';
 import { AUTHORED_DRAWING_STROKE, AUTHORED_WEBSITE_ACCENT } from '@/domains/canvas/domain/authoredColors';

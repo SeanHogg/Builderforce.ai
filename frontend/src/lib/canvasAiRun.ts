@@ -108,7 +108,9 @@ export interface CanvasAiCompletion {
   resolvedModel: string | null;
   resolvedVendor: string | null;
   account: string | null;
-  routingMode: 'auto' | 'byo_pool';
+  /** The turn's explicit routing, or `'account'` when it sent none — the gateway then
+   *  applied the ACCOUNT's cloud funding order (never recorded as `'auto'`, which it isn't). */
+  routingMode: 'auto' | 'byo_pool' | 'account';
   toolsAdvertised: number;
   toolCalls: string[];
   finishReason: string | null;

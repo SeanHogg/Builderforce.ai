@@ -401,6 +401,18 @@ async function reportAndThrow(
 }
 
 /**
+ * The platform policy's gate for one request (`localFirst/platformPolicy`
+ * `assertWebApiRequest`). Loaded on first use, never statically: the policy module
+ * stays out of the root layout's closure, and in the browser it is already loaded by
+ * the boot (`PlatformPolicyBoot`). Throws `PlatformAccessDenied` when refused.
+ */
+async function assertPlatformAllows(url: string, method: string, credentialed: boolean): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const { assertWebApiRequest } = await import('./localFirst/platformPolicy');
+  assertWebApiRequest(url, method, credentialed);
+}
+
+/**
  * Everything the three transports did IDENTICALLY, in one place: resolve the
  * credential, build the URL, send it, and apply the two judgements that are the
  * same regardless of how the caller wants the body back (an expired session
@@ -436,6 +448,12 @@ async function sendRequest(
   // lazy fixture modules first — only for a read that already qualifies.
   const sample = await resolveGuestReadLoaded({ path, method, hadToken });
   if (sample) return { res: guestReadResponse(sample), url, method, hadToken };
+
+  // THE platform gate — every request this transport sends passes the person's
+  // inference mode first (Local only sends nothing their credential rides on: no memory
+  // recall, no personality block). A refusal throws before the request exists, so it
+  // raises no toast and files no report; best-effort callers read it as "nothing".
+  await assertPlatformAllows(url, method, hadToken || !!optHeaders?.Authorization);
 
   const res = await fetchWithTransportReport(
     url,

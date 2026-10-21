@@ -1,5 +1,13 @@
 // src/chatError.ts
 var NOT_SIGNED_IN = "not_signed_in";
+var NO_LOCAL_MODEL = "no_local_model";
+var NO_SPECIFIC_MODEL = "no_specific_model";
+var LOCAL_ENGINE_FAILURE_CODES = ["bfi_engine_crashed", "page_engine_detached", "model_keeps_crashing"];
+var LOCAL_ENGINE_CODE_RE = new RegExp(`\\b(${LOCAL_ENGINE_FAILURE_CODES.join("|")})\\b`);
+function localEngineCode(code, message) {
+  if (code && LOCAL_ENGINE_FAILURE_CODES.includes(code)) return code;
+  return LOCAL_ENGINE_CODE_RE.exec(message)?.[1];
+}
 var BrainRequestError = class extends Error {
   status;
   code;
@@ -23,10 +31,11 @@ function str(v) {
 }
 function brainRequestError(status, body, statusText) {
   const b = body ?? {};
-  const message = str(b.error) || str(b.message) || statusText || `Request failed (${status})`;
+  const nested = b.error && typeof b.error === "object" ? b.error : void 0;
+  const message = str(b.error) || str(nested?.message) || str(b.message) || statusText || `Request failed (${status})`;
   return new BrainRequestError(message, {
     status,
-    code: str(b.code),
+    code: str(b.code) ?? str(nested?.code),
     reason: str(b.reason),
     unlock: str(b.unlock),
     requiredPlan: str(b.requiredPlan),
@@ -53,6 +62,10 @@ function chatErrorAction(err) {
   }
   if (!message) return null;
   if (message === NOT_SIGNED_IN) return { kind: "sign_in" };
+  if (message === NO_LOCAL_MODEL) return { kind: "no_local_model" };
+  if (message === NO_SPECIFIC_MODEL) return { kind: "no_specific_model" };
+  const engineCode = localEngineCode(err instanceof BrainRequestError ? err.code : void 0, message);
+  if (engineCode) return { kind: "local_engine_failed", engineCode };
   if (AUTH_PROSE.test(message)) return { kind: "auth" };
   if (CARD_PROSE.test(message)) return { kind: "validate_card" };
   if (UPGRADE_PROSE.test(message)) return { kind: "upgrade" };
@@ -61,8 +74,11 @@ function chatErrorAction(err) {
 
 export {
   NOT_SIGNED_IN,
+  NO_LOCAL_MODEL,
+  NO_SPECIFIC_MODEL,
+  LOCAL_ENGINE_FAILURE_CODES,
   BrainRequestError,
   brainRequestError,
   chatErrorAction
 };
-//# sourceMappingURL=chunk-67SSAVEK.mjs.map
+//# sourceMappingURL=chunk-ZV73UMUH.mjs.map

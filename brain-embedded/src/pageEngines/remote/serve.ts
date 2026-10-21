@@ -1,30 +1,33 @@
 /**
- * The webview half of the page-engine bridge: it answers the extension host's probe and
- * chat requests from the engines this webview runs on WebGPU (see
- * `src/pageEngineBridgeProtocol.ts`). Pure over an injected transport so the round trip
- * is testable without a webview.
+ * The ENGINE side of a remote page engine: answer a caller's probe and chat requests
+ * (`protocol.ts`) from engines running here — the editor's chat webview, the editor
+ * host's `bfi` worker, a page's `bfi` Web Worker. Pure over an injected transport, so
+ * the round trip is testable without any of them.
  *
- * An engine refusal keeps its HTTP status across the bridge, so the host's shim answers
- * exactly what it would have answered in the page; a Stop on the host aborts the engine
- * here; chunks stream back one frame each.
+ * An engine refusal keeps its HTTP status across the boundary, so the caller's shim
+ * answers exactly what it would have answered in place; an abort from the caller aborts
+ * the engine here; chunks stream back one frame each. While a chat is running it says
+ * so every {@link PAGE_ENGINE_HEARTBEAT_MS} (`pageEngine.alive`) — a long load or a turn
+ * queued behind another sends no chunk for a while, and the caller's inactivity timeout
+ * must tell that apart from an engine that went silent.
  */
-import { PageEngineError, type PageEngine } from '@seanhogg/builderforce-brain-embedded';
-import type { PageEngineReply, PageEngineRequest } from '../../src/pageEngineBridgeProtocol';
+import { PageEngineError, type PageEngine } from '../types';
+import { PAGE_ENGINE_HEARTBEAT_MS, type PageEngineReply, type PageEngineRequest } from './protocol';
 
 type ReplyPayload<T extends PageEngineReply['type']> = Omit<Extract<PageEngineReply, { type: T }>, 'type'>;
 
-export interface PageEngineHostIo {
-  /** Post a reply to the host. */
+export interface PageEngineServerIo {
+  /** Post a reply to the caller. */
   reply<T extends PageEngineReply['type']>(type: T, payload: ReplyPayload<T>): void;
-  /** Subscribe to the host's requests; returns the unsubscribe. */
+  /** Subscribe to the caller's requests; returns the unsubscribe. */
   listen(onRequest: (request: PageEngineRequest) => void): () => void;
 }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
-/** Serve `engines()` to the host over `io`. The engines are read lazily, on the first
- *  request — a panel that never routes a turn to a page model never builds them. */
-export function servePageEngines(engines: () => readonly PageEngine[], io: PageEngineHostIo): () => void {
+/** Serve `engines()` over `io`. The engines are read lazily, on the first request — a
+ *  surface that never routes a turn to a page model never builds them. */
+export function servePageEngines(engines: () => readonly PageEngine[], io: PageEngineServerIo): () => void {
   const running = new Map<string, AbortController>();
   const engineFor = (runtime: string) => engines().find((engine) => engine.runtime === runtime);
 
@@ -32,11 +35,12 @@ export function servePageEngines(engines: () => readonly PageEngine[], io: PageE
     const { id, runtime } = request;
     const engine = engineFor(runtime);
     if (!engine) {
-      io.reply('pageEngine.error', { id, status: 503, code: `${runtime}_unavailable`, message: `${runtime} is not available in this panel` });
+      io.reply('pageEngine.error', { id, status: 503, code: `${runtime}_unavailable`, message: `${runtime} is not available here` });
       return;
     }
     const controller = new AbortController();
     running.set(id, controller);
+    const heartbeat = setInterval(() => io.reply('pageEngine.alive', { id }), PAGE_ENGINE_HEARTBEAT_MS);
     try {
       const chunks = await engine.chatCompletions(request.body, controller.signal);
       for await (const chunk of chunks) {
@@ -45,12 +49,13 @@ export function servePageEngines(engines: () => readonly PageEngine[], io: PageE
       }
       if (!controller.signal.aborted) io.reply('pageEngine.end', { id });
     } catch (e) {
-      // The host asked for the stop; it already settled its side.
+      // The caller asked for the stop; it already settled its side.
       if (controller.signal.aborted) return;
       const status = e instanceof PageEngineError ? e.status : 500;
       const code = e instanceof PageEngineError ? e.code : `${runtime}_engine_failed`;
       io.reply('pageEngine.error', { id, status, code, message: message(e) });
     } finally {
+      clearInterval(heartbeat);
       running.delete(id);
     }
   }

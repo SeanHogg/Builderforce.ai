@@ -24,6 +24,7 @@ import {
   rewriteToLocalUrl,
   runLocalFirst,
   type LocalEndpoint,
+  type LocalFirstAttempt,
   type LocalFirstAttemptRecord,
   type LocalFirstWorkload,
   type LocalRuntimeId,
@@ -249,6 +250,18 @@ export interface LocalFirstStreamInput {
    * since the fit is what makes the rest fit.
    */
   fit?: LocalAttemptFit;
+  /**
+   * The sentinel thrown when nothing can serve a call — `not_signed_in` (the default) or,
+   * for a person sign-in would not help (Local only, or signed in with the cloud route
+   * unavailable), `no_local_model`. `createHostModelStream` decides which.
+   */
+  noModel?: string;
+  /**
+   * Consulted once per call with the plan, before any attempt runs; returns the plan to
+   * run. Hybrid's `run.local-success` predictor drops the local attempts here when it is
+   * confident they would fail (`createHostModelStream`). Absent = the plan as made.
+   */
+  gate?: (plan: LocalFirstAttempt[], call: Omit<StreamChatOptions, 'transport'>) => Promise<LocalFirstAttempt[]>;
 }
 
 /** What no fit can drop: the system message(s) and the latest user turn. */
@@ -308,7 +321,7 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
     // model the plan would have tried first.
     if (!localFirstApplies(opts)) {
       if (!opts.model || !isLocalModelRef(opts.model)) {
-        if (!input.cloud) throw new Error(NOT_SIGNED_IN);
+        if (!input.cloud) throw new Error(input.noModel ?? NOT_SIGNED_IN);
         return input.cloud(opts, handlers);
       }
       const local = probedTarget(opts.model, input.probes);
@@ -321,12 +334,13 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
     // From here the call names no model (a local ref no probe serves cannot be sent
     // anywhere by name, so it is dropped): the plan routes it.
     const routed: Omit<StreamChatOptions, 'transport'> = opts.model ? { ...opts, model: undefined } : opts;
-    const plan = localFirstPlan({
+    const planned = localFirstPlan({
       probes: input.probes,
       workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
       cloud: input.cloud ? {} : null,
     });
-    if (plan.length === 0) throw new Error(NOT_SIGNED_IN);
+    const plan = input.gate ? await input.gate(planned, routed) : planned;
+    if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
     const { result, attempts } = await runLocalFirst(
       plan,
       async (attempt, commit) => {
@@ -389,13 +403,15 @@ export async function completeLocalFirst(input: {
   signal?: AbortSignal;
   fetch?: LocalFetch;
   onAttempt?: (record: LocalFirstAttemptRecord) => void;
+  /** As {@link LocalFirstStreamInput.noModel}. */
+  noModel?: string;
 }): Promise<string> {
   const plan = localFirstPlan({
     probes: input.probes,
     workload: localFirstWorkload({ messages: input.messages }),
     cloud: input.cloud ? {} : null,
   });
-  if (plan.length === 0) throw new Error(NOT_SIGNED_IN);
+  if (plan.length === 0) throw new Error(input.noModel ?? NOT_SIGNED_IN);
   const { result } = await runLocalFirst(
     plan,
     (attempt) =>

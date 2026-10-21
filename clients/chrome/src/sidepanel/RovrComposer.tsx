@@ -6,15 +6,19 @@
  * pricing page in a tab. Its tool row carries WHERE Rovr acts (`SiteChip`).
  */
 import { useMemo, type ReactNode } from 'react';
-import { BrainComposer } from '@seanhogg/builderforce-brain-ui';
+import { BrainComposer, useComposerMenuRequest } from '@seanhogg/builderforce-brain-ui';
 import { PRICING_URL } from '../config';
 import { t } from '../i18n/t';
+import { useInferenceModeOption } from './hooks';
 import { rovrComposerLabels } from './labels/composerLabels';
 import { ROVR_STARTERS } from './rovrStarters';
 import { SiteChip } from './SiteChip';
 import type { RovrChatOptions } from './useRovrChatOptions';
 
 export interface RovrComposerProps {
+  /** This composer's id — the key the chat's error banner opens ITS `/` menu with
+   *  ("Pick a model"). */
+  composerId: string;
   value: string;
   onChange(value: string): void;
   onSubmit(): void;
@@ -29,9 +33,18 @@ export interface RovrComposerProps {
   showSuggestions: boolean;
 }
 
-export function RovrComposer({ value, onChange, onSubmit, running, onStop, chatOptions, onOpenSettings, above, showSuggestions }: RovrComposerProps) {
+export function RovrComposer({ composerId, value, onChange, onSubmit, running, onStop, chatOptions, onOpenSettings, above, showSuggestions }: RovrComposerProps) {
   const { options, memoryGap, request, projectId } = chatOptions;
   const labels = useMemo(() => rovrComposerLabels(memoryGap), [memoryGap]);
+  // Where models run — the `/` menu's Run models control and the first-run question.
+  // Nothing until the policy's first read: never the refused placeholder shown as a choice.
+  const inferenceMode = useInferenceModeOption();
+  // "Pick a model" (the banner beside this composer) opens this menu on its Model tab.
+  const openMenu = useComposerMenuRequest(composerId);
+  const composerOptions = useMemo(
+    () => ({ ...options, ...(inferenceMode ? { inferenceMode } : {}), ...(openMenu ? { openMenu } : {}) }),
+    [options, inferenceMode, openMenu],
+  );
   const locale = useMemo(() => chrome.i18n.getUILanguage(), []);
   const account = useMemo(
     () =>
@@ -56,7 +69,7 @@ export function RovrComposer({ value, onChange, onSubmit, running, onStop, chatO
       onStop={onStop}
       placeholder={t('composerPlaceholder')}
       ariaLabel={t('composerLabel')}
-      options={options}
+      options={composerOptions}
       {...(account ? { account, onAccountSettings: onOpenSettings } : {})}
       labels={labels}
       above={above}

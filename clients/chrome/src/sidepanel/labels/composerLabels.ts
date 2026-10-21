@@ -101,6 +101,17 @@ const OPTIONS_KEY: Readonly<Record<string, MessageKey>> = {
   modelLocked: 'optModelLocked',
   accountSettings: 'optAccountSettings',
   status: 'optStatus',
+  // Where models run — the Model tab's control and the first-run question.
+  inferenceMode: 'optInferenceMode',
+  inferenceModeHybrid: 'optInferenceModeHybrid',
+  inferenceModeHybridHint: 'optInferenceModeHybridHint',
+  inferenceModeLocalOnly: 'optInferenceModeLocalOnly',
+  inferenceModeLocalOnlyHint: 'optInferenceModeLocalOnlyHint',
+  inferenceModeSpecific: 'optInferenceModeSpecific',
+  inferenceModeSpecificHint: 'optInferenceModeSpecificHint',
+  inferenceModeRecommended: 'optInferenceModeRecommended',
+  inferenceModeAskTitle: 'optInferenceModeAskTitle',
+  inferenceModeAskBody: 'optInferenceModeAskBody',
 };
 
 const PICKER_KEY: Readonly<Record<string, MessageKey>> = {
@@ -116,7 +127,7 @@ const isLocalModelField = (key: string): key is keyof LocalModelLabels =>
   (LOCAL_MODEL_LABEL_FIELDS as readonly string[]).includes(key);
 
 /** Which Rovr message one of brain-ui's scoped composer keys reads. */
-function composerMessageKey(scoped: string, memoryGap: MemoryGap): MessageKey | undefined {
+export function composerMessageKey(scoped: string, memoryGap: MemoryGap): MessageKey | undefined {
   const dot = scoped.indexOf('.');
   const part = scoped.slice(0, dot);
   const key = scoped.slice(dot + 1);

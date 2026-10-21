@@ -14,7 +14,7 @@ import type { LocalRuntimeId } from '@builderforce/local-inference';
 import { errorMessage } from './types';
 
 /** The step that failed. */
-export type PageEngineFailureStage = 'probe' | 'cache_lookup' | 'support' | 'measure' | 'unload' | 'persist' | 'chunk' | 'load';
+export type PageEngineFailureStage = 'probe' | 'cache_lookup' | 'support' | 'measure' | 'unload' | 'persist' | 'chunk' | 'load' | 'trap';
 
 export function reportPageEngineFailure(runtime: LocalRuntimeId, stage: PageEngineFailureStage, error: unknown): void {
   console.warn(`BuilderForce page engine: ${runtime} ${stage} failed (${errorMessage(error)})`);

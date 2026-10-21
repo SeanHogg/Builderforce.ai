@@ -1,5 +1,5 @@
 'use client';
-import { useId, useMemo, useState } from 'react';
+import { useCallback, useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { compareAnalysis, type AnalysisIssue, type AnalysisLocation, type CodeAnalysisComparison, type CodeAnalysisSnapshot } from '@builderforce/agent-tools';
 
@@ -20,7 +20,7 @@ export function CodeAuditVisualizer({ analysis, openSource }: { analysis: CodeAn
   const diff = useMemo(() => compareAnalysis(current, baseline), [current, baseline]);
   const compareView = revision === 'changes' && diff.comparable;
   const snapshot = revision === 'before' && baseline ? baseline : current;
-  const group = (file: string) => level === 'files' ? file : file.split('/').slice(0, file.includes('/') ? 2 : 1).join('/');
+  const group = useCallback((file: string) => level === 'files' ? file : file.split('/').slice(0, file.includes('/') ? 2 : 1).join('/'), [level]);
   const graph = useMemo(() => {
     const files = compareView && baseline ? [...new Set([...baseline.nodes, ...current.nodes])] : snapshot.nodes;
     const names = [...new Set(files.filter((file) => file.toLowerCase().includes(query.toLowerCase())).map(group))].sort();
@@ -28,7 +28,7 @@ export function CodeAuditVisualizer({ analysis, openSource }: { analysis: CodeAn
     const positions = new Map(visible.map((name, i) => [name, { x: (i % 4) * 240 + 20, y: Math.floor(i / 4) * 95 + 25 }]));
     const edges = compareView && baseline ? [...new Map([...baseline.edges, ...current.edges].map((edge) => [JSON.stringify([edge.from, edge.to]), edge])).values()] : snapshot.edges;
     return { names, visible, positions, edges, files };
-  }, [current, baseline, snapshot, query, level, compareView]);
+  }, [current, baseline, snapshot, query, group, compareView]);
   const edgeId = (edge: { from: string; to: string }) => JSON.stringify([edge.from, edge.to]);
   const oldEdges = new Set(baseline?.edges.map(edgeId));
   const newEdges = new Set(current.edges.map(edgeId));

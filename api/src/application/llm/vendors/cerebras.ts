@@ -23,7 +23,7 @@ import type { VendorModelEntry } from './types';
 import { CEREBRAS_STRICT_KEYWORDS } from '../jsonSchemaSanitize';
 
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  { id: 'gpt-oss-120b', tier: 'FREE', label: 'GPT-OSS 120B (Cerebras · Fast)', brand: 'Cerebras' },
+  { id: 'gpt-oss-120b', tier: 'FREE', weights: 'gpt-oss-120b', label: 'GPT-OSS 120B (Cerebras · Fast)', brand: 'Cerebras' },
   { id: 'qwen-3.8-27b', tier: 'FREE', label: 'Qwen 3.8 27B (Cerebras)',        brand: 'Cerebras', capabilities: ['vision'] },
 ];
 

@@ -35,6 +35,7 @@ import {
 } from './cloudRunModelPolicy';
 import { emitCodingModelDegraded, hasVendorKeys, refuseCloudRunWithoutByo, requestedModelForRole } from './routing';
 import type { ContainerRunContext } from './runContext';
+import { strictWhenConnected } from '../../llm/fundingOrder';
 
 export async function recordCloudUsage(
   env: Env,
@@ -336,7 +337,7 @@ export async function imageRunTurn(
     ...(xaiOAuthToken ? { xaiOAuthToken } : {}),
     ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}),
     ...byoRoutingOptions(creds),
-    ...(creds.configuredProviders.length ? { byoRequired: true } : {}),
+    ...strictWhenConnected(creds.configuredProviders.length > 0),
   });
   const turnRun = await completeUnderRunPolicy(modelState, (req) => proxy.complete({
     messages: args.messages as unknown as ChatMessage[], tools: args.tools,

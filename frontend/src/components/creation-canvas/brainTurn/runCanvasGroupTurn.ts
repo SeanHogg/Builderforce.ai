@@ -6,7 +6,7 @@ import { canvasProjectId, canvasProjectNodes } from '@/lib/canvasProjectRef';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import { readChosenCanvasPhase } from '@/lib/canvasPhases';
-import { projectMemoryHooks } from '@seanhogg/builderforce-brain-embedded';
+import { projectMemoryHooks, routingModeForSelection } from '@seanhogg/builderforce-brain-embedded';
 import { apiRequest } from '@/lib/apiClient';
 import { teachProjectEvermindFromText } from '@/lib/projectEvermindApi';
 import { safeTraceJson } from '../canvasArtifactExport';
@@ -112,7 +112,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
           prompt: 'Contribute a specialist perspective to the latest request.', canvasSnapshot: turnSnapshot(stage.nodes()),
           guestTurnId: requestMessageId,
           guestTurnInput: request,
-          persistence, canvasActions: persistence === 'server' ? [] : canvasActions, notices: canvasNotices, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+          persistence, canvasActions: persistence === 'server' ? [] : canvasActions, notices: canvasNotices, routingMode: routingModeForSelection(modelSelection),
           runShaping,
           ...(arcStage ? { arcStage } : {}),
           autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
@@ -160,7 +160,7 @@ export async function runCanvasGroupTurn(ctx: CanvasGroupTurnContext): Promise<s
     mode: sessionMode,
     projectId: evermindProjectId,
     ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
-    routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+    routingMode: routingModeForSelection(modelSelection),
     runShaping,
     ...(arcStage ? { arcStage } : {}),
     autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,

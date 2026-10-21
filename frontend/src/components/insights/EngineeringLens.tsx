@@ -8,6 +8,7 @@ import { DaysWindowSelect, KpiGrid } from './LensShell';
 import { pct, score2 } from './format';
 import { useInsightFormat } from './format';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
+import { RunAnomaliesCard } from './RunAnomaliesCard';
 
 /**
  * LENS #1 — AI effectiveness over run_model_outcomes. The "which approach
@@ -67,6 +68,7 @@ export function EngineeringLens() {
         <StatCard label={t('eng.degraded')} value={pct(data.totals.degradedRatePct)} sub={t('eng.degradedSub')} />
         <StatCard label={t('eng.cost')} value={usd(data.totals.costUsd)} sub={t('eng.costSub')} />
       </KpiGrid>
+      <RunAnomaliesCard days={days} projectId={currentProjectId} />
       {table(t('eng.byApproach'), t('eng.approach'), data.byApproach)}
       {table(t('eng.byModel'), t('eng.model'), data.byModel)}
       {table(t('eng.byActionType'), t('eng.workType'), data.byActionType)}

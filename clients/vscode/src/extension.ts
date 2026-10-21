@@ -15,10 +15,12 @@ import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
 import { afterWorkspaceScan, syncWorkspaceFacts } from "./workspaceFactsSync";
 import { watchWorkspaceSymbols } from "./workspaceSymbolWatch";
-import { getModels, getWebBaseUrl, getKimiCodeUnavailableReason, getLocalModelsConfig, SECRET_KEY, clearPersonalityBlockCache, invalidateKimiInstallMemo } from "./gateway";
+import { getModels, getWebBaseUrl, getKimiCodeUnavailableReason, getLocalModelsConfig, SECRET_KEY, invalidateKimiInstallMemo } from "./gateway";
+import { clearPersonalityBlockCache } from "./personalityLimbic";
 import { listLocalModels, localModelOptions, type LocalModel } from "./localModels";
 import { pickSynapseInstall, runSynapseInstall, synapseInstallRows, type SynapsePickRow } from "./synapseInstall";
-import { resolveModelRoute, routeRequiresSignIn } from "./modelRouting";
+import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn } from "./modelRouting";
+import { registerInferenceModeCommands, showNoLocalModelPrompt } from "./noLocalModelPrompt";
 import { PERMISSION_MODE_SETTING } from "./permissionMode";
 import { InsightsController } from "./insights";
 import { EvermindViewProvider } from "./evermindView";
@@ -52,6 +54,7 @@ import { editWorkspaceHooks } from "./hooks/editorDirectives";
 import { buildIdentityReport } from "./buildIdentityReport";
 import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
 import { bindOutboxStorage, durableStepHost } from "./outboxStorage";
+import { bindLocalSuccessStorage } from "./localSuccessStorage";
 import { EXPORT_DEAD_LETTERS_COMMAND, runExportDeadLetters } from "./deadLetterCommand";
 import { bindOutboxSendPermissionAtActivation } from "./sendPermissionActivation";
 import { installAuditClose } from "./installAuditClose";
@@ -61,10 +64,12 @@ import { bootVsixHost } from "./bootVsixHost";
 // differs. Used by the Visualization panel.
 import { renderWebviewHtml } from "./webviewShared";
 import { VisualizationPanel } from "./visualizationPanel";
-import { bindPlatformPolicy, platformPolicy, withPlatformAuthentication, outboxSendPermission as platformOutboxSendPermission } from "./platformPolicy";
+import { bindPlatformPolicy, platformPolicy, platformPolicyResolved, withPlatformAuthentication, outboxSendPermission as platformOutboxSendPermission } from "./platformPolicy";
 import { localBrainApplication } from "./localFirstStore";
 import { configurePolicyGatesPersistence } from "./policyGates";
 import { createPolicyGatesPersistence } from "./policySnapshots";
+import { installHostBfiRuntime } from "./hostBfi/runtime";
+import { hostPageEngines } from "./pageEngineBridge";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 /**
@@ -124,7 +129,10 @@ async function syncSignedInContext(context: vscode.ExtensionContext): Promise<vo
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  bindPlatformPolicy(context);
+  // Installs the fetch guard now; the policy RESOLVES after the signed-in read —
+  // `platformPolicyResolved()`, which every platform call started below waits on.
+  void bindPlatformPolicy(context, SECRET_KEY);
+  registerInferenceModeCommands(context, () => BuilderForcePanel.refresh());
   // G08: install the local audit-close path at activation. `AuditExecution.closeLocally`
   // now routes through `closeAuditLocally`, which recovers interrupted runs and refuses
   // the cloud launch, but the helper surface is only reachable once activation has
@@ -133,6 +141,14 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(installAuditClose());
   const vsixHost = bootVsixHost({ network: "denied", directory: context.globalStorageUri.fsPath });
   context.subscriptions.push({ dispose: () => vsixHost.stop() });
+  // A `local/bfi/…` pin keeps running locally with the chat panel closed: the host's own
+  // bfi worker (CPU backend) joins the page-engine bridge while a model file is cached.
+  const hostBfi = installHostBfiRuntime({
+    extensionPath: context.extensionPath,
+    storagePath: context.globalStorageUri.fsPath,
+    bridge: hostPageEngines,
+  });
+  context.subscriptions.push({ dispose: () => hostBfi.dispose() });
   // G12: bind the policy's send permission into the durable outbox store HERE, beside the
   // fetch guard it comes from, so `builderforce.platform.synchronize` going off actually
   // stops sends. Without this the store's gate has no administrative source: the outboxes
@@ -289,6 +305,8 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push({ dispose: () => runHost.dispose() });
   BuilderForcePanel.configure({
     runHost,
+    // The webview's bfi model store is a view of the host's file cache — one download.
+    modelFiles: hostBfi.files,
     onChatsChanged,
     onPlatformWrite,
     onSelectProject: (projectId) => void selectProjectById(context, projects, projectId),
@@ -300,6 +318,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // Storage + credential for the durable write outboxes (activity, error reports,
   // unsaved chat turns, run outcomes) — a backlog from the last session replays now.
   bindOutboxStorage(context);
+  // Where Hybrid's local-success predictor is kept (machine-wide: the models are this machine's).
+  bindLocalSuccessStorage(context);
   installStepDurability(durableStepHost((chatId, rows) => localBrainApplication(context).persistence.sendMessages(chatId, rows)));
   // The ONE log surface, owned by errorReporter so any module can write to it and
   // so "log it" and "file it in Quality" can never drift apart.
@@ -739,6 +759,9 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 async function heartbeat(context: vscode.ExtensionContext): Promise<void> {
+  // Never before the policy is resolved: a signed-in person would still read as signed
+  // out (Local only) and the beat would be refused.
+  await platformPolicyResolved();
   if (!(await context.secrets.get(SECRET_KEY))) return;
   const version = (context.extension.packageJSON as { version?: string }).version ?? "0.0.0";
   await bfApi.connect(context.secrets, os.hostname(), version);
@@ -759,6 +782,7 @@ async function pollAssignedTasks(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
 ): Promise<void> {
+  await platformPolicyResolved();
   if (!(await context.secrets.get(SECRET_KEY))) return;
   const assigned = await bfApi.listAssignedTasks(context.secrets);
   const currentIds = assigned.map((t) => t.id);
@@ -1556,12 +1580,21 @@ async function maybeScan(context: vscode.ExtensionContext, force: boolean): Prom
   // Hand the folder to Builderforce Desktop (when it runs) so its index starts building
   // now — before any sign-in gate, because the local index needs no account.
   void registerWorkspace(root);
+  // The route reads the inference mode, which is only real once the policy resolved.
+  await platformPolicyResolved();
   const key = await context.secrets.get(SECRET_KEY);
   // The SAME route the chat participant runs on, rather than a second reading of
   // `builderforce.defaultModel`: that divergence meant pinning an on-device model left
   // the scan summarizing through the gateway under a different model entirely. A local
   // route also needs no account, so the sign-in gate follows the route, not the key.
   const route = await resolveModelRoute(context.secrets);
+  // Nothing can summarize the workspace for a reason signing in won't fix. The automatic
+  // scan stays quiet; a rescan the person ASKED for says why and offers the remedies.
+  const noModel = routeNeedsLocalModel(route) ? "no_local_model" : routeNeedsSpecificModel(route) ? "no_specific_model" : null;
+  if (noModel) {
+    if (force) void showNoLocalModelPrompt(noModel);
+    return;
+  }
   if (!key && routeRequiresSignIn(route)) return;
 
   const work = async (progress?: vscode.Progress<{ message?: string }>) => {

@@ -8,7 +8,7 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { brainConfig } from '@/lib/brain/runtime';
 import { guestBrainConfig } from '@/lib/brain/guestRuntime';
-import { ensureGuestToken } from '@/lib/guestRoomApi';
+import { webInferenceModeNow } from '@/lib/localFirst/webInferenceMode';
 import { GUEST_RESEARCH_ACTIONS } from '@/lib/guestResearchActions';
 import { loadGuestCareerActions } from '@/lib/guestCareerActions';
 import { conversationSpeakerLabels, echoesEarlierAnswer, stripSpeakerLabel } from '@/lib/canvasTranscript';
@@ -20,7 +20,7 @@ import {
   unverifiedCreationClaim,
 } from '@/lib/canvasTurnOutcome';
 import { canvasSystemMessages, promptNamedTools } from '@/lib/canvasAiSystemPrompt';
-import { CanvasRunAbortedError, GuestAiUnavailableError } from '@/lib/canvasAiErrors';
+import { CanvasRunAbortedError } from '@/lib/canvasAiErrors';
 import { MALFORMED_TOOL_CALL_DIRECTIVE, TRUNCATED_ROUND_DIRECTIVE } from '@/lib/canvasAiTurnBudget';
 import { runAgentLoop, openAiChatCodec } from '@builderforce/agent-loop';
 import { initialRunPolicy } from '@builderforce/run-policy';
@@ -59,9 +59,14 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // (below), which ride the request as `excludeModels` — honoured by the gateway only
   // while another candidate remains. Worst case the same model answers again — strictly
   // better than refusing to answer at all.
-  if (options.persistence === 'local' && !(await ensureGuestToken())) {
-    throw new GuestAiUnavailableError();
-  }
+  //
+  // NO MINT ON OPEN. An anonymous board (`persistence: 'local'`) defaults to Local only:
+  // its turns run on this device's model with no API call at all, and with no model
+  // here the stream fails `no_local_model` — the shared remedy (download a model /
+  // switch to Hybrid), never a dead panel. The guest token is minted by the guest
+  // transport the first time a HYBRID turn reaches the gateway (`guestRuntime`), so
+  // nothing here asks for one up front.
+  const localOnly = webInferenceModeNow() === 'local-only';
   const config = options.persistence === 'server' ? brainConfig : guestBrainConfig;
   const transport = config.transport;
   // Where each round trip runs is the config's — the Brain's own stream, so an unpinned,
@@ -88,7 +93,8 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // interview prep, runway) are pure over text the visitor supplies, so a guest gets the
   // IDENTICAL implementation a tenant does rather than a degraded imitation. Fetched
   // from the server catalog rather than re-declared here — see guestCareerActions.
-  const careerActions = options.persistence === 'server' ? [] : await loadGuestCareerActions();
+  // Their catalogue is a platform read, so under Local only they are skipped (no fetch).
+  const careerActions = options.persistence === 'server' || localOnly ? [] : await loadGuestCareerActions();
   const actions = [...options.canvasActions, ...mcpActions, ...researchActions, ...careerActions];
   const byName = new Map(actions.map((action) => [action.name, action]));
   const recalled = await recallCanvasMemory(options.evermind, options.prompt, options.onTrace);

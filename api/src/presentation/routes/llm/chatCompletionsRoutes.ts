@@ -46,6 +46,7 @@ import { gatePremiumSelection, gateStrictPin, replayIdempotentRequest } from './
 import { buildCompletionEnvelope, buildCompletionHeaders, stampTraceIdOnError } from './chatCompletionResponse';
 import { handleGuestChat } from './guestChat';
 import { requireTenantAccess, respondToAccessError, type TenantAccess } from './access';
+import { requestFundingOrder } from './requestFundingOrder';
 
 export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
   router.post('/v1/chat/completions', async (c) => {
@@ -189,6 +190,15 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
       ? bodyAny.routingMode
       : undefined;
     if (bodyAny.routingMode != null && routingMode == null) delete bodyAny.routingMode;
+    // Free tier first, connected accounts first, or inferred from them — the ONE rule
+    // (`fundingOrder.ts`), read the ONE way every completion surface reads it
+    // (`requestFundingOrder`: the account preference only when the turn did not choose,
+    // a failed read falls back to the inference).
+    const fundingOrder = await requestFundingOrder(c, access, {
+      ...(routingMode ? { requested: routingMode } : {}),
+      byoConfigured: tenantCreds.configuredProviders.length > 0,
+      source: 'presentation/routes/llm/chatCompletionsRoutes.ts',
+    });
     // What kind of call this is, for the usage row — validated so a client can never write
     // an arbitrary string into the ledger. The proxy reads the same field to order the seed.
     const bodyRole = isModelRole(bodyAny.role) ? bodyAny.role : null;
@@ -210,7 +220,7 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
     // a plain chat keeps the general pool. Reuses the credentials resolved above so
     // any direct-Claude resolution rides the tenant subscription and BYO vendors
     // serve from the tenant's own account.
-    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, hostEgress, byoRouting: byoRoutingOptions(tenantCreds),byoRequired: routingMode === 'byo_pool' || (routingMode == null && tenantCreds.configuredProviders.length > 0), allowGatewayAuto: routingMode === 'auto', byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, hostEgress, byoRouting: byoRoutingOptions(tenantCreds), ...fundingOrder, byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
     // of the Brain "dies after several executions" fix — the reactive 413

@@ -24,6 +24,8 @@ export const LOOPBACK_ORIGINS = ['http://127.0.0.1', 'http://localhost'] as cons
  *  vendored file's own name (`packages/bfi-web`); the panel loads it from
  *  `chrome.runtime.getURL(BFI_WASM_FILE)`. */
 export const BFI_WASM_FILE = 'bfi_web_bg.wasm';
+/** The `bfi` Web Worker `build.mjs` emits beside the panel (`src/host/bfiWorker.ts`). */
+export const BFI_WORKER_FILE = 'bfiWorker.js';
 
 /** The client name sent with a device sign-in (`POST /api/auth/device/code`). */
 export const DEVICE_CLIENT = 'chrome';

@@ -1,6 +1,6 @@
 import type { ChatModeVocabulary } from '@/lib/brain/useChatModeCopy';
 import type { ReactNode } from 'react';
-import type { ChatModelOptions, ChatModelSelection, ComposerSuggestion, ModelIdentityContext, QueuedTurns } from '@seanhogg/builderforce-brain-ui';
+import type { ChatModelOptions, ChatModelSelection, ComposerSuggestion, InferenceModeGate, ModelIdentityContext, QueuedTurns } from '@seanhogg/builderforce-brain-ui';
 import type { DirectedRecipient, TicketTag } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainEffort, ChatMode } from '@/lib/brain';
 import type { TemplateEntry } from '@/lib/templates/contract';
@@ -94,6 +94,18 @@ export interface ChatInputProps {
   modelSelection?: ChatModelSelection;
   modelOptions?: ChatModelOptions;
   onModelSelectionChange?: (selection: ChatModelSelection) => void;
+  /**
+   * This composer's id on its surface — the key a banner beside it opens ITS `/` menu
+   * with (brain-ui's `requestComposerMenu`: "Download a local model", "Pick a model").
+   * Omit on a surface with no such banner; no request then reaches this composer.
+   */
+  composerId?: string;
+  /**
+   * The first-run gate when the HOST owns it (brain-ui `useInferenceModeGate`) because
+   * it also starts turns itself — the guest panel's landing prompt passes the same gate
+   * as Send, and the question shows in this composer for both. Omit otherwise.
+   */
+  modeGate?: InferenceModeGate;
   /** The model the gateway will actually use while the selection is `auto`, when
    *  the host knows it — so the menu names what is running, not just "Auto". */
   effectiveModel?: string;

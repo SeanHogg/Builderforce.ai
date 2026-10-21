@@ -101,6 +101,8 @@ fs.mkdirSync(outDir, { recursive: true });
 await Promise.all([
   esbuild.build({ ...shared, entryPoints: { background: 'src/background/serviceWorker.ts' }, format: 'esm', outdir: outDir }),
   esbuild.build({ ...shared, entryPoints: { content: 'src/content/pageAgent.ts' }, format: 'iife', outdir: outDir }),
+  // The `bfi` engine's Web Worker (`BFI_WORKER_FILE`): the panel starts it on first use.
+  esbuild.build({ ...shared, entryPoints: { bfiWorker: 'src/host/bfiWorker.ts' }, format: 'esm', outdir: outDir }),
   esbuild.build({
     ...shared,
     entryPoints: { sidepanel: 'src/sidepanel/main.tsx' },

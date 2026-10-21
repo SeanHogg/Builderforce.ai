@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useState, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
+import { usePolledResource } from '@/hooks/usePolledResource';
 import { ApiRequestError } from '@/lib/apiClient';
 import {
   captureLearningBaseline,
@@ -36,7 +37,8 @@ export function EvermindLearningReview({ projectId }: { projectId: number | null
     }
   }, [projectId, t]);
 
-  useEffect(() => { void reload(); }, [reload]);
+  // Load once per project (`maxTicks: 0` = the immediate read only); actions reload explicitly.
+  usePolledResource(() => reload(), { intervalMs: 60_000, enabled: projectId != null, maxTicks: 0, restartKey: projectId });
 
   const act = useCallback(async (fn: () => Promise<unknown>) => {
     setBusy(true);

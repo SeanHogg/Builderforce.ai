@@ -18,8 +18,17 @@
  *
  * The caller owns the socket and its frames; this owns only WHEN to call
  * `connect` again. Report each attempt's fate through `opened()` / `closed()`.
+ *
+ * THE PLATFORM GATE. Every web socket opens through {@link openSocket}, which asks the
+ * SAME gate as `fetch` (`localFirst/webRequestGate`, the shared route table): under Local
+ * only a socket that carries the person's content is never constructed. The reconnector
+ * then PARKS instead of retrying — no backoff loop, no "reconnecting" churn, one quiet
+ * give-up (`'local-only'`) — and wakes by itself when the inference mode changes (the
+ * person opts into Hybrid), so the surface simply runs local-only until then.
  */
 import { backoffDelay, isDocumentHidden } from './pollPolicy';
+import { subscribeWebInferenceMode } from '../localFirst/webInferenceMode';
+import { webSocketRefusal } from '../localFirst/webRequestGate';
 
 /** First reconnect wait; doubles per consecutive failure up to {@link RECONNECT_MAX_MS}. */
 export const RECONNECT_BASE_MS = 2_000;
@@ -31,11 +40,26 @@ export const STABLE_OPEN_MS = 10_000;
 /** Close codes a server sends to say "not allowed" — never retried. */
 export const AUTH_CLOSE_CODES: ReadonlySet<number> = new Set([1008, 4001, 4003, 4401, 4403]);
 
-/** Why the reconnector stopped trying: refused by the server, never opened, or the caller said retrying is pointless. */
-export type ReconnectGiveUp = 'auth' | 'unopened' | 'stale';
+/**
+ * Why the reconnector stopped trying: refused by the server, never opened, the caller said
+ * retrying is pointless, or the person's inference mode keeps this socket local-only (it
+ * resumes on its own when the mode changes).
+ */
+export type ReconnectGiveUp = 'auth' | 'unopened' | 'stale' | 'local-only';
 
-/** `new WebSocket(url)`, or null when the constructor throws (a malformed URL, a blocked scheme). */
+/** How many sockets the platform gate refused — a reconnector reads it around its own `connect`. */
+let policyRefusals = 0;
+
+/**
+ * `new WebSocket(url)` — after THE platform gate (the same decision `fetch` gets). Null
+ * when the gate refuses it (Local only, a content-carrying socket: never constructed) or
+ * when the constructor throws (a malformed URL, a blocked scheme).
+ */
 export function openSocket(url: string): WebSocket | null {
+  if (webSocketRefusal(url)) {
+    policyRefusals += 1;
+    return null;
+  }
   try { return new WebSocket(url); } catch { return null; }
 }
 
@@ -80,6 +104,11 @@ export function createReconnector(options: ReconnectOptions): Reconnector {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let delay = base;
   let unopened = 0;
+  /** Inside the synchronous `connect` call, and the gate's refusal count when it began. */
+  let connecting = false;
+  let refusalsAtAttempt = 0;
+  /** Parked by the platform gate; woken by an inference-mode change. */
+  let parkedUntilModeChange: (() => void) | null = null;
 
   const canRetry = () => !options.canRetry || options.canRetry();
 
@@ -87,7 +116,27 @@ export function createReconnector(options: ReconnectOptions): Reconnector {
     if (stopped) return;
     live = true;
     openedAt = null;
-    options.connect();
+    connecting = true;
+    refusalsAtAttempt = policyRefusals;
+    try {
+      options.connect();
+    } finally {
+      connecting = false;
+    }
+  };
+
+  /** The gate refused this attempt's socket: wait for the mode to change, quietly. */
+  const park = () => {
+    options.onGiveUp?.('local-only');
+    if (parkedUntilModeChange) return;
+    parkedUntilModeChange = subscribeWebInferenceMode(() => {
+      if (stopped || live) return;
+      parkedUntilModeChange?.();
+      parkedUntilModeChange = null;
+      unopened = 0;
+      delay = base;
+      attempt();
+    });
   };
 
   const schedule = () => {
@@ -106,7 +155,7 @@ export function createReconnector(options: ReconnectOptions): Reconnector {
   };
 
   const onVisibility = () => {
-    if (stopped || refused || live || timer || isDocumentHidden() || !canRetry()) return;
+    if (stopped || refused || parkedUntilModeChange || live || timer || isDocumentHidden() || !canRetry()) return;
     // Back in view with no socket (paused while hidden, or gave up after never opening):
     // one fresh round from the short wait.
     unopened = 0;
@@ -129,6 +178,11 @@ export function createReconnector(options: ReconnectOptions): Reconnector {
       live = false;
       const heldSince = openedAt;
       openedAt = null;
+      // This attempt's socket was refused by the platform gate (it never existed).
+      if (connecting && policyRefusals > refusalsAtAttempt) {
+        park();
+        return;
+      }
       if (code != null && AUTH_CLOSE_CODES.has(code)) {
         refused = true;
         options.onGiveUp?.('auth');
@@ -146,6 +200,8 @@ export function createReconnector(options: ReconnectOptions): Reconnector {
       stopped = true;
       if (timer) clearTimeout(timer);
       timer = null;
+      parkedUntilModeChange?.();
+      parkedUntilModeChange = null;
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
     },
   };

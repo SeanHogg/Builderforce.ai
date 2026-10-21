@@ -32,11 +32,18 @@ hold.
 
 ```ts
 export class BfiEngine {
-  /** WebGPU adapter + device (requests `shader-f16` when offered). Rejects with
-   *  `webgpu_unavailable: <reason>` when there is no adapter. */
-  static create(): Promise<BfiEngine>;
-  /** No device creation; safe to call on every probe. */
-  static support(): Promise<{ supported: boolean; reason?: string; maxBufferBytes: number; f16: boolean }>;
+  /** `webgpu`: adapter + device (requests `shader-f16` when offered); rejects with
+   *  `webgpu_unavailable: <reason>` when there is no adapter. `cpu`: the native bfi
+   *  CPU kernels in wasm memory (SIMD128, single-threaded). `auto` (default): WebGPU
+   *  when an adapter exists, else CPU. */
+  static create(options?: { backend?: 'webgpu' | 'cpu' | 'auto' }): Promise<BfiEngine>;
+  readonly backend: 'webgpu' | 'cpu';
+  /** No device creation; safe to call on every probe. The top level is the WebGPU
+   *  adapter (contract v2, unchanged); `backends` describes each backend. */
+  static support(): Promise<{ supported: boolean; reason?: string; maxBufferBytes: number; f16: boolean;
+    backends: { webgpu: { supported: boolean; reason?: string; maxBufferBytes: number; f16: boolean };
+                cpu: { supported: true; simd: boolean; threads: number; kvBudgetBytes: number;
+                       maxMemoryBytes: number; deviceMemoryBytes?: number } } }>;
   /** Load a GGUF from bytes streamed by the host (the host owns download + cache).
    *  Weights stay PACKED on the GPU (one buffer per tensor). */
   load(chunks: ReadableStream<Uint8Array>, totalBytes: number,
@@ -45,7 +52,8 @@ export class BfiEngine {
   /** The context a load will serve (pure; 0 on a bad shape). Defaults: 2 GiB budget,
    *  f16 false, 128 MiB maxBufferBytes. */
   static contextFor(shape: { layers: number; kvHeads: number; headDim: number;
-    trainedContext: number; kvBudgetBytes?: number; f16?: boolean; maxBufferBytes?: number }): number;
+    trainedContext: number; backend?: 'webgpu' | 'cpu'; kvBudgetBytes?: number; f16?: boolean;
+    maxBufferBytes?: number }): number;
   /** OpenAI `chat.completions` request JSON → streams OpenAI chunk JSON strings via
    *  `onChunk` (`{choices:[{delta:{content|tool_calls}}]}`), resolves with the final
    *  completion JSON (incl. `usage`, `finish_reason`). `tools` → grammar-constrained
@@ -53,9 +61,24 @@ export class BfiEngine {
   chat(requestJson: string, onChunk: (chunkJson: string) => void, signal?: AbortSignal): Promise<string>;
   unload(): void;
 }
-export interface BfiModelInfo { arch: string; contextTokens: number; vocab: number; params: number;
-  kvF16: boolean }
+export interface BfiModelInfo { arch: string; backend: 'webgpu' | 'cpu'; contextTokens: number;
+  vocab: number; params: number; kvF16: boolean }
 ```
+
+**CPU backend (no GPU).** The same model code (`bfi-models` qwen3 on `bfi-core`'s
+`CpuBackend`, streamed tensor by tensor, weights packed in wasm memory). f32 KV under a
+512 MiB default budget (`contextFor({ backend: 'cpu' })`: Bonsai 1.7B 2,304, 4B / 8B
+1,792). wasm32's 4 GiB is the ceiling: weights + KV + a 256 MiB working set over it is
+`cpu_memory_exceeded`, refused from the header before any weight is placed. Catalog
+rows opt in with `requires.cpu.minDeviceMemoryBytes` (1.7B 2 GiB, 4B 4 GiB, 8B 8 GiB;
+an unreported RAM reads as 4 GiB); `localModelFit` returns the backend it chose and the
+picker badges `bfi` rows "GPU" / "CPU". The web app and Rovr run the whole `bfi` page engine
+in a dedicated Web Worker (`createBfiWorkerEngine` / `runBfiWorker`, over the same remote
+page-engine frames the editor uses), so CPU decoding never blocks the page. The editor's
+extension host runs the same wasm in a `worker_threads` worker (registry `fallbackReach:
+'host'`), so a `local/bfi/…` pin is served with the chat panel closed; in the editor the
+host's file cache is the ONE copy of a model — the webview's model store is a view of
+it and its engine streams the bytes back over the bridge.
 
 **Served context.** The KV cache is f16 when the adapter offers `shader-f16`, else f32,
 and is capped by `kvBudgetBytes` (default 2 GiB). A load tries the planned context, halves

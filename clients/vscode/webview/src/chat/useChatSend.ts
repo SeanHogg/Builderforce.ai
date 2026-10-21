@@ -12,9 +12,10 @@ import { childTarget, isWaitingOnSubagents, steerRun, type useChatChildren } fro
 import type { QueuedTurn } from './VsCodeComposer';
 
 /**
- * Fetch a fresh affective/personality block for THIS turn's text from the host (which
- * calls the gateway), with a short timeout so a slow/offline gateway never stalls the
- * send. Best-effort → '' on any failure.
+ * A fresh affective/personality block for THIS turn's text from the host (which appraises
+ * it locally against the session's cached personality — the first turn of a session may
+ * wait on that one personality fetch), with a short timeout so a slow/offline gateway
+ * never stalls the send. Best-effort → '' on any failure.
  */
 async function requestLimbic(text: string): Promise<string> {
   try {

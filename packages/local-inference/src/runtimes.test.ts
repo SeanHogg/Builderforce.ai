@@ -3,6 +3,7 @@ import {
   BFI_ENGINE_BASE_URL,
   BROWSER_ENGINE_BASE_URL,
   GATEWAY_COMPLETIONS_PATH,
+  HOST_FALLBACK_RUNTIMES,
   HTTP_LOCAL_RUNTIMES,
   LOCAL_MODEL_PREFIX,
   LOCAL_RUNTIMES,
@@ -42,6 +43,11 @@ describe('registry', () => {
       'webllm',
       'browser',
     ]);
+  });
+
+  it('lets only bfi fall back to the host (its wasm has a CPU backend), and only as a fallback', () => {
+    expect(HOST_FALLBACK_RUNTIMES.map((r) => r.id)).toEqual(['bfi']);
+    for (const r of HOST_FALLBACK_RUNTIMES) expect(r.reach).toBe('page');
   });
 
   it('marks the in-page engines as reached by the page, never over HTTP', () => {

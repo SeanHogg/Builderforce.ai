@@ -374,6 +374,14 @@ export interface VendorModelEntry {
    *  auto-routes — a model a caller may pin (and the catalog must recognise) but the
    *  cascade must never fall onto on its own (e.g. an ULTRA-priced Opus on OpenRouter). */
   autoRoute?: false;
+  /**
+   * The open-weights model this entry serves, as a vendor-neutral key
+   * (`deepseek-v4-flash`, `gemma-4-31b-it`). Two entries with the same key are TWINS —
+   * the same model behind different vendors — so the chain can try the cheaper one
+   * first (`freeTier.ts` `preferFreeTwins`). Declared only where the weights are known
+   * to match; absent = no twin. Quantization variants of one model (fp8) count as twins.
+   */
+  weights?: string;
 }
 
 /** A vendor's current flagship models, as ROUTED ids (prefix included, exactly what a

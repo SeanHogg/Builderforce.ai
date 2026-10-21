@@ -120,6 +120,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
+  // The platform policy's inference mode defaults on whether a session is present
+  // (signed in = Hybrid, signed out = Local only) — THE web definition, `webSignedIn`,
+  // read from storage. A session change in this tab re-applies it (other tabs follow
+  // the storage event); imported lazily so the policy stays out of the root closure.
+  const sessionPresent = !!(webToken || tenantToken);
+  useEffect(() => {
+    if (!initialized) return;
+    void import('./localFirst/platformPolicy').then((m) => m.refreshWebPlatformPolicy());
+  }, [initialized, sessionPresent]);
+
   /**
    * Take a freshly-issued session. Three statements that must always happen
    * together — set the token, set the user, write both through to storage — and

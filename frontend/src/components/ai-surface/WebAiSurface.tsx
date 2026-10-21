@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
-import { AiSurface, SurfaceFooter, type AiSurfaceProps, type AskUserMessageLike, type BrainTimelineLabels } from '@seanhogg/builderforce-brain-ui';
+import { useTranslations } from 'next-intl';
+import { AiSurface, ModelFallbackNotice, SurfaceFooter, useModelFallback, type AiSurfaceProps, type AskUserMessageLike, type BrainTimelineLabels } from '@seanhogg/builderforce-brain-ui';
+import { webModelFallback } from '@/lib/brain/modelFallback';
 import type { RunKey } from '@seanhogg/builderforce-brain-embedded';
 import { REPLAY_MASK } from '@/lib/replaySensitive';
 import { PendingQuestionBar } from './PendingQuestionBar';
@@ -56,11 +58,20 @@ export interface WebAiSurfaceProps extends Omit<AiSurfaceProps, 'footer'>, Omit<
 
 export function WebAiSurface({
   runKey, onApproveAll, messages, onAnswerQuestion, timelineLabels, composer, status, footnote, footerClassName,
-  footer = true, ...surface
+  footer = true, notices, ...surface
 }: WebAiSurfaceProps) {
+  // "Your pick X failed; answered with Auto" — every web surface, once, here: the page's
+  // one fallback channel (`lib/brain/modelFallback`), self-gating until something fell back.
+  const fellBack = useModelFallback(webModelFallback);
+  const t = useTranslations('brain');
+  const tCommon = useTranslations('common');
+  const fallbackNotice = fellBack
+    ? <ModelFallbackNotice channel={webModelFallback} labels={{ fallback: t('modelFallback', { model: '{model}' }), dismiss: tCommon('dismiss') }} />
+    : null;
   return (
     <AiSurface
       {...surface}
+      notices={fallbackNotice ? <>{fallbackNotice}{notices}</> : notices}
       footer={footer ? (
         <WebSurfaceFooter
           runKey={runKey}

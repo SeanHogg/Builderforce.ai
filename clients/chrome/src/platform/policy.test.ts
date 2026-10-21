@@ -21,28 +21,27 @@ describe('Rovr platform policy', () => {
     expect(policy.allows('authenticate')).toBe(false);
   });
 
-  it('persists each capability independently and reads it back in a new context', async () => {
-    const storage = createMemoryKeyValue();
+  it('persists each advanced override independently and reads it back in a new context', async () => {
+    const storage = createMemoryKeyValue({ 'session.key': 'bfk_live_example' });
     const panel = createRovrPlatformPolicy(storage);
     await panel.ready();
     await panel.setCapability('synchronize', true);
 
-    // The service worker is another context over the SAME storage: it sees the grant,
-    // and only the grant — gateway inference stays denied.
+    // The service worker is another context over the SAME storage: it sees the grant on
+    // top of the signed-in default (Hybrid), and only the grant.
     const worker = createRovrPlatformPolicy(storage);
     await worker.ready();
     expect(worker.allows('synchronize')).toBe(true);
-    expect(worker.allows('authenticate')).toBe(true); // implied by sync
-    expect(worker.allows('gateway-inference')).toBe(false);
+    expect(worker.allows('gateway-inference')).toBe(true);
 
-    await panel.setCapability('gatewayInference', true);
+    await panel.setCapability('gatewayInference', false);
     const again = createRovrPlatformPolicy(storage);
     await again.ready();
-    expect(again.snapshot()).toMatchObject({ synchronize: true, gatewayInference: true, connectedFeatures: false });
+    expect(again.snapshot()).toMatchObject({ synchronize: true, gatewayInference: false, connectedFeatures: true });
   });
 
-  it('follows changes made in another context, including revocation back to the default', async () => {
-    const storage = createMemoryKeyValue();
+  it('follows changes made in another context, including revocation back to the mode default', async () => {
+    const storage = createMemoryKeyValue({ 'session.key': 'bfk_live_example' });
     const panel = createRovrPlatformPolicy(storage);
     const worker = createRovrPlatformPolicy(storage);
     await Promise.all([panel.ready(), worker.ready()]);
@@ -50,14 +49,13 @@ describe('Rovr platform policy', () => {
     await panel.setCapability('synchronize', true);
     await vi.waitFor(() => expect(worker.allows('synchronize')).toBe(true));
 
-    // Revoking removes the value's effect everywhere; an absent key is the denial default.
+    // Removing the override hands the capability back to the mode: Hybrid keeps sync off.
     await storage.remove('policy.synchronize');
     await vi.waitFor(() => expect(worker.allows('synchronize')).toBe(false));
-    expect(worker.allows('authenticate')).toBe(false);
   });
 
   it('gates every outbox send path absolutely while sync is disabled, and resumes on grant', async () => {
-    const storage = createMemoryKeyValue();
+    const storage = createMemoryKeyValue({ 'session.key': 'bfk_live_example' });
     const policy = createRovrPlatformPolicy(storage);
     await policy.ready();
     const sent: string[] = [];
@@ -90,7 +88,7 @@ describe('Rovr platform policy', () => {
     outbox.close();
   });
 
-  it('grants nothing to being online or signed in', async () => {
+  it('grants nothing to being online; signing in moves an undecided person onto Hybrid', async () => {
     const storage = createMemoryKeyValue();
     const policy = createRovrPlatformPolicy(storage);
     await policy.ready();
@@ -100,15 +98,75 @@ describe('Rovr platform policy', () => {
     online.set(true);
     expect(online.isOnline()).toBe(true);
     expect(policy.allows('synchronize')).toBe(false);
+    expect(policy.inferenceMode()).toEqual({ mode: 'local-only', chosen: false, signedIn: false, loaded: true });
 
-    // Neither is holding a credential: writing one the way a sign-in does, with no
-    // capability grant beside it, leaves the platform write and the gateway denied.
+    // Signing in (unchosen) is Hybrid: the gateway and connected features open, so the
+    // person's turns and reads work — but sync still waits for its own grant.
     await storage.set('session.key', 'bfk_live_example');
     await storage.set('session.tenantId', 7);
-    await vi.waitFor(() => expect(policy.allows('synchronize')).toBe(false));
-    expect(policy.allows('gateway-inference')).toBe(false);
-    expect(policy.allows('authenticate')).toBe(false);
+    await vi.waitFor(() => expect(policy.allows('gateway-inference')).toBe(true));
+    expect(policy.inferenceMode()).toEqual({ mode: 'hybrid', chosen: false, signedIn: true, loaded: true });
+    expect(policy.allows('connected-feature')).toBe(true);
+    expect(policy.allows('authenticate')).toBe(true);
+    expect(policy.allows('synchronize')).toBe(false);
     expect(platformSendPermission(policy).isAllowed()).toBe(false);
+
+    // Signing out returns to Local only.
+    await storage.remove('session.key');
+    await vi.waitFor(() => expect(policy.allows('gateway-inference')).toBe(false));
+  });
+
+  describe('inference mode', () => {
+    it('is not a mode until storage has been read — never Local only shown to a Hybrid person', async () => {
+      const storage = createMemoryKeyValue({ 'session.key': 'bfk_live_example', 'policy.inferenceMode': 'hybrid' });
+      const policy = createRovrPlatformPolicy(storage);
+      expect(policy.inferenceMode().loaded).toBe(false);
+      await policy.ready();
+      expect(policy.inferenceMode()).toEqual({ mode: 'hybrid', chosen: true, signedIn: true, loaded: true });
+    });
+
+    it('persists a chosen mode under policy.inferenceMode and every context follows it', async () => {
+      const storage = createMemoryKeyValue({ 'session.key': 'bfk_live_example' });
+      const panel = createRovrPlatformPolicy(storage);
+      const worker = createRovrPlatformPolicy(storage);
+      await Promise.all([panel.ready(), worker.ready()]);
+      const seen: string[] = [];
+      worker.subscribeMode((state) => seen.push(state.mode));
+
+      await panel.setInferenceMode('local-only');
+      expect(await storage.get('policy.inferenceMode')).toBe('local-only');
+      expect(panel.inferenceMode()).toEqual({ mode: 'local-only', chosen: true, signedIn: true, loaded: true });
+      expect(panel.allows('gateway-inference')).toBe(false);
+      await vi.waitFor(() => expect(worker.inferenceMode().mode).toBe('local-only'));
+      expect(seen).toContain('local-only');
+
+      const restarted = createRovrPlatformPolicy(storage);
+      await restarted.ready();
+      expect(restarted.inferenceMode()).toMatchObject({ mode: 'local-only', chosen: true });
+    });
+
+    it('Local only keeps the gateway, connected features, sync and direct providers off whatever an override says', async () => {
+      const storage = createMemoryKeyValue({
+        'session.key': 'bfk_live_example',
+        'policy.inferenceMode': 'local-only',
+        'policy.gatewayInference': true,
+        'policy.connectedFeatures': true,
+        'policy.synchronize': true,
+        'policy.directProviders': true,
+      });
+      const policy = createRovrPlatformPolicy(storage);
+      await policy.ready();
+      expect(policy.snapshot()).toMatchObject({ gatewayInference: false, connectedFeatures: false, synchronize: false, directProviders: false });
+    });
+
+    it('Specific opens direct providers; an invalid stored mode reads as unchosen', async () => {
+      const storage = createMemoryKeyValue({ 'session.key': 'bfk_live_example', 'policy.inferenceMode': 'specific' });
+      const policy = createRovrPlatformPolicy(storage);
+      await policy.ready();
+      expect(policy.allows('direct-provider')).toBe(true);
+      await storage.set('policy.inferenceMode', 'cloud');
+      await vi.waitFor(() => expect(policy.inferenceMode()).toMatchObject({ mode: 'hybrid', chosen: false }));
+    });
   });
 
   it('classifies platform requests and leaves everything else ungated', () => {
@@ -119,6 +177,10 @@ describe('Rovr platform policy', () => {
       'gateway-inference',
     );
     expect(platformCapabilityFor(`${base}/api/brain/chats`, { method: 'POST' })).toBe('synchronize');
+    // A POST that READS is a connected feature (the shared route table), behind the mount too.
+    expect(platformCapabilityFor(`${base}/api/limbic/block`, { method: 'POST' })).toBe('connected-feature');
+    expect(platformCapabilityFor(`${base}/llm/v1/models`, { method: 'POST' })).toBe('connected-feature');
+    expect(platformCapabilityFor('https://api.builderforce.ai/api/limbic/block', { method: 'POST' })).toBe('connected-feature');
     expect(platformCapabilityFor(`${base}/api/tasks`)).toBe('connected-feature');
     expect(platformCapabilityFor(`${base}/api/tasks`, { method: 'HEAD' })).toBe('connected-feature');
     // On-device inference and direct providers are not the platform: never classified.
@@ -158,9 +220,10 @@ describe('Rovr platform policy', () => {
     });
 
     it('reports the denied request and sends an allowed one with redirects off', async () => {
-      const policy = createRovrPlatformPolicy(createMemoryKeyValue());
+      const policy = createRovrPlatformPolicy(createMemoryKeyValue({ 'session.key': 'bfk_live_example' }));
       await policy.ready();
       await policy.setCapability('synchronize', true);
+      await policy.setCapability('gatewayInference', false);
       const native = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => Promise.resolve(new Response('{}')));
       vi.stubGlobal('fetch', native);
       const outcomes: string[] = [];
@@ -171,7 +234,7 @@ describe('Rovr platform policy', () => {
       // A BuilderForce URL can never be chased to an origin the classifier never saw.
       expect(native.mock.calls[0]?.[1]).toMatchObject({ method: 'POST', redirect: 'error' });
 
-      // Granting sync grants writing, not the gateway.
+      // Granting sync grants writing, not the gateway the person switched off.
       await expect(
         guarded('https://api.builderforce.ai/llm/chat/completions', { method: 'POST' }),
       ).rejects.toBeInstanceOf(PlatformAccessDenied);

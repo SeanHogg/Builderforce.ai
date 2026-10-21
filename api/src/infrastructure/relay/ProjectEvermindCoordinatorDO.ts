@@ -12,9 +12,10 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  *   POST /learn  — an agent pushes a weight delta (diff of its locally-adapted
  *                  replica vs the base version it pulled). Appended to a pending
  *                  queue; a debounced alarm batches a burst into ONE merge.
- *   alarm()      — drain pending → FedAvg-merge (mergeCheckpointDiffs) the diffs
- *                  taken against the CURRENT head → repackage → write next version
- *                  to R2 → record the version bump in `project_evermind`.
+ *   alarm()      — drain pending → FedAvg-merge the diffs taken against the CURRENT
+ *                  head, gated on held-out eval loss (`gateEvermindMerge`: a merge
+ *                  that raises it is refused and nothing is published) → repackage →
+ *                  write next version to R2 → record the version bump in `project_evermind`.
  *   GET /head    — current { version, ref, mode } for replicas to compare against.
  *
  * Maintenance doors (all single-writer, so none can race a merge):
@@ -32,8 +33,6 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
 import {
   EvermindModelPackage,
   BPETokenizer,
-  mergeCheckpointDiffs,
-  meanEvalLoss,
   parseDeltaLearnPayload,
   decodeDeltaPayload,
   deltaUnusableReason,
@@ -57,7 +56,8 @@ import type { EffectiveTeacher, RecordedSkipReason } from '../../application/llm
 import { ingestErrorEvents } from '../../application/quality/ingestEngine';
 import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import { embedForRecall, packVec, unpackVec } from '../../application/llm/evermindEmbed';
-import { admitDeltaAgainstHead, deltaParseStatus } from '../../application/llm/evermindDeltaLearn';
+import { admitDeltaAgainstHead, deltaParseRefusal, mergeRegressionRefusal, type DeltaRefusal } from '../../application/llm/evermindDeltaLearn';
+import { gateEvermindMerge } from '../../application/llm/evermindMergeGate';
 import type { Env } from '../../env';
 
 /** Debounce window — a burst of learns within this window folds into one merge. */
@@ -778,9 +778,11 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
   private async handleFlush(): Promise<Response> {
     const meta = await this.state.storage.get<CoordMeta>(META_KEY);
     if (!meta) return this.json({ ok: true, merged: 0, version: 0, pending: 0 });
-    const { merged, newVersion } = await this.drain();
+    const { merged, newVersion, refusal } = await this.drain();
     const head = await getProjectEvermindHead(this.env, this.db, meta.tenantId, meta.projectId);
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
+    // A batch the eval gate refused answers in the delta door's own refusal shape.
+    if (refusal) return this.json({ ...refusal.body, merged, version: head.version, pending: pending.length }, refusal.status);
     return this.json({ ok: true, merged, version: newVersion ?? head.version, pending: pending.length });
   }
 
@@ -817,8 +819,13 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (!raw || typeof raw.tenantId !== 'number' || typeof raw.projectId !== 'number') {
       return this.json({ ok: false, error: 'tenantId, projectId, diff, baseVersion required' }, 400);
     }
+    // The single writer trusts no front door: the engine's parse also refuses an ML-head
+    // delta (`target: 'ml:<task>'`), so one never reaches the LM merge.
     const parsed = parseDeltaLearnPayload(raw);
-    if (!parsed.ok) return this.json({ ok: false, error: parsed.error }, deltaParseStatus(parsed.reason));
+    if (!parsed.ok) {
+      const refused = deltaParseRefusal(parsed);
+      return this.json(refused.body, refused.status);
+    }
     const tenantId = raw.tenantId;
     const projectId = raw.projectId;
 
@@ -913,9 +920,11 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
    * Drain the pending queue into ONE merged version and return what happened, so
    * both the debounced {@link alarm} and the on-demand {@link handleFlush} share the
    * exact merge path (DRY). `merged` is the number of contributions folded in;
-   * `newVersion` is the version they were merged into (null when nothing merged).
+   * `newVersion` is the version they were merged into (null when nothing merged);
+   * `refusal` is set when the held-out eval gate refused the batch (nothing published,
+   * the batch consumed — re-merging it would regress again).
    */
-  private async drain(): Promise<{ merged: number; newVersion: number | null }> {
+  private async drain(): Promise<{ merged: number; newVersion: number | null; refusal?: DeltaRefusal }> {
     const meta = await this.state.storage.get<CoordMeta>(META_KEY);
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
     if (!meta || pending.length === 0) return { merged: 0, newVersion: null };
@@ -1120,12 +1129,27 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       }
       if (diffs.length === 0) return { merged: 0, newVersion: null }; // nothing merged (finally drops what we consumed)
 
-      const { checkpoint, contributors, mergedRows, deltaNorm } = mergeCheckpointDiffs(basePkg.checkpoint, diffs, weights);
+      // FedAvg, gated: score the PREVIOUS vs the MERGED model on the held-out set of
+      // examples taught BEFORE this merge (so this batch never grades its own fit). A merge
+      // that raises the loss is refused — nothing is published and the batch is consumed;
+      // an unscorable one (no held-out set yet, not an LM) merges as it always did.
+      const evalSet = isLM ? ((await this.state.storage.get<EvalExample[]>(EVAL_KEY)) ?? []) : [];
+      const { merge, mergedLM } = gateEvermindMerge(basePkg, tok, evalSet, diffs, weights, isLM);
+      if (merge.refusedReason === 'regressed') {
+        this.reportError(new Error('evermind merge refused: held-out eval loss regressed'), {
+          operation: 'merge gate',
+          context: { tenantId, projectId, baseLoss: merge.baseLoss, newLoss: merge.newLoss, contributions: mergedMeta.length },
+          level: 'warning',
+        });
+        return { merged: 0, newVersion: null, refusal: mergeRegressionRefusal(merge) };
+      }
+      const { checkpoint, contributors, mergedRows, deltaNorm } = merge;
 
       // Repackage the merged weights as the next immutable version (recomputes the
-      // manifest checksum), carrying the base name + model card forward.
-      const lm = basePkg.loadLM();
-      lm.loadWeights(checkpoint);
+      // manifest checksum), carrying the base name + model card forward. The gate's
+      // scorer already loaded them when it scored the merge.
+      const lm = mergedLM ?? basePkg.loadLM();
+      if (!mergedLM) lm.loadWeights(checkpoint);
       const nextVersion = head.version + 1;
       const nextPkg = EvermindModelPackage.fromLM(lm, {
         name: basePkg.manifest.name,
@@ -1203,20 +1227,14 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
         merged: mergedMeta.length,
       });
 
-      // Automatic regression check: score the PREVIOUS vs the MERGED model on the
-      // held-out set of examples taught BEFORE this merge, and record the loss delta so
-      // the version chip can show ▲ (improved / retained) or ▼ (regressed). Best-effort:
-      // any failure just skips the point, never the merge. Only meaningful for an LM.
+      // Record the gate's pre/post check (scored above, before publishing) so the version
+      // chip shows ▲ (improved / retained); a regression no longer publishes at all.
+      // Best-effort: any failure just skips the point, never the merge. LM only.
       if (isLM) {
         try {
-          const evalSet = (await this.state.storage.get<EvalExample[]>(EVAL_KEY)) ?? [];
-          if (evalSet.length > 0) {
-            const baseEvalLM = basePkg.loadLM(); // fresh: the PREVIOUS version's weights
-            const baseLoss = meanEvalLoss(baseEvalLM, tok, evalSet);
-            const newLoss = meanEvalLoss(lm, tok, evalSet); // `lm` holds the merged weights
-            if (baseLoss != null && newLoss != null) {
-              await this.recordEval({ version: nextVersion, at, baseLoss, newLoss, delta: baseLoss - newLoss, evalSize: evalSet.length });
-            }
+          const { baseLoss, newLoss } = merge;
+          if (baseLoss != null && newLoss != null) {
+            await this.recordEval({ version: nextVersion, at, baseLoss, newLoss, delta: baseLoss - newLoss, evalSize: evalSet.length });
           }
           // Grow the held-out set with THIS merge's learned examples, for the NEXT merge's
           // check (kept AFTER scoring so this batch never grades its own fit).

@@ -28,8 +28,8 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   // hand-maintained list had gone 10-of-11 dead, which meant most of the FREE pool's
   // NIM segment burned an attempt on a 404 before the cascade could advance. Do not
   // add an id here from memory — refresh the snapshot and take it from there.
-  { id: 'nvidia/nemotron-3-ultra-550b-a55b',            tier: 'FREE', label: 'Nemotron 3 Ultra 550B (NIM)',    brand: 'NVIDIA'    },
-  { id: 'nvidia/nemotron-3-super-120b-a12b',            tier: 'FREE', label: 'Nemotron 3 Super 120B (NIM)',    brand: 'NVIDIA'    },
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b',            tier: 'FREE', weights: 'nemotron-3-ultra-550b-a55b', label: 'Nemotron 3 Ultra 550B (NIM)',    brand: 'NVIDIA'    },
+  { id: 'nvidia/nemotron-3-super-120b-a12b',            tier: 'FREE', weights: 'nemotron-3-super-120b-a12b', label: 'Nemotron 3 Super 120B (NIM)',    brand: 'NVIDIA'    },
   // `moonshotai/kimi-k2.6` is still LISTED by `/v1/models` but its NVCF function is gone
   // (`404 Function '23d4f03a-…': Not found`, 21× in 2026-10-03..10), so listing is not
   // proof of service here: it is superseded by K3 rather than kept.
@@ -39,7 +39,7 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'nvidia/nemotron-3.5-lightning-30b-a3b',        tier: 'FREE', label: 'Nemotron 3.5 Lightning 30B (NIM)', brand: 'NVIDIA'  },
   { id: 'openai/gpt-oss-20b',                           tier: 'FREE', label: 'GPT-OSS 20B (NIM)',              brand: 'OpenAI'    },
   { id: 'mistralai/mistral-large-2-instruct',           tier: 'FREE', label: 'Mistral Large 2 (NIM)',          brand: 'Mistral'   },
-  { id: 'google/gemma-4-31b-it',                        tier: 'FREE', label: 'Gemma 4 31B (NIM)',              brand: 'Google'    },
+  { id: 'google/gemma-4-31b-it',                        tier: 'FREE', weights: 'gemma-4-31b-it', label: 'Gemma 4 31B (NIM)',              brand: 'Google'    },
   { id: 'meta/llama-3.2-11b-vision-instruct',           tier: 'FREE', label: 'Llama 3.2 11B Vision (NIM)',     brand: 'Meta',      capabilities: ['vision'] },
   // RETIRED by NIM in the 2026-10-04 snapshot refresh, no same-family successor served:
   // `openai/gpt-oss-120b` (NIM now serves only 20B — a size downgrade, so no supersession

@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import { BRAIN_AUTO_APPROVE_DIRECTIVE, buildComposerDirectives, type BrainEffort } from '@/lib/brain';
 import type { Project } from '@/lib/types';
+import { personalitySetpoints, turnAffectBlock } from '@seanhogg/builderforce-brain-embedded';
 import { usePersonalityBlock, getSessionPsychometric } from '@/lib/usePersonalityBlock';
-import { fetchLimbicBlock } from '@/lib/personalityApi';
 
 /**
  * The ambient system channel every Brain turn carries (host context, capability,
@@ -59,16 +59,13 @@ export function useBrainSystemContext({
   // Per-turn limbic affect (VS Code webview parity). The static personality tone
   // above (`ambientSystem` ← personalityBlock) sets the user's baseline voice;
   // this seam adds a FRESH per-message affect block the sync system prompt can't:
-  // it appraises THIS turn's text (seeded from the user's psychometric) and folds
-  // the dynamic `block` into that run's system prompt. Reuses the profile cached
-  // by usePersonalityBlock's once-per-session `/me` fetch — only the appraisal
-  // POST varies per turn. Best-effort: '' when there's no profile or on any error
-  // (a no-op that never blocks the chat), so static + per-turn coexist.
+  // it appraises THIS turn's text, seeded from the user's psychometric, with
+  // Evermind's local limbic — ON THIS DEVICE, no request per turn, so it works
+  // signed out (neutral seed) and offline. The profile is the one cached by
+  // usePersonalityBlock's once-per-session `/me` fetch. '' at rest.
   const augmentSystemPrompt = useCallback(async (userText: string): Promise<string> => {
     if (!userText.trim()) return '';
-    const psychometric = await getSessionPsychometric();
-    if (!psychometric) return '';
-    return fetchLimbicBlock(psychometric, userText);
+    return turnAffectBlock(userText, personalitySetpoints(await getSessionPsychometric()));
   }, []);
 
   return { ambientSystem, augmentSystemPrompt };

@@ -38,7 +38,7 @@
  * `useSessionActions`, `useHostIntents`) and the presentational pieces beside them.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import {
   useBrainConversation,
   useBrainConfig,
@@ -80,6 +80,8 @@ const HISTORY_ID = 'bf-chat-history';
 
 export function VsCodeChatSurface({ init }: { init: InitData }) {
   const t = useMemo(() => makeT(init.labels), [init.labels]);
+  // The composer, as the error banner names it to open ITS `/` menu ("Pick a model").
+  const composerId = useId();
   const { persistence } = useBrainConfig();
   // The conversation list — the shared `useBrainChats` plus the editor's own bindings.
   const vsChats = useVsCodeChats(init, t('app.newChat', 'New chat'));
@@ -156,7 +158,8 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
     // A strict pin wins; otherwise an agent persona runs on the agent's own model.
     model: init.modelStrict ? init.model : (personaModelId ?? init.model),
     modelStrict: init.modelStrict,
-    routingMode: init.routingMode ?? 'auto',
+    // Absent = Auto: the gateway applies the account's `cloudOrder` (host `modelState`).
+    routingMode: init.routingMode,
     // A model that burns its stall budget describing tool calls it never makes is
     // switched by the run itself, over the surface already loaded for the picker.
     pickFallbackModel: init.modelStrict ? undefined : pickFallbackModel,
@@ -283,7 +286,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           ratings={conv.ratings}
         />
       )}
-      notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} bundle={init.labels} />}
+      notices={<VsCodeChatNotices conv={conv} chatsError={vsChats.error} onDismissChatsError={vsChats.clearError} bundle={init.labels} init={init} composerId={composerId} />}
       footer={(
         <SurfaceFooter
           // The chat's live sub-agents: who works for whom, and the owner's levers.
@@ -309,6 +312,7 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           )}
           composer={(
             <VsCodeComposer
+              composerId={composerId}
               init={init}
               apiReq={apiReq}
               conv={conv}

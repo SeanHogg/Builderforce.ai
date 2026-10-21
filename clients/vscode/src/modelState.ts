@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { routingModeForSelection, type ChatModelSelection } from "@seanhogg/builderforce-brain-embedded";
 import { getProjectEvermindHead } from "./bfApi";
 import { getModels, isModelAllowed } from "./gateway";
 import { isLocalModelRef } from "./localModels";
@@ -17,8 +18,16 @@ const PROJECT_EVERMIND_PIN = "project_evermind:";
 export type EffectiveModelChoice = {
   model?: string;
   modelStrict?: boolean;
-  routingMode: "auto" | "byo_pool";
+  /** Only an explicit "your keys" pick sends one; Auto sends nothing, so the gateway
+   *  applies the person's account `cloudOrder` (the shared {@link routingModeForSelection}). */
+  routingMode?: "byo_pool";
 };
+
+/** The routing field a selection sends — the rule the web app uses, not a local copy. */
+function routingFor(selection: ChatModelSelection): Pick<EffectiveModelChoice, "routingMode"> {
+  const routingMode = routingModeForSelection(selection);
+  return routingMode ? { routingMode } : {};
+}
 
 /** Undefined means inherit project/config. Once the user chooses, Auto and Pool
  * remain explicit choices rather than collapsing back into that inheritance. */
@@ -42,11 +51,11 @@ function defaultModel(): string | undefined {
 }
 
 export async function resolveEffectiveModelChoice(secrets: vscode.SecretStorage): Promise<EffectiveModelChoice> {
-  if (selected?.mode === "auto") return { routingMode: "auto" };
-  if (selected?.mode === "byo_pool") return { routingMode: "byo_pool" };
+  if (selected?.mode === "auto") return routingFor({ mode: "auto" });
+  if (selected?.mode === "byo_pool") return routingFor({ mode: "byo_pool" });
   if (selected?.mode === "model" && selected.model) {
     const model = await entitled(secrets, selected.model);
-    return model ? { model, modelStrict: true, routingMode: "auto" } : { routingMode: "auto" };
+    return model ? { model, modelStrict: true, ...routingFor({ mode: "model", model }) } : routingFor({ mode: "auto" });
   }
   const project = getSelectedProject();
   if (project) {
@@ -56,15 +65,16 @@ export async function resolveEffectiveModelChoice(secrets: vscode.SecretStorage)
     // coding eval, for the current head). The gateway enforces the same gate when it
     // expands the pin; checking here keeps the chat from advertising a model it won't get.
     if (head?.inferenceEnabled && head.seeded && head.codingGate?.qualified === true) {
-      return { model: `${PROJECT_EVERMIND_PIN}${project.id}`, routingMode: "auto" };
+      return { model: `${PROJECT_EVERMIND_PIN}${project.id}` };
     }
   }
   // Operator role pin (ROLE_MODELS / ROLE_MODEL_DEFAULT). Explicit user pick and
   // the project's Evermind pin above still win; undefined pin falls through.
   const rolePin = await entitled(secrets, roleModelPin(NATIVE_RUN_ROLE));
-  if (rolePin) return { model: rolePin, routingMode: "auto" };
+  // A soft pin (role / configured default) is not a routing choice: no `routingMode`.
+  if (rolePin) return { model: rolePin };
   const model = await entitled(secrets, defaultModel());
-  return { ...(model ? { model } : {}), routingMode: "auto" };
+  return model ? { model } : {};
 }
 
 /**

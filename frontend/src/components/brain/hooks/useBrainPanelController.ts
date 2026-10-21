@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import {
   effortProfile,
@@ -42,6 +42,7 @@ import { useBrainPanelBanners } from './useBrainPanelBanners';
 import { useBrainPanelModels } from './useBrainPanelModels';
 import { useBrainPanelParticipants } from './useBrainPanelParticipants';
 import { useBrainPanelTurns } from './useBrainPanelTurns';
+import { routingModeForSelection } from '@seanhogg/builderforce-brain-embedded';
 
 /**
  * The ONE Brain panel's state machine: composes the focused hooks (preferences,
@@ -67,6 +68,9 @@ export function useBrainPanelController({
   // No close handler => the Brain is part of the page's own layout, not the drawer;
   // the floating launcher stands down rather than offer a second copy of this chat.
   useRegisterInlineBrain(!onClose);
+  // THIS panel's composer, as its error banner names it to open its `/` menu (a page
+  // can hold the full Brain and the drawer at once — a remedy opens only its own).
+  const composerId = useId();
 
   const { filterProjectId, setFilterProjectId } = useBrainProjectFilter();
   const { projects, setProjects, projectName } = useBrainProjects();
@@ -192,7 +196,7 @@ export function useBrainPanelController({
     // An explicit pick wins; otherwise an agent persona runs on the agent's own model.
     model: selectedModel ?? persona.personaModelId,
     modelStrict: modelSelection.mode === 'model',
-    routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+    routingMode: routingModeForSelection(modelSelection),
     pickFallbackModel: modelSelection.mode === 'model' ? undefined : pickFallbackModel,
     windowSources,
     maxTokens: effortProfile(prefs.effort).maxTokens,
@@ -319,6 +323,7 @@ export function useBrainPanelController({
     setInput,
     handleSend,
     composerFocusToken,
+    composerId,
     queued,
     /** Stop the run AND drop the held turns — the composer's Stop. */
     stopTurn,

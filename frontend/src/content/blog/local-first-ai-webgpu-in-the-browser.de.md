@@ -32,7 +32,12 @@ Das ist das Kernfeature des Leitfadens – und eine vollwertige Engine in Builde
 import { createPageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 
 // Bonsai, WebLLM and the Prompt API — one set per page, one fetch shim, one model store.
-const engines = createPageEngineSet({ loadBfi });
+const engines = createPageEngineSet({
+  bfiWorker: {
+    create: () => new Worker(new URL('./bfi.worker.ts', import.meta.url), { type: 'module' }),
+    wasmUrl: async () => (await import('@seanhogg/bfi-web/wasm-url')).bfiWasmUrl,
+  },
+});
 ```
 
 Die Engine erkennt die API per Feature-Detection, verarbeitet die vom Browser gemeldeten Zustände `downloadable`/`downloading`/`available`, und jede Engine meldet ihr echtes Kontextfenster – so wird eine Unterhaltung passend gepackt, *bevor* sie ein kleineres On-Device-Modell erreicht.

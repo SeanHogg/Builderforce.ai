@@ -30,8 +30,10 @@ import { getModality } from '../modality';
 import { getStoredGuestToken, clearGuestToken } from '../guestChatApi';
 import {
   getActiveGuestRoom, getGuestDisplayName, fetchGuestRoomMessages, appendGuestRoomMessages,
-  fetchGuestRoomState, renameGuestRoom, type GuestRoomMessage,
+  fetchGuestRoomState, renameGuestRoom, ensureGuestToken, type GuestRoomMessage,
 } from '../guestRoomApi';
+import { GuestAiUnavailableError } from '../canvasAiErrors';
+import { fetchWithTransportReport } from '../errors/transportFailure';
 
 const CHATS_KEY = 'bf_guest_chats';
 const MSGS_KEY = (chatId: number) => `bf_guest_msgs:${chatId}`;
@@ -291,9 +293,27 @@ const dispatchingGuestPersistence: BrainPersistenceAdapter = {
   uploadUrl: (...args) => activeGuestPersistence().uploadUrl(...args),
 };
 
+/**
+ * The guest's gateway leg. Nothing mints on open: the token is obtained HERE, the first
+ * time a turn actually reaches the gateway (Hybrid — Local only never builds a cloud
+ * stream, so it never gets here), and `ensureGuestToken` itself refuses to mint on Local
+ * only. A request that already carries a token goes as it is; with no token to be had the
+ * turn fails as `GuestAiUnavailableError`, said in the visitor's language by each surface.
+ */
+async function guestGatewayFetch(input: string, init: RequestInit): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (!headers.has('Authorization')) {
+    const token = await ensureGuestToken();
+    if (!token) throw new GuestAiUnavailableError();
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return fetchWithTransportReport(input, { ...init, headers });
+}
+
 const guestTransport: BrainTransport = {
   baseUrl: AUTH_API_URL,
   getToken: getStoredGuestToken,
+  fetch: guestGatewayFetch,
   // A guest 401 means the token lapsed — drop it so the next send re-mints.
   onUnauthorized: () => { clearGuestToken(); },
   // The gateway's refusal keeps its structured fields (parseLlmError), and a

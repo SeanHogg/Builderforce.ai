@@ -96,3 +96,19 @@ describe("the host's tool-count announcement", () => {
     stop();
   });
 });
+
+describe("the host's Hybrid-fallback announcement", () => {
+  it("raises the notice only for THIS panel's chat, and retires it on a chat change", async () => {
+    const { driver } = await load();
+    const stop = driver.installHostRunDriver();
+    driver.setHostRunContext({ chatId: 41, autoApprove: false, modelSurface: null });
+    // Another chat's fallback is not this panel's to show.
+    fromHost({ type: "run.modelFallback", chatId: 77, from: "openai/gpt-5" });
+    expect(driver.hostModelFallback.latest()).toBeNull();
+    fromHost({ type: "run.modelFallback", chatId: 41, from: "anthropic/claude-sonnet-4" });
+    expect(driver.hostModelFallback.latest()?.from).toBe("anthropic/claude-sonnet-4");
+    driver.setHostRunContext({ chatId: 77, autoApprove: false, modelSurface: null });
+    expect(driver.hostModelFallback.latest()).toBeNull();
+    stop();
+  });
+});

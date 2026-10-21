@@ -30,6 +30,11 @@ export default [
   ['check:root-closure', 'check-root-closure.mjs'],
   ['check:primitives', 'check-primitive-duplication.mjs'],
   ['check:blog-index', 'publish-blog-content.mjs', '--check'],
+  // Repo-level: the WebLLM rows of the page engines' catalog are GENERATED from the
+  // installed `@mlc-ai/web-llm` (packages/local-inference/src/webllmCatalog.generated.ts).
+  // Here rather than in api's manifest because this install is the one that installs
+  // brain-embedded's dependencies (ensure-linked-deps), so the library is on disk.
+  ['check:webllm-catalog', '../../scripts/gen-webllm-catalog.mjs', '--check'],
   // `--changed`, not a full sweep: four of the six rules run the React Compiler,
   // so all 2,071 files cost ~10 minutes and a single component costs ~17s. The
   // cost here is proportional to the diff, and a change touching no component
