@@ -14,6 +14,7 @@ import {
   type LocalBackend,
   type LocalDeviceSupport,
 } from '@builderforce/local-inference';
+import { reportPageEngineFailure } from './engineFailure';
 import type { HfModelStore } from './hfModelStore';
 import { webGpuSupport } from './webgpu';
 
@@ -24,7 +25,14 @@ export const BFI_UNSUPPORTED: LocalDeviceSupport = { supported: false, reason: '
 /** Whether the store holds any Bonsai model — the one check that decides whether the
  *  wasm (or its worker) is needed yet. A failed lookup reads as "not downloaded". */
 export async function anyBfiModelDownloaded(store: Pick<HfModelStore, 'status'>): Promise<boolean> {
-  const states = await Promise.all(localCatalogFor('bfi').map((row) => store.status(row.ref).catch(() => 'absent' as const)));
+  const states = await Promise.all(
+    localCatalogFor('bfi').map((row) =>
+      store.status(row.ref).catch((e: unknown) => {
+        reportPageEngineFailure('bfi', 'cache_lookup', e);
+        return 'absent' as const;
+      }),
+    ),
+  );
   return states.includes('ready');
 }
 

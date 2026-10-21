@@ -17,6 +17,9 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  *                  that raises it is refused and nothing is published) → repackage →
  *                  write next version to R2 → record the version bump in `project_evermind`.
  *   GET /head    — current { version, ref, mode } for replicas to compare against.
+ *   POST /learn-head, GET /ml-head — the FEDERATED ML HEADS (`run.local-success`):
+ *                  a separate store with its own eval-gated merge, drained on the same
+ *                  alarm (`evermindMlHeadStore.ts`) — never the LM merge.
  *
  * Maintenance doors (all single-writer, so none can race a merge):
  *   POST /reindex          — recompute every memory's recall embedding against the
@@ -58,6 +61,9 @@ import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import { embedForRecall, packVec, unpackVec } from '../../application/llm/evermindEmbed';
 import { admitDeltaAgainstHead, deltaParseRefusal, mergeRegressionRefusal, type DeltaRefusal } from '../../application/llm/evermindDeltaLearn';
 import { gateEvermindMerge } from '../../application/llm/evermindMergeGate';
+import { mlHeadVersionKey } from '../../application/llm/evermindMlHeadDispatch';
+import { bumpCacheVersionSafe } from '../cache/readThroughCache';
+import { EvermindMlHeadStore } from './evermindMlHeadStore';
 import type { Env } from '../../env';
 
 /** Debounce window — a burst of learns within this window folds into one merge. */
@@ -332,15 +338,24 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
   private readonly db: Db;
   /** Bound once here so no call site can forget the runtime override. */
   private readonly reportError: DurableErrorReporter;
+  /** The federated ML heads — their own store and merge; the LM merge below never sees them. */
+  private readonly mlHeads: EvermindMlHeadStore;
 
   constructor(private readonly state: DurableObjectState, private readonly env: Env) {
     this.reportError = createDurableErrorReporter('infrastructure/relay/ProjectEvermindCoordinatorDO.ts', env, state);
     this.db = buildDatabase(env);
+    this.mlHeads = new EvermindMlHeadStore(state.storage, {
+      debounceMs: DEBOUNCE_MS,
+      mode: async (tenantId, projectId) => (await getProjectEvermindHead(this.env, this.db, tenantId, projectId)).mode,
+      onMerged: (owner, target) => bumpCacheVersionSafe(this.env, mlHeadVersionKey(owner.tenantId, owner.projectId, target), 'evermindMlHeadMerged'),
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname.endsWith('/learn-text')) return this.handleLearnText(request);
+    if (request.method === 'POST' && url.pathname.endsWith('/learn-head')) return this.answer(this.mlHeads.learn(await request.json().catch((error: unknown) => ({ unreadable: String(error) }))));
+    if (request.method === 'GET' && url.pathname.endsWith('/ml-head')) return this.answer(this.mlHeads.read(url.searchParams.get('target')));
     // Checked AFTER '/learn-text' deliberately: that path also ends in '/learn'.
     if (request.method === 'POST' && url.pathname.endsWith('/learn')) return this.handleLearn(request);
     if (request.method === 'POST' && url.pathname.endsWith('/flush')) return this.handleFlush();
@@ -538,6 +553,11 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
 
   private json(body: unknown, status = 200): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  private async answer(pending: Promise<{ status: number; body: Record<string, unknown> }>): Promise<Response> {
+    const { status, body } = await pending;
+    return this.json(body, status);
   }
 
   private async handleHead(): Promise<Response> {
@@ -913,6 +933,8 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
 
   /** The debounced-merge entry point — drains the queue in the background. */
   async alarm(): Promise<void> {
+    // The ML heads first: their merge is cheap, and an LM drain that throws must not hold them.
+    await this.mlHeads.drain().catch((error: unknown) => this.reportError(error, { operation: 'drainMlHeads' }));
     await this.drain();
   }
 

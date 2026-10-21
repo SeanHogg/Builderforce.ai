@@ -6,8 +6,8 @@ import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, t
 import { formatDurationPrecise } from '@/lib/duration';
 import { pct, useInsightFormat } from './format';
 
-const noteStyle = { margin: 0, fontSize: '0.84rem', color: 'var(--text-muted)' } as const;
-const subStyle = { display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', overflowWrap: 'anywhere' } as const;
+const noteStyle = { margin: 0, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' } as const;
+const subStyle = { display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', overflowWrap: 'anywhere' } as const;
 
 /**
  * Run anomalies — the runs that cost, took or failed far outside the range of the runs

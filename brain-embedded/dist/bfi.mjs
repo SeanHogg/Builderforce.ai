@@ -21,7 +21,7 @@ import {
   restrictBackends,
   serveEngineWorker,
   servePageEngines
-} from "./chunk-TQONCF7B.mjs";
+} from "./chunk-JEIL76LJ.mjs";
 
 // src/pageEngines/bfiChunks.ts
 function closingChunk(finalJson) {
@@ -183,7 +183,7 @@ function cancellable(source) {
     cancel() {
       if (finished) return;
       finished = true;
-      void reader.cancel().catch(() => void 0);
+      void reader.cancel().catch((e) => reportPageEngineFailure("bfi", "cancel", e));
     }
   };
 }

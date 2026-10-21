@@ -269,6 +269,8 @@
     "lib/kernel/kernelApi.ts",
     "lib/legalDocs.ts",
     "lib/live/LiveSessionContext.tsx",
+    "lib/localFirst/webInferenceMode.ts",
+    "lib/localFirst/webRequestGate.ts",
     "lib/markdownPipeline.ts",
     "lib/markdownRichFormat.ts",
     "lib/marketingApi.ts",

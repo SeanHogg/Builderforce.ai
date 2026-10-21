@@ -261,20 +261,6 @@ declare function isPageEngineReply(message: unknown): message is PageEngineReply
 /** Whether an engine-received message is one of the caller's requests. */
 declare function isPageEngineRequest(message: unknown): message is PageEngineRequest;
 
-/**
- * The ENGINE side of a remote page engine: answer a caller's probe and chat requests
- * (`protocol.ts`) from engines running here — the editor's chat webview, the editor
- * host's `bfi` worker, a page's `bfi` Web Worker. Pure over an injected transport, so
- * the round trip is testable without any of them.
- *
- * An engine refusal keeps its HTTP status across the boundary, so the caller's shim
- * answers exactly what it would have answered in place; an abort from the caller aborts
- * the engine here; chunks stream back one frame each. While a chat is running it says
- * so every {@link PAGE_ENGINE_HEARTBEAT_MS} (`pageEngine.alive`) — a long load or a turn
- * queued behind another sends no chunk for a while, and the caller's inactivity timeout
- * must tell that apart from an engine that went silent.
- */
-
 type ReplyPayload<T extends PageEngineReply['type']> = Omit<Extract<PageEngineReply, {
     type: T;
 }>, 'type'>;

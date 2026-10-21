@@ -11750,6 +11750,10 @@
       "edits-land-while-you-watch": {
         "title": "Edits land while you watch — hot updates, real stylesheets and the frameworks you already use",
         "description": "The app you build on a Builderforce canvas now updates in place as you edit, keeping what you typed and where you scrolled. It compiles Sass, SCSS and Less, scopes CSS Modules for real, loads the stylesheets your packages ship, and runs Next.js and SvelteKit dev servers in the browser."
+      },
+      "no-account-no-gpu-you-choose-where-it-runs": {
+        "title": "No account, no GPU, no network — and you choose where every word goes",
+        "description": "Studio and Rovr now open with a working model and no account, no sign-up call and no GPU required. Every surface — the web, the VS Code extension and the Rovr side panel — asks one question about where your words run: Local only, Hybrid or one Specific model. And Hybrid learns, on your device, which turns to keep local."
       }
     }
   },

@@ -11,6 +11,7 @@
  * queued behind another sends no chunk for a while, and the caller's inactivity timeout
  * must tell that apart from an engine that went silent.
  */
+import { reportPageEngineFailure } from '../engineFailure';
 import { PageEngineError, type PageEngine } from '../types';
 import { PAGE_ENGINE_HEARTBEAT_MS, type PageEngineReply, type PageEngineRequest } from './protocol';
 
@@ -65,8 +66,12 @@ export function servePageEngines(engines: () => readonly PageEngine[], io: PageE
       case 'pageEngine.probe': {
         const engine = engineFor(request.runtime);
         const asked = engine ? engine.probe(request.fresh ? { fresh: true } : undefined) : Promise.resolve(null);
+        // A probe that rejected answers "nothing to serve" — with its reason recorded.
         void asked
-          .catch(() => null)
+          .catch((e: unknown) => {
+            reportPageEngineFailure(request.runtime, 'probe', e);
+            return null;
+          })
           .then((probe) => io.reply('pageEngine.probed', { id: request.id, probe }));
         return;
       }

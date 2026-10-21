@@ -72,7 +72,8 @@ export function hybridLocalSuccessTurn(router: LocalSuccessRouter, probes: reado
         ...(local && local.outcome !== 'served' && records.some((r) => r.attempt.kind === 'cloud') ? { fellBack: true } : {}),
         ...(cloud ? { cloud } : {}),
       };
-      void router.record(assessed.ref, outcome).catch(() => undefined);
+      // `record` never rejects — it reports its own failure (`localSuccessFailure.ts`).
+      void router.record(assessed.ref, outcome);
     },
   };
 }

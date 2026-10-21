@@ -469,7 +469,14 @@ async function webGpuSupport(gpu = pageGpu()) {
 // src/pageEngines/bfiSupport.ts
 var BFI_UNSUPPORTED = { supported: false, reason: "bfi_unavailable", f16: false, maxBufferBytes: 0 };
 async function anyBfiModelDownloaded(store) {
-  const states = await Promise.all(localCatalogFor("bfi").map((row) => store.status(row.ref).catch(() => "absent")));
+  const states = await Promise.all(
+    localCatalogFor("bfi").map(
+      (row) => store.status(row.ref).catch((e) => {
+        reportPageEngineFailure("bfi", "cache_lookup", e);
+        return "absent";
+      })
+    )
+  );
   return states.includes("ready");
 }
 function restrictBackends(s, backends) {
@@ -635,7 +642,10 @@ function servePageEngines(engines, io) {
       case "pageEngine.probe": {
         const engine = engineFor(request.runtime);
         const asked = engine ? engine.probe(request.fresh ? { fresh: true } : void 0) : Promise.resolve(null);
-        void asked.catch(() => null).then((probe) => io.reply("pageEngine.probed", { id: request.id, probe }));
+        void asked.catch((e) => {
+          reportPageEngineFailure(request.runtime, "probe", e);
+          return null;
+        }).then((probe) => io.reply("pageEngine.probed", { id: request.id, probe }));
         return;
       }
       case "pageEngine.chat":
@@ -738,7 +748,7 @@ function cancellable(source) {
     cancel() {
       if (finished) return;
       finished = true;
-      void reader.cancel().catch(() => void 0);
+      void reader.cancel().catch((e) => reportPageEngineFailure("bfi", "cancel", e));
     }
   };
 }

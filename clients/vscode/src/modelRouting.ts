@@ -61,7 +61,7 @@ import { probeLocalFirstRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeBrainRun";
 import { hostPageEngines } from "./pageEngineBridge";
-import { localSuccessStore } from "./localSuccessStorage";
+import { localSuccessFederation, localSuccessStore } from "./localSuccessStorage";
 import { assertPlatformCapability, platformPolicy } from "./platformPolicy";
 import { currentInferenceMode } from "./inferenceModeSetting";
 import type { InferenceMode } from "@builderforce/local-first";
@@ -259,8 +259,10 @@ export function routeStream(
     // (never a sign-in prompt for someone already signed in).
     mode: () => route.inferenceMode ?? "hybrid",
     signedIn: () => !!apiKey,
-    // Hybrid's local-success predictor, trained on this machine's routed turns.
+    // Hybrid's local-success predictor, trained on this machine's routed turns, and its
+    // head shared with the turn's project (signed-in Hybrid only — the shared step decides).
     localSuccess: localSuccessStore,
+    localSuccessFederation,
     ...(onFallback ? { onFallback } : {}),
   });
 }

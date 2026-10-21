@@ -51,6 +51,10 @@ export type { HostLocalPin, HostModelStreamInput, ModelFallbackEvent } from './h
 // a host lends `createHostModelStream({ localSuccess })`, and the Web Storage adapter.
 export { webStorageLocalSuccessStore, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE } from './localSuccess/localSuccessRouter';
 export type { LocalSuccessStore, LocalSuccessSnapshot } from './localSuccess/localSuccessRouter';
+// Its head federates with the project's fleet through ONE port a host builds from its
+// authed transport (`createLocalSuccessFederation`) and lends `createHostModelStream({ localSuccessFederation })`.
+export { createLocalSuccessFederation } from './localSuccess/localSuccessFederation';
+export type { LocalSuccessFederation, LocalSuccessFleetHead, LocalSuccessContribution } from './localSuccess/localSuccessFederation';
 // The per-turn affect block, appraised on this device by Evermind's local limbic — the
 // replacement for the per-turn `/api/limbic/block` call on every host.
 export { personalitySetpoints, turnAffectBlock } from './limbicAffect';

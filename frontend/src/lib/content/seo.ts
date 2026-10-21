@@ -157,6 +157,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'how-to-build-a-3d-world-resume-in-hired-video-studio',
   ],
   product: [
+    'no-account-no-gpu-you-choose-where-it-runs',
     'kimi-k3-from-your-own-account',
     'send-the-link-join-without-an-account',
     'grade-the-proof-and-close-the-loop',
@@ -185,6 +186,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   ],
   // Evermind technology page / feature teaser.
   evermind: [
+    'no-account-no-gpu-you-choose-where-it-runs',
     'your-private-evermind-on-your-machine',
     'four-questions-before-you-buy-enterprise-ai',
     'build-and-train-evermind-on-the-creation-canvas',
@@ -242,7 +244,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // Feature routes — associated blog content shown on each logged-out feature
   // teaser (RouteMarketing). Keyed by the route path minus its leading slash.
   brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
-  ide: ['builderforce-studio-describe-it-run-it', 'builderforce-webcontainers-open-source', 'your-app-talks-back', 'studio-makes-the-images-your-app-needs', 'make-video-scenes-and-movies-on-the-canvas', 'one-local-index-for-every-ai-tool', 'vs-code-command-center-for-your-agentic-workforce', 'choose-who-answers-not-just-who-you-ask', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
+  ide: ['no-account-no-gpu-you-choose-where-it-runs', 'builderforce-studio-describe-it-run-it', 'builderforce-webcontainers-open-source', 'your-app-talks-back', 'studio-makes-the-images-your-app-needs', 'make-video-scenes-and-movies-on-the-canvas', 'one-local-index-for-every-ai-tool', 'vs-code-command-center-for-your-agentic-workforce', 'choose-who-answers-not-just-who-you-ask', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
   training: ['webgpu-lora-explained', 'local-first-ai-webgpu-in-the-browser', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices', 'how-to-launch-a-course-and-upload-scorm-on-hired-video', 'how-to-run-a-classroom-cohort-as-an-educator', 'how-to-earn-a-verifiable-certificate-on-hired-video'],
   workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
   projects: ['planning-spine-cost-bearing-delivery', 'role-gated-accountability-proof-of-participation', 'autonomous-swimlane-execution', 'task-execution-and-observability'],

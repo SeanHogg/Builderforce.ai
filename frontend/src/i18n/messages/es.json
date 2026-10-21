@@ -11750,6 +11750,10 @@
       "edits-land-while-you-watch": {
         "title": "Los cambios llegan mientras miras: actualizaciones en caliente, hojas de estilo reales y los frameworks que ya usas",
         "description": "La app que construyes en un lienzo de Builderforce ahora se actualiza en su sitio mientras editas, conservando lo que escribiste y dónde estabas. Compila Sass, SCSS y Less, aísla de verdad los CSS Modules, carga las hojas de estilo de tus paquetes y ejecuta servidores de desarrollo de Next.js y SvelteKit en el navegador."
+      },
+      "no-account-no-gpu-you-choose-where-it-runs": {
+        "title": "Sin cuenta, sin GPU, sin red, y tú eliges adónde va cada palabra",
+        "description": "Studio y Rovr ahora se abren con un modelo funcionando y sin cuenta, sin llamada de registro y sin necesidad de GPU. Cada superficie —la web, la extensión de VS Code y el panel lateral de Rovr— hace una sola pregunta sobre dónde se ejecutan tus palabras: Solo local, Híbrido o un Modelo específico. Y Híbrido aprende, en tu dispositivo, qué turnos mantener en local."
       }
     }
   },

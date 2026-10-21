@@ -11,7 +11,9 @@
  *   GET  /head        — current { version, ref, mode } to compare a replica against
  *   GET  /model       — download a version's `.evermind` bytes (replica refresh)
  *   GET  /tokenizer    — download a version's tokenizer.json
- *   POST /learn        — push a weight delta (→ coordinator DO, the single writer)
+ *   POST /learn        — push a weight delta (→ coordinator DO, the single writer); a delta
+ *                        whose `target` names a federated ML head merges into THAT head
+ *   GET  /ml-head      — a federated ML head's merged parameters (`?target=ml:<task>`)
  *   GET  /contribution/:id — poll ONE contribution from enqueue to merged provenance
  *   POST /seed         — initialize the project's base model (manager, JWT only)
  *   PATCH /mode        — connected | offline-frozen (manager, JWT only)
@@ -69,6 +71,8 @@ import { projectInTenantCached } from '../../application/project/projectOwnershi
 import { MAX_DELTA_B64_CHARS, parseDeltaLearnPayload } from '@seanhogg/builderforce-memory-engine';
 import { deltaParseRefusal } from '../../application/llm/evermindDeltaLearn';
 import { dispatchProjectEvermindLearn } from '../../application/llm/evermindDeltaDispatch';
+import { mlHeadDoorFor } from '../../application/llm/evermindMlHeads';
+import { mlHeadLearnCore, mlHeadReadCore } from './projectEvermindMlHeadCores';
 import { codingEvalFromReports, evermindQualifiesForCoding } from '../../application/llm/evermindCodingGate';
 import { recordProjectEvermindCodingEval } from '../../application/llm/evermindCodingEvalStore';
 import { parseOptionalBody, z, zJsonObject } from './requestBody';
@@ -288,17 +292,22 @@ const DELTA_ENVELOPE_BYTES = 64 * 1024;
  */
 async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
   if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
-  if (inheritedBlock) return inheritedBlock;
   const declared = Number(c.req.header('content-length') ?? 0);
   if (Number.isFinite(declared) && declared > MAX_DELTA_B64_CHARS + DELTA_ENVELOPE_BYTES) {
     return json({ error: `delta too large (max ${MAX_DELTA_B64_CHARS} base64 characters)` }, 413);
   }
+  const body = await parseOptionalBody(c, zJsonObject);
+  // A delta aimed at a FEDERATED ML HEAD (its `target` names a registered head) merges
+  // into that head, through its own door — see `projectEvermindMlHeadCores`.
+  const headDoor = mlHeadDoorFor(body.target);
+  if (headDoor) return mlHeadLearnCore(env, tenantId, projectId, body, headDoor);
+  const inheritedBlock = await refuseInheritedWrite(env, db, tenantId, projectId);
+  if (inheritedBlock) return inheritedBlock;
   // The engine's `parseDeltaLearnPayload` owns the delta contract (and reads an absent
   // body as `{}`); the route only refuses a body that is not a JSON object.
-  // It also refuses an ML-head delta (`target: 'ml:<task>'`): this door merges into the
-  // model checkpoint only. The refusal has the coordinator's `{ ok: false, error }` shape.
-  const parsed = parseDeltaLearnPayload(await parseOptionalBody(c, zJsonObject));
+  // It also refuses any other ML-head target (`ml:<task>` with no head door): this door
+  // merges into the model checkpoint only. The refusal has the coordinator's `{ ok: false, error }` shape.
+  const parsed = parseDeltaLearnPayload(body);
   if (!parsed.ok) {
     const refused = deltaParseRefusal(parsed);
     return json(refused.body, refused.status);
@@ -400,6 +409,11 @@ export function createProjectEvermindRoutes(db: Db, door: FrontDoor = tenantDoor
   router.get('/:projectId/evermind/tokenizer', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'tokenizer.json'));
   // On-prem RUNNER delta push (the host ran the fit itself) — see learnCore.
   router.post('/:projectId/evermind/learn', (c) => learnCore(c.env as Env, db, t(c), pid(c), c));
+  // A federated ML head's merged parameters (a host's fleet head) — see projectEvermindMlHeadCores.
+  router.get('/:projectId/evermind/ml-head', async (c) => {
+    if (!(await projectInTenantCached(c.env as Env, db, t(c), pid(c)))) return json({ error: 'project not found' }, 404);
+    return mlHeadReadCore(c.env as Env, t(c), pid(c), c.req.query('target'));
+  });
   router.post('/:projectId/evermind/learn-text', (c) => learnTextCore(c.env as Env, db, t(c), pid(c), c, door.agentHost));
   if (door.agentHost) return router;
 

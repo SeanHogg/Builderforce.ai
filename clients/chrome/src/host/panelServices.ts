@@ -7,8 +7,9 @@
  */
 import { createLocalRuntimeProber, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import { createOnlineSignal } from '@builderforce/write-outbox';
-import { createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
+import { createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 import { createApiClient, type ApiClient } from '../api/apiClient';
+import { portRequest } from '../api/requestPorts';
 import { createSession, type Session } from '../auth/session';
 import { BFI_WASM_FILE, BFI_WORKER_FILE, DEFAULT_BASE_URL, LOCAL_DB, STEP_OUTBOX_DB } from '../config';
 import { KIMI_API_ORIGINS, createConnectedAccount, type ConnectedAccount } from '../inference/connectedAccount';
@@ -195,6 +196,9 @@ export async function createPanelServices(): Promise<PanelServices> {
       load: () => local.get<unknown>(LOCAL_SUCCESS_KEY),
       save: (snapshot) => local.set(LOCAL_SUCCESS_KEY, snapshot),
     },
+    // ...and its head shared with the fleet of the project memory stands behind (a Rovr
+    // chat carries no project of its own), through the panel's one API client.
+    localSuccessFederation: createLocalSuccessFederation(portRequest(api), { project: () => settings.taskProjectId() }),
     onAttempt: (record: LocalFirstAttemptRecord) => {
       if (record.outcome !== 'served' && record.attempt.kind === 'local') {
         console.warn(`Rovr local-first: ${record.attempt.ref} ${record.outcome}${record.detail ? ` (${record.detail})` : ''}`);

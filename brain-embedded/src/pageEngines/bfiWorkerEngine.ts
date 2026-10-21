@@ -40,6 +40,7 @@ import { BFI_ENGINE_BASE_URL, type LocalBackend, type LocalDeviceSupport } from 
 import type { BfiPageEngine } from './bfiEngine';
 import type { BfiThreadsSource } from './bfiLoader';
 import { BFI_UNSUPPORTED, anyBfiModelDownloaded, bfiSupportWithoutWasm, withPeerBackends } from './bfiSupport';
+import { reportPageEngineFailure } from './engineFailure';
 import type { HfModelStore } from './hfModelStore';
 import { createPageEngineClient } from './remote/client';
 import { createEngineWorker, type EngineWorkerHandle } from './remote/engineWorker';
@@ -162,13 +163,13 @@ export function createBfiWorkerEngine(options: BfiWorkerEngineOptions): BfiWorke
       case 'close': {
         const reader = reads.get(f.handle!);
         reads.delete(f.handle!);
-        await reader?.cancel().catch(() => undefined);
+        await reader?.cancel().catch((e: unknown) => reportPageEngineFailure('bfi', 'cancel', e));
         return undefined;
       }
     }
   };
   const closeReads = (): void => {
-    for (const reader of reads.values()) void reader.cancel().catch(() => undefined);
+    for (const reader of reads.values()) void reader.cancel().catch((e: unknown) => reportPageEngineFailure('bfi', 'cancel', e));
     reads.clear();
   };
 
@@ -281,7 +282,11 @@ export function createBfiWorkerEngine(options: BfiWorkerEngineOptions): BfiWorke
           if (!(await anyDownloaded())) return bfiSupportWithoutWasm();
           return onceMore(ownSupport, (s) => s === BFI_UNSUPPORTED);
         })(),
-        options.peerSupport?.().catch(() => undefined),
+        // A peer that cannot answer leaves this host's own record standing.
+        options.peerSupport?.().catch((e: unknown) => {
+          reportPageEngineFailure('bfi', 'support', e);
+          return undefined;
+        }),
       ]);
       return withPeerBackends(own, backends, peer);
     },

@@ -34,8 +34,14 @@ export type WorkerFactory = () => Worker;
 
 function defaultWorkerFactory(): Worker {
   // `new URL(..., import.meta.url)` is the statically-analysable form webpack 5 /
-  // Turbopack (Next.js) compile into a separate worker bundle.
-  return new Worker(new URL('./mamba.worker.ts', import.meta.url), { type: 'module' });
+  // Turbopack (Next.js) compile into a separate worker bundle. The `typeof window`
+  // guard is constant-folded to false on server layers, so an edge compile that
+  // reaches this module never emits webpack's unguarded `document.baseURI` worker
+  // runtime into the shared edge chunk (the 2026-10-21 `/docs` build failure).
+  if (typeof window !== 'undefined') {
+    return new Worker(new URL('./mamba.worker.ts', import.meta.url), { type: 'module' });
+  }
+  throw new Error('The mamba worker runs only in a browser.');
 }
 
 interface Pending {

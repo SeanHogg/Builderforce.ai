@@ -45,6 +45,15 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +2 files (2026-10-21, Local-only socket gate) — `lib/localFirst/webRequestGate.ts`
+ *     (~154 lines) and `lib/localFirst/webInferenceMode.ts` (~65 lines); every module they
+ *     import (`auth`, `storage`, `apiOrigin`, `@builderforce/local-first`) is already here.
+ *     `openSocket` (reconnectPolicy, already here) must refuse a Local-only content socket
+ *     SYNCHRONOUSLY, before `new WebSocket` runs, and the shell's broadcast socket opens
+ *     through it, so an `import()` cannot sit on that path without letting the first
+ *     socket out ungated. `apiClient` reaches the same gate lazily because its path is
+ *     async; `canvasAiErrors`, which arrived in the same change, was cut back out with an
+ *     `import()` on the guest no-token path.
  *   +1 file (2026-10-18, panel-bridge DRY pass) — `components/insights/makePanelBrainBridge.ts`
  *     (~66 lines, imports only `react` and `@/lib/brain`, both already here). Not new
  *     first-paint work: the AI, delivery, DevEx and finance `*PanelBrainBridge` modules

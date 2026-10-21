@@ -207,7 +207,7 @@ function cancellable(source: ReadableStream<Uint8Array>): { stream: ReadableStre
     cancel() {
       if (finished) return;
       finished = true;
-      void reader.cancel().catch(() => undefined);
+      void reader.cancel().catch((e: unknown) => reportPageEngineFailure('bfi', 'cancel', e));
     },
   };
 }

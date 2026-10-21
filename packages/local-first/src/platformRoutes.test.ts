@@ -23,6 +23,8 @@ describe('platform route table', () => {
     ['/api/brain/stream', 'POST', 'gateway-inference'],
     ['/api/limbic/affect', 'POST', 'connected-feature'],
     ['/api/projects/12/evermind/learn', 'POST', 'connected-feature'],
+    // The run.local-success head's fleet read (its push rides the learn door above).
+    ['/api/projects/12/evermind/ml-head', 'GET', 'connected-feature'],
     ['/api/evermind/learn', 'POST', 'connected-feature'],
     ['/api/sync/push', 'POST', 'synchronize'],
     ['/api/sync/pull', 'GET', 'synchronize'],
@@ -49,6 +51,9 @@ describe('platform route table', () => {
       ['/api/brain/stream', 'POST'],
       ['/api/projects/12/evermind', 'GET'],
       ['/api/projects/12/evermind/recall', 'POST'],
+      // A head delta carries this device's turn features; Local only sends neither it nor the read.
+      ['/api/projects/12/evermind/learn', 'POST'],
+      ['/api/projects/12/evermind/ml-head', 'GET'],
       ['/api/evermind/stats', 'GET'],
       ['/api/limbic/block', 'POST'],
       ['/api/limbic/affect', 'PUT'],

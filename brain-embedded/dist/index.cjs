@@ -196,6 +196,7 @@ __export(src_exports, {
   createLocalBrainPersistence: () => createLocalBrainPersistence,
   createLocalFirstStream: () => createLocalFirstStream,
   createLocalStream: () => createLocalStream,
+  createLocalSuccessFederation: () => createLocalSuccessFederation,
   createModelFallbackChannel: () => createModelFallbackChannel,
   createPageEngineClient: () => createPageEngineClient,
   createPageEngineSet: () => createPageEngineSet,
@@ -6193,38 +6194,194 @@ function hybridLocalSuccessTurn(router, probes, signal) {
         ...local && local.outcome !== "served" && records.some((r) => r.attempt.kind === "cloud") ? { fellBack: true } : {},
         ...cloud ? { cloud } : {}
       };
-      void router.record(assessed.ref, outcome).catch(() => void 0);
+      void router.record(assessed.ref, outcome);
     }
   };
 }
 
 // src/localSuccess/localSuccessRouter.ts
+var import_builderforce_memory_engine2 = require("@seanhogg/builderforce-memory-engine");
+
+// src/localSuccess/localSuccessFederation.ts
 var import_builderforce_memory_engine = require("@seanhogg/builderforce-memory-engine");
+
+// src/pageEngines/engineFailure.ts
+function reportPageEngineFailure(runtime, stage, error) {
+  console.warn(`BuilderForce page engine: ${runtime} ${stage} failed (${errorMessage(error)})`);
+}
+
+// src/pageEngines/types.ts
+var PageEngineError = class extends Error {
+  status;
+  code;
+  constructor(status2, code, message2 = code) {
+    super(message2);
+    this.name = "PageEngineError";
+    this.status = status2;
+    this.code = code;
+  }
+};
+var abortReason = (signal) => signal.reason ?? new DOMException("Aborted", "AbortError");
+var errorMessage = (e) => e instanceof Error ? e.message : String(e);
+var hasTools = (body) => Array.isArray(body.tools) && body.tools.length > 0;
+function memoizedProbe(runtime, run, config = {}) {
+  const ttlMs = config.ttlMs ?? PAGE_ENGINE_PROBE_TTL_MS;
+  const now = config.now ?? (() => Date.now());
+  let memo;
+  return {
+    probe(options = {}) {
+      const at = now();
+      if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
+      const value = run().catch((e) => {
+        reportPageEngineFailure(runtime, "probe", e);
+        return null;
+      });
+      memo = { at, value };
+      return value;
+    },
+    invalidate() {
+      memo = void 0;
+    }
+  };
+}
+var PAGE_ENGINE_PROBE_TTL_MS = 3e4;
+
+// src/localSuccess/localSuccessFailure.ts
+function reportLocalSuccessFailure(stage, error) {
+  console.warn(`BuilderForce local-success predictor: ${stage} failed (${errorMessage(error)})`);
+}
+
+// src/localSuccess/localSuccessFederation.ts
+var LOCAL_SUCCESS_TARGET = (0, import_builderforce_memory_engine.mlHeadTarget)(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.id);
+var FEDERATE_MIN_NEW_OUTCOMES = 20;
+var FEDERATE_MIN_INTERVAL_MS = 60 * 60 * 1e3;
+var FLEET_REFRESH_MS = 60 * 60 * 1e3;
+var FEDERATE_HOLDOUT_MAX = 32;
+var DIM = import_builderforce_memory_engine.LOCAL_SUCCESS_FEATURES.length;
+var CLASSES = import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.output.labels.length;
+var LOCAL_SUCCESS_PARAMS = DIM * CLASSES + CLASSES;
+var ENGINE_KEY = (0, import_builderforce_memory_engine.engineKey)(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.engines[0]);
+function zeroHead() {
+  return { version: 0, params: new Array(LOCAL_SUCCESS_PARAMS).fill(0), evalLoss: null };
+}
+async function localSuccessScope(federation, callProjectId) {
+  if (!federation) return void 0;
+  let projectId = callProjectId;
+  if (projectId == null) {
+    try {
+      projectId = await federation.project?.();
+    } catch (error) {
+      reportLocalSuccessFailure("pull", error);
+      return void 0;
+    }
+  }
+  return typeof projectId === "number" && Number.isInteger(projectId) && projectId > 0 ? { federation, projectId } : void 0;
+}
+function fleetRefreshDue(fleet, projectId, now) {
+  return !fleet || fleet.projectId !== projectId || now - fleet.pulledAt >= FLEET_REFRESH_MS;
+}
+function headTrusted(head) {
+  return !!head && head.holdoutLoss != null && head.holdoutLoss < Math.LN2;
+}
+function fleetHeadWins(local, fleet) {
+  if (fleet.version <= 0 || fleet.evalLoss == null || fleet.evalLoss >= Math.LN2) return false;
+  return !headTrusted(local) || fleet.evalLoss < local.holdoutLoss;
+}
+function pushDue(prev, next, ats, pushedAt, now) {
+  if (!headTrusted(next)) return false;
+  if (prev?.holdoutLoss != null && !(next.holdoutLoss < prev.holdoutLoss)) return false;
+  if (pushedAt != null && now - pushedAt < FEDERATE_MIN_INTERVAL_MS) return false;
+  const fresh = pushedAt == null ? ats.length : ats.filter((at) => at > pushedAt).length;
+  return fresh >= FEDERATE_MIN_NEW_OUTCOMES;
+}
+function localSuccessContribution(base, trained, examples, samples) {
+  const entry = (0, import_builderforce_memory_engine.mlHeadEntry)(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.id, ENGINE_KEY, base.version, base.params, { dim: DIM, classes: CLASSES });
+  const tail = Math.min(FEDERATE_HOLDOUT_MAX, Math.floor(examples.length * (import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.train?.holdoutFraction ?? 0.2)));
+  const holdout = examples.slice(examples.length - tail).map((e) => ({
+    x: (0, import_builderforce_memory_engine.localSuccessFeatures)(e.input),
+    y: e.label,
+    ...e.weight != null && e.weight !== 1 ? { w: e.weight } : {}
+  }));
+  return { ...(0, import_builderforce_memory_engine.buildMlHeadDelta)(entry, trained, samples, `ml head ${import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.id}`), holdout };
+}
+function parseFleetHead(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw;
+  if (typeof r.version !== "number" || !Number.isInteger(r.version) || r.version <= 0) return null;
+  if (!Array.isArray(r.params) || r.params.length !== LOCAL_SUCCESS_PARAMS || !r.params.every((p) => typeof p === "number" && Number.isFinite(p))) return null;
+  const evalLoss = typeof r.evalLoss === "number" && Number.isFinite(r.evalLoss) ? r.evalLoss : null;
+  return { version: r.version, params: r.params, evalLoss };
+}
+function parseFleetBase(raw) {
+  if (!raw || typeof raw !== "object") return void 0;
+  const f = raw;
+  if (typeof f.projectId !== "number" || typeof f.pulledAt !== "number" || typeof f.version !== "number" || !Number.isInteger(f.version) || f.version < 0) return void 0;
+  if (!Array.isArray(f.params) || f.params.length !== LOCAL_SUCCESS_PARAMS || !f.params.every((p) => typeof p === "number" && Number.isFinite(p))) return void 0;
+  return { projectId: f.projectId, version: f.version, params: f.params, evalLoss: typeof f.evalLoss === "number" ? f.evalLoss : null, pulledAt: f.pulledAt };
+}
+function createLocalSuccessFederation(request, opts = {}) {
+  return {
+    async push(projectId, contribution) {
+      await request(`/api/projects/${projectId}/evermind/learn`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(contribution)
+      });
+    },
+    async pull(projectId) {
+      return parseFleetHead(await request(`/api/projects/${projectId}/evermind/ml-head?target=${encodeURIComponent(LOCAL_SUCCESS_TARGET)}`));
+    },
+    ...opts.project ? { project: opts.project } : {}
+  };
+}
+
+// src/localSuccess/localSuccessRouter.ts
 var LOCAL_SKIP_CONFIDENCE = 0.8;
 var LOCAL_SKIP_EXPLORE = 0.1;
 var LOCAL_SUCCESS_HISTORY = 300;
-var registry = (0, import_builderforce_memory_engine.createMlRegistry)();
-var ENGINE_KEY = (0, import_builderforce_memory_engine.engineKey)(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.engines[0]);
-var DIM = import_builderforce_memory_engine.LOCAL_SUCCESS_FEATURES.length;
-var CLASSES = import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.output.labels.length;
+function scopedLocalSuccessRouter(router, scope) {
+  if (!scope) return router;
+  return {
+    assess: (ref, base) => router.assess(ref, base, scope),
+    record: (ref, outcome) => router.record(ref, outcome, scope)
+  };
+}
+var registry = (0, import_builderforce_memory_engine2.createMlRegistry)();
+var ENGINE_KEY2 = (0, import_builderforce_memory_engine2.engineKey)(import_builderforce_memory_engine2.LOCAL_SUCCESS_TASK.engines[0]);
+var DIM2 = import_builderforce_memory_engine2.LOCAL_SUCCESS_FEATURES.length;
+var CLASSES2 = import_builderforce_memory_engine2.LOCAL_SUCCESS_TASK.output.labels.length;
 function parseSnapshot(raw) {
   const empty = { v: 1, outcomes: [] };
   if (!raw || typeof raw !== "object" || raw.v !== 1) return empty;
   const s = raw;
   const outcomes = Array.isArray(s.outcomes) ? s.outcomes.filter((o) => !!o && typeof o.ref === "string" && !!o.turn && typeof o.turn === "object") : [];
-  const head = s.head && Array.isArray(s.head.params) && s.head.params.length === DIM * CLASSES + CLASSES ? s.head : void 0;
-  return { v: 1, outcomes: outcomes.slice(-LOCAL_SUCCESS_HISTORY), ...head ? { head } : {} };
+  const head = s.head && Array.isArray(s.head.params) && s.head.params.length === DIM2 * CLASSES2 + CLASSES2 ? s.head : void 0;
+  const fleet = parseFleetBase(s.fleet);
+  return {
+    v: 1,
+    outcomes: outcomes.slice(-LOCAL_SUCCESS_HISTORY),
+    ...head ? { head } : {},
+    ...fleet ? { fleet } : {},
+    ...typeof s.pushedAt === "number" ? { pushedAt: s.pushedAt } : {}
+  };
+}
+function logisticFrom(params) {
+  const model = new import_builderforce_memory_engine2.LogisticModel(DIM2, CLASSES2);
+  model.importParams(params);
+  return model;
 }
 function modelsFor(params) {
-  const model = new import_builderforce_memory_engine.LogisticModel(DIM, CLASSES);
-  model.importParams(params);
-  const models = new import_builderforce_memory_engine.InMemoryMlModels();
-  models.set(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.id, ENGINE_KEY, model);
+  const models = new import_builderforce_memory_engine2.InMemoryMlModels();
+  models.set(import_builderforce_memory_engine2.LOCAL_SUCCESS_TASK.id, ENGINE_KEY2, logisticFrom(params));
   return models;
 }
-function trusted(head) {
-  return !!head && head.holdoutLoss != null && head.holdoutLoss < Math.LN2;
+function warmStartTask(params) {
+  return {
+    ...import_builderforce_memory_engine2.LOCAL_SUCCESS_TASK,
+    train: { ...import_builderforce_memory_engine2.LOCAL_SUCCESS_TASK.train, fit: (samples) => (0, import_builderforce_memory_engine2.fitLogistic)(samples, { classes: CLASSES2 }, logisticFrom(params)) }
+  };
 }
+var trusted = headTrusted;
 function priorRate(outcomes, ref) {
   let ran = 0;
   let ok = 0;
@@ -6244,39 +6401,78 @@ function createLocalSuccessRouter(store, opts = {}) {
     try {
       snapshot = parseSnapshot(await store.load());
       models = snapshot.head ? modelsFor(snapshot.head.params) : null;
-    } catch {
+    } catch (e) {
+      reportLocalSuccessFailure("load", e);
     }
   })();
   let writes = loaded;
+  let pulling = false;
+  let pullRetryAt = 0;
   return {
-    async assess(ref, base) {
+    async assess(ref, base, scope) {
       await loaded;
+      if (scope) refreshFleet(scope);
       const prior = priorRate(snapshot.outcomes, ref);
       const turn = { ...base, ...prior != null ? { priorLocalSuccessRate: prior } : {} };
       if (!models || !trusted(snapshot.head)) return { turn, skip: false, probability: null };
       try {
-        const { output } = await (0, import_builderforce_memory_engine.runMlTask)(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.id, turn, { registry, mode: "local-only", models });
+        const { output } = await (0, import_builderforce_memory_engine2.runMlTask)(import_builderforce_memory_engine2.LOCAL_SUCCESS_TASK.id, turn, { registry, mode: "local-only", models });
         const skip = 1 - output.probability > LOCAL_SKIP_CONFIDENCE && random() >= LOCAL_SKIP_EXPLORE;
         return { turn, skip, probability: output.probability };
       } catch {
         return { turn, skip: false, probability: null };
       }
     },
-    record(ref, outcome) {
-      const done = writes.then(() => append(ref, outcome));
-      writes = done.catch(() => void 0);
+    record(ref, outcome, scope) {
+      const done = writes.then(() => append(ref, outcome, scope)).catch((e) => reportLocalSuccessFailure("record", e));
+      writes = done;
       return done;
     }
   };
-  async function append(ref, outcome) {
+  function refreshFleet(scope) {
+    if (pulling || now() < pullRetryAt || !fleetRefreshDue(snapshot.fleet, scope.projectId, now())) return;
+    pulling = true;
+    writes = writes.then(async () => adopt(scope.projectId, await scope.federation.pull(scope.projectId) ?? zeroHead())).catch(pullFailed).finally(() => {
+      pulling = false;
+    });
+  }
+  function pullFailed(reason) {
+    pullRetryAt = now() + FLEET_REFRESH_MS;
+    reportLocalSuccessFailure("pull", reason);
+  }
+  async function adopt(projectId, pulled) {
+    const wins = fleetHeadWins(snapshot.head, pulled);
+    snapshot = {
+      ...snapshot,
+      fleet: { ...pulled, projectId, pulledAt: now() },
+      ...wins ? { head: { params: pulled.params, holdoutLoss: pulled.evalLoss, samples: 0 } } : {}
+    };
+    if (wins) models = modelsFor(pulled.params);
+    await persist();
+  }
+  async function persist() {
+    try {
+      await store.save(snapshot);
+    } catch (e) {
+      reportLocalSuccessFailure("save", e);
+    }
+  }
+  function pushRefused(reason) {
+    if (snapshot.fleet) snapshot = { ...snapshot, fleet: { ...snapshot.fleet, pulledAt: 0 } };
+    reportLocalSuccessFailure("push", reason);
+  }
+  async function append(ref, outcome, scope) {
     const outcomes = [...snapshot.outcomes, { ...outcome, ref, at: now() }].slice(-LOCAL_SUCCESS_HISTORY);
-    const fresh = new import_builderforce_memory_engine.InMemoryMlModels();
+    const examples = (0, import_builderforce_memory_engine2.localSuccessExamples)(outcomes);
+    const fleet = snapshot.fleet;
+    const prev = snapshot.head;
+    const fresh = new import_builderforce_memory_engine2.InMemoryMlModels();
     let head;
     let nextModels = null;
     try {
-      const fit = await (0, import_builderforce_memory_engine.trainMlTask)(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK, (0, import_builderforce_memory_engine.localSuccessExamples)(outcomes), {
+      const fit = await (0, import_builderforce_memory_engine2.trainMlTask)(fleet ? warmStartTask(fleet.params) : import_builderforce_memory_engine2.LOCAL_SUCCESS_TASK, examples, {
         models: fresh,
-        classical: { logistic: { classes: CLASSES } }
+        classical: { logistic: { classes: CLASSES2 } }
       });
       const params = fit?.predictor.exportParams?.();
       if (fit && params) {
@@ -6287,12 +6483,19 @@ function createLocalSuccessRouter(store, opts = {}) {
       head = snapshot.head;
       nextModels = models;
     }
-    snapshot = { v: 1, outcomes, ...head ? { head } : {} };
+    snapshot = {
+      v: 1,
+      outcomes,
+      ...head ? { head } : {},
+      ...snapshot.fleet ? { fleet: snapshot.fleet } : {},
+      ...snapshot.pushedAt != null ? { pushedAt: snapshot.pushedAt } : {}
+    };
     models = nextModels;
-    try {
-      await store.save(snapshot);
-    } catch {
+    if (scope && head && head !== prev && fleet && fleet.projectId === scope.projectId && pushDue(prev, head, outcomes.map((o) => o.at), snapshot.pushedAt, now())) {
+      snapshot = { ...snapshot, pushedAt: now() };
+      void scope.federation.push(scope.projectId, localSuccessContribution(fleet, head.params, examples, head.samples)).catch(pushRefused);
     }
+    await persist();
   }
 }
 function webStorageLocalSuccessStore(key = "bf.ml.run.local-success") {
@@ -6308,7 +6511,8 @@ function webStorageLocalSuccessStore(key = "bf.ml.run.local-success") {
     save(snapshot) {
       try {
         globalThis.localStorage?.setItem(key, JSON.stringify(snapshot));
-      } catch {
+      } catch (e) {
+        reportLocalSuccessFailure("save", e);
       }
     }
   };
@@ -6337,7 +6541,8 @@ function createHostModelStream(input) {
     const byoPool = !localOnly && opts.routingMode === "byo_pool";
     if (mode === "specific" && !pick2 && !byoPool) throw new Error(NO_SPECIFIC_MODEL);
     const cloud = localOnly ? null : await input.cloud();
-    const noModel = localOnly || (input.signedIn ? await input.signedIn() : cloud !== null) ? NO_LOCAL_MODEL : NOT_SIGNED_IN;
+    const signedIn = !localOnly && (input.signedIn ? await input.signedIn() : cloud !== null);
+    const noModel = localOnly || signedIn ? NO_LOCAL_MODEL : NOT_SIGNED_IN;
     const auto = async (call2, h) => {
       const localRef = call2.model;
       const local2 = localRef ? resolveLocal(localRef) : null;
@@ -6347,7 +6552,14 @@ function createHostModelStream(input) {
         if (!cloud) throw new Error(noModel);
         return cloud(call2, h);
       }
-      const learned = mode === "hybrid" && cloud && input.localSuccess ? hybridLocalSuccessTurn(localSuccessRouterFor(input.localSuccess), probes, call2.signal) : null;
+      const learned = mode === "hybrid" && cloud && input.localSuccess ? hybridLocalSuccessTurn(
+        scopedLocalSuccessRouter(
+          localSuccessRouterFor(input.localSuccess),
+          signedIn ? await localSuccessScope(input.localSuccessFederation, call2.metadata?.projectId) : void 0
+        ),
+        probes,
+        call2.signal
+      ) : null;
       const onAttempt = learned || input.onAttempt ? (record2) => {
         learned?.onAttempt(record2);
         input.onAttempt?.(record2);
@@ -6477,47 +6689,6 @@ function turnAffectBlock(text, setpoints) {
   if (!text.trim()) return "";
   return (0, import_limbic.buildLimbicBlock)((0, import_limbic.appraiseTask)(text, setpoints ?? (0, import_limbic.neutralLimbicState)()));
 }
-
-// src/pageEngines/engineFailure.ts
-function reportPageEngineFailure(runtime, stage, error) {
-  console.warn(`BuilderForce page engine: ${runtime} ${stage} failed (${errorMessage(error)})`);
-}
-
-// src/pageEngines/types.ts
-var PageEngineError = class extends Error {
-  status;
-  code;
-  constructor(status2, code, message2 = code) {
-    super(message2);
-    this.name = "PageEngineError";
-    this.status = status2;
-    this.code = code;
-  }
-};
-var abortReason = (signal) => signal.reason ?? new DOMException("Aborted", "AbortError");
-var errorMessage = (e) => e instanceof Error ? e.message : String(e);
-var hasTools = (body) => Array.isArray(body.tools) && body.tools.length > 0;
-function memoizedProbe(runtime, run, config = {}) {
-  const ttlMs = config.ttlMs ?? PAGE_ENGINE_PROBE_TTL_MS;
-  const now = config.now ?? (() => Date.now());
-  let memo;
-  return {
-    probe(options = {}) {
-      const at = now();
-      if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
-      const value = run().catch((e) => {
-        reportPageEngineFailure(runtime, "probe", e);
-        return null;
-      });
-      memo = { at, value };
-      return value;
-    },
-    invalidate() {
-      memo = void 0;
-    }
-  };
-}
-var PAGE_ENGINE_PROBE_TTL_MS = 3e4;
 
 // src/pageEngines/messages.ts
 function messageText(content) {
@@ -6889,7 +7060,10 @@ function servePageEngines(engines, io) {
       case "pageEngine.probe": {
         const engine = engineFor(request.runtime);
         const asked = engine ? engine.probe(request.fresh ? { fresh: true } : void 0) : Promise.resolve(null);
-        void asked.catch(() => null).then((probe) => io.reply("pageEngine.probed", { id: request.id, probe }));
+        void asked.catch((e) => {
+          reportPageEngineFailure(request.runtime, "probe", e);
+          return null;
+        }).then((probe) => io.reply("pageEngine.probed", { id: request.id, probe }));
         return;
       }
       case "pageEngine.chat":
@@ -7282,7 +7456,14 @@ async function webGpuSupport(gpu = pageGpu()) {
 // src/pageEngines/bfiSupport.ts
 var BFI_UNSUPPORTED = { supported: false, reason: "bfi_unavailable", f16: false, maxBufferBytes: 0 };
 async function anyBfiModelDownloaded(store) {
-  const states = await Promise.all(localCatalogFor("bfi").map((row) => store.status(row.ref).catch(() => "absent")));
+  const states = await Promise.all(
+    localCatalogFor("bfi").map(
+      (row) => store.status(row.ref).catch((e) => {
+        reportPageEngineFailure("bfi", "cache_lookup", e);
+        return "absent";
+      })
+    )
+  );
   return states.includes("ready");
 }
 function restrictBackends(s, backends) {
@@ -7394,13 +7575,13 @@ function createBfiWorkerEngine(options) {
       case "close": {
         const reader = reads.get(f.handle);
         reads.delete(f.handle);
-        await reader?.cancel().catch(() => void 0);
+        await reader?.cancel().catch((e) => reportPageEngineFailure("bfi", "cancel", e));
         return void 0;
       }
     }
   };
   const closeReads = () => {
-    for (const reader of reads.values()) void reader.cancel().catch(() => void 0);
+    for (const reader of reads.values()) void reader.cancel().catch((e) => reportPageEngineFailure("bfi", "cancel", e));
     reads.clear();
   };
   const worker = createEngineWorker({
@@ -7503,7 +7684,11 @@ function createBfiWorkerEngine(options) {
           if (!await anyDownloaded()) return bfiSupportWithoutWasm();
           return onceMore(ownSupport, (s) => s === BFI_UNSUPPORTED);
         })(),
-        options.peerSupport?.().catch(() => void 0)
+        // A peer that cannot answer leaves this host's own record standing.
+        options.peerSupport?.().catch((e) => {
+          reportPageEngineFailure("bfi", "support", e);
+          return void 0;
+        })
       ]);
       return withPeerBackends(own, backends, peer);
     },
@@ -19049,6 +19234,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   createLocalBrainPersistence,
   createLocalFirstStream,
   createLocalStream,
+  createLocalSuccessFederation,
   createModelFallbackChannel,
   createPageEngineClient,
   createPageEngineSet,

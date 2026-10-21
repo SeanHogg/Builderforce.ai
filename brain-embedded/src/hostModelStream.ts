@@ -31,6 +31,9 @@
  *    before the local attempt — skipped when it is confident the turn would fail there —
  *    and every outcome (local served, local failed → gateway, skipped) trains it. Only
  *    here: Local only has no alternative to local, and Specific makes no local attempt.
+ *    With a `localSuccessFederation` too, a SIGNED-IN turn with a project also shares
+ *    what the head learned and starts from the fleet's merged head
+ *    (`localSuccess/localSuccessFederation.ts`) — never anonymous, Local only or Specific.
  *  - **Hybrid with a pick:** the pick FIRST, never hard-pinned (no `modelStrict`); if it
  *    fails before the person saw any output AND the failure is transport-class (see
  *    {@link isFallbackFailure}: the gateway unreachable, a 5xx, a timeout before any
@@ -62,7 +65,8 @@ import {
 } from './localFirstTransport';
 import { pageRuntimePin } from './pageEngines/pageRuntimePin';
 import { hybridLocalSuccessTurn } from './localSuccess/hybridLocalSuccess';
-import { localSuccessRouterFor, type LocalSuccessStore } from './localSuccess/localSuccessRouter';
+import { localSuccessRouterFor, scopedLocalSuccessRouter, type LocalSuccessStore } from './localSuccess/localSuccessRouter';
+import { localSuccessScope, type LocalSuccessFederation } from './localSuccess/localSuccessFederation';
 import { StreamInterruptedError, TransportError, type StreamChatOptions, type StreamChatResult, type StreamHandlers } from './streamChatCompletion';
 
 /** A Brain streaming fn — structurally `BrainStreamFn`, restated to keep this module off
@@ -121,6 +125,12 @@ export interface HostModelStreamInput {
    * Hybrid always tries local first, as before. See `localSuccess/localSuccessRouter.ts`.
    */
   localSuccess?: LocalSuccessStore;
+  /**
+   * How this host federates that predictor's head with its project's fleet (its own
+   * authed transport, built with `createLocalSuccessFederation`). Absent = the head
+   * stays on this device. Used only with `localSuccess`, on a signed-in Hybrid turn.
+   */
+  localSuccessFederation?: LocalSuccessFederation;
 }
 
 /** What {@link HostModelStreamInput.onFallback} is told: the pick that failed, and why. */
@@ -155,7 +165,8 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
     if (mode === 'specific' && !pick && !byoPool) throw new Error(NO_SPECIFIC_MODEL);
     // Local only never BUILDS a cloud stream — not merely never calls one.
     const cloud = localOnly ? null : await input.cloud();
-    const noModel = localOnly || (input.signedIn ? await input.signedIn() : cloud !== null) ? NO_LOCAL_MODEL : NOT_SIGNED_IN;
+    const signedIn = !localOnly && (input.signedIn ? await input.signedIn() : cloud !== null);
+    const noModel = localOnly || signedIn ? NO_LOCAL_MODEL : NOT_SIGNED_IN;
 
     /** Auto: local first (when anything is probed), then the gateway. */
     const auto = async (call: CallOpts, h: StreamHandlers): Promise<StreamChatResult> => {
@@ -168,8 +179,16 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
         return cloud(call, h);
       }
       // Hybrid with a cloud to go to is the only row where skipping local is a choice.
+      // Federating additionally needs a signed-in person and a project to share with.
       const learned = mode === 'hybrid' && cloud && input.localSuccess
-        ? hybridLocalSuccessTurn(localSuccessRouterFor(input.localSuccess), probes, call.signal)
+        ? hybridLocalSuccessTurn(
+          scopedLocalSuccessRouter(
+            localSuccessRouterFor(input.localSuccess),
+            signedIn ? await localSuccessScope(input.localSuccessFederation, call.metadata?.projectId) : undefined,
+          ),
+          probes,
+          call.signal,
+        )
         : null;
       const onAttempt = learned || input.onAttempt
         ? (record: LocalFirstAttemptRecord) => {

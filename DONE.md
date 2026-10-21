@@ -30,6 +30,21 @@
 - **Settings card:** separate `loadFailed` / `saveFailed` messages and corrected copy, in all five locales.
 - **Verified:** api typecheck plus 199/199 tests (fundingOrder, freeTier, the new proxySeed, accountBrainPreferences, all 22 `LlmProxyService.*`, tenantProxy, cloudAgentEngine); model-catalog test; frontend typecheck, hooks ratchet and i18n keys; VSIX host typecheck.
 
+## ✅ RESOLVED 2026-10-21 — run.local-success heads federate · Release CI green again (api 2026.10.65 · frontend 2026.10.81 · VSIX 2026.10.57 · Rovr 2026.10.19 · brain-embedded 2026.10.38)
+
+- **Federation:**
+  - Clients: the `LocalSuccessFederation` port (`brain-embedded/src/localSuccess/localSuccessFederation.ts`) is wired on web, Rovr and the VSIX.
+  - Push: a signed-in Hybrid turn in a project pushes an improving head (`ml:run.local-success`), with numeric holdout rows only. The throttle is 20 new outcomes and 1 hour.
+  - Pull: the fleet head is pulled hourly. It warm-starts local refits and serves when the local head is cold or worse.
+  - Never sent: anonymous, Local only, Specific and no-project turns.
+  - Server: `evermindMlHeads.ts` (a per-target door registry plus an eval-gated `mergeMlHeadDeltas` round; a regression gets 409) and `evermindMlHeadStore.ts` (batched FedAvg on the coordinator alarm). The read is `GET /api/projects/:id/evermind/ml-head`, cached on a version bumped on merge. The LM merge path is unchanged.
+- **Release run 39554272770 (f792c124c) failures, fixed:**
+  - **Frontend build:** `document is not defined` while collecting `/docs`. The new `new Worker(new URL(…, import.meta.url))` in `localFirst.ts` pulled webpack's unguarded `document.baseURI` worker runtime into the shared edge chunk. It is now behind `typeof window !== 'undefined'`, which is constant-folded on server layers; `mamba-worker-client.ts` got the same guard.
+  - **api guards:** brain-embedded `check:silent-catches` had 11 new catches; each now reports through `reportPageEngineFailure` or `reportLocalSuccessFailure`.
+  - **frontend `check:design-scale`:** `RunAnomaliesCard` now uses `--font-size-small`.
+  - **frontend `check:root-closure`:** `canvasAiErrors` is cut with `import()`. The Local-only socket gate (`webRequestGate`, `webInferenceMode`) was re-baselined, with the argument written in the guard header.
+- **Launch post:** `/blog/no-account-no-gpu-you-choose-where-it-runs`, in 5 locales.
+
 ## ✅ RESOLVED 2026-10-21 — Evermind ML task catalog wired into Builderforce.ai (memory ^2026.10.3)
 
 - **(a) Dependencies:** api, frontend, brain-embedded, the VSIX and agent-runtime are on `^2026.10.3`, installed.

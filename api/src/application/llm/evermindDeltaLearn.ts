@@ -66,11 +66,24 @@ export function admitDeltaAgainstHead(
   if (head.version === 0) {
     return { status: 409, body: { ok: false, error: 'project Evermind not seeded — no base model to learn against' } };
   }
-  if (head.mode === 'offline-frozen') {
-    return { status: 423, body: { ok: false, error: 'project Evermind is offline-frozen (read-only); learning disabled', mode: head.mode } };
-  }
-  if (payload.baseVersion !== head.version) {
-    return { status: 409, body: { ok: false, error: 'stale base — rebase against current head', headVersion: head.version } };
-  }
-  return null;
+  return frozenRefusal(head.mode) ?? staleBaseRefusal(payload.baseVersion, head.version);
+}
+
+/**
+ * An offline-frozen project learns nothing — its LM nor its federated ML heads
+ * (`evermindMlHeads`). 423: read-only until a manager reconnects it.
+ */
+export function frozenRefusal(mode: string): DeltaRefusal | null {
+  if (mode !== 'offline-frozen') return null;
+  return { status: 423, body: { ok: false, error: 'project Evermind is offline-frozen (read-only); learning disabled', mode } };
+}
+
+/**
+ * A delta diffed against another version than the head's cannot be element-merged; the
+ * refusal names `headVersion` so the producer can rebase onto it. Shared by the LM door
+ * and the ML-head doors.
+ */
+export function staleBaseRefusal(baseVersion: number, headVersion: number): DeltaRefusal | null {
+  if (baseVersion === headVersion) return null;
+  return { status: 409, body: { ok: false, error: 'stale base — rebase against current head', headVersion } };
 }

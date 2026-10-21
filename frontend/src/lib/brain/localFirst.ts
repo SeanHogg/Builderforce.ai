@@ -21,6 +21,7 @@
 
 import {
   createHostModelStream,
+  createLocalSuccessFederation,
   createPageEngineSet,
   streamChatCompletion,
   webStorageLocalSuccessStore,
@@ -28,6 +29,8 @@ import {
   type BrainTransport,
   type PageEngineSet,
 } from '@seanhogg/builderforce-brain-embedded';
+import { apiRequest } from '../apiClient';
+import { TRANSPORT_FAILURE_STATUS } from '../errors/transportFailure';
 import { bootWebPlatformPolicy, webInferencePolicyFor, webSignedIn } from '../localFirst/platformPolicy';
 import { webModelFallback } from './modelFallback';
 
@@ -35,6 +38,15 @@ let pageEngines: PageEngineSet | undefined;
 /** Where this browser keeps Hybrid's local-success predictor — one store, one history.
  *  Touches storage only when a Hybrid turn first consults it. */
 const webLocalSuccess = webStorageLocalSuccessStore();
+/** How that predictor's head federates with the turn's project — the workspace session's
+ *  own `apiRequest`, behind the web request gate (Local only refuses the Evermind routes).
+ *  Background and best-effort: a refusal (a stale base, a frozen Evermind) or an outage is
+ *  the federation's to absorb, never a toast. */
+const FEDERATION_EXPECTED_ERRORS = [400, 403, 404, 409, 413, 423, 503, TRANSPORT_FAILURE_STATUS];
+const webLocalSuccessFederation = createLocalSuccessFederation(
+  <T,>(path: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) =>
+    apiRequest<T>(path, { ...init, expectedErrors: FEDERATION_EXPECTED_ERRORS }),
+);
 
 /** This page's engines and their model store — built on first use, one per page. The
  *  model picker drives `store`; the Brain stream below reads `probe` and `fetch`. */
@@ -47,7 +59,22 @@ export function browserPageEngines(): PageEngineSet {
     // handed to the worker absolute. Both are reached lazily: the worker starts and the
     // wasm is fetched only when a downloaded Bonsai model is first probed or run.
     bfiWorker: {
-      create: () => new Worker(new URL('./bfi.worker.ts', import.meta.url), { type: 'module', name: 'bfi' }),
+      // The `typeof window` test is load-bearing for the BUILD, not the browser. This
+      // module is in the edge SSR compile (edge-rendered pages reach it, statically or
+      // through `import()` — webpack compiles both), and webpack turns a
+      // `new Worker(new URL(…, import.meta.url))` it walks into a
+      // worker chunk — whose JSONP loader puts `__webpack_require__.b = document.baseURI`
+      // into the ONE shared `edge-runtime-webpack.js`. Every edge function then threw
+      // `document is not defined` at load (the build died collecting `/docs/[[...path]]`).
+      // Next's SWC rewrites `typeof window` to "undefined" on server layers and webpack
+      // never walks the dead branch, so no edge bundle sees the worker. Keep the
+      // constructor INSIDE this branch.
+      create: () => {
+        if (typeof window !== 'undefined') {
+          return new Worker(new URL('./bfi.worker.ts', import.meta.url), { type: 'module', name: 'bfi' });
+        }
+        throw new Error('The bfi worker runs only in a browser.');
+      },
       wasmUrl: async () => new URL((await import('@seanhogg/bfi-web/wasm-url')).bfiWasmUrl, window.location.href),
       // The THREADED CPU build, served as plain files from `public/bfi-threads/`
       // (`scripts/copy-bfi-threads.mjs`). The worker loads it only where threads exist and
@@ -100,5 +127,8 @@ export function createBrowserLocalFirstStream(transport: BrainTransport): BrainS
     // Hybrid's local-success predictor, trained on this browser's routed turns and kept
     // in its Web Storage (no request; a guest on Local only never reaches it).
     localSuccess: webLocalSuccess,
+    // ...and its head shared with the project's fleet: a signed-in Hybrid turn in a
+    // project only (brain-embedded gates it; a guest never federates).
+    localSuccessFederation: webLocalSuccessFederation,
   });
 }

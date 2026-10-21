@@ -318,8 +318,9 @@ export function activate(context: vscode.ExtensionContext): void {
   // Storage + credential for the durable write outboxes (activity, error reports,
   // unsaved chat turns, run outcomes) — a backlog from the last session replays now.
   bindOutboxStorage(context);
-  // Where Hybrid's local-success predictor is kept (machine-wide: the models are this machine's).
-  bindLocalSuccessStorage(context);
+  // Where Hybrid's local-success predictor is kept (machine-wide: the models are this machine's),
+  // and the authed transport its head federates over with the turn's project.
+  bindLocalSuccessStorage(context, bfApi.bfApiRequest(context.secrets));
   installStepDurability(durableStepHost((chatId, rows) => localBrainApplication(context).persistence.sendMessages(chatId, rows)));
   // The ONE log surface, owned by errorReporter so any module can write to it and
   // so "log it" and "file it in Quality" can never drift apart.

@@ -32,7 +32,6 @@ import {
   getActiveGuestRoom, getGuestDisplayName, fetchGuestRoomMessages, appendGuestRoomMessages,
   fetchGuestRoomState, renameGuestRoom, ensureGuestToken, type GuestRoomMessage,
 } from '../guestRoomApi';
-import { GuestAiUnavailableError } from '../canvasAiErrors';
 import { fetchWithTransportReport } from '../errors/transportFailure';
 
 const CHATS_KEY = 'bf_guest_chats';
@@ -304,7 +303,12 @@ async function guestGatewayFetch(input: string, init: RequestInit): Promise<Resp
   const headers = new Headers(init.headers);
   if (!headers.has('Authorization')) {
     const token = await ensureGuestToken();
-    if (!token) throw new GuestAiUnavailableError();
+    if (!token) {
+      // Imported on this failure path only: the guest runtime is in the root layout's
+      // static closure (`scripts/check-root-closure.mjs`), and the error type is not.
+      const { GuestAiUnavailableError } = await import('../canvasAiErrors');
+      throw new GuestAiUnavailableError();
+    }
     headers.set('Authorization', `Bearer ${token}`);
   }
   return fetchWithTransportReport(input, { ...init, headers });

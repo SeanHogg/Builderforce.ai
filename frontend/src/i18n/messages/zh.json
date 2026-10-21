@@ -11750,6 +11750,10 @@
       "edits-land-while-you-watch": {
         "title": "修改即刻生效——热更新、真正的样式表，以及你已经在用的框架",
         "description": "你在 Builderforce 画布上构建的应用，现在会在你编辑时原地更新，保留你输入的内容和滚动的位置。它能编译 Sass、SCSS 和 Less，真正隔离 CSS Modules，加载你所用包自带的样式表，还能在浏览器里运行 Next.js 和 SvelteKit 开发服务器。"
+      },
+      "no-account-no-gpu-you-choose-where-it-runs": {
+        "title": "无需账号、无需 GPU、无需网络——你的每一个字去往哪里，由你决定",
+        "description": "Studio 和 Rovr 现在一打开就有可用的模型，无需账号、无需注册调用、无需 GPU。每个界面——网页、VS Code 扩展和 Rovr 侧边栏——都只问一个问题：你的文字在哪里运行？仅本地、混合，或某一个指定模型。混合模式还会在你的设备上学习哪些轮次该留在本地。"
       }
     }
   },

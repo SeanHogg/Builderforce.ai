@@ -4,6 +4,7 @@ import type { BrainStreamFn } from './brainRunStore';
 import { BrainRequestError } from './chatError';
 import { createHostModelStream } from './hostModelStream';
 import type { LocalSuccessSnapshot, LocalSuccessStore } from './localSuccess/localSuccessRouter';
+import type { LocalSuccessFederation, LocalSuccessFleetHead } from './localSuccess/localSuccessFederation';
 
 /**
  * The ONE host routing step (web app, Rovr, VS Code). Load-bearing:
@@ -406,6 +407,52 @@ describe("createHostModelStream — Hybrid's run.local-success predictor", () =>
       expect(calls).toEqual([]);
     } finally {
       random.mockRestore();
+    }
+  });
+});
+
+describe('createHostModelStream — federating the run.local-success head', () => {
+  const store = (): LocalSuccessStore => ({ load: () => undefined, save: () => undefined });
+  const fleet = () => ({
+    pull: vi.fn(async (_projectId: number): Promise<LocalSuccessFleetHead | null> => null),
+    push: vi.fn(async (_projectId: number, _contribution: unknown): Promise<void> => undefined),
+  });
+  const inProject = { ...hello, metadata: { projectId: 7 } };
+
+  function stream(input: { mode: 'hybrid' | 'local-only' | 'specific'; signedIn: boolean; federation: LocalSuccessFederation; pinned?: string }) {
+    const { cloud } = fakeCloud();
+    return createHostModelStream({
+      mode: () => input.mode,
+      signedIn: () => input.signedIn,
+      probes: async () => [ollama],
+      cloud: () => (input.mode === 'local-only' ? null : cloud),
+      fetch: vi.fn(async () => sse('from-device')),
+      fit: async (m) => m,
+      localSuccess: store(),
+      localSuccessFederation: input.federation,
+      ...(input.pinned ? { pinned: () => input.pinned } : {}),
+    });
+  }
+
+  it("a signed-in Hybrid turn in a project refreshes its project's fleet head", async () => {
+    const federation = fleet();
+    await stream({ mode: 'hybrid', signedIn: true, federation })(inProject);
+    await vi.waitFor(() => expect(federation.pull).toHaveBeenCalledWith(7));
+  });
+
+  it('never federates anonymous, Local only, Specific, or a turn with no project', async () => {
+    const cases = [
+      { mode: 'hybrid' as const, signedIn: false, call: inProject },
+      { mode: 'local-only' as const, signedIn: true, call: inProject },
+      { mode: 'specific' as const, signedIn: true, call: inProject, pinned: 'openai/gpt-5' },
+      { mode: 'hybrid' as const, signedIn: true, call: hello },
+    ];
+    for (const c of cases) {
+      const federation = fleet();
+      await stream({ mode: c.mode, signedIn: c.signedIn, federation, ...(c.pinned ? { pinned: c.pinned } : {}) })(c.call);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(federation.pull).not.toHaveBeenCalled();
+      expect(federation.push).not.toHaveBeenCalled();
     }
   });
 });

@@ -496,7 +496,10 @@ function servePageEngines(engines, io) {
       case "pageEngine.probe": {
         const engine = engineFor(request.runtime);
         const asked = engine ? engine.probe(request.fresh ? { fresh: true } : void 0) : Promise.resolve(null);
-        void asked.catch(() => null).then((probe) => io.reply("pageEngine.probed", { id: request.id, probe }));
+        void asked.catch((e) => {
+          reportPageEngineFailure(request.runtime, "probe", e);
+          return null;
+        }).then((probe) => io.reply("pageEngine.probed", { id: request.id, probe }));
         return;
       }
       case "pageEngine.chat":
@@ -889,7 +892,14 @@ async function webGpuSupport(gpu = pageGpu()) {
 // src/pageEngines/bfiSupport.ts
 var BFI_UNSUPPORTED = { supported: false, reason: "bfi_unavailable", f16: false, maxBufferBytes: 0 };
 async function anyBfiModelDownloaded(store) {
-  const states = await Promise.all(localCatalogFor("bfi").map((row) => store.status(row.ref).catch(() => "absent")));
+  const states = await Promise.all(
+    localCatalogFor("bfi").map(
+      (row) => store.status(row.ref).catch((e) => {
+        reportPageEngineFailure("bfi", "cache_lookup", e);
+        return "absent";
+      })
+    )
+  );
   return states.includes("ready");
 }
 function restrictBackends(s, backends) {
@@ -1001,13 +1011,13 @@ function createBfiWorkerEngine(options) {
       case "close": {
         const reader = reads.get(f.handle);
         reads.delete(f.handle);
-        await reader?.cancel().catch(() => void 0);
+        await reader?.cancel().catch((e) => reportPageEngineFailure("bfi", "cancel", e));
         return void 0;
       }
     }
   };
   const closeReads = () => {
-    for (const reader of reads.values()) void reader.cancel().catch(() => void 0);
+    for (const reader of reads.values()) void reader.cancel().catch((e) => reportPageEngineFailure("bfi", "cancel", e));
     reads.clear();
   };
   const worker = createEngineWorker({
@@ -1110,7 +1120,11 @@ function createBfiWorkerEngine(options) {
           if (!await anyDownloaded()) return bfiSupportWithoutWasm();
           return onceMore(ownSupport, (s) => s === BFI_UNSUPPORTED);
         })(),
-        options.peerSupport?.().catch(() => void 0)
+        // A peer that cannot answer leaves this host's own record standing.
+        options.peerSupport?.().catch((e) => {
+          reportPageEngineFailure("bfi", "support", e);
+          return void 0;
+        })
       ]);
       return withPeerBackends(own, backends, peer);
     },
@@ -1282,4 +1296,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-TQONCF7B.mjs.map
+//# sourceMappingURL=chunk-JEIL76LJ.mjs.map

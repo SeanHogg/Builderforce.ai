@@ -22,6 +22,7 @@ import {
   LogisticModel,
   createMlRegistry,
   engineKey,
+  fitLogistic,
   localSuccessExamples,
   runMlTask,
   trainMlTask,
@@ -29,6 +30,20 @@ import {
   type LocalSuccessOutcome,
   type LocalTurnFeatures,
 } from '@seanhogg/builderforce-memory-engine';
+import {
+  fleetHeadWins,
+  fleetRefreshDue,
+  headTrusted,
+  localSuccessContribution,
+  parseFleetBase,
+  pushDue,
+  zeroHead,
+  FLEET_REFRESH_MS,
+  type FleetBase,
+  type LocalSuccessFleetHead,
+  type LocalSuccessScope,
+} from './localSuccessFederation';
+import { reportLocalSuccessFailure } from './localSuccessFailure';
 import type { TurnFeaturesBase } from './turnFeatures';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -52,6 +67,13 @@ export interface LocalSuccessSnapshot {
   outcomes: StoredLocalSuccessOutcome[];
   /** The trained head (logistic weights + biases), when the task has trained. */
   head?: { params: number[]; holdoutLoss: number | null; samples: number };
+  /**
+   * The project's merged fleet head this device last pulled — every refit warm-starts
+   * from it, and a push is diffed against it (`localSuccessFederation.ts`).
+   */
+  fleet?: FleetBase;
+  /** When this device last pushed a head delta (ms epoch) — the federation throttle. */
+  pushedAt?: number;
 }
 
 /** Skip local only when the predictor says it FAILS with more confidence than this. */
@@ -74,9 +96,24 @@ export interface LocalSuccessVerdict {
   probability: number | null;
 }
 
+/**
+ * `scope` is present only on a turn that may federate (Hybrid, signed in, with a
+ * project — `hostModelStream.ts` decides): `assess` then refreshes the fleet head when
+ * due, and `record` may push the refit's delta. Without it nothing leaves the device.
+ */
 export interface LocalSuccessRouter {
-  assess(ref: string, base: TurnFeaturesBase): Promise<LocalSuccessVerdict>;
-  record(ref: string, outcome: LocalSuccessOutcome): Promise<void>;
+  assess(ref: string, base: TurnFeaturesBase, scope?: LocalSuccessScope): Promise<LocalSuccessVerdict>;
+  /** Never rejects: a failure to record is reported inside (`localSuccessFailure.ts`). */
+  record(ref: string, outcome: LocalSuccessOutcome, scope?: LocalSuccessScope): Promise<void>;
+}
+
+/** `router` with every call made under `scope` — what one federated Hybrid turn is lent. */
+export function scopedLocalSuccessRouter(router: LocalSuccessRouter, scope: LocalSuccessScope | undefined): LocalSuccessRouter {
+  if (!scope) return router;
+  return {
+    assess: (ref, base) => router.assess(ref, base, scope),
+    record: (ref, outcome) => router.record(ref, outcome, scope),
+  };
 }
 
 export interface LocalSuccessRouterOptions {
@@ -97,21 +134,42 @@ function parseSnapshot(raw: unknown): LocalSuccessSnapshot {
     ? s.outcomes.filter((o): o is StoredLocalSuccessOutcome => !!o && typeof o.ref === 'string' && !!o.turn && typeof o.turn === 'object')
     : [];
   const head = s.head && Array.isArray(s.head.params) && s.head.params.length === DIM * CLASSES + CLASSES ? s.head : undefined;
-  return { v: 1, outcomes: outcomes.slice(-LOCAL_SUCCESS_HISTORY), ...(head ? { head } : {}) };
+  const fleet = parseFleetBase(s.fleet);
+  return {
+    v: 1,
+    outcomes: outcomes.slice(-LOCAL_SUCCESS_HISTORY),
+    ...(head ? { head } : {}),
+    ...(fleet ? { fleet } : {}),
+    ...(typeof s.pushedAt === 'number' ? { pushedAt: s.pushedAt } : {}),
+  };
+}
+
+function logisticFrom(params: readonly number[]): LogisticModel {
+  const model = new LogisticModel(DIM, CLASSES);
+  model.importParams(params);
+  return model;
 }
 
 function modelsFor(params: readonly number[]): InMemoryMlModels {
-  const model = new LogisticModel(DIM, CLASSES);
-  model.importParams(params);
   const models = new InMemoryMlModels();
-  models.set(LOCAL_SUCCESS_TASK.id, ENGINE_KEY, model);
+  models.set(LOCAL_SUCCESS_TASK.id, ENGINE_KEY, logisticFrom(params));
   return models;
 }
 
-/** A trained head acts only once it beats a coin (ln 2 nats) on its held-out tail. */
-function trusted(head: LocalSuccessSnapshot['head']): boolean {
-  return !!head && head.holdoutLoss != null && head.holdoutLoss < Math.LN2;
+/**
+ * The task trained FROM `params` — the engine's warm start (`fitLogistic(…, init)`: "a
+ * local round on top of a merged federated head") through the ONE trainer's own `fit`
+ * seam, so the held-out measurement and refit stay `trainMlTask`'s. A fresh copy per fit.
+ */
+function warmStartTask(params: readonly number[]): typeof LOCAL_SUCCESS_TASK {
+  return {
+    ...LOCAL_SUCCESS_TASK,
+    train: { ...LOCAL_SUCCESS_TASK.train!, fit: (samples) => fitLogistic(samples, { classes: CLASSES }, logisticFrom(params)) },
+  };
 }
+
+/** A trained head acts only once it beats a coin (ln 2 nats) on its held-out tail. */
+const trusted = headTrusted;
 
 /** The local success rate of `ref` over the history, or undefined when it never ran locally. */
 function priorRate(outcomes: readonly StoredLocalSuccessOutcome[], ref: string): number | undefined {
@@ -134,15 +192,20 @@ export function createLocalSuccessRouter(store: LocalSuccessStore, opts: LocalSu
     try {
       snapshot = parseSnapshot(await store.load());
       models = snapshot.head ? modelsFor(snapshot.head.params) : null;
-    } catch {
-      /* storage unreadable — start cold, exactly as today */
+    } catch (e) {
+      // Storage unreadable — start cold, exactly as today.
+      reportLocalSuccessFailure('load', e);
     }
   })();
   let writes: Promise<void> = loaded;
+  /** Pulls of the fleet head in flight / backed off after a failure (in memory: a reload retries). */
+  let pulling = false;
+  let pullRetryAt = 0;
 
   return {
-    async assess(ref, base) {
+    async assess(ref, base, scope) {
       await loaded;
+      if (scope) refreshFleet(scope);
       const prior = priorRate(snapshot.outcomes, ref);
       const turn: LocalTurnFeatures = { ...base, ...(prior != null ? { priorLocalSuccessRate: prior } : {}) };
       if (!models || !trusted(snapshot.head)) return { turn, skip: false, probability: null };
@@ -155,24 +218,86 @@ export function createLocalSuccessRouter(store: LocalSuccessStore, opts: LocalSu
       }
     },
 
-    record(ref, outcome) {
+    record(ref, outcome, scope) {
       // Serialized: two turns settling at once must not each append to the same history.
-      const done = writes.then(() => append(ref, outcome));
-      writes = done.catch(() => undefined);
+      // A failure is reported here, once, and resolves — it never rejects the caller or
+      // breaks the chain the next turn's write waits on.
+      const done = writes
+        .then(() => append(ref, outcome, scope))
+        .catch((e: unknown) => reportLocalSuccessFailure('record', e));
+      writes = done;
       return done;
     },
   };
 
-  async function append(ref: string, outcome: LocalSuccessOutcome): Promise<void> {
+  /**
+   * A federated turn re-pulls its project's fleet head when due (first time, another
+   * project, or {@link FLEET_REFRESH_MS} old) — off the turn: serialized behind the
+   * writes, never awaited by `assess`.
+   */
+  function refreshFleet(scope: LocalSuccessScope): void {
+    if (pulling || now() < pullRetryAt || !fleetRefreshDue(snapshot.fleet, scope.projectId, now())) return;
+    pulling = true;
+    writes = writes
+      .then(async () => adopt(scope.projectId, (await scope.federation.pull(scope.projectId)) ?? zeroHead()))
+      .catch(pullFailed)
+      .finally(() => {
+        pulling = false;
+      });
+  }
+
+  /** The pull failed (offline, signed out mid-session, refused): wait a refresh window before retrying. */
+  function pullFailed(reason: unknown): void {
+    pullRetryAt = now() + FLEET_REFRESH_MS;
+    reportLocalSuccessFailure('pull', reason);
+  }
+
+  /**
+   * Take `pulled` as `projectId`'s fleet base — the head every refit warm-starts from and
+   * every push is diffed against — and SERVE it when the local head is cold, untrusted
+   * or worse (`fleetHeadWins`). Local outcomes keep training on top from the next refit.
+   */
+  async function adopt(projectId: number, pulled: LocalSuccessFleetHead): Promise<void> {
+    const wins = fleetHeadWins(snapshot.head, pulled);
+    snapshot = {
+      ...snapshot,
+      fleet: { ...pulled, projectId, pulledAt: now() },
+      ...(wins ? { head: { params: pulled.params, holdoutLoss: pulled.evalLoss, samples: 0 } } : {}),
+    };
+    if (wins) models = modelsFor(pulled.params);
+    await persist();
+  }
+
+  /** Save the snapshot; a refused save is reported and the in-memory head still serves this session. */
+  async function persist(): Promise<void> {
+    try {
+      await store.save(snapshot);
+    } catch (e) {
+      // Storage full or blocked — the in-memory head still serves this session.
+      reportLocalSuccessFailure('save', e);
+    }
+  }
+
+  /** A push was refused (a stale base above all — the fleet merged meanwhile): re-pull on the next federated turn. */
+  function pushRefused(reason: unknown): void {
+    if (snapshot.fleet) snapshot = { ...snapshot, fleet: { ...snapshot.fleet, pulledAt: 0 } };
+    reportLocalSuccessFailure('push', reason);
+  }
+
+  async function append(ref: string, outcome: LocalSuccessOutcome, scope?: LocalSuccessScope): Promise<void> {
     const outcomes = [...snapshot.outcomes, { ...outcome, ref, at: now() }].slice(-LOCAL_SUCCESS_HISTORY);
+    const examples = localSuccessExamples(outcomes);
+    const fleet = snapshot.fleet;
+    const prev = snapshot.head;
     const fresh = new InMemoryMlModels();
     let head: LocalSuccessSnapshot['head'];
     let nextModels: InMemoryMlModels | null = null;
     try {
       // Refit on the whole bounded history (a few hundred rows × nine features — cheap),
       // after the turn, off its critical path. Two classes always, so a history of only
-      // failures still fits a head the right shape to persist and federate.
-      const fit = await trainMlTask(LOCAL_SUCCESS_TASK, localSuccessExamples(outcomes), {
+      // failures still fits a head the right shape to persist and federate. With a fleet
+      // head pulled, the fit continues FROM it, so the diff is a FedAvg contribution.
+      const fit = await trainMlTask(fleet ? warmStartTask(fleet.params) : LOCAL_SUCCESS_TASK, examples, {
         models: fresh,
         classical: { logistic: { classes: CLASSES } },
       });
@@ -186,13 +311,22 @@ export function createLocalSuccessRouter(store: LocalSuccessStore, opts: LocalSu
       head = snapshot.head;
       nextModels = models;
     }
-    snapshot = { v: 1, outcomes, ...(head ? { head } : {}) };
+    snapshot = {
+      v: 1,
+      outcomes,
+      ...(head ? { head } : {}),
+      ...(snapshot.fleet ? { fleet: snapshot.fleet } : {}),
+      ...(snapshot.pushedAt != null ? { pushedAt: snapshot.pushedAt } : {}),
+    };
     models = nextModels;
-    try {
-      await store.save(snapshot);
-    } catch {
-      /* storage full or blocked — the in-memory head still serves this session */
+    // Federate: a refit that improved, on a turn allowed to, against THIS project's base,
+    // when the throttle allows (`pushDue`). Fire-and-forget — the push never holds the
+    // history's writes, and a refusal only re-pulls the base.
+    if (scope && head && head !== prev && fleet && fleet.projectId === scope.projectId && pushDue(prev, head, outcomes.map((o) => o.at), snapshot.pushedAt, now())) {
+      snapshot = { ...snapshot, pushedAt: now() };
+      void scope.federation.push(scope.projectId, localSuccessContribution(fleet, head.params, examples, head.samples)).catch(pushRefused);
     }
+    await persist();
   }
 }
 
@@ -213,8 +347,9 @@ export function webStorageLocalSuccessStore(key = 'bf.ml.run.local-success'): Lo
     save(snapshot) {
       try {
         globalThis.localStorage?.setItem(key, JSON.stringify(snapshot));
-      } catch {
-        /* storage blocked or full */
+      } catch (e) {
+        // Storage blocked or full — the in-memory head still serves this session.
+        reportLocalSuccessFailure('save', e);
       }
     },
   };

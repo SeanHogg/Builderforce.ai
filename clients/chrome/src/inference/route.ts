@@ -31,6 +31,7 @@ import {
   type BrainStreamFn,
   type BrainTransport,
   type HostLocalPin,
+  type LocalSuccessFederation,
   type LocalSuccessStore,
   type ModelFallbackEvent,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -79,6 +80,8 @@ export interface RovrRouteDeps {
   onFallback?(event: ModelFallbackEvent): void;
   /** Where Hybrid's local-success predictor is kept (the panel's extension storage). */
   localSuccess?: LocalSuccessStore;
+  /** How that predictor's head federates with the project's fleet (signed-in Hybrid only — the shared step decides). */
+  localSuccessFederation?: LocalSuccessFederation;
 }
 
 /**
@@ -132,5 +135,6 @@ export function createRovrStream(deps: RovrRouteDeps): BrainStreamFn {
     ...(deps.onAttempt ? { onAttempt: deps.onAttempt } : {}),
     ...(deps.onFallback ? { onFallback: deps.onFallback } : {}),
     ...(deps.localSuccess ? { localSuccess: deps.localSuccess } : {}),
+    ...(deps.localSuccessFederation ? { localSuccessFederation: deps.localSuccessFederation } : {}),
   });
 }
