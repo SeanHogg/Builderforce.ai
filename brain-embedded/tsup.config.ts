@@ -14,6 +14,10 @@ const root = path.dirname(fileURLToPath(import.meta.url));
  */
 const sourceAliases = sourcePackageAliasMap(path.resolve(root, '..'));
 
+// @seanhogg/bfi-web is a built package (not source-only) with types in its root.
+// It's not picked up by sourcePackageAliasMap, so add it manually for the dts build.
+const bfiWebPath = path.resolve(root, '../packages/bfi-web');
+
 export default defineConfig(libraryConfig({
   // `chatError` is a SECOND entry, not just a re-export off the root: it is pure
   // TypeScript with no React, so a non-React host (the VS Code extension process,
@@ -40,17 +44,24 @@ export default defineConfig(libraryConfig({
   // `tsc --noEmit` keeps the narrow one. It is the repo root because the `paths`
   // below point at `packages/*/src`, outside this package.
   dts: {
-    resolve: [/^@builderforce\//],
+    resolve: [/^@builderforce\//, /^@seanhogg\/bfi-web$/, /^@seanhogg\/builderforce-memory/, /^@seanhogg\/builderforce-memory-engine/],
     compilerOptions: {
       rootDir: '..',
-      paths: Object.fromEntries(Object.entries(sourceAliases).map(([specifier, entry]) => [specifier, [entry]])),
+      paths: {
+        ...Object.fromEntries(Object.entries(sourceAliases).map(([specifier, entry]) => [specifier, [entry]])),
+        '@seanhogg/bfi-web': [bfiWebPath],
+      },
     },
   },
   // `@seanhogg/bfi-web` is a `link:` devDependency, which tsup would otherwise INLINE —
   // 50 KB of glue whose `new URL('bfi_web_bg.wasm', import.meta.url)` would then point
   // beside this dist. External, like `@mlc-ai/web-llm`, so each host's bundler resolves
   // it from its own link and emits the binary itself.
-  external: [...REACT_EXTERNALS, '@seanhogg/bfi-web'],
+  //
+  // `@seanhogg/builderforce-memory` and `@seanhogg/builderforce-memory-engine` are
+  // published packages with their own dist. They must be external so the consumer's
+  // bundler (the VS Code extension's esbuild) resolves them from its own node_modules.
+  external: [...REACT_EXTERNALS, '@seanhogg/bfi-web', '@seanhogg/builderforce-memory', '@seanhogg/builderforce-memory-engine'],
   extra: {
     esbuildOptions(options: { alias?: Record<string, string> }) {
       options.alias = { ...(options.alias ?? {}), ...sourceAliases };

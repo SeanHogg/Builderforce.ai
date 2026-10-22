@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.57] — Brain-embedded build fix & VSIX packaging
+
+- **Fixed brain-embedded TypeScript build** — The `tsup` config now correctly resolves `@seanhogg/bfi-web` types (a built package with its own dist) and `@seanhogg/builderforce-memory/evermind` subpath exports. The declaration build passes without `Cannot find module` errors.
+- **VSIX packages cleanly** — `npm run package` in `clients/vscode` produces `builderforce-ai-2026.10.57.vsix` (12.79 MB, 164 files) with all dependencies resolved, including `@seanhogg/builderforce-memory-mcp/compaction` which was previously missing from the bundle.
+
 ## [2026.10.51] — Kimi K3 from your own Kimi account
 
 - **Pick Kimi K3 without installing the Kimi Code CLI.** The model picker offers "Connect Kimi". Kimi's sign-in opens with the code already filled in, the connection is saved in your workspace's integrations, and this editor keeps a short-lived token and calls Kimi directly. Afterwards you choose which Kimi model new turns use; K3 is marked because it needs a plan that includes it.

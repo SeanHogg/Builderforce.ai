@@ -21,7 +21,7 @@ import {
   restrictBackends,
   serveEngineWorker,
   servePageEngines
-} from "./chunk-JEIL76LJ.mjs";
+} from "./chunk-WKSCDTN3.mjs";
 
 // src/pageEngines/bfiChunks.ts
 function closingChunk(finalJson) {

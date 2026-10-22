@@ -48,7 +48,7 @@ import {
   serveEngineWorker,
   servePageEngines,
   webGpuSupport
-} from "./chunk-JEIL76LJ.mjs";
+} from "./chunk-WKSCDTN3.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useMemo } from "react";
