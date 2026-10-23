@@ -40,9 +40,12 @@ const PAUSED_SKIP = { ok: false, error: 'not run: the run paused on a question f
  * @param {((toolName: string, data: unknown) => string) | undefined} [io.toolResultPolicy]
  *   The per-result budget for tool rows (PRD C7, the shared tool-output policy). Omitted
  *   ⇒ plain JSON rows, as before — the Actions runner passes nothing.
+ * @param {((toolName: string) => boolean) | undefined} [io.isReadOnly]
+ *   PRD D8: which tools only read, so a turn's consecutive reads dispatch concurrently
+ *   (the kernel's `isReadOnly` port). Omitted ⇒ every call in order, as before.
  * @returns {Promise<{ output: string, cancelled: boolean, crashed: string | null, paused: boolean }>}
  */
-export async function runImageLoop({ messages, llm, execTool, isCancelled, toolResultPolicy }) {
+export async function runImageLoop({ messages, llm, execTool, isCancelled, toolResultPolicy, isReadOnly }) {
   let steering = [];
   let turnCallIds = [];
   let crashed = null;
@@ -85,6 +88,9 @@ export async function runImageLoop({ messages, llm, execTool, isCancelled, toolR
       },
     },
     ports: {
+      // D8: a run of read-only calls in one turn dispatches concurrently; a write, a
+      // finish or anything unnamed still runs in order. Absent ⇒ the sequential path.
+      ...(isReadOnly ? { isReadOnly: (call) => call.name !== 'finish' && isReadOnly(call.name) } : {}),
       complete: async (ctx) => {
         const turn = await llm(messages);
         // A gateway error is a FAILURE, not an orderly finish — the model produced no

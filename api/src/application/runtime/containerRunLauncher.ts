@@ -22,6 +22,7 @@
 import { isCostLeverOn } from '@builderforce/cost-levers';
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { CONTAINER_MAX_STEPS } from './cloudAgentTools';
+import { containerRunLevers } from './costLoop/runLevers';
 import { previewStepForRun } from './previewDevServer';
 import { containerGitCloneUrl, mintContainerRunToken } from './containerRunToken';
 import { prepareCloudRun, stampExecutionSourceRef } from './cloudAgentEngine';
@@ -112,6 +113,11 @@ export async function launchContainerRun(
         // C7: the image shapes tool results with the shared policy only when the Worker
         // (which owns the tenant + env) turned the lever on; absent ⇒ off in the image.
         toolOutputPolicy: isCostLeverOn(env, 'c7_tool_output_policy', args.tenantId),
+        // The image's local services and loop ports, each behind its lever (absent ⇒ off):
+        // C5 indexes the clone with bf-context; D7/D1 run the project's fast checks after a
+        // turn's edits (D7 shows the model the failures, D1 reports the verdict to the
+        // `llm` op's cascade); D8 dispatches a turn's consecutive reads concurrently.
+        ...containerRunLevers(env, args.tenantId),
         ...(preview ? { preview } : {}),
         ...(args.resume ? { resume: { messages: args.resume.messages, writtenPaths: args.resume.writtenPaths } } : {}),
       }),

@@ -21,9 +21,16 @@ import type {
   ToolRegistry,
   ToolResult,
 } from "@builderforce/agent-tools";
+import { isCostLeverOn } from "@builderforce/cost-levers";
 import type { TSchema } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import type { ImageContent, TextContent } from "../model/types.js";
+
+/** The C8 lever for an on-device host (no tenant: on only when fully rolled out). Read per
+ *  call so an env override takes effect without rebuilding the tool set. */
+function compressLargeOutputs(): boolean {
+  return isCostLeverOn(process.env, "c8_token_compression", null);
+}
 
 function toAgentToolResult(result: ToolResult): AgentToolResult<ToolResult> {
   const content: (TextContent | ImageContent)[] = [
@@ -71,6 +78,7 @@ export function toAgentTool(
         caps: provider,
         signal,
         workspaceRoot,
+        compressLargeOutputs: compressLargeOutputs(),
         // Forward the loop's streaming callback so a shared tool can emit progress
         // exactly as a native one does. Dropping it here is what made the shared
         // contract unable to back a streaming `exec`/`process`: the tool would run to

@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/repo-map",
+  "version": "2026.10.0",
+  "private": true,
+  "type": "module",
+  "description": "THE cloud repo map (PRD C5) in pure TypeScript: the same file reference graph, personalized PageRank and token-budgeted renderer as bf-index (builderforce-inference/crates/bf-index graph.rs + repo_map.rs), built from regex-extracted definitions (@builderforce/agent-tools/symbols), an identifier tokenizer and per-language import patterns. Runs where there is no filesystem and no bf-context binary: the durable cloud runner. Pure, I/O-free.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Db } from '../../infrastructure/database/connection';
-import { readCostMetricRows } from './costMetricsStore';
+import { readCostMetricRows, readServedWithoutModel } from './costMetricsStore';
 
 /** Flatten a drizzle `sql` template into its text (parameters as their values). */
 function dump(q: unknown): string {
@@ -43,5 +43,30 @@ describe('readCostMetricRows', () => {
     }]);
     const [row] = await readCostMetricRows(db, 7, 7, 'none');
     expect(row).toMatchObject({ calls: 3, promptTokens: 900, cacheReadTokens: 300, costMillicents: 1200, medianContextTokens: null, mergedRuns: 0, medianTurns: null });
+  });
+});
+
+describe('groupBy=day', () => {
+  it('keys each row by its UTC day and orders the series ascending', async () => {
+    const { db, sqls } = capture();
+    await readCostMetricRows(db, 7, 30, 'day');
+    expect(sqls[0]).toContain("to_char(u.created_at, 'YYYY-MM-DD') AS group_key");
+    expect(sqls[0]).toContain('ORDER BY t.group_key ASC');
+  });
+
+  it('keeps every other grouping most-expensive-first', async () => {
+    const { db, sqls } = capture();
+    await readCostMetricRows(db, 7, 30, 'role');
+    expect(sqls[0]).toContain('ORDER BY t.cost_millicents DESC');
+  });
+});
+
+describe('readServedWithoutModel', () => {
+  it('counts the stand-in rows beside the model-served calls, on the tenant window', async () => {
+    const { db, sqls } = capture([{ served: '4', dispatched: '12' }]);
+    expect(await readServedWithoutModel(db, 7, 30)).toEqual({ served: 4, dispatched: 12 });
+    expect(sqls[0]).toContain('u.calls = 0 AND u.savings_source IN (response_cache, memory_answer, evermind_answer, deterministic)');
+    expect(sqls[0]).toContain('COALESCE(SUM(u.calls), 0)::int AS dispatched');
+    expect(sqls[0]).toContain('WHERE u.tenant_id = 7');
   });
 });

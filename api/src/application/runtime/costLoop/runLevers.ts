@@ -48,3 +48,23 @@ export function cloudOutputCap(env: unknown, tenantId: TenantId, role: string | 
 export function toolRowCodecOptions(env: unknown, tenantId: TenantId): OpenAiChatCodecOptions | undefined {
   return isCostLeverOn(env, 'c7_tool_output_policy', tenantId) ? { toolResultPolicy: modelToolResultPolicy({ summarize: true }) } : undefined;
 }
+
+/**
+ * The cost-lever flags the image reads off its `/run` body (`container/server.mjs`). The
+ * Worker owns the tenant and the env, so it decides; the image only obeys, and an absent
+ * flag is off there — an older Worker never turns on a behaviour it did not choose.
+ */
+export function containerRunLevers(env: unknown, tenantId: TenantId): {
+  repoMap: boolean; postEditChecks: boolean; postEditSteer: boolean; parallelReads: boolean;
+} {
+  const on = (id: Parameters<typeof isCostLeverOn>[1]) => isCostLeverOn(env, id, tenantId);
+  const steer = on('d7_deterministic_handlers');
+  return {
+    repoMap: on('c5_cloud_repo_map'),
+    // The checks run when either consumer is on: D7 (the model reads the failures) or
+    // D1 (the cascade reads the verdict, which the image reports on its next `llm` op).
+    postEditChecks: steer || on('d1_verifier_cascade'),
+    postEditSteer: steer,
+    parallelReads: on('d8_parallel_tool_calls'),
+  };
+}

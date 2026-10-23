@@ -694,4 +694,43 @@ describe('/learn — the pre-diffed weight-delta door (on-prem runner) and its s
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, queued: 1, baseVersion: 8 });
   });
+
+  it('keeps the provenance of a pre-distilled contribution on the queued entry, and refuses a malformed one', async () => {
+    const { doInstance, map } = makeDO();
+    const learn = (distillation: unknown) => doInstance.fetch(new Request('https://coordinator/learn-text', {
+      method: 'POST',
+      body: JSON.stringify({ tenantId: 1, projectId: 2, text: 'the teacher exemplar, long enough to train', distillation }),
+    }));
+
+    expect((await learn({ distilled: true, teacherModel: 'anthropic/claude' })).status).toBe(200);
+    expect((await learn({ distilled: false, skipReason: 'not-a-reason', attemptedTeacherModel: 'x/y' })).status).toBe(400);
+    const pending = map.get('pending') as Array<{ distillation?: unknown }>;
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.distillation).toEqual({ distilled: true, teacherModel: 'anthropic/claude' });
+  });
+});
+
+describe('/contribution — a teacher call deferred to a provider batch', () => {
+  const statusOf = async (doInstance: InstanceType<typeof ProjectEvermindCoordinatorDO>, id: number) =>
+    (await (await doInstance.fetch(new Request(`https://coordinator/contribution?id=${id}`))).json()) as Record<string, unknown>;
+
+  it('reports a consumed entry whose teacher call is queued as PENDING, not dropped', async () => {
+    const { doInstance, map } = makeDO();
+    map.set('deferred:5', { batchJobId: 31 });
+    expect(await statusOf(doInstance, 5)).toEqual({ status: 'pending', kind: 'text', deferred: true, batchJobId: 31, contributionId: 5 });
+  });
+
+  it('follows the contribution the posted-back batch answer became', async () => {
+    const { doInstance } = makeDO();
+    const res = await doInstance.fetch(new Request('https://coordinator/learn-text', {
+      method: 'POST',
+      body: JSON.stringify({
+        tenantId: 1, projectId: 2, text: 'the teacher exemplar, long enough to train',
+        deferredContributionId: 5, distillation: { distilled: true, teacherModel: 'anthropic/claude' },
+      }),
+    }));
+    const { contributionId } = (await res.json()) as { contributionId: number };
+    expect(await statusOf(doInstance, 5)).toMatchObject({ status: 'pending', kind: 'text', contributionId: 5 });
+    expect(await statusOf(doInstance, contributionId)).toMatchObject({ status: 'pending', contributionId });
+  });
 });

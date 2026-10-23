@@ -49,6 +49,39 @@ export interface AvoidedCall {
   estimated: boolean;
 }
 
+/**
+ * Sources whose `calls = 0` row means a request was ANSWERED WITHOUT A MODEL — the
+ * exact / semantic response cache and single-flight followers (`response_cache`), a
+ * memory or Evermind answer replay, and the deterministic step (D7). THE list the cost
+ * metrics' `servedWithoutModel` counts, so a new stand-in is added in one place.
+ */
+export const SERVED_WITHOUT_MODEL_SOURCES: readonly AvoidedCallSource[] = ['response_cache', 'memory_answer', 'evermind_answer', 'deterministic'];
+
+/**
+ * Count a request that was answered without a model but has no measurable saving to
+ * record (a deterministic answer; a cache hit whose original usage was not stored) — a
+ * `calls = 0` row with zero tokens, zero cost and zero saved tokens, so no spend, request
+ * count or savings total moves. Best-effort, like every usage write.
+ */
+export function recordServedWithoutModel(
+  db: Db,
+  env: Env,
+  served: { tenantId: number; userId?: string | null; projectId?: number | null; source: AvoidedCallSource; model?: string | null },
+): Promise<void> {
+  return recordUsageRow(db, env, {
+    tenantId: served.tenantId,
+    userId: served.userId ?? null,
+    llmProduct: 'memory',
+    model: served.model?.trim() || 'unknown',
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    useCase: served.source,
+    attribution: { projectId: served.projectId ?? null },
+    surface: 'web',
+    calls: 0,
+    savings: { source: served.source, savedPromptTokens: 0, savedCompletionTokens: 0, estimated: true },
+  });
+}
+
 /** Record one avoided call. Best-effort, like every usage write. */
 export function recordAvoidedCall(db: Db, env: Env, call: AvoidedCall): Promise<void> {
   if (call.promptTokens + call.completionTokens <= 0) return Promise.resolve();

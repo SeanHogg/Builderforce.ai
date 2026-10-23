@@ -58,8 +58,10 @@ import { deleteProjectFact, upsertProjectFact } from '../llm/projectFactsWrite';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { fuseHybridArms } from '@seanhogg/builderforce-memory/retrieval';
-import { embedMemoryText, memoryEmbeddingText, toVectorLiteral, MEMORY_EMBEDDING_MODEL } from './memoryEmbedding';
+import { memoryEmbeddingText } from './memoryEmbedding';
+import { memoryEmbeddingFieldsFor, memoryQueryVectors, type MemoryQueryVector } from './memoryEmbeddingPolicy';
 import { annRecallProject, annRecallScoped, type RecalledRow } from './memorySemanticRecall';
+import { cutRecall, type ScoredCandidate } from '../llm/retrievalK';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { clamp01 } from '../../domain/shared/numbers';
 import { queryTerms } from '../../domain/shared/queryTerms';
@@ -84,8 +86,8 @@ const versionKey = (tenantId: number): string => `mem:ver:${tenantId}`;
  * (migration 1134), and the two arms are combined with the SHARED 0.7/0.3 formula
  * — the same arithmetic the on-prem sqlite-vec + FTS5 store ranks with.
  */
-function fuseRecallArms(vectorRows: RecalledRow[], lexicalRows: RecalledRow[]): MemoryEntry[] {
-  return fuseHybridArms<RecalledRow, RecalledRow, MemoryEntry>({
+function fuseRecallArms(vectorRows: RecalledRow[], lexicalRows: RecalledRow[]): Array<ScoredCandidate<MemoryEntry>> {
+  return fuseHybridArms<RecalledRow, RecalledRow, ScoredCandidate<MemoryEntry>>({
     vector: vectorRows,
     text: lexicalRows,
     vectorScoreOf: (r) => r.vectorScore,
@@ -93,14 +95,29 @@ function fuseRecallArms(vectorRows: RecalledRow[], lexicalRows: RecalledRow[]): 
     // carries the same evidence. Scoring them equally is honest about that, and the
     // vector arm supplies the ordering within the overlap.
     textScoreOf: () => 1,
-    merge: (row) => ({
-      key: row.key,
-      content: row.content,
-      scope: row.scopeKind as MemoryScopeKind,
-      origin: row.origin,
-      expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+    // The fused score rides along so the cut (C4/C6, `cutRecall`) can size on it.
+    merge: (row, score) => ({
+      row: {
+        key: row.key,
+        content: row.content,
+        scope: row.scopeKind as MemoryScopeKind,
+        origin: row.origin,
+        expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+      },
+      score,
     }),
   });
+}
+
+/** One ANN read per query vector (one per vector space — E3 dual-read), concatenated. */
+async function annAcrossSpaces(
+  vectors: readonly MemoryQueryVector[],
+  read: (literal: string, opts: { space: MemoryQueryVector['space']; onlyRowsLacking?: MemoryQueryVector['onlyRowsLacking'] }) => Promise<RecalledRow[]>,
+): Promise<RecalledRow[]> {
+  const arms = await Promise.all(
+    vectors.map((v) => read(v.literal, { space: v.space, ...(v.onlyRowsLacking ? { onlyRowsLacking: v.onlyRowsLacking } : {}) })),
+  );
+  return arms.flat();
 }
 
 /**
@@ -176,10 +193,8 @@ export async function remember(env: Env, db: Db, ctx: MemoryWriteContext, input:
     // Best-effort: a failed embed leaves the columns null and the backfill sweep
     // retries — a memory that is stored but not yet vectorised is still recalled by
     // the lexical arm, whereas refusing the write would lose the fact entirely.
-    const vector = toVectorLiteral((await embedMemoryText(env, memoryEmbeddingText(key, content))) ?? []);
-    const embeddingFields = vector
-      ? { embedding: vector, embeddingModel: MEMORY_EMBEDDING_MODEL, embeddedAt: now }
-      : { embedding: null, embeddingModel: null, embeddedAt: null };
+    // Which vector space it lands in (1536 paid / 1024 free) is the E3 policy's call.
+    const embeddingFields = await memoryEmbeddingFieldsFor(env, ctx.tenantId, memoryEmbeddingText(key, content), now);
 
     await db
       .insert(agentMemory)
@@ -242,7 +257,8 @@ export async function recall(
       async () => {
         // The semantic arm needs a query vector; without one (no key, or the vendor
         // failed) recall is the lexical arm alone, which is the pre-1134 behaviour.
-        const queryVector = query.trim() ? toVectorLiteral((await embedMemoryText(env, query)) ?? []) : null;
+        // One query vector per vector space the tenant reads (E3 dual-read).
+        const queryVectors = await memoryQueryVectors(env, ctx.tenantId, query);
         // Pull more candidates per arm than the caller asked for, so fusion has
         // something to choose between rather than re-ordering the final N.
         const perArm = n * CANDIDATE_MULTIPLIER;
@@ -276,13 +292,15 @@ export async function recall(
                   .limit(perArm);
               })(),
           projectScope
-            ? recallProjectFacts(env, db, ctx.tenantId, projectScope.id, { query, limit: perArm })
+            // A candidate ARM, so the facts path must not apply its own cut (C4/C6) —
+            // the union below is cut once, over both stores.
+            ? recallProjectFacts(env, db, ctx.tenantId, projectScope.id, { query, limit: perArm, candidatesOnly: true })
             : Promise.resolve([] as Array<{ key: string; content: string }>),
-          queryVector && scopedKinds.length > 0
-            ? annRecallScoped(db, ctx.tenantId, scopedKinds, queryVector, perArm)
+          scopedKinds.length > 0
+            ? annAcrossSpaces(queryVectors, (literal, opts) => annRecallScoped(db, ctx.tenantId, scopedKinds, literal, perArm, opts))
             : Promise.resolve([] as RecalledRow[]),
-          queryVector && projectScope
-            ? annRecallProject(db, ctx.tenantId, projectScope.id, queryVector, perArm, QA_CACHE_SOURCE)
+          projectScope
+            ? annAcrossSpaces(queryVectors, (literal, opts) => annRecallProject(db, ctx.tenantId, projectScope.id, literal, perArm, QA_CACHE_SOURCE, opts))
             : Promise.resolve([] as RecalledRow[]),
         ]);
 
@@ -314,7 +332,18 @@ export async function recall(
         // one. Dedupe runs AFTER fusion so the surviving row is the better-ranked
         // of the two, not whichever arm happened to return first.
         const fused = fuseRecallArms(vectorRows, lexicalRows);
-        return dedupeBySpecificity<MemoryEntry>(fused).slice(0, n);
+        const deduped = dedupeBySpecificity(fused.map((c) => ({ ...c, key: c.row.key, scope: c.row.scope })));
+        // The cut: `n` as before, or reranked (C6) / adaptively sized (C4) when on.
+        // The cache key above holds the REQUESTED `n`, so an adaptive cut never
+        // fragments it.
+        return cutRecall<MemoryEntry>({
+          env,
+          tenantId: ctx.tenantId,
+          query,
+          ranked: deduped.map((c) => ({ row: c.row, score: c.score })),
+          requested: n,
+          textOf: (row) => memoryEmbeddingText(row.key, row.content),
+        });
       },
       { l1TtlMs: RECALL_L1_TTL_MS },
     );

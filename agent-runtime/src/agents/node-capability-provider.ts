@@ -29,6 +29,7 @@ import {
   writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { join, relative, resolve as resolvePath, sep } from "node:path";
+import { isCostLeverOn } from "@builderforce/cost-levers";
 import { applyStringEdit, editFacts, matchGlobInScope, dirMayContainGlobMatch, normalizeScopeDir, isUnderScopeDir } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the VS Code local provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
@@ -389,6 +390,9 @@ export async function catalogNodeCapabilityProvider(
   options: NodeProviderOptions,
 ): Promise<CapabilityProvider> {
   setDesktopClientName("on-prem");
-  const semantic = options.semantic ?? (await catalogDesktopSemantic(options.workspaceRoot));
+  const semantic = options.semantic ?? (await catalogDesktopSemantic(options.workspaceRoot, {
+      // C4 for an on-device host (no tenant: on only when fully rolled out).
+      adaptive: isCostLeverOn(process.env, "c4_adaptive_context", null),
+    }));
   return buildNodeCapabilityProvider({ ...options, semantic });
 }

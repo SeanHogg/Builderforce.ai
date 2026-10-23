@@ -40,7 +40,8 @@ import {
   type TenantVendorKeys,
 } from './tenantProviderKeyService';
 import { recordProxyUsage } from './usageLedger';
-import { recordAvoidedCall } from './savingsLedger';
+import { recordAvoidedCall, recordServedWithoutModel } from './savingsLedger';
+import { isUndispatchedOutcome } from './deterministic/deterministicCompletion';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -274,9 +275,9 @@ export async function completeForTenant(
       },
     },
   );
-  // A cache HIT dispatched nothing, so metering it would invent spend that did not
-  // happen and inflate every per-model and per-tenant rollup that sums these rows.
-  if (opts?.meterUseCase && result.outcome !== 'response_cache_hit') {
+  // An UNDISPATCHED answer (cache hit, deterministic step) spent nothing, so metering it
+  // would invent spend and inflate every per-model and per-tenant rollup that sums these rows.
+  if (opts?.meterUseCase && !isUndispatchedOutcome(result.outcome)) {
     void recordProxyUsage(buildDatabase(env), env, {
       tenantId,
       userId: opts.userId ?? null,
@@ -284,23 +285,36 @@ export async function completeForTenant(
       result,
     });
   }
-  // ...but it DID save the call it replayed, priced from the original call's own usage.
-  void recordCacheHitSaving(env, { tenantId, userId: opts?.userId ?? null, projectId: opts?.projectId ?? null }, result);
+  // ...but it DID answer the request: a replay is recorded as the call it saved, a
+  // deterministic answer as a served-without-a-model counter.
+  void recordUndispatchedAnswer(env, { tenantId, userId: opts?.userId ?? null, projectId: opts?.projectId ?? null }, result);
   return result;
 }
 
 /**
- * A `response_cache_hit` dispatched nothing, so it is never metered as spend — but it
- * DID save the call it replayed, priced from the original call's own usage. THE one
- * recorder of that saving for every door that offers the response cache (this seam and
- * `/v1/chat/completions`). No-op on anything but a hit carrying its upstream usage.
+ * An UNDISPATCHED answer is never metered as spend — but it DID answer a request, and
+ * the cost metrics count it as served without a model. THE one recorder for every door
+ * that offers the caches and the deterministic step (this seam and `/v1/chat/completions`):
+ *   • a `response_cache_hit` carrying its upstream usage → the call it saved, priced from
+ *     that usage (measured);
+ *   • a hit without stored usage, or a `deterministic` answer → a zero-token counter row.
+ * No-op on a dispatched result.
  */
-export function recordCacheHitSaving(
+export function recordUndispatchedAnswer(
   env: Env,
   who: { tenantId: number; userId?: string | null; projectId?: number | null },
   result: ProxyResult,
 ): Promise<void> | undefined {
-  if (result.outcome !== 'response_cache_hit' || !result.cachedUsage) return undefined;
+  if (!isUndispatchedOutcome(result.outcome)) return undefined;
+  if (result.outcome !== 'response_cache_hit' || !result.cachedUsage) {
+    return recordServedWithoutModel(buildDatabase(env), env, {
+      tenantId: who.tenantId,
+      userId: who.userId ?? null,
+      ...(who.projectId != null ? { projectId: who.projectId } : {}),
+      source: result.outcome === 'response_cache_hit' ? 'response_cache' : 'deterministic',
+      model: result.resolvedModel,
+    });
+  }
   return recordAvoidedCall(buildDatabase(env), env, {
     tenantId: who.tenantId,
     userId: who.userId ?? null,

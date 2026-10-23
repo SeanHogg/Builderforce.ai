@@ -4,8 +4,10 @@
  * every surface injects. Primitives live in `projectFactsStore`.
  */
 import { and, desc, eq, gt, ilike, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
-import { embedMemoryText, toVectorLiteral } from '../memory/memoryEmbedding';
+import { memoryEmbeddingText } from '../memory/memoryEmbedding';
+import { memoryQueryVectors } from '../memory/memoryEmbeddingPolicy';
 import { annRecallProject } from '../memory/memorySemanticRecall';
+import { cutRecall } from './retrievalK';
 import { fuseHybridArms } from '@seanhogg/builderforce-memory/retrieval';
 import { projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -58,16 +60,27 @@ export async function recallProjectFacts(
   db: Db,
   tenantId: number,
   projectId: number,
-  opts?: { query?: string; limit?: number; readFileHash?: FileContentHashReader },
+  opts?: {
+    query?: string;
+    limit?: number;
+    readFileHash?: FileContentHashReader;
+    /** The caller is FUSING these as one arm of a wider recall (`memoryService`), so
+     *  return the first `limit` fused rows and leave the rerank / adaptive cut (C6/C4)
+     *  to the caller's single cut over the union. */
+    candidatesOnly?: boolean;
+  },
 ): Promise<ProjectFact[]> {
   if (!Number.isInteger(projectId) || projectId <= 0) return [];
   const limit = Math.min(Math.max(1, Math.trunc(opts?.limit ?? RECALL_DEFAULT)), RECALL_MAX);
   const query = (opts?.query ?? '').trim();
+  const candidatesOnly = opts?.candidatesOnly === true;
   try {
     const token = await projectFactsVersion(env, tenantId, projectId);
     const cached = await getOrSetCached(
       env,
-      `project_facts:recall:${tenantId}:${projectId}:v:${token}:${limit}:${query}`,
+      // Keyed on the REQUESTED limit, never the adaptive K a cut chose, so C4 cannot
+      // fragment the cache; a candidate-arm read is its own entry (it is not cut).
+      `project_facts:recall:${tenantId}:${projectId}:v:${token}:${limit}${candidatesOnly ? ':c' : ''}:${query}`,
       async () => {
         // Durable beliefs only — Q&A cache rows (source=qa-cache) are retrieved by
         // exact question key (projectMemory), never surfaced as ambient RAG facts.
@@ -136,16 +149,20 @@ export async function recallProjectFacts(
         // shift); as a multiplier it does what "this fact matters more" means, and it
         // keeps a retired-and-replaced belief from outranking a live one that merely
         // reads more fluently. Rows at the neutral 0.5 are untouched.
-        const ranked = fuseHybridArms<SemanticFactRow, SemanticFactRow, SemanticFactRow>({
+        const ranked = fuseHybridArms<SemanticFactRow, SemanticFactRow, { row: SemanticFactRow; score: number }>({
           vector: semanticRows,
           text: lexicalRows,
           vectorScoreOf: (r) => r.score * (0.5 + r.importance),
           textScoreOf: (r) => (0.5 + r.importance),
-          merge: (row) => row,
+          merge: (row, score) => ({ row, score }),
         });
         // With no query the semantic arm is empty, and a stable sort of a
         // constant-per-arm score preserves the SQL's importance-then-recency order.
-        return ranked.slice(0, limit).map((row) => ({
+        // The cut: `limit` as before, or reranked (C6) / adaptively sized (C4) when on.
+        const kept = candidatesOnly
+          ? ranked.slice(0, limit).map((c) => c.row)
+          : await cutRecall<SemanticFactRow>({ env, tenantId, query, ranked, requested: limit, textOf: (row) => memoryEmbeddingText(row.key, row.content) });
+        return kept.map((row) => ({
           key: row.key,
           content: row.content,
           expiresAt: row.expiresAt ? new Date(row.expiresAt).toISOString() : null,
@@ -256,10 +273,20 @@ async function recallProjectFactsSemantically(
 ): Promise<SemanticFactRow[]> {
   if (!query) return [];
   // The RAW query is what gets embedded, not `memoryEmbeddingText(key, …)` — that one
-  // is for WRITE-side text. Identical to memoryService.ts:243.
-  const vector = toVectorLiteral((await embedMemoryText(env, query)) ?? []);
-  if (!vector) return [];
-  const hits = await annRecallProject(db, tenantId, projectId, vector, limit, QA_CACHE_SOURCE);
+  // is for WRITE-side text. One vector per vector space the tenant reads (E3 dual-read),
+  // the same policy `memoryService.recall` uses.
+  const vectors = await memoryQueryVectors(env, tenantId, query, ['project_facts']);
+  if (!vectors.length) return [];
+  const hits = (
+    await Promise.all(
+      vectors.map((v) =>
+        annRecallProject(db, tenantId, projectId, v.literal, limit, QA_CACHE_SOURCE, {
+          space: v.space,
+          ...(v.onlyRowsLacking ? { onlyRowsLacking: v.onlyRowsLacking } : {}),
+        }),
+      ),
+    )
+  ).flat();
   if (!hits.length) return [];
 
   const keys = hits.map((h) => h.key).filter(Boolean);
@@ -275,7 +302,10 @@ async function recallProjectFactsSemantically(
       isNull(projectFacts.supersededBy),
       or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
     ));
-  const scoreByKey = new Map(hits.map((h) => [h.key, h.vectorScore]));
+  // A key can only be found in one space (the fallback arm excludes rows the other
+  // space covers), but take the best score defensively rather than the last one.
+  const scoreByKey = new Map<string, number>();
+  for (const h of hits) scoreByKey.set(h.key, Math.max(scoreByKey.get(h.key) ?? 0, h.vectorScore));
   return rows.map((row) => ({
     id: row.key,
     key: row.key,

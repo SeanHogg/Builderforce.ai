@@ -20,6 +20,11 @@
  * lexical arm still recalls it) and `memoryEmbeddingBackfill` vectorises the row once
  * the pinned model answers again. A second model means a second column (or a per-row
  * dimension) plus a recall that embeds the query once per stored model.
+ *
+ * That second column now exists (1256, cost lever `e3_free_embeddings`): see the vector
+ * SPACES below. Each space is still one pinned model in one fixed-width column — the
+ * rule above holds per space — and `memoryEmbeddingPolicy` decides which space a write
+ * and a recall use.
  */
 
 import { dispatchEmbeddingVendor } from '../llm/embeddingVendors/registry';
@@ -41,6 +46,45 @@ export function memoryEmbeddingAvailable(env: Env): boolean {
   return Boolean(env.OPENROUTER_API_KEY);
 }
 
+// ---------------------------------------------------------------------------
+// Vector SPACES (1256, cost lever `e3_free_embeddings`)
+//
+// The "second column" the note above says a second model needs. A space is one model
+// pinned to one column width; the ANN reads (`memorySemanticRecall`) map a space to its
+// column and model stamp, so nothing compares vectors across spaces:
+//   legacy → `embedding`      vector(1536), text-embedding-3-small (paid, OpenRouter)
+//   bge_m3 → `embedding_1024` vector(1024), Workers AI bge-m3 (free, account quota)
+// Both are kept (dual-read) until every row carries a bge-m3 vector; the backfill sweep
+// fills `embedding_1024` for free, then the lever moves new writes and queries onto it.
+// ---------------------------------------------------------------------------
+
+export type MemoryVectorSpaceId = 'legacy' | 'bge_m3';
+
+export interface MemoryVectorSpace {
+  id: MemoryVectorSpaceId;
+  /** Vendor-prefixed, so the cascade can never answer from another model. */
+  model: string;
+  dims: number;
+  /** Whether this deployment holds the credential the space's vendor needs. */
+  available: (env: Env) => boolean;
+}
+
+/** Workers AI bge-m3 — width must match `vector(1024)` in migration 1256. */
+export const MEMORY_EMBEDDING_1024_MODEL = 'cloudflare/@cf/baai/bge-m3';
+export const MEMORY_EMBEDDING_1024_DIMS = 1024;
+
+export const MEMORY_VECTOR_SPACES: Readonly<Record<MemoryVectorSpaceId, MemoryVectorSpace>> = {
+  legacy: { id: 'legacy', model: MEMORY_EMBEDDING_MODEL, dims: MEMORY_EMBEDDING_DIMS, available: memoryEmbeddingAvailable },
+  bge_m3: {
+    id: 'bge_m3',
+    model: MEMORY_EMBEDDING_1024_MODEL,
+    dims: MEMORY_EMBEDDING_1024_DIMS,
+    available: (env) => Boolean(env.CLOUDFLARE_AI_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID),
+  },
+};
+
+const LEGACY = MEMORY_VECTOR_SPACES.legacy;
+
 /**
  * The text a memory is embedded as. Key and content together, because a memory's
  * key carries meaning the content often assumes ("deploy-command" + "pnpm deploy").
@@ -52,8 +96,8 @@ export function memoryEmbeddingText(key: string, content: string): string {
 }
 
 /** A pgvector literal (`[1,2,3]`) for the driver. Rejects a wrong-width vector. */
-export function toVectorLiteral(vector: readonly number[]): string | null {
-  if (vector.length !== MEMORY_EMBEDDING_DIMS) return null;
+export function toVectorLiteral(vector: readonly number[], space: MemoryVectorSpace = LEGACY): string | null {
+  if (vector.length !== space.dims) return null;
   return `[${vector.map((n) => (Number.isFinite(n) ? n : 0)).join(',')}]`;
 }
 
@@ -62,33 +106,39 @@ export function toVectorLiteral(vector: readonly number[]): string | null {
  * when embedding is unavailable or the vendor failed, so every caller can treat
  * "no vector" as an ordinary outcome and fall back to lexical retrieval.
  */
-export async function embedMemoryTexts(env: Env, input: readonly string[]): Promise<number[][] | null> {
+export async function embedMemoryTexts(env: Env, input: readonly string[], space: MemoryVectorSpace = LEGACY): Promise<number[][] | null> {
   const texts = input.filter((t) => t.trim().length > 0);
-  if (texts.length === 0 || !memoryEmbeddingAvailable(env)) return null;
+  if (texts.length === 0 || !space.available(env)) return null;
   try {
     const result = await dispatchEmbeddingVendor({
-      env: { OPENROUTER_API_KEY: env.OPENROUTER_API_KEY, VOYAGE_API_KEY: env.VOYAGE_API_KEY },
-      model: MEMORY_EMBEDDING_MODEL,
+      env: {
+        OPENROUTER_API_KEY: env.OPENROUTER_API_KEY,
+        VOYAGE_API_KEY: env.VOYAGE_API_KEY,
+        CLOUDFLARE_AI_API_TOKEN: env.CLOUDFLARE_AI_API_TOKEN,
+        CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID,
+      },
+      model: space.model,
       input: [...texts],
     });
     const vectors = [...result.data].sort((a, b) => a.index - b.index).map((row) => row.embedding);
     if (vectors.length !== texts.length) return null;
     // A wrong-width vector means the pin did not hold; writing it would poison the
     // index, so the whole batch is refused and the rows stay unembedded.
-    if (vectors.some((v) => v.length !== MEMORY_EMBEDDING_DIMS)) return null;
+    if (vectors.some((v) => v.length !== space.dims)) return null;
     return vectors;
   } catch (error) {
     reportCaughtError(error, {
       source: 'application/memory/memoryEmbedding.ts',
       operation: 'embedMemoryTexts',
       level: 'warning',
+      context: { space: space.id },
     });
     return null;
   }
 }
 
 /** Embed a single text. `null` on any failure, same contract as the batch form. */
-export async function embedMemoryText(env: Env, text: string): Promise<number[] | null> {
-  const vectors = await embedMemoryTexts(env, [text]);
+export async function embedMemoryText(env: Env, text: string, space: MemoryVectorSpace = LEGACY): Promise<number[] | null> {
+  const vectors = await embedMemoryTexts(env, [text], space);
   return vectors?.[0] ?? null;
 }

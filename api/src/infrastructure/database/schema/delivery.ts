@@ -838,6 +838,12 @@ export const projectFacts = pgTable('project_facts', {
   embedding:      vector('embedding', { dimensions: 1536 }),
   embeddingModel: varchar('embedding_model', { length: 64 }),
   embeddedAt:     timestamp('embedded_at'),
+  /** FREE EMBEDDINGS (1256, cost lever `e3_free_embeddings`) — a second vector space
+   *  (Workers AI bge-m3, 1024-d) beside the 1536 column, dual-read until every row has
+   *  one. Its own model stamp because a row can hold both vectors at once. */
+  embedding1024:      vector('embedding_1024', { dimensions: 1024 }),
+  embedding1024Model: varchar('embedding_1024_model', { length: 64 }),
+  embedded1024At:     timestamp('embedded_1024_at'),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });

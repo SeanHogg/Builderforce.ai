@@ -53,7 +53,7 @@ import {
 } from '../../application/llm/projectEvermind';
 import { assessLMCoherence } from '@seanhogg/builderforce-memory/evermind';
 import { resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
-import { distillEvermindEntry, evermindStudent } from '../../application/llm/evermindDistillation';
+import { adaptPreDistilledEntry, distillEvermindEntry, evermindStudent, readPreDistillation, type PreDistilledLearnText } from '../../application/llm/evermindDistillation';
 import { backfillEntryProvenance } from '../../application/llm/evermindProvenance';
 import type { EffectiveTeacher, RecordedSkipReason } from '../../application/llm/evermindTeacher';
 import { ingestErrorEvents } from '../../application/quality/ingestEngine';
@@ -141,6 +141,9 @@ interface PendingEntry {
   /** The Brain chat this contribution came from. Carried through the queue so the
    *  merged memory keeps its provenance — see {@link RecentEntry.chatId}. */
   chatId?: number;
+  /** Present when `text` ALREADY went through distillation (a deferred teacher's batch
+   *  settled): the alarm adapts on it as is and records this provenance — no teacher. */
+  distillation?: PreDistilledLearnText['distillation'];
 }
 
 interface CoordMeta {
@@ -158,6 +161,17 @@ interface LearnTextBody {
   /** The Brain chat this contribution came from, when it came from one. Recall uses it
    *  to put a conversation's OWN memories first — see {@link RecentEntry.chatId}. */
   chatId?: number;
+  /** Set by the deferred-teacher batch handler: the text is already distilled. */
+  distillation?: unknown;
+  /** Set with `distillation`: the contribution id whose teacher call was deferred. */
+  deferredContributionId?: number;
+}
+
+/** A contribution whose teacher call went to a provider batch: the job it waits on, and
+ *  — once the batch answer was posted back — the contribution it became. */
+interface DeferredContribution {
+  batchJobId?: number;
+  replacedBy?: number;
 }
 
 /** One inspectable record of a contribution the coordinator merged into a version.
@@ -270,6 +284,8 @@ interface EvalPoint {
 }
 
 const PENDING_KEY = 'pending';
+/** `deferred:<id>` — a contribution whose teacher call was queued on a provider batch. */
+const deferredKey = (id: number): string => `deferred:${id}`;
 const META_KEY = 'meta';
 const SEQ_KEY = 'seq';
 /** LEGACY single-value ring. Retained only so {@link ProjectEvermindCoordinatorDO.migrateLegacyRing}
@@ -628,20 +644,31 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (!Number.isFinite(asked) || asked <= 0) return this.json({ error: 'id is required' }, 400);
     const id = Math.trunc(asked);
 
+    return this.json({ ...(await this.contributionStatus(id)), contributionId: id });
+  }
+
+  /** One contribution's state (see {@link handleContribution}); follows a deferred one. */
+  private async contributionStatus(id: number, hops = 0): Promise<Record<string, unknown>> {
     const merged = await this.readMemory(id);
     if (merged) {
       const { emb: _emb, ...rest } = merged;
-      return this.json({ status: 'merged', contributionId: id, ...rest });
+      return { status: 'merged', ...rest };
     }
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
     const queued = pending.find((e) => e.id === id);
     if (queued) {
-      return this.json({ status: 'pending', contributionId: id, kind: queued.diffB64 ? 'delta' : 'text', queued: pending.length });
+      return { status: 'pending', kind: queued.diffB64 ? 'delta' : 'text', queued: pending.length };
     }
+    // Consumed with its teacher call queued on a provider batch: still PENDING, not
+    // dropped — the batch answer comes back as a contribution of its own, which this id
+    // then follows (one hop; the answer is never deferred again).
+    const deferred = await this.state.storage.get<DeferredContribution>(deferredKey(id));
+    if (deferred?.replacedBy != null && hops === 0) return this.contributionStatus(deferred.replacedBy, 1);
+    if (deferred) return { status: 'pending', kind: 'text', deferred: true, ...(deferred.batchJobId != null ? { batchJobId: deferred.batchJobId } : {}) };
     // Neither queued nor stored. A merge consumed it and it never became a memory —
     // reported as its own state rather than folded into `pending` (which would leave a
     // poller waiting forever) or into `merged` (which would claim it is in the weights).
-    return this.json({ status: 'dropped', contributionId: id });
+    return { status: 'dropped' };
   }
 
   /**
@@ -881,12 +908,21 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (head.mode === 'offline-frozen') return this.json({ ok: false, error: 'project Evermind is offline-frozen (read-only); learning disabled', mode: head.mode }, 423);
 
     const prompt = typeof body.prompt === 'string' && body.prompt.trim() ? body.prompt.trim().slice(0, MAX_TEXT_CHARS) : undefined;
+    const distillation = readPreDistillation(body.distillation);
+    if (body.distillation != null && !distillation) return this.json({ ok: false, error: 'distillation is malformed' }, 400);
     const { queued, dropped, contributionId } = await this.enqueue(body.tenantId, body.projectId, head.version, {
       text: text.slice(0, MAX_TEXT_CHARS),
       ...(prompt ? { prompt } : {}),
+      ...(distillation ? { distillation } : {}),
       weight: typeof body.weight === 'number' && body.weight > 0 ? body.weight : 1,
       ...(Number.isInteger(body.chatId) && (body.chatId as number) > 0 ? { chatId: body.chatId } : {}),
     });
+    // The batch answer is the contribution the deferred one became: a poller of the
+    // original id follows it from here (handleContribution).
+    const origin = body.deferredContributionId;
+    if (distillation && Number.isInteger(origin) && (origin as number) > 0) {
+      await this.state.storage.put(deferredKey(origin as number), { replacedBy: contributionId } satisfies DeferredContribution);
+    }
     return this.json({ ok: true, queued, contributionId, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
   }
 
@@ -899,7 +935,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     tenantId: number,
     projectId: number,
     baseVersion: number,
-    entry: { diffB64?: string; text?: string; prompt?: string; label?: string; weight: number; chatId?: number },
+    entry: { diffB64?: string; text?: string; prompt?: string; label?: string; weight: number; chatId?: number; distillation?: PreDistilledLearnText['distillation'] },
   ): Promise<{ queued: number; dropped: number; contributionId: number }> {
     await this.state.storage.put(META_KEY, { tenantId, projectId } satisfies CoordMeta);
     const seq = ((await this.state.storage.get<number>(SEQ_KEY)) ?? 0) + 1;
@@ -915,6 +951,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       ...(entry.prompt ? { prompt: entry.prompt } : {}),
       ...(entry.label ? { label: entry.label } : {}),
       ...(entry.chatId != null ? { chatId: entry.chatId } : {}),
+      ...(entry.distillation ? { distillation: entry.distillation } : {}),
     });
     // Cost guard: cap the queue, dropping the OLDEST contributions if a project is
     // firehosing learns faster than the debounce can merge them.
@@ -1012,7 +1049,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // Resolve the effective (budget-gated) teacher ONCE per alarm — the token scan
       // is a per-tenant aggregate constant across this batch, so it must not run per
       // entry. null unless a teacher is pinned AND there's trainable text to distil.
-      const effectiveTeacher: EffectiveTeacher = (isLM && usable.some((e) => !!e.text))
+      const effectiveTeacher: EffectiveTeacher = (isLM && usable.some((e) => !!e.text && !e.distillation))
         ? await resolveEvermindTeacherModel(this.env, this.db, tenantId, head.teacherModel)
         : { model: null, reason: 'not_pinned' };
       const student = evermindStudent(basePkg, tok);
@@ -1020,6 +1057,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       const weights: number[] = [];
       let textFits = 0;
       let narrationSkipped = 0;
+      let teacherDeferred = 0;
       for (const e of usable) {
         if (e.diffB64) {
           processedIds.push(e.id); // consumed whether or not it proves usable
@@ -1065,9 +1103,21 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           // contribution is never lost. The student is the SAME adaptation recipe the
           // on-prem producer runs (engine `adaptAndDiff`), so a server-side fit and a
           // pushed delta are the same size of update. [[evermind-learning-architecture]]
-          const training = await distillEvermindEntry(
-            this.env, tenantId, effectiveTeacher, student, e.text, { prompt: e.prompt ?? null },
-          );
+          // A pre-distilled entry (the deferred teacher's batch answer, posted back) skips
+          // the teacher. Otherwise the teacher call is offered to the batch queue (lever
+          // D6): nobody waits on it, and the handler posts the answer back as a
+          // pre-distilled contribution — so a deferred entry is QUEUED, not dropped.
+          const training = e.distillation
+            ? await adaptPreDistilledEntry(student, e.text, e.distillation)
+            : await distillEvermindEntry(
+                this.env, tenantId, effectiveTeacher, student, e.text,
+                { prompt: e.prompt ?? null, defer: { db: this.db, projectId, chatId: e.chatId ?? null, weight: e.weight, contributionId: e.id } },
+              );
+          if (training.deferredJobId != null) {
+            teacherDeferred++;
+            await this.state.storage.put(deferredKey(e.id), { batchJobId: training.deferredJobId } satisfies DeferredContribution);
+            continue;
+          }
           const adapted = training.adapted;
           if (training.narrationOnly && !adapted) {
             // All mid-turn narration ("Let me check…") — consumed, deliberately not learned.
@@ -1146,6 +1196,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
         }
       }
 
+      if (teacherDeferred > 0) {
+        console.info(`[evermind] queued ${teacherDeferred} teacher call(s) on a provider batch tenant=${tenantId} project=${projectId}`);
+      }
       if (narrationSkipped > 0) {
         console.warn(`[evermind] skipped ${narrationSkipped} narration-only run text(s) tenant=${tenantId} project=${projectId}`);
       }

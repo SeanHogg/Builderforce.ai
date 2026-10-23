@@ -196,7 +196,15 @@ export type RunPolicyEvent =
       surface?: ModelFallbackSurface | null;
       pick?: (tried: readonly string[]) => string | undefined;
     }
-  | { type: 'transport_failed'; kind: TransportFailureKind; model?: string; status?: number };
+  | { type: 'transport_failed'; kind: TransportFailureKind; model?: string; status?: number }
+  /**
+   * The verifier cascade (cost PRD D1) moved the run one model tier up after a unit of
+   * work failed its verifier, or back down to the unit's base once one passed. The next
+   * turn asks for `to` strictly — a soft hint could be shadowed by the gateway's seed —
+   * and the model it leaves is recorded as tried, so a later stall failover does not
+   * pick it again (only the cascade's own de-escalation returns to it).
+   */
+  | { type: 'escalated'; to: string };
 
 /** What the next request asks for. */
 export interface TurnRequest {
@@ -314,6 +322,17 @@ export function reduceRunPolicy(state: RunPolicyState, event: RunPolicyEvent): R
       return stalled(s, event);
     case 'transport_failed':
       return transportFailed(s, event);
+    case 'escalated': {
+      const from = s.model;
+      if (!event.to || event.to === from) return s;
+      return {
+        ...s,
+        model: event.to,
+        locked: false,
+        strictPin: true,
+        tried: from && !s.tried.includes(from) ? [...s.tried, from] : s.tried,
+      };
+    }
   }
 }
 

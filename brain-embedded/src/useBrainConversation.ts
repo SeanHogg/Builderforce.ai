@@ -40,7 +40,8 @@ import { priorResearchDigest } from './priorResearch';
 import { withDirectedMetadata, isDirectedToParticipant, directedAgentRecipients, type DirectedRecipient, type DirectedGroup } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
 import type { BrainRunActivity } from './runActivity';
-import { ratedTurnContext, withRating } from './turnRating';
+import { localRatingVerdict, ratedTurnContext, withRating } from './turnRating';
+import { submitLocalTurnVerdict } from './localSuccess/verifiedLocalLabel';
 import type { ChatErrorAction } from './chatError';
 import type { ChatMode, ChatRosterAgent } from './chatMode';
 import {
@@ -666,14 +667,20 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     // is whatever the gateway actually resolved for THIS reply (after any failover),
     // and the tool is the one the turn executed.
     const context = ratedTurnContext(messages, msg.id);
+    // E5: a thumb on the chat's latest reply is the `rating` verdict on that turn's
+    // deferred local-success label — resolved here, where the web Brain and Rovr run
+    // their model stream (a no-op when nothing local is waiting). The VS Code host
+    // resolves it on its own side from `localVerdict` (its stream lives there).
+    const localVerdict = localRatingVerdict(messages, msg.id, rating, chatId);
+    if (localVerdict) submitLocalTurnVerdict(localVerdict.chatId, localVerdict.passed);
     try {
       await persistence.setMessageFeedback(
         msg.id,
         rating === 1 ? 'up' : rating === -1 ? 'down' : null,
-        { toolName: context.toolName },
+        { toolName: context.toolName, ...(localVerdict ? { localVerdict } : {}) },
       );
     } catch { /* best-effort */ }
-  }, [persistence, messages]);
+  }, [persistence, messages, chatId]);
 
   const attach = useCallback(async (file: File) => {
     setUploading(true);

@@ -16,7 +16,8 @@ import { delegationPlaceholders, placeholderAdvisory, placeholdersWritten, place
 import { canCompleteTicket, completionAdvisory, isTicketCompletion, notOnBaseBranchAdvisory } from '../completionGuard';
 import { shippedToBaseBranch } from '../shipVerification';
 import { toolActivity, visitTarget } from '../runActivity';
-import { isUnscopedMutation, revisitAdvisory, withAdvisory } from '../readCoverage';
+import { revisitAdvisory, withAdvisory } from '@builderforce/run-guards';
+import { isUnscopedMutation } from '../readCoverage';
 import { trimToolResult } from '../toolResultBudget';
 import { nowIso, nowMs, pushTrace, setActivity } from './runCells';
 import { autoLinkCreatedItem, recordCodeChangeTicket } from './runBackstops';

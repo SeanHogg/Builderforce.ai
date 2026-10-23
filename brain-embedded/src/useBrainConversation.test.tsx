@@ -229,9 +229,11 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     );
     await act(async () => { await hook.current.send('hi'); });
     expect(prepared).toEqual([7]);
-    const opts = mockStream.mock.calls[0]![0] as { messages: Array<{ role: string; content: unknown }>; tools?: unknown[] };
+    const opts = mockStream.mock.calls[0]![0] as { messages: Array<{ role: string; content: unknown }>; tools?: Array<{ function: { name: string } }> };
     expect(String(opts.messages[0]!.content)).toContain('You are Rovr, acting for chat 7.');
-    expect(opts.tools).toHaveLength(1);
+    // The host's tool is laid over the request; the run's own always-advertised tools
+    // (planning hand-off, ask-user) ride alongside it by policy, so the count is not 1.
+    expect(opts.tools?.map((t) => t.function.name)).toContain('do_thing');
   });
 
   it("a prepareRun refusal is the conversation's error — the turn is kept, and retryLastTurn runs it once fixed", async () => {

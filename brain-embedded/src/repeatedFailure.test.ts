@@ -5,7 +5,7 @@ import {
   repeatedFailureAdvisory,
   FAILURE_NUDGE_AT,
   FAILURE_HARD_AT,
-} from './repeatedFailure';
+} from '@builderforce/run-guards';
 
 /** The remedy the real run got three times, and re-issued the same bare call after. */
 const NOT_A_REPO =

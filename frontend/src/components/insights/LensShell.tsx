@@ -63,7 +63,8 @@ export function LensPage({
   );
 }
 
-const selectStyle: React.CSSProperties = {
+/** The lens control style — shared by every lens-level <Select> so they read as one toolbar. */
+export const lensSelectStyle: React.CSSProperties = {
   padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
   background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)',
 };
@@ -72,7 +73,7 @@ const selectStyle: React.CSSProperties = {
 export function DaysWindowSelect({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const t = useTranslations('insights');
   return (
-    <Select style={selectStyle} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={t('window')}>
+    <Select style={lensSelectStyle} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={t('window')}>
       <option value={7}>{t('days', { n: 7 })}</option>
       <option value={30}>{t('days', { n: 30 })}</option>
       <option value={90}>{t('days', { n: 90 })}</option>

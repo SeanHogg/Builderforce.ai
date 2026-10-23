@@ -2652,6 +2652,8 @@
         "engineeringDesc": "Which AI approach actually ships — outcome score, merge rate and cost by work type and model.",
         "llmUsage": "LLM Usage",
         "llmUsageDesc": "Token usage, requests and model health, plus estimated spend by source, project, team, user and repo.",
+        "costEfficiency": "Cost efficiency",
+        "costEfficiencyDesc": "Is each model dollar buying more shipped work — cache hit rate, turns and context per run, cost per merged PR, and which cost levers pay off.",
         "recommendations": "Recommendations",
         "recommendationsDesc": "Ranked prescriptive actions and anomalies to act on, drawn from every insight."
       },
@@ -3863,6 +3865,118 @@
       "confirmMessage": "Every recording of this visitor on this site is deleted, with its AI summaries. This cannot be undone.",
       "confirm": "Erase",
       "done": "{count, plural, one {# recording erased.} other {# recordings erased.}}"
+    },
+    "cost": {
+      "approx": "≈{value}",
+      "points": "{value} pts",
+      "subtitle": "Cache hit rate, turns and context per run, and what a merged PR costs in model spend.",
+      "empty": "No model usage recorded in this window.",
+      "loadFailed": "Couldn't load cost metrics.",
+      "verdict": "Over the last {days} days the cache served {cache} of prompt tokens, and a merged PR cost {cost} in model spend across {merged, plural, one {# merged run} other {# merged runs}}.",
+      "verdictNoPr": "Over the last {days} days the cache served {cache} of prompt tokens; no run in this window has merged a PR yet.",
+      "basis": "Token figures are provider-reported; spend is the cost stamped when each call was logged.",
+      "unattributed": "Unattributed",
+      "metric": {
+        "cacheHitRate": "Cache hit rate",
+        "outputInputRatio": "Output / input",
+        "reasoningShare": "Reasoning share",
+        "medianContextTokens": "Median context per turn",
+        "medianTurns": "Median turns per run",
+        "costPerMergedPr": "Cost per merged PR"
+      },
+      "tone": {
+        "better": "Improving",
+        "worse": "Regressing",
+        "flat": "Steady"
+      },
+      "kpi": {
+        "cacheHitRateSub": "Share of prompt tokens read from cache",
+        "medianTurnsSub": "Completed runs · {runs}",
+        "medianContextSub": "Prompt tokens per model call",
+        "costPerPrSub": "Median {median} · {merged} merged runs",
+        "costPerPrNone": "No merged runs in this window",
+        "outputInputSub": "Output tokens per input token",
+        "reasoningShareSub": "Of output, where the provider reports it",
+        "reasoningUnreported": "Not reported by these providers",
+        "servedWithoutModel": "Served without a model",
+        "servedWithoutModelSub": "{requests} requests answered with no model call"
+      },
+      "col": {
+        "metric": "Metric",
+        "calls": "Model calls",
+        "spend": "Spend"
+      },
+      "grouping": {
+        "label": "Group by",
+        "actionType": "Work type",
+        "role": "Role"
+      },
+      "group": {
+        "title": "Where the spend goes",
+        "aria": "Spend per group",
+        "truncated": "Showing the top {n} groups."
+      },
+      "lever": {
+        "title": "Cost levers: on vs off",
+        "desc": "Each partially rolled-out lever, comparing the calls it was on for with the calls it was off for. A change resting on fewer than {calls} calls or {runs} runs in either arm is withheld.",
+        "empty": "No lever is partially rolled out in this window, so there is nothing to compare.",
+        "colOn": "On",
+        "colOff": "Off",
+        "colDelta": "Change (on − off)",
+        "nameWithReq": "{lever} · {req}",
+        "sample": "{on} on / {off} off calls",
+        "insufficient": "Insufficient sample"
+      },
+      "run": {
+        "open": "Cost breakdown",
+        "title": "Run #{id} · cost breakdown",
+        "empty": "No model turns recorded for this run.",
+        "outcome": "{action} · {status} after {steps} steps.",
+        "outcomeMerged": "{action} · {status} after {steps} steps · merged.",
+        "budgetUsed": "Budget used",
+        "noCap": "No per-run cap is set for this run",
+        "turns": "Turns",
+        "turnsSub": "Models used: {models}",
+        "toolSchema": "Tool schemas",
+        "toolSchemaSub": "Estimated tokens spent describing tools",
+        "splitTitle": "Where the tokens went",
+        "contextTitle": "Context by source (estimated)",
+        "colTurn": "Turn",
+        "colModel": "Model",
+        "turnMerged": "{n} ({calls} calls)",
+        "byo": "Own key",
+        "total": "Total",
+        "truncated": "Showing the first {n} turns.",
+        "estimateNote": "≈ marks estimates: spend is priced from the model's rate card, and tool-schema and context figures are character-based estimates rather than provider counts.",
+        "part": {
+          "uncached": "Uncached input",
+          "cacheRead": "Cache read",
+          "cacheWrite": "Cache write",
+          "output": "Output",
+          "reasoning": "Reasoning"
+        },
+        "category": {
+          "system": "System prompt",
+          "tools": "Tool definitions",
+          "history": "Conversation",
+          "toolOutputs": "Tool outputs",
+          "memory": "Memory"
+        },
+        "budgetOfCap": "{share} of {cap} cap · {source}",
+        "tokenBudget": "Token budget",
+        "budgetSource": {
+          "payload": "set on this run",
+          "plan": "plan limit",
+          "default": "platform default"
+        }
+      },
+      "trend": {
+        "title": "Daily trend",
+        "desc": "One metric, day by day across the window — where efficiency is moving.",
+        "metric": "Metric",
+        "empty": "No days in this window have data for this metric yet.",
+        "chartLabel": "{metric} by day"
+      }
     }
   },
   "cloudAgentForm": {
@@ -5588,6 +5702,7 @@
       "aiHubImpact": "AI Impact",
       "aiHubEngineering": "AI Effectiveness",
       "aiHubLlmUsage": "LLM Usage",
+      "aiHubCostEfficiency": "Cost efficiency",
       "aiHubRecommendations": "Recommendations",
       "delivHubDelivery": "Delivery",
       "delivHubAutonomy": "Autonomy Health",
@@ -5859,6 +5974,7 @@
       "aiHubImpactDesc": "Adoption & model-usage trends, a multi-tool evaluation matrix and a composite AI productivity score.",
       "aiHubEngineeringDesc": "Which AI approach actually ships — outcome score, merge rate and cost by work type and model.",
       "aiHubLlmUsageDesc": "Token usage, requests and model health, plus estimated spend by source, project, team, user and repo.",
+      "aiHubCostEfficiencyDesc": "Is each model dollar buying more shipped work — cache hit rate, turns and context per run, cost per merged PR, and which cost levers pay off.",
       "aiHubRecommendationsDesc": "Ranked prescriptive actions and anomalies to act on, drawn from every insight.",
       "delivHubDeliveryDesc": "Burnup, forecast and scope creep for a deliverable across initiatives, projects and releases.",
       "delivHubAutonomyDesc": "Did the work finish itself? Lifecycle funnel by who created the ticket, the autonomous-vs-human move split, and where autonomy stalls.",

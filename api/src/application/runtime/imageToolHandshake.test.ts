@@ -14,12 +14,13 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ToolSchema } from '@builderforce/agent-tools';
 import { HANDSHAKE_ONLY_TOOLS, imageAdvertisedTools, readToolManifest } from './imageToolHandshake';
-import { CONTAINER_AGENT_TOOLS } from './cloudAgentTools';
+import { CONTAINER_AGENT_TOOLS, cloudAgentToolsFor, containerSurfaceCapsFor } from './cloudAgentTools';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const apiRoot = resolve(here, '../../..');
 const relayModule = readFileSync(resolve(apiRoot, 'container/agentRelay.mjs'), 'utf8');
 const containerServer = readFileSync(resolve(apiRoot, 'container/server.mjs'), 'utf8');
+const repoIndexModule = readFileSync(resolve(apiRoot, 'container/repoIndex.mjs'), 'utf8');
 
 const tool = (name: string): ToolSchema => ({
   type: 'function',
@@ -140,11 +141,31 @@ describe('the images and the Worker agree about tool names', () => {
     expect(old).not.toContain('skill_list');
   });
 
+  /** The tools the Container names while its bf-context index is live (C5). */
+  const repoIndexTools = (): string[] => {
+    const match = /export const REPO_INDEX_TOOL_NAMES = \[([^\]]*)\]/.exec(repoIndexModule);
+    expect(match, 'REPO_INDEX_TOOL_NAMES not found in container/repoIndex.mjs').toBeTruthy();
+    return [...(match?.[1] ?? '').matchAll(/'([^']+)'/g)].map((m) => m[1]!);
+  };
+
+  it('C5: with the lever on, a Container whose index is live is offered repo_map / semantic_search; one without it, or too old to send a manifest, is not', () => {
+    const levered = cloudAgentToolsFor(containerSurfaceCapsFor({ COST_LEVER_C5_CLOUD_REPO_MAP: 'on' }, 1));
+    expect(names(levered)).toEqual(expect.arrayContaining(['repo_map', 'semantic_search']));
+    const base = [...arrayLiteral('IMAGE_LOCAL_TOOL_NAMES'), ...arrayLiteral('RELAY_TOOL_NAMES'), ...containerLocal()];
+    expect(names(imageAdvertisedTools(levered, [...base, ...repoIndexTools()]))).toEqual(expect.arrayContaining(['repo_map', 'semantic_search']));
+    expect(names(imageAdvertisedTools(levered, base))).not.toContain('repo_map');
+    const old = names(imageAdvertisedTools(levered, null));
+    expect(old).not.toContain('repo_map');
+    expect(old).not.toContain('semantic_search');
+    // Lever off: the surface's constant set, exactly as before.
+    expect(names(cloudAgentToolsFor(containerSurfaceCapsFor({ COST_LEVERS_ALL: 'off' }, 1)))).not.toContain('repo_map');
+  });
+
   it('everything gated behind the handshake is something a current image dispatches', () => {
     // A gated tool no image implements would be permanently invisible: withheld from an
     // old image by the gate, and from a new one by the intersection.
     const relay = arrayLiteral('RELAY_TOOL_NAMES');
-    const local = [...arrayLiteral('IMAGE_LOCAL_TOOL_NAMES'), ...containerLocal()];
+    const local = [...arrayLiteral('IMAGE_LOCAL_TOOL_NAMES'), ...containerLocal(), ...repoIndexTools()];
     for (const name of HANDSHAKE_ONLY_TOOLS) {
       expect([...relay, ...local]).toContain(name);
     }

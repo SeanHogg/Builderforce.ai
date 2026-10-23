@@ -51,7 +51,11 @@ export type VendorId =
   | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax' | 'cohere'
   // ── BYO-only vendor: no operator pool key; only reachable when a tenant
   //    connects their own Meta AI account from the provider-keys settings page.
-  | 'meta';
+  | 'meta'
+  // ── NOT a dispatchable vendor: labels a result the platform answered WITHOUT a
+  //    model (the deterministic step, cost lever D7). No module is registered for it,
+  //    so nothing can route to it — it exists so a ProxyResult can name who served it.
+  | 'builderforce';
 
 /**
  * Tier classification per model — drives pricing, plan gating, and the

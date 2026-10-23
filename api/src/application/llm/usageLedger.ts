@@ -34,6 +34,23 @@ import { COST_LEVER_ARMS_KEY, costLeverArmsStamp } from '../costMetrics/leverArm
 export const CACHE_READ_MULTIPLIER = 0.1;
 export const CACHE_CREATION_MULTIPLIER = 1.25;
 
+/** Provider batch APIs (Anthropic Message Batches, OpenAI Batch) bill every token tier at
+ *  half the synchronous rate. Applied to the catalog price, so the cache multipliers above
+ *  still split the discounted input price. */
+export const BATCH_PRICE_MULTIPLIER = 0.5;
+
+/** How a call was billed by its provider: the ordinary synchronous rate, or the batch rate. */
+export type UsagePricingTier = 'standard' | 'batch';
+
+/** The per-token prices a call is billed at for its pricing tier. Pure. */
+export function pricingForTier(
+  pricing: { prompt: number; completion: number } | undefined,
+  tier: UsagePricingTier | null | undefined,
+): { prompt: number; completion: number } | undefined {
+  if (!pricing || tier !== 'batch') return pricing;
+  return { prompt: pricing.prompt * BATCH_PRICE_MULTIPLIER, completion: pricing.completion * BATCH_PRICE_MULTIPLIER };
+}
+
 /** Default daily paid-overflow $ ceiling (millicents, 1/100000 USD) for a FREE
  *  tenant with no explicit cap — $0.50/day. Paid plans (pro/teams) are treated
  *  as effectively unlimited unless they set an explicit cap. See migration 0130
@@ -267,8 +284,10 @@ function readChatAttribution(metadata: Record<string, unknown> | null | undefine
  * (`savingsLedger.recordAvoidedCall`). Absent ⇒ memory did nothing on this row.
  */
 export interface UsageSavings {
-  /** Set only on an avoided call (`calls` = 0): what stood in for the model. */
-  source?: 'memory_answer' | 'evermind_answer' | 'response_cache' | null;
+  /** Set only on an avoided call (`calls` = 0): what stood in for the model.
+   *  `deterministic` (D7) is a COUNTER row only — zero saved tokens, so no saving is
+   *  claimed for it; it exists so "served without a model" can be counted. */
+  source?: 'memory_answer' | 'evermind_answer' | 'response_cache' | 'deterministic' | null;
   savedPromptTokens: number;
   savedCompletionTokens?: number;
   recallPromptTokens?: number;
@@ -379,6 +398,9 @@ export interface RecordUsageRow {
   /** ESTIMATED tokens the advertised tool schemas cost on this call (chars/4 over the
    *  serialized `tools`) — null when the producer did not measure it. */
   toolSchemaTokens?: number | null;
+  /** How the provider billed the call. `batch` = a provider batch API (D6), priced at
+   *  {@link BATCH_PRICE_MULTIPLIER} and stamped `metadata.pricingTier`. Absent = standard. */
+  pricingTier?: UsagePricingTier | null;
 }
 
 /** Minimal shape of a ProxyResult this helper needs — avoids importing the full type.
@@ -564,8 +586,9 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
         reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "recordUsageRow" });
       }
     }
+    // A batch-API call is billed at the batch rate; savings below stay valued at list.
     const costUsdMillicents = computeRecordedCostMillicents(
-      pricing,
+      pricingForTier(pricing, row.pricingTier),
       usage,
       row.byo === true,
       row.premiumSurcharge === true,
@@ -581,9 +604,14 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     // the persistence filter so a caller cannot spoof its own arm, and bounded by
     // construction (partial-rollout lever ids only — see costLeverArmsStamp).
     const leverArms = costLeverArmsStamp(env, row.tenantId);
-    const stamped: Record<string, unknown> | null = leverArms
+    const armed: Record<string, unknown> | null = leverArms
       ? { ...(keptMetadata ?? {}), [COST_LEVER_ARMS_KEY]: leverArms }
       : keptMetadata;
+    // The pricing tier is the writer's fact, stamped after the filter like the arms, so
+    // an invoice line can say why the row costs half.
+    const stamped: Record<string, unknown> | null = row.pricingTier === 'batch'
+      ? { ...(armed ?? {}), pricingTier: 'batch' }
+      : armed;
     const metadata = row.premiumSurcharge
       ? { ...(stamped ?? {}), premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS }
       : stamped;

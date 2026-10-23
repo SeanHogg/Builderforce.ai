@@ -17,6 +17,17 @@ function pairingValid(msgs: ChatCompletionMessage[]): boolean {
   return true;
 }
 
+/** No two assistant (or two user) turns back to back; a `tool` row between two assistant turns is the normal round. */
+function alternates(msgs: ChatCompletionMessage[]): boolean {
+  let prev: string | null = null;
+  for (const m of msgs) {
+    if (m.role === 'system') continue;
+    if (m.role !== 'tool' && prev === m.role) return false;
+    prev = m.role;
+  }
+  return true;
+}
+
 describe('packForModel', () => {
   it('summary path: the dropped middle becomes the run summarizer’s note, inside the window', async () => {
     const stream = vi.fn(async () => ({ text: 'read files a.ts..j.ts; filter bar at TaskBoard.tsx:42' }));
@@ -39,7 +50,14 @@ describe('packForModel', () => {
     expect(messages[0]).toBe(msgs[0]);
     expect(messages).toContain(msgs[msgs.length - 1]);
     const note = messages.find((m) => typeof m.content === 'string' && m.content.includes('TaskBoard.tsx:42'));
-    expect(note?.role).toBe('assistant');
+    // The packer alternates the note against what follows it (`noteRole` in
+    // `@seanhogg/builderforce-memory/handoff`): this tail opens with an assistant
+    // `tool_calls` round, so the note is a `user` turn — an `assistant` note here would
+    // put two assistant turns in a row, which strict chat templates reject.
+    const next = messages[messages.indexOf(note!) + 1];
+    expect(next?.role).toBe('assistant');
+    expect(note?.role).toBe('user');
+    expect(alternates(messages)).toBe(true);
     expect(note?.content).toContain('Handed off from anthropic/claude-sonnet to local/webllm/Qwen3-1.7B-q4f16_1-MLC.');
     expect(pairingValid(messages)).toBe(true);
     expect(traces).toEqual([

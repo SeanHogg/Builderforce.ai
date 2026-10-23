@@ -220,7 +220,9 @@ export async function resolveLearnedRoutingInputs(
     if (row?.actionType) {
       actionType = normalizeActionType(row.actionType);
     } else {
-      const verdict = await classifyTaskAction(env, { title: args.taskRow.title, description: args.taskRow.description });
+      // D6: with the batch lever on, a model label is deferred to the batch API (the
+      // lexical verdict answers now); the batch result lands on this same task column.
+      const verdict = await classifyTaskAction(env, { title: args.taskRow.title, description: args.taskRow.description }, { db, tenantId: args.tenantId, taskId: args.taskRow.id });
       actionType = verdict.actionType;
       // Co-derive the investment-allocation category for free off the same signals
       // (no extra LLM call) — the column is the cache/override (EMP-1).

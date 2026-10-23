@@ -54,6 +54,9 @@ export type { LocalSuccessStore, LocalSuccessSnapshot } from './localSuccess/loc
 // Its head federates with the project's fleet through ONE port a host builds from its
 // authed transport (`createLocalSuccessFederation`) and lends `createHostModelStream({ localSuccessFederation })`.
 export { createLocalSuccessFederation } from './localSuccess/localSuccessFederation';
+// E5: a host's explicit thumbs-up / thumbs-down on a chat's latest local reply — the
+// `rating` verdict for the deferred local-success label (lever `e5_verified_local_label`).
+export { submitLocalTurnVerdict } from './localSuccess/verifiedLocalLabel';
 export type { LocalSuccessFederation, LocalSuccessFleetHead, LocalSuccessContribution } from './localSuccess/localSuccessFederation';
 // The per-turn affect block, appraised on this device by Evermind's local limbic — the
 // replacement for the per-turn `/api/limbic/block` call on every host.
@@ -400,9 +403,10 @@ export type { GitShortStatus } from './shipVerification';
 // Loop guard: the per-run tally of which targets have been read, and the advisory the
 // run loop attaches once a read starts circling. Exported for tests and for any surface
 // that wants to report the same coverage picture.
-export { ReadCoverage, revisitAdvisory, withAdvisory, REVISIT_NUDGE_AT, REVISIT_HARD_AT } from './readCoverage';
-export type { ReadVisit, CachedRead } from './readCoverage';
-export { FailureTally, failureReason, repeatedFailureAdvisory, FAILURE_NUDGE_AT, FAILURE_HARD_AT } from './repeatedFailure';
+export { ReadCoverage } from './readCoverage';
+export { revisitAdvisory, withAdvisory, REVISIT_NUDGE_AT, REVISIT_HARD_AT } from '@builderforce/run-guards';
+export type { ReadVisit, CachedRead } from '@builderforce/run-guards';
+export { FailureTally, failureReason, repeatedFailureAdvisory, FAILURE_NUDGE_AT, FAILURE_HARD_AT } from '@builderforce/run-guards';
 // What one tool result may cost the MODEL transcript, and how it is cut down: a generic
 // head slice for list results, LINE-paged windows with an intact continuation offset for
 // `read_file`. Exported so a host can size its own reads to the same budget.
@@ -660,8 +664,8 @@ export {
 export type { ModelIdentityContext, RoutedProduct } from './modelIdentity';
 
 // What a thumbs press is ABOUT: the model that served the turn + the MCP tool it ran.
-export { ratedTurnContext, ratedTurnTool, withRating } from './turnRating';
-export type { RatableMessage, RatedTurnContext, MessageRatings } from './turnRating';
+export { localRatingVerdict, ratedTurnContext, ratedTurnTool, withRating } from './turnRating';
+export type { LocalRatingVerdict, RatableMessage, RatedTurnContext, MessageRatings } from './turnRating';
 
 // The model a chat's last completion actually resolved to — what
 // `builtin_session_current_model` is answered with, and what a host can show as

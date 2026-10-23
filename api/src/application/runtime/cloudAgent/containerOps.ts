@@ -32,7 +32,7 @@ import { systemAuditRuns } from '../../../infrastructure/database/schema';
 import { and, eq, ne } from 'drizzle-orm';
 import { coordinationScopeKey } from '../../../domain/coordination/resourceKey';
 import { isMemoryScope } from '../../../domain/memory/memoryScope';
-import { ExecutionStatus, TenantRole } from '../../../domain/shared/types';
+import { ExecutionStatus } from '../../../domain/shared/types';
 import { executions, tasks } from '../../../infrastructure/database/schema';
 import { scopedToTenant } from '../../../infrastructure/database/tenantScope';
 import { buildCoordinationCapability, claimWriteLease } from '../../coordination/coordinationCapability';
@@ -42,13 +42,14 @@ import {
 } from '../../llm/builtinMcpService';
 import { CLOUD_COMPACT_DEFAULTS, buildGatewaySummarizer, compactMessages } from '../../llm/compactMessages';
 import { buildMemoryCapability } from '../../memory/memoryService';
+import { withAnswerReplay } from '../costLoop/answerReplay';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { settleLateSteersSafely } from '../lateSteerFollowUp';
 import { commitAgentFile, resolveTicketRepoContext } from '../../repos/commitFileAsPendingChange';
 import { recordRepoWrite, resolveTaskRepoRouter } from '../../repos/taskRepoSet';
 import { recordContextContribution } from '../../trust/trustService';
 import { searchOwnedThenDiscover } from '../../webSearch/demandSearch';
-import { CONTAINER_AGENT_TOOLS, cloudToolRegistry } from '../cloudAgentTools';
+import { CLOUD_RUN_TENANT_ROLE, cloudAgentToolsFor, cloudToolRegistry, containerSurfaceCapsFor } from '../cloudAgentTools';
 import { applyPendingSteering } from '../cloudLoopControl';
 import { handleCloudRunCrash } from '../cloudSelfHeal';
 import { buildLiveOrchestration } from '../cloudLiveOrchestration';
@@ -74,6 +75,7 @@ import { heartbeatAndCheckCancelled, heartbeatExecution, isExecutionCancelled, t
 import { skillOp } from './skillOp';
 import { cloudStallStep, recordStallStep, type CloudRunModelState } from './cloudRunModelPolicy';
 import { loadContainerRunModelState, saveContainerRunModelState } from './containerRunModelStore';
+import { readImageCheckVerdict } from './imageCascade';
 import {
   inRunVerifyOutcome,
   planInRunVerify,
@@ -274,7 +276,7 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
         tenantId, tool: platformTool,
         arguments: { projectId, ...toolArgs, ...(ctx.originatingChatId != null ? { chatId: ctx.originatingChatId } : {}) },
         env, userId: cloudAgentRef ?? null, agentRef: cloudAgentRef ?? null,
-        role: TenantRole.MANAGER,
+        role: CLOUD_RUN_TENANT_ROLE,
         // Provenance (ticket 5301): the container only relays the tool, but the
         // execution that formed the belief is known here. The model name alone is not
         // a recordable cost (origin columns store model + both token counts, or none),
@@ -348,7 +350,8 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
   memory: async (deps) => {
     const { env, db, executionId, args, tenantId, taskId, projectId, cloudAgentRef } = deps;
     const action = typeof args.action === 'string' ? args.action : '';
-    const memory = buildMemoryCapability({ db, env, tenantId, projectId, ticketId: taskId, origin: 'cloud-run', executionId });
+    // B4: the same answer replay the durable loop's recall gets (`costLoop/answerReplay.ts`).
+    const memory = withAnswerReplay(buildMemoryCapability({ db, env, tenantId, projectId, ticketId: taskId, origin: 'cloud-run', executionId }), { env, db, tenantId, projectId, agentRef: cloudAgentRef ?? null });
     const tStart = Date.now();
     let result: Record<string, unknown>;
     let toolName = 'memory';
@@ -517,7 +520,9 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     // and deployed first — an older image simply does not name the new tool and is never
     // offered it. See `imageToolHandshake.ts` for the rule this replaced.
     const containerTools = imageAdvertisedTools(
-      [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas(ctx.originatingChatId)],
+      // The container surface's set with the tenant's levers applied (C5 adds
+      // `repo_map` / `semantic_search`, which the image names only while its index is live).
+      [...cloudAgentToolsFor(containerSurfaceCapsFor(env, tenantId)), ...cloudAgentPlatformToolSchemas(ctx.originatingChatId)],
       readToolManifest(args.supportedTools),
     );
     // THE model hand-off policy for this run, carried between ops Worker-side: which
@@ -545,9 +550,11 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     }
     const tGen0 = Date.now();
     // ONE metered turn on the image's own transcript. The parent's own turn is always
-    // the primary coding work this run exists for.
+    // the primary coding work this run exists for. `checks` is the image's post-edit
+    // verdict on its previous turn — the D1 cascade's code-unit verifier (`imageCascade.ts`).
+    const checks = readImageCheckVerdict(args.checks);
     const turn = await engine.imageRunTurn(
-      { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model, role: 'code' as const, ...(modelState ? { modelState } : {}) },
+      { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model, role: 'code' as const, ...(modelState ? { modelState } : {}), ...(checks !== undefined ? { checks } : {}) },
       { messages: sendMessages, tools: containerTools, notify: true, tGen0 },
     );
     // Heartbeat: a live container keeps the run out of the orphan reaper.

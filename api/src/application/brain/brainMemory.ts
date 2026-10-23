@@ -22,6 +22,9 @@ import { canAccessChat, verifyChatOwnership, verifyProjectInTenant } from './bra
 import { bumpChatStructure, bumpTeamChats } from './chatCacheVersions';
 import { ADVISORY_THREAD_AI_CONTEXT_ERROR, advisoryChatAdmittedToAiContext } from '../commerce/advisoryReservation';
 import { buildTenantLlmService, completeTraced } from './brainLlmCall';
+import { deferLlmCall } from '../llm/batch/deferLlmCall';
+import type { BatchCallbackHandler } from '../llm/batch/batchCallbacks';
+import type { DeferredLlmRequest } from '../llm/batch/batchTypes';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -331,9 +334,72 @@ export async function getProjectMemory(db: Db, tenantId: number, projectId: numb
 // Project memory consolidation
 // -----------------------------------------------------------------------
 
+/**
+ * How a background memory call is answered. The default is DEFERRED (PRD D6, lever
+ * `d6_batch_api`): nothing in the product waits on a consolidation or an agentHost
+ * session summary — the stored memory is what its readers (the memory list, memory-sync,
+ * recall) use — so the call rides a provider batch at half price and the batch handler
+ * below does the store. `wait: true` keeps the synchronous call for a caller that needs
+ * the text in its response. A tenant the lever is off for, or with no batchable
+ * provider, runs synchronously either way.
+ */
+export interface BackgroundMemoryOptions {
+  executionCtx?: ExecutionContext;
+  wait?: boolean;
+}
+
+/** The consolidation request, shared by the synchronous call and the deferred job. */
+function projectMemoryRequest(projectName: string, memories: ReadonlyArray<{ summary: string }>): DeferredLlmRequest {
+  const memoriesText = memories
+    .map((m, i) => `Chat ${i + 1}:\n${m.summary}`)
+    .join('\n\n---\n\n');
+
+  const systemPrompt = [
+    `You are a project memory consolidator for the project "${projectName}".`,
+    'Combine the following individual chat summaries into a single, coherent project memory.',
+    'Focus on: overall project context, key decisions across all chats, established patterns,',
+    'action items, and important details. Remove redundancy. Be concise but comprehensive.',
+    'Output only the consolidated memory, no preamble.',
+  ].join('\n');
+
+  return {
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: memoriesText },
+    ],
+    temperature: 0.2,
+    maxTokens: 1200,
+  };
+}
+
+/** The gateway body for a deferred-shape request — the synchronous path's call. */
+function gatewayBody(request: DeferredLlmRequest): never {
+  return { messages: request.messages, temperature: request.temperature, max_tokens: request.maxTokens } as never;
+}
+
+/**
+ * Store a consolidation answer — the tail both paths share. Cleaned for the same reason
+ * as a chat summary (see `answerTextOf`): consolidation runs on a reasoning model too, and
+ * its reasoning would otherwise be stored as the project's consolidated memory and pushed
+ * to every agent host on the next sync. Returns null when the answer was empty.
+ */
+async function storeProjectMemory(db: Db, tenantId: number, projectId: number, raw: string): Promise<string | null> {
+  const consolidatedSummary = answerTextOf(raw);
+  if (!consolidatedSummary) return null;
+  await db
+    .insert(projectMemories)
+    .values({ tenantId, projectId, consolidatedSummary })
+    .onConflictDoUpdate({
+      target: projectMemories.projectId,
+      set: { consolidatedSummary, updatedAt: new Date() },
+    });
+  return consolidatedSummary;
+}
+
 /** `opts.executionCtx` is the request context the trace write rides on. Optional:
- *  a caller without one (cron/internal) still traces, best-effort. */
-export async function consolidateProjectMemory(db: Db, tenantId: number, projectId: number, env: Env, opts?: { executionCtx?: ExecutionContext }) {
+ *  a caller without one (cron/internal) still traces, best-effort. Deferred by default —
+ *  see {@link BackgroundMemoryOptions}. */
+export async function consolidateProjectMemory(db: Db, tenantId: number, projectId: number, env: Env, opts?: BackgroundMemoryOptions) {
   const apiKey = env.OPENROUTER_API_KEY;
   const proj = await verifyProjectInTenant(db, projectId, tenantId);
   if (!proj) return { error: 'Project not found' as const };
@@ -349,61 +415,105 @@ export async function consolidateProjectMemory(db: Db, tenantId: number, project
     return { consolidatedSummary: null, reason: 'No chat memories to consolidate' };
   }
 
-  const memoriesText = memories
-    .map((m, i) => `Chat ${i + 1}:\n${m.summary}`)
-    .join('\n\n---\n\n');
+  const request = projectMemoryRequest(proj.name, memories);
 
-  const systemPrompt = [
-    `You are a project memory consolidator for the project "${proj.name}".`,
-    'Combine the following individual chat summaries into a single, coherent project memory.',
-    'Focus on: overall project context, key decisions across all chats, established patterns,',
-    'action items, and important details. Remove redundancy. Be concise but comprehensive.',
-    'Output only the consolidated memory, no preamble.',
-  ].join('\n');
+  if (!opts?.wait) {
+    const queued = await deferLlmCall(env, db, {
+      tenantId, projectId, kind: 'project_memory', request, payload: { projectId },
+    });
+    if (queued.deferred) {
+      // Readers keep the current consolidation until the batch lands.
+      const current = await getProjectMemory(db, tenantId, projectId);
+      return { consolidatedSummary: current?.consolidatedSummary ?? null, deferred: true as const, jobId: queued.jobId };
+    }
+  }
 
   const service = await buildTenantLlmService(env, tenantId);
 
-  const result = await completeTraced(db, service, {
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: memoriesText },
-    ],
-    temperature: 0.2,
-    max_tokens: 1200,
-  } as never, {
+  const result = await completeTraced(db, service, gatewayBody(request), {
     env, ...(opts?.executionCtx ? { executionCtx: opts.executionCtx } : {}),
     apiKey, tenantId, useCase: 'brain_project_memory', projectId,
   });
 
   const { content: rawConsolidated } = await readProxyChoice(result);
-
-  // Cleaned for the same reason as a chat summary (see `answerTextOf`): consolidation
-  // runs on a reasoning model too, and its reasoning would otherwise be stored as the
-  // project's consolidated memory and pushed to every agent host on the next sync.
-  const consolidatedSummary = answerTextOf(rawConsolidated);
+  const consolidatedSummary = await storeProjectMemory(db, tenantId, projectId, rawConsolidated);
 
   if (!consolidatedSummary) {
     return { consolidatedSummary: null, reason: 'LLM returned empty response' };
   }
 
-  await db
-    .insert(projectMemories)
-    .values({ tenantId, projectId, consolidatedSummary })
-    .onConflictDoUpdate({
-      target: projectMemories.projectId,
-      set: { consolidatedSummary, updatedAt: new Date() },
-    });
-
   return { consolidatedSummary };
 }
+
+/** Settles a deferred consolidation with the store the synchronous call does. */
+export const projectMemoryBatchHandler: BatchCallbackHandler = {
+  async settle({ db }, job, completion) {
+    const projectId = Number(job.callbackPayload.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) throw new Error('project_memory job has no projectId');
+    // The project may have left the tenant while the batch ran.
+    if (!await verifyProjectInTenant(db, projectId, job.tenantId)) return;
+    if (!await storeProjectMemory(db, job.tenantId, projectId, completion.content)) {
+      throw new Error('LLM returned empty response');
+    }
+  },
+};
 
 // -----------------------------------------------------------------------
 // AgentHost session summarisation — bridges agentHost chat history into brain memory
 // -----------------------------------------------------------------------
 
+/** The agentHost-session summary request, shared by the synchronous call and the job. */
+function agentHostSessionRequest(msgs: ReadonlyArray<{ role: string; content: string }>): DeferredLlmRequest {
+  const transcript = msgs.map(m => `${m.role}: ${m.content}`).join('\n\n');
+
+  const systemPrompt = [
+    'You are a summarization assistant. Compress the following agentHost coding session into a concise memory.',
+    'Focus on: what was worked on, key decisions, code changes, bugs found, and important context.',
+    'Output only the summary, no preamble.',
+  ].join('\n');
+
+  return {
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: transcript },
+    ],
+    temperature: 0.2,
+    maxTokens: 800,
+  };
+}
+
+/** Store a session summary in chatMemories, linked via agentHostSessionId for project
+ *  memory consolidation — the tail both paths share. Null when the answer was empty. */
+async function storeAgentHostSessionSummary(
+  db: Db,
+  tenantId: number,
+  sessionId: number,
+  projectId: number | null,
+  raw: string,
+): Promise<string | null> {
+  // The model's raw content can carry its `<think>` reasoning — see `answerTextOf`.
+  const summary = answerTextOf(raw);
+  if (!summary) return null;
+  await db
+    .insert(chatMemories)
+    .values({
+      tenantId,
+      agentHostSessionId: sessionId,
+      projectId,
+      summary,
+    })
+    .onConflictDoUpdate({
+      target: chatMemories.agentHostSessionId,
+      targetWhere: isNotNull(chatMemories.agentHostSessionId),
+      set: { summary, projectId, updatedAt: new Date() },
+    });
+  return summary;
+}
+
 /** `opts.executionCtx` is the request context the trace write rides on. Optional:
- *  a caller without one (cron/internal) still traces, best-effort. */
-export async function summarizeAgentHostSession(db: Db, sessionId: number, tenantId: number, env: Env, opts?: { executionCtx?: ExecutionContext }) {
+ *  a caller without one (cron/internal) still traces, best-effort. Deferred by default —
+ *  see {@link BackgroundMemoryOptions}. */
+export async function summarizeAgentHostSession(db: Db, sessionId: number, tenantId: number, env: Env, opts?: BackgroundMemoryOptions) {
   const apiKey = env.OPENROUTER_API_KEY;
   // Verify session belongs to tenant
   const [session] = await db
@@ -429,51 +539,51 @@ export async function summarizeAgentHostSession(db: Db, sessionId: number, tenan
     return { summary: null, reason: 'Not enough messages to summarize' };
   }
 
-  const transcript = msgs.map(m => `${m.role}: ${m.content}`).join('\n\n');
+  const request = agentHostSessionRequest(msgs);
 
-  const systemPrompt = [
-    'You are a summarization assistant. Compress the following agentHost coding session into a concise memory.',
-    'Focus on: what was worked on, key decisions, code changes, bugs found, and important context.',
-    'Output only the summary, no preamble.',
-  ].join('\n');
+  if (!opts?.wait) {
+    const queued = await deferLlmCall(env, db, {
+      tenantId,
+      projectId: session.projectId,
+      kind: 'agent_host_session_summary',
+      request,
+      payload: { sessionId, projectId: session.projectId },
+    });
+    if (queued.deferred) return { summary: null, projectId: session.projectId, deferred: true as const, jobId: queued.jobId };
+  }
 
   const service = await buildTenantLlmService(env, tenantId);
 
-  const result = await completeTraced(db, service, {
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: transcript },
-    ],
-    temperature: 0.2,
-    max_tokens: 800,
-  } as never, {
+  const result = await completeTraced(db, service, gatewayBody(request), {
     env, ...(opts?.executionCtx ? { executionCtx: opts.executionCtx } : {}),
     apiKey, tenantId, useCase: 'brain_summary', projectId: session.projectId,
   });
 
   const { content: rawSummary } = await readProxyChoice(result);
-
-  // The model's raw content can carry its `<think>` reasoning — see `answerTextOf`.
-  const summary = answerTextOf(rawSummary);
+  const summary = await storeAgentHostSessionSummary(db, tenantId, sessionId, session.projectId, rawSummary);
 
   if (!summary) {
     return { summary: null, reason: 'LLM returned empty response' };
   }
 
-  // Store in chatMemories linked via agentHostSessionId for project memory consolidation
-  await db
-    .insert(chatMemories)
-    .values({
-      tenantId,
-      agentHostSessionId: sessionId,
-      projectId: session.projectId,
-      summary,
-    })
-    .onConflictDoUpdate({
-      target: chatMemories.agentHostSessionId,
-      targetWhere: isNotNull(chatMemories.agentHostSessionId),
-      set: { summary, projectId: session.projectId, updatedAt: new Date() },
-    });
-
   return { summary, projectId: session.projectId };
 }
+
+/** Settles a deferred agentHost-session summary with the store the synchronous call does. */
+export const agentHostSessionBatchHandler: BatchCallbackHandler = {
+  async settle({ db }, job, completion) {
+    const sessionId = Number(job.callbackPayload.sessionId);
+    if (!Number.isInteger(sessionId) || sessionId <= 0) throw new Error('agent_host_session_summary job has no sessionId');
+    // The session may have been deleted while the batch ran; its project is re-read so a
+    // move between projects lands the memory where the session now is.
+    const [session] = await db
+      .select({ id: chatSessions.id, projectId: chatSessions.projectId })
+      .from(chatSessions)
+      .where(and(eq(chatSessions.id, sessionId), eq(chatSessions.tenantId, job.tenantId)))
+      .limit(1);
+    if (!session) return;
+    if (!await storeAgentHostSessionSummary(db, job.tenantId, sessionId, session.projectId, completion.content)) {
+      throw new Error('LLM returned empty response');
+    }
+  },
+};

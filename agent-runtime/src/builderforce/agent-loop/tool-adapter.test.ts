@@ -93,4 +93,22 @@ describe("streaming — the seam a converged exec/process needs", () => {
     const result = await tool.execute("call1", {});
     expect(result.content[0]).toEqual({ type: "text", text: JSON.stringify({ done: true }) });
   });
+
+  it("carries the host's C8 decision (cost lever c8_token_compression) on the tool context", async () => {
+    let seen: boolean | undefined;
+    const probe: ToolDefinition = { ...fakeDef, execute: async (_args, ctx) => ((seen = ctx.compressLargeOutputs), { data: {} }) };
+    const tool = toAgentTool(probe, provider);
+    const prior = process.env.COST_LEVER_C8_TOKEN_COMPRESSION;
+    try {
+      process.env.COST_LEVER_C8_TOKEN_COMPRESSION = "on";
+      await tool.execute("c1", {});
+      expect(seen).toBe(true);
+      process.env.COST_LEVER_C8_TOKEN_COMPRESSION = "off";
+      await tool.execute("c2", {});
+      expect(seen).toBe(false);
+    } finally {
+      if (prior === undefined) delete process.env.COST_LEVER_C8_TOKEN_COMPRESSION;
+      else process.env.COST_LEVER_C8_TOKEN_COMPRESSION = prior;
+    }
+  });
 });

@@ -42,6 +42,7 @@ import { LateSteerNote } from './LateSteerNote';
 import { useFormat } from "@/i18n/useFormat";
 import { faultMessage } from '@/lib/apiClient';
 import { formatUsdSpend } from '@/lib/formatSpend';
+import { RunCostBreakdownButton } from './RunCostBreakdownButton';
 /**
  * Live execution view for a task. Queued runs stream their status, output
  * (rendered as markdown in a fixed-height scroll region), file changes, and tool
@@ -221,7 +222,6 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   useEffect(() => { setSentMessages([]); }, [selectedId]);
 
   const { trace, readTail } = useExecutionTrace(selectedId);
-
   const stream = useExecutionStream(selectedId);
 
   // Live execution (from the stream) wins over the cached list row.
@@ -909,7 +909,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                       >
                         {t('spentOnRun', { amount: formatUsdSpend(runCost.estimatedCostUsd) })}
                       </span>
-                    )}
+                    )}{selected && <RunCostBreakdownButton executionId={selected.id} />}
                   </div>
                   {llmTurns.map((turn) => (
                     <div

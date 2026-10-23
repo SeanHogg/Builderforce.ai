@@ -77,6 +77,14 @@ function languageOf(path: string): Language | undefined {
   return LANGUAGE_BY_EXT[extensionOf(path.replace(/\\/g, "/"))];
 }
 
+/** The language family {@link extractSymbols} reads `path` as — exported so a consumer
+ *  that adds per-language facts (the repo map's comment and import syntax) keys its own
+ *  tables on the SAME family instead of re-deriving it from the extension. */
+export type SymbolLanguage = Language;
+export function symbolLanguageOf(path: string): SymbolLanguage | undefined {
+  return languageOf(path);
+}
+
 /** True when {@link extractSymbols} understands this file's language. */
 export function isSymbolIndexable(path: string): boolean {
   return languageOf(path) !== undefined;

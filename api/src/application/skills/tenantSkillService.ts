@@ -147,6 +147,16 @@ export async function proposeSkill(
   return { ok: true, slug, outcome: 'created' };
 }
 
+/** Whether a run already proposed (or revised) a skill — the agent's own `skill_propose`. */
+export async function skillProposedByExecution(db: Db, tenantId: number, executionId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ id: tenantSkills.id })
+    .from(tenantSkills)
+    .where(scopedToTenant(tenantSkills, tenantId, eq(tenantSkills.originExecutionId, executionId)))
+    .limit(1);
+  return !!row;
+}
+
 /** Every skill in the workspace, newest first — the reviewer's queue. */
 export async function listSkills(db: Db, tenantId: number, status?: TenantSkillStatus): Promise<TenantSkill[]> {
   const rows = await db

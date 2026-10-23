@@ -10,6 +10,7 @@
  * 2026.10.57 showed on open when the list named `listChats` and the object behind it
  * (a write-only twin of the Brain adapter) had no such method.
  */
+import { submitLocalTurnVerdict } from "@seanhogg/builderforce-brain-embedded";
 import { isLocalPersistenceMethod } from "./bridgeProtocol";
 
 /** Refusal sentence for a `local.persistence` method the host cannot run. */
@@ -29,9 +30,24 @@ export async function callLocalPersistence(
     return { ok: false, error: UNKNOWN_PERSISTENCE_METHOD };
   }
   try {
-    const result: unknown = await (fn as (...a: unknown[]) => unknown).apply(persistence, Array.isArray(args) ? args : []);
+    const list = Array.isArray(args) ? args : [];
+    const result: unknown = await (fn as (...a: unknown[]) => unknown).apply(persistence, list);
+    if (method === "setMessageFeedback") submitRatingVerdict(list[2]);
     return { ok: true, result };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * E5 on the editor: the model stream (and so the deferred local-success label) lives in
+ * this extension host, not the webview that drew the thumb — so the webview's rating
+ * carries `localVerdict` (set by the shared conversation hook only for the chat's latest
+ * reply) and it is resolved here. A no-op for any other context.
+ */
+function submitRatingVerdict(context: unknown): void {
+  const verdict = (context as { localVerdict?: { chatId?: unknown; passed?: unknown } | null } | null | undefined)?.localVerdict;
+  if (verdict && typeof verdict.chatId === "number" && Number.isFinite(verdict.chatId) && typeof verdict.passed === "boolean") {
+    submitLocalTurnVerdict(verdict.chatId, verdict.passed);
   }
 }

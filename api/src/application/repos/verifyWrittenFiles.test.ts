@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as repo from './readRepoContents';
-import { verifyWrittenFiles } from './verifyWrittenFiles';
+import { checkFileContent, isVerifiablePath, verifyWrittenFiles } from './verifyWrittenFiles';
 
 const ctx: repo.RepoReadContext = {
   provider: 'github', host: null, owner: 'a', repo: 'b', token: 't', ref: 'builderforce/task-1',
@@ -60,5 +60,16 @@ describe('verifyWrittenFiles', () => {
       path: 'src/a.tsx', line: 1,
       ruleId: 'typescript/explicit-conditional-jsx-callback',
     })]);
+  });
+});
+
+describe('checkFileContent (the per-file policy on bytes in hand)', () => {
+  it('checks, fails and skips by path the same way verifyWrittenFiles does', () => {
+    expect(checkFileContent('a.json', '{"x":1}')).toEqual({ kind: 'checked' });
+    expect(checkFileContent('a.json', '{x:1,}').kind).toBe('errors');
+    expect(checkFileContent('b.yml', 'a: [1').kind).toBe('errors');
+    expect(checkFileContent('notes.md', '# anything')).toEqual({ kind: 'skipped' });
+    expect(isVerifiablePath('src/a.tsx')).toBe(true);
+    expect(isVerifiablePath('README.md')).toBe(false);
   });
 });

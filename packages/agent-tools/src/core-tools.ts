@@ -36,6 +36,7 @@ import type {
 import { ToolRegistry } from "./registry.js";
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 import { readJsonKey } from "./jsonKeyRead.js";
+import { compressShellResult, compressWebFetchResult } from "./compress.js";
 // The line window is its own dependency-free module so the build-less Container image can
 // run a compiled copy of it (see `fileWindow.ts`); re-exported for existing importers.
 import { READ_DEFAULT_LINE_LIMIT, fileWindowNote, windowFileContent } from "./fileWindow.js";
@@ -481,7 +482,7 @@ export const webFetchTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const url = typeof args.url === "string" ? args.url : "";
     if (!url.trim()) return { data: { ok: false, error: "url is required" } };
-    const r = (await ctx.caps.web!.fetch(url)) as WebFetchResult;
+    const r = await compressWebFetchResult((await ctx.caps.web!.fetch(url)) as WebFetchResult, ctx);
     return { data: r as unknown as Record<string, unknown> };
   },
 });
@@ -537,7 +538,7 @@ export const runCommandTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const command = typeof args.command === "string" ? args.command : "";
     if (!command.trim()) return { data: { ok: false, error: "command is required" } };
-    const r = await ctx.caps.shell!.run(command);
+    const r = await compressShellResult(await ctx.caps.shell!.run(command), ctx);
     return { data: r as unknown as Record<string, unknown> };
   },
 });

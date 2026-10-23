@@ -13,6 +13,7 @@ import { normalizeScopeDir, isUnderScopeDir, selectPathsWithinCap } from '@build
 import { buildGitApiBaseUrl } from './gitProxy';
 import { bitbucketServerPathString, resolveRepoApiTarget } from './repoApiTarget';
 import { createRepoSource, makeRepoFetch } from './sources/RepoSource';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 export interface RepoReadContext {
   provider: string;
@@ -384,4 +385,61 @@ export async function listRepoFiles(ctx: RepoReadContext, subPath?: string, glob
     .map((n) => n.path as string)
     .filter((p) => isUnderScopeDir(p, prefix));
   return { ok: true, ...finishTreeListing(paths, subPath, glob, json?.truncated === true) };
+}
+
+export type CommitShaResult = { ok: true; sha: string } | { ok: false; reason: string };
+export type RepoTarballResult = { ok: true; body: ReadableStream<Uint8Array> } | { ok: false; reason: string };
+
+/** Network failure → a typed miss, reported (never swallowed) so a flaky git API is visible. */
+async function githubFetch(url: string, init: RequestInit, operation: string): Promise<Response | null> {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/repos/readRepoContents.ts', operation, level: 'warning', context: { url } });
+    return null;
+  }
+}
+
+/** A response body as text; a body that fails mid-read is reported and reads as ''. */
+async function readText(res: Response, operation: string): Promise<string> {
+  try {
+    return await res.text();
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/repos/readRepoContents.ts', operation, level: 'warning', context: { status: res.status } });
+    return '';
+  }
+}
+
+/**
+ * The commit sha `ctx.ref` points at — what content-addressed caches (the cloud repo
+ * map's R2 graph) key on, so a moved branch is a new key and an unmoved one a hit.
+ * GitHub only (the tarball below is GitHub-only too). Never throws.
+ */
+export async function resolveRepoCommitSha(ctx: RepoReadContext): Promise<CommitShaResult> {
+  if (ctx.provider !== 'github') return { ok: false, reason: `commit lookup not implemented for provider '${ctx.provider}'` };
+  if (!ctx.ref) return { ok: false, reason: 'ref is required' };
+  const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);
+  const url = `${apiBase}/repos/${ctx.owner}/${ctx.repo}/commits/${ctx.ref.split('/').map(encodeURIComponent).join('/')}`;
+  const res = await githubFetch(url, { headers: { ...ghHeaders(ctx.token), Accept: 'application/vnd.github.sha' } }, 'resolveRepoCommitSha');
+  if (!res) return { ok: false, reason: 'commit lookup failed (network)' };
+  const body = (await readText(res, 'resolveRepoCommitSha')).trim();
+  if (!res.ok) return { ok: false, reason: `GitHub ${res.status}: ${body.slice(0, 160)}` };
+  return /^[0-9a-f]{40}$/i.test(body) ? { ok: true, sha: body.toLowerCase() } : { ok: false, reason: 'GitHub returned no commit sha' };
+}
+
+/**
+ * The repository at `sha` as ONE gzip'd tarball stream (`GET /repos/{o}/{r}/tarball/{ref}`)
+ * — one request for the whole tree, where per-file contents reads would cost one each.
+ * The caller decompresses and reads it as it arrives. GitHub only. Never throws.
+ */
+export async function fetchRepoTarball(ctx: RepoReadContext, sha: string): Promise<RepoTarballResult> {
+  if (ctx.provider !== 'github') return { ok: false, reason: `tarball not implemented for provider '${ctx.provider}'` };
+  const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);
+  const res = await githubFetch(`${apiBase}/repos/${ctx.owner}/${ctx.repo}/tarball/${encodeURIComponent(sha)}`, { headers: ghHeaders(ctx.token), redirect: 'follow' }, 'fetchRepoTarball');
+  if (!res) return { ok: false, reason: 'tarball request failed (network)' };
+  if (!res.ok || !res.body) {
+    const t = res.ok ? '' : (await readText(res, 'fetchRepoTarball')).slice(0, 160);
+    return { ok: false, reason: `GitHub ${res.status}${t ? `: ${t}` : ''}` };
+  }
+  return { ok: true, body: res.body };
 }

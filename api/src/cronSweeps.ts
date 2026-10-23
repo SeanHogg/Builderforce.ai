@@ -40,14 +40,15 @@ import { TaskService } from './application/task/TaskService';
 import { TaskRepository } from './infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from './infrastructure/repositories/ProjectRepository';
 
-import { runMemoryEmbeddingBackfill } from './application/memory/memoryEmbeddingBackfill';
+import { runMemoryEmbeddingBackfill, type BackfillResult } from './application/memory/memoryEmbeddingBackfill';
+import { allDrained } from './application/memory/memoryEmbeddingPolicy';
 import { sweepAllUnrecalledFactDecay } from './application/llm/projectFactsDecay';
 import { runAgentBenchmarkSweep } from './application/eval/agentBenchmarkSweep';
 import { projectRegistry } from './application/kernel/registryProjection';
 import { METRIC_ROLLUPS } from './application/kernel/rollupRegistry';
 import { runRollups } from './application/kernel/metricRollup';
 import { FINANCE_ROLLUP_VERSION_KEY } from './application/finance/runwayCache';
-import { bumpCacheVersion } from './infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, getOrSetCached } from './infrastructure/cache/readThroughCache';
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
 import { runByoCredentialHealthCron } from './application/llm/byoCredentialHealthCron';
 import { runRetentionPurge } from './application/maintenance/retentionPurge';
@@ -58,8 +59,10 @@ import { runProofVerdictSweep } from './application/realization/proofVerdictSwee
 import { runBloatReclaim, runTableVacuum } from './application/maintenance/tableMaintenance';
 import { describeStoragePressure, runStoragePressureSweep } from './application/maintenance/storagePressure';
 import { runEvalDriftSweep } from './application/eval/runEvalDriftSweep';
+import { describeSpecialistSweep, runSpecialistEvalSweep } from './application/llm/specialists/evalSweep';
 import { runAlertSweep } from './application/alerts/runAlertSweep';
 import { runCostAlertSweep } from './application/alerts/costAlertSweep';
+import { runDifficultyTraining } from './application/llm/difficultyTraining';
 import { runRunAnomalyNotifySweep } from './application/insights/runAnomalyNotify';
 import { runValidatorReviewSweep } from './application/validation/validationDispatch';
 import { demoAccountsEnabled, reseedDemoTenants } from './application/demo/demoSeedService';
@@ -120,6 +123,16 @@ import { describeNumberRent, runPhoneNumberRentSweep } from './application/phone
 import { describeAllowanceGrant, runPhoneAllowanceSweep } from './application/phone/grantPhoneAllowance';
 import { describeTrialReminders, runSpawnTrialReminderSweep } from './application/spawn/spawnTrial';
 import { describeSourcingSweep, runSourcingSweep } from './application/sourcing/runSourcingSweep';
+import { describeBatchTick, runLlmBatchTick } from './application/llm/batch/runLlmBatchTick';
+
+/** Both memory stores the embedding backfill covers. */
+const MEMORY_STORES = ['agent_memory', 'project_facts'] as const;
+
+/** The embedding backfill's log line — shared by its daily and catch-up schedules. */
+function describeMemoryBackfill(r: BackfillResult): string | null {
+  if (r.skipped) return null;
+  return r.memories + r.projectFacts > 0 ? `memories=${r.memories} facts=${r.projectFacts}` : null;
+}
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -146,6 +159,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const r = await runVendorHealthCron(env);
       return r.changes.length > 0 ? `changes=${r.changes.length} emailed=${r.emailed}` : null;
+    },
+  },
+  {
+    key: 'difficulty-router-training',
+    cadence: 'daily',
+    description: 'Fit the D2 difficulty heads (per tenant + global) from cascade_outcomes and cache them in KV.',
+    run: async ({ env, db }) => {
+      const r = await runDifficultyTraining(env, db);
+      return r.rows > 0 ? `rows=${r.rows} tenantHeads=${r.tenantHeads} global=${r.globalHead}${r.skipped ? ` skipped=${r.skipped}` : ''}` : null;
     },
   },
   {
@@ -402,11 +424,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     key: 'memory-embedding-backfill',
     cadence: 'daily',
     description: 'Vectorise memories written before semantic recall existed, or whose embed failed at write time.',
-    run: async ({ env, db }) => {
-      const r = await runMemoryEmbeddingBackfill(env, db);
-      if (r.skipped) return null;
-      return r.memories + r.projectFacts > 0 ? `memories=${r.memories} facts=${r.projectFacts}` : null;
-    },
+    run: async ({ env, db }) => describeMemoryBackfill(await runMemoryEmbeddingBackfill(env, db)),
   },
   {
     key: 'project-fact-decay',
@@ -522,6 +540,16 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
+    key: 'specialist-evals',
+    cadence: 'weekly-mon',
+    // Cost lever E2: re-score every specialist candidate on its job's held-out eval
+    // set against the frontier reference; admit at ≥ 0.9 of frontier, revoke on drift.
+    description: 'Specialist admissions: score small models per narrow job against frontier references, admit at frontier parity, revoke on drift.',
+    // Spends gateway tokens (frontier references, candidate replays, the judge).
+    dispatches: true,
+    run: async ({ env, db }) => describeSpecialistSweep(await runSpecialistEvalSweep(env, db)),
+  },
+  {
     key: 'webscan',
     cadence: 'weekly-mon',
     description: 'Re-scan every project with a website target so posture drift is caught unprompted.',
@@ -556,6 +584,14 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
   // Frequent — the every-5-minute tick. KV work-gated in scheduled(); a forced
   // run bypasses that gate deliberately (see the admin route).
   // ---------------------------------------------------------------------------
+  {
+    key: 'llm-batch',
+    cadence: 'frequent',
+    description:
+      'Deferred LLM work (D6): run jobs past their 24h SLA synchronously, settle finished '
+      + 'provider batches through their handlers, and submit queued jobs as Anthropic / OpenAI batches.',
+    run: async ({ env, db }) => describeBatchTick(await runLlmBatchTick(env, db)),
+  },
   {
     key: 'pr-ticket-reconciler',
     cadence: 'frequent',
@@ -1145,7 +1181,28 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
         ? `due=${r.due} completed=${r.completed} abandoned=${r.abandoned} errors=${r.errors}`
         : null;
     },
-  },  {
+  },
+  {
+    // E3: the whole store must carry a bge-m3 vector before `e3_free_embeddings` serves
+    // from it, so while EITHER store still has rows with `embedding_1024 IS NULL` the
+    // backfill runs hourly instead of waiting a day per slice. Coverage is the marker the
+    // backfill itself keeps (a full lap that found nothing — KV only, no Postgres); once
+    // both stores are drained this is a no-op and the daily `memory-embedding-backfill`
+    // carries on alone. Hourly by a per-UTC-hour cache slot (no cron expression is hourly).
+    key: 'memory-embedding-catchup',
+    cadence: 'frequent',
+    description: 'Hourly while either memory store still lacks bge-m3 vectors: run the embedding backfill; a no-op once both are covered.',
+    run: async ({ env, db }) => {
+      if (await allDrained(env, MEMORY_STORES)) return null;
+      let summary: string | null = null;
+      await getOrSetCached(env, `mem:backfill:catchup:${new Date().toISOString().slice(0, 13)}`, async () => {
+        summary = describeMemoryBackfill(await runMemoryEmbeddingBackfill(env, db));
+        return true;
+      }, { kvTtlSeconds: 2 * 3_600, l1TtlMs: 3_600_000 });
+      return summary;
+    },
+  },
+  {
     // Hourly by its own KV claim (no cron expression is hourly); see costAlertSweep.ts.
     key: 'cost-alerts',
     cadence: 'frequent',

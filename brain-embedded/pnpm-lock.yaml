@@ -45,6 +45,9 @@ importers:
       '@builderforce/model-catalog':
         specifier: link:../packages/model-catalog
         version: link:../packages/model-catalog
+      '@builderforce/run-guards':
+        specifier: link:../packages/run-guards
+        version: link:../packages/run-guards
       '@builderforce/run-policy':
         specifier: link:../packages/run-policy
         version: link:../packages/run-policy

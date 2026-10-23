@@ -870,6 +870,7 @@ function useTranscriptScroll(autoScroll, revealMessage) {
       if (pinnedRef.current) scroller.scrollTop = scroller.scrollHeight;
     };
     stick();
+    if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(stick);
     ro.observe(content);
     return () => ro.disconnect();

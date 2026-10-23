@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ratedTurnContext, ratedTurnTool, withRating } from './turnRating';
+import { localRatingVerdict, ratedTurnContext, ratedTurnTool, withRating } from './turnRating';
 import { STEP_MESSAGE_ROLE } from './types';
 
 const step = (id: number, category: string, label: string) => ({
@@ -72,5 +72,20 @@ describe('withRating', () => {
     expect(withRating(start, 1, -1)).toEqual({ 1: -1 });
     expect(withRating(start, 1, 0)).toEqual({});
     expect(start).toEqual({ 1: 1 });
+  });
+});
+
+describe('localRatingVerdict (E5)', () => {
+  const chat = [{ id: 1, role: 'user', metadata: null }, reply(2), { id: 3, role: 'user', metadata: null }, reply(4), step(5, 'tool', 'read_file')];
+
+  it("judges only the chat's latest reply — a trailing step row does not hide it", () => {
+    expect(localRatingVerdict(chat, 4, 1, 7)).toEqual({ chatId: 7, passed: true });
+    expect(localRatingVerdict(chat, 4, -1, 7)).toEqual({ chatId: 7, passed: false });
+  });
+
+  it('carries nothing for an older reply, a cleared thumb or a chat-less conversation', () => {
+    expect(localRatingVerdict(chat, 2, -1, 7)).toBeNull();
+    expect(localRatingVerdict(chat, 4, 0, 7)).toBeNull();
+    expect(localRatingVerdict(chat, 4, 1, null)).toBeNull();
   });
 });

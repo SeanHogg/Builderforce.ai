@@ -2661,6 +2661,8 @@
         "engineeringDesc": "Welcher KI-Ansatz tatsächlich liefert – Ergebnis-Score, Merge-Rate und Kosten nach Arbeitstyp und Modell.",
         "llmUsage": "LLM-Nutzung",
         "llmUsageDesc": "Token-Nutzung, Anfragen und Modellzustand sowie geschätzte Ausgaben nach Quelle, Projekt, Team, Benutzer und Repository.",
+        "costEfficiency": "Kosteneffizienz",
+        "costEfficiencyDesc": "Bringt jeder Modell-Dollar mehr ausgelieferte Arbeit? Cache-Trefferquote, Durchgänge und Kontext pro Lauf, Kosten pro gemergtem PR und welche Kostenhebel sich lohnen.",
         "recommendations": "Empfehlungen",
         "recommendationsDesc": "Priorisierte, umsetzbare Empfehlungen und Anomalien aus allen Einblicken."
       },
@@ -3863,6 +3865,118 @@
       "confirmMessage": "Alle Aufzeichnungen dieses Besuchers auf dieser Website werden samt KI-Zusammenfassungen gelöscht. Das kann nicht rückgängig gemacht werden.",
       "confirm": "Löschen",
       "done": "{count, plural, one {# Aufzeichnung gelöscht.} other {# Aufzeichnungen gelöscht.}}"
+    },
+    "cost": {
+      "approx": "≈{value}",
+      "points": "{value} Pp.",
+      "subtitle": "Cache-Trefferquote, Durchgänge und Kontext pro Lauf und was ein gemergter PR an Modellkosten verursacht.",
+      "empty": "In diesem Zeitraum wurde keine Modellnutzung erfasst.",
+      "loadFailed": "Kostenkennzahlen konnten nicht geladen werden.",
+      "verdict": "In den letzten {days} Tagen hat der Cache {cache} der Prompt-Tokens geliefert, und ein gemergter PR kostete {cost} an Modellkosten über {merged, plural, one {# gemergten Lauf} other {# gemergte Läufe}}.",
+      "verdictNoPr": "In den letzten {days} Tagen hat der Cache {cache} der Prompt-Tokens geliefert; in diesem Zeitraum hat noch kein Lauf einen PR gemergt.",
+      "basis": "Token-Zahlen meldet der Anbieter; die Kosten sind der Betrag, der beim Protokollieren jedes Aufrufs erfasst wurde.",
+      "unattributed": "Nicht zugeordnet",
+      "metric": {
+        "cacheHitRate": "Cache-Trefferquote",
+        "outputInputRatio": "Ausgabe / Eingabe",
+        "reasoningShare": "Reasoning-Anteil",
+        "medianContextTokens": "Median-Kontext pro Durchgang",
+        "medianTurns": "Median-Durchgänge pro Lauf",
+        "costPerMergedPr": "Kosten pro gemergtem PR"
+      },
+      "tone": {
+        "better": "Verbessert sich",
+        "worse": "Verschlechtert sich",
+        "flat": "Stabil"
+      },
+      "kpi": {
+        "cacheHitRateSub": "Anteil der Prompt-Tokens aus dem Cache",
+        "medianTurnsSub": "Abgeschlossene Läufe · {runs}",
+        "medianContextSub": "Prompt-Tokens pro Modellaufruf",
+        "costPerPrSub": "Median {median} · {merged} gemergte Läufe",
+        "costPerPrNone": "Keine gemergten Läufe in diesem Zeitraum",
+        "outputInputSub": "Ausgabe-Tokens pro Eingabe-Token",
+        "reasoningShareSub": "Anteil an der Ausgabe, sofern der Anbieter ihn meldet",
+        "reasoningUnreported": "Von diesen Anbietern nicht gemeldet",
+        "servedWithoutModel": "Ohne Modell beantwortet",
+        "servedWithoutModelSub": "{requests} Anfragen ohne Modellaufruf beantwortet"
+      },
+      "col": {
+        "metric": "Kennzahl",
+        "calls": "Modellaufrufe",
+        "spend": "Kosten"
+      },
+      "grouping": {
+        "label": "Gruppieren nach",
+        "actionType": "Arbeitstyp",
+        "role": "Rolle"
+      },
+      "group": {
+        "title": "Wohin die Kosten fließen",
+        "aria": "Kosten pro Gruppe",
+        "truncated": "Es werden die {n} größten Gruppen angezeigt."
+      },
+      "lever": {
+        "title": "Kostenhebel: an vs. aus",
+        "desc": "Jeder teilweise ausgerollte Hebel – Aufrufe, bei denen er aktiv war, gegenüber Aufrufen, bei denen er aus war. Hat eine der Gruppen weniger als {calls} Aufrufe oder {runs} Läufe, wird die Veränderung nicht ausgewiesen.",
+        "empty": "In diesem Zeitraum ist kein Hebel teilweise ausgerollt, daher gibt es nichts zu vergleichen.",
+        "colOn": "An",
+        "colOff": "Aus",
+        "colDelta": "Veränderung (an − aus)",
+        "nameWithReq": "{lever} · {req}",
+        "sample": "{on} Aufrufe an / {off} aus",
+        "insufficient": "Zu kleine Stichprobe"
+      },
+      "run": {
+        "open": "Kostenaufschlüsselung",
+        "title": "Lauf #{id} · Kostenaufschlüsselung",
+        "empty": "Für diesen Lauf wurden keine Modelldurchgänge erfasst.",
+        "outcome": "{action} · {status} nach {steps} Schritten.",
+        "outcomeMerged": "{action} · {status} nach {steps} Schritten · gemergt.",
+        "budgetUsed": "Verbrauchtes Budget",
+        "noCap": "Für diesen Lauf ist kein eigenes Limit gesetzt",
+        "turns": "Durchgänge",
+        "turnsSub": "Verwendete Modelle: {models}",
+        "toolSchema": "Tool-Schemas",
+        "toolSchemaSub": "Geschätzte Tokens für die Tool-Beschreibungen",
+        "splitTitle": "Wohin die Tokens gingen",
+        "contextTitle": "Kontext nach Quelle (geschätzt)",
+        "colTurn": "Durchgang",
+        "colModel": "Modell",
+        "turnMerged": "{n} ({calls} Aufrufe)",
+        "byo": "Eigener Schlüssel",
+        "total": "Gesamt",
+        "truncated": "Es werden die ersten {n} Durchgänge angezeigt.",
+        "estimateNote": "≈ kennzeichnet Schätzungen: Die Kosten sind nach der Preisliste des Modells berechnet, Tool-Schema- und Kontextwerte sind zeichenbasierte Schätzungen statt Anbieterzählungen.",
+        "part": {
+          "uncached": "Eingabe ohne Cache",
+          "cacheRead": "Cache-Lesen",
+          "cacheWrite": "Cache-Schreiben",
+          "output": "Ausgabe",
+          "reasoning": "Reasoning"
+        },
+        "category": {
+          "system": "System-Prompt",
+          "tools": "Tool-Definitionen",
+          "history": "Unterhaltung",
+          "toolOutputs": "Tool-Ausgaben",
+          "memory": "Gedächtnis"
+        },
+        "budgetOfCap": "{share} des Limits von {cap} · {source}",
+        "tokenBudget": "Token-Budget",
+        "budgetSource": {
+          "payload": "für diesen Lauf gesetzt",
+          "plan": "Tariflimit",
+          "default": "Plattformstandard"
+        }
+      },
+      "trend": {
+        "title": "Täglicher Verlauf",
+        "desc": "Eine Kennzahl, Tag für Tag im gewählten Zeitraum – wohin sich die Effizienz bewegt.",
+        "metric": "Kennzahl",
+        "empty": "Für diese Kennzahl liegen in diesem Zeitraum noch keine Tageswerte vor.",
+        "chartLabel": "{metric} pro Tag"
+      }
     }
   },
   "cloudAgentForm": {
@@ -5588,6 +5702,7 @@
       "aiHubImpact": "KI-Wirkung",
       "aiHubEngineering": "KI-Effektivität",
       "aiHubLlmUsage": "LLM-Nutzung",
+      "aiHubCostEfficiency": "Kosteneffizienz",
       "aiHubRecommendations": "Empfehlungen",
       "delivHubDelivery": "Lieferung",
       "delivHubAutonomy": "Autonomie-Gesundheit",
@@ -5859,6 +5974,7 @@
       "aiHubImpactDesc": "Akzeptanz- und Modellnutzungstrends, eine Multi-Tool-Bewertungsmatrix und ein zusammengesetzter KI-Produktivitätswert.",
       "aiHubEngineeringDesc": "Welcher KI-Ansatz tatsächlich liefert – Ergebnis-Score, Merge-Rate und Kosten nach Arbeitstyp und Modell.",
       "aiHubLlmUsageDesc": "Token-Nutzung, Anfragen und Modellzustand sowie geschätzte Ausgaben nach Quelle, Projekt, Team, Benutzer und Repository.",
+      "aiHubCostEfficiencyDesc": "Bringt jeder Modell-Dollar mehr ausgelieferte Arbeit? Cache-Trefferquote, Durchgänge und Kontext pro Lauf, Kosten pro gemergtem PR und welche Kostenhebel sich lohnen.",
       "aiHubRecommendationsDesc": "Priorisierte, umsetzbare Empfehlungen und Anomalien aus allen Einblicken.",
       "delivHubDeliveryDesc": "Burnup, Prognose und Scope Creep eines Liefergegenstands über Initiativen, Projekte und Releases hinweg.",
       "delivHubAutonomyDesc": "Hat sich die Arbeit selbst erledigt? Lebenszyklus-Funnel danach, wer das Ticket angelegt hat, Verhältnis autonomer zu menschlichen Wechseln und wo die Autonomie stehen bleibt.",

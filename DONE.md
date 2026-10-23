@@ -1,3 +1,21 @@
+## ✅ RESOLVED 2026-10-23 — LLM cost optimization, wave 2: verifier cascade, progress guards, cloud repo map, batch API, retrieval, specialists, cost dashboard (api 2026.10.67 · frontend 2026.10.83 · brain-embedded 2026.10.41 · agent-runtime 2026.10.15 · VSIX 2026.10.61 · Rovr 2026.10.21)
+
+All behind `@builderforce/cost-levers`; lever off = previous behaviour.
+
+- **A3 progress guards:** new `@builderforce/run-guards` (read coverage, failure tally, write ledger, edit-revert, no-progress) shared by the Brain and the cloud loop; trip 1 steers, trip 2 escalates a tier, trip 3 pauses for `ask_human`.
+- **D1 weak-first verifier cascade** (`run-policy/cascade.ts`): soft-seeded runs start on the weakest tier; a failed post-edit check or finish gate escalates one tier (max 2 per unit) with the verifier's reason and a reasoning boost; container runs escalate on in-image check verdicts. Finish gates moved out of `cloudAgentEngine.ts` (2,660 → 2,478 lines across both waves).
+- **D2 difficulty router** (`@builderforce/difficulty-router`, `cascade_outcomes`, migration 1254): daily-trained per-tenant/global heads skip a weak attempt predicted to fail.
+- **D6 batch APIs:** deferred job queue (migrations 1255 / transactional 0020) over Anthropic Message Batches and OpenAI Batch at half price; memory consolidation, session summaries, ticket classification fallback and distillation teacher text defer; BYO calls batch only on the tenant's own key.
+- **D7 deterministic paths:** arithmetic, unit and date answers without a model (not metered, counted as served-without-model); durable runs check written files immediately; container runs typecheck/lint/cargo/py_compile after edits and report failures only.
+- **D8 concurrent read-only tool calls** in the kernel and the container loop.
+- **C4 / C6 / E3 retrieval:** adaptive K (`chooseK`), Workers AI `bge-reranker-base`, `bge-m3` 1024-d columns with dual-read and an hourly catch-up backfill (migration 1256).
+- **C5 cloud repo map:** `@builderforce/repo-map` (TS port of bf-index's PageRank) built from one tarball and cached per commit in R2 for durable runs; bf-context in the container image; `repo_map` / `semantic_search` advertised behind the lever.
+- **C8 compression call sites:** shell and web-fetch outputs on Desktop/VSIX/on-prem surfaces.
+- **B4 agent answer replay** on `memory_recall`; **E1** auto-drafted skills (never auto-approved); **E2** specialist admission (frontier-parity gate extracted from the Evermind coding gate, migration 1257); **E5** local success = served AND passed (retry, malformed-call or thumbs verdicts).
+- **A4 cost dashboard:** Cost efficiency lens + hub card (KPIs incl. served-without-model, daily trend, lever on/off comparison) and per-run cost breakdown with budget vs cap; five locales.
+- **Fixed along the way:** deterministic answers were metered as zero-token usage; `classifyTask.ts` string literals broken by an escape; arithmetic guard rejected `10 - 4 - 3` as a phone number; pre-existing failures in `packForModel.test.ts`, `useBrainConversation.test.tsx` (stale tool count) and Rovr `ChatView.test.tsx` (mock missing `pageEngines`); flaky lock-test cleanup.
+- **Decided:** the cloud loop keeps the 5-minute prompt-cache TTL — durable ticks are seconds apart and the history breakpoint advances every turn, so 1-hour writes (2× vs 1.25×) would cost more; vendors still honour `cacheTtl: '1h'` when a caller passes it.
+
 ## ✅ RESOLVED 2026-10-22 — LLM cost optimization, wave 1: the audit's defects plus measurement, caching, context and routing levers (api 2026.10.66 · brain-embedded 2026.10.40 · agent-runtime 2026.10.14 · builderforce-memory 2026.10.22 · builderforce-inference 2026.10.11)
 
 Every lever is gated by `isCostLeverOn` in the new `@builderforce/cost-levers` (env `COST_LEVER_<ID>=on|off|<pct>`, tenant-hash rollout, `COST_LEVERS_ALL=off` kill switch); lever off = the previous behaviour.

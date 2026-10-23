@@ -12,7 +12,11 @@
  *
  * Not recorded: a turn the person stopped (it says nothing about either model), and a
  * cloud refusal the person can act on (a 4xx: sign-in, plan, key) — that is about the
- * account, not about how hard the turn was.
+ * account, not about how hard the turn was. *
+ * E5 (lever `e5_verified_local_label`): a SERVED local turn in a chat is not recorded at
+ * settle time — "served" is only the transport's word. Its record is deferred until the
+ * chat's next call (or an explicit rating) gives a verdict, or a timeout falls back to the
+ * transport label (`verifiedLocalLabel.ts`).
  */
 
 import type { LocalFirstAttempt, LocalFirstAttemptRecord, LocalRuntimeProbe } from '@builderforce/local-inference';
@@ -22,6 +26,13 @@ import type { StreamChatOptions } from '../streamChatCompletion';
 import { contextWindowOf } from '../windowFit/modelWindow';
 import type { LocalSuccessRouter } from './localSuccessRouter';
 import { localTurnFeatures } from './turnFeatures';
+import {
+  conversationKeyOf,
+  deferredLocalRecords,
+  submitPrompt,
+  verifiedLocalLabelOn,
+  type DeferredLocalRecords,
+} from './verifiedLocalLabel';
 
 type CallOpts = Omit<StreamChatOptions, 'transport'>;
 
@@ -43,11 +54,25 @@ function cloudResult(records: readonly LocalFirstAttemptRecord[], error: unknown
   return 'failed';
 }
 
-export function hybridLocalSuccessTurn(router: LocalSuccessRouter, probes: readonly LocalRuntimeProbe[], signal?: AbortSignal): HybridLocalSuccessTurn {
+export function hybridLocalSuccessTurn(
+  router: LocalSuccessRouter,
+  probes: readonly LocalRuntimeProbe[],
+  signal?: AbortSignal,
+  deferred: DeferredLocalRecords = deferredLocalRecords,
+): HybridLocalSuccessTurn {
   let assessed: { ref: string; outcome: Pick<LocalSuccessOutcome, 'turn'> } | null = null;
+  /** The chat + submit this call belongs to — the key a served local answer waits under for its verdict. */
+  let submit: { conversation: string; prompt: string } | null = null;
   const records: LocalFirstAttemptRecord[] = [];
   return {
     async gate(plan, call) {
+      const conversation = conversationKeyOf(call);
+      if (conversation && verifiedLocalLabelOn()) {
+        // This call is the verdict on the chat's previous local answer (retry, tool
+        // refusal, or moving on) — read it before this turn is assessed.
+        deferred.observe(conversation, call);
+        submit = { conversation, prompt: submitPrompt(call) };
+      }
       const local = plan.find((a): a is Extract<LocalFirstAttempt, { kind: 'local' }> => a.kind === 'local');
       // Only a plan with somewhere to go instead is worth gating.
       if (!local || !plan.some((a) => a.kind === 'cloud')) return plan;
@@ -72,6 +97,10 @@ export function hybridLocalSuccessTurn(router: LocalSuccessRouter, probes: reado
         ...(local && local.outcome !== 'served' && records.some((r) => r.attempt.kind === 'cloud') ? { fellBack: true } : {}),
         ...(cloud ? { cloud } : {}),
       };
+      if (submit && local?.outcome === 'served' && verifiedLocalLabelOn()) {
+        deferred.defer({ ...submit, ref: assessed.ref, outcome, record: (ref, o) => router.record(ref, o) });
+        return;
+      }
       // `record` never rejects — it reports its own failure (`localSuccessFailure.ts`).
       void router.record(assessed.ref, outcome);
     },

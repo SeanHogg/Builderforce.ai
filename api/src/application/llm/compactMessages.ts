@@ -36,15 +36,21 @@ import { packHandoff, tokensOf, type HandoffMessage } from '@seanhogg/builderfor
 import { DEFAULT_HANDOFF_RESERVE_TOKENS, handoffTokenBudget } from '@builderforce/run-policy';
 import { priceTierBoundary } from '@builderforce/model-catalog';
 import { isCostLeverOn } from '@builderforce/cost-levers';
-import { ideProxy, readProxyChoice, type ProxyEnv } from './LlmProxyService';
+import type { Env } from '../../env';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { ideProxy, readProxyChoice } from './LlmProxyService';
+import { resolveSpecialist } from './specialists/resolveSpecialist';
+import { captureSpecialistSample, type SpecialistRequest } from './specialists/evalCaseStore';
 import { estimateTokensFromChars } from './tokenUsage';
 import { catalogEntry } from './vendors/registry';
 
 type Msg = Record<string, unknown>;
 
 /** Compress a chunk of conversation text into a concise memory. Returns null to
- *  signal "couldn't summarize" so the caller falls back to recall / elision. */
-export type CompactionSummarizer = (conversationText: string) => Promise<string | null>;
+ *  signal "couldn't summarize" so the caller falls back to recall / elision. `ctx`
+ *  carries the tenant the run bills to, so the summary model can be chosen per tenant
+ *  (cost lever E2 — an admitted specialist). */
+export type CompactionSummarizer = (conversationText: string, ctx?: { tenantId?: string | number | null }) => Promise<string | null>;
 
 export interface CompactOptions {
   /** Compact only when the messages estimate exceeds this token budget — the cost cap. */
@@ -280,7 +286,7 @@ export async function compactMessages(
     ...(summarize
       ? {
           summarize: async (dropped: readonly HandoffMessage[]) => {
-            const summary = await summarize(renderForSummary(dropped as unknown as Msg[])).catch(() => null);
+            const summary = await summarize(renderForSummary(dropped as unknown as Msg[]), { tenantId: opts.tenantId }).catch(() => null);
             return summary && summary.trim()
               ? `[Compressed memory of ${dropped.length} earlier step(s) — the task and recent steps are retained verbatim]\n${summary.trim()}`
               : '';
@@ -308,28 +314,66 @@ export async function compactMessages(
   };
 }
 
+/** The summary job's system instruction — one definition for the call and its eval cases. */
+const COMPACTION_SUMMARY_SYSTEM = 'You compress an in-progress coding agent transcript into a concise memory. Preserve, as terse bullet points: files read/edited and the key facts learned from them, decisions made, commands/checks run and their outcomes, and anything still TODO. Drop chatter and raw file dumps. Output ONLY the memory, no preamble.';
+
+/** The dropped-middle summary request (specialist job `compaction_summary`). */
+export function compactionSummaryRequest(conversationText: string): SpecialistRequest {
+  return {
+    messages: [
+      { role: 'system', content: COMPACTION_SUMMARY_SYSTEM },
+      { role: 'user', content: conversationText },
+    ],
+    max_tokens: 700,
+  };
+}
+
+/** The tenant id as the eval-case store keys it (a numeric tenant), or null. */
+function numericTenant(tenantId: string | number | null | undefined): number | null {
+  const n = typeof tenantId === 'string' ? Number(tenantId) : tenantId;
+  return typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/** One summary completion on the free gateway — pinned to `model` when given. */
+async function summarizeOn(env: Env, request: SpecialistRequest, model?: string): Promise<string | null> {
+  try {
+    const result = await ideProxy(env).complete({
+      ...request,
+      ...(model ? { model, modelStrict: true } : {}),
+      temperature: 0,
+    });
+    if (result.response.status >= 400) return null;
+    const { content } = await readProxyChoice(result);
+    return content ? content : null;
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/llm/compactMessages.ts', operation: 'summarizeOn', context: { model: model ?? null } });
+    return null;
+  }
+}
+
 /**
  * Build the gateway-backed {@link CompactionSummarizer} — the live "builder memory"
  * compressor. Runs a single non-streaming completion on the FREE pool (cheap), with
  * the same intent as BrainService's chat summariser. Returns null on any failure so
  * compaction degrades to elision rather than breaking the run.
+ *
+ * Cost lever E2: when a specialist is admitted for `compaction_summary`
+ * (`specialists/resolveSpecialist`), the summary is asked of that model first (strict
+ * pin); its failure falls back to the free pool, so the lever can only save. While no
+ * specialist serves, a sampled share of the requests is kept as the job's eval set.
  */
-export function buildGatewaySummarizer(env: ProxyEnv): CompactionSummarizer {
-  return async (conversationText: string) => {
-    try {
-      const result = await ideProxy(env).complete({
-        messages: [
-          { role: 'system', content: 'You compress an in-progress coding agent transcript into a concise memory. Preserve, as terse bullet points: files read/edited and the key facts learned from them, decisions made, commands/checks run and their outcomes, and anything still TODO. Drop chatter and raw file dumps. Output ONLY the memory, no preamble.' },
-          { role: 'user', content: conversationText },
-        ],
-        max_tokens: 700,
-        temperature: 0,
-      });
-      if (result.response.status >= 400) return null;
-      const { content } = await readProxyChoice(result);
-      return content ? content : null;
-    } catch {
-      return null;
+export function buildGatewaySummarizer(env: Env): CompactionSummarizer {
+  return async (conversationText: string, ctx) => {
+    const request = compactionSummaryRequest(conversationText);
+    const specialist = await resolveSpecialist(env, ctx?.tenantId ?? null, 'compaction_summary');
+    if (specialist) {
+      const fromSpecialist = await summarizeOn(env, request, specialist.model);
+      if (fromSpecialist) return fromSpecialist;
     }
+    const summary = await summarizeOn(env, request);
+    if (summary && !specialist) {
+      void captureSpecialistSample(env, { jobId: 'compaction_summary', tenantId: numericTenant(ctx?.tenantId), request });
+    }
+    return summary;
   };
 }

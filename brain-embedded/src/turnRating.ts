@@ -75,6 +75,33 @@ export function ratedTurnContext(messages: readonly RatableMessage[], messageId:
   };
 }
 
+/** What a thumb tells the E5 local-success label: the verdict on chat `chatId`'s latest reply. */
+export interface LocalRatingVerdict {
+  chatId: number;
+  passed: boolean;
+}
+
+/**
+ * The E5 `rating` verdict a thumb carries, or null when it carries none. Only a thumb
+ * on the chat's LATEST reply judges the turn the local-success label is waiting on —
+ * a press on an older reply (or clearing a thumb) says nothing about it, and the
+ * deferred registry resolves by chat, so it must never be handed an older verdict.
+ */
+export function localRatingVerdict(
+  messages: readonly RatableMessage[],
+  messageId: number,
+  rating: 1 | -1 | 0,
+  chatId: number | null,
+): LocalRatingVerdict | null {
+  if (rating === 0 || chatId == null) return null;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i]!;
+    if (message.role !== 'assistant' || isStepMessage(message)) continue;
+    return message.id === messageId ? { chatId, passed: rating === 1 } : null;
+  }
+  return null;
+}
+
 /** One viewer's thumb per message id — the shape every transcript's `ratings` prop takes. */
 export type MessageRatings = Record<number, 1 | -1>;
 

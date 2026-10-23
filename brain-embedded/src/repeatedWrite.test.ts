@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WriteLedger, repeatedWriteNote } from './repeatedWrite';
+import { WriteLedger, repeatedWriteNote } from '@builderforce/run-guards';
 
 const APP = { path: 'src/App.jsx', content: 'export default function App() {}' };
 

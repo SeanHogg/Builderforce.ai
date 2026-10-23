@@ -28,6 +28,8 @@ export function useTranscriptScroll(autoScroll: boolean, revealMessage: { id: nu
       if (pinnedRef.current) scroller.scrollTop = scroller.scrollHeight;
     };
     stick();
+    // Hosts without ResizeObserver (jsdom, older webviews) keep the initial stick only.
+    if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(stick);
     ro.observe(content);
     return () => ro.disconnect();

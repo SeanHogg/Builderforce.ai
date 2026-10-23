@@ -132,7 +132,8 @@ export async function packForModel(input: PackForModelInput): Promise<PackForMod
     estimatedTokens: pack.estimatedTokens,
     fits: pack.fits,
   });
-  // Kept messages are the input's own objects; the one note is a plain assistant string.
+  // Kept messages are the input's own objects; the one note is a plain string whose role
+  // the packer alternates against the turn after it (`user` before an assistant turn).
   return { messages: pack.messages as ChatCompletionMessage[], pack };
 }
 

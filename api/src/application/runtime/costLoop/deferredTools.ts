@@ -21,10 +21,15 @@ const ALWAYS = ['read_file', 'search_code', 'list_files', 'edit_file', 'run_chec
  * Role → core tool manifest. Names absent from a surface's catalog are skipped, so one
  * row serves the durable surface (run_checks) and a shell surface (run_command) alike.
  * `tool_search` and `update_task_state` are added by the session, not listed here.
+ *
+ * `repo_map` (C5) is core for explore + code: one call for the codebase's shape instead
+ * of a list_files/read_file crawl (absent from a catalog without `repo.semantic`, so it
+ * costs nothing with the lever off). To keep code within the 20-tool budget (the two
+ * meta tools ride on top), `web_search` left the code row — one `tool_search` away.
  */
 export const ROLE_CORE_TOOLS: Readonly<Record<DeferredToolRole, readonly string[]>> = {
-  explore: [...ALWAYS, 'memory_recall', 'workspace_read', 'web_search', 'web_fetch'],
-  code: [...ALWAYS, 'write_file', 'delete_file', 'update_prd', 'memory_recall', 'memory_remember', 'claim_resource', 'release_resource', 'workspace_note', 'web_search'],
+  explore: [...ALWAYS, 'repo_map', 'memory_recall', 'workspace_read', 'web_search', 'web_fetch'],
+  code: [...ALWAYS, 'repo_map', 'write_file', 'delete_file', 'update_prd', 'memory_recall', 'memory_remember', 'claim_resource', 'release_resource', 'workspace_note'],
   verify: [...ALWAYS, 'memory_recall', 'workspace_read'],
   plan: [...ALWAYS, 'spawn_agents', 'wait_agents', 'message_agent', 'update_prd', 'memory_recall', 'memory_remember', 'workspace_note', 'workspace_read'],
 };

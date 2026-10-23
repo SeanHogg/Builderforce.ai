@@ -2661,6 +2661,8 @@
         "engineeringDesc": "Quelle approche IA livre vraiment — score de résultat, taux de fusion et coût par type de travail et modèle.",
         "llmUsage": "Utilisation des LLM",
         "llmUsageDesc": "Utilisation des tokens, requêtes et état des modèles, ainsi que les dépenses estimées par source, projet, équipe, utilisateur et dépôt.",
+        "costEfficiency": "Efficacité des coûts",
+        "costEfficiencyDesc": "Chaque dollar de modèle achète-t-il plus de travail livré ? Taux de succès du cache, tours et contexte par exécution, coût par PR fusionnée et leviers de coût qui paient.",
         "recommendations": "Recommandations",
         "recommendationsDesc": "Actions prescriptives priorisées et anomalies à traiter, issues de chaque aperçu."
       },
@@ -3863,6 +3865,118 @@
       "confirmMessage": "Tous les enregistrements de ce visiteur sur ce site sont supprimés, avec leurs résumés IA. Action irréversible.",
       "confirm": "Effacer",
       "done": "{count, plural, one {# enregistrement effacé.} other {# enregistrements effacés.}}"
+    },
+    "cost": {
+      "approx": "≈{value}",
+      "points": "{value} pts",
+      "subtitle": "Taux de succès du cache, tours et contexte par exécution, et ce que coûte une PR fusionnée en dépense de modèle.",
+      "empty": "Aucune utilisation de modèle enregistrée sur cette période.",
+      "loadFailed": "Impossible de charger les indicateurs de coût.",
+      "verdict": "Sur les {days} derniers jours, le cache a servi {cache} des tokens de prompt, et une PR fusionnée a coûté {cost} en dépense de modèle sur {merged, plural, one {# exécution fusionnée} other {# exécutions fusionnées}}.",
+      "verdictNoPr": "Sur les {days} derniers jours, le cache a servi {cache} des tokens de prompt ; aucune exécution de cette période n'a encore fusionné de PR.",
+      "basis": "Les chiffres de tokens sont déclarés par le fournisseur ; la dépense est le coût enregistré lors de chaque appel.",
+      "unattributed": "Non attribué",
+      "metric": {
+        "cacheHitRate": "Taux de succès du cache",
+        "outputInputRatio": "Sortie / entrée",
+        "reasoningShare": "Part de raisonnement",
+        "medianContextTokens": "Contexte médian par tour",
+        "medianTurns": "Tours médians par exécution",
+        "costPerMergedPr": "Coût par PR fusionnée"
+      },
+      "tone": {
+        "better": "En amélioration",
+        "worse": "En régression",
+        "flat": "Stable"
+      },
+      "kpi": {
+        "cacheHitRateSub": "Part des tokens de prompt lus depuis le cache",
+        "medianTurnsSub": "Exécutions terminées · {runs}",
+        "medianContextSub": "Tokens de prompt par appel au modèle",
+        "costPerPrSub": "Médiane {median} · {merged} exécutions fusionnées",
+        "costPerPrNone": "Aucune exécution fusionnée sur cette période",
+        "outputInputSub": "Tokens de sortie par token d'entrée",
+        "reasoningShareSub": "De la sortie, lorsque le fournisseur la déclare",
+        "reasoningUnreported": "Non déclaré par ces fournisseurs",
+        "servedWithoutModel": "Servies sans modèle",
+        "servedWithoutModelSub": "{requests} requêtes traitées sans appel de modèle"
+      },
+      "col": {
+        "metric": "Indicateur",
+        "calls": "Appels au modèle",
+        "spend": "Dépense"
+      },
+      "grouping": {
+        "label": "Regrouper par",
+        "actionType": "Type de travail",
+        "role": "Rôle"
+      },
+      "group": {
+        "title": "Où va la dépense",
+        "aria": "Dépense par groupe",
+        "truncated": "Affichage des {n} premiers groupes."
+      },
+      "lever": {
+        "title": "Leviers de coût : activés ou désactivés",
+        "desc": "Chaque levier partiellement déployé, en comparant les appels où il était activé à ceux où il était désactivé. L'écart est masqué lorsqu'un des groupes compte moins de {calls} appels ou {runs} exécutions.",
+        "empty": "Aucun levier n'est partiellement déployé sur cette période ; il n'y a rien à comparer.",
+        "colOn": "Activé",
+        "colOff": "Désactivé",
+        "colDelta": "Écart (activé − désactivé)",
+        "nameWithReq": "{lever} · {req}",
+        "sample": "{on} appels activé / {off} désactivé",
+        "insufficient": "Échantillon insuffisant"
+      },
+      "run": {
+        "open": "Détail des coûts",
+        "title": "Exécution n° {id} · détail des coûts",
+        "empty": "Aucun tour de modèle enregistré pour cette exécution.",
+        "outcome": "{action} · {status} après {steps} étapes.",
+        "outcomeMerged": "{action} · {status} après {steps} étapes · fusionnée.",
+        "budgetUsed": "Budget consommé",
+        "noCap": "Aucun plafond n'est fixé pour cette exécution",
+        "turns": "Tours",
+        "turnsSub": "Modèles utilisés : {models}",
+        "toolSchema": "Schémas d'outils",
+        "toolSchemaSub": "Tokens estimés pour décrire les outils",
+        "splitTitle": "Où sont allés les tokens",
+        "contextTitle": "Contexte par source (estimé)",
+        "colTurn": "Tour",
+        "colModel": "Modèle",
+        "turnMerged": "{n} ({calls} appels)",
+        "byo": "Clé personnelle",
+        "total": "Total",
+        "truncated": "Affichage des {n} premiers tours.",
+        "estimateNote": "≈ signale des estimations : la dépense est calculée d'après la grille tarifaire du modèle, et les chiffres de schémas d'outils et de contexte sont estimés à partir des caractères, pas comptés par le fournisseur.",
+        "part": {
+          "uncached": "Entrée hors cache",
+          "cacheRead": "Lecture du cache",
+          "cacheWrite": "Écriture du cache",
+          "output": "Sortie",
+          "reasoning": "Raisonnement"
+        },
+        "category": {
+          "system": "Prompt système",
+          "tools": "Définitions d'outils",
+          "history": "Conversation",
+          "toolOutputs": "Sorties d'outils",
+          "memory": "Mémoire"
+        },
+        "budgetOfCap": "{share} du plafond de {cap} · {source}",
+        "tokenBudget": "Budget de tokens",
+        "budgetSource": {
+          "payload": "défini sur cette exécution",
+          "plan": "limite de l’offre",
+          "default": "valeur par défaut de la plateforme"
+        }
+      },
+      "trend": {
+        "title": "Tendance quotidienne",
+        "desc": "Une métrique, jour après jour sur la période — là où l’efficacité évolue.",
+        "metric": "Métrique",
+        "empty": "Aucun jour de cette période n’a encore de données pour cette métrique.",
+        "chartLabel": "{metric} par jour"
+      }
     }
   },
   "cloudAgentForm": {
@@ -5588,6 +5702,7 @@
       "aiHubImpact": "Impact de l’IA",
       "aiHubEngineering": "Efficacité de l’IA",
       "aiHubLlmUsage": "Utilisation des LLM",
+      "aiHubCostEfficiency": "Efficacité des coûts",
       "aiHubRecommendations": "Recommandations",
       "delivHubDelivery": "Livraison",
       "delivHubAutonomy": "Santé de l'autonomie",
@@ -5859,6 +5974,7 @@
       "aiHubImpactDesc": "Tendances d’adoption et d’utilisation des modèles, une matrice d’évaluation multi-outils et un score composite de productivité IA.",
       "aiHubEngineeringDesc": "Quelle approche IA livre vraiment — score de résultat, taux de fusion et coût par type de travail et modèle.",
       "aiHubLlmUsageDesc": "Utilisation des tokens, requêtes et état des modèles, ainsi que les dépenses estimées par source, projet, équipe, utilisateur et dépôt.",
+      "aiHubCostEfficiencyDesc": "Chaque dollar de modèle achète-t-il plus de travail livré ? Taux de succès du cache, tours et contexte par exécution, coût par PR fusionnée et leviers de coût qui paient.",
       "aiHubRecommendationsDesc": "Actions prescriptives priorisées et anomalies à traiter, issues de chaque aperçu.",
       "delivHubDeliveryDesc": "Burnup, prévision et dérive du périmètre d'un livrable à travers initiatives, projets et versions.",
       "delivHubAutonomyDesc": "Le travail s'est-il terminé tout seul ? Entonnoir du cycle de vie selon l'auteur du ticket, répartition des déplacements autonomes et humains, et points de blocage de l'autonomie.",

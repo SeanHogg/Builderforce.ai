@@ -195,6 +195,11 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
           labels={labels}
           assistantName="Rovr"
           onAnswerQuestion={answer}
+          // The thumb is the E5 `rating` verdict on the latest local reply (resolved by
+          // the shared hook, in this page where Rovr's model stream runs). Rovr's device
+          // record keeps no server rating, so the press is a verdict, not a stored fact.
+          onRateMessage={conv.rateMessage}
+          ratings={conv.ratings}
         />
       )}
       empty={empty ? (

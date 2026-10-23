@@ -7,7 +7,7 @@
  * Aliases the fragments may use: `u` = llm_usage_log, `o` = run_model_outcomes (LEFT
  * JOINed on execution id), `la` = the lever-arm lateral (lever grouping only).
  */
-export const COST_METRIC_GROUP_BYS = ['none', 'actionType', 'role', 'lever'] as const;
+export const COST_METRIC_GROUP_BYS = ['none', 'actionType', 'role', 'lever', 'day'] as const;
 export type CostMetricGroupBy = (typeof COST_METRIC_GROUP_BYS)[number];
 
 export const COST_METRIC_WINDOWS = { '7d': 7, '30d': 30 } as const;
@@ -20,6 +20,8 @@ export interface CostMetricGroupSpec {
   arm: string;
   /** Extra FROM clause (the lever lateral), or ''. */
   join: string;
+  /** Groups are a series, read in key order (ascending) rather than most expensive first. */
+  series?: true;
 }
 
 /** One arm array of the `metadata.costLevers` stamp, as a safe set-returning source. */
@@ -44,6 +46,9 @@ export const COST_METRIC_GROUPS: Readonly<Record<CostMetricGroupBy, CostMetricGr
       ') la',
     ].join('\n'),
   },
+  // UTC calendar day, 'YYYY-MM-DD'. `created_at` is a UTC `timestamp` (no zone), so the
+  // text of its date part IS the UTC day — no session-zone conversion can shift it.
+  day: { key: `to_char(u.created_at, 'YYYY-MM-DD')`, arm: `''`, join: '', series: true },
 };
 
 export function isCostMetricGroupBy(v: unknown): v is CostMetricGroupBy {

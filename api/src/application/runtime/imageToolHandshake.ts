@@ -47,6 +47,11 @@ export const HANDSHAKE_ONLY_TOOLS: readonly string[] = [
   // `edit_file` handler (cost lever D5); an image from before that answers it with
   // `unknown tool`.
   'edit_file',
+  // `repo.semantic` (cost lever C5) joins the container set per tenant. The image backs
+  // it with its bf-context index and names the two tools only while that index is live
+  // (`REPO_INDEX_TOOL_NAMES` in `container/repoIndex.mjs`); an image that predates it has
+  // no handler for either.
+  'repo_map', 'semantic_search',
 ];
 
 /**

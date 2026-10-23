@@ -11,7 +11,7 @@
  */
 import { splitVendorReasoning, type ChoiceMessageLike } from '@builderforce/agent-loop';
 import type { ModelFallbackSurface } from '@builderforce/agent-stall';
-import type { ModelRole, ToolSchema } from '@builderforce/agent-tools';
+import type { AgentExecParams, ModelRole, ToolSchema } from '@builderforce/agent-tools';
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 import { pricesForCall } from '../../llm/catalogView';
@@ -36,6 +36,9 @@ import {
 import { emitCodingModelDegraded, hasVendorKeys, refuseCloudRunWithoutByo, requestedModelForRole } from './routing';
 import type { ContainerRunContext } from './runContext';
 import { cloudOutputCap, cloudReasoningExecParams, cloudRoutingExploration } from '../costLoop/runLevers';
+import { cloudTierLadder } from '../costLoop/verifierCascade';
+import type { CascadeVerdict } from '@builderforce/run-policy';
+import { ImageCascade, imageTurnFeatures } from './imageCascade';
 import { strictWhenConnected } from '../../llm/fundingOrder';
 import type { LlmUsage } from '../../llm/proxyTypes';
 import {
@@ -318,6 +321,9 @@ export async function imageRunTurn(
     /** The run's model hand-off state from its previous turn; absent on the first
      *  turn, when it is seeded from the run-start pick. */
     modelState?: CloudRunModelState;
+    /** D1: the image's post-edit verdict on the previous turn (`readImageCheckVerdict`).
+     *  Absent ⇒ the image runs no verifier and the cascade stays off for it. */
+    checks?: CascadeVerdict | null;
   },
   args: {
     messages: Array<Record<string, unknown>>;
@@ -347,22 +353,30 @@ export async function imageRunTurn(
   if (byoBlocked) return { ok: false, error: byoBlocked.message, code: byoBlocked.code };
   const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = creds;
   const byoVendors = byoVendorIdsFromCredentials(creds);
+  // D1: the weak-first cascade, when the lever is on and the image has a verifier. A
+  // later turn first folds the image's verdict on the previous one (one tier up on a fail).
+  const turnRole = cloudRunRole(role);
+  const cascade = await ImageCascade.open({
+    env, db, tenantId, executionId, cloudAgentRef, role: turnRole,
+    ladder: cloudTierLadder(byoVendors, ctx.effectivePlan, ctx.premiumOverride, creds.configuredProviders.length > 0),
+    features: imageTurnFeatures(ctx, args.messages, args.tools, turnRole),
+  }, run.checks);
+  let modelState = run.modelState;
+  if (modelState && cascade) modelState = await cascade.fold(modelState);
   // The run-start pick seeds the run's model policy on its FIRST turn only; every later
   // turn asks for what the policy says (the locked model, or the cascade after a
   // release) — the same rules as the durable loop, instead of a fresh soft seed per op.
-  let modelState = run.modelState;
   if (!modelState) {
     // Evermind coding gate — undefined unless the pin is an `evermind/<ref>` route.
     const evermindCoding = await resolveEvermindCodingRoute(env, db, tenantId, model);
     // Operator ROLE_MODELS pin is the requested model when this turn has no explicit
     // user/agent pin. Undefined pin = existing plan seed / learned ranker.
     const requested = requestedModelForRole(env, role, model);
-    const pickRole = cloudRunRole(role);
-    modelState = initialCloudRunModelState(pickCloudModel(requested, ctx.effectivePlan, ctx.premiumOverride, {
+    const pick = pickCloudModel(requested, ctx.effectivePlan, ctx.premiumOverride, {
       ...(evermindCoding ? { evermindCoding } : {}),
-      role: pickRole,
+      role: turnRole,
       // A cost-first role (explore / utility / verify) orders by expected cost.
-      prices: await pricesForCall(env, pickRole, undefined),
+      prices: await pricesForCall(env, turnRole, undefined),
       // D3: Thompson exploration on the soft seed while the lever is on for this tenant.
       explore: cloudRoutingExploration(env, tenantId),
       // Context-aware seed: a small-window model isn't picked for a big turn.
@@ -377,8 +391,13 @@ export async function imageRunTurn(
       byoSelectedModels: creds.byoSelectedModels,
       // Parity with the durable loop: a PREMIUM pin needs a validated billing card.
       premiumEntitled: ctx.premiumEntitled,
-    }), role, { verify: requestedModelForRole(env, 'verify') ?? undefined });
+    });
+    modelState = initialCloudRunModelState(pick, role, { verify: requestedModelForRole(env, 'verify') ?? undefined });
+    if (cascade) modelState = await cascade.seed(modelState, pick.strict === true);
   }
+  // The cascade's steer (why the run moved tier) rides THIS request only.
+  const cascadeSteer = cascade?.steerNote();
+  const turnMessages = cascadeSteer ? [...args.messages, { role: 'user', content: cascadeSteer }] : args.messages;
   const requestedModel = modelState.policy.model ?? model;
   const proxy = llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, {
     backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true,
@@ -393,7 +412,7 @@ export async function imageRunTurn(
     // D5: the per-role reply cap — parity with the durable loop's session cap.
     const maxTokens = cloudOutputCap(env, tenantId, req.role, undefined);
     return proxy.complete({
-      messages: args.messages as unknown as ChatMessage[], tools: args.tools,
+      messages: turnMessages as unknown as ChatMessage[], tools: args.tools,
       ...turnRequestFields(req),
       ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
       // Personality temperature — parity with the Worker/DO loop.
@@ -406,7 +425,7 @@ export async function imageRunTurn(
       // First-turn detection: no assistant turn yet in this slice.
       // D4: with no persona level, the turn role's default effort while the lever is on.
       ...(req.strict
-        ? reasoningParamsForModel(req.model, cloudReasoningExecParams(env, tenantId, ctx.execParams, req.role), {
+        ? reasoningParamsForModel(req.model, withCascadeReasoning(cascade, cloudReasoningExecParams(env, tenantId, ctx.execParams, req.role), req.role), {
             isFirstTurn: !args.messages.some((m) => (m as { role?: string }).role === 'assistant'),
           }) ?? {}
         : {}),
@@ -421,14 +440,20 @@ export async function imageRunTurn(
     env, db, tenantId, cloudAgentRef, executionId, taskId, projectId,
     requestedModel, fallbackModel: turnRun.state.policy.model,
     effectivePlan: ctx.effectivePlan, premiumOverride: ctx.premiumOverride,
-    role: cloudRunRole(role),
+    role: turnRole,
     phase: turnRun.state.policy.phase,
-    turnInput: { messages: args.messages, tools: args.tools },
+    turnInput: { messages: turnMessages, tools: args.tools },
   }, { tGen0, notify: args.notify });
+  await cascade?.end(turn.ok ? turn.resolvedModel : undefined);
   if (!turn.ok) return { ok: false, error: turn.error, modelState: turnRun.state };
   return {
     ok: true, content: turn.content, toolCalls: turn.toolCalls, resolvedModel: turn.resolvedModel,
     modelState: turnRun.state,
     fallbackSurface: codingFallbackSurface(byoVendors, ctx.effectivePlan, ctx.premiumOverride),
   };
+}
+
+/** D1: the persona/role reasoning levers, raised while the cascade has a unit escalated. */
+function withCascadeReasoning(cascade: ImageCascade | null, base: AgentExecParams | undefined, role: unknown): AgentExecParams | undefined {
+  return cascade ? cascade.reasoning(base, role) : base;
 }

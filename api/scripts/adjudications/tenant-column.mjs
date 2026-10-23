@@ -62,6 +62,9 @@ export default {
   llm_health_probes:
     'reachability probes the platform runs against its own model vendors. A probe result is a fact about the VENDOR, identical for every workspace, and the probe runs on a schedule with no tenant in the request to scope it to.',
 
+  llm_specialist_admissions:
+    'which small model is admitted for which narrow internal job (cost lever E2), scored against the frontier model on the eval set of that job. An admission is a fact about the MODEL, identical for every workspace, written by the weekly sweep with no tenant in the request; a per-tenant copy would re-run the same eval per workspace for the same verdict. The eval INPUTS it was scored on (`llm_specialist_eval_cases`) are tenant-owned and carry `tenant_id`.',
+
   marketplace_skills:
     'a public marketplace LISTING. `author_id` names who published it, but the listing is browsable and installable by every workspace — that is what makes it a marketplace. Scoping it would make each listing visible only to its own publisher.',
 

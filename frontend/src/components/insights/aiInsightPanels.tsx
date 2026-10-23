@@ -44,9 +44,12 @@ const AiImpactLens = dynamic(() => import('./AiImpactLens').then((module) => mod
 const EngineeringLens = dynamic(() => import('./EngineeringLens').then((module) => module.EngineeringLens), { ssr: false });
 const RecommendationsLens = dynamic(() => import('./RecommendationsLens').then((module) => module.RecommendationsLens), { ssr: false });
 const LlmUsageLens = dynamic(() => import('./LlmUsageLens').then((module) => module.LlmUsageLens), { ssr: false });
+const CostEfficiencyLens = dynamic(() => import('./cost/CostEfficiencyLens').then((module) => module.CostEfficiencyLens), { ssr: false });
+// The cost card pulls the cost client + formatter; a dynamic edge keeps them out of the root closure.
+const CostEfficiencySummary = dynamic(() => import('./cost/CostEfficiencySummary').then((module) => module.CostEfficiencySummary), { ssr: false });
 
 /** Stable ids (also the `?panel=` deep-link + Brain enum values). */
-export type AiInsightPanelId = 'ai-impact' | 'engineering' | 'llm-usage' | 'recommendations';
+export type AiInsightPanelId = 'ai-impact' | 'engineering' | 'llm-usage' | 'cost-efficiency' | 'recommendations';
 
 export interface AiInsightPanelDef {
   id: AiInsightPanelId;
@@ -82,6 +85,10 @@ export const AI_INSIGHT_PANELS: Record<AiInsightPanelId, AiInsightPanelDef> = {
   'llm-usage': {
     id: 'llm-usage', icon: '🪙', titleKey: 'panel.llmUsage', descKey: 'panel.llmUsageDesc',
     capability: 'insights.llmUsage', width: WIDE, Summary: LlmUsageSummary, render: () => <LlmUsageLens />,
+  },
+  'cost-efficiency': {
+    id: 'cost-efficiency', icon: '📊', titleKey: 'panel.costEfficiency', descKey: 'panel.costEfficiencyDesc',
+    capability: 'insights.costEfficiency', width: WIDE, Summary: CostEfficiencySummary, render: () => <CostEfficiencyLens />,
   },
   recommendations: {
     id: 'recommendations', icon: '🧠', titleKey: 'panel.recommendations', descKey: 'panel.recommendationsDesc',

@@ -33,7 +33,8 @@ import {
 } from '../../../application/shared/idempotentReplay';
 import { resolveTenantLlmCredentials, byoVendorIdsFromCredentials } from '../../../application/llm/tenantProviderKeyService';
 import { buildHostEgressForVendors } from '../../../application/llm/hostEgress';
-import { byoRoutingOptions, recordCacheHitSaving } from '../../../application/llm/tenantProxy';
+import { byoRoutingOptions, recordUndispatchedAnswer } from '../../../application/llm/tenantProxy';
+import { isUndispatchedOutcome } from '../../../application/llm/deterministic/deterministicCompletion';
 import { pricesForCall } from '../../../application/llm/catalogView';
 import { GUEST_TOKEN_PREFIX } from '../../../application/guest/guestToken';
 import { proxyForCompletion, tenantCanSelfFund } from '../../../application/llm/gatewayCompletionProxy';
@@ -248,9 +249,10 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
         },
       },
     });
-    // A cache HIT dispatched nothing: it is never metered as spend (that would invent
-    // usage every rollup then sums), only recorded as the call it saved.
-    const cacheHit = result.outcome === 'response_cache_hit';
+    // An UNDISPATCHED answer (a cache hit, or the deterministic step — D7) is never
+    // metered as spend (that would invent usage every rollup then sums); a cache hit is
+    // only recorded as the call it saved. ONE predicate names every undispatched outcome.
+    const cacheHit = isUndispatchedOutcome(result.outcome);
 
     // Did the PREMIUM model the tenant selected actually serve this turn? Only then
     // does the flat 1¢ surcharge apply — if the cascade failed over to a plan-pool
@@ -309,6 +311,12 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
 
       // Log any failovers that happened before this successful model
       logCascadeFailovers();
+      // A streamed undispatched answer (the deterministic pseudo-stream) is never metered,
+      // but it is counted as served without a model — the same recorder as non-streaming.
+      if (cacheHit) {
+        const served = recordUndispatchedAnswer(c.env, { tenantId: access.tenantId, userId: access.userId, projectId: workHints.projectId ?? null }, result);
+        if (served) c.executionCtx?.waitUntil?.(served);
+      }
 
       // Full diagnostic trace (builder-side only), written ONCE when the stream ends
       // with the usage frame and the reassembled completion body. The same tee
@@ -317,10 +325,14 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
         c.env, c.executionCtx,
         { ...traceBase, streamed: true, responseBody: null, errorMessage: null },
         result.response.body,
-        (usage) => {
-          logUsage(c.env, c.executionCtx, { ...usageRow, streamed: true, usage, surface: resolveUsageSurface(c, access) });
-          recordBrainChatModelActivity();
-        },
+        // An undispatched stream (deterministic pseudo-stream) carries no usage and
+        // spent nothing — it gets no meter at all, never a zero/guessed row.
+        cacheHit
+          ? undefined
+          : (usage) => {
+              logUsage(c.env, c.executionCtx, { ...usageRow, streamed: true, usage, surface: resolveUsageSurface(c, access) });
+              recordBrainChatModelActivity();
+            },
       );
 
       return new Response(instrumentedStream, {
@@ -335,7 +347,7 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
     // Log any failovers, then log usage
     logCascadeFailovers();
     if (cacheHit) {
-      const saving = recordCacheHitSaving(c.env, { tenantId: access.tenantId, userId: access.userId, projectId: workHints.projectId ?? null }, result);
+      const saving = recordUndispatchedAnswer(c.env, { tenantId: access.tenantId, userId: access.userId, projectId: workHints.projectId ?? null }, result);
       if (saving) c.executionCtx?.waitUntil?.(saving);
     } else {
       logUsage(c.env, c.executionCtx, {

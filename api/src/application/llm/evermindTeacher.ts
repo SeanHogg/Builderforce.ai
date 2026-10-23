@@ -28,6 +28,7 @@ import { llmProxyForPlan, readProxyChoice } from './LlmProxyService';
 import { tenantMayRunAutonomously } from './tenantTokenAvailability';
 import { resolveTenantLlmCredentials } from './tenantProviderKeyService';
 import { isRoutableModel } from './vendors/registry';
+import type { DeferredLlmRequest } from './batch/batchTypes';
 
 /** Max chars of task/run text handed to the teacher (bounds prompt/token cost). */
 export const TEACHER_INPUT_MAX_CHARS = 4000;
@@ -55,6 +56,22 @@ const TEACHER_SYSTEM: Record<TeacherMode, string> = {
     'an expert would have written it. Keep code as code and prose as prose. Do NOT add ' +
     'commentary, preamble, or meta-explanation — output only the exemplary content itself.',
 };
+
+/**
+ * THE teacher request — the system prompt for the mode, the bounded input and the output
+ * cap. One builder for the synchronous call below and the deferred (batch) job, so a
+ * batched exemplar is asked for in exactly the words a synchronous one is.
+ */
+export function teacherRequest(mode: TeacherMode, input: string): DeferredLlmRequest {
+  return {
+    messages: [
+      { role: 'system', content: TEACHER_SYSTEM[mode] },
+      { role: 'user', content: input.trim().slice(0, TEACHER_INPUT_MAX_CHARS) },
+    ],
+    temperature: 0.2,
+    maxTokens: TEACHER_MAX_OUTPUT_TOKENS,
+  };
+}
 
 export interface TeacherExemplar {
   /** The frontier model that actually produced the exemplar. */
@@ -110,8 +127,13 @@ export async function generateTeacherExemplar(
     // Thread the tenant's connected BYO account so a strict-pinned frontier teacher
     // resolves on THEIR OWN account (subscription/api-key, $0 to us) when they have
     // one — matching the "BYO funds frontier" rule. Absent → the funded premium pool.
-    const creds = await resolveTenantLlmCredentials(env, tenantId).catch(() => ({ anthropicOAuthToken: null, vendorKeys: {}, configuredProviders: [], unresolvedReasons: {}, vendorPriority: [] }));
+    const creds = await resolveTenantLlmCredentials(env, tenantId).catch((error: unknown) => {
+      // Unreadable credentials → the funded pool, exactly as a tenant with none.
+      reportCaughtError(error, { source: 'application/llm/evermindTeacher.ts', operation: 'generateTeacherExemplar', level: 'warning', context: { tenantId } });
+      return { anthropicOAuthToken: null, vendorKeys: {}, configuredProviders: [], unresolvedReasons: {}, vendorPriority: [] };
+    });
     const hasVendorKeys = Object.values(creds.vendorKeys).some(Boolean);
+    const request = teacherRequest(mode, text);
     const result = await llmProxyForPlan(env, 'pro', true, {
       ...(creds.anthropicOAuthToken ? { anthropicOAuthToken: creds.anthropicOAuthToken } : {}),
       ...(hasVendorKeys ? { tenantVendorKeys: creds.vendorKeys } : {}),
@@ -119,12 +141,9 @@ export async function generateTeacherExemplar(
       {
         model,
         modelStrict: true,
-        messages: [
-          { role: 'system', content: TEACHER_SYSTEM[mode] },
-          { role: 'user', content: text.slice(0, TEACHER_INPUT_MAX_CHARS) },
-        ],
-        temperature: 0.2,
-        max_tokens: TEACHER_MAX_OUTPUT_TOKENS,
+        messages: request.messages,
+        temperature: request.temperature,
+        max_tokens: request.maxTokens,
         useCase: 'task_execution',
       },
       undefined,

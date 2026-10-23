@@ -138,6 +138,7 @@ export const CAPABILITIES = {
   'insights.aiImpact':    'manager',   // AI Impact: adoption trends, multi-tool eval, productivity score
   'insights.recommendations': 'manager', // AI-driven prescriptive recommendations + anomalies
   'insights.llmUsage':    'manager',   // LLM usage: token/request totals, model health & spend by source/project/user/team/repo
+  'insights.costEfficiency': 'manager', // Cost efficiency (A4): cache/turn/context ratios, cost per merged PR, lever A/B (mirrors requireRole(MANAGER) on /api/cost/*)
   'insights.finance':     'manager',   // CFO: FinOps / cost / budgets
   'insights.allocation':  'manager',   // EM / CFO: investment allocation + capex/opex + goals
   'insights.benchmarking': 'manager',  // Industry benchmarking — percentile vs cohort

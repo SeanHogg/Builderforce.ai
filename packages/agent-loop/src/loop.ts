@@ -37,6 +37,14 @@ class Ctx<M> implements TurnContext<M> {
   ) {}
 }
 
+/** How many calls from `start` may dispatch together: the run of consecutive read-only
+ *  calls there, when it is at least two long; otherwise 1 (the sequential path). */
+function readOnlySpan(calls: readonly ParsedToolCall[], start: number, isReadOnly: (call: ParsedToolCall) => boolean): number {
+  let end = start;
+  while (end < calls.length && isReadOnly(calls[end] as ParsedToolCall)) end++;
+  return end - start >= 2 ? end - start : 1;
+}
+
 export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult> {
   const { codec, ports, budget, signal } = args;
   const hooks = args.hooks ?? {};
@@ -129,16 +137,11 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
     }
     ctx.messages.push(codec.assistant(turn));
 
-    for (let i = 0; i < calls.length; i++) {
-      let call = calls[i] as ParsedToolCall;
-      let result: LoopDispatchResult | undefined;
-
-      const pre = await hooks.beforeDispatch?.(call, ctx);
-      if (pre && "result" in pre) result = pre.result;
-      else if (pre && "rewrite" in pre) call = pre.rewrite;
-
-      if (!result) result = await ports.dispatch(call, ctx);
-
+    // Settle one dispatched call, in call order: interpret its control signal, count it
+    // against the failure streak, push its row and run `afterDispatch`. True ⇒ the hook
+    // abandoned the rest of the turn (every later call already has its skipped row).
+    const settle = async (i: number, call: ParsedToolCall, dispatched: LoopDispatchResult): Promise<boolean> => {
+      let result = dispatched;
       if (result.control?.kind === "finish") {
         const block = await hooks.onFinish?.(ctx, result.control.summary, call);
         if (block) {
@@ -160,11 +163,42 @@ export async function runAgentLoop<M>(args: LoopRunArgs<M>): Promise<LoopResult>
       const row = codec.tool(call, result);
       ctx.messages.push(row);
       const post = await hooks.afterDispatch?.(call, result, row, ctx);
-      if (post?.skipRemaining) {
-        const skipped: LoopDispatchResult = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
-        for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
-        break;
+      if (!post?.skipRemaining) return false;
+      const skipped: LoopDispatchResult = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
+      for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
+      return true;
+    };
+
+    for (let i = 0; i < calls.length; ) {
+      // D8: a run of consecutive read-only calls is dispatched together. `beforeDispatch`
+      // still runs once per call, in order, BEFORE any of them dispatches; results are
+      // settled in call order, so the transcript and every later hook see exactly the
+      // sequential shape. A call whose `beforeDispatch` answered with a control signal,
+      // or rewrote it into a call that is not read-only, closes the batch at itself.
+      const span = ports.isReadOnly ? readOnlySpan(calls, i, ports.isReadOnly) : 1;
+      const prepared: Array<{ call: ParsedToolCall; result?: LoopDispatchResult }> = [];
+      for (let j = i; j < i + span; j++) {
+        let call = calls[j] as ParsedToolCall;
+        let result: LoopDispatchResult | undefined;
+        const pre = await hooks.beforeDispatch?.(call, ctx);
+        if (pre && "result" in pre) result = pre.result;
+        else if (pre && "rewrite" in pre) call = pre.rewrite;
+        prepared.push(result ? { call, result } : { call });
+        if (span > 1 && (result?.control || (!result && !ports.isReadOnly!(call)))) break;
       }
+      const last = prepared[prepared.length - 1]!;
+      // A batch's trailing non-read-only rewrite runs AFTER the reads before it, alone.
+      const tail = prepared.length > 1 && !last.result && !ports.isReadOnly!(last.call) ? last : undefined;
+      const batch = tail ? prepared.slice(0, -1) : prepared;
+      const results = batch.length > 1
+        ? await Promise.all(batch.map((p) => p.result ?? ports.dispatch(p.call, ctx)))
+        : [batch[0]!.result ?? (await ports.dispatch(batch[0]!.call, ctx))];
+      if (tail) results.push(await ports.dispatch(tail.call, ctx));
+
+      let stop = false;
+      for (let k = 0; k < prepared.length && !stop; k++) stop = await settle(i + k, prepared[k]!.call, results[k]!);
+      if (stop) break;
+      i += prepared.length;
     }
 
     const after: AfterToolCallsDecision | void = await hooks.afterToolCalls?.(ctx, finished);

@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/difficulty-router",
+  "version": "2026.10.0",
+  "private": true,
+  "type": "module",
+  "description": "The D2 difficulty router (PRD: LLM Cost Optimization Layer): will the WEAK model's attempt at this step fail its verifier? The feature contract the cascade records and asks with, the fixed feature scaling, the trust policy (min samples, held-out loss below a coin, skip threshold) as data, the binary head a trained logistic model reduces to, and the prediction. Pure, dependency-free and I/O-free: the trainer is injected (the api passes the engine's `trainMlTask`), so no second logistic trainer exists.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

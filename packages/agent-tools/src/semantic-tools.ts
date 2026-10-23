@@ -11,6 +11,7 @@
  */
 
 import type { RepoMapResult, SemanticSearchResult } from "./capabilities.js";
+import { chooseK } from "./retrievalK.js";
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 
 const SEARCH_DEFAULT_LIMIT = 8;
@@ -36,11 +37,19 @@ export const semanticSearchTool: ToolDefinition = defineTool({
     const query = typeof args.query === "string" ? args.query.trim() : "";
     if (!query) return { data: { ok: false, error: "query is required" } };
     const scope = typeof args.path === "string" && args.path.trim() ? args.path.trim() : undefined;
-    const requested = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : SEARCH_DEFAULT_LIMIT;
+    const explicit = typeof args.limit === "number" && Number.isFinite(args.limit);
+    const requested = explicit ? Math.floor(args.limit as number) : SEARCH_DEFAULT_LIMIT;
     const limit = Math.min(SEARCH_MAX_LIMIT, Math.max(1, requested));
-    const r: SemanticSearchResult = await ctx.caps.semantic!.search(query, { scope, limit });
+    const semantic = ctx.caps.semantic!;
+    const r: SemanticSearchResult = await semantic.search(query, { scope, limit });
     if (!r.ok) return { data: r as unknown as Record<string, unknown> };
-    const results = (r.results ?? []).map((h) => ({
+    let hits = r.results ?? [];
+    // C4: the model's own `limit` always wins; otherwise a clear head is sent alone. Hits
+    // without a score give chooseK no head to find, so it keeps the full default.
+    if (semantic.adaptive && !explicit && hits.length > 0) {
+      hits = hits.slice(0, chooseK({ requested: limit, scores: hits.map((h) => (typeof h.score === "number" ? h.score : Number.NaN)) }));
+    }
+    const results = hits.map((h) => ({
       at: `${h.path}:${h.startLine}-${h.endLine}`,
       symbol: h.symbol ?? undefined,
       kind: h.kind,
@@ -66,6 +75,7 @@ export const repoMapTool: ToolDefinition = defineTool({
     properties: {
       focus: { type: "array", items: { type: "string" }, description: 'Optional repo-relative paths to rank first, e.g. ["api/src/billing"].' },
       maxTokens: { type: "number", description: `Budget for the map (default ${MAP_DEFAULT_TOKENS}, max ${MAP_MAX_TOKENS}).` },
+      query: { type: "string", description: 'Optional words describing the task, e.g. "stripe webhook retries" — ranks the files that match it first.' },
     },
   },
   requires: ["repo.semantic"],
@@ -73,7 +83,8 @@ export const repoMapTool: ToolDefinition = defineTool({
     const focus = Array.isArray(args.focus) ? args.focus.filter((f): f is string => typeof f === "string" && f.trim() !== "") : [];
     const requested = typeof args.maxTokens === "number" && Number.isFinite(args.maxTokens) ? Math.floor(args.maxTokens) : MAP_DEFAULT_TOKENS;
     const maxTokens = Math.min(MAP_MAX_TOKENS, Math.max(200, requested));
-    const r: RepoMapResult = await ctx.caps.semantic!.repoMap({ maxTokens, focus });
+    const query = typeof args.query === "string" && args.query.trim() ? args.query.trim() : undefined;
+    const r: RepoMapResult = await ctx.caps.semantic!.repoMap({ maxTokens, focus, ...(query ? { query } : {}) });
     if (!r.ok) return { data: r as unknown as Record<string, unknown> };
     const data: Record<string, unknown> = { ok: true, map: r.map ?? "" };
     if (r.indexing) data.note = "The index is still being built — the map covers only the files scanned so far.";

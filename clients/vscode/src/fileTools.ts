@@ -12,6 +12,7 @@ import type { Capability } from "@builderforce/agent-tools";
 import { buildCoreToolRegistry } from "@builderforce/agent-tools";
 import { buildLocalCapabilityProvider, LOCAL_SURFACE_CAPS } from "./localCapabilities";
 import { findRipgrep } from "./ripgrep";
+import { hostCostLeverOn } from "./hostCostLevers";
 
 /**
  * One definition per tool: name, JSON-schema params, whether it mutates the
@@ -71,6 +72,7 @@ export const TOOL_DEFS: ToolDef[] = registry
         // symbol search covers the whole workspace instead of the first 4,000 files.
         caps: buildLocalCapabilityProvider(root, { ripgrep: () => findRipgrep() }),
         workspaceRoot: root,
+        compressLargeOutputs: hostCostLeverOn("c8_token_compression"),
       });
       return JSON.stringify(result.data);
     },

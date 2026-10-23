@@ -13,11 +13,16 @@
  *                             never "window spend ÷ merges"
  *
  * A ratio with a zero denominator is `null` ("no data"), never 0.
+ *
+ *   servedWithoutModel        requests answered by a cache, a deterministic handler or a
+ *                             memory replay / all requests in the window (0 when none)
+ *   budget (per run)          the run's spend / token caps and where they came from
  */
 import { costLeverSpec, type CostLeverId } from '@builderforce/cost-levers';
 import { millicentsToUsd } from '../../domain/shared/money';
+import { resolveRunTokenCap, RUN_TOKEN_CAP_BY_PLAN } from '../../domain/containment/runLimits';
 import type { CostMetricGroupBy, CostMetricWindow } from './costMetricGroups';
-import type { CostMetricRow, RunOutcomeRow, RunTurnRow } from './costMetricsStore';
+import type { CostMetricRow, RunBudgetInputs, RunOutcomeRow, RunTurnRow, ServedWithoutModelRow } from './costMetricsStore';
 
 export interface CostGroupMetrics {
   group: string;
@@ -53,6 +58,18 @@ export interface LeverComparison {
   delta: Record<ComparedMetric, number | null>;
 }
 
+/** Requests answered without a model — cache, single-flight, deterministic, memory replay. */
+export interface ServedWithoutModel {
+  requests: number;
+  /** 0..1 of all requests in the window (served without a model + served by one). */
+  share: number;
+}
+
+export function toServedWithoutModel(r: ServedWithoutModelRow): ServedWithoutModel {
+  const total = r.served + r.dispatched;
+  return { requests: r.served, share: total > 0 ? r.served / total : 0 };
+}
+
 export interface CostMetricsReport {
   window: CostMetricWindow;
   windowDays: number;
@@ -64,6 +81,8 @@ export interface CostMetricsReport {
   groups: CostGroupMetrics[];
   /** groupBy=lever only. */
   levers?: LeverComparison[];
+  /** Tenant-wide over the window, whatever the grouping. */
+  servedWithoutModel: ServedWithoutModel;
 }
 
 const ratio = (n: number, d: number): number | null => (d > 0 ? n / d : null);
@@ -114,7 +133,7 @@ export function compareLeverArms(groups: readonly CostGroupMetrics[]): LeverComp
 
 export function buildCostMetricsReport(
   rows: readonly CostMetricRow[],
-  args: { window: CostMetricWindow; windowDays: number; groupBy: CostMetricGroupBy; limit: number },
+  args: { window: CostMetricWindow; windowDays: number; groupBy: CostMetricGroupBy; limit: number; served: ServedWithoutModelRow },
 ): CostMetricsReport {
   const groups = rows.map(toGroupMetrics);
   return {
@@ -125,6 +144,7 @@ export function buildCostMetricsReport(
     truncated: rows.length >= args.limit,
     groups,
     ...(args.groupBy === 'lever' ? { levers: compareLeverArms(groups) } : {}),
+    servedWithoutModel: toServedWithoutModel(args.served),
   };
 }
 
@@ -171,6 +191,52 @@ export interface RunCostBreakdown {
   /** Fields that are character estimates, not provider-reported. */
   estimatedFields: ReadonlyArray<'toolSchemaTokens' | 'categories'>;
   truncated: boolean;
+  /** The run's caps; null when the run does not exist for the tenant. */
+  budget: RunBudget | null;
+}
+
+export interface RunBudget {
+  capUsd: number | null;
+  capTokens: number | null;
+  /** `payload` = set on the run itself, `plan` = the tenant plan's cap, `default` = the platform default. */
+  source: 'payload' | 'plan' | 'default';
+}
+
+/** A `containmentLimits` number as the run reads it: finite and non-negative, else absent. */
+function containmentNumber(limits: Record<string, unknown> | null, key: string): number | undefined {
+  const n = limits?.[key];
+  return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.trunc(n) : undefined;
+}
+
+function containmentLimitsOf(payload: string | null): Record<string, unknown> | null {
+  if (!payload) return null;
+  try {
+    const value = (JSON.parse(payload) as { containmentLimits?: unknown } | null)?.containmentLimits;
+    return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+  } catch {
+    return null; // an unparseable payload declares no override - the run reads it the same way
+  }
+}
+
+/**
+ * The run's budget from the same inputs the run enforces: the USD cap is the declared
+ * `execution_limits` row (the payload override, else the platform default, written when
+ * the run started), the token cap `resolveRunTokenCap(plan, payload override)`. `source`
+ * names the most specific input in play: the payload when it overrode either cap, else
+ * the plan when one was resolved, else the platform default.
+ */
+export function buildRunBudget(inputs: RunBudgetInputs, plan: string | null): RunBudget | null {
+  if (!inputs.found) return null;
+  const limits = containmentLimitsOf(inputs.payload);
+  const spendOverride = containmentNumber(limits, 'maxSpendMillicents');
+  const tokenOverride = containmentNumber(limits, 'maxTokens');
+  const spendMillicents = inputs.declaredSpendMillicents ?? spendOverride ?? null;
+  const planKnown = plan != null && Object.prototype.hasOwnProperty.call(RUN_TOKEN_CAP_BY_PLAN, plan);
+  return {
+    capUsd: spendMillicents != null ? millicentsToUsd(spendMillicents) : null,
+    capTokens: resolveRunTokenCap(plan, tokenOverride),
+    source: spendOverride !== undefined || tokenOverride !== undefined ? 'payload' : planKnown ? 'plan' : 'default',
+  };
 }
 
 const CATEGORY_KEYS = ['system', 'tools', 'history', 'toolOutputs', 'memory'] as const;
@@ -193,6 +259,7 @@ export function buildRunCostBreakdown(
   turns: readonly RunTurnRow[],
   outcome: RunOutcomeRow | null,
   limit: number,
+  budget: RunBudget | null = null,
 ): RunCostBreakdown {
   let calls = 0, prompt = 0, completion = 0, cacheRead = 0, cacheCreation = 0, cost = 0;
   let reasoning: number | null = null;
@@ -232,5 +299,6 @@ export function buildRunCostBreakdown(
     turns: out,
     estimatedFields: ['toolSchemaTokens', 'categories'],
     truncated: turns.length >= limit,
+    budget,
   };
 }

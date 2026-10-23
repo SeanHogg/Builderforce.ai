@@ -314,7 +314,24 @@ describe('the entity catalog', () => {
     // entity-shaped at all: no title, no status, just a (tenant, project, fingerprint)
     // uniqueness key and a lease, the dedup index `auditRemediation.ts` claims so one
     // finding maps to one ticket across retries. Nobody opens a lease.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(43);
+    //
+    // Ceiling moved 43 → 47 (2026-10-23) with the LLM cost-optimisation tables, each
+    // adjudicated rather than counted — none is a thing a person opens:
+    //  - `cascade_outcomes` (1254) is APPEND-ONLY TELEMETRY: one row per weak-model
+    //    attempt the D1 verifier judged, written by `recordCascadeOutcome` and read only
+    //    as aggregates (the D2 training sweep, the D1 weak-pass-rate prior). No title, no
+    //    status, no edit — the same shape as `run_model_outcomes`.
+    //  - `llm_batch_jobs` (1255) is a JOB QUEUE whose live copy is on the operational
+    //    endpoint (transactional 0020); core holds the unsplit fallback, so the generic
+    //    layer would read the always-empty copy — the reason the 1217 replay mirrors are
+    //    exempt. Its status machine (queued → submitted → completed) is driven by the
+    //    batch tick's guarded claims; a generic PATCH of `status` would double-settle.
+    //  - `llm_specialist_eval_cases` (1257) is an EVAL CATALOGUE: captured job inputs
+    //    and their frontier reference output, replayed by the weekly specialist sweep.
+    //  - `llm_specialist_admissions` (1257) is a GLOBAL CATALOGUE with no `tenant_id`
+    //    (adjudicated in scripts/adjudications/tenant-column.mjs) — the catalog registers
+    //    into the tenant-scoped `objects` table, so it structurally cannot be entered.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(47);
   });
 
   it('declares nothing that no migration creates', () => {

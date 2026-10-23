@@ -17,6 +17,7 @@
 import { peekCached, setCached } from '../../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../../env';
 import type { CloudRunModelState } from './cloudRunModelPolicy';
+import type { CascadeSessionState } from '../costLoop/verifierCascade';
 
 /** A week: long enough for a run paused on a question to resume on the same state. */
 const STATE_TTL_SECONDS = 7 * 86_400;
@@ -32,4 +33,25 @@ export async function loadContainerRunModelState(env: Env, executionId: number):
 
 export async function saveContainerRunModelState(env: Env, executionId: number, state: CloudRunModelState): Promise<void> {
   await setCached(env, stateKey(executionId), state, { kvTtlSeconds: STATE_TTL_SECONDS });
+}
+
+/** The D1 cascade's state for an image run (`imageCascade.ts`), beside the model state:
+ *  its units, the seed's softness and action type, and the model the last turn resolved
+ *  to (the attempt the next verdict judges). Written only while the lever is on. */
+export interface ContainerRunCascadeState {
+  cascade: CascadeSessionState;
+  resolvedModel?: string;
+}
+
+function cascadeKey(executionId: number): string {
+  return `container-run-cascade:${executionId}`;
+}
+
+export async function loadContainerRunCascade(env: Env, executionId: number): Promise<ContainerRunCascadeState | undefined> {
+  const saved = await peekCached<ContainerRunCascadeState>(env, cascadeKey(executionId));
+  return saved?.cascade ? saved : undefined;
+}
+
+export async function saveContainerRunCascade(env: Env, executionId: number, state: ContainerRunCascadeState): Promise<void> {
+  await setCached(env, cascadeKey(executionId), state, { kvTtlSeconds: STATE_TTL_SECONDS });
 }

@@ -45,6 +45,27 @@ describe("semantic_search", () => {
     const r = await semanticSearchTool.execute({ query: "  " }, { caps });
     expect(r.data).toEqual({ ok: false, error: "query is required" });
   });
+
+  describe("adaptive K (C4)", () => {
+    const hit = (i: number, score?: number) => ({ path: `src/f${i}.ts`, startLine: 1, endLine: 2, snippet: `f${i}`, source: "hybrid" as const, ...(score === undefined ? {} : { score }) });
+    const scored = [0.95, 0.9, 0.85, 0.4, 0.3, 0.2, 0.1, 0.05].map((s, i) => hit(i, s));
+    const adaptiveCaps = (results: ReturnType<typeof hit>[], adaptive: boolean): CapabilityProvider => ({
+      capabilities: new Set(["repo.semantic"]),
+      semantic: { adaptive, search: async () => ({ ok: true, results }), repoMap: async () => ({ ok: true, map: "" }) },
+    });
+
+    it("sends only the clear head when the host turned it on", async () => {
+      const r = await semanticSearchTool.execute({ query: "x" }, { caps: adaptiveCaps(scored, true) });
+      expect(r.data.total).toBe(3);
+    });
+
+    it("keeps the full default when off, when the model set a limit, or when hits carry no score", async () => {
+      expect((await semanticSearchTool.execute({ query: "x" }, { caps: adaptiveCaps(scored, false) })).data.total).toBe(8);
+      expect((await semanticSearchTool.execute({ query: "x", limit: 8 }, { caps: adaptiveCaps(scored, true) })).data.total).toBe(8);
+      const unscored = scored.map((_, i) => hit(i));
+      expect((await semanticSearchTool.execute({ query: "x" }, { caps: adaptiveCaps(unscored, true) })).data.total).toBe(8);
+    });
+  });
 });
 
 describe("repo_map", () => {
@@ -60,6 +81,19 @@ describe("repo_map", () => {
     const r = await repoMapTool.execute({ focus: ["api/src", 3, ""], maxTokens: 50 }, { caps });
     expect(seen).toEqual({ maxTokens: 200, focus: ["api/src"] });
     expect(r.data.map).toContain("core.ts");
+  });
+
+  it("passes a trimmed query through to the backing", async () => {
+    let seen: unknown;
+    const caps = provider(
+      () => ({ ok: true, results: [] }),
+      (o) => {
+        seen = o;
+        return { ok: true, map: "" };
+      },
+    );
+    await repoMapTool.execute({ query: "  stripe webhook  " }, { caps });
+    expect(seen).toEqual({ maxTokens: 1500, focus: [], query: "stripe webhook" });
   });
 });
 

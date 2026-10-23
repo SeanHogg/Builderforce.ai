@@ -25,6 +25,7 @@ const TELEMETRY_WINDOWS: Record<string, number> = {
   evermind_learning_runs: 90,
   usage_snapshots: 90, run_model_outcomes: 400,
   replay_visit_summaries: 400, replay_releases: 400,
+  cascade_outcomes: 90, llm_batch_jobs: 30, llm_specialist_eval_cases: 180,
 };
 
 describe('bounded telemetry retention entries', () => {
@@ -38,7 +39,7 @@ describe('bounded telemetry retention entries', () => {
   });
 
   it('puts the run-telemetry tables on BOTH endpoints and everything else on core only', () => {
-    const both = ['execution_claims', 'execution_claim_evidence', 'usage_snapshots', 'run_model_outcomes', 'replay_visit_summaries', 'replay_releases'];
+    const both = ['execution_claims', 'execution_claim_evidence', 'usage_snapshots', 'run_model_outcomes', 'replay_visit_summaries', 'replay_releases', 'llm_batch_jobs'];
     for (const relation of Object.keys(TELEMETRY_WINDOWS)) {
       expect([...byName(relation).connections].sort(), relation).toEqual(both.includes(relation) ? ['primary', 'transactional'] : ['primary']);
     }
@@ -49,6 +50,14 @@ describe('bounded telemetry retention entries', () => {
       const q = toSQL(table.purge(realDb, CUTOFF));
       expect(q.sql, table.relation).toMatch(new RegExp(`^delete from "${table.relation}" where ctid = any\\(array\\(select ctid from "${table.relation}" where .* limit \\$\\d+\\)\\)$`));
     }
+  });
+
+  it('never deletes an open batch job', () => {
+    const q = toSQL(byName('llm_batch_jobs').purge(realDb, CUTOFF));
+    expect(q.sql).toContain('"status" in');
+    expect(q.params).toEqual(expect.arrayContaining(['completed', 'failed']));
+    expect(q.params).not.toContain('queued');
+    expect(q.params).not.toContain('submitted');
   });
 
   it('never deletes a webhook still awaiting retry or a delivery still queued', () => {

@@ -22,15 +22,16 @@
  *
  * Pure (no I/O), so the route, the routers and the console all compute the SAME verdict.
  * The comparison rules themselves — the ratio, the tolerance at the bar, "the same eval"
- * — are the memory package's eval baseline rules, the ones `evaluateGate`'s
- * `minBaselineRatio` applies, so an offline launch gate and this routing gate agree.
+ * — are the shared frontier-parity admission (`specialists/admission.ts`), the same rule
+ * the E2 specialist admissions apply, so every "may a cheaper model serve this?" gate agrees.
  */
 
-import { baselineRatio, meetsBaselineRatio, sameEvalProblem } from '@seanhogg/builderforce-memory/eval';
+import { FRONTIER_PARITY_BAR, meetsParity, parityRatio, readComparablePair } from './specialists/admission';
 
 /** The bar: Evermind must reach this fraction of the frontier baseline's coding-eval
- *  score. Operator decision 2026-09-12. The ONE definition — never restate 0.9. */
-export const EVERMIND_CODING_QUALITY_BAR = 0.9;
+ *  score. Operator decision 2026-09-12. It IS the shared frontier-parity bar
+ *  (`specialists/admission.ts`) — never restate 0.9. */
+export const EVERMIND_CODING_QUALITY_BAR = FRONTIER_PARITY_BAR;
 
 /** A recorded coding eval of one head version against a frontier baseline. */
 export interface EvermindCodingEval {
@@ -83,7 +84,7 @@ export function evermindQualifiesForCoding(head: {
   codingEval?: EvermindCodingEval | null;
 }): EvermindCodingGate {
   const ev = head.codingEval ?? null;
-  const ratio = ev ? baselineRatio(ev.score, ev.baselineScore) : null;
+  const ratio = ev ? parityRatio(ev.score, ev.baselineScore) : null;
   const verdict = (reason: EvermindCodingGateReason): EvermindCodingGate => ({
     qualified: reason === 'qualified',
     reason,
@@ -98,7 +99,7 @@ export function evermindQualifiesForCoding(head: {
   if (head.quarantinedAt) return verdict('quarantined');
   if (!ev) return verdict('no_eval');
   if (ev.version !== head.version) return verdict('stale_eval');
-  if (!meetsBaselineRatio(ratio, EVERMIND_CODING_QUALITY_BAR)) return verdict('below_bar');
+  if (!meetsParity(ratio, EVERMIND_CODING_QUALITY_BAR)) return verdict('below_bar');
   return verdict('qualified');
 }
 
@@ -134,19 +135,6 @@ export function codingEvalFromRow(row: {
 }
 
 const MAX_MODEL_ID_CHARS = 200;
-const MAX_DATASET_CHARS = 200;
-
-function readSummary(raw: unknown, which: string): { ok: true; summary: { dataset: string; meanScore: number; cases: number } } | { ok: false; error: string } {
-  if (!raw || typeof raw !== 'object') return { ok: false, error: `${which} report is required` };
-  const r = raw as Record<string, unknown>;
-  const dataset = typeof r.dataset === 'string' ? r.dataset.trim() : '';
-  const meanScore = typeof r.meanScore === 'number' ? r.meanScore : Number.NaN;
-  const cases = Array.isArray(r.cases) ? r.cases.length : typeof r.cases === 'number' ? r.cases : Number.NaN;
-  if (!dataset || dataset.length > MAX_DATASET_CHARS) return { ok: false, error: `${which} report needs a dataset name` };
-  if (!Number.isFinite(meanScore) || meanScore < 0 || meanScore > 1) return { ok: false, error: `${which} meanScore must be in [0, 1]` };
-  if (!Number.isInteger(cases) || cases <= 0) return { ok: false, error: `${which} report needs at least one case` };
-  return { ok: true, summary: { dataset, meanScore, cases } };
-}
 
 /**
  * Turn the two EvalHarness reports — Evermind's and the frontier baseline's — into the
@@ -161,13 +149,8 @@ export function codingEvalFromReports(args: {
   evaluatedAt: Date;
 }): { ok: true; eval: EvermindCodingEval } | { ok: false; error: string } {
   if (!Number.isInteger(args.version) || args.version <= 0) return { ok: false, error: 'version must be the positive head version the eval scored' };
-  const ev = readSummary(args.evermind, 'evermind');
-  if (!ev.ok) return ev;
-  const base = readSummary(args.baseline, 'baseline');
-  if (!base.ok) return base;
-  const notSameEval = sameEvalProblem(ev.summary, base.summary);
-  if (notSameEval) return { ok: false, error: notSameEval };
-  if (!(base.summary.meanScore > 0)) return { ok: false, error: 'baseline meanScore must be above 0 to compare against' };
+  const pair = readComparablePair(args.evermind, args.baseline, { candidate: 'evermind', frontier: 'baseline' });
+  if (!pair.ok) return pair;
   const baselineModel = typeof args.baselineModel === 'string' && args.baselineModel.trim()
     ? args.baselineModel.trim().slice(0, MAX_MODEL_ID_CHARS)
     : null;
@@ -175,10 +158,10 @@ export function codingEvalFromReports(args: {
     ok: true,
     eval: {
       version: args.version,
-      score: ev.summary.meanScore,
-      baselineScore: base.summary.meanScore,
+      score: pair.candidate.meanScore,
+      baselineScore: pair.frontier.meanScore,
       baselineModel,
-      dataset: ev.summary.dataset,
+      dataset: pair.candidate.dataset,
       evaluatedAt: args.evaluatedAt.toISOString(),
     },
   };

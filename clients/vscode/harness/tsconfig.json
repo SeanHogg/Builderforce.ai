@@ -17,7 +17,8 @@
     "paths": {
       "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-tools": ["../../../packages/agent-tools/src/index.ts"],
-      "@builderforce/agent-tools/*": ["../../../packages/agent-tools/src/*"]
+      "@builderforce/agent-tools/*": ["../../../packages/agent-tools/src/*"],
+      "@builderforce/cost-levers": ["../../../packages/cost-levers/src/index.ts"]
     }
   },
   "include": ["**/*.ts", "../vitest.config.ts"]

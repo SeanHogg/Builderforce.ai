@@ -33,7 +33,7 @@ import { asksForChange } from '@builderforce/agent-stall';
 import { isCodeChangeTool } from './localWorkspaceTools';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { visitTarget } from './runActivity';
-import { stableStringify } from '@builderforce/agent-tools';
+import { BACK_TO_BACK_AT, callFingerprint } from '@builderforce/run-guards';
 import type { BrainMessage } from './types';
 
 /** One target the run went back to more than once. */
@@ -60,12 +60,9 @@ export interface RepeatStreak {
   failed: number;
 }
 
-/**
- * Consecutive identical calls at which the streak becomes a verdict on its own.
- * Two in a row is a retry; three is the model asking the same question a third time
- * after hearing the same answer twice, whatever the rest of the run looks like.
- */
-export const BACK_TO_BACK_AT = 3;
+/** Consecutive identical calls at which the streak becomes a verdict on its own —
+ *  the shared `@builderforce/run-guards` threshold the live guards use too. */
+export { BACK_TO_BACK_AT };
 
 /** Tools that MUTATE something — the run's "did it have an effect" evidence.
  *  Covers the IDE workspace writers (`isCodeChangeTool`) plus the gateway's
@@ -94,18 +91,12 @@ export function hasEditIntent(messages: BrainMessage[]): boolean {
 
 /**
  * The structural signature of a call — what makes two calls "the same call". Same
- * fingerprint the live loop-breakers use (`readCoverage.ts`, `repeatedFailure.ts`):
+ * fingerprint the live loop-breakers use (`@builderforce/run-guards`):
  * same tool, same arguments in any key order — so the report and the in-run
  * advisories always agree on what "identical" means.
  */
 function callSignature(ev: BrainTraceEvent): string {
-  let args = '';
-  try {
-    args = stableStringify(ev.args ?? null);
-  } catch {
-    args = String(ev.args ?? '');
-  }
-  return `${ev.label}(${args})`;
+  return callFingerprint(ev.label, ev.args);
 }
 
 /**

@@ -16,6 +16,11 @@
  *   • `container/fileWindow.mjs`       ← `packages/agent-tools/src/fileWindow.ts` (the
  *     `read_file` line window + its "call again with offset" note, so the image honours
  *     the `offset`/`limit` the shared schema advertises).
+ *   • `container/semanticTools.mjs`    ← `packages/agent-tools/src/semantic-tools.ts` (+
+ *     `tool.ts`): the shared `repo_map` / `semantic_search` definitions (PRD C5).
+ *   • `container/readOnlyTools.mjs`    ← `api/src/application/runtime/costLoop/readOnlyTools.ts`:
+ *     THE read-only tool table (PRD D8), so the image loop's `isReadOnly` port names the
+ *     same tools the durable runner's does.
  *
  * `--check` needs no compiler: each bundle's header carries a hash of the source it was
  * built from, so the check recomputes it and fails the moment a source changes without
@@ -57,6 +62,24 @@ const BUNDLES = [
     srcDir: join(REPO_ROOT, 'packages', 'agent-tools', 'src'),
     files: ['fileWindow.ts'],
     exports: ['READ_DEFAULT_LINE_LIMIT', 'windowFileContent', 'fileWindowNote'],
+  },
+  {
+    // THE `repo_map` / `semantic_search` definitions (PRD C5). The image backs their
+    // `repo.semantic` capability with its bf-context binary (`container/repoIndex.mjs`),
+    // so the result the model reads is the one Desktop and the durable runner produce.
+    // `tool.ts` rides along for `defineTool`; its imports are type-only.
+    out: join(API_ROOT, 'container', 'semanticTools.mjs'),
+    srcDir: join(REPO_ROOT, 'packages', 'agent-tools', 'src'),
+    files: ['tool.ts', 'semantic-tools.ts'],
+    exports: ['defineTool', 'semanticSearchTool', 'repoMapTool', 'SEMANTIC_TOOLS'],
+  },
+  {
+    // THE read-only tool table (PRD D8). The durable runner's `isReadOnly` port reads it
+    // in TypeScript; the image loop's reads this compiled copy — one list of names.
+    out: join(API_ROOT, 'container', 'readOnlyTools.mjs'),
+    srcDir: join(API_ROOT, 'src', 'application', 'runtime', 'costLoop'),
+    files: ['readOnlyTools.ts'],
+    exports: ['READ_ONLY_CLOUD_TOOLS', 'isReadOnlyCloudTool'],
   },
 ];
 

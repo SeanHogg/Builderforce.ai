@@ -252,6 +252,13 @@ export default {
       'keyed by a monotonic history number under one object and must never be overwritten, ' +
       'because the history IS the value.',
 
+  "llm_batch_jobs":
+      'a PROVIDER BATCH QUEUE row, not a run. Grain is one deferred LLM request awaiting an ' +
+      'Anthropic/OpenAI batch result: request body, provider batch id, callback kind and a ' +
+      'claim lease. It has no steps, no agent, no outcome a person reviews, and is purged ' +
+      'once settled. A `run` is work an agent performs and a person follows; this is a ' +
+      'pricing transport for calls nobody waits on (cost lever D6).',
+
   "llm_action_ratings":
       'labelled ROUTING SIGNAL, not a user\'s comment on an object. Grain is one row per rater ' +
       'per rated thing, keyed by (surface, subject, resolvedModel), and the reader is the ' +

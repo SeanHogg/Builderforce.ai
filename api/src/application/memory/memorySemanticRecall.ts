@@ -14,7 +14,41 @@ import type { PgColumn } from 'drizzle-orm/pg-core';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentMemory, projectFacts } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { MEMORY_EMBEDDING_MODEL } from './memoryEmbedding';
+import { MEMORY_VECTOR_SPACES, type MemoryVectorSpace, type MemoryVectorSpaceId } from './memoryEmbedding';
+
+/**
+ * Which column (and model stamp) holds each vector space, per store (1256). The ANN
+ * reads and the backfill claims resolve a space through these
+ * two maps, so adding a space is a row here rather than a branch at every query.
+ */
+interface SpaceColumns {
+  vector: PgColumn;
+  model: PgColumn;
+}
+export const AGENT_MEMORY_SPACE_COLUMNS: Readonly<Record<MemoryVectorSpaceId, SpaceColumns>> = {
+  legacy: { vector: agentMemory.embedding, model: agentMemory.embeddingModel },
+  bge_m3: { vector: agentMemory.embedding1024, model: agentMemory.embedding1024Model },
+};
+export const PROJECT_FACTS_SPACE_COLUMNS: Readonly<Record<MemoryVectorSpaceId, SpaceColumns>> = {
+  legacy: { vector: projectFacts.embedding, model: projectFacts.embeddingModel },
+  bge_m3: { vector: projectFacts.embedding1024, model: projectFacts.embedding1024Model },
+};
+
+/** Which space an ANN read compares in, and the dual-read restriction (see `memoryQueryVectors`). */
+export interface AnnSpaceOptions {
+  /** Default: the 1536 legacy space. */
+  space?: MemoryVectorSpace;
+  /** Only rows with NO vector in this space — the dual-read fallback arm. */
+  onlyRowsLacking?: MemoryVectorSpaceId;
+}
+
+/** The space predicate + distance expression for one store. */
+function spaceClause(columns: Readonly<Record<MemoryVectorSpaceId, SpaceColumns>>, opts: AnnSpaceOptions | undefined) {
+  const space = opts?.space ?? MEMORY_VECTOR_SPACES.legacy;
+  const col = columns[space.id];
+  const lacking = opts?.onlyRowsLacking ? isNull(columns[opts.onlyRowsLacking].vector) : undefined;
+  return { col, where: and(eq(col.model, space.model), lacking) };
+}
 
 /** One candidate from either arm, before fusion. */
 export interface RecalledRow {
@@ -49,8 +83,10 @@ export async function annRecallScoped(
   scopes: ReadonlyArray<{ kind: string; id: number }>,
   queryVector: string,
   limit: number,
+  spaceOpts?: AnnSpaceOptions,
 ): Promise<RecalledRow[]> {
   if (scopes.length === 0) return [];
+  const { col, where: inSpace } = spaceClause(AGENT_MEMORY_SPACE_COLUMNS, spaceOpts);
   const scopeClause = or(
     ...scopes.map((s) => and(eq(agentMemory.scopeKind, s.kind), eq(agentMemory.scopeId, s.id))),
   );
@@ -61,7 +97,7 @@ export async function annRecallScoped(
       scopeKind: agentMemory.scopeKind,
       origin: agentMemory.origin,
       expiresAt: agentMemory.expiresAt,
-      score: similarity(sql`${agentMemory.embedding}`, queryVector),
+      score: similarity(sql`${col.vector}`, queryVector),
     })
     .from(agentMemory)
     .where(
@@ -70,10 +106,10 @@ export async function annRecallScoped(
         tenantId,
         scopeClause,
         unexpired(agentMemory.expiresAt),
-        eq(agentMemory.embeddingModel, MEMORY_EMBEDDING_MODEL),
+        inSpace,
       ),
     )
-    .orderBy(sql`${agentMemory.embedding} <=> ${queryVector}::vector`)
+    .orderBy(sql`${col.vector} <=> ${queryVector}::vector`)
     .limit(limit);
   return rows.map((r) => ({
     id: `scoped:${r.scopeKind}:${r.key}`,
@@ -94,13 +130,15 @@ export async function annRecallProject(
   queryVector: string,
   limit: number,
   qaCacheSource: string,
+  spaceOpts?: AnnSpaceOptions,
 ): Promise<RecalledRow[]> {
+  const { col, where: inSpace } = spaceClause(PROJECT_FACTS_SPACE_COLUMNS, spaceOpts);
   const rows = await db
     .select({
       key: projectFacts.key,
       content: projectFacts.content,
       expiresAt: projectFacts.expiresAt,
-      score: similarity(sql`${projectFacts.embedding}`, queryVector),
+      score: similarity(sql`${col.vector}`, queryVector),
     })
     .from(projectFacts)
     .where(
@@ -113,10 +151,10 @@ export async function annRecallProject(
         // ANN arm must not nominate a superseded row for the join to only drop.
         isNull(projectFacts.supersededBy),
         unexpired(projectFacts.expiresAt),
-        eq(projectFacts.embeddingModel, MEMORY_EMBEDDING_MODEL),
+        inSpace,
       ),
     )
-    .orderBy(sql`${projectFacts.embedding} <=> ${queryVector}::vector`)
+    .orderBy(sql`${col.vector} <=> ${queryVector}::vector`)
     .limit(limit);
   return rows.map((r) => ({
     id: `project:${r.key}`,
@@ -155,5 +193,37 @@ export async function unembeddedProjectFacts(db: Db, limit: number): Promise<Arr
     // Same declared sweep, project half — see `unembeddedMemories`.
     .where(acrossTenants(projectFacts, 'scheduled_sweep', isNull(projectFacts.embedding)))
     .orderBy(asc(projectFacts.updatedAt))
+    .limit(limit);
+}
+
+/**
+ * Rows with no vector in `space`, by id after `afterId` — the 1024 backfill's KEYSET
+ * claim (1256). Unlike the legacy claim (oldest-updated first, which re-serves a row
+ * whose embed keeps failing at the head of every pass), a keyset walk moves past a bad
+ * row; the sweep persists the last id and wraps to the start when a lap completes.
+ */
+export async function unembeddedInSpace(
+  db: Db,
+  store: 'agent_memory' | 'project_facts',
+  space: MemoryVectorSpaceId,
+  afterId: string,
+  limit: number,
+): Promise<Array<{ id: string; key: string; content: string }>> {
+  if (store === 'agent_memory') {
+    const col = AGENT_MEMORY_SPACE_COLUMNS[space];
+    return db
+      .select({ id: agentMemory.id, key: agentMemory.key, content: agentMemory.content })
+      .from(agentMemory)
+      // Same DECLARED platform sweep as `unembeddedMemories`.
+      .where(acrossTenants(agentMemory, 'scheduled_sweep', isNull(col.vector), afterId ? gt(agentMemory.id, afterId) : undefined))
+      .orderBy(asc(agentMemory.id))
+      .limit(limit);
+  }
+  const col = PROJECT_FACTS_SPACE_COLUMNS[space];
+  return db
+    .select({ id: projectFacts.id, key: projectFacts.key, content: projectFacts.content })
+    .from(projectFacts)
+    .where(acrossTenants(projectFacts, 'scheduled_sweep', isNull(col.vector), afterId ? gt(projectFacts.id, afterId) : undefined))
+    .orderBy(asc(projectFacts.id))
     .limit(limit);
 }

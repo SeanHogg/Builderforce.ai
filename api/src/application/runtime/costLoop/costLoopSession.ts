@@ -3,7 +3,8 @@
  * lines (it must not grow): which tools a turn advertises (C1), the request messages
  * with the volatile tail (B1), compaction extras (C2 masking + the task-brief pin),
  * the `tool_search` / `update_task_state` meta tools (C1 / C3), the per-role output cap
- * (D5) and the run budget (A2).
+ * (D5), the run budget (A2), and the in-run guards (loopGuards.ts: A3 progress
+ * detector, D7 post-edit check, D1 verifier cascade, D8 concurrent reads).
  *
  * Every lever is read once per tick through `isCostLeverOn`; with a lever off, its
  * part of the session reproduces the engine's behaviour from before the lever existed.
@@ -24,11 +25,12 @@ import {
 import { UPDATE_TASK_STATE_SCHEMA, UPDATE_TASK_STATE_TOOL, applyTaskStateUpdate, renderTaskState, type TaskState } from './taskState';
 import { ledgerRunSpend, readRunTokenCap, renderBudget, turnSpend, type RunSpend } from './runBudget';
 import { turnRequestMessages } from './volatileTail';
+import { LoopGuards, type LoopGuardState } from './loopGuards';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { notifyContainmentStop } from '../../alerts/containmentAlert';
 
 /** What the cost levers persist across durable ticks. */
-export interface CostLoopState {
+export interface CostLoopState extends LoopGuardState {
   /** C1: tools loaded beyond the role core set (prompt-named, searched, or called). */
   loadedTools?: string[];
   /** C3: the agent's structured task state. */
@@ -70,6 +72,8 @@ export interface CostLoopSessionArgs {
 
 export class CostLoopSession {
   readonly stablePrefix: boolean;
+  /** The in-run guards (A3 / D7 / D1 / D8) — the engine wraps its hooks and ports with them. */
+  readonly guards: LoopGuards;
   private readonly deferred: boolean;
   private readonly masking: boolean;
   private readonly taskStateOn: boolean;
@@ -86,6 +90,7 @@ export class CostLoopSession {
   constructor(private readonly a: CostLoopSessionArgs, private readonly tokenCap: number | undefined) {
     const on = (id: Parameters<typeof isCostLeverOn>[1]) => isCostLeverOn(a.env, id, a.tenantId);
     this.stablePrefix = on('b1_stable_prefix');
+    this.guards = new LoopGuards(a.env, a.tenantId, a.resume, a.db);
     this.deferred = on('c1_deferred_tools');
     this.masking = on('c2_observation_masking');
     this.taskStateOn = on('c3_task_state');
@@ -168,7 +173,7 @@ export class CostLoopSession {
     return turnRequestMessages(messages, {
       stablePrefix: this.stablePrefix,
       ...(dynamicSystem ? { dynamicSystem } : {}),
-      sections: [this.budgetLine, this.taskStateOn ? renderTaskState(this.taskState) : ''],
+      sections: [this.budgetLine, this.taskStateOn ? renderTaskState(this.taskState) : '', ...this.guards.tailSections()],
     });
   }
 
@@ -212,6 +217,7 @@ export class CostLoopSession {
       ...(this.taskState ? { taskState: this.taskState } : {}),
       ...(this.budgetOn && this.spend && !this.child ? { ...this.spend } : {}),
       ...(this.budgetOn ? { tokenCap: this.tokenCap } : {}),
+      ...this.guards.snapshot(),
     };
   }
 

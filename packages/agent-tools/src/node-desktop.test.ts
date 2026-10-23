@@ -10,6 +10,7 @@ import {
   healthReportsCompress,
   desktopRepoMapSection,
   desktopSemanticCapability,
+  GROUNDING_MAP_ADAPTIVE_TOKENS,
   liveDesktop,
   readDesktopModelsEndpoint,
   setDesktopFetchForTests,
@@ -116,6 +117,16 @@ describe("desktop context client", () => {
     expect(readDesktopModelsEndpoint()).toBeNull();
     setDesktopFetchForTests(fakeService({}));
     expect(await liveDesktop()).toMatchObject({ port: 4999, token: "tok" });
+  });
+
+  it("asks for the small adaptive map only when the caller's C4 lever is on", async () => {
+    publish();
+    const budgets: unknown[] = [];
+    setDesktopFetchForTests(fakeService({ "repo-map": (body) => { budgets.push(body.maxTokens); return { map: "src/a.ts\n", status: READY }; } }));
+    await desktopRepoMapSection("/repo");
+    await desktopRepoMapSection("/repo", { adaptive: true });
+    expect(budgets).toEqual([1200, GROUNDING_MAP_ADAPTIVE_TOKENS]);
+    expect(GROUNDING_MAP_ADAPTIVE_TOKENS).toBe(400);
   });
 
   it("caches the probe instead of re-checking health on every call", async () => {

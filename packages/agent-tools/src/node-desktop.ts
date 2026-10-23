@@ -58,6 +58,12 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const COMPRESS_TIMEOUT_MS = 120_000;
 /** The repo map carried in every turn's grounding — enough to orient, small enough to keep. */
 const GROUNDING_MAP_TOKENS = 1200;
+/**
+ * The grounding map's starting budget under adaptive context (cost lever
+ * `c4_adaptive_context`). The section already points the model at `repo_map` with
+ * `focus` for more, so the per-turn map only has to orient — the run widens on demand.
+ */
+export const GROUNDING_MAP_ADAPTIVE_TOKENS = 400;
 
 const SEMANTIC_TOOL_NAMES: ReadonlySet<string> = new Set(SEMANTIC_TOOLS.map((t) => t.name));
 
@@ -225,9 +231,10 @@ async function desktopCompress(text: string, rate: number): Promise<CompressResu
  * is attached only when the caller has seen the health probe report it — use
  * {@link catalogDesktopSemantic}, which decides that from the probe.
  */
-export function desktopSemanticCapability(root: string, opts?: { compress?: boolean }): RepoSemanticCapability {
+export function desktopSemanticCapability(root: string, opts?: { compress?: boolean; adaptive?: boolean }): RepoSemanticCapability {
   return {
     ...(opts?.compress ? { compress: desktopCompress } : {}),
+    ...(opts?.adaptive ? { adaptive: true } : {}),
     async search(query, opts): Promise<SemanticSearchResult> {
       try {
         const r = await call<{ results: SemanticSearchHit[]; status: DesktopIndexStatus }>("search", {
@@ -248,6 +255,7 @@ export function desktopSemanticCapability(root: string, opts?: { compress?: bool
           root,
           ...(opts?.maxTokens ? { maxTokens: opts.maxTokens } : {}),
           ...(opts?.focus?.length ? { focus: opts.focus } : {}),
+          ...(opts?.query?.trim() ? { query: opts.query.trim() } : {}),
         });
         if (!r) return { ok: false, error: NOT_RUNNING };
         return { ok: true, map: r.map, indexing: indexing(r.status) };
@@ -262,9 +270,9 @@ export function desktopSemanticCapability(root: string, opts?: { compress?: bool
  * Catalog-time probe: the semantic backing when Desktop is live, else `undefined`.
  * Surfaces advertise `repo.semantic` only when this returns a capability — never always-on.
  */
-export async function catalogDesktopSemantic(root: string): Promise<RepoSemanticCapability | undefined> {
+export async function catalogDesktopSemantic(root: string, opts?: { adaptive?: boolean }): Promise<RepoSemanticCapability | undefined> {
   if (!(await liveDesktop())) return undefined;
-  return desktopSemanticCapability(root, { compress: await desktopCompressAvailable() });
+  return desktopSemanticCapability(root, { compress: await desktopCompressAvailable(), adaptive: opts?.adaptive });
 }
 
 /**
@@ -309,8 +317,11 @@ export async function checkReferences(root: string, texts: readonly string[]): P
  * The repo map as a grounding section, or '' when the service is absent or has nothing
  * indexed yet. Carried in every turn's workspace grounding (both chat surfaces).
  */
-export async function desktopRepoMapSection(root: string): Promise<string> {
-  const r = await desktopSemanticCapability(root).repoMap({ maxTokens: GROUNDING_MAP_TOKENS });
+export async function desktopRepoMapSection(root: string, opts?: { adaptive?: boolean }): Promise<string> {
+  // `adaptive` = the caller's `isCostLeverOn(env, "c4_adaptive_context", tenantId)`; this
+  // module reads no lever. Off (or omitted) = today's 1200-token map.
+  const maxTokens = opts?.adaptive ? GROUNDING_MAP_ADAPTIVE_TOKENS : GROUNDING_MAP_TOKENS;
+  const r = await desktopSemanticCapability(root, { adaptive: opts?.adaptive }).repoMap({ maxTokens });
   if (!r.ok || !r.map?.trim()) return "";
   return [
     "## Repository map (Builderforce Desktop — files ranked by how much the code depends on them)",

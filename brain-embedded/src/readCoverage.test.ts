@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { ReadCoverage, revisitAdvisory, withAdvisory, REVISIT_NUDGE_AT, REVISIT_HARD_AT } from './readCoverage';
+import { revisitAdvisory, withAdvisory, REVISIT_NUDGE_AT, REVISIT_HARD_AT } from '@builderforce/run-guards';
+import { ReadCoverage } from './readCoverage';
 
 const CSS = 'frontend/src/components/home/LandingCanvasHero.module.css';
 

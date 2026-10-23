@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { REFLECTION_SCORE_FLOOR, runEarnedReflection, skillReflectionDirective } from './skillReflection';
+import { REFLECTION_SCORE_FLOOR, draftSkillFromRun, runEarnedReflection, skillReflectionDirective } from './skillReflection';
 
 /**
  * GAP C1 — the bar that decides whether a run's work counts as evidence. It exists
@@ -39,5 +39,43 @@ describe('skillReflectionDirective', () => {
 
   it('is empty for a run with no repository to have learned a procedure about', () => {
     expect(skillReflectionDirective(false)).toBe('');
+  });
+});
+
+describe('draftSkillFromRun (E1 auto-propose)', () => {
+  const run = {
+    taskId: 42, taskTitle: 'Add a dark-mode toggle', executionId: 900, agentLabel: 'Coder', projectId: 7,
+    trace: [
+      { tool: 'search_code', args: { query: 'ThemeProvider' } },
+      { tool: 'read_file', args: { path: 'src/theme.ts' } },
+      { tool: 'read_file', args: { path: 'src/theme.ts' } },
+      { tool: 'finish.blocked', args: { reason: 'branch_ci' } },
+      { tool: 'tool_search', args: { query: 'x' } },
+      { tool: 'edit_file', args: { path: 'src/theme.ts', old_string: 'a', new_string: 'b' } },
+      { tool: 'run_checks', args: {} },
+      { tool: 'finish', args: { summary: 'done' } },
+    ],
+    filesTouched: ['src/theme.ts'],
+    verification: 'ci_green' as const,
+  };
+
+  it('drafts the procedure from the trace: telemetry and loop control dropped, repeats folded', () => {
+    const d = draftSkillFromRun(run);
+    expect(d.slug).toBe('auto-task-42');
+    expect(d.body).toContain('1. `search_code` — ThemeProvider');
+    expect(d.body).toContain('2. `read_file` — src/theme.ts (×2)');
+    expect(d.body).toContain('3. `edit_file` — src/theme.ts');
+    expect(d.body).toContain('4. `run_checks`');
+    expect(d.body).not.toContain('finish.blocked');
+    expect(d.body).not.toContain('tool_search');
+    expect(d.body).toContain('- `src/theme.ts`');
+    expect(d.body).toContain('branch CI went green');
+  });
+
+  it('is stamped with its origin for the reviewer, and never claims approval', () => {
+    const d = draftSkillFromRun({ ...run, verification: 'merged' });
+    expect(d).toMatchObject({ originExecutionId: 900, originTaskId: 42, projectId: 7, authorLabel: 'Coder (auto-drafted)' });
+    expect(d.description).toContain('Needs human review');
+    expect(d.evidence).toContain('the change was merged');
   });
 });

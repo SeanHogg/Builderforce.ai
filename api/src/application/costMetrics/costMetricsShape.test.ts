@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildCostMetricsReport, buildRunCostBreakdown, compareLeverArms, readContextCategories, toGroupMetrics,
+  buildCostMetricsReport, buildRunBudget, buildRunCostBreakdown, compareLeverArms, readContextCategories, toGroupMetrics,
+  toServedWithoutModel,
 } from './costMetricsShape';
 import type { CostMetricRow, RunTurnRow } from './costMetricsStore';
 import { COST_METRIC_GROUPS, COST_METRIC_GROUP_BYS, isCostMetricGroupBy, isCostMetricWindow } from './costMetricGroups';
@@ -37,6 +38,60 @@ describe('toGroupMetrics', () => {
   });
 });
 
+const NO_SERVED = { served: 0, dispatched: 0 };
+
+describe('servedWithoutModel', () => {
+  it('is the share of ALL requests (served without a model + served by one) answered without a model', () => {
+    expect(toServedWithoutModel({ served: 25, dispatched: 75 })).toEqual({ requests: 25, share: 0.25 });
+    expect(toServedWithoutModel(NO_SERVED)).toEqual({ requests: 0, share: 0 });
+  });
+
+  it('rides every report, whatever the grouping', () => {
+    const report = buildCostMetricsReport([row()], { window: '7d', windowDays: 7, groupBy: 'actionType', limit: 200, served: { served: 1, dispatched: 3 } });
+    expect(report.servedWithoutModel).toEqual({ requests: 1, share: 0.25 });
+  });
+});
+
+describe('groupBy=day', () => {
+  it('is a UTC YYYY-MM-DD series read in ascending key order', () => {
+    expect(COST_METRIC_GROUPS.day.key).toContain("'YYYY-MM-DD'");
+    expect(COST_METRIC_GROUPS.day.series).toBe(true);
+    expect(isCostMetricGroupBy('day')).toBe(true);
+    const report = buildCostMetricsReport(
+      [row({ groupKey: '2026-10-20' }), row({ groupKey: '2026-10-21' })],
+      { window: '7d', windowDays: 7, groupBy: 'day', limit: 200, served: NO_SERVED },
+    );
+    expect(report.groups.map((g) => g.group)).toEqual(['2026-10-20', '2026-10-21']);
+    expect(report.groups[0]).toMatchObject({ calls: 10, costUsd: 5 });
+  });
+});
+
+describe('buildRunBudget', () => {
+  const payload = (limits: Record<string, unknown>) => JSON.stringify({ containmentLimits: limits });
+
+  it('names the payload when the run overrode a cap', () => {
+    expect(buildRunBudget({ found: true, declaredSpendMillicents: 500_000, payload: payload({ maxSpendMillicents: 500_000, maxTokens: 1_000 }) }, 'pro'))
+      .toEqual({ capUsd: 5, capTokens: 1_000, source: 'payload' });
+  });
+
+  it('falls back to the plan token cap and the declared spend row', () => {
+    expect(buildRunBudget({ found: true, declaredSpendMillicents: 2_500_000, payload: '{}' }, 'pro'))
+      .toEqual({ capUsd: 25, capTokens: 2_000_000, source: 'plan' });
+  });
+
+  it('is the platform default when the plan is unknown, and null for a missing run', () => {
+    expect(buildRunBudget({ found: true, declaredSpendMillicents: null, payload: 'not json' }, null))
+      .toEqual({ capUsd: null, capTokens: 200_000, source: 'default' });
+    expect(buildRunBudget({ found: false, declaredSpendMillicents: null, payload: null }, 'pro')).toBeNull();
+  });
+
+  it('rides the run breakdown', () => {
+    expect(buildRunCostBreakdown(9, [], null, 1000).budget).toBeNull();
+    const budget = { capUsd: 1, capTokens: 2, source: 'plan' as const };
+    expect(buildRunCostBreakdown(9, [], null, 1000, budget).budget).toEqual(budget);
+  });
+});
+
 describe('compareLeverArms', () => {
   it('pairs each lever on-arm with its off-arm and differences the metrics', () => {
     const groups = [
@@ -54,8 +109,8 @@ describe('compareLeverArms', () => {
   });
 
   it('only builds comparisons for groupBy=lever', () => {
-    expect(buildCostMetricsReport([row()], { window: '7d', windowDays: 7, groupBy: 'none', limit: 200 })).not.toHaveProperty('levers');
-    const report = buildCostMetricsReport([row({ groupKey: 'c1_deferred_tools', arm: 'on' })], { window: '30d', windowDays: 30, groupBy: 'lever', limit: 1 });
+    expect(buildCostMetricsReport([row()], { window: '7d', windowDays: 7, groupBy: 'none', limit: 200, served: NO_SERVED })).not.toHaveProperty('levers');
+    const report = buildCostMetricsReport([row({ groupKey: 'c1_deferred_tools', arm: 'on' })], { window: '30d', windowDays: 30, groupBy: 'lever', limit: 1, served: NO_SERVED });
     expect(report.levers).toHaveLength(1);
     expect(report.truncated).toBe(true);
     expect(report.basis).toBe('provider_reported');

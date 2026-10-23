@@ -403,7 +403,7 @@ function mapStopReason(stop: unknown): string {
 
 /** Build an OpenAI chat-completion object from an Anthropic Messages response, so
  *  the rest of the gateway (parser, empty-200 guard, cloud loop, SDK) is unchanged. */
-function toOpenAIResponse(raw: unknown, model: string): Record<string, unknown> {
+export function toOpenAIResponse(raw: unknown, model: string): Record<string, unknown> {
   const r = raw as { id?: string; content?: unknown[]; stop_reason?: unknown; usage?: Record<string, unknown> } | null;
   const blocks = Array.isArray(r?.content) ? r!.content : [];
   let text = '';
@@ -453,9 +453,10 @@ function toOpenAIResponse(raw: unknown, model: string): Record<string, unknown> 
  * and `callStream`. `stream` flips the `stream: true` flag; everything else — the OAuth
  * vs api-key auth, the Claude-Code identity system block OAuth requires, prompt caching
  * on the stable prefix, extended-thinking gating, structured-output passthrough — is identical,
- * so the two surfaces can never drift on request shape.
+ * so the two surfaces can never drift on request shape. Exported for the Message Batches
+ * adapter (`anthropicBatch.ts`), whose per-request `params` are this same body.
  */
-function prepareAnthropicRequest(
+export function prepareAnthropicRequest(
   params: VendorCallParams,
   stream: boolean,
 ): { headers: Record<string, string>; body: Record<string, unknown>; isOAuth: boolean } {

@@ -38,6 +38,7 @@ import {
   alertEvents,
   authTokens,
   authUserSessions,
+  cascadeOutcomes,
   catalogAdoptionEvents,
   connectorCallLogs,
   deliveries,
@@ -50,6 +51,8 @@ import {
   executionClaims,
   executionLimits,
   ideTrainingLogs,
+  llmBatchJobs,
+  llmSpecialistEvalCases,
   magicLinkTokens,
   marketingHeatmapPages,
   marketingSessionPrompts,
@@ -188,6 +191,14 @@ export const BOUNDED_TELEMETRY_TABLES: readonly SweptTable[] = [
     rationale: 'AI summaries of recordings; the recordings themselves go at 90d, this is the 13-month Insights window.' }),
   entry({ relation: 'replay_releases', connections: BOTH, table: replayReleases, tenanted: replayReleases, column: replayReleases.lastSeenAt, days: 400, reclaimable: false,
     rationale: 'Insights release markers not seen for 13 months — their daily rows are gone.' }),
+  // ── LLM cost optimisation (1254 / 1255+0020 / 1257) — autovacuum restated in 1258 / 0021 ──
+  entry({ relation: 'cascade_outcomes', connections: CORE, table: cascadeOutcomes, tenanted: cascadeOutcomes, column: cascadeOutcomes.createdAt, days: 90, floor: 30,
+    rationale: 'Append-only D1 verifier-cascade outcomes — the training rows of the D2 head. The daily training sweep and the D1 weak-pass-rate prior both read the last 30 days (DIFFICULTY_TRAINING_DAYS), so the floor sits on that window; a quarter keeps a trend readable.' }),
+  entry({ relation: 'llm_batch_jobs', connections: BOTH, table: llmBatchJobs, tenanted: llmBatchJobs, column: llmBatchJobs.createdAt, days: 30, floor: 7, reclaimable: false,
+    only: () => inArray(llmBatchJobs.status, ['completed', 'failed']),
+    rationale: 'The D6 deferred-call queue. Only SETTLED jobs age out — an open job is work that has not happened yet. A settled row has already had its request cleared and its usage metered into llm_usage_log, so past a month it is provenance nobody opens. Not reclaimable: the tick claims rows from it.' }),
+  entry({ relation: 'llm_specialist_eval_cases', connections: CORE, table: llmSpecialistEvalCases, tenanted: llmSpecialistEvalCases, column: llmSpecialistEvalCases.capturedAt, days: 180, floor: 90, reclaimable: false,
+    rationale: 'The E2 specialist eval catalogue (captured job inputs + the frontier reference output). Capped per job by the registry; ageing a case out after six months lets fresh inputs be captured, so the eval set tracks what the job sees today instead of freezing on its first weeks.' }),
 ];
 
 /** Credentials and leases past their own expiry. Window = expiry + a 7-day grace. */

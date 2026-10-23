@@ -283,16 +283,19 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### LLM cost optimization — open items (PRD: LLM Cost Optimization Layer) `[agents]`
 
-Wave 1 shipped (see DONE.md 2026-10-22). Still open:
+Waves 1–2 shipped (see DONE.md 2026-10-22 and 2026-10-23). Still open:
 
 - **builderforce-memory 2026.10.22 is committed but not published to npm.** *Blocker: operator approval to push the `v2026.10.22` release tag (the publish was refused as a public action).* It unblocks: the VS Code "Import from builderforce-memory" lossless compaction (`clients/vscode` memorySnapshot/markdownMemory/memoryImport/evermindView changes held uncommitted until the version resolves), the api's native `pinned` handoff option (a local `ensurePinned` fallback covers it meanwhile) and reasoning tokens reaching the ledger through `readUsageFields`.
 - **The 100 already-stubbed local memory facts have no full copy.** `memory_restore` can import text, but no backup exists; the only remnant is the Evermind coordinator `mem:` records (≤2,000 chars, unkeyed). *Blocker: an operator export of those records.* Stubs are now flagged `contentLost` and injected labelled at half weight.
 - **The installed Claude Code memory hook predates the labels.** Re-run `builderforce-memory-install` after the publish. *Blocker: operator approval — it rewrites the user's Claude Code hooks.*
 - **Semantic cache index stays in KV (LSH, ≤64 entries per bucket).** Moving it to Vectorize needs a `vectorize` binding in `api/wrangler.toml` and a deploy. *Blocker: binding + deploy.*
-- **Cloud loop never requests the 1h prompt-cache TTL;** the vendors honour it when passed. Not blocked.
-- **VS Code Evermind recall probe goes through `/answer`,** which may record a memory "saving" per probe question. Not blocked.
-- **`brain-embedded/src/windowFit/packForModel.test.ts` "summary path" fails at HEAD** (pre-existing, confirmed on a clean worktree of 6cbbab71f): the handoff note comes back with role `user`, the test expects `assistant`. The packer (`@seanhogg/builderforce-memory` 2026.10.3 `noteRole(after[0])`) alternates the note's role against the tail's first message; either the test's fixture or its expectation is stale. Not blocked.
-- **Wave 2 (in progress):** A3 cloud progress detector, B4 agent answer replay, C4 adaptive context, C5 cloud repo map, C6 reranker, C8 compression call sites, D1 verifier cascade, D2 difficulty router, D6 batch API, D7 deterministic handlers, D8 concurrent dispatch, E1 auto-proposed skills, E2 specialists, E3 free embeddings, E5 verified local label, A4 cost dashboard UI.
+- **VS Code Evermind recall probe goes through `/answer`,** which may record a memory "saving" per probe question. It ships with the held VS Code lossless-compaction change (patch kept in the session scratchpad: `vscode-lossless-compaction.patch`). *Blocker: the builderforce-memory 2026.10.22 publish above.*
+- **Container image with `bf-context` has not been built or smoke-tested.** The multi-stage Dockerfile (api/container) builds bf-context from builderforce-inference @ 174566a; the local Docker daemon was not running, so the first build is CI's / the next deploy's. *Blocker: a running Docker daemon or the deploy pipeline.* Unblocks C5 on container runs.
+- **Provider batch APIs (D6) have never run live.** Anthropic Message Batches and OpenAI Batch adapters are unit-tested only. *Blocker: a live `CLAUDE_API_KEY` / `OPENAI_API_KEY` batch round-trip.* Batch calls write usage rows but no `llm_traces` rows yet — not blocked.
+- **Specialists (E2) admit nothing until eval cases accumulate:** the weekly sweep needs captured samples per job before any model can be admitted. *Blocker: production traffic.*
+- **D2 difficulty router and E5 verified local label train on live outcomes;** both stay inert until `cascade_outcomes` / the local-success heads have ≥ 50 samples. *Blocker: production traffic.*
+- **E3 free embeddings stay at 0% until the 1024-d backfill covers both stores;** `memory-embedding-catchup` runs hourly until drained, then flip `COST_LEVER_E3_FREE_EMBEDDINGS`. *Blocker: the backfill finishing in production.*
+- **Durable `semantic_search` is keyword-over-definitions only** (container runs get bf-context search). Dense search on durable runs means embedding repo chunks per commit (Workers AI + an R2/Vectorize vector store) — a recurring per-commit embedding cost. *Decision needed: operator — worth that cost, or keyword-only on durable runs?*
 
 ### Workload-aware routing and model hand-off `[agents]`
 

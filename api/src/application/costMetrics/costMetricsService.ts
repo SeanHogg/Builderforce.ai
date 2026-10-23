@@ -16,11 +16,13 @@ import type { Db } from '../../infrastructure/database/connection';
 import { getCacheVersion, getOrSetCached, outcomesVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { COST_METRIC_WINDOWS, type CostMetricGroupBy, type CostMetricWindow } from './costMetricGroups';
 import {
-  COST_METRIC_GROUP_LIMIT, RUN_TURN_LIMIT, readCostMetricRows, readRunOutcome, readRunTurns,
-  type CostMetricWindowSpec,
+  COST_METRIC_GROUP_LIMIT, RUN_TURN_LIMIT, readCostMetricRows, readRunBudgetInputs, readRunOutcome, readRunTurns,
+  readServedWithoutModel, type CostMetricWindowSpec,
 } from './costMetricsStore';
+import { resolveTenantEffectivePlan } from '../tenant/tenantPlanSnapshot';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
-  buildCostMetricsReport, buildRunCostBreakdown, toGroupMetrics,
+  buildCostMetricsReport, buildRunBudget, buildRunCostBreakdown, toGroupMetrics,
   type CostGroupMetrics, type CostMetricsReport, type RunCostBreakdown,
 } from './costMetricsShape';
 
@@ -38,8 +40,11 @@ export async function computeCostMetrics(
   groupBy: CostMetricGroupBy,
 ): Promise<CostMetricsReport> {
   const windowDays = COST_METRIC_WINDOWS[window];
-  const rows = await readCostMetricRows(db, tenantId, windowDays, groupBy);
-  return buildCostMetricsReport(rows, { window, windowDays, groupBy, limit: COST_METRIC_GROUP_LIMIT });
+  const [rows, served] = await Promise.all([
+    readCostMetricRows(db, tenantId, windowDays, groupBy),
+    readServedWithoutModel(db, tenantId, windowDays),
+  ]);
+  return buildCostMetricsReport(rows, { window, windowDays, groupBy, limit: COST_METRIC_GROUP_LIMIT, served });
 }
 
 export async function getCostMetrics(
@@ -53,7 +58,7 @@ export async function getCostMetrics(
   const ver = await getCacheVersion(env, outcomesVersionKey(tenantId));
   return getOrSetCached(
     env,
-    `cost:metrics:t:${tenantId}:w:${window}:g:${groupBy}:v:${ver}:b:${costMetricsBucket(nowMs)}`,
+    `cost:metrics:v2:t:${tenantId}:w:${window}:g:${groupBy}:v:${ver}:b:${costMetricsBucket(nowMs)}`,
     () => computeCostMetrics(db, tenantId, window, groupBy),
     TTL,
   );
@@ -69,13 +74,25 @@ export async function tenantCostSummary(db: Db, tenantId: number, window: CostMe
   return row ? toGroupMetrics(row) : null;
 }
 
-/** Uncached: one run's per-turn breakdown. */
-export async function computeRunCostBreakdown(db: Db, tenantId: number, executionId: number): Promise<RunCostBreakdown> {
-  const [turns, outcome] = await Promise.all([
+/** The tenant's effective plan for the budget's plan default - null (so `default`) when unreadable. */
+async function planForBudget(env: Env | undefined, db: Db, tenantId: number): Promise<string | null> {
+  try {
+    return await resolveTenantEffectivePlan(env, tenantId, db);
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/costMetrics/costMetricsService.ts', operation: 'planForBudget', context: { tenantId }, level: 'warning' });
+    return null;
+  }
+}
+
+/** Uncached: one run's per-turn breakdown and its budget. */
+export async function computeRunCostBreakdown(db: Db, tenantId: number, executionId: number, env?: Env): Promise<RunCostBreakdown> {
+  const [turns, outcome, budgetInputs, plan] = await Promise.all([
     readRunTurns(db, tenantId, executionId),
     readRunOutcome(db, tenantId, executionId),
+    readRunBudgetInputs(db, tenantId, executionId),
+    planForBudget(env, db, tenantId),
   ]);
-  return buildRunCostBreakdown(executionId, turns, outcome, RUN_TURN_LIMIT);
+  return buildRunCostBreakdown(executionId, turns, outcome, RUN_TURN_LIMIT, buildRunBudget(budgetInputs, plan));
 }
 
 export async function getRunCostBreakdown(
@@ -88,8 +105,8 @@ export async function getRunCostBreakdown(
   const ver = await getCacheVersion(env, outcomesVersionKey(tenantId));
   return getOrSetCached(
     env,
-    `cost:run:t:${tenantId}:e:${executionId}:v:${ver}:b:${costMetricsBucket(nowMs)}`,
-    () => computeRunCostBreakdown(db, tenantId, executionId),
+    `cost:run:v2:t:${tenantId}:e:${executionId}:v:${ver}:b:${costMetricsBucket(nowMs)}`,
+    () => computeRunCostBreakdown(db, tenantId, executionId, env),
     TTL,
   );
 }

@@ -8,10 +8,15 @@
  *   - changed TS/JS is evaluated by source-only, low-false-positive quality rules.
  * Full build / type-check / lint / tests remain CI-on-PR work (and run directly on
  * the long-lived Container surface). Never throws.
+ *
+ * {@link checkFileContent} is the per-file policy on bytes already in hand — the
+ * post-edit check (cost PRD D7) runs it on a `write_file`'s content without a read back.
  */
 import { parse as parseYaml } from 'yaml';
 import { readRepoFile, type RepoReadContext } from './readRepoContents';
 import { inspectAgentSource } from './sourceQualityPolicy';
+
+export type VerifyError = { path: string; message: string; line?: number; ruleId?: string };
 
 export interface VerifyResult {
   /** False when any statically-checkable file failed to parse. */
@@ -21,54 +26,65 @@ export interface VerifyResult {
   /** Files with no applicable policy, or which were unreadable/truncated. */
   skipped: string[];
   /** Parse failures the agent must fix. */
-  errors: Array<{ path: string; message: string; line?: number; ruleId?: string }>;
+  errors: VerifyError[];
 }
 
 const JSON_EXT = /\.json$/i;
 const YAML_EXT = /\.ya?ml$/i;
 const SOURCE_EXT = /\.[cm]?[jt]sx?$/i;
 
-export async function verifyWrittenFiles(
-  ctx: RepoReadContext,
-  paths: Iterable<string>,
-): Promise<VerifyResult> {
-  const list = [...paths];
-  const outcomes = await Promise.all(list.map(async (path): Promise<
-    { kind: 'checked' | 'skipped'; path: string }
-    | { kind: 'errors'; path: string; errors: Array<{ message: string; line?: number; ruleId?: string }> }
-  > => {
-    const isJson = JSON_EXT.test(path);
-    const isYaml = YAML_EXT.test(path);
-    const isSource = SOURCE_EXT.test(path);
-    if (!isJson && !isYaml && !isSource) return { kind: 'skipped', path };
-    const rf = await readRepoFile(ctx, path);
-    // Can't read (transient) or content was truncated for size → don't false-fail.
-    if (!rf.ok || rf.truncated) return { kind: 'skipped', path };
-    try {
-      if (isJson) JSON.parse(rf.content);
-      else if (isYaml) parseYaml(rf.content);
-      else {
-        const findings = inspectAgentSource(path, rf.content);
-        if (findings.length) {
-          return {
-            kind: 'errors', path,
-            errors: findings.map((f) => ({ message: f.message, line: f.line, ruleId: f.ruleId })),
-          };
-        }
-      }
-      return { kind: 'checked', path };
-    } catch (e) {
-      return { kind: 'errors', path, errors: [{ message: (e as Error).message.slice(0, 240) }] };
-    }
-  }));
+/** Whether any shell-free policy applies to this path. */
+export function isVerifiablePath(path: string): boolean {
+  return JSON_EXT.test(path) || YAML_EXT.test(path) || SOURCE_EXT.test(path);
+}
 
+/** One file's content against its policy: `skipped` when none applies. Never throws. */
+export function checkFileContent(
+  path: string,
+  content: string,
+): { kind: 'checked' | 'skipped' } | { kind: 'errors'; errors: Array<Omit<VerifyError, 'path'>> } {
+  if (!isVerifiablePath(path)) return { kind: 'skipped' };
+  try {
+    if (JSON_EXT.test(path)) JSON.parse(content);
+    else if (YAML_EXT.test(path)) parseYaml(content);
+    else {
+      const findings = inspectAgentSource(path, content);
+      if (findings.length) {
+        return { kind: 'errors', errors: findings.map((f) => ({ message: f.message, line: f.line, ruleId: f.ruleId })) };
+      }
+    }
+    return { kind: 'checked' };
+  } catch (e) {
+    return { kind: 'errors', errors: [{ message: (e as Error).message.slice(0, 240) }] };
+  }
+}
+
+/** Fold per-file outcomes into one result. */
+export function foldVerifyOutcomes(
+  outcomes: ReadonlyArray<{ path: string } & ReturnType<typeof checkFileContent>>,
+): VerifyResult {
   const checked: string[] = [];
   const skipped: string[] = [];
-  const errors: Array<{ path: string; message: string; line?: number; ruleId?: string }> = [];
+  const errors: VerifyError[] = [];
   for (const o of outcomes) {
     if (o.kind === 'errors') errors.push(...o.errors.map((error) => ({ path: o.path, ...error })));
     else if (o.kind === 'checked') checked.push(o.path);
     else skipped.push(o.path);
   }
   return { ok: errors.length === 0, checked, skipped, errors };
+}
+
+export async function verifyWrittenFiles(
+  ctx: RepoReadContext,
+  paths: Iterable<string>,
+): Promise<VerifyResult> {
+  const list = [...paths];
+  const outcomes = await Promise.all(list.map(async (path) => {
+    if (!isVerifiablePath(path)) return { path, kind: 'skipped' as const };
+    const rf = await readRepoFile(ctx, path);
+    // Can't read (transient) or content was truncated for size → don't false-fail.
+    if (!rf.ok || rf.truncated) return { path, kind: 'skipped' as const };
+    return { path, ...checkFileContent(path, rf.content) };
+  }));
+  return foldVerifyOutcomes(outcomes);
 }

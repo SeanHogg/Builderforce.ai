@@ -86,6 +86,8 @@ async function panel(stream: BrainStreamFn) {
     modelFallback: createModelFallbackChannel(),
     reportError: vi.fn(),
     safety: () => ({ url: null, allowedOrigins: new Set<string>(), factsFor: () => undefined }),
+    // No in-page model store in these turn tests: the composer's `localStore` is optional.
+    pageEngines: { store: undefined },
   } as unknown as PanelServices;
   // Another panel window over the same device record: its writes reach this one only
   // through the channel.

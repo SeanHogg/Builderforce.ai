@@ -24,6 +24,28 @@ function scripted(turns: Turn[]) {
 }
 
 describe('runImageLoop', () => {
+  it("D8: dispatches a turn's consecutive reads concurrently when given the read-only port, and in order without it", async () => {
+    const run = async (isReadOnly?: (name: string) => boolean) => {
+      const { llm } = scripted([
+        { content: '', toolCalls: [call('c1', 'read_file', { path: 'a' }), call('c2', 'read_file', { path: 'b' })] },
+        { content: 'done', toolCalls: [] },
+      ]);
+      let inFlight = 0;
+      let peak = 0;
+      const execTool = async () => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight--;
+        return { ok: true };
+      };
+      await runImageLoop({ messages: [], llm, execTool, isCancelled: () => false, ...(isReadOnly ? { isReadOnly } : {}) });
+      return peak;
+    };
+    expect(await run((name) => name === 'read_file')).toBe(2);
+    expect(await run()).toBe(1);
+  });
+
   it('finishes on a bare answer and on the finish tool', async () => {
     const { llm } = scripted([
       { content: 'reading', toolCalls: [call('c1', 'read_file', { path: 'a.ts' })] },

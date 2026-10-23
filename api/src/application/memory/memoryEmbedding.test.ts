@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MEMORY_EMBEDDING_DIMS,
   MEMORY_EMBEDDING_MODEL,
+  MEMORY_VECTOR_SPACES,
   embedMemoryText,
   memoryEmbeddingAvailable,
   memoryEmbeddingText,
@@ -62,5 +63,29 @@ describe('toVectorLiteral', () => {
   it('rejects a vector of the wrong width and an empty one', () => {
     expect(toVectorLiteral([1, 2, 3])).toBeNull();
     expect(toVectorLiteral([])).toBeNull();
+  });
+});
+
+describe('vector spaces (1256, E3)', () => {
+  it('pins the free space to Cloudflare bge-m3 at 1024 dims, the 1536 space unchanged', () => {
+    expect(MEMORY_VECTOR_SPACES.legacy.model).toBe(MEMORY_EMBEDDING_MODEL);
+    expect(MEMORY_VECTOR_SPACES.bge_m3.model.startsWith('cloudflare/')).toBe(true);
+    expect(MEMORY_VECTOR_SPACES.bge_m3.dims).toBe(1024);
+    expect(MEMORY_VECTOR_SPACES.bge_m3.available({ CLOUDFLARE_AI_API_TOKEN: 't' } as unknown as Env)).toBe(false);
+    expect(MEMORY_VECTOR_SPACES.bge_m3.available({ CLOUDFLARE_AI_API_TOKEN: 't', CLOUDFLARE_ACCOUNT_ID: 'a' } as unknown as Env)).toBe(true);
+  });
+
+  it('checks a literal against its own space width', () => {
+    const v1024 = Array.from({ length: 1024 }, () => 1);
+    expect(toVectorLiteral(v1024)).toBeNull();
+    expect(toVectorLiteral(v1024, MEMORY_VECTOR_SPACES.bge_m3)).not.toBeNull();
+    expect(toVectorLiteral(vector(1), MEMORY_VECTOR_SPACES.bge_m3)).toBeNull();
+  });
+
+  it('requests the bge-m3 model for the free space and refuses a 1536 answer', async () => {
+    dispatch.mockResolvedValueOnce({ data: [{ index: 0, embedding: vector(0.5) }] });
+    const cf = { CLOUDFLARE_AI_API_TOKEN: 't', CLOUDFLARE_ACCOUNT_ID: 'a' } as unknown as Env;
+    expect(await embedMemoryText(cf, 'q', MEMORY_VECTOR_SPACES.bge_m3)).toBeNull();
+    expect(dispatch.mock.calls[0]![0]).toMatchObject({ model: MEMORY_VECTOR_SPACES.bge_m3.model });
   });
 });

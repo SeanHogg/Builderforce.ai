@@ -28,7 +28,7 @@ import { connect as netConnect } from 'node:net';
 // `node:tls` is what lets this process read the peer certificate the Worker cannot.
 import { connect as tlsConnect } from 'node:tls';
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { join, dirname, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzip } from 'node:zlib';
@@ -52,11 +52,32 @@ import { runImageLoop } from './agentImageLoop.mjs';
 import { SHELL_CAPTURE_CHARS, fitToolText, keepTail, modelToolResultPolicy, toolOutputCap } from './toolOutputPolicy.mjs';
 import { applyStringEdit, editFacts } from './stringEdit.mjs';
 import { fileWindowNote, windowFileContent } from './fileWindow.mjs';
+// PRD C5: the shared `repo_map` / `semantic_search` definitions (compiled from
+// `packages/agent-tools/src/semantic-tools.ts`) over the image's bf-context index.
+import { repoMapTool, semanticSearchTool } from './semanticTools.mjs';
+import { REPO_INDEX_TOOL_NAMES, bfContextAvailable, startRepoIndex } from './repoIndex.mjs';
+// PRD D7: the project's own fast checks after a turn's edits, failures only.
+import { cloneCheckIo, createPostEditChecks } from './postEditChecks.mjs';
+// PRD D8: THE read-only tool table (compiled from `costLoop/readOnlyTools.ts` by
+// `api/scripts/gen-container-shared.mjs`), so the loop's `isReadOnly` port names the same
+// tools the durable runner's does.
+import { isReadOnlyCloudTool } from './readOnlyTools.mjs';
 
 /** Tools this image runs against its clone beyond the shared image-local set — the
  *  container's half of the capability handshake. The Actions runner does not implement
  *  `edit_file`, so it is named here rather than in the shared relay list. */
 const CONTAINER_LOCAL_TOOL_NAMES = ['edit_file'];
+
+/** This run's local tool names: the constant set, plus `repo_map` / `semantic_search`
+ *  when the run's repo index is live (C5 lever on AND bf-context in this image). The
+ *  Worker advertises only what the handshake names, so a run without the index is never
+ *  offered the two tools. */
+function containerLocalToolNames(local) {
+  return local && local.repoIndex ? [...CONTAINER_LOCAL_TOOL_NAMES, ...REPO_INDEX_TOOL_NAMES] : CONTAINER_LOCAL_TOOL_NAMES;
+}
+
+/** The shared semantic tool definitions, by name — dispatched against the run's index. */
+const SEMANTIC_TOOL_BY_NAME = new Map([[repoMapTool.name, repoMapTool], [semanticSearchTool.name, semanticSearchTool]]);
 
 /** Whether the C7 lever is on for this run — decided by the Worker (it owns the tenant
  *  and the env) and carried on the run spec. Absent ⇒ off: an older Worker never
@@ -152,7 +173,7 @@ async function op(spec, body) {
 /** Run a shell command in `cwd`, capturing combined stdout/stderr and the exit code.
  *  `proc` (optional) is a holder whose `.current` is set to the live child so the
  *  heartbeat loop can SIGKILL an in-flight command when the run is cancelled. */
-function runShell(command, cwd, proc) {
+function runShell(command, cwd, proc, timeoutMs = COMMAND_TIMEOUT_MS) {
   return new Promise((resolve) => {
     const child = spawn('bash', ['-lc', command], { cwd, env: process.env });
     if (proc) proc.current = child;
@@ -160,8 +181,9 @@ function runShell(command, cwd, proc) {
     const cap = (chunk) => { out = keepTail(out + chunk, SHELL_CAPTURE_CHARS.container); };
     child.stdout.on('data', cap);
     child.stderr.on('data', cap);
-    const timer = setTimeout(() => { child.kill('SIGKILL'); }, COMMAND_TIMEOUT_MS);
-    const done = (result) => { clearTimeout(timer); if (proc && proc.current === child) proc.current = null; resolve(result); };
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs);
+    const done = (result) => { clearTimeout(timer); if (proc && proc.current === child) proc.current = null; resolve({ ...result, timedOut }); };
     child.on('close', (code) => done({ exitCode: code ?? -1, output: out }));
     child.on('error', (e) => done({ exitCode: -1, output: `${out}\n${e.message}` }));
   });
@@ -360,7 +382,14 @@ async function verifyThenRemember(spec, workdir, writtenPaths, finalOutput, proc
   await op(spec, { op: 'verify', args: { writtenPaths: [...writtenPaths], results, summary: finalOutput } }).catch(() => {});
 }
 
-async function execTool(spec, workdir, writtenPaths, readMemo, name, parsed, proc, loop) {
+async function execTool(spec, workdir, writtenPaths, readMemo, name, parsed, proc, loop, local) {
+  if (SEMANTIC_TOOL_BY_NAME.has(name)) {
+    // The shared definition (argument parsing, budgets, result shape) over this run's
+    // bf-context index — the `repo.semantic` capability `repoIndex.mjs` backs.
+    if (!local || !local.repoIndex) return { ok: false, error: `${name} is not available on this run — use list_files / run_command (grep)` };
+    const r = await SEMANTIC_TOOL_BY_NAME.get(name).execute(parsed, { caps: { capabilities: new Set(['repo.semantic']), semantic: local.repoIndex } });
+    return r.data;
+  }
   if (name === 'list_files') {
     if (!workdir) return { ok: false, error: 'no repository bound to this task' };
     return listFiles(
@@ -397,7 +426,7 @@ async function execTool(spec, workdir, writtenPaths, readMemo, name, parsed, pro
       try { await mkdir(dirname(join(workdir, path)), { recursive: true }); await writeFile(join(workdir, path), content); } catch { /* non-fatal; commit is source of truth */ }
     }
     const r = await op(spec, { op: 'write', args: { path, content, summary: parsed.summary, isNew } });
-    if (r.ok) { writtenPaths.add(path); readMemo.delete(path); }
+    if (r.ok) { writtenPaths.add(path); readMemo.delete(path); local?.checks?.touch(path); }
     return r;
   }
   if (name === 'edit_file') {
@@ -423,6 +452,7 @@ async function execTool(spec, workdir, writtenPaths, readMemo, name, parsed, pro
     try { await writeFile(join(workdir, path), edit.content); } catch { /* non-fatal; commit is source of truth */ }
     writtenPaths.add(path);
     readMemo.delete(path);
+    local?.checks?.touch(path);
     const facts = editFacts(edit);
     return {
       ok: true,
@@ -716,6 +746,59 @@ async function startPreviewDevServer(spec, workdir) {
   await fail(`the dev server did not answer on port ${step.port ?? PREVIEW_PORT} within ${Math.round((attempts * intervalMs) / 1000)}s — command: ${chosen.command}`);
 }
 
+/** Post a timeline event for a local service; a missed event never affects the run. */
+function localServiceEvent(spec, toolName, detail, result) {
+  op(spec, { op: 'event', args: { toolName, category: 'tool', detail, result: String(result).slice(0, 300) } })
+    .catch((e) => console.warn(`[container] ${toolName} event not recorded: ${e instanceof Error ? e.message : String(e)}`));
+}
+
+/**
+ * Start the clone's local services, each behind its lever on the run spec:
+ *   • C5 `spec.repoMap` — index the clone with bf-context in the background (never
+ *     awaited: the first turn must not wait for it);
+ *   • D7/D1 `spec.postEditChecks` — the debounced post-edit fast checks (their failures
+ *     reach the model under `spec.postEditSteer`; their verdict reaches the Worker's cascade).
+ */
+async function startLocalServices(spec, workdir, proc, local) {
+  if (spec.repoMap === true && (await bfContextAvailable())) {
+    try {
+      local.repoIndex = await startRepoIndex({
+        workdir,
+        onEvent: (e) => localServiceEvent(spec, 'runtime.repo_index', e, e.phase === 'ready' ? `repo index ready in ${e.durationMs}ms` : `repo index failed: ${e.error}`),
+      });
+    } catch (e) {
+      localServiceEvent(spec, 'runtime.repo_index', { phase: 'failed' }, `repo index could not start: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (spec.postEditChecks === true) {
+    const bins = new Map();
+    const hasBin = (name) => {
+      if (!bins.has(name)) bins.set(name, runShell(`command -v ${name} >/dev/null 2>&1`, workdir, null, 10_000).then((r) => r.exitCode === 0));
+      return bins.get(name);
+    };
+    local.checks = createPostEditChecks({
+      workdir,
+      run: (command, cwd, timeoutMs) => runShell(command, cwd, proc, timeoutMs),
+      io: cloneCheckIo(workdir, { access, readFile, hasBin }),
+      fit: (output) => fitToolText(output, toolOutputCap('run_command'), { tool: 'run_command', summarize: true }),
+      onEvent: (e) => localServiceEvent(spec, 'runtime.post_edit_check', e, `${e.check}${e.cwd ? ` (${e.cwd})` : ''}: ${e.skipped ? `skipped (${e.skipped})` : e.timedOut ? 'timed out' : `exit ${e.exitCode}`}`),
+    });
+  }
+}
+
+/** The previous turn's post-edit verdict (`{ passed, verifier, reason?, steer }`), or
+ *  null when no check judged it. A check runner that throws is recorded and costs the
+ *  turn nothing. */
+async function drainPostEditChecks(spec, local) {
+  if (!local.checks) return null;
+  try {
+    return await local.checks.drainVerdict();
+  } catch (e) {
+    localServiceEvent(spec, 'runtime.post_edit_check', { error: true }, `post-edit checks failed to run: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
 /**
  * Drive the agent loop to completion, then finalize (PR) via the Worker.
  *
@@ -729,6 +812,10 @@ async function startPreviewDevServer(spec, workdir) {
  */
 async function runLoop(spec) {
   let workdir = null;
+  // The run's local services over the clone: the C5 repo index and the D7 post-edit
+  // checks. Each exists only when its lever is on for this run (decided by the Worker,
+  // carried on the spec) and the clone landed.
+  const local = { repoIndex: null, checks: null };
   const writtenPaths = new Set();
   const readMemo = new Map();
   let finalOutput = '';
@@ -780,6 +867,8 @@ async function runLoop(spec) {
       }
     }
 
+    if (workdir) await startLocalServices(spec, workdir, proc, local);
+
     // ── LIVE PREVIEW ────────────────────────────────────────────────────────────
     // Start the project's dev server BEFORE the agent loop, so the preview is already
     // coming up while the first LLM turn is in flight rather than only after the run
@@ -819,11 +908,25 @@ async function runLoop(spec) {
       // `CONTAINER_SURFACE_CAPS` the moment its Worker-side op exists rather than only
       // after every image has been rebuilt and deployed. An older image simply omits
       // the new name and is never offered the tool.
-      llm: (transcript) => op(spec, { op: 'llm', args: { messages: transcript, supportedTools: [...SUPPORTED_TOOL_NAMES, ...CONTAINER_LOCAL_TOOL_NAMES], writtenPaths: [...writtenPaths] } }),
-      execTool: (name, parsed, loop) => execTool(spec, workdir, writtenPaths, readMemo, name, parsed, proc, loop),
+      llm: async (transcript) => {
+        // D7: the previous turn's edits are checked ONCE, here, before the next paid turn
+        // — so a batch of edits costs one check run, and the model reads only failures
+        // (when the Worker turned the steer on).
+        const checked = await drainPostEditChecks(spec, local);
+        if (checked && checked.steer && spec.postEditSteer === true) transcript.push({ role: 'user', content: checked.steer });
+        // D1: the same verdict goes to the Worker, whose `llm` op owns the model choice —
+        // a failed check moves a weak-first run one tier up for THIS turn. `checks` is
+        // present (null when nothing judged) only while this run has a verifier, which is
+        // what lets the Worker start it on the weak tier at all.
+        const checks = local.checks ? { checks: checked ? { passed: checked.passed, verifier: checked.verifier, ...(checked.reason ? { reason: checked.reason } : {}) } : null } : {};
+        return op(spec, { op: 'llm', args: { messages: transcript, supportedTools: [...SUPPORTED_TOOL_NAMES, ...containerLocalToolNames(local)], writtenPaths: [...writtenPaths], ...checks } });
+      },
+      execTool: (name, parsed, loop) => execTool(spec, workdir, writtenPaths, readMemo, name, parsed, proc, loop, local),
       // The C7 per-result budget on every tool row the model re-reads (logs summarized,
       // large JSON projected). Off ⇒ plain JSON, as before.
       toolResultPolicy: containerToolResultPolicy(spec),
+      // D8: a turn's consecutive reads dispatch concurrently, while the Worker turned it on.
+      ...(spec.parallelReads === true ? { isReadOnly: isReadOnlyCloudTool } : {}),
       // A heartbeat may have observed a cancel (and killed an in-flight command)
       // since the last step — stop before spending another LLM call.
       isCancelled: () => cancelled,
@@ -868,6 +971,7 @@ async function runLoop(spec) {
         await op(spec, { op: 'finalize', args: { writtenPaths: [...writtenPaths], finalOutput, cancelled } }).catch(() => {});
       }
     } finally {
+      if (local.repoIndex) await local.repoIndex.dispose();
       if (workdir) await rm(workdir, { recursive: true, force: true }).catch(() => {});
     }
   }

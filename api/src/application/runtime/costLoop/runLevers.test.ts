@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { pickCloudModel } from '../../llm/pickCloudModel';
-import { cloudOutputCap, cloudReasoningExecParams, cloudRoutingExploration, toolRowCodecOptions } from './runLevers';
+import { cloudOutputCap, cloudReasoningExecParams, cloudRoutingExploration, containerRunLevers, toolRowCodecOptions } from './runLevers';
 
 const OFF = { COST_LEVERS_ALL: 'off' };
 
@@ -63,5 +63,21 @@ describe('pickCloudModel — D3 exploration reaches only the soft seed', () => {
 
   it('a strict pin is untouched', () => {
     expect(pickCloudModel('openai/gpt-4.1', 'pro', false, { actionStats, explore })).toEqual({ model: 'openai/gpt-4.1', strict: true });
+  });
+});
+
+describe("containerRunLevers — the image's /run flags", () => {
+  it('is all off with the levers off', () => {
+    expect(containerRunLevers(OFF, 7)).toEqual({ repoMap: false, postEditChecks: false, postEditSteer: false, parallelReads: false });
+  });
+
+  it('runs the checks for D1 alone without showing the model their failures', () => {
+    expect(containerRunLevers({ COST_LEVERS_ALL: 'off', COST_LEVER_D1_VERIFIER_CASCADE: 'on' }, 7))
+      .toMatchObject({ postEditChecks: true, postEditSteer: false });
+  });
+
+  it('maps C5, D7 and D8 onto their flags', () => {
+    expect(containerRunLevers({ COST_LEVERS_ALL: 'off', COST_LEVER_C5_CLOUD_REPO_MAP: 'on', COST_LEVER_D7_DETERMINISTIC_HANDLERS: 'on', COST_LEVER_D8_PARALLEL_TOOL_CALLS: 'on' }, 7))
+      .toEqual({ repoMap: true, postEditChecks: true, postEditSteer: true, parallelReads: true });
   });
 });

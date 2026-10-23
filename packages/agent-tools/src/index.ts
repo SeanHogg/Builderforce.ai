@@ -39,3 +39,5 @@ export * from "./toolSearch.js";
 // LLMLingua-2 compression policy for oversized prose (cost lever C8); the compressor is
 // injected and fenced code is never sent.
 export * from "./compress.js";
+// Adaptive retrieval depth (cost lever C4): start at 3, widen only on a flat score field.
+export * from "./retrievalK.js";

@@ -49,7 +49,7 @@ import { and, eq } from 'drizzle-orm';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { buildMemoryCapability } from '../memory/memoryService';
 import { approvedSkillsForRun, buildSkillAuthoringCapability, rankSkillsForTask, renderSkillBlock } from '../skills/tenantSkillService';
-import { runEarnedReflection, skillReflectionDirective } from '../skills/skillReflection';
+import { recordRunReflection, skillReflectionDirective } from '../skills/skillReflection';
 import { isMemoryScope } from '../../domain/memory/memoryScope';
 import { buildCoordinationCapability, claimWriteLease, guardRepoWrite } from '../coordination/coordinationCapability';
 import { releaseAllForExecution, type LeaseHolder } from '../coordination/leaseService';
@@ -70,8 +70,7 @@ import { postRepoPrComment } from '../repos/postPrComment';
 import { openClaimedPullRequest, openTaskRepoSetPullRequests } from '../repos/openTaskPullRequest';
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../repos/readRepoContents';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
-import { pollBranchCi, ciFinishDecision } from '../ci/pollCommitCiStatus';
-import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
+import { pollBranchCi } from '../ci/pollCommitCiStatus';
 import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, estimateRequestTokens, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
 import type { ArcStage } from '@builderforce/workload';
 import { byoRoutingOptions } from '../llm/tenantProxy';
@@ -81,10 +80,15 @@ import { compactMessages, buildGatewaySummarizer, toolsTokensOf, CLOUD_COMPACT_D
 import { resolveTenantLlmCredentials, byoVendorIdsFromCredentials, type TenantVendorKeys } from '../llm/tenantProviderKeyService';
 import { assertCloudRunByo, type CloudByoFailure } from '../llm/cloudByoPolicy';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
-import { TenantRole } from '../../domain/shared/types';
+import { durableRepoSemantic, durableRunCaps, prepSurfaceCaps } from './cloudAgent/runSurfaceCaps';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { openCostLoopSession, type CostLoopState } from './costLoop/costLoopSession';
 import { workModeToolingPrompt } from './costLoop/workModePrompt';
+import { cloudTierLadder } from './costLoop/verifierCascade';
+import type { LoopGuardDeps } from './costLoop/loopGuards';
+import { withAnswerReplay } from './costLoop/answerReplay';
+import { evaluateFinishGates, finishGateSnapshot, initialFinishGateState, matchesRequiredReviewSignoff, missingReviewVerdictMessage, type RequiredReviewSignoff } from './cloudAgent/finishGates';
+export { matchesRequiredReviewSignoff, missingReviewVerdictMessage, type RequiredReviewSignoff } from './cloudAgent/finishGates';
 import { cloudReasoningExecParams, cloudRoutingExploration, toolRowCodecOptions } from './costLoop/runLevers';
 import { isCostLeverOn } from '@builderforce/cost-levers';
 import { ensureTaskPrdRecord, appendTaskPrdRevision, editTaskPrdSection, findTaskPrimarySpec } from '../prd/taskPrd';
@@ -95,9 +99,7 @@ import { applyPendingSteering, startCancelWatcher, CLOUD_RUN_CANCELLED_REASON } 
 import { notifyExecutionSubscribers } from './executionEvents';
 import { coercePausedLoopState, pauseExecutionForQuestion, withPausedToolResults, PAUSED_TOOL_RESULT_NOTE } from './executionPause';
 import {
-  CONTAINER_AGENT_TOOLS, CONTAINER_SURFACE_CAPS, CLOUD_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
-  MAX_PLACEHOLDER_FINISH_BLOCKS,
-  assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey,
+  CLOUD_RUN_TENANT_ROLE, cloudAgentToolsFor, cloudToolRegistry, policyGateCallKey,
 } from './cloudAgentTools';
 import {
   CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, applyStringEdit, editFacts,
@@ -111,8 +113,8 @@ import {
 } from '@seanhogg/builderforce-memory-engine/limbic';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, type LoopHooks, type LoopPorts, type LoopResult } from '@builderforce/agent-loop';
 import { buildLiveOrchestration } from './cloudLiveOrchestration';
-import { delegationCaps, isChildDelegation, meterExecutionIdOf, type CloudRunDelegation } from './cloudRunDelegation';
-import { absorbChildWrites, liveChildrenFinishBlock } from './cloudChildRuns';
+import { isChildDelegation, meterExecutionIdOf, type CloudRunDelegation } from './cloudRunDelegation';
+import { liveChildrenFinishBlock } from './cloudChildRuns';
 import { resolveAgentPersonaBrief } from '../agent/agentPersonaBrief';
 import { imageAdvertisedTools, readToolManifest } from './imageToolHandshake';
 import { renderRunContext, summarizeBlocks, type RunContextBlock } from '@builderforce/run-context';
@@ -145,7 +147,7 @@ import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { resolveAppBaseUrl } from '../../env';
 import type { Env } from '../../env';
 import { isAgentRunnable } from '../../domain/containment/agentState';
-import { recordCodeCompletionClaim, recordTypedExecutionClaim } from '../provenance/finishClaimService';
+import { recordTypedExecutionClaim } from '../provenance/finishClaimService';
 import { authorizeCredentialDelegation, delegateCredential, ensureAgentRunIdentity, revokeRunPrincipal } from '../agentIdentity/agentRunIdentity';
 import { checkRunLimits } from '../../domain/containment/runLimits';
 import { isHumanOrExternalOutputTool, trustNotice } from '../../domain/trust/contentTrust';
@@ -385,26 +387,6 @@ export interface CloudLoopResult {
   awaitingInput?: { approvalId: string; question: string };
 }
 
-export type RequiredReviewSignoff = { roleKey: string; laneKey?: string };
-
-/** Accept evidence only for the exact accountability slot that caused this run. */
-export function matchesRequiredReviewSignoff(
-  required: RequiredReviewSignoff | undefined,
-  toolName: string,
-  args: Record<string, unknown>,
-  succeeded: boolean,
-): boolean {
-  if (!required || !succeeded || toolName !== 'builtin_kanban_signoff') return false;
-  const roleKey = typeof args.roleKey === 'string' ? args.roleKey.trim() : '';
-  const laneKey = typeof args.laneKey === 'string' ? args.laneKey.trim() : undefined;
-  return roleKey === required.roleKey && laneKey === required.laneKey;
-}
-
-export function missingReviewVerdictMessage(required: RequiredReviewSignoff): string {
-  const lane = required.laneKey ? ` and laneKey='${required.laneKey}'` : '';
-  return `Cannot finish this reviewer assignment until you call builtin_kanban_signoff with roleKey='${required.roleKey}'${lane} and an explicit approved or changes_requested verdict. A narrative summary is not acceptance evidence.`;
-}
-
 /**
  * The durable/Worker surface's {@link CapabilityProvider}: the concrete backing for
  * the capability-gated tool registry on Cloudflare. It exposes the repo over the git
@@ -430,8 +412,8 @@ function buildCloudProvider(args: {
   repoMiss: string;
   /** Live set of paths written this run (mutated by write/delete). */
   writtenPaths: Set<string>;
-  /** The run's capability set — {@link CLOUD_SURFACE_CAPS} plus whatever the TENANT
-   *  unlocked (today: `web.search`). Must be the same set the advertised tool schemas
+  /** The run's capability set — `CLOUD_SURFACE_CAPS` plus whatever the TENANT
+   *  unlocked (`durableRunCaps`: C5's `repo.semantic`). Must be the set the tool schemas
    *  were derived from. */
   capabilities: ReadonlySet<Capability>;
   /** Replay: pin repo reads to this ref rather than computing base→branch. */
@@ -529,7 +511,7 @@ function buildCloudProvider(args: {
   };
 
   return {
-    capabilities: args.capabilities,
+    capabilities: args.capabilities, semantic: durableRepoSemantic(args.capabilities, { env, tenantId, projectId, repoCtx }),
     repoRead: {
       async listFiles(sub, glob) {
         if (!repoCtx) return { ok: false, error: noRepo() };
@@ -731,8 +713,9 @@ function buildCloudProvider(args: {
     // Durable cross-run memory, GOVERNED (0371): the run's scope chain decides both
     // what it may recall (ticket → project → tenant, never a sibling project) and where
     // a write lands, and every fact carries its origin run + optional TTL. The backing
-    // table is a routing detail of the scope, not a decision made here.
-    memory: buildMemoryCapability({ db, env, tenantId, projectId, ticketId: taskRow.id, origin: 'cloud-run', executionId }),
+    // table is a routing detail of the scope, not a decision made here. B4: a recall the
+    // project's answered-question memory already holds is replayed (`answerReplay.ts`).
+    memory: withAnswerReplay(buildMemoryCapability({ db, env, tenantId, projectId, ticketId: taskRow.id, origin: 'cloud-run', executionId }), { env, db, tenantId, projectId, agentRef: cloudAgentRef ?? null }),
     // Multi-agent coordination for this ticket: leases + the shared blackboard.
     coordination: buildCoordinationCapability({ env, db, holder: leaseHolder }),
     // Skill authoring: a run that worked out a repeatable procedure can PROPOSE it
@@ -832,7 +815,7 @@ async function runCloudToolLoop(
   // which is why it is part of CLOUD_SURFACE_CAPS rather than a per-run addition: the
   // advertised schemas and the wired backing come from the same constant and cannot
   // drift.
-  const surfaceCaps = delegationCaps(CLOUD_SURFACE_CAPS, opts?.delegation);
+  const surfaceCaps = durableRunCaps(env, tenantId, opts?.delegation, repoCtx);
   /** Where this run's tokens bill — a child's are its parent's. */
   const meterExecutionId = meterExecutionIdOf(executionId, opts?.delegation);
   const runIdentity = await ensureAgentRunIdentity(db, {
@@ -852,7 +835,7 @@ async function runCloudToolLoop(
     maxRepositories: executionLimits.maxRepositories,
     maxSpendMillicents: executionLimits.maxSpendMillicents,
   }).from(executionLimits).where(and(eq(executionLimits.tenantId, tenantId), eq(executionLimits.executionId, executionId))).limit(1);
-  const cloudTools = [...CLOUD_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas(opts?.originatingChatId)];
+  const cloudTools = [...cloudAgentToolsFor(surfaceCaps), ...cloudAgentPlatformToolSchemas(opts?.originatingChatId)];
   const effectiveSystemPrompt = tenantModel?.directives
     ? `${tenantModel.directives}\n\n${systemPrompt}`
     : systemPrompt;
@@ -1028,33 +1011,11 @@ async function runCloudToolLoop(
   // the run in `paused` and resume it when the question is answered.
   let awaitingInput: { approvalId: string; question: string } | null = null;
   let step = startStep;
-  // Honesty gate: this executor has no shell, so it can never actually run a
-  // build/type-check/test. Reject a finish that claims one passed — once — to force
-  // an honest summary; the opened PR is annotated unverified regardless.
-  let finishBlockedOnce = false;
-  // Anti-stub gate: count finish attempts blocked because committed files still
-  // contain placeholder/stub code, so the agent is forced to ship a real
-  // implementation (or delete the dead file) — see MAX_PLACEHOLDER_FINISH_BLOCKS.
-  // Carried across DO ticks via resume state (the durable surface runs one step per
-  // tick, so a per-call counter would reset before the cap was ever reached).
-  let placeholderBlocks = opts?.resume?.placeholderBlocks ?? 0;
-  // In-run CI (ticket #3092): the Worker has no shell, so branch commit status /
-  // check-runs ARE the build/type-check/test. Caps persist across durable ticks
-  // the same way placeholderBlocks does — a loop-local counter would reset every
-  // alarm and the gate would either never relent or never fire twice.
-  let ciPendingBlocks = opts?.resume?.ciPendingBlocks ?? 0;
-  let ciFailureBlocks = opts?.resume?.ciFailureBlocks ?? 0;
-  let ciVerified = false;
-  // Pre-finish completeness self-review (ROADMAP #38): block a finish that produced
-  // NO code deliverable exactly ONCE, re-prompting the agent to verify it met the
-  // PRD requirements. A genuine "nothing to change" run finishes on the retry; a
-  // premature one ("wrote a plan, shipped nothing") is forced to reconsider. Carried
-  // across DO ticks via resume state so the block isn't re-armed every tick.
-  // A sub-agent delivers a slice (often an answer, not code); its OWNER is held to the
-  // deliverable gate for the whole tree, so the child starts with it already spent.
-  let noDeliverableBlocked = opts?.resume?.noDeliverableBlocked ?? isChildDelegation(opts?.delegation);
+  // The finish gates' counters (`cloudAgent/finishGates.ts`): honesty, anti-stub, in-run
+  // CI, the completeness self-review and the reviewer verdict. Carried across DO ticks
+  // via resume state — a per-call counter would reset before any cap was reached.
+  const gates = initialFinishGateState(opts?.resume, isChildDelegation(opts?.delegation));
   const requiredSignoff = opts?.resume?.requiredSignoff ?? opts?.requiredSignoff;
-  let reviewVerdictRecorded = opts?.resume?.reviewVerdictRecorded ?? false;
 
   // Governance gates (compile-primitive policy modality). Resolved ONCE: a resumed
   // run reuses the gates persisted on its first tick (the payload may not survive
@@ -1072,6 +1033,10 @@ async function runCloudToolLoop(
     required: requiredSignoff ? ['builtin_kanban_signoff'] : [],
     record: (toolName, category, detail, result) => recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName, category, detail, result }),
   });
+  // D1 + D2: the role's tier ladder, and a soft seed's weak-first start (first tick only).
+  const ladder = cloudTierLadder(byoVendorIdsFromCredentials(loopCreds), routing.effectivePlan, routing.premiumOverride, loopCreds.configuredProviders.length > 0);
+  const stepFeatures = (turnIndex: number) => ({ actionType: learned.actionType, role: runRole, promptTokens: estimateRequestTokens(messages, cloudTools), toolCount: cloudTools.length, turnIndex });
+  if (!opts?.resume) modelState = await cost.guards.seedModel(modelState, { strict: pick.strict === true, ladder, features: stepFeatures(0) });
 
   // Hard cancel: a background watcher polls the (cross-isolate) execution status
   // and aborts the in-flight gateway fetch the instant it sees CANCELLED, so a
@@ -1127,8 +1092,8 @@ async function runCloudToolLoop(
   const codec = openAiChatCodec<Row>(toolRowCodecOptions(env, tenantId)); // C7: the shared tool-row budget
   const evt = { tenantId, cloudAgentRef, executionId };
   const dataOk = (data: unknown): boolean => !(data && typeof data === 'object' && (data as { ok?: unknown }).ok === false);
-  // Per-call timer. Calls within a turn are dispatched sequentially, so one slot is exact.
-  let tStart = 0;
+  // Per-call timers, by call id: a turn's reads may dispatch concurrently (D8).
+  const tStart = new Map<string, number>();
 
   const hooks: LoopHooks<Row> = {
     // Between-step guard: stop before issuing the next (paid) call if cancelled.
@@ -1188,7 +1153,7 @@ async function runCloudToolLoop(
         messages.push({ role: 'user', content: childBlock });
         return { action: 'continue' };
       }
-      if (requiredSignoff && !reviewVerdictRecorded) {
+      if (requiredSignoff && !gates.reviewVerdictRecorded) {
         const error = missingReviewVerdictMessage(requiredSignoff);
         messages.push({ role: 'assistant', content: turn.content });
         messages.push({ role: 'user', content: error });
@@ -1220,7 +1185,7 @@ async function runCloudToolLoop(
     },
 
     beforeDispatch: async (call) => {
-      tStart = Date.now();
+      tStart.set(call.id, Date.now());
       const name = call.name;
       const parsed = call.args;
       if (call.malformed) {
@@ -1293,145 +1258,27 @@ async function runCloudToolLoop(
       return undefined;
     },
 
-    onFinish: async (ctx, summary) => {
-      if (opts?.delegation) {
-        const childBlock = await liveChildrenFinishBlock(db, tenantId, executionId);
-        if (childBlock) return childBlock;
-        // The children committed from their own runs; the pull request is the whole tree's.
-        await absorbChildWrites(db, tenantId, executionId, repoCtx, writtenPaths);
-      }
-      // Four finish gates, in order. Either yields a block message that forces the
-      // agent to call finish again once it has corrected the run; null = ship.
-      // Validation is AUTOMATIC here: `run_checks` remains useful for an early
-      // self-check, but forgetting to call it cannot bypass the quality policy.
-      const prefinishVerification = repoCtx && writtenPaths.size > 0
-        ? await verifyWrittenFiles({ ...repoCtx, ref: repoCtx.branch }, writtenPaths)
-        : null;
-      // Ticket #3092: poll branch CI once static validation is clean. Decision is
-      // applied in the else-if chain below so a green/none result still falls
-      // through to honesty + anti-stub (an else-if that always matched would skip them).
-      let ciDecision: ReturnType<typeof ciFinishDecision> | null = null;
-      if (repoCtx && writtenPaths.size > 0 && prefinishVerification?.ok !== false) {
-        const ci = await pollBranchCi(repoCtx);
-        ciDecision = ciFinishDecision(ci, { pendingBlocks: ciPendingBlocks, failureBlocks: ciFailureBlocks });
-        ciPendingBlocks = ciDecision.pendingBlocks;
-        ciFailureBlocks = ciDecision.failureBlocks;
-        if (ciDecision.ciVerified) ciVerified = true;
-      }
-      // This run has just PERFORMED its verification action — `verifyWrittenFiles`
-      // above and/or the branch-CI poll. That is the moment the run enters the
-      // policy's `verify` phase, so every turn the block messages below force the
-      // agent to take is asked for as `verify` rather than continuing in `code`.
-      //
-      // It has to happen HERE, not in the verify/remember tail: that tail runs only
-      // once the run is over, so a phase applied there reduced the state into a value
-      // nobody ever read. `applyVerifyPhase` RETURNS the new state — the assignment is
-      // the whole point. Idempotent, so a second blocked finish is a no-op.
-      if (repoCtx && writtenPaths.size > 0) {
-        modelState = { ...modelState, policy: applyVerifyPhase(modelState.policy) };
-      }
-      let finishBlock: string | null = null;
-      if (requiredSignoff && !reviewVerdictRecorded) {
-        finishBlock = missingReviewVerdictMessage(requiredSignoff);
-        await recordCloudToolEvent(db, {
-          ...evt,
-          toolName: 'finish.blocked', category: 'tool',
-          detail: { reason: 'review_verdict_missing', ...requiredSignoff },
-          result: finishBlock,
-        });
-      } else if (repoCtx && !noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
-        // (0) Completeness self-review (ROADMAP #38): a code-bound run is finishing
-        // with NO code deliverable. Block ONCE and
-        // make the agent self-review the requirements — implement what's missing, or
-        // explicitly confirm no code change was required — before an empty finish is
-        // honored. A legitimate no-op run finishes on the retry.
-        noDeliverableBlocked = true;
-        finishBlock =
-          'Before finishing: you have not committed any code changes for this task — only the PRD (or nothing) is on the branch. Re-read the task requirements and verify EACH is actually implemented. If work remains, use search_code/read_file to find the right place and write_file to implement it, then finish. If — and only if — this task genuinely requires no code change, call finish again and state explicitly why no change was needed.';
-        await recordCloudToolEvent(db, {
-          ...evt,
-          toolName: 'finish.blocked', category: 'tool',
-          detail: { reason: 'no_deliverable' },
-          result: 'Blocked finish: no code deliverable — self-review required',
-        });
-      } else if (prefinishVerification && !prefinishVerification.ok) {
-        // (1) Mandatory changed-source/config policy. Unlike the optional tool call,
-        // this cannot be skipped by a model that rushes straight to `finish`.
-        finishBlock =
-          `Cannot finish — changed-file validation found ${prefinishVerification.errors.length} issue(s). `
-          + 'Repair every issue, then finish again. This is a shell-free source policy, not a claim that the full project type-check ran.\n'
-          + prefinishVerification.errors.map((e) =>
-            `- ${e.path}${e.line ? `:${e.line}` : ''}${e.ruleId ? ` [${e.ruleId}]` : ''}: ${e.message}`,
-          ).join('\n');
-        await recordCloudToolEvent(db, {
-          ...evt,
-          toolName: 'finish.blocked', category: 'tool',
-          detail: { reason: 'source_quality', errors: prefinishVerification.errors },
-          result: `Blocked finish: ${prefinishVerification.errors.length} source/config quality issue(s)`,
-        });
-      } else if (ciDecision?.block) {
-        // (2) In-run CI: branch commit status / check-runs are this executor's
-        // build/type-check/test. Red and pending block up to a cap; green skips
-        // the honesty gate below. PR-only workflows report none and do not block.
-        finishBlock = ciDecision.block;
-        await recordCloudToolEvent(db, {
-          ...evt,
-          toolName: 'finish.blocked', category: 'tool',
-          detail: { reason: 'branch_ci', pendingBlocks: ciPendingBlocks, failureBlocks: ciFailureBlocks },
-          result: finishBlock.slice(0, 300),
-        });
-      } else if (summary && !finishBlockedOnce && !ciVerified && assertsUnrunVerification(summary)) {
-        // (3) Honesty: the summary claims a check passed, but nothing was (or
-        // could be) run — and in-run CI did not report green. Block once.
-        finishBlockedOnce = true;
-        finishBlock =
-          'You stated that a build/type-check/lint/test passed or is resolved, but this executor cannot run a local shell and in-run CI did not report success. Call run_checks (it polls branch CI) or finish again with a summary that does NOT claim a check passed.';
-      } else if (repoCtx && writtenPaths.size > 0 && placeholderBlocks < MAX_PLACEHOLDER_FINISH_BLOCKS) {
-        // (3) Anti-stub: refuse to ship placeholder/scaffold code. Read the
-        // committed files back and block if any still contain stub markers — the
-        // agent must implement them for real (using the existing infrastructure)
-        // or remove the dead file with delete_file.
-        const scan = await scanWrittenForPlaceholders({ ...repoCtx, ref: repoCtx.branch }, writtenPaths);
-        if (scan.flagged.length) {
-          placeholderBlocks += 1;
-          finishBlock =
-            `Cannot finish — ${scan.flagged.length} committed file(s) still contain placeholder/stub code instead of a real implementation. `
-            + 'Replace each stub with a working implementation that uses the existing infrastructure (search_code for it first), or if a file is dead code that should not ship in this PR, remove it with delete_file. Then call finish again.\n'
-            + scan.flagged.map((f) => `- ${f.path}: ${f.markers.join('; ')}`).join('\n');
-          await recordCloudToolEvent(db, {
-            ...evt,
-            toolName: 'finish.blocked', category: 'tool',
-            detail: { reason: 'placeholders', files: scan.flagged },
-            result: `Blocked finish: ${scan.flagged.map((f) => f.path).join(', ')}`,
-          });
-        }
-      }
-      if (!finishBlock && repoCtx && writtenPaths.size > 0) {
-        const claim = await recordCodeCompletionClaim(db, {
-          tenantId,
-          executionId,
-          statement: summary || ctx.output || `Completed changes to ${[...writtenPaths].join(', ')}`,
-        });
-        if (!claim.ok) {
-          finishBlock = `Cannot finish — no structural evidence record supports this completion claim (${claim.error}). Retry the successful write or verification, then finish again.`;
-        }
-      }
-      return finishBlock;
-    },
+    // The finish gates (`cloudAgent/finishGates.ts`), then the verifier cascade (D1) on
+    // their named verdict. The run enters `verify` HERE, where it verifies — a phase
+    // applied in the end-of-run tail reduced the state into a value nobody read.
+    onFinish: async (ctx, summary) => cost.guards.finish(await evaluateFinishGates({
+      db, evt, repoCtx, writtenPaths, requiredSignoff, delegated: !!opts?.delegation, summary, output: ctx.output, gates,
+      enterVerify: () => { modelState = { ...modelState, policy: applyVerifyPhase(modelState.policy) }; },
+    }), ctx.step, guardDeps),
 
     afterDispatch: async (call, result) => {
       const name = call.name;
       const parsed = call.args;
       const succeeded = dataOk(result.data);
       if (matchesRequiredReviewSignoff(requiredSignoff, name, parsed, succeeded)) {
-        reviewVerdictRecorded = true;
+        gates.reviewVerdictRecorded = true;
       }
       await recordCloudToolEvent(db, {
         ...evt,
         toolName: name, category: 'tool', toolCallId: call.id,
         detail: name === 'write_file' ? { path: parsed.path, summary: parsed.summary } : parsed,
         result: JSON.stringify(result.data).slice(0, 300),
-        durationMs: Date.now() - tStart,
+        durationMs: Date.now() - (tStart.get(call.id) ?? Date.now()),
       });
       if (succeeded && (name === 'run_checks' || name === 'run_command' || name === 'builtin_reviews_record')) {
         const kind = name === 'builtin_reviews_record' ? 'review_verdict' : 'validation';
@@ -1479,7 +1326,7 @@ async function runCloudToolLoop(
           // continuation turns (whose thinking block was lost in the OpenAI round-trip);
           // for a pinned OpenAI o-series/gpt-5 coder it lands `reasoning_effort`.
           ...(req.strict
-            ? reasoningParamsForModel(req.model, cloudReasoningExecParams(env, tenantId, opts?.execParams, req.role), {
+            ? reasoningParamsForModel(req.model, cost.guards.reasoning(cloudReasoningExecParams(env, tenantId, opts?.execParams, req.role), req.role), {
                 isFirstTurn: !messages.some((m) => (m as { role?: string }).role === 'assistant'),
               }) ?? {}
             : {}),
@@ -1526,7 +1373,7 @@ async function runCloudToolLoop(
             tenantId, tool: platformTool,
             arguments: { projectId, ...call.args, ...(opts?.originatingChatId != null ? { chatId: opts.originatingChatId } : {}) },
             env, userId: cloudAgentRef ?? null, agentRef: cloudAgentRef ?? null,
-            role: TenantRole.MANAGER,
+            role: CLOUD_RUN_TENANT_ROLE,
             // Provenance (ticket 5301): this run formed the belief, so a
             // project_facts.remember from here carries the execution id. The model is
             // known but the token counts are metered per turn, not per tool call, and a
@@ -1548,10 +1395,16 @@ async function runCloudToolLoop(
     },
   };
 
+  // The in-run guards (`costLoop/loopGuards.ts`: A3 / D7 / D1 / D8) around the hooks and ports.
+  const guardDeps: LoopGuardDeps = {
+    db, evt, role: runRole, ladder, repoCtx, resolvedModel: () => lastResolvedModel, features: stepFeatures,
+    model: { get: () => modelState, set: (next) => { modelState = next; } },
+    pause: (question) => pauseExecutionForQuestion(env, db, { tenantId, executionId, taskId: taskRow.id, projectId, ...(cloudAgentRef ? { cloudAgentRef } : {}), agentLabel, question, surface: 'durable' }),
+  };
   let loop: LoopResult;
   try {
     loop = await runAgentLoop<Row>({
-      messages, codec, ports, hooks,
+      messages, codec, ...cost.guards.wrap(hooks, ports, guardDeps),
       signal: abortController.signal,
       budget: { startStep, ...(maxThisCall != null ? { maxSteps: maxThisCall } : {}) },
     });
@@ -1598,12 +1451,8 @@ async function runCloudToolLoop(
     routing,
     repoCtx,
     repoMiss,
-    noDeliverableBlocked,
-    reviewVerdictRecorded,
+    ...finishGateSnapshot(gates),
     requiredSignoff,
-    placeholderBlocks,
-    ciPendingBlocks,
-    ciFailureBlocks,
     policyGates,
     policyAskedGates: [...policyAskedGates],
     ...cost.snapshot(),
@@ -1649,7 +1498,7 @@ async function runCloudToolLoop(
   // The global step cap is a safety limit, never an evidence bypass. Exhausting it
   // without the required reviewer verdict fails the run and leaves the slot open
   // for retry/escalation; it must not finalize as successful acceptance.
-  if (requiredSignoff && !reviewVerdictRecorded) {
+  if (requiredSignoff && !gates.reviewVerdictRecorded) {
     return {
       ok: false,
       output: missingReviewVerdictMessage(requiredSignoff),
@@ -1668,11 +1517,11 @@ async function runCloudToolLoop(
   // already ran in `onFinish`), then commits what the run learned. Both steps are
   // best-effort — neither may delay or undo the finalize below, which IS this run's
   // result.
-  await runVerifyThenRemember({ env, db, tenantId, projectId, executionId, taskRow, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths, finalOutput, ciVerified, modelState });
+  await runVerifyThenRemember({ env, db, tenantId, projectId, executionId, taskRow, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths, finalOutput, ciVerified: gates.ciVerified, modelState });
 
   const fin = await finalizeCloudRun(env, db, {
     tenantId, cloudAgentRef, executionId, taskRow, agentLabel,
-    repoCtx, repoMiss, writtenPaths, finalOutput, cancelled, ciVerified,
+    repoCtx, repoMiss, writtenPaths, finalOutput, cancelled, ciVerified: gates.ciVerified,
   });
   return { ok: fin.ok, output: fin.output, cancelled, finished: true };
 }
@@ -2267,20 +2116,12 @@ ${ciVerified
 
   // Did this run clear the reflection bar? Recorded either way, because "a run that
   // produced verified work proposed no skill" is a fact a reviewer should be able to
-  // see — a silence is otherwise indistinguishable from a run that had nothing to say.
-  if (runEarnedReflection({ merged, prOpened, producedChanges: writtenPaths.size > 0 })) {
-    await recordCloudToolEvent(db, {
-      tenantId, cloudAgentRef, executionId,
-      toolName: 'skill.reflection', category: 'lifecycle',
-      detail: { merged, prOpened, producedChanges: writtenPaths.size > 0 },
-      result: 'run cleared the reflection bar',
-    }).catch((error) => reportCaughtError(error, {
-      source: 'application/runtime/cloudAgentEngine.ts',
-      operation: 'finalizeCloudRun',
-      level: 'warning',
-      context: { logMessage: '[cloud-finalize] reflection-bar telemetry failed (the run is unaffected)', details: { tenantId, executionId, error } },
-    }));
-  }
+  // see — and (E1) a verified run whose model proposed nothing gets a DRAFT written for
+  // it from its own trace. Never throws.
+  await recordRunReflection(env, db, {
+    tenantId, ...(cloudAgentRef ? { cloudAgentRef } : {}), executionId, taskRow, agentLabel,
+    projectId: repoCtx?.projectId ?? null, merged, prOpened, ciVerified, writtenPaths: [...writtenPaths],
+  });
 
   // The run is terminal: its callback principal stops authenticating NOW, not at its
   // 24h expiry. Best-effort — the DB-state check on every callback already refuses a
@@ -2334,7 +2175,7 @@ export async function prepareCloudRun(
   // The capability set this run's surface advertises. Resolved ONCE: the identity it
   // issues and the prompt it builds have to agree about which tools exist, and a
   // second `opts?.shell ? … : …` further down is how they stop agreeing.
-  const surfaceCaps = opts?.shell ? CONTAINER_SURFACE_CAPS : CLOUD_SURFACE_CAPS;
+  const surfaceCaps = prepSurfaceCaps(env, tenantId, opts?.shell === true);
   const prepIdentity = await ensureAgentRunIdentity(db, {
     tenantId, executionId, agentRef: cloudAgentRef, issuedBy: `execution:${executionId}`,
     capabilities: [...surfaceCaps],

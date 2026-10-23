@@ -41,6 +41,7 @@ const AI_TITLE_KEY: Record<AiInsightPanelId, string> = {
   'ai-impact': 'aiHubImpact',
   engineering: 'aiHubEngineering',
   'llm-usage': 'aiHubLlmUsage',
+  'cost-efficiency': 'aiHubCostEfficiency',
   recommendations: 'aiHubRecommendations',
 };
 
@@ -69,6 +70,7 @@ const AI_SIZE: Record<AiInsightPanelId, ComponentDef['size']> = {
   'ai-impact': 'lg',
   engineering: 'md',
   'llm-usage': 'md',
+  'cost-efficiency': 'lg',
   recommendations: 'md',
 };
 

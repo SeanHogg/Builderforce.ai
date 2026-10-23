@@ -4,7 +4,8 @@
  * cached read serves a stale set. Primitives live in `projectFactsStore`.
  */
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
-import { embedMemoryText, memoryEmbeddingText, toVectorLiteral, MEMORY_EMBEDDING_MODEL } from '../memory/memoryEmbedding';
+import { memoryEmbeddingText } from '../memory/memoryEmbedding';
+import { NO_MEMORY_EMBEDDING, memoryEmbeddingFieldsFor } from '../memory/memoryEmbeddingPolicy';
 import { projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
@@ -95,15 +96,12 @@ export async function upsertProjectFact(
   // the exact opposite of what the comment below it claimed. Losing a write to an
   // embedding outage is the worse failure of the two; the vector is a cache.
   const now = new Date();
-  const vector = toVectorLiteral(
-    await embedMemoryText(env, memoryEmbeddingText(k, c)).catch((err: unknown) => {
-      reportCaughtError(err, { source: 'project-facts', operation: 'embed-on-write', level: 'warning', context: { tenantId, projectId } });
-      return null;
-    }) ?? [],
-  );
-  const embeddingFields = vector
-    ? { embedding: vector, embeddingModel: MEMORY_EMBEDDING_MODEL, embeddedAt: now }
-    : { embedding: null, embeddingModel: null, embeddedAt: null };
+  // Every embedding column (1536 and, since 1256, the free 1024 space) is set or
+  // cleared together, so a rewrite never leaves a vector of the OLD content behind.
+  const embeddingFields = await memoryEmbeddingFieldsFor(env, tenantId, memoryEmbeddingText(k, c), now).catch((err: unknown) => {
+    reportCaughtError(err, { source: 'project-facts', operation: 'embed-on-write', level: 'warning', context: { tenantId, projectId } });
+    return { ...NO_MEMORY_EMBEDDING };
+  });
 
   // Retire what this write CONTRADICTS, and do it BEFORE the new row lands — otherwise
   // both beliefs are live for the window between the two writes, which is the exact

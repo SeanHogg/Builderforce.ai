@@ -170,12 +170,16 @@ export interface RepoSemanticCapability {
   search(query: string, opts?: { scope?: string; limit?: number }): Promise<SemanticSearchResult>;
   /** Get the repository's shape: files ordered by how much the rest of the code depends on
    *  them, each with its most-referenced definitions. */
-  repoMap(opts?: { focus?: string[]; maxTokens?: number }): Promise<RepoMapResult>;
+  repoMap(opts?: { focus?: string[]; maxTokens?: number; query?: string }): Promise<RepoMapResult>;
   /** LLMLingua-2 token compression of large prose (PRD C8). Present only when the backing
    *  service reports the compress feature — callers feature-detect, never assume it.
    *  `rate` is the share of tokens to keep (0..1). Code fences, paths and numbers are
    *  never altered by the service. Gate use on cost lever `c8_token_compression`. */
   compress?(text: string, rate: number): Promise<CompressResult>;
+  /** The host's cost-lever C4 decision (`isCostLeverOn(env, "c4_adaptive_context", tenantId)`).
+   *  When true, `semantic_search` without an explicit `limit` sends only as many hits as
+   *  {@link chooseK} judges the score distribution needs. Absent/false = the fixed default. */
+  readonly adaptive?: boolean;
 }
 
 /** Mutate the working tree. The provider owns the side effects of a write —
@@ -628,6 +632,8 @@ export interface SemanticSearchHit {
   kind?: string;
   snippet: string;
   source: "embedding" | "keyword" | "hybrid";
+  /** Relevance score, higher is better, when the backing reports one (feeds adaptive K, C4). */
+  score?: number;
 }
 
 export interface SemanticSearchResult {

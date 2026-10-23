@@ -34,3 +34,17 @@ export {
   type HandoffTokenBudgetInput,
 } from './handoffBudget.js';
 export { ROLE_OUTPUT_CAPS, cappedMaxTokens, roleOutputCap, type OutputCapRole } from './outputCaps.js';
+export {
+  MAX_UNIT_ESCALATIONS,
+  cascadeSteer,
+  cascadeVerdict,
+  initialCascadeState,
+  nextTierModel,
+  verifyStructuredOutput,
+  weakestTierModel,
+  type CascadeAction,
+  type CascadeState,
+  type CascadeUnitKind,
+  type CascadeVerdict,
+  type TierLadder,
+} from './cascade.js';

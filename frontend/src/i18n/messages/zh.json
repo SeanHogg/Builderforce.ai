@@ -2652,6 +2652,8 @@
         "engineeringDesc": "哪种 AI 方式真正交付——按工作类型和模型分列的结果评分、合并率与成本。",
         "llmUsage": "LLM 用量",
         "llmUsageDesc": "令牌用量、请求数和模型健康状况，以及按来源、项目、团队、用户和代码库估算的支出。",
+        "costEfficiency": "成本效率",
+        "costEfficiencyDesc": "每一美元模型支出是否换来更多已交付的工作——缓存命中率、每次运行的轮次与上下文、每个已合并 PR 的成本，以及哪些成本杠杆真正见效。",
         "recommendations": "建议",
         "recommendationsDesc": "依据各项洞察生成的、可执行的优先建议与异常项。"
       },
@@ -3863,6 +3865,118 @@
       "confirmMessage": "此访客在本站点的所有录像及其 AI 摘要都将被删除，且无法撤销。",
       "confirm": "删除",
       "done": "{count, plural, other {已删除 # 条录像。}}"
+    },
+    "cost": {
+      "approx": "≈{value}",
+      "points": "{value} 个百分点",
+      "subtitle": "缓存命中率、每次运行的轮次与上下文，以及一个已合并 PR 的模型支出。",
+      "empty": "此时间窗口内没有模型使用记录。",
+      "loadFailed": "无法加载成本指标。",
+      "verdict": "过去 {days} 天，缓存提供了 {cache} 的提示词令牌；在 {merged} 次已合并运行中，每个已合并 PR 的模型支出为 {cost}。",
+      "verdictNoPr": "过去 {days} 天，缓存提供了 {cache} 的提示词令牌；此窗口内尚无运行合并 PR。",
+      "basis": "令牌数据由提供商上报；支出为每次调用记录时标记的成本。",
+      "unattributed": "未归属",
+      "metric": {
+        "cacheHitRate": "缓存命中率",
+        "outputInputRatio": "输出 / 输入",
+        "reasoningShare": "推理占比",
+        "medianContextTokens": "每轮上下文中位数",
+        "medianTurns": "每次运行轮次中位数",
+        "costPerMergedPr": "每个已合并 PR 的成本"
+      },
+      "tone": {
+        "better": "改善中",
+        "worse": "退步中",
+        "flat": "持平"
+      },
+      "kpi": {
+        "cacheHitRateSub": "从缓存读取的提示词令牌占比",
+        "medianTurnsSub": "已完成运行 · {runs}",
+        "medianContextSub": "每次模型调用的提示词令牌",
+        "costPerPrSub": "中位数 {median} · {merged} 次已合并运行",
+        "costPerPrNone": "此窗口内没有已合并的运行",
+        "outputInputSub": "每个输入令牌对应的输出令牌",
+        "reasoningShareSub": "占输出的比例（提供商有上报时）",
+        "reasoningUnreported": "这些提供商未上报",
+        "servedWithoutModel": "无需模型即完成",
+        "servedWithoutModelSub": "{requests} 个请求未调用模型即得到回答"
+      },
+      "col": {
+        "metric": "指标",
+        "calls": "模型调用",
+        "spend": "支出"
+      },
+      "grouping": {
+        "label": "分组依据",
+        "actionType": "工作类型",
+        "role": "角色"
+      },
+      "group": {
+        "title": "支出流向",
+        "aria": "各分组支出",
+        "truncated": "仅显示前 {n} 个分组。"
+      },
+      "lever": {
+        "title": "成本杠杆：开启 vs 关闭",
+        "desc": "对每个部分推出的杠杆，比较其开启时与关闭时的调用。任一组少于 {calls} 次调用或 {runs} 次运行时，不显示变化值。",
+        "empty": "此窗口内没有部分推出的杠杆，因此无可比较。",
+        "colOn": "开启",
+        "colOff": "关闭",
+        "colDelta": "变化（开启 − 关闭）",
+        "nameWithReq": "{lever} · {req}",
+        "sample": "开启 {on} / 关闭 {off} 次调用",
+        "insufficient": "样本不足"
+      },
+      "run": {
+        "open": "成本明细",
+        "title": "运行 #{id} · 成本明细",
+        "empty": "此运行没有模型轮次记录。",
+        "outcome": "{action} · {steps} 步后 {status}。",
+        "outcomeMerged": "{action} · {steps} 步后 {status} · 已合并。",
+        "budgetUsed": "已用预算",
+        "noCap": "此运行未设置单次上限",
+        "turns": "轮次",
+        "turnsSub": "使用模型：{models}",
+        "toolSchema": "工具定义",
+        "toolSchemaSub": "描述工具所用令牌的估算值",
+        "splitTitle": "令牌去向",
+        "contextTitle": "上下文来源（估算）",
+        "colTurn": "轮次",
+        "colModel": "模型",
+        "turnMerged": "{n}（{calls} 次调用）",
+        "byo": "自有密钥",
+        "total": "合计",
+        "truncated": "仅显示前 {n} 轮。",
+        "estimateNote": "≈ 表示估算值：支出按模型价目表计价，工具定义与上下文数据基于字符估算，并非提供商计数。",
+        "part": {
+          "uncached": "未缓存输入",
+          "cacheRead": "缓存读取",
+          "cacheWrite": "缓存写入",
+          "output": "输出",
+          "reasoning": "推理"
+        },
+        "category": {
+          "system": "系统提示词",
+          "tools": "工具定义",
+          "history": "对话",
+          "toolOutputs": "工具输出",
+          "memory": "记忆"
+        },
+        "budgetOfCap": "已用 {cap} 上限的 {share} · {source}",
+        "tokenBudget": "Token 预算",
+        "budgetSource": {
+          "payload": "在此运行中设置",
+          "plan": "套餐上限",
+          "default": "平台默认值"
+        }
+      },
+      "trend": {
+        "title": "每日趋势",
+        "desc": "在所选时间段内逐日查看一项指标——效率的走向。",
+        "metric": "指标",
+        "empty": "此时间段内暂无该指标的每日数据。",
+        "chartLabel": "{metric}（按天）"
+      }
     }
   },
   "cloudAgentForm": {
@@ -5588,6 +5702,7 @@
       "aiHubImpact": "AI 影响",
       "aiHubEngineering": "AI 效能",
       "aiHubLlmUsage": "LLM 用量",
+      "aiHubCostEfficiency": "成本效率",
       "aiHubRecommendations": "建议",
       "delivHubDelivery": "交付",
       "delivHubAutonomy": "自主健康度",
@@ -5859,6 +5974,7 @@
       "aiHubImpactDesc": "采用与模型使用趋势、多工具评估矩阵，以及综合 AI 生产力评分。",
       "aiHubEngineeringDesc": "哪种 AI 方式真正交付——按工作类型和模型分列的结果评分、合并率与成本。",
       "aiHubLlmUsageDesc": "令牌用量、请求数和模型健康状况，以及按来源、项目、团队、用户和代码库估算的支出。",
+      "aiHubCostEfficiencyDesc": "每一美元模型支出是否换来更多已交付的工作——缓存命中率、每次运行的轮次与上下文、每个已合并 PR 的成本，以及哪些成本杠杆真正见效。",
       "aiHubRecommendationsDesc": "依据各项洞察生成的、可执行的优先建议与异常项。",
       "delivHubDeliveryDesc": "跨计划、项目与发布的可交付物的燃起图、预测与范围蔓延。",
       "delivHubAutonomyDesc": "工作是否自行完成？按创建者划分的生命周期漏斗、自主与人工移动之比，以及自主执行停滞之处。",

@@ -724,6 +724,215 @@ interface LocalFirstAttemptRecord {
 }
 
 /**
+ * The visit tally behind the CIRCLING-read guard: how many times a run has gone back to
+ * one target, with which argument sets, and whether something with an unknown blast
+ * radius ran in between (so the next re-read is fetching news, not circling).
+ *
+ * One tally, two hosts: the in-memory read guard (`ReadCoverage`, the browser Brain and
+ * the VS Code loop) and the durable progress detector (`ProgressDetector`, the cloud
+ * loop), which persists it between steps — so its state is plain JSON.
+ */
+/** Visits to one target before the model is told it is circling. Two reads of a long
+ *  file is ordinary (read the top, jump to the section); the THIRD is the point where a
+ *  pass stops being navigation and starts being a loop. */
+declare const REVISIT_NUDGE_AT = 3;
+/** Visits after which the advisory escalates from a reminder to an instruction. By the
+ *  fifth read of one file the gentle version has demonstrably not worked. */
+declare const REVISIT_HARD_AT = 5;
+interface ReadVisit {
+    /** How many times this target has now been read, including this call. */
+    count: number;
+    /** The distinct argument sets already used against it, oldest first, capped. */
+    priorArgs: string[];
+    /**
+     * Something with an UNKNOWN blast radius (a shell command, a merge, an undo) ran
+     * between the previous read of this target and this one, so this read may well be
+     * returning different bytes. The advisory stays silent for it — re-reading after a
+     * build or a codemod is exactly the right move — but the COUNT still stands, so a
+     * model circling one file across three `run_command`s is still caught on the next read.
+     */
+    mayHaveChanged: boolean;
+}
+/**
+ * The advisory to attach to a read result once a target has been visited enough times
+ * to look like circling. Null below the threshold — the overwhelming majority of reads
+ * carry nothing extra.
+ *
+ * Written as a diagnosis plus a next move, not a scolding: a model told only "you are
+ * repeating yourself" tends to repeat itself apologetically. It is told what it has
+ * already been given, why looking again will not help, and which of the two things it
+ * should do instead — page FORWARD through the rest of the file from the offset its
+ * last result named, or act on what it has.
+ */
+declare function revisitAdvisory(tool: string, target: string, visit: ReadVisit): string | null;
+/**
+ * Attach an advisory to a tool result without disturbing its shape. Object results gain
+ * a `note` field (the same channel the tools' own guidance uses, so the model meets one
+ * convention rather than two); anything else is wrapped so the original value survives
+ * intact under `result`.
+ */
+declare function withAdvisory(result: unknown, advisory: string): unknown;
+
+/**
+ * The loop-breaker for re-reading.
+ *
+ * Three guards, one tally:
+ *
+ * 1. The EXACT repeat — same tool, same arguments. The run loop answers it with a stub
+ *    telling the model to reuse the earlier result.
+ *
+ * 2. The CIRCLING read — seven DIFFERENT `read_file` calls shuffling a window up and
+ *    down one 566-line file until the tool budget is gone and the one-line change the
+ *    user asked for is never made. The exact-repeat guard stays silent for all of them;
+ *    the visit tally ({@link VisitTally}) is what sees it.
+ *
+ * 3. The COVERED window — fourteen `read_file`s at shifting offsets (1050, 1080, 1105…)
+ *    that all sat inside a window the run had already returned. An overlapping window is
+ *    an exact-repeat in disguise: those lines are already above. The loop stubs (or
+ *    replays from cache once compaction has dropped the original) and tells the model to
+ *    page FORWARD. A jump to uncovered lines, and a page past a truncated window, still run.
+ *
+ * All three share the one question that decides whether they are still valid: "did
+ * something just change what a re-read would see?" — answered once, by {@link
+ * ReadCoverage.invalidate}.
+ *
+ * WHICH tools change what, and what a call is ABOUT, is the host's vocabulary (its tool
+ * names, its shell classifier), so it arrives as {@link ReadCoverageTraits}; the rules
+ * here are the same on every host. Pure: no clock, no I/O.
+ */
+
+/** The host's tool vocabulary, as the read guard needs it. */
+interface ReadCoverageTraits {
+    /** What a call VISITED — its target plus the question asked of it (`scope ∋ query`). */
+    visitTarget(args: unknown): string | undefined;
+    /** The bare target a call names (a path, a command, a query). */
+    activityTarget(args: unknown): string | undefined;
+    /** Joins a scope to the question asked of it in a {@link visitTarget}. */
+    questionSeparator: string;
+    /** Could this call have changed ANY file, unnamed (a shell command, a tree-rewriting git tool)? */
+    isUnscopedMutation(tool: string, args: unknown): boolean;
+    /** A file write / edit / delete. */
+    isCodeChangeTool(tool: string): boolean;
+    /** A tool that acts on the local workspace (not a platform / MCP call). */
+    isLocalWorkspaceTool(tool: string): boolean;
+    /** A local tool that PUBLISHES work (commit / push / open a PR). */
+    isRepoPublishTool(tool: string): boolean;
+    /** A host read of repository STATE (branches, PRs) that a publish moves. */
+    isRepoStateReadTool(tool: string): boolean;
+}
+/**
+ * What a successful read RETURNED, kept so an exact repeat can be answered from memory —
+ * the "already above you" stub stops being true the moment compaction summarizes that
+ * result away. `anchor` is the transcript message the result was handed to the model in
+ * (opaque here; the run loop decides whether that message is still in the working context).
+ */
+interface CachedRead {
+    /** The tool's UNTRIMMED result — the loop re-trims it to the budget on replay. */
+    result: unknown;
+    anchor: unknown;
+}
+/** What {@link ReadCoverage.coveredRead} hands the loop. */
+interface CoveredRead {
+    /** Inclusive first line of the request (after EOF clip). */
+    start: number;
+    /** Inclusive last line of the request (after EOF clip). */
+    end: number;
+    /** The covering read's cache — replay this when compaction dropped the original. */
+    cached: CachedRead | null;
+    /** The note the model should read instead of another copy of those lines. */
+    note: string;
+}
+/**
+ * Per-run tally of which reads have been made, which targets they were about, and how
+ * often. One instance per run; the run loop owns it and drops it when the run ends.
+ */
+declare class ReadCoverage$1 {
+    private readonly traits;
+    private readonly visits;
+    /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
+    private readonly exact;
+    constructor(traits: ReadCoverageTraits);
+    private static exactKey;
+    /** Was this visit ABOUT `target` — the target itself, or a question asked of it? */
+    private visitedScopeIs;
+    /** Has this exact read already SUCCEEDED this run, with nothing since that could have changed its answer? */
+    isRepeat(tool: string, args: unknown): boolean;
+    /** Keep what a SUCCESSFUL read returned, with the message that carried it. A no-op for
+     *  a read that was never recorded (a failure has nothing to replay). */
+    cacheResult(tool: string, args: unknown, cached: CachedRead): void;
+    /** The cached result of an exact earlier read, or null when none is held. */
+    cachedResult(tool: string, args: unknown): CachedRead | null;
+    /**
+     * Record a SUCCESSFUL read. Arms the exact-repeat guard for it, and returns the
+     * resulting target visit — or null when the call names no target.
+     */
+    record(tool: string, args: unknown): ReadVisit | null;
+    /**
+     * A non-read call has run. Forget exactly the reads it could have changed — no more,
+     * no less — for every guard:
+     *
+     * - An unscoped mutation (shell, merge, undo) forgets every cached ANSWER, and marks
+     *   every target so its NEXT read is excused — but keeps the visit COUNT: the tally
+     *   counts the model's behaviour, which a build in between does not change.
+     * - A file write/edit/delete forgets its own target across every tool that reads it,
+     *   plus every tree-wide answer; nothing about other files.
+     * - A local tool that PUBLISHES work forgets the platform reads and the repo-state
+     *   reads, and keeps the file reads.
+     * - The remaining local tools change nothing a read observes.
+     * - Anything else is a platform / MCP call: it forgets target-less platform reads.
+     */
+    invalidate(tool: string, args: unknown): void;
+    /**
+     * Answer a `read_file` whose window is already inside an earlier successful window of
+     * the SAME file. Null for a jump to lines the earlier read did not return, and for a
+     * page that extends past a truncated window — those still need the disk.
+     */
+    coveredRead(tool: string, args: unknown): CoveredRead | null;
+    /**
+     * Answer a `search_code` from a WIDER complete search already held (same query, an
+     * ancestor scope), filtered to the narrower `path`. A derived 0 is never returned — a
+     * parent's 0 may be a false negative, and the tool treats `truncated:false` as proof
+     * of absence — so the narrower search must actually run.
+     */
+    derivedSearch(tool: string, args: unknown): Record<string, unknown> | null;
+}
+
+/** Identical failures before the model is told it is repeating itself. The first retry is free. */
+declare const FAILURE_NUDGE_AT = 2;
+/** Identical failures after which the advisory stops asking and starts instructing. */
+declare const FAILURE_HARD_AT = 3;
+/** The persisted form: `[fingerprint, attempts]` pairs. */
+type FailureTallyState = Array<[string, number]>;
+/** Per-run tally of which exact calls have FAILED, and how often. */
+declare class FailureTally {
+    private readonly failures;
+    constructor(state?: FailureTallyState);
+    /** Record a FAILED call. Returns how many times this exact call has now failed, including this one. */
+    record(tool: string, args: unknown): number;
+    /** This exact call SUCCEEDED: its earlier failures were transient after all. */
+    clear(tool: string, args: unknown): void;
+    /** Forget every recorded failure (the run changed course). */
+    reset(): void;
+    snapshot(): FailureTallyState;
+}
+/** The error text a failed tool result carries, bounded — quoted back to the model so
+ *  the advisory argues from the answer it already got. */
+declare function failureReason(result: unknown): string | undefined;
+/**
+ * The advisory to attach to a failed tool result once the identical call has failed
+ * enough times to be a loop rather than a retry. Null below the threshold.
+ */
+declare function repeatedFailureAdvisory(tool: string, attempts: number, reason?: string): string | null;
+
+/**
+ * Consecutive identical calls ({@link callFingerprint}) at which a back-to-back streak
+ * becomes a verdict on its own. Two in a row is a retry; three is the model asking the
+ * same question a third time after hearing the same answer twice, whatever the rest of
+ * the run looks like. Shared by the post-hoc run report and the live guards.
+ */
+declare const BACK_TO_BACK_AT = 3;
+
+/**
  * Did the run actually GET ANYWHERE?
  *
  * The A-vs-B triage in `brainTriage.ts` answers "why did a turn come back
@@ -776,12 +985,7 @@ interface RepeatStreak {
      *  error; a streak of successes is a stall on an answer it already has. */
     failed: number;
 }
-/**
- * Consecutive identical calls at which the streak becomes a verdict on its own.
- * Two in a row is a retry; three is the model asking the same question a third time
- * after hearing the same answer twice, whatever the rest of the run looks like.
- */
-declare const BACK_TO_BACK_AT = 3;
+
 declare function isMutationTool(name: string): boolean;
 /**
  * Whether the run was asked to CHANGE something. Reads the user turns only — the
@@ -2926,6 +3130,78 @@ type BrainRunEngine = (control: RunEngineControl) => Promise<void>;
 declare function startEngineRun(key: RunKey, engine: BrainRunEngine): Promise<boolean>;
 
 /**
+ * WHAT A RATING IS ABOUT — the pure rule that turns "the user pressed 👎 on this
+ * reply" into the two facts the learned router needs: WHICH MODEL served the turn,
+ * and WHICH MCP TOOL it executed.
+ *
+ * "Some models are better than others at specific tasks" is only measurable if a
+ * rating is filed against the task, and the task a chat turn performed is the tool
+ * it called. That association is derivable from the transcript itself: the agent
+ * loop persists each tool call as a durable STEP row (see `persistedSteps.ts`) that
+ * sits between the user's question and the assistant's answer. Walking back from
+ * the rated reply to the steps of ITS turn therefore works after a reload, unlike
+ * the in-memory trace, which is empty on a freshly-opened chat.
+ *
+ * Pure and host-agnostic: the web Brain panel, the Canvas dock and the VS Code
+ * webview all mount the same transcript and all call this, so a rating means the
+ * same thing wherever it was pressed.
+ */
+/** The minimum message shape this rule needs — every surface's own `BrainMessage`
+ *  satisfies it, so nothing has to be converted to call in. */
+interface RatableMessage {
+    id: number;
+    role: string;
+    metadata?: string | null;
+}
+/** Everything a rating carries beyond the thumb itself. */
+interface RatedTurnContext {
+    /** The model the gateway actually resolved for this reply, from its provenance.
+     *  Empty when the turn predates provenance — the caller must then skip the
+     *  rating rather than attribute it to a guess. */
+    model: string;
+    /** The MCP tool the rated turn executed, or null for a prose-only reply. */
+    toolName: string | null;
+}
+/**
+ * The tool a rated turn executed. Walks BACK from the reply over the durable step
+ * rows that belong to the same turn (they sit between it and the previous
+ * conversation message) and returns the LAST tool step — the one whose result the
+ * reply is actually reporting on, and therefore the one being judged.
+ *
+ * Returns null for a turn that called nothing. That is a real and common case, and
+ * a rating with no tool is still evidence about the model: "it answered badly" is a
+ * verdict, and forcing it into some tool's bucket would libel that tool.
+ */
+declare function ratedTurnTool(messages: readonly RatableMessage[], messageId: number): string | null;
+/**
+ * Build the full rating context for one assistant reply. `model` comes from the
+ * reply's own persisted provenance, so it is the id the gateway resolved after any
+ * failover — never the model the composer happened to be showing.
+ */
+declare function ratedTurnContext(messages: readonly RatableMessage[], messageId: number): RatedTurnContext;
+/** What a thumb tells the E5 local-success label: the verdict on chat `chatId`'s latest reply. */
+interface LocalRatingVerdict {
+    chatId: number;
+    passed: boolean;
+}
+/**
+ * The E5 `rating` verdict a thumb carries, or null when it carries none. Only a thumb
+ * on the chat's LATEST reply judges the turn the local-success label is waiting on —
+ * a press on an older reply (or clearing a thumb) says nothing about it, and the
+ * deferred registry resolves by chat, so it must never be handed an older verdict.
+ */
+declare function localRatingVerdict(messages: readonly RatableMessage[], messageId: number, rating: 1 | -1 | 0, chatId: number | null): LocalRatingVerdict | null;
+/** One viewer's thumb per message id — the shape every transcript's `ratings` prop takes. */
+type MessageRatings = Record<number, 1 | -1>;
+/**
+ * The optimistic update a thumb press makes to that map: `0` clears the message's
+ * verdict, `1`/`-1` sets it. Pure so every surface that rates a reply (the web Brain
+ * panel through `useBrainConversation`, the Canvas dock) moves its thumbs the same way
+ * before the best-effort write lands.
+ */
+declare function withRating(ratings: MessageRatings, messageId: number, rating: 1 | -1 | 0): MessageRatings;
+
+/**
  * Chat/message persistence the host provides. Mirrors the Builderforce
  * `/api/brain` client surface; any backend conforming to these signatures works.
  */
@@ -2992,6 +3268,10 @@ interface BrainPersistenceAdapter {
      */
     setMessageFeedback(messageId: number, feedback: 'up' | 'down' | null, context?: {
         toolName?: string | null;
+        /** E5: set only when the press judges the chat's LATEST reply. A host whose model
+         *  stream runs in another realm (the VS Code extension host) hands it to
+         *  `submitLocalTurnVerdict` there; servers ignore it. */
+        localVerdict?: LocalRatingVerdict | null;
     }): Promise<unknown>;
     /**
      * Ask an invited agent participant to reply — a chat-scoped run that answers AS
@@ -3331,6 +3611,17 @@ type RunPolicyEvent =
     kind: TransportFailureKind;
     model?: string;
     status?: number;
+}
+/**
+ * The verifier cascade (cost PRD D1) moved the run one model tier up after a unit of
+ * work failed its verifier, or back down to the unit's base once one passed. The next
+ * turn asks for `to` strictly — a soft hint could be shadowed by the gateway's seed —
+ * and the model it leaves is recorded as tried, so a later stall failover does not
+ * pick it again (only the cascade's own de-escalation returns to it).
+ */
+ | {
+    type: 'escalated';
+    to: string;
 };
 
 /**
@@ -3940,6 +4231,39 @@ declare function createModelFallbackChannel(): ModelFallbackChannel;
 declare function modelFallbackText(template: string, event: Pick<ModelFallbackEvent, 'from'>): string;
 /** English default — every host passes its own localized template. */
 declare const DEFAULT_MODEL_FALLBACK_TEMPLATE = "Your pick {model} failed; answered with Auto.";
+
+/**
+ * E5 — the VERIFIED local label (cost lever `e5_verified_local_label`).
+ *
+ * The transport label says a local turn "succeeded" when the local model served (no
+ * throw, a non-empty answer). That teaches the `run.local-success` predictor that a
+ * served-but-wrong answer is a success. With the lever on and a verdict supplied, the
+ * label is served AND the verdict passed; with no verdict (it never came, or timed out)
+ * the transport label stands — today's behaviour.
+ *
+ * WHERE A BRAIN TURN'S VERDICT COMES FROM. A local answer is settled before anyone has
+ * judged it, so the router's record is DEFERRED by turn ({@link createDeferredLocalRecords})
+ * and resolved by the first of:
+ *   - `retry`       — the next call in the same chat re-sends the SAME user message with
+ *                     nothing after it (regenerate / resend): failed;
+ *   - `tool_schema` — the next call is the same submit's next tool-loop iteration and a
+ *                     tool result for this turn's calls is the agent loop's
+ *                     malformed/truncated-arguments refusal (`@builderforce/agent-loop`
+ *                     `MALFORMED_CALL_RESULT` / `TRUNCATED_CALL_RESULT`): failed;
+ *   - `tool_ok`     — that next iteration carries this turn's tool results, none refused: passed;
+ *   - `continued`   — the next call in the chat is a different user message (the person
+ *                     moved on rather than retrying): passed;
+ *   - `rating`      — a host reports an explicit thumb on the chat's latest reply
+ *                     ({@link submitLocalTurnVerdict});
+ *   - the timeout   — {@link LOCAL_VERDICT_TIMEOUT_MS}: the transport label.
+ * Everything is read on this device from the calls themselves — no model call, no network.
+ */
+
+/**
+ * An explicit verdict on chat `chatId`'s latest local reply (a host's thumbs-down /
+ * thumbs-up). A no-op when that reply is not waiting — recorded already, or not local.
+ */
+declare function submitLocalTurnVerdict(chatId: number, passed: boolean): boolean;
 
 /**
  * The per-turn AFFECT block, appraised on this device — never a platform call.
@@ -6170,250 +6494,21 @@ declare function shippedToBaseBranch(events: readonly BrainTraceEvent[], opts?: 
 }): boolean;
 
 /**
- * Visits to one target before the model is told it is circling. Two reads of a
- * long file is ordinary (read the top, jump to the section); the THIRD is the
- * point where a pass stops being navigation and starts being a loop.
- */
-declare const REVISIT_NUDGE_AT = 3;
-/**
- * Visits after which the advisory escalates from a reminder to an instruction.
- * By the fifth read of one file the gentle version has demonstrably not worked.
- */
-declare const REVISIT_HARD_AT = 5;
-interface ReadVisit {
-    /** How many times this target has now been read, including this call. */
-    count: number;
-    /** The distinct argument sets already used against it, oldest first, capped. */
-    priorArgs: string[];
-    /**
-     * Something with an UNKNOWN blast radius (a shell command, a merge, an undo) ran
-     * between the previous read of this target and this one, so this read may well be
-     * returning different bytes. The advisory stays silent for it — re-reading after a
-     * build or a codemod is exactly the right move — but the COUNT still stands, so a
-     * model circling one file across three `run_command`s is still caught on the next
-     * read. See {@link ReadCoverage.invalidate}.
-     */
-    mayHaveChanged: boolean;
-}
-/**
- * What a successful read RETURNED, kept so an exact repeat can be answered from memory.
+ * The Brain's binding of the shared read guard (`@builderforce/run-guards`).
  *
- * The exact-repeat stub tells the model "the result is already in the conversation
- * above" — which stops being true the moment auto-compaction summarizes that result
- * away. Measured on chat #101: a file read once, compacted out of the working context,
- * then requested again five times, and every one of those answered with a stub pointing
- * at content the model could no longer see. It read the stub as "I lack the file",
- * asked again, and the run ended with 50% of its calls revisiting old ground and not
- * one edit made. The cache is what lets the loop re-serve the result instead — without
- * touching the disk, and without a stub that lies.
- *
- * `anchor` is the transcript message the result was handed to the model in (opaque
- * here; the run loop decides whether that message is still in the working context).
+ * The rules — exact repeat, circling read, covered window, and the one `invalidate`
+ * that decides what a non-read call forgets — live once in the package, shared with the
+ * cloud loop's progress detector. What is the Brain's own is its tool VOCABULARY: which
+ * tools touch the local workspace, which publish, which shell commands provably only
+ * read, and what a call is about. Those are bound here, so every caller keeps
+ * `new ReadCoverage()`. The package's own helpers (advisories, thresholds, types) are
+ * imported from `@builderforce/run-guards` directly — this file re-exports none of them.
  */
-interface CachedRead {
-    /** The tool's UNTRIMMED result — the loop re-trims it to the budget on replay. */
-    result: unknown;
-    anchor: unknown;
-}
-/** What {@link ReadCoverage.coveredRead} hands the loop. */
-interface CoveredRead {
-    /** Inclusive first line of the request (after EOF clip). */
-    start: number;
-    /** Inclusive last line of the request (after EOF clip). */
-    end: number;
-    /** The covering read's cache — replay this when compaction dropped the original. */
-    cached: CachedRead | null;
-    /** The note the model should read instead of another copy of those lines. */
-    note: string;
-}
-/**
- * Per-run tally of which reads have been made, which targets they were about, and how
- * often. One instance per run; the run loop owns it and drops it when the run ends.
- */
-declare class ReadCoverage {
-    private readonly visits;
-    /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
-    private readonly exact;
-    private static exactKey;
-    /**
-     * Has this exact read — same tool, same arguments in any key order — already
-     * SUCCEEDED this run, with nothing since that could have changed its answer? The run
-     * loop answers such a call with a stub instead of re-running it.
-     */
-    isRepeat(tool: string, args: unknown): boolean;
-    /**
-     * Keep what a SUCCESSFUL read returned, with the transcript message that carried it,
-     * so an exact repeat can be replayed once that message has left the working context.
-     * A no-op for a read that was never recorded (a failure has nothing to replay).
-     */
-    cacheResult(tool: string, args: unknown, cached: CachedRead): void;
-    /** The cached result of an exact earlier read, or null when none is held. */
-    cachedResult(tool: string, args: unknown): CachedRead | null;
-    /**
-     * Record a SUCCESSFUL read. Arms the exact-repeat guard for it, and returns the
-     * resulting target visit — or null when the call names no target (nothing to be
-     * circling around; the exact guard still applies).
-     */
-    record(tool: string, args: unknown): ReadVisit | null;
-    /**
-     * A non-read call has run. Forget exactly the reads it could have changed — no more,
-     * no less — for BOTH guards:
-     *
-     * - A tool whose blast radius is unknown (`run_command`, a base-branch merge, an
-     *   undo) forgets every cached ANSWER: the honest answer to "what did that touch?" is
-     *   "anything", so no exact repeat may be stubbed out afterwards. It does NOT forget
-     *   the visit TALLY, and that distinction is the whole difference between a guard that
-     *   works and one that is inert. The tally counts the MODEL's behaviour — how many
-     *   times it has gone back to one target, with every one of those results still sitting
-     *   in the transcript above it — and a build running in between changes none of that.
-     *   Clearing it wholesale is what made the advisory unreachable in any run that
-     *   verifies its work: read, read, `run_command` (typecheck), read, read, `run_command`
-     *   … never reaches three, so the nudge at 3 and the hard stop at 5 never fired, and a
-     *   run spent 46% of its calls re-reading ground it had already covered with the loop
-     *   guard silent throughout. Instead each target is marked {@link ReadVisit.mayHaveChanged}
-     *   so the NEXT read of it is excused — a re-read after a build is the right move — and
-     *   the one after that is not.
-     * - A file write/edit/delete forgets its own target, across every tool that reads it —
-     *   `read_file` and `search_code` on one path are the same stale picture. A re-read of
-     *   what was just changed is genuinely new information; nagging about it would punish
-     *   exactly the right behaviour. It forgets NOTHING about other files: clearing the
-     *   whole tally on every non-read call is what once let one CSS file be read 14 times
-     *   with the advisory firing on neither it nor its component.
-     * - A local tool that PUBLISHES work (`git_commit`, `git_push`, `open_pull_request`)
-     *   changes no byte a FILE read would see — but it does change what a PLATFORM read of
-     *   branch / pull-request state returns, so it forgets the platform reads and keeps the
-     *   file reads. See {@link isRepoPublishTool}: without this, a run that surveys the
-     *   board, pushes the branches and surveys again is served its own pre-push answer.
-     *   The same sweep forgets host reads of REPOSITORY STATE (`review_ticket_branches`,
-     *   see {@link isRepoStateReadTool}) — a cached branch review must not outlive a push.
-     * - The remaining local tools (`git_status`, `git_diff`, …) change nothing a read
-     *   observes, so they forget nothing.
-     * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
-     *   returns (a ticket update changes the ticket list), so target-less platform reads
-     *   are forgotten; file reads are not, because a ticket write does not edit source.
-     */
-    invalidate(tool: string, args: unknown): void;
-    /**
-     * Answer a `read_file` whose window is already inside an earlier successful window
-     * of the SAME file. Chat #109's fourteen overlapping reads of one service file were
-     * different exact-repeat keys (offset 1050, then 1080, then 1105) so the stub never
-     * ran; the circling advisory fired and was ignored; the bytes still filled the
-     * window. This is that stub for overlapping windows.
-     *
-     * A jump to lines the earlier read did not return, and a page that extends past a
-     * truncated window, return null — those still need the disk. An edit of the file
-     * forgets the covering cache via {@link invalidate}.
-     */
-    coveredRead(tool: string, args: unknown): CoveredRead | null;
-    /**
-     * Answer a `search_code` from a WIDER search already held: the same query (and the same
-     * other arguments) run earlier over an ancestor directory — or the whole tree — whose
-     * result was complete (not truncated). Filtering those matches to the narrower `path`
-     * is exactly what re-running the search would return, without running it.
-     *
-     * Measured on a ticket-review run: one directory searched nine times and one file six,
-     * mostly re-asking a question an earlier, broader search had already answered.
-     *
-     * A derived 0 is never returned. Chat #111: a directory search for `addressedTo`
-     * under `Builderforce.ai/clients` came back `total:0 truncated:false` even though
-     * `VsCodeChatSurface.tsx` contains the term; the file-scoped retry was then answered
-     * from that parent ("the term does not appear") and the run concluded composers never
-     * pass `addressedTo`. A 0 from a parent is the most expensive lie this guard can tell —
-     * the tool's own copy treats `truncated:false` as proof of absence — so the narrower
-     * search must actually run. File-scope uses a different backend (`searchOneFile`) and
-     * is the recovery path. Null when no complete covering result with matches is held.
-     */
-    derivedSearch(tool: string, args: unknown): Record<string, unknown> | null;
-}
-/**
- * The advisory to attach to a read result once a target has been visited enough
- * times to look like circling. Null below the threshold — the overwhelming majority
- * of reads carry nothing extra.
- *
- * Written as a diagnosis plus a next move, not a scolding: a model told only "you
- * are repeating yourself" tends to repeat itself apologetically. It is told what it
- * has already been given, why looking again will not help, and which of the two
- * things it should do instead — page FORWARD through the rest of the file from the
- * offset its last result named, or act on what it has. (Not "read it whole in one
- * call": a large file is delivered in budgeted windows, so that advice asked for
- * something the transcript could never carry.)
- */
-declare function revisitAdvisory(tool: string, target: string, visit: ReadVisit): string | null;
-/**
- * Attach an advisory to a tool result without disturbing its shape. Object results
- * gain a `note` field (the same channel the tools' own guidance uses, so the model
- * meets one convention rather than two); anything else is wrapped so the original
- * value survives intact under `result`.
- */
-declare function withAdvisory(result: unknown, advisory: string): unknown;
 
-/**
- * The loop-breaker for FAILING calls.
- *
- * `readCoverage.ts` guards the successful read that keeps coming back — the model
- * circling one file until its budget is gone. It deliberately records nothing about a
- * FAILED call, and that is correct on its own terms: a read that failed has no result
- * sitting in the transcript to reuse, so stubbing a retry would strand the run on a
- * transient error.
- *
- * The consequence is that identical FAILURES get no pushback at all. Measured on a real
- * run: `git_status` was called three times with the same arguments and answered three
- * times with the same "not a git repository at the workspace root" remedy — a remedy
- * that names the exact retry (`repo: "…"`) — and the model made the same bare call
- * again each time. Same for a platform read answered `HTTP 502` twice. Nothing in the
- * loop distinguished "retrying a flake", which is right, from "asking a question that
- * has already been answered the same way twice", which is a stall wearing the costume
- * of persistence.
- *
- * So: the FIRST retry of a failed call passes silently — flakes are real, and a tool
- * that failed on a network blip deserves another go. From the SECOND identical failure
- * the result the model reads carries the count and the error it already got, and the
- * only two moves that can work: change an argument (the remedy usually names which), or
- * stop and say what is blocking. From the third it is an instruction, not a suggestion.
- *
- * "Identical" is the same fingerprint the exact-repeat read guard uses — same tool, same
- * arguments in any key order — so a genuine change of arguments starts a fresh count and
- * is never nagged. A SUCCESS clears the tally for that call outright.
- *
- * Pure and self-contained: a small tally with one method to record a failure and one to
- * clear it. No clock, no I/O — the same shape, and the same reasons, as `ReadCoverage`.
- */
-/**
- * Identical failures before the model is told it is repeating itself. The first retry
- * is free: a tool that failed once may well have failed on a flake, and a run that
- * refuses to try again is worse than one that tries twice.
- */
-declare const FAILURE_NUDGE_AT = 2;
-/**
- * Identical failures after which the advisory stops asking and starts instructing. By
- * the third the evidence that another go will help is gone.
- */
-declare const FAILURE_HARD_AT = 3;
-/** Per-run tally of which exact calls have FAILED, and how often. One instance per run;
- *  the run loop owns it and drops it when the run ends. */
-declare class FailureTally {
-    private readonly failures;
-    private static key;
-    /** Record a FAILED call. Returns how many times this exact call has now failed,
-     *  including this one. */
-    record(tool: string, args: unknown): number;
-    /** This exact call SUCCEEDED. Its earlier failures were transient after all, so they
-     *  are no longer evidence of anything — a later failure starts counting from one. */
-    clear(tool: string, args: unknown): void;
+/** Per-run read guard bound to the Brain's tools. One instance per run. */
+declare class ReadCoverage extends ReadCoverage$1 {
+    constructor();
 }
-/** The error text a failed tool result carries, if it names one — quoted back to the
- *  model so the advisory argues from the answer it already got rather than in the
- *  abstract. Bounded: a stack trace pasted into an advisory buries the advisory. */
-declare function failureReason(result: unknown): string | undefined;
-/**
- * The advisory to attach to a failed tool result once the identical call has failed
- * enough times to be a loop rather than a retry. Null below the threshold — the first
- * retry of anything carries nothing extra.
- *
- * Written the same way the revisit advisory is: a diagnosis, the evidence, and the
- * moves that remain. A model told only "this failed again" retries again.
- */
-declare function repeatedFailureAdvisory(tool: string, attempts: number, reason?: string): string | null;
 
 /**
  * THE tool-output policy: what a tool result costs the MODEL transcript, and how it is
@@ -7711,66 +7806,6 @@ declare function revealsModelId(identity: ModelIdentityContext | null | undefine
 declare function displayModelName(model: string | null | undefined, identity: ModelIdentityContext | null | undefined, opts?: {
     account?: ProvenanceAccount;
 }): string;
-
-/**
- * WHAT A RATING IS ABOUT — the pure rule that turns "the user pressed 👎 on this
- * reply" into the two facts the learned router needs: WHICH MODEL served the turn,
- * and WHICH MCP TOOL it executed.
- *
- * "Some models are better than others at specific tasks" is only measurable if a
- * rating is filed against the task, and the task a chat turn performed is the tool
- * it called. That association is derivable from the transcript itself: the agent
- * loop persists each tool call as a durable STEP row (see `persistedSteps.ts`) that
- * sits between the user's question and the assistant's answer. Walking back from
- * the rated reply to the steps of ITS turn therefore works after a reload, unlike
- * the in-memory trace, which is empty on a freshly-opened chat.
- *
- * Pure and host-agnostic: the web Brain panel, the Canvas dock and the VS Code
- * webview all mount the same transcript and all call this, so a rating means the
- * same thing wherever it was pressed.
- */
-/** The minimum message shape this rule needs — every surface's own `BrainMessage`
- *  satisfies it, so nothing has to be converted to call in. */
-interface RatableMessage {
-    id: number;
-    role: string;
-    metadata?: string | null;
-}
-/** Everything a rating carries beyond the thumb itself. */
-interface RatedTurnContext {
-    /** The model the gateway actually resolved for this reply, from its provenance.
-     *  Empty when the turn predates provenance — the caller must then skip the
-     *  rating rather than attribute it to a guess. */
-    model: string;
-    /** The MCP tool the rated turn executed, or null for a prose-only reply. */
-    toolName: string | null;
-}
-/**
- * The tool a rated turn executed. Walks BACK from the reply over the durable step
- * rows that belong to the same turn (they sit between it and the previous
- * conversation message) and returns the LAST tool step — the one whose result the
- * reply is actually reporting on, and therefore the one being judged.
- *
- * Returns null for a turn that called nothing. That is a real and common case, and
- * a rating with no tool is still evidence about the model: "it answered badly" is a
- * verdict, and forcing it into some tool's bucket would libel that tool.
- */
-declare function ratedTurnTool(messages: readonly RatableMessage[], messageId: number): string | null;
-/**
- * Build the full rating context for one assistant reply. `model` comes from the
- * reply's own persisted provenance, so it is the id the gateway resolved after any
- * failover — never the model the composer happened to be showing.
- */
-declare function ratedTurnContext(messages: readonly RatableMessage[], messageId: number): RatedTurnContext;
-/** One viewer's thumb per message id — the shape every transcript's `ratings` prop takes. */
-type MessageRatings = Record<number, 1 | -1>;
-/**
- * The optimistic update a thumb press makes to that map: `0` clears the message's
- * verdict, `1`/`-1` sets it. Pure so every surface that rates a reply (the web Brain
- * panel through `useBrainConversation`, the Canvas dock) moves its thumbs the same way
- * before the best-effort write lands.
- */
-declare function withRating(ratings: MessageRatings, messageId: number, rating: 1 | -1 | 0): MessageRatings;
 
 /**
  * Which model ACTUALLY answered — per conversation — and how a tool call gets told.
@@ -9180,4 +9215,4 @@ interface ChatCreation {
 }
 declare function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }: ChatCreationOptions): ChatCreation;
 
-export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type AnswerOriginCost, type ArmedNewChat, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS, BROWSER_ENGINE_MODEL, BUILDERFORCE_PRODUCT_NAME, BfiWorkerEngineOptions, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunEngine, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BrowserEngineProber, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatCreation, type ChatCreationOptions, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatTicket, type ChatTurns, type ChatTurnsOptions, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_FALLBACK_TEMPLATE, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, EMPTY_GATEWAY_MODEL_OPTIONS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GatewayJsonRequest, type GatewayModelOptions, type GatewayModelSurface, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, HISTORY_TOKEN_BUDGET, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type HandoffFitOptions, HfModelStore, type HostLocalPin, type HostModelStreamInput, INFERENCE_MODES, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageUrlContentPart, type IndexedDbStepDurabilityOptions, type InferenceMode, LOCAL_PICKER_GROUPS, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalAttemptFit, type LocalBrainPersistenceOptions, type LocalChatMessage, type LocalFetch, type LocalFirstAttemptSummary, type LocalFirstStreamInput, type LocalModelRow, type LocalModelState, type LocalModelStore, type LocalPickerGroup, type LocalPickerView, type LocalStreamRoute, type LocalSuccessContribution, type LocalSuccessFederation, type LocalSuccessFleetHead, type LocalSuccessSnapshot, type LocalSuccessStore, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MemorySurface, type MentionToken, type MessageProvenance, type MessageRatings, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackChannel, type ModelFallbackEvent, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelScore, type ModelTurn, type ModelWindowSources, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, type OnDeviceStoreScope, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type PackForModelInput, type PackForModelResult, PageEngine, type PageEngineSet, type PageEngineSetOptions, type PageRuntimePin, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, type ProviderFailureEvent, type QueuedItem, type QueuedTurns, type QueuedTurnsOptions, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, RUN_REFRESH_MS, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunEngineControl, type RunKey, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, type RunStopHook, type RunStopInput, type RunTurn, type RunWindowSources, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type SavingsBreakdown, type SavingsBySource, type SavingsSourceKey, type SpendBreakdown, type SpendSavingsSummary, type StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, USAGE_SURFACES, USAGE_SURFACE_HEADER, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UsageSurface, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, type WindowFitTrace, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, brainPersonaAgents, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, contextWindowOf, createBrainRestPersistence, createBrowserEngineProber, createComposingActivity, createHandoffFit, createHostModelStream, createLocalBrainPersistence, createLocalFirstStream, createLocalStream, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, createPayloadBudget, declinesReview, declinesShipping, defaultInferenceMode, deferredLocalModelStore, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gatewayCanChooseModel, gatewayModelIdentity, gatewayModelWindows, gatewayPlanIsPaid, gatewayPlanModels, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, hasPromptApi, hasWebGPU, installIndexedDbStepDurability, installRunDriver, installStepDurability, invalidateGatewayModelOptions, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isFallbackFailure, isInferenceMode, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUsageSurface, isUserConfiguredModelRef, lastConsolidationIndex, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, loadGatewayModelOptions, loadOnDeviceAnswerStore, localFallbackTrace, localFirstApplies, localFirstWorkload, localPickerView, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelFallbackText, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, packForModel, pageEnginesFetch, pageRuntimePin, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, personalitySetpoints, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, probePageEngines, productForPlan, productModelName, progressDuration, projectMemoryHooks, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, providerFailureEvent, providerFailureTrace, queueRunSteering, ratedTurnContext, ratedTurnTool, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resetOnDeviceStoresForTests, resolveBrainStream, resolveContextWindow, resolveRecipient, resolveRunConfirm, retryOnConnectFailure, revealsModelId, revisitAdvisory, routerToolSpecs, routingModeForSelection, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startEngineRun, startRun, stepRow, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, stripAskUser, studioToolsIn, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeLocalFirstAttempt, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSchemaTokens, toolSpecsFor, traceWithPersistedSteps, transcriptSeedFrom, transportRetryTrace, trimToolResult, turnAffectBlock, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, useArmedNewChat, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useChatCreation, useChatTurns, useMcpExtensions, useOptionalBrainContext, useQueuedTurns, useRegisterBrainActions, useRunRefreshTick, useRunSnapshot, useToolConfirmationGate, utf8ByteLength, webStorageLocalSuccessStore, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, withRating, withReadyPageModels, withUsageSurface, workFiledNotStaffedVerdict, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type AnswerOriginCost, type ArmedNewChat, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS, BROWSER_ENGINE_MODEL, BUILDERFORCE_PRODUCT_NAME, BfiWorkerEngineOptions, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunEngine, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BrowserEngineProber, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatCompletionMessage, type ChatCreation, type ChatCreationOptions, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatTicket, type ChatTurns, type ChatTurnsOptions, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_FALLBACK_TEMPLATE, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, EMPTY_GATEWAY_MODEL_OPTIONS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GatewayJsonRequest, type GatewayModelOptions, type GatewayModelSurface, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, HISTORY_TOKEN_BUDGET, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type HandoffFitOptions, HfModelStore, type HostLocalPin, type HostModelStreamInput, INFERENCE_MODES, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageUrlContentPart, type IndexedDbStepDurabilityOptions, type InferenceMode, LOCAL_PICKER_GROUPS, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalAttemptFit, type LocalBrainPersistenceOptions, type LocalChatMessage, type LocalFetch, type LocalFirstAttemptSummary, type LocalFirstStreamInput, type LocalModelRow, type LocalModelState, type LocalModelStore, type LocalPickerGroup, type LocalPickerView, type LocalRatingVerdict, type LocalStreamRoute, type LocalSuccessContribution, type LocalSuccessFederation, type LocalSuccessFleetHead, type LocalSuccessSnapshot, type LocalSuccessStore, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryFirstAnswer, type MemorySurface, type MentionToken, type MessageProvenance, type MessageRatings, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackChannel, type ModelFallbackEvent, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelScore, type ModelTurn, type ModelWindowSources, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, type OnDeviceStoreScope, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type PackForModelInput, type PackForModelResult, PageEngine, type PageEngineSet, type PageEngineSetOptions, type PageRuntimePin, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, type ProviderFailureEvent, type QueuedItem, type QueuedTurns, type QueuedTurnsOptions, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, RUN_REFRESH_MS, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunEngineControl, type RunKey, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunProgress, type RunStopHook, type RunStopInput, type RunTurn, type RunWindowSources, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type SavingsBreakdown, type SavingsBySource, type SavingsSourceKey, type SpendBreakdown, type SpendSavingsSummary, type StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, USAGE_SURFACES, USAGE_SURFACE_HEADER, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UsageSurface, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, type WindowFitTrace, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, brainPersonaAgents, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, consolidationMarkerContent, consolidationMetadata, contextWindowOf, createBrainRestPersistence, createBrowserEngineProber, createComposingActivity, createHandoffFit, createHostModelStream, createLocalBrainPersistence, createLocalFirstStream, createLocalStream, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, createPayloadBudget, declinesReview, declinesShipping, defaultInferenceMode, deferredLocalModelStore, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gatewayCanChooseModel, gatewayModelIdentity, gatewayModelWindows, gatewayPlanIsPaid, gatewayPlanModels, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, hasPromptApi, hasWebGPU, installIndexedDbStepDurability, installRunDriver, installStepDurability, invalidateGatewayModelOptions, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isFallbackFailure, isInferenceMode, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUsageSurface, isUserConfiguredModelRef, lastConsolidationIndex, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, loadGatewayModelOptions, loadOnDeviceAnswerStore, localFallbackTrace, localFirstApplies, localFirstWorkload, localPickerView, localRatingVerdict, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelFallbackText, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, onDeviceMemoryHooks, packForModel, pageEnginesFetch, pageRuntimePin, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, personalitySetpoints, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, probePageEngines, productForPlan, productModelName, progressDuration, projectMemoryHooks, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, providerFailureEvent, providerFailureTrace, queueRunSteering, ratedTurnContext, ratedTurnTool, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resetOnDeviceStoresForTests, resolveBrainStream, resolveContextWindow, resolveRecipient, resolveRunConfirm, retryOnConnectFailure, revealsModelId, revisitAdvisory, routerToolSpecs, routingModeForSelection, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, scopeToConsolidation, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startEngineRun, startRun, stepRow, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, stripAskUser, studioToolsIn, submitLocalTurnVerdict, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeLocalFirstAttempt, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSchemaTokens, toolSpecsFor, traceWithPersistedSteps, transcriptSeedFrom, transportRetryTrace, trimToolResult, turnAffectBlock, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, useArmedNewChat, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useChatCreation, useChatTurns, useMcpExtensions, useOptionalBrainContext, useQueuedTurns, useRegisterBrainActions, useRunRefreshTick, useRunSnapshot, useToolConfirmationGate, utf8ByteLength, webStorageLocalSuccessStore, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, withRating, withReadyPageModels, withUsageSurface, workFiledNotStaffedVerdict, workItemLinkFromCreate };

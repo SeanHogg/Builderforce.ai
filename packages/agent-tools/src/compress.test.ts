@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CompressResult } from "./capabilities";
-import { compressLargeContext, splitFences } from "./compress";
+import { compressLargeContext, compressShellResult, compressWebFetchResult, splitFences } from "./compress";
+import { runCommandTool, webFetchTool } from "./core-tools";
 
 /** Keeps every other word; records what it was asked to compress. */
 function halver(calls: string[] = []) {
@@ -87,5 +88,52 @@ describe("compressLargeContext", () => {
       expect(r.compressed).toBe(false);
     }
     expect(calls).toEqual([]);
+  });
+});
+
+describe("C8 call sites: run_command stdout and web_fetch content", () => {
+  const prose = "word ".repeat(2_000);
+  const ctxWith = (compressLargeOutputs: boolean | undefined, calls: string[] = []) => ({
+    caps: { semantic: { compress: halver(calls) } },
+    ...(compressLargeOutputs === undefined ? {} : { compressLargeOutputs }),
+  });
+
+  it("leaves output untouched unless the host turned compression on", async () => {
+    const calls: string[] = [];
+    expect(await compressShellResult({ ok: true, exitCode: 0, stdout: prose }, ctxWith(undefined, calls))).toEqual({ ok: true, exitCode: 0, stdout: prose });
+    expect(await compressWebFetchResult({ ok: true, content: prose }, ctxWith(false, calls))).toEqual({ ok: true, content: prose });
+    expect(calls).toEqual([]);
+  });
+
+  it("leaves output untouched on a surface without the compress capability", async () => {
+    const r = await compressWebFetchResult({ ok: true, content: prose }, { caps: {}, compressLargeOutputs: true } as never);
+    expect(r).toEqual({ ok: true, content: prose });
+  });
+
+  it("compresses a successful command's stdout and a fetched page, and marks them", async () => {
+    const shell = await compressShellResult({ ok: true, exitCode: 0, stdout: prose }, ctxWith(true));
+    expect(shell.compressed).toBe(true);
+    expect(shell.stdout!.length).toBeLessThan(prose.length);
+    const page = await compressWebFetchResult({ ok: true, status: 200, content: prose }, ctxWith(true));
+    expect(page).toMatchObject({ ok: true, status: 200, compressed: true });
+  });
+
+  it("never compresses a failing command's output", async () => {
+    const calls: string[] = [];
+    const failed = { ok: false, exitCode: 1, stdout: prose };
+    expect(await compressShellResult(failed, ctxWith(true, calls))).toBe(failed);
+    expect(calls).toEqual([]);
+  });
+
+  it("is wired into the run_command and web_fetch tools", async () => {
+    const caps = {
+      capabilities: new Set(["shell", "web"]),
+      semantic: { compress: halver() },
+      shell: { run: async () => ({ ok: true, exitCode: 0, stdout: prose }) },
+      web: { fetch: async () => ({ ok: true, content: prose }) },
+    };
+    const ctx = { caps, compressLargeOutputs: true } as never;
+    expect((await runCommandTool.execute({ command: "npm ls" }, ctx)).data.compressed).toBe(true);
+    expect((await webFetchTool.execute({ url: "https://example.com" }, ctx)).data.compressed).toBe(true);
   });
 });

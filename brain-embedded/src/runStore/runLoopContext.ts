@@ -14,8 +14,7 @@ import type { BrainToolSpec, ChatCompletionMessage, CompletionMetadata, StreamCh
 import { isRepoStateReadTool } from '../localWorkspaceTools';
 import { isReadOnlyPlatformTool } from '../chatWorkLinking';
 import type { ReadCoverage } from '../readCoverage';
-import { failureReason, repeatedFailureAdvisory, type FailureTally } from '../repeatedFailure';
-import type { WriteLedger } from '../repeatedWrite';
+import { failureReason, repeatedFailureAdvisory, type FailureTally, type WriteLedger } from '@builderforce/run-guards';
 import type { PlaceholderLedger } from '../completionGuard';
 import type { turnInterruption } from '../finishReason.js';
 import type { RunWindowFit } from '../windowFit/runWindowFit';

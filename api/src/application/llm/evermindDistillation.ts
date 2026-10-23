@@ -17,21 +17,32 @@
  *     un-distilled path, the refine-mode teacher input and the teacher fallback. A run
  *     whose text was nothing but narration teaches nothing. Unfiltered, that chatter
  *     self-learned into the head, regressed held-out loss and kept it quarantined.
+ *   • the DEFERRED teacher (PRD D6, lever `d6_batch_api`): with a {@link TeacherDeferral}
+ *     the teacher call rides a provider batch instead of holding the alarm. The entry fits
+ *     nothing now; {@link evermindTeacherBatchHandler} hands the exemplar (or, when the
+ *     teacher produced none, the cleaned run text) back to the coordinator as ONE
+ *     pre-distilled contribution carrying its provenance, so the entry is learned exactly
+ *     once and never re-taught.
  */
 
 import { adaptAndDiff, type AdaptResult, type EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 import { DistillationEngine, type DistillationStudent, type DistillationTeacher } from '@seanhogg/builderforce-memory/distillation';
 import { stripRunNarration } from '@builderforce/agent-loop';
 import type { Env } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
 import {
   TEACHER_MIN_OUTPUT_CHARS,
   generateTeacherExemplar,
   noteTeacherFault,
+  teacherRequest,
   type EffectiveTeacher,
   type TeacherFailureReason,
   type TeacherMode,
   type TeacherSkipReason,
 } from './evermindTeacher';
+import { coordinatorStub } from './projectEvermind';
+import { deferLlmCall } from './batch/deferLlmCall';
+import type { BatchCallbackHandler } from './batch/batchCallbacks';
 
 /** Chars of the task / run context that prefix the exemplar in the training text. */
 export const TEACHER_CONTEXT_CHARS = 1500;
@@ -63,6 +74,40 @@ export interface EvermindDistilledEntry {
   learnedText?: string;
   /** True when the raw run text was ALL narration, so it was not learned from. */
   narrationOnly?: boolean;
+  /** Present when the teacher call was queued on a provider batch: nothing was fitted
+   *  now, and the batch handler delivers the learned text as its own contribution. */
+  deferredJobId?: number;
+}
+
+/** Where a deferred teacher's answer goes back to: the project coordinator that queued
+ *  the entry, with the entry's own provenance. */
+export interface TeacherDeferral {
+  db: Db;
+  projectId: number;
+  chatId?: number | null;
+  weight?: number;
+  /** The coordinator's id for the queued entry, carried back so a poller of that id
+   *  follows the contribution the batch answer becomes. */
+  contributionId?: number;
+}
+
+/**
+ * A contribution that has ALREADY been through distillation — the body the batch handler
+ * posts to the coordinator's `/learn-text`. `distillation` is the provenance the alarm
+ * records instead of running a teacher: an entry carrying it is adapted on `text` as is.
+ */
+export interface PreDistilledLearnText {
+  tenantId: number;
+  projectId: number;
+  text: string;
+  prompt?: string;
+  chatId?: number;
+  weight?: number;
+  /** The contribution id the teacher call was deferred from (see {@link TeacherDeferral}). */
+  deferredContributionId?: number;
+  distillation:
+    | { distilled: true; teacherModel: string }
+    | { distilled: false; skipReason: TeacherFailureReason; skipDetail?: string; attemptedTeacherModel: string };
 }
 
 /**
@@ -120,7 +165,7 @@ export async function distillEvermindEntry(
   teacher: EffectiveTeacher,
   student: DistillationStudent<EvermindAdaptation>,
   runText: string,
-  opts?: { prompt?: string | null; signal?: AbortSignal },
+  opts?: { prompt?: string | null; signal?: AbortSignal; defer?: TeacherDeferral },
 ): Promise<EvermindDistilledEntry> {
   const learnable = learnableRunText(runText);
   const prompt = (opts?.prompt ?? '').trim();
@@ -131,6 +176,29 @@ export async function distillEvermindEntry(
   }
   const model = teacher.model;
   const [input, mode] = prompt ? [prompt, 'answer' as const] : [learnable!, 'refine' as const];
+
+  // Nobody waits on a teacher: queue it on a batch when the coordinator says where the
+  // answer goes. An input the teacher would refuse as too short stays synchronous (it
+  // fails fast and costs nothing).
+  if (opts?.defer && input.trim().length >= 20) {
+    const queued = await deferLlmCall(env, opts.defer.db, {
+      tenantId,
+      projectId: opts.defer.projectId,
+      kind: 'evermind_teacher',
+      pinnedModel: model,
+      request: teacherRequest(mode, input),
+      payload: {
+        projectId: opts.defer.projectId,
+        teacherModel: model,
+        ...(prompt ? { prompt } : {}),
+        ...(learnable ? { fallbackText: learnable } : {}),
+        ...(opts.defer.chatId != null ? { chatId: opts.defer.chatId } : {}),
+        ...(opts.defer.weight != null ? { weight: opts.defer.weight } : {}),
+        ...(opts.defer.contributionId != null ? { contributionId: opts.defer.contributionId } : {}),
+      },
+    });
+    if (queued.deferred) return { adapted: null, distilled: false, deferredJobId: queued.jobId };
+  }
 
   // A narration-only run has no fallback worth learning: the student skips an empty
   // fallback instead of fitting on it.
@@ -174,7 +242,145 @@ export async function distillEvermindEntry(
   };
 }
 
+/**
+ * Learn a contribution that has ALREADY been through distillation (the deferred teacher's
+ * batch handler posted it — {@link PreDistilledLearnText}): no teacher runs, the student
+ * adapts on `text` as is, and the entry carries the provenance the handler recorded — the
+ * same fields a synchronous {@link distillEvermindEntry} would have stamped.
+ */
+export async function adaptPreDistilledEntry(
+  student: DistillationStudent<EvermindAdaptation>,
+  text: string,
+  distillation: PreDistilledLearnText['distillation'],
+): Promise<EvermindDistilledEntry> {
+  const adapted = await student.adapt(text);
+  if (distillation.distilled) {
+    return { adapted, distilled: true, teacherModel: distillation.teacherModel, exemplar: text, learnedText: text };
+  }
+  return {
+    adapted,
+    distilled: false,
+    skipReason: distillation.skipReason,
+    attemptedTeacherModel: distillation.attemptedTeacherModel,
+    ...(distillation.skipDetail ? { skipDetail: distillation.skipDetail } : {}),
+    learnedText: text,
+  };
+}
+
+const TEACHER_FAILURE_REASONS: ReadonlySet<string> = new Set<TeacherFailureReason>(['input_too_short', 'gateway_error', 'empty_output', 'exception']);
+
+/** A `/learn-text` body's `distillation` field, validated — or undefined when absent or malformed. */
+export function readPreDistillation(value: unknown): PreDistilledLearnText['distillation'] | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const v = value as Record<string, unknown>;
+  if (v.distilled === true && typeof v.teacherModel === 'string' && v.teacherModel) {
+    return { distilled: true, teacherModel: v.teacherModel };
+  }
+  if (v.distilled === false && typeof v.skipReason === 'string' && TEACHER_FAILURE_REASONS.has(v.skipReason) && typeof v.attemptedTeacherModel === 'string') {
+    return {
+      distilled: false,
+      skipReason: v.skipReason as TeacherFailureReason,
+      attemptedTeacherModel: v.attemptedTeacherModel,
+      ...(typeof v.skipDetail === 'string' && v.skipDetail ? { skipDetail: v.skipDetail.slice(0, 500) } : {}),
+    };
+  }
+  return undefined;
+}
+
 function errorText(error: unknown): string | undefined {
   if (error === undefined) return undefined;
   return error instanceof Error ? error.message : String(error);
 }
+
+// ---------------------------------------------------------------------------
+// Deferred teacher — the batch completion handler
+// ---------------------------------------------------------------------------
+
+/** The deferred entry's provenance, read back off the job. */
+function deferredEntry(payload: Record<string, unknown>): { projectId: number; teacherModel: string; prompt?: string; fallbackText?: string; chatId?: number; weight?: number; contributionId?: number } {
+  const projectId = Number(payload.projectId);
+  if (!Number.isInteger(projectId) || projectId <= 0) throw new Error('evermind_teacher job has no projectId');
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  const prompt = str(payload.prompt);
+  const fallbackText = str(payload.fallbackText);
+  const chatId = num(payload.chatId);
+  const weight = num(payload.weight);
+  const contributionId = num(payload.contributionId);
+  return {
+    projectId,
+    teacherModel: str(payload.teacherModel) ?? 'unknown',
+    ...(prompt ? { prompt } : {}),
+    ...(fallbackText ? { fallbackText } : {}),
+    ...(chatId != null ? { chatId } : {}),
+    ...(weight != null ? { weight } : {}),
+    ...(contributionId != null ? { contributionId } : {}),
+  };
+}
+
+/** Post one pre-distilled contribution to the project coordinator. Throws on refusal so
+ *  the job records why the memory did not land. */
+async function deliverPreDistilled(env: Env, body: PreDistilledLearnText): Promise<void> {
+  const stub = coordinatorStub(env, body.tenantId, body.projectId);
+  if (!stub) throw new Error('no coordinator binding');
+  const res = await stub.fetch('https://coordinator/learn-text', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`coordinator refused the contribution: HTTP ${res.status}`);
+}
+
+/** The cleaned run text as an un-distilled contribution — the synchronous fallback's
+ *  "a contribution is never lost", for a teacher that answered nothing usable. */
+async function deliverFallback(
+  env: Env,
+  tenantId: number,
+  entry: ReturnType<typeof deferredEntry>,
+  skipReason: TeacherFailureReason,
+  skipDetail?: string,
+): Promise<void> {
+  if (!entry.fallbackText) return; // all narration: the synchronous path learns nothing either
+  await deliverPreDistilled(env, {
+    tenantId,
+    projectId: entry.projectId,
+    text: entry.fallbackText,
+    ...(entry.prompt ? { prompt: entry.prompt } : {}),
+    ...(entry.chatId != null ? { chatId: entry.chatId } : {}),
+    ...(entry.weight != null ? { weight: entry.weight } : {}),
+    ...(entry.contributionId != null ? { deferredContributionId: entry.contributionId } : {}),
+    distillation: { distilled: false, skipReason, ...(skipDetail ? { skipDetail } : {}), attemptedTeacherModel: entry.teacherModel },
+  });
+}
+
+/**
+ * Settles a deferred teacher call. The exemplar passes the same quality gate the engine
+ * applies ({@link TEACHER_MIN_OUTPUT_CHARS}); below it, or when the batch could not get
+ * an answer at all, the cleaned run text is learned un-distilled with the reason — and a
+ * gateway failure benches the teacher exactly as a synchronous one does.
+ */
+export const evermindTeacherBatchHandler: BatchCallbackHandler = {
+  async settle({ env }, job, completion) {
+    const entry = deferredEntry(job.callbackPayload);
+    const exemplar = completion.content.trim();
+    if (exemplar.length < TEACHER_MIN_OUTPUT_CHARS) {
+      await deliverFallback(env, job.tenantId, entry, 'empty_output', `${exemplar.length} chars`);
+      return;
+    }
+    await deliverPreDistilled(env, {
+      tenantId: job.tenantId,
+      projectId: entry.projectId,
+      text: exemplar,
+      ...(entry.prompt ? { prompt: entry.prompt } : {}),
+      ...(entry.chatId != null ? { chatId: entry.chatId } : {}),
+      ...(entry.weight != null ? { weight: entry.weight } : {}),
+      ...(entry.contributionId != null ? { deferredContributionId: entry.contributionId } : {}),
+      distillation: { distilled: true, teacherModel: completion.model || entry.teacherModel },
+    });
+  },
+  async abandon({ env }, job, error) {
+    const entry = deferredEntry(job.callbackPayload);
+    await noteTeacherFault(env, job.tenantId, entry.teacherModel, 'gateway_error');
+    await deliverFallback(env, job.tenantId, entry, 'gateway_error', error.slice(0, 200));
+  },
+};

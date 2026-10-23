@@ -24,8 +24,7 @@ import { selfReviewShipDirective } from '../selfReviewShip';
 import { previewReviewDirective } from '../previewReview';
 import { previousReplyText } from '../restatedReply';
 import { ReadCoverage } from '../readCoverage';
-import { FailureTally } from '../repeatedFailure';
-import { WriteLedger } from '../repeatedWrite';
+import { FailureTally, WriteLedger } from '@builderforce/run-guards';
 import { PlaceholderLedger } from '../completionGuard';
 import { HISTORY_TOKEN_BUDGET } from '../workingTranscript';
 import { createRunWindowFit } from '../windowFit/runWindowFit';
@@ -274,7 +273,7 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     // starts circling. Both are invalidated together, and only for what a later
     // mutation actually touched — never wiped wholesale by an unrelated call.
     readCoverage: new ReadCoverage(),
-    // What this run has already FAILED at (see `repeatedFailure.ts`). The read guards
+    // What this run has already FAILED at (see `FailureTally` in `@builderforce/run-guards`). The read guards
     // above deliberately record only SUCCESSES, so an identical failing call — the same
     // `git_status` answered with the same remedy three times, the same platform read
     // answered 502 twice — got no pushback at all and could repeat until the budget was

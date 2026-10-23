@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VendorFatalError, VendorRetryableError } from '../vendors/types';
-import { MEMORY_EMBEDDING_DIMS, MEMORY_EMBEDDING_MODEL } from '../../memory/memoryEmbedding';
+import { MEMORY_EMBEDDING_1024_DIMS, MEMORY_EMBEDDING_1024_MODEL, MEMORY_EMBEDDING_DIMS, MEMORY_EMBEDDING_MODEL } from '../../memory/memoryEmbedding';
 import { buildCloudflareEmbeddingBody, cloudflareEmbeddingModule, parseCloudflareEmbeddings } from './cloudflare';
 import { openRouterEmbeddingModule } from './openrouter';
 import { voyageEmbeddingModule } from './voyage';
@@ -112,8 +112,15 @@ describe('embedding catalog dimensions', () => {
     expect(openRouterEmbeddingModule.catalog.find((e) => e.id === pinned)?.dimensions).toBe(MEMORY_EMBEDDING_DIMS);
   });
 
-  it('no Cloudflare model matches the memory width — it must never be a memory fallback', () => {
+  it('no Cloudflare model matches the 1536 memory width — it must never be a fallback INTO that column', () => {
     for (const entry of cloudflareEmbeddingModule.catalog) expect(entry.dimensions).not.toBe(MEMORY_EMBEDDING_DIMS);
+  });
+
+  it('the free memory space (1256, E3) is bge-m3 on Cloudflare, at the width its own column stores', () => {
+    expect(MEMORY_EMBEDDING_1024_MODEL.startsWith('cloudflare/')).toBe(true);
+    const pinned = MEMORY_EMBEDDING_1024_MODEL.replace(/^cloudflare\//, '');
+    expect(cloudflareEmbeddingModule.catalog.find((e) => e.id === pinned)?.dimensions).toBe(MEMORY_EMBEDDING_1024_DIMS);
+    expect(resolveEmbeddingCandidates(MEMORY_EMBEDDING_1024_MODEL)).toEqual([{ vendor: 'cloudflare', model: pinned }]);
   });
 });
 

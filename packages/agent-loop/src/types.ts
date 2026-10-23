@@ -105,6 +105,14 @@ export interface LoopPorts<M> {
   complete(ctx: TurnContext<M>): Promise<LoopTurnResult>;
   /** Run one tool. Throw to abort the run; return `isError` + data to keep going with an error payload. */
   dispatch(call: ParsedToolCall, ctx: TurnContext<M>): Promise<LoopDispatchResult>;
+  /**
+   * OPTIONAL (cost lever D8): whether a call only READS, so a run of two or more
+   * consecutive read-only calls in one turn may dispatch concurrently. Hook order is
+   * unchanged — `beforeDispatch` runs per call, in order, before the batch dispatches;
+   * results are settled (control, failure streak, row, `afterDispatch`) in call order.
+   * Absent ⇒ every call dispatches sequentially, exactly as before.
+   */
+  isReadOnly?(call: ParsedToolCall): boolean;
 }
 
 export type StopDecision = { action: "stop"; ok?: boolean; output?: string; finished?: boolean };

@@ -2,7 +2,7 @@
  * The gateway completion USE CASE — the body of `LlmProxyService.complete()`, split
  * out of the facade. Orchestrates the steps the other `proxy*` modules own:
  *
- *   exact response cache → semantic cache (B2) → single-flight (B3) →
+ *   deterministic handlers (D7) → exact response cache → semantic cache (B2) → single-flight (B3) →
  *   strict pin → seed + cooldowns → candidate chain →
  *   (empty chain branch | primary cascade → schema downgrade → paid backstop) → finalize
  *
@@ -24,6 +24,7 @@ import { resolveEmptyChain } from './proxyAllCooled';
 import { applyExcludedModels } from './requestFit';
 import { lookupSemanticChat, planSemanticChat, storeSemanticChat, type ResponseCacheGrant, type SemanticChatDeps } from './semanticChatCache';
 import { coalesceCompletion } from './proxySingleFlight';
+import { tryDeterministicCompletion } from './deterministic/deterministicCompletion';
 import type { ChatCompletionRequest, ProxyResult } from './proxyTypes';
 import type { ProxyRuntime } from './proxyConfig';
 
@@ -56,6 +57,15 @@ export async function completeChat(
   const startedAt = Date.now();
   const tid = traceId ?? newTraceId();
   const grant = opts?.responseCache;
+
+  // ── DETERMINISTIC HANDLERS (D7) ─────────────────────────────────────────
+  // A tool-free question a registered handler is sure of (arithmetic, a unit
+  // conversion, calendar arithmetic) is answered without a model — outcome
+  // `deterministic`, no usage, never metered. See `deterministic/`.
+  if (isCostLeverOn(cfg.env, 'd7_deterministic_handlers', cfg.tenantId ?? grant?.tenantId)) {
+    const answered = tryDeterministicCompletion(body);
+    if (answered) return finalize(answered, tid, startedAt, [answered.resolvedModel], answered.outcome);
+  }
 
   // ── EXACT-MATCH RESPONSE CACHE ──────────────────────────────────────────
   // See `responseCacheKeyFor` for the double opt-in.

@@ -15,7 +15,8 @@
  * `@builderforce/cost-levers`; this helper does not read the lever itself.
  */
 
-import type { CompressResult } from "./capabilities.js";
+import type { CompressResult, RepoSemanticCapability, ShellResult, WebFetchResult } from "./capabilities.js";
+import type { ToolContext } from "./tool.js";
 
 export type CompressFn = (text: string, rate: number) => Promise<CompressResult>;
 
@@ -124,4 +125,54 @@ export async function compressLargeContext(
     }
   }
   return compressed ? { text: parts.join(""), compressed, originalTokens, keptTokens } : unchanged;
+}
+
+/**
+ * What {@link compressToolOutput} reads off a tool context: the host's C8 decision
+ * ({@link ToolContext.compressLargeOutputs} — agent-tools has no env, so the host resolves
+ * `isCostLeverOn(env, "c8_token_compression", tenantId)` once and passes the answer; absent
+ * or false = no compression), the compressor, and the log sink.
+ */
+export interface CompressionToolContext extends Pick<ToolContext, "compressLargeOutputs" | "emit"> {
+  readonly caps: { readonly semantic?: Pick<RepoSemanticCapability, "compress"> };
+}
+
+/**
+ * C8 on ONE tool-output string: compressed when the host turned it on AND the surface
+ * backs `compress` (the Desktop semantic service, when its health probe reports it), else
+ * the text unchanged. Only for prose-heavy outputs — shell stdout and fetched pages —
+ * never for `read_file` of code (an edit needs the exact bytes).
+ */
+export async function compressToolOutput(
+  text: string,
+  ctx: CompressionToolContext,
+  tool: string,
+): Promise<CompressLargeContextResult> {
+  const semantic = ctx.caps.semantic;
+  if (ctx.compressLargeOutputs !== true || !semantic?.compress) {
+    return { text, compressed: false, originalTokens: 0, keptTokens: 0 };
+  }
+  const r = await compressLargeContext(text, { compress: (t, rate) => semantic.compress!(t, rate) });
+  if (r.compressed) {
+    ctx.emit?.({ level: "debug", message: `${tool}: output compressed (C8)`, detail: { originalTokens: r.originalTokens, keptTokens: r.keptTokens } });
+  }
+  return r;
+}
+
+/**
+ * `run_command`: compress a SUCCESSFUL command's stdout. A failing command's output is
+ * left verbatim — the error lines, stack and assertion diff are exactly what the model
+ * must read, and the C7 tool-output policy already focuses them.
+ */
+export async function compressShellResult(r: ShellResult, ctx: CompressionToolContext): Promise<ShellResult & { compressed?: true }> {
+  if (!r.ok || (r.exitCode !== undefined && r.exitCode !== 0) || typeof r.stdout !== "string") return r;
+  const c = await compressToolOutput(r.stdout, ctx, "run_command");
+  return c.compressed ? { ...r, stdout: c.text, compressed: true } : r;
+}
+
+/** `web_fetch`: compress the fetched page's readable text (code fences stay verbatim). */
+export async function compressWebFetchResult(r: WebFetchResult, ctx: CompressionToolContext): Promise<WebFetchResult & { compressed?: true }> {
+  if (!r.ok || typeof r.content !== "string") return r;
+  const c = await compressToolOutput(r.content, ctx, "web_fetch");
+  return c.compressed ? { ...r, content: c.text, compressed: true } : r;
 }

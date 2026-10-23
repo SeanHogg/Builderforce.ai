@@ -1379,6 +1379,12 @@ export const agentMemory = pgTable('agent_memory', {
   embedding:      vector('embedding', { dimensions: 1536 }),
   embeddingModel: varchar('embedding_model', { length: 64 }),
   embeddedAt:     timestamp('embedded_at'),
+  /** FREE EMBEDDINGS (1256, cost lever `e3_free_embeddings`) — a second vector space
+   *  (Workers AI bge-m3, 1024-d) beside the 1536 column, dual-read until every row has
+   *  one. Its own model stamp because a row can hold both vectors at once. */
+  embedding1024:      vector('embedding_1024', { dimensions: 1024 }),
+  embedding1024Model: varchar('embedding_1024_model', { length: 64 }),
+  embedded1024At:     timestamp('embedded_1024_at'),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });
@@ -1561,6 +1567,28 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   uniqueIndex('run_model_outcomes_client_run_id_key').on(t.clientRunId).where(sql`client_run_id IS NOT NULL`),
 ]);
 
+
+// ---------------------------------------------------------------------------
+// Verifier-cascade outcomes (migration 1254) — the D2 difficulty router's training
+// rows: one per weak-model attempt the D1 cascade's verifier judged. `features` is the
+// raw `DifficultyFeatures` (@builderforce/difficulty-router), so a scaling change
+// re-featurizes old rows. Plain ids, no FKs (run telemetry, like `run_model_outcomes`).
+// Writer: `recordCascadeOutcome`; reader: the daily training sweep — never the hot path.
+// ---------------------------------------------------------------------------
+export const cascadeOutcomes = pgTable('cascade_outcomes', {
+  id:          bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  executionId: varchar('execution_id', { length: 128 }).notNull(),
+  actionType:  varchar('action_type', { length: 32 }).notNull(),
+  role:        varchar('role', { length: 16 }).notNull(),
+  weakModel:   varchar('weak_model', { length: 200 }).notNull(),
+  passed:      boolean('passed').notNull(),
+  verifier:    varchar('verifier', { length: 64 }).notNull(),
+  features:    jsonb('features').notNull(),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('cascade_outcomes_tenant_created_idx').on(t.tenantId, t.createdAt),
+]);
 
 // ---------------------------------------------------------------------------
 // Human ratings of model output (migration 0468).
@@ -2176,6 +2204,50 @@ export const llmTraces = pgTable('llm_traces', {
   callerMetadata:    text('caller_metadata'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
 });
+
+/**
+ * Specialist eval cases (1257, cost lever E2) — the held-out eval set of one narrow
+ * job: the exact chat request the job sent, captured (sampled, capped per job,
+ * redacted) and the frontier reference model's output for it, filled once by the
+ * weekly sweep. Reader/writer: `application/llm/specialists/evalCaseStore.ts`.
+ */
+export const llmSpecialistEvalCases = pgTable('llm_specialist_eval_cases', {
+  id:              serial('id').primaryKey(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  jobId:           varchar('job_id', { length: 64 }).notNull(),
+  inputHash:       varchar('input_hash', { length: 64 }).notNull(),
+  /** JSON `{ messages, max_tokens?, response_format? }` — replayed verbatim. */
+  request:         text('request').notNull(),
+  referenceOutput: text('reference_output'),
+  referenceModel:  varchar('reference_model', { length: 200 }),
+  capturedAt:      timestamp('captured_at').notNull().defaultNow(),
+  referencedAt:    timestamp('referenced_at'),
+}, (t) => ({
+  jobInput: uniqueIndex('uq_llm_specialist_eval_cases_job_input').on(t.jobId, t.inputHash),
+}));
+
+/**
+ * Specialist admissions (1257, cost lever E2) — a small model admitted for ONE job
+ * at ≥ the frontier-parity bar on that job's eval set. Re-scored weekly; drift
+ * stamps `revokedAt`. A platform fact about a model, the same for every tenant.
+ * Reader/writer: `application/llm/specialists/admissionStore.ts`.
+ */
+export const llmSpecialistAdmissions = pgTable('llm_specialist_admissions', {
+  id:            serial('id').primaryKey(),
+  jobId:         varchar('job_id', { length: 64 }).notNull(),
+  model:         varchar('model', { length: 200 }).notNull(),
+  dataset:       varchar('dataset', { length: 200 }).notNull(),
+  cases:         integer('cases').notNull(),
+  score:         real('score').notNull(),
+  frontierScore: real('frontier_score').notNull(),
+  frontierModel: varchar('frontier_model', { length: 200 }),
+  admittedAt:    timestamp('admitted_at').notNull().defaultNow(),
+  evaluatedAt:   timestamp('evaluated_at').notNull().defaultNow(),
+  revokedAt:     timestamp('revoked_at'),
+  revokeReason:  varchar('revoke_reason', { length: 64 }),
+}, (t) => ({
+  active: uniqueIndex('uq_llm_specialist_admissions_active').on(t.jobId, t.model).where(sql`revoked_at IS NULL`),
+}));
 
 
 // Anonymous landing-page prompts (0128) — durable, cross-device handoff of a
@@ -2963,4 +3035,48 @@ export const agentBenchmarkResults = pgTable('agent_benchmark_results', {
 }, (t) => [
   index('agent_benchmark_results_series_idx').on(t.tenantId, t.caseId, t.createdAt),
   index('agent_benchmark_results_agent_idx').on(t.tenantId, t.cloudAgentRef, t.createdAt),
+]);
+
+// ---------------------------------------------------------------------------
+// llm_batch_jobs — the deferred LLM work queue (PRD D6, provider batch APIs).
+// LIVES ON THE OPERATIONAL ENDPOINT beside `llm_usage_log` (transactional-migrations/0020,
+// mirrored on core by migrations/1255 for the unsplit fallback). Resolved through
+// `usageDatabaseOf()`. Core entities are plain ids. `request` is cleared once a job
+// settles, so a finished row keeps provenance and none of the prompt text.
+// ---------------------------------------------------------------------------
+export const llmBatchJobs = pgTable('llm_batch_jobs', {
+  id:               serial('id').primaryKey(),
+  tenantId:         integer('tenant_id').notNull(),
+  projectId:        integer('project_id'),
+  taskId:           integer('task_id'),
+  /** The ledger `use_case` the settled usage row is written under. */
+  useCase:          varchar('use_case', { length: 64 }).notNull(),
+  /** Which registered completion handler settles the result (`BatchCallbackKind`). */
+  callbackKind:     varchar('callback_kind', { length: 48 }).notNull(),
+  /** What that handler needs to do the synchronous caller's write (ids, never secrets). */
+  callbackPayload:  jsonb('callback_payload').$type<Record<string, unknown>>().notNull().default({}),
+  /** `anthropic` | `openai` — the provider whose batch API carries the job. */
+  vendor:           varchar('vendor', { length: 32 }).notNull(),
+  model:            varchar('model', { length: 200 }).notNull(),
+  /** `byo` (the tenant's own api key) | `platform` (the operator key). Resolved to a
+   *  credential at submit time — no secret is ever stored here. */
+  funding:          varchar('funding', { length: 16 }).notNull(),
+  /** The vendor-neutral request (`DeferredLlmRequest`); `{}` once settled. */
+  request:          jsonb('request').$type<Record<string, unknown>>().notNull().default({}),
+  /** queued → submitting → submitted → completed | failed; `running_sync` while a
+   *  synchronous fallback holds it. */
+  status:           varchar('status', { length: 16 }).notNull().default('queued'),
+  providerBatchId:  varchar('provider_batch_id', { length: 128 }),
+  attempts:         integer('attempts').notNull().default(0),
+  /** Why the job ran synchronously instead (`sla_expired`, `submit_failed`, …). */
+  fallbackReason:   varchar('fallback_reason', { length: 64 }),
+  lastError:        text('last_error'),
+  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  submittedAt:      timestamp('submitted_at', { withTimezone: true }),
+  completedAt:      timestamp('completed_at', { withTimezone: true }),
+  updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_llm_batch_jobs_open').on(t.status, t.createdAt),
+  index('idx_llm_batch_jobs_provider_batch').on(t.providerBatchId),
+  index('idx_llm_batch_jobs_tenant').on(t.tenantId, t.createdAt),
 ]);

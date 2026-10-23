@@ -1,0 +1,21 @@
+// paths: this package imports `@builderforce/agent-tools` by source. esbuild (wrangler,
+// the VSIX and brain-embedded bundles) resolves a bare specifier through the NEAREST
+// tsconfig to the importing file, so the mapping must live here, not only in each host's.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "lib": ["ES2022", "DOM"],
+    "declaration": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "@builderforce/agent-tools": ["../agent-tools/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

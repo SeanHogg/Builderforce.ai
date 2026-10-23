@@ -15,6 +15,7 @@ import { createContext, useContext, useMemo } from 'react';
 import type { BrainChat, BrainMessage } from './types';
 import { streamChatCompletion, type BrainTransport } from './streamChatCompletion';
 import type { BrainStreamFn } from './brainRunStore';
+import type { LocalRatingVerdict } from './turnRating';
 
 /**
  * Chat/message persistence the host provides. Mirrors the Builderforce
@@ -61,7 +62,13 @@ export interface BrainPersistenceAdapter {
   setMessageFeedback(
     messageId: number,
     feedback: 'up' | 'down' | null,
-    context?: { toolName?: string | null },
+    context?: {
+      toolName?: string | null;
+      /** E5: set only when the press judges the chat's LATEST reply. A host whose model
+       *  stream runs in another realm (the VS Code extension host) hands it to
+       *  `submitLocalTurnVerdict` there; servers ignore it. */
+      localVerdict?: LocalRatingVerdict | null;
+    },
   ): Promise<unknown>;
   /**
    * Ask an invited agent participant to reply — a chat-scoped run that answers AS

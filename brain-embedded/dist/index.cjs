@@ -104,7 +104,7 @@ __export(src_exports, {
   REVISIT_HARD_AT: () => REVISIT_HARD_AT,
   REVISIT_NUDGE_AT: () => REVISIT_NUDGE_AT,
   RUN_REFRESH_MS: () => RUN_REFRESH_MS,
-  ReadCoverage: () => ReadCoverage,
+  ReadCoverage: () => ReadCoverage2,
   RepetitionLoopError: () => RepetitionLoopError,
   STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
   STOPPED_TURN_META_KEY: () => STOPPED_TURN_META_KEY,
@@ -308,6 +308,7 @@ __export(src_exports, {
   localFirstApplies: () => localFirstApplies,
   localFirstWorkload: () => localFirstWorkload,
   localPickerView: () => localPickerView,
+  localRatingVerdict: () => localRatingVerdict,
   localStorageConfirmationPersistence: () => localStorageConfirmationPersistence,
   localToolsIn: () => localToolsIn,
   localTransport: () => localTransport,
@@ -415,6 +416,7 @@ __export(src_exports, {
   streamChatCompletion: () => streamChatCompletion,
   stripAskUser: () => stripAskUser,
   studioToolsIn: () => studioToolsIn,
+  submitLocalTurnVerdict: () => submitLocalTurnVerdict,
   subscribeRun: () => subscribeRun,
   subscribeRunStore: () => subscribeRunStore,
   subscribeToChatMessages: () => subscribeToChatMessages,
@@ -871,6 +873,11 @@ var Ctx = class {
   output = "";
   failureStreak = 0;
 };
+function readOnlySpan(calls, start, isReadOnly) {
+  let end = start;
+  while (end < calls.length && isReadOnly(calls[end])) end++;
+  return end - start >= 2 ? end - start : 1;
+}
 async function runAgentLoop(args) {
   const { codec, ports, budget, signal } = args;
   const hooks = args.hooks ?? {};
@@ -946,13 +953,8 @@ async function runAgentLoop(args) {
       break;
     }
     ctx.messages.push(codec.assistant(turn));
-    for (let i = 0; i < calls.length; i++) {
-      let call2 = calls[i];
-      let result;
-      const pre = await hooks.beforeDispatch?.(call2, ctx);
-      if (pre && "result" in pre) result = pre.result;
-      else if (pre && "rewrite" in pre) call2 = pre.rewrite;
-      if (!result) result = await ports.dispatch(call2, ctx);
+    const settle = async (i, call2, dispatched) => {
+      let result = dispatched;
       if (result.control?.kind === "finish") {
         const block = await hooks.onFinish?.(ctx, result.control.summary, call2);
         if (block) {
@@ -969,11 +971,32 @@ async function runAgentLoop(args) {
       const row = codec.tool(call2, result);
       ctx.messages.push(row);
       const post = await hooks.afterDispatch?.(call2, result, row, ctx);
-      if (post?.skipRemaining) {
-        const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
-        for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
-        break;
+      if (!post?.skipRemaining) return false;
+      const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
+      for (const rest of calls.slice(i + 1)) ctx.messages.push(codec.tool(rest, skipped));
+      return true;
+    };
+    for (let i = 0; i < calls.length; ) {
+      const span = ports.isReadOnly ? readOnlySpan(calls, i, ports.isReadOnly) : 1;
+      const prepared = [];
+      for (let j = i; j < i + span; j++) {
+        let call2 = calls[j];
+        let result;
+        const pre = await hooks.beforeDispatch?.(call2, ctx);
+        if (pre && "result" in pre) result = pre.result;
+        else if (pre && "rewrite" in pre) call2 = pre.rewrite;
+        prepared.push(result ? { call: call2, result } : { call: call2 });
+        if (span > 1 && (result?.control || !result && !ports.isReadOnly(call2))) break;
       }
+      const last = prepared[prepared.length - 1];
+      const tail = prepared.length > 1 && !last.result && !ports.isReadOnly(last.call) ? last : void 0;
+      const batch = tail ? prepared.slice(0, -1) : prepared;
+      const results = batch.length > 1 ? await Promise.all(batch.map((p) => p.result ?? ports.dispatch(p.call, ctx))) : [batch[0].result ?? await ports.dispatch(batch[0].call, ctx)];
+      if (tail) results.push(await ports.dispatch(tail.call, ctx));
+      let stop = false;
+      for (let k = 0; k < prepared.length && !stop; k++) stop = await settle(i + k, prepared[k].call, results[k]);
+      if (stop) break;
+      i += prepared.length;
     }
     const after = await hooks.afterToolCalls?.(ctx, finished);
     if (after && after.finished !== void 0) finished = after.finished;
@@ -2886,6 +2909,17 @@ function reduceRunPolicy(state, event) {
       return stalled(s, event);
     case "transport_failed":
       return transportFailed(s, event);
+    case "escalated": {
+      const from = s.model;
+      if (!event.to || event.to === from) return s;
+      return {
+        ...s,
+        model: event.to,
+        locked: false,
+        strictPin: true,
+        tried: from && !s.tried.includes(from) ? [...s.tried, from] : s.tried
+      };
+    }
   }
 }
 function succeeded(s, resolved, acted) {
@@ -3840,6 +3874,97 @@ function resolveToolAlias(name) {
   return TOOL_NAME_ALIASES[key] ?? name;
 }
 
+// ../packages/agent-tools/src/compress.ts
+var DEFAULT_COMPRESS_MIN_CHARS = 4e3;
+var DEFAULT_COMPRESS_RATE = 0.5;
+var FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
+function fenceRun(line2) {
+  return FENCE_OPEN.exec(line2)?.[1] ?? null;
+}
+function splitFences(text) {
+  const out = [];
+  const lines = text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+  let buf = "";
+  let fence = null;
+  const flush = (kind) => {
+    if (buf) out.push({ kind, text: buf });
+    buf = "";
+  };
+  for (const line2 of lines) {
+    const bare = line2.replace(/\r?\n$/, "");
+    if (!fence) {
+      const run2 = fenceRun(bare);
+      if (run2) {
+        flush("prose");
+        fence = { ch: run2.charAt(0), len: run2.length };
+      }
+      buf += line2;
+      continue;
+    }
+    buf += line2;
+    const run = fenceRun(bare);
+    const open = fence;
+    if (run && run.charAt(0) === open.ch && run.length >= open.len && [...bare.trim()].every((c) => c === open.ch)) {
+      flush("fence");
+      fence = null;
+    }
+  }
+  flush(fence ? "fence" : "prose");
+  return out;
+}
+async function compressLargeContext(text, opts = {}) {
+  const minChars = opts.minChars ?? DEFAULT_COMPRESS_MIN_CHARS;
+  const rate = opts.rate ?? DEFAULT_COMPRESS_RATE;
+  const unchanged = { text, compressed: false, originalTokens: 0, keptTokens: 0 };
+  if (!opts.compress || text.length < minChars || !(rate > 0 && rate < 1)) return unchanged;
+  let compressed = false;
+  let originalTokens = 0;
+  let keptTokens = 0;
+  const parts = [];
+  for (const seg of splitFences(text)) {
+    if (seg.kind === "fence" || seg.text.trim().length < minChars) {
+      parts.push(seg.text);
+      continue;
+    }
+    let r;
+    try {
+      r = await opts.compress(seg.text, rate);
+    } catch {
+      r = { ok: false };
+    }
+    if (r.ok && typeof r.text === "string" && r.text.length < seg.text.length) {
+      parts.push(r.text);
+      compressed = true;
+      originalTokens += r.originalTokens ?? 0;
+      keptTokens += r.keptTokens ?? 0;
+    } else {
+      parts.push(seg.text);
+    }
+  }
+  return compressed ? { text: parts.join(""), compressed, originalTokens, keptTokens } : unchanged;
+}
+async function compressToolOutput(text, ctx, tool) {
+  const semantic = ctx.caps.semantic;
+  if (ctx.compressLargeOutputs !== true || !semantic?.compress) {
+    return { text, compressed: false, originalTokens: 0, keptTokens: 0 };
+  }
+  const r = await compressLargeContext(text, { compress: (t, rate) => semantic.compress(t, rate) });
+  if (r.compressed) {
+    ctx.emit?.({ level: "debug", message: `${tool}: output compressed (C8)`, detail: { originalTokens: r.originalTokens, keptTokens: r.keptTokens } });
+  }
+  return r;
+}
+async function compressShellResult(r, ctx) {
+  if (!r.ok || r.exitCode !== void 0 && r.exitCode !== 0 || typeof r.stdout !== "string") return r;
+  const c = await compressToolOutput(r.stdout, ctx, "run_command");
+  return c.compressed ? { ...r, stdout: c.text, compressed: true } : r;
+}
+async function compressWebFetchResult(r, ctx) {
+  if (!r.ok || typeof r.content !== "string") return r;
+  const c = await compressToolOutput(r.content, ctx, "web_fetch");
+  return c.compressed ? { ...r, content: c.text, compressed: true } : r;
+}
+
 // ../packages/agent-tools/src/fileWindow.ts
 var READ_DEFAULT_LINE_LIMIT = 2e3;
 function windowFileContent(content, opts) {
@@ -4593,6 +4718,40 @@ var fileOutlineTool = defineTool({
 });
 var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 
+// ../packages/agent-tools/src/retrievalK.ts
+var ADAPTIVE_K_START = 3;
+var ADAPTIVE_K_FLOOR = 0.5;
+var ADAPTIVE_K_HEAD_MARGIN = 0.15;
+var positiveInt = (n, fallback) => typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : fallback;
+function hasClearHead(scores, start = ADAPTIVE_K_START, floor = ADAPTIVE_K_FLOOR, headMargin = ADAPTIVE_K_HEAD_MARGIN) {
+  const top = Number(scores[0]);
+  if (!Number.isFinite(top) || top < floor || top <= 0) return false;
+  if (scores.length <= start) return true;
+  const firstDropped = Number(scores[start]);
+  if (!Number.isFinite(firstDropped)) return true;
+  return (top - firstDropped) / top >= headMargin;
+}
+function chooseK(input) {
+  const n = input.scores.length;
+  const requested = positiveInt(input.requested, 0);
+  const ceiling = Math.min(requested, positiveInt(input.max, requested), n);
+  if (ceiling <= 0) return 0;
+  const start = Math.max(1, Math.min(positiveInt(input.start, ADAPTIVE_K_START), ceiling));
+  let k = hasClearHead(input.scores, start, input.floor ?? ADAPTIVE_K_FLOOR, input.headMargin ?? ADAPTIVE_K_HEAD_MARGIN) ? start : ceiling;
+  const budget = input.budgetTokens;
+  if (typeof budget === "number" && Number.isFinite(budget) && input.itemTokens?.length) {
+    let used = 0;
+    let fit = 0;
+    for (let i = 0; i < k; i++) {
+      used += Math.max(0, Number(input.itemTokens[i] ?? 0) || 0);
+      if (used > budget) break;
+      fit = i + 1;
+    }
+    k = Math.max(1, fit);
+  }
+  return k;
+}
+
 // ../packages/agent-tools/src/semantic-tools.ts
 var SEARCH_DEFAULT_LIMIT = 8;
 var SEARCH_MAX_LIMIT = 25;
@@ -4615,11 +4774,17 @@ var semanticSearchTool = defineTool({
     const query = typeof args.query === "string" ? args.query.trim() : "";
     if (!query) return { data: { ok: false, error: "query is required" } };
     const scope = typeof args.path === "string" && args.path.trim() ? args.path.trim() : void 0;
-    const requested = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : SEARCH_DEFAULT_LIMIT;
+    const explicit = typeof args.limit === "number" && Number.isFinite(args.limit);
+    const requested = explicit ? Math.floor(args.limit) : SEARCH_DEFAULT_LIMIT;
     const limit = Math.min(SEARCH_MAX_LIMIT, Math.max(1, requested));
-    const r = await ctx.caps.semantic.search(query, { scope, limit });
+    const semantic = ctx.caps.semantic;
+    const r = await semantic.search(query, { scope, limit });
     if (!r.ok) return { data: r };
-    const results = (r.results ?? []).map((h) => ({
+    let hits = r.results ?? [];
+    if (semantic.adaptive && !explicit && hits.length > 0) {
+      hits = hits.slice(0, chooseK({ requested: limit, scores: hits.map((h) => typeof h.score === "number" ? h.score : Number.NaN) }));
+    }
+    const results = hits.map((h) => ({
       at: `${h.path}:${h.startLine}-${h.endLine}`,
       symbol: h.symbol ?? void 0,
       kind: h.kind,
@@ -4642,7 +4807,8 @@ var repoMapTool = defineTool({
     type: "object",
     properties: {
       focus: { type: "array", items: { type: "string" }, description: 'Optional repo-relative paths to rank first, e.g. ["api/src/billing"].' },
-      maxTokens: { type: "number", description: `Budget for the map (default ${MAP_DEFAULT_TOKENS}, max ${MAP_MAX_TOKENS}).` }
+      maxTokens: { type: "number", description: `Budget for the map (default ${MAP_DEFAULT_TOKENS}, max ${MAP_MAX_TOKENS}).` },
+      query: { type: "string", description: 'Optional words describing the task, e.g. "stripe webhook retries" \u2014 ranks the files that match it first.' }
     }
   },
   requires: ["repo.semantic"],
@@ -4650,7 +4816,8 @@ var repoMapTool = defineTool({
     const focus = Array.isArray(args.focus) ? args.focus.filter((f) => typeof f === "string" && f.trim() !== "") : [];
     const requested = typeof args.maxTokens === "number" && Number.isFinite(args.maxTokens) ? Math.floor(args.maxTokens) : MAP_DEFAULT_TOKENS;
     const maxTokens = Math.min(MAP_MAX_TOKENS, Math.max(200, requested));
-    const r = await ctx.caps.semantic.repoMap({ maxTokens, focus });
+    const query = typeof args.query === "string" && args.query.trim() ? args.query.trim() : void 0;
+    const r = await ctx.caps.semantic.repoMap({ maxTokens, focus, ...query ? { query } : {} });
     if (!r.ok) return { data: r };
     const data = { ok: true, map: r.map ?? "" };
     if (r.indexing) data.note = "The index is still being built \u2014 the map covers only the files scanned so far.";
@@ -5222,7 +5389,7 @@ var webFetchTool = defineTool({
   async execute(args, ctx) {
     const url = typeof args.url === "string" ? args.url : "";
     if (!url.trim()) return { data: { ok: false, error: "url is required" } };
-    const r = await ctx.caps.web.fetch(url);
+    const r = await compressWebFetchResult(await ctx.caps.web.fetch(url), ctx);
     return { data: r };
   }
 });
@@ -5269,7 +5436,7 @@ var runCommandTool = defineTool({
   async execute(args, ctx) {
     const command = typeof args.command === "string" ? args.command : "";
     if (!command.trim()) return { data: { ok: false, error: "command is required" } };
-    const r = await ctx.caps.shell.run(command);
+    const r = await compressShellResult(await ctx.caps.shell.run(command), ctx);
     return { data: r };
   }
 });
@@ -6444,53 +6611,6 @@ function localTurnFeatures(call2, servedContextTokens) {
   };
 }
 
-// src/localSuccess/hybridLocalSuccess.ts
-function cloudResult(records, error) {
-  const cloud = records.find((r) => r.attempt.kind === "cloud");
-  if (!cloud) return void 0;
-  if (cloud.outcome === "served") return "succeeded";
-  if (error instanceof BrainRequestError && error.status >= 400 && error.status < 500) return void 0;
-  return "failed";
-}
-function hybridLocalSuccessTurn(router, probes, signal) {
-  let assessed = null;
-  const records = [];
-  return {
-    async gate(plan, call2) {
-      const local = plan.find((a) => a.kind === "local");
-      if (!local || !plan.some((a) => a.kind === "cloud")) return plan;
-      try {
-        const verdict = await router.assess(local.ref, localTurnFeatures(call2, contextWindowOf(local.ref, { probes })));
-        assessed = { ref: local.ref, outcome: { turn: verdict.turn } };
-        return verdict.skip ? plan.filter((a) => a.kind === "cloud") : plan;
-      } catch {
-        return plan;
-      }
-    },
-    onAttempt(record2) {
-      records.push(record2);
-    },
-    settle(error) {
-      if (!assessed || signal?.aborted) return;
-      const local = records.find((r) => r.attempt.kind === "local" && r.attempt.ref === assessed.ref);
-      const cloud = cloudResult(records, error);
-      const outcome = {
-        ...assessed.outcome,
-        ...local ? { local: local.outcome === "served" ? "succeeded" : "failed" } : {},
-        ...local && local.outcome !== "served" && records.some((r) => r.attempt.kind === "cloud") ? { fellBack: true } : {},
-        ...cloud ? { cloud } : {}
-      };
-      void router.record(assessed.ref, outcome);
-    }
-  };
-}
-
-// src/localSuccess/localSuccessRouter.ts
-var import_builderforce_memory_engine2 = require("@seanhogg/builderforce-memory-engine");
-
-// src/localSuccess/localSuccessFederation.ts
-var import_builderforce_memory_engine = require("@seanhogg/builderforce-memory-engine");
-
 // src/pageEngines/engineFailure.ts
 function reportPageEngineFailure(runtime, stage, error) {
   console.warn(`BuilderForce page engine: ${runtime} ${stage} failed (${errorMessage(error)})`);
@@ -6537,7 +6657,146 @@ function reportLocalSuccessFailure(stage, error) {
   console.warn(`BuilderForce local-success predictor: ${stage} failed (${errorMessage(error)})`);
 }
 
+// src/localSuccess/verifiedLocalLabel.ts
+var LOCAL_VERDICT_TIMEOUT_MS = 5 * 6e4;
+function verifiedLocalLabelOn() {
+  return isCostLeverOn(void 0, "e5_verified_local_label", null);
+}
+function labelWithVerdict(outcome, leverOn = verifiedLocalLabelOn()) {
+  const { verifier, ...engine } = outcome;
+  if (leverOn && verifier && !verifier.passed && engine.local === "succeeded") return { ...engine, local: "failed" };
+  return engine;
+}
+function lastUserIndex(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === "user") return i;
+  return -1;
+}
+function submitPrompt(call2) {
+  const i = lastUserIndex(call2.messages);
+  return i < 0 ? "" : contentText(call2.messages[i].content);
+}
+var REFUSALS = [MALFORMED_CALL_RESULT, TRUNCATED_CALL_RESULT];
+function inferVerdict(pendingPrompt, next) {
+  const i = lastUserIndex(next.messages);
+  const prompt = i < 0 ? "" : contentText(next.messages[i].content);
+  if (prompt !== pendingPrompt) return { passed: true, source: "continued" };
+  const tail = next.messages.slice(i + 1);
+  if (tail.length === 0) return { passed: false, source: "retry" };
+  let lastAssistant = -1;
+  for (let j = tail.length - 1; j >= 0; j--) if (tail[j].role === "assistant") {
+    lastAssistant = j;
+    break;
+  }
+  const results = tail.slice(lastAssistant + 1).filter((m) => m.role === "tool");
+  const refused = results.some((m) => {
+    const text = contentText(m.content);
+    return REFUSALS.some((r) => text.includes(r));
+  });
+  return refused ? { passed: false, source: "tool_schema" } : { passed: true, source: "tool_ok" };
+}
+function createDeferredLocalRecords(opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? LOCAL_VERDICT_TIMEOUT_MS;
+  const leverOn = opts.leverOn ?? verifiedLocalLabelOn;
+  const byTurn = /* @__PURE__ */ new Map();
+  const byConversation = /* @__PURE__ */ new Map();
+  let seq = 0;
+  function finish(p, verdict) {
+    clearTimeout(p.timer);
+    byTurn.delete(p.turnId);
+    if (byConversation.get(p.conversation) === p.turnId) byConversation.delete(p.conversation);
+    const outcome = labelWithVerdict(verdict ? { ...p.outcome, verifier: verdict } : p.outcome, leverOn());
+    p.record(p.ref, outcome).catch((e) => reportLocalSuccessFailure("record", e));
+  }
+  function resolveTurn(turnId, verdict) {
+    const p = turnId ? byTurn.get(turnId) : void 0;
+    if (!p) return false;
+    finish(p, verdict);
+    return true;
+  }
+  return {
+    defer(turn) {
+      resolveTurn(byConversation.get(turn.conversation), void 0);
+      const turnId = `${turn.conversation}#${++seq}`;
+      const timer = setTimeout(() => resolveTurn(turnId, void 0), timeoutMs);
+      byTurn.set(turnId, { ...turn, turnId, timer });
+      byConversation.set(turn.conversation, turnId);
+      return turnId;
+    },
+    verdict: (turnId, verdict) => resolveTurn(turnId, verdict),
+    observe(conversation, next) {
+      const turnId = byConversation.get(conversation);
+      const p = turnId ? byTurn.get(turnId) : void 0;
+      if (p) finish(p, inferVerdict(p.prompt, next));
+    },
+    verdictForConversation: (conversation, verdict) => resolveTurn(byConversation.get(conversation), verdict),
+    pending: () => byTurn.size
+  };
+}
+var deferredLocalRecords = createDeferredLocalRecords();
+function conversationKeyOf(call2) {
+  const chatId = call2.metadata?.chatId;
+  return typeof chatId === "number" && Number.isFinite(chatId) ? `chat:${chatId}` : null;
+}
+function submitLocalTurnVerdict(chatId, passed) {
+  return deferredLocalRecords.verdictForConversation(`chat:${chatId}`, { passed, source: "rating" });
+}
+
+// src/localSuccess/hybridLocalSuccess.ts
+function cloudResult(records, error) {
+  const cloud = records.find((r) => r.attempt.kind === "cloud");
+  if (!cloud) return void 0;
+  if (cloud.outcome === "served") return "succeeded";
+  if (error instanceof BrainRequestError && error.status >= 400 && error.status < 500) return void 0;
+  return "failed";
+}
+function hybridLocalSuccessTurn(router, probes, signal, deferred = deferredLocalRecords) {
+  let assessed = null;
+  let submit = null;
+  const records = [];
+  return {
+    async gate(plan, call2) {
+      const conversation = conversationKeyOf(call2);
+      if (conversation && verifiedLocalLabelOn()) {
+        deferred.observe(conversation, call2);
+        submit = { conversation, prompt: submitPrompt(call2) };
+      }
+      const local = plan.find((a) => a.kind === "local");
+      if (!local || !plan.some((a) => a.kind === "cloud")) return plan;
+      try {
+        const verdict = await router.assess(local.ref, localTurnFeatures(call2, contextWindowOf(local.ref, { probes })));
+        assessed = { ref: local.ref, outcome: { turn: verdict.turn } };
+        return verdict.skip ? plan.filter((a) => a.kind === "cloud") : plan;
+      } catch {
+        return plan;
+      }
+    },
+    onAttempt(record2) {
+      records.push(record2);
+    },
+    settle(error) {
+      if (!assessed || signal?.aborted) return;
+      const local = records.find((r) => r.attempt.kind === "local" && r.attempt.ref === assessed.ref);
+      const cloud = cloudResult(records, error);
+      const outcome = {
+        ...assessed.outcome,
+        ...local ? { local: local.outcome === "served" ? "succeeded" : "failed" } : {},
+        ...local && local.outcome !== "served" && records.some((r) => r.attempt.kind === "cloud") ? { fellBack: true } : {},
+        ...cloud ? { cloud } : {}
+      };
+      if (submit && local?.outcome === "served" && verifiedLocalLabelOn()) {
+        deferred.defer({ ...submit, ref: assessed.ref, outcome, record: (ref, o) => router.record(ref, o) });
+        return;
+      }
+      void router.record(assessed.ref, outcome);
+    }
+  };
+}
+
+// src/localSuccess/localSuccessRouter.ts
+var import_builderforce_memory_engine2 = require("@seanhogg/builderforce-memory-engine");
+
 // src/localSuccess/localSuccessFederation.ts
+var import_builderforce_memory_engine = require("@seanhogg/builderforce-memory-engine");
 var LOCAL_SUCCESS_TARGET = (0, import_builderforce_memory_engine.mlHeadTarget)(import_builderforce_memory_engine.LOCAL_SUCCESS_TASK.id);
 var FEDERATE_MIN_NEW_OUTCOMES = 20;
 var FEDERATE_MIN_INTERVAL_MS = 60 * 60 * 1e3;
@@ -11356,8 +11615,384 @@ function memoryToolsIn(toolNames) {
   return toolNames.filter(isProjectMemoryTool);
 }
 
-// src/runProgress.ts
+// ../packages/run-guards/src/fingerprint.ts
+function callFingerprint(tool, args) {
+  let text;
+  try {
+    text = stableStringify(args ?? {});
+  } catch {
+    text = String(args ?? "");
+  }
+  return `${tool}:${text}`;
+}
+function pathArgOf(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
+  const path2 = args.path;
+  return typeof path2 === "string" && path2.trim() ? path2.trim() : null;
+}
+
+// ../packages/run-guards/src/visitTally.ts
+var REVISIT_NUDGE_AT = 3;
+var REVISIT_HARD_AT = 5;
+var MAX_REMEMBERED_ARGS = 8;
+var VisitTally = class {
+  visits;
+  constructor(state) {
+    this.visits = new Map((state ?? []).map(([k, v]) => [k, { ...v, priorArgs: [...v.priorArgs] }]));
+  }
+  /**
+   * Record one visit to `key` made with `args`. Returns a SNAPSHOT of the resulting
+   * visit, so the caller cannot hold — or reset — the live tally. The "something ran
+   * that could have changed this" pass is spent by the read it excuses.
+   */
+  record(key, args) {
+    let argText;
+    try {
+      argText = JSON.stringify(args ?? {});
+    } catch {
+      argText = String(args ?? "");
+    }
+    const existing = this.visits.get(key);
+    if (!existing) {
+      const fresh = { count: 1, priorArgs: [argText], mayHaveChanged: false };
+      this.visits.set(key, fresh);
+      return { ...fresh, priorArgs: [...fresh.priorArgs] };
+    }
+    existing.count += 1;
+    if (!existing.priorArgs.includes(argText) && existing.priorArgs.length < MAX_REMEMBERED_ARGS) {
+      existing.priorArgs.push(argText);
+    }
+    const visit = { ...existing, priorArgs: [...existing.priorArgs] };
+    existing.mayHaveChanged = false;
+    return visit;
+  }
+  /** Forget every visit whose key matches. */
+  forget(match) {
+    for (const key of [...this.visits.keys()]) if (match(key)) this.visits.delete(key);
+  }
+  /** Something with an unknown blast radius ran: excuse the NEXT read of every target. */
+  markAllMayHaveChanged() {
+    for (const visit of this.visits.values()) visit.mayHaveChanged = true;
+  }
+  snapshot() {
+    return [...this.visits.entries()].map(([k, v]) => [k, { ...v, priorArgs: [...v.priorArgs] }]);
+  }
+};
+function revisitAdvisory(tool, target, visit) {
+  if (visit.count < REVISIT_NUDGE_AT) return null;
+  if (visit.mayHaveChanged) return null;
+  const shape = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
+  if (visit.count >= REVISIT_HARD_AT) {
+    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
+  }
+  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same lines is unlikely to surface it \u2014 page forward from the \`offset\` the last result's note gave you, or search for the specific symbol with search_code. If you already have what you need, act on it rather than re-reading.`;
+}
+function withAdvisory(result, advisory) {
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    const existing = result.note;
+    const note = typeof existing === "string" && existing ? `${existing}
+
+${advisory}` : advisory;
+    return { ...result, note };
+  }
+  return { result, note: advisory };
+}
+
+// ../packages/run-guards/src/readCoverage.ts
+var PATH_ARG_KEYS = /* @__PURE__ */ new Set(["path", "scope", "repo", "file", "filePath", "dir"]);
+function normalizePathArg(value) {
+  const p = value.split("\\").join("/").replace(/^\.\/+/, "").replace(/\/+$/, "");
+  return p === "." ? "" : p;
+}
+function canonicalReadArgs(tool, args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (value == null) continue;
+    if (typeof value === "string") {
+      const trimmed = PATH_ARG_KEYS.has(key) ? normalizePathArg(value.trim()) : value.trim();
+      if (trimmed) out[key] = trimmed;
+      continue;
+    }
+    out[key] = value;
+  }
+  if (tool === "read_file" && (out.offset === 1 || out.offset === 0)) delete out.offset;
+  return out;
+}
+var TREE_WIDE_READ_TOOLS = /* @__PURE__ */ new Set(["search_code", "find_symbol", "list_files", "semantic_search", "repo_map"]);
+function resultObject(result) {
+  if (result && typeof result === "object" && !Array.isArray(result)) return result;
+  if (typeof result === "string") {
+    try {
+      const parsed = JSON.parse(result);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+function isUnderDir(p, dir) {
+  if (!dir) return true;
+  const path2 = normalizePathArg(p);
+  return path2 === dir || path2.startsWith(`${dir}/`);
+}
+function asPositiveInt(value, fallback) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+function requestedReadWindow(args) {
+  const start = asPositiveInt(args.offset, 1);
+  const limit = asPositiveInt(args.limit, READ_DEFAULT_LINE_LIMIT);
+  return { start, end: start + limit - 1 };
+}
+function servedReadWindow(result) {
+  const data = resultObject(result);
+  if (!data || data.ok === false) return null;
+  const start = asPositiveInt(data.offset, 1);
+  const content = typeof data.content === "string" ? data.content : "";
+  const returned = content === "" ? 0 : content.split("\n").length;
+  if (returned <= 0) return null;
+  let end = start + returned - 1;
+  if (data.truncated !== true && typeof data.totalLines === "number" && data.totalLines >= start) {
+    end = Math.max(end, Math.floor(data.totalLines));
+  }
+  return { start, end };
+}
+function spanContains(outer, inner) {
+  return inner.start >= outer.start && inner.end <= outer.end;
+}
+function clipRequestedToEof(want, covering) {
+  const data = resultObject(covering);
+  if (!data || data.truncated === true || typeof data.totalLines !== "number" || data.totalLines < 1) return want;
+  return { start: want.start, end: Math.min(want.end, Math.floor(data.totalLines)) };
+}
+var ReadCoverage = class _ReadCoverage {
+  constructor(traits) {
+    this.traits = traits;
+  }
+  traits;
+  visits = new VisitTally();
+  /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
+  exact = /* @__PURE__ */ new Map();
+  static exactKey(tool, args) {
+    return `${tool}:${stableStringify(canonicalReadArgs(tool, args))}`;
+  }
+  /** Was this visit ABOUT `target` — the target itself, or a question asked of it? */
+  visitedScopeIs(visited, target) {
+    return visited === target || (visited?.startsWith(`${target}${this.traits.questionSeparator}`) ?? false);
+  }
+  /** Has this exact read already SUCCEEDED this run, with nothing since that could have changed its answer? */
+  isRepeat(tool, args) {
+    return this.exact.has(_ReadCoverage.exactKey(tool, args));
+  }
+  /** Keep what a SUCCESSFUL read returned, with the message that carried it. A no-op for
+   *  a read that was never recorded (a failure has nothing to replay). */
+  cacheResult(tool, args, cached2) {
+    const read = this.exact.get(_ReadCoverage.exactKey(tool, args));
+    if (read) read.cached = cached2;
+  }
+  /** The cached result of an exact earlier read, or null when none is held. */
+  cachedResult(tool, args) {
+    return this.exact.get(_ReadCoverage.exactKey(tool, args))?.cached ?? null;
+  }
+  /**
+   * Record a SUCCESSFUL read. Arms the exact-repeat guard for it, and returns the
+   * resulting target visit — or null when the call names no target.
+   */
+  record(tool, args) {
+    const target = this.traits.visitTarget(args) ?? null;
+    this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target });
+    if (!target) return null;
+    return this.visits.record(`${tool}:${target}`, args);
+  }
+  /**
+   * A non-read call has run. Forget exactly the reads it could have changed — no more,
+   * no less — for every guard:
+   *
+   * - An unscoped mutation (shell, merge, undo) forgets every cached ANSWER, and marks
+   *   every target so its NEXT read is excused — but keeps the visit COUNT: the tally
+   *   counts the model's behaviour, which a build in between does not change.
+   * - A file write/edit/delete forgets its own target across every tool that reads it,
+   *   plus every tree-wide answer; nothing about other files.
+   * - A local tool that PUBLISHES work forgets the platform reads and the repo-state
+   *   reads, and keeps the file reads.
+   * - The remaining local tools change nothing a read observes.
+   * - Anything else is a platform / MCP call: it forgets target-less platform reads.
+   */
+  invalidate(tool, args) {
+    const t = this.traits;
+    if (t.isUnscopedMutation(tool, args)) {
+      this.exact.clear();
+      this.visits.markAllMayHaveChanged();
+      return;
+    }
+    if (t.isCodeChangeTool(tool)) {
+      const target = t.activityTarget(args);
+      if (!target) return;
+      this.visits.forget((key) => this.visitedScopeIs(key.slice(key.indexOf(":") + 1), target));
+      for (const [key, read] of [...this.exact.entries()]) {
+        if (this.visitedScopeIs(read.target, target) || TREE_WIDE_READ_TOOLS.has(read.tool)) this.exact.delete(key);
+      }
+      return;
+    }
+    if (t.isLocalWorkspaceTool(tool) && !t.isRepoPublishTool(tool)) return;
+    for (const [key, read] of [...this.exact.entries()]) {
+      if (!t.isLocalWorkspaceTool(read.tool) || t.isRepoStateReadTool(read.tool)) this.exact.delete(key);
+    }
+  }
+  /**
+   * Answer a `read_file` whose window is already inside an earlier successful window of
+   * the SAME file. Null for a jump to lines the earlier read did not return, and for a
+   * page that extends past a truncated window — those still need the disk.
+   */
+  coveredRead(tool, args) {
+    if (tool !== "read_file") return null;
+    const wanted = canonicalReadArgs(tool, args);
+    const path2 = typeof wanted.path === "string" ? wanted.path : "";
+    if (!path2) return null;
+    if (typeof wanted.key === "string") return null;
+    const want = requestedReadWindow(wanted);
+    for (const read of this.exact.values()) {
+      if (read.tool !== "read_file" || !read.cached) continue;
+      if (typeof read.args.key === "string") continue;
+      const earlierPath = typeof read.args.path === "string" ? read.args.path : "";
+      if (earlierPath !== path2) continue;
+      const got = servedReadWindow(read.cached.result);
+      if (!got) continue;
+      const clipped = clipRequestedToEof(want, read.cached.result);
+      if (clipped.start > clipped.end) continue;
+      if (!spanContains(got, clipped)) continue;
+      return {
+        start: clipped.start,
+        end: clipped.end,
+        cached: read.cached,
+        note: `Lines ${clipped.start}\u2013${clipped.end} of this file were already returned by an earlier read_file (lines ${got.start}\u2013${got.end}). Reuse that result; if you need later lines, page forward with offset ${got.end + 1}. Do not re-open a window you already have.`
+      };
+    }
+    return null;
+  }
+  /**
+   * Answer a `search_code` from a WIDER complete search already held (same query, an
+   * ancestor scope), filtered to the narrower `path`. A derived 0 is never returned — a
+   * parent's 0 may be a false negative, and the tool treats `truncated:false` as proof
+   * of absence — so the narrower search must actually run.
+   */
+  derivedSearch(tool, args) {
+    if (tool !== "search_code") return null;
+    const wanted = canonicalReadArgs(tool, args);
+    const scope = typeof wanted.path === "string" ? wanted.path : "";
+    if (!scope) return null;
+    const { path: _scope, ...rest } = wanted;
+    const others = stableStringify(rest);
+    for (const read of this.exact.values()) {
+      if (read.tool !== "search_code" || !read.cached) continue;
+      const { path: earlierPath, ...earlierRest } = read.args;
+      const earlier = typeof earlierPath === "string" ? earlierPath : "";
+      if (earlier === scope || !isUnderDir(scope, earlier)) continue;
+      if (stableStringify(earlierRest) !== others) continue;
+      const result = resultObject(read.cached.result);
+      if (!result || result.ok !== true || result.truncated === true || !Array.isArray(result.matches)) continue;
+      const matches = result.matches.filter(
+        (m) => typeof m.path === "string" && isUnderDir(m.path, scope)
+      );
+      if (matches.length === 0) continue;
+      return {
+        ok: true,
+        query: wanted.query,
+        total: matches.length,
+        truncated: false,
+        matches,
+        note: `Answered from this run's earlier complete search for the same query${earlier ? ` under "${earlier}"` : " over the whole tree"}, filtered to "${scope}" \u2014 not re-run.`
+      };
+    }
+    return null;
+  }
+};
+
+// ../packages/run-guards/src/failureTally.ts
+var FAILURE_NUDGE_AT = 2;
+var FAILURE_HARD_AT = 3;
+var FailureTally = class {
+  failures;
+  constructor(state) {
+    this.failures = new Map(state ?? []);
+  }
+  /** Record a FAILED call. Returns how many times this exact call has now failed, including this one. */
+  record(tool, args) {
+    const key = callFingerprint(tool, args);
+    const attempts = (this.failures.get(key) ?? 0) + 1;
+    this.failures.set(key, attempts);
+    return attempts;
+  }
+  /** This exact call SUCCEEDED: its earlier failures were transient after all. */
+  clear(tool, args) {
+    this.failures.delete(callFingerprint(tool, args));
+  }
+  /** Forget every recorded failure (the run changed course). */
+  reset() {
+    this.failures.clear();
+  }
+  snapshot() {
+    return [...this.failures.entries()];
+  }
+};
+function failureReason(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return void 0;
+  const error = result.error;
+  return typeof error === "string" && error.trim() ? error.trim().slice(0, 400) : void 0;
+}
+function repeatedFailureAdvisory(tool, attempts, reason) {
+  if (attempts < FAILURE_NUDGE_AT) return null;
+  const got = reason ? ` Both times it answered: "${reason}".` : "";
+  if (attempts >= FAILURE_HARD_AT) {
+    const said = reason ? ` It has answered "${reason}" every time.` : "";
+    return `STOP CALLING \`${tool}\` WITH THESE ARGUMENTS. This is failure ${attempts} of the identical call in this run.${said} The arguments are the problem, not the timing \u2014 repeating them will fail again and will spend the rest of this run's tool budget. Do ONE of these now: (a) re-read the error above and change the argument it names (a failing tool usually says exactly what to pass instead \u2014 a scope, a path, an id \u2014 so pass it); (b) reach the same goal with a different tool; (c) stop and tell the user plainly what is blocking you and what you need from them. Do not issue this call again.`;
+  }
+  return `\`${tool}\` has now failed ${attempts} times in this run with these exact arguments.${got} Another identical attempt will not behave differently \u2014 this is not a flake. Read the error above and change what it names (most failures state the argument to pass instead), use a different tool to reach the same goal, or say plainly what is blocking you. Do not simply repeat the call.`;
+}
+
+// ../packages/run-guards/src/writeLedger.ts
+function contentWriteOf(tool, args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
+  const { path: path2, content } = args;
+  if (typeof path2 !== "string" || !path2.trim() || typeof content !== "string") return null;
+  return { path: path2.trim(), fingerprint: callFingerprint(tool, args) };
+}
+var WriteLedger = class {
+  written = /* @__PURE__ */ new Map();
+  /** Is this call a full-content write identical to the last one that landed on its
+   *  path, with nothing touching that path since? */
+  isRepeat(tool, args) {
+    const write = contentWriteOf(tool, args);
+    return !!write && this.written.get(write.path) === write.fingerprint;
+  }
+  /**
+   * A non-read call ran. A successful full-content write is remembered; anything else
+   * that names a path forgets that path; `unscoped` forgets everything. A FAILED write
+   * forgets its path — the file's state is unknown.
+   */
+  record(tool, args, options) {
+    if (options.unscoped) {
+      this.written.clear();
+      return;
+    }
+    const write = options.ok ? contentWriteOf(tool, args) : null;
+    if (write) {
+      this.written.set(write.path, write.fingerprint);
+      return;
+    }
+    const path2 = pathArgOf(args);
+    if (path2) this.written.delete(path2);
+  }
+};
+function repeatedWriteNote(tool, path2) {
+  return `Not re-run: this exact \`${tool}\` of "${path2}" already succeeded earlier in this run and nothing has changed the file since, so it already holds this content \u2014 writing it again cannot change anything. If something still looks broken, the cause is not that the write failed: re-read the error (it may predate your write), look elsewhere for the cause, or tell the user what you see.`;
+}
+
+// ../packages/run-guards/src/streak.ts
 var BACK_TO_BACK_AT = 3;
+
+// src/runProgress.ts
 var MUTATION_TOOL = /(^|_)(write|edit|save|create|update|delete|apply|patch|publish|send|dispatch|run_command|assign|link|move|set)(_|$)/i;
 function isMutationTool(name) {
   return isCodeChangeTool(name) || MUTATION_TOOL.test(name);
@@ -11366,13 +12001,7 @@ function hasEditIntent(messages) {
   return messages.some((m) => m.role === "user" && asksForChange(m.content));
 }
 function callSignature(ev) {
-  let args = "";
-  try {
-    args = stableStringify(ev.args ?? null);
-  } catch {
-    args = String(ev.args ?? "");
-  }
-  return `${ev.label}(${args})`;
+  return callFingerprint(ev.label, ev.args);
 }
 function targetSignature(ev) {
   const target = visitTarget(ev.args);
@@ -11671,7 +12300,7 @@ function isDispatchTool(label) {
   return DISPATCH_TOOL.test(label);
 }
 var MAX_REFUSAL_CHARS = 180;
-function resultObject(result) {
+function resultObject2(result) {
   if (result && typeof result === "object") return result;
   if (typeof result === "string") {
     try {
@@ -11685,7 +12314,7 @@ function resultObject(result) {
 }
 function didDispatch(ev) {
   if (ev.isError || isFailedToolResult(ev.result)) return false;
-  const r = resultObject(ev.result);
+  const r = resultObject2(ev.result);
   if (!r) return true;
   const autoRun = r.autoRun && typeof r.autoRun === "object" ? r.autoRun : null;
   if (autoRun && typeof autoRun.dispatched === "boolean") return autoRun.dispatched;
@@ -11693,7 +12322,7 @@ function didDispatch(ev) {
   return true;
 }
 function refusalMessage(ev) {
-  const r = resultObject(ev.result);
+  const r = resultObject2(ev.result);
   const raw = r && typeof r.error === "string" && r.error || r && typeof r.detail === "string" && r.detail || (r && r.autoRun && typeof r.autoRun === "object" && typeof r.autoRun.detail === "string" ? String(r.autoRun.detail) : "") || (typeof ev.result === "string" ? ev.result : "") || (r ? JSON.stringify(r) : "") || "no reason given";
   const flat = String(raw).replace(/\s+/g, " ").trim();
   return flat.length > MAX_REFUSAL_CHARS ? `${flat.slice(0, MAX_REFUSAL_CHARS)}\u2026` : flat || "no reason given";
@@ -11721,7 +12350,7 @@ function staffingSummaryInTrace(events) {
       const agent = asAgentOf(ev.args);
       if (!agent) continue;
       const args = ev.args;
-      const result = resultObject(ev.result);
+      const result = resultObject2(ev.result);
       const label = typeof args?.label === "string" && args.label.trim() || typeof result?.label === "string" && result.label.trim() || (typeof args?.task === "string" ? args.task.trim().slice(0, 60) : "") || "delegated work";
       personaSubagents.push({
         agent,
@@ -12122,306 +12751,6 @@ ${opts.advisory}` : ""}`, bytes, truncated: true };
 ${marker}${opts.advisory ? `
 ${opts.advisory}` : ""}`;
   return { content, bytes, truncated: true };
-}
-
-// src/readCoverage.ts
-var PATH_ARG_KEYS = /* @__PURE__ */ new Set(["path", "scope", "repo", "file", "filePath", "dir"]);
-function normalizePathArg(value) {
-  const p = value.split("\\").join("/").replace(/^\.\/+/, "").replace(/\/+$/, "");
-  return p === "." ? "" : p;
-}
-function canonicalReadArgs(tool, args) {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return {};
-  const out = {};
-  for (const [key, value] of Object.entries(args)) {
-    if (value == null) continue;
-    if (typeof value === "string") {
-      const trimmed = PATH_ARG_KEYS.has(key) ? normalizePathArg(value.trim()) : value.trim();
-      if (trimmed) out[key] = trimmed;
-      continue;
-    }
-    out[key] = value;
-  }
-  if (tool === "read_file" && (out.offset === 1 || out.offset === 0)) delete out.offset;
-  return out;
-}
-var TREE_WIDE_READ_TOOLS = /* @__PURE__ */ new Set(["search_code", "find_symbol", "list_files", "semantic_search", "repo_map"]);
-function visitedScopeIs(visited, target) {
-  return visited === target || (visited?.startsWith(`${target}${VISIT_QUESTION_SEPARATOR}`) ?? false);
-}
-function isUnscopedMutation(tool, args) {
-  return isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args);
-}
-function resultObject2(result) {
-  if (result && typeof result === "object" && !Array.isArray(result)) return result;
-  if (typeof result === "string") {
-    try {
-      const parsed = JSON.parse(result);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-function isUnderDir(p, dir) {
-  if (!dir) return true;
-  const path2 = normalizePathArg(p);
-  return path2 === dir || path2.startsWith(`${dir}/`);
-}
-function asPositiveInt(value, fallback) {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
-}
-function requestedReadWindow(args) {
-  const start = asPositiveInt(args.offset, 1);
-  const limit = asPositiveInt(args.limit, READ_DEFAULT_LINE_LIMIT);
-  return { start, end: start + limit - 1 };
-}
-function servedReadWindow(result) {
-  const data = resultObject2(result);
-  if (!data || data.ok === false) return null;
-  const start = asPositiveInt(data.offset, 1);
-  const content = typeof data.content === "string" ? data.content : "";
-  const returned = content === "" ? 0 : content.split("\n").length;
-  if (returned <= 0) return null;
-  let end = start + returned - 1;
-  if (data.truncated !== true && typeof data.totalLines === "number" && data.totalLines >= start) {
-    end = Math.max(end, Math.floor(data.totalLines));
-  }
-  return { start, end };
-}
-function spanContains(outer, inner) {
-  return inner.start >= outer.start && inner.end <= outer.end;
-}
-function clipRequestedToEof(want, covering) {
-  const data = resultObject2(covering);
-  if (!data || data.truncated === true || typeof data.totalLines !== "number" || data.totalLines < 1) return want;
-  return { start: want.start, end: Math.min(want.end, Math.floor(data.totalLines)) };
-}
-var REVISIT_NUDGE_AT = 3;
-var REVISIT_HARD_AT = 5;
-var MAX_REMEMBERED_ARGS = 8;
-var ReadCoverage = class _ReadCoverage {
-  visits = /* @__PURE__ */ new Map();
-  /** Successful reads by `${tool}:${canonical args}` — the exact-repeat guard. */
-  exact = /* @__PURE__ */ new Map();
-  static exactKey(tool, args) {
-    return `${tool}:${stableStringify(canonicalReadArgs(tool, args))}`;
-  }
-  /**
-   * Has this exact read — same tool, same arguments in any key order — already
-   * SUCCEEDED this run, with nothing since that could have changed its answer? The run
-   * loop answers such a call with a stub instead of re-running it.
-   */
-  isRepeat(tool, args) {
-    return this.exact.has(_ReadCoverage.exactKey(tool, args));
-  }
-  /**
-   * Keep what a SUCCESSFUL read returned, with the transcript message that carried it,
-   * so an exact repeat can be replayed once that message has left the working context.
-   * A no-op for a read that was never recorded (a failure has nothing to replay).
-   */
-  cacheResult(tool, args, cached2) {
-    const read = this.exact.get(_ReadCoverage.exactKey(tool, args));
-    if (read) read.cached = cached2;
-  }
-  /** The cached result of an exact earlier read, or null when none is held. */
-  cachedResult(tool, args) {
-    return this.exact.get(_ReadCoverage.exactKey(tool, args))?.cached ?? null;
-  }
-  /**
-   * Record a SUCCESSFUL read. Arms the exact-repeat guard for it, and returns the
-   * resulting target visit — or null when the call names no target (nothing to be
-   * circling around; the exact guard still applies).
-   */
-  record(tool, args) {
-    const target = visitTarget(args) ?? null;
-    this.exact.set(_ReadCoverage.exactKey(tool, args), { tool, args: canonicalReadArgs(tool, args), target });
-    if (!target) return null;
-    const key = `${tool}:${target}`;
-    const existing = this.visits.get(key);
-    let argText;
-    try {
-      argText = JSON.stringify(args ?? {});
-    } catch {
-      argText = String(args ?? "");
-    }
-    if (!existing) {
-      const fresh = { count: 1, priorArgs: [argText], mayHaveChanged: false };
-      this.visits.set(key, fresh);
-      return { ...fresh };
-    }
-    existing.count += 1;
-    if (!existing.priorArgs.includes(argText) && existing.priorArgs.length < MAX_REMEMBERED_ARGS) {
-      existing.priorArgs.push(argText);
-    }
-    const visit = { ...existing };
-    existing.mayHaveChanged = false;
-    return visit;
-  }
-  /**
-   * A non-read call has run. Forget exactly the reads it could have changed — no more,
-   * no less — for BOTH guards:
-   *
-   * - A tool whose blast radius is unknown (`run_command`, a base-branch merge, an
-   *   undo) forgets every cached ANSWER: the honest answer to "what did that touch?" is
-   *   "anything", so no exact repeat may be stubbed out afterwards. It does NOT forget
-   *   the visit TALLY, and that distinction is the whole difference between a guard that
-   *   works and one that is inert. The tally counts the MODEL's behaviour — how many
-   *   times it has gone back to one target, with every one of those results still sitting
-   *   in the transcript above it — and a build running in between changes none of that.
-   *   Clearing it wholesale is what made the advisory unreachable in any run that
-   *   verifies its work: read, read, `run_command` (typecheck), read, read, `run_command`
-   *   … never reaches three, so the nudge at 3 and the hard stop at 5 never fired, and a
-   *   run spent 46% of its calls re-reading ground it had already covered with the loop
-   *   guard silent throughout. Instead each target is marked {@link ReadVisit.mayHaveChanged}
-   *   so the NEXT read of it is excused — a re-read after a build is the right move — and
-   *   the one after that is not.
-   * - A file write/edit/delete forgets its own target, across every tool that reads it —
-   *   `read_file` and `search_code` on one path are the same stale picture. A re-read of
-   *   what was just changed is genuinely new information; nagging about it would punish
-   *   exactly the right behaviour. It forgets NOTHING about other files: clearing the
-   *   whole tally on every non-read call is what once let one CSS file be read 14 times
-   *   with the advisory firing on neither it nor its component.
-   * - A local tool that PUBLISHES work (`git_commit`, `git_push`, `open_pull_request`)
-   *   changes no byte a FILE read would see — but it does change what a PLATFORM read of
-   *   branch / pull-request state returns, so it forgets the platform reads and keeps the
-   *   file reads. See {@link isRepoPublishTool}: without this, a run that surveys the
-   *   board, pushes the branches and surveys again is served its own pre-push answer.
-   *   The same sweep forgets host reads of REPOSITORY STATE (`review_ticket_branches`,
-   *   see {@link isRepoStateReadTool}) — a cached branch review must not outlive a push.
-   * - The remaining local tools (`git_status`, `git_diff`, …) change nothing a read
-   *   observes, so they forget nothing.
-   * - Anything else is a platform or MCP call. It may have changed what a PLATFORM read
-   *   returns (a ticket update changes the ticket list), so target-less platform reads
-   *   are forgotten; file reads are not, because a ticket write does not edit source.
-   */
-  invalidate(tool, args) {
-    if (isUnscopedMutation(tool, args)) {
-      this.exact.clear();
-      for (const visit of this.visits.values()) visit.mayHaveChanged = true;
-      return;
-    }
-    if (isCodeChangeTool(tool)) {
-      const target = activityTarget(args);
-      if (!target) return;
-      for (const key of [...this.visits.keys()]) {
-        if (visitedScopeIs(key.slice(key.indexOf(":") + 1), target)) this.visits.delete(key);
-      }
-      for (const [key, read] of [...this.exact.entries()]) {
-        if (visitedScopeIs(read.target, target) || TREE_WIDE_READ_TOOLS.has(read.tool)) this.exact.delete(key);
-      }
-      return;
-    }
-    if (isLocalWorkspaceTool(tool) && !isRepoPublishTool(tool)) return;
-    for (const [key, read] of [...this.exact.entries()]) {
-      if (!isLocalWorkspaceTool(read.tool) || isRepoStateReadTool(read.tool)) this.exact.delete(key);
-    }
-  }
-  /**
-   * Answer a `read_file` whose window is already inside an earlier successful window
-   * of the SAME file. Chat #109's fourteen overlapping reads of one service file were
-   * different exact-repeat keys (offset 1050, then 1080, then 1105) so the stub never
-   * ran; the circling advisory fired and was ignored; the bytes still filled the
-   * window. This is that stub for overlapping windows.
-   *
-   * A jump to lines the earlier read did not return, and a page that extends past a
-   * truncated window, return null — those still need the disk. An edit of the file
-   * forgets the covering cache via {@link invalidate}.
-   */
-  coveredRead(tool, args) {
-    if (tool !== "read_file") return null;
-    const wanted = canonicalReadArgs(tool, args);
-    const path2 = typeof wanted.path === "string" ? wanted.path : "";
-    if (!path2) return null;
-    if (typeof wanted.key === "string") return null;
-    const want = requestedReadWindow(wanted);
-    for (const read of this.exact.values()) {
-      if (read.tool !== "read_file" || !read.cached) continue;
-      if (typeof read.args.key === "string") continue;
-      const earlierPath = typeof read.args.path === "string" ? read.args.path : "";
-      if (earlierPath !== path2) continue;
-      const got = servedReadWindow(read.cached.result);
-      if (!got) continue;
-      const clipped = clipRequestedToEof(want, read.cached.result);
-      if (clipped.start > clipped.end) continue;
-      if (!spanContains(got, clipped)) continue;
-      return {
-        start: clipped.start,
-        end: clipped.end,
-        cached: read.cached,
-        note: `Lines ${clipped.start}\u2013${clipped.end} of this file were already returned by an earlier read_file (lines ${got.start}\u2013${got.end}). Reuse that result; if you need later lines, page forward with offset ${got.end + 1}. Do not re-open a window you already have.`
-      };
-    }
-    return null;
-  }
-  /**
-   * Answer a `search_code` from a WIDER search already held: the same query (and the same
-   * other arguments) run earlier over an ancestor directory — or the whole tree — whose
-   * result was complete (not truncated). Filtering those matches to the narrower `path`
-   * is exactly what re-running the search would return, without running it.
-   *
-   * Measured on a ticket-review run: one directory searched nine times and one file six,
-   * mostly re-asking a question an earlier, broader search had already answered.
-   *
-   * A derived 0 is never returned. Chat #111: a directory search for `addressedTo`
-   * under `Builderforce.ai/clients` came back `total:0 truncated:false` even though
-   * `VsCodeChatSurface.tsx` contains the term; the file-scoped retry was then answered
-   * from that parent ("the term does not appear") and the run concluded composers never
-   * pass `addressedTo`. A 0 from a parent is the most expensive lie this guard can tell —
-   * the tool's own copy treats `truncated:false` as proof of absence — so the narrower
-   * search must actually run. File-scope uses a different backend (`searchOneFile`) and
-   * is the recovery path. Null when no complete covering result with matches is held.
-   */
-  derivedSearch(tool, args) {
-    if (tool !== "search_code") return null;
-    const wanted = canonicalReadArgs(tool, args);
-    const scope = typeof wanted.path === "string" ? wanted.path : "";
-    if (!scope) return null;
-    const { path: _scope, ...rest } = wanted;
-    const others = stableStringify(rest);
-    for (const read of this.exact.values()) {
-      if (read.tool !== "search_code" || !read.cached) continue;
-      const { path: earlierPath, ...earlierRest } = read.args;
-      const earlier = typeof earlierPath === "string" ? earlierPath : "";
-      if (earlier === scope || !isUnderDir(scope, earlier)) continue;
-      if (stableStringify(earlierRest) !== others) continue;
-      const result = resultObject2(read.cached.result);
-      if (!result || result.ok !== true || result.truncated === true || !Array.isArray(result.matches)) continue;
-      const matches = result.matches.filter(
-        (m) => typeof m.path === "string" && isUnderDir(m.path, scope)
-      );
-      if (matches.length === 0) continue;
-      return {
-        ok: true,
-        query: wanted.query,
-        total: matches.length,
-        truncated: false,
-        matches,
-        note: `Answered from this run's earlier complete search for the same query${earlier ? ` under "${earlier}"` : " over the whole tree"}, filtered to "${scope}" \u2014 not re-run. ${matches.length === 0 ? "The term does not appear under this path." : ""}`.trim()
-      };
-    }
-    return null;
-  }
-};
-function revisitAdvisory(tool, target, visit) {
-  if (visit.count < REVISIT_NUDGE_AT) return null;
-  if (visit.mayHaveChanged) return null;
-  const shape = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
-  if (visit.count >= REVISIT_HARD_AT) {
-    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
-  }
-  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same lines is unlikely to surface it \u2014 page forward from the \`offset\` the last result's note gave you, or search for the specific symbol with search_code. If you already have what you need, act on it rather than re-reading.`;
-}
-function withAdvisory(result, advisory) {
-  if (result && typeof result === "object" && !Array.isArray(result)) {
-    const existing = result.note;
-    const note = typeof existing === "string" && existing ? `${existing}
-
-${advisory}` : advisory;
-    return { ...result, note };
-  }
-  return { result, note: advisory };
 }
 
 // src/toolResultBudget.ts
@@ -13849,85 +14178,25 @@ function restatedReplyNudge() {
   ].join("\n");
 }
 
-// src/repeatedFailure.ts
-var FAILURE_NUDGE_AT = 2;
-var FAILURE_HARD_AT = 3;
-var FailureTally = class _FailureTally {
-  failures = /* @__PURE__ */ new Map();
-  static key(tool, args) {
-    return `${tool}:${stableStringify(args ?? {})}`;
-  }
-  /** Record a FAILED call. Returns how many times this exact call has now failed,
-   *  including this one. */
-  record(tool, args) {
-    const key = _FailureTally.key(tool, args);
-    const attempts = (this.failures.get(key) ?? 0) + 1;
-    this.failures.set(key, attempts);
-    return attempts;
-  }
-  /** This exact call SUCCEEDED. Its earlier failures were transient after all, so they
-   *  are no longer evidence of anything — a later failure starts counting from one. */
-  clear(tool, args) {
-    this.failures.delete(_FailureTally.key(tool, args));
+// src/readCoverage.ts
+function isUnscopedMutation(tool, args) {
+  return isUnscopedMutationTool(tool) && !isReadOnlyShellCall(tool, args);
+}
+var BRAIN_READ_TRAITS = {
+  visitTarget,
+  activityTarget,
+  questionSeparator: VISIT_QUESTION_SEPARATOR,
+  isUnscopedMutation,
+  isCodeChangeTool,
+  isLocalWorkspaceTool,
+  isRepoPublishTool,
+  isRepoStateReadTool
+};
+var ReadCoverage2 = class extends ReadCoverage {
+  constructor() {
+    super(BRAIN_READ_TRAITS);
   }
 };
-function failureReason(result) {
-  if (!result || typeof result !== "object" || Array.isArray(result)) return void 0;
-  const error = result.error;
-  return typeof error === "string" && error.trim() ? error.trim().slice(0, 400) : void 0;
-}
-function repeatedFailureAdvisory(tool, attempts, reason) {
-  if (attempts < FAILURE_NUDGE_AT) return null;
-  const got = reason ? ` Both times it answered: "${reason}".` : "";
-  if (attempts >= FAILURE_HARD_AT) {
-    const said = reason ? ` It has answered "${reason}" every time.` : "";
-    return `STOP CALLING \`${tool}\` WITH THESE ARGUMENTS. This is failure ${attempts} of the identical call in this run.${said} The arguments are the problem, not the timing \u2014 repeating them will fail again and will spend the rest of this run's tool budget. Do ONE of these now: (a) re-read the error above and change the argument it names (a failing tool usually says exactly what to pass instead \u2014 a scope, a path, an id \u2014 so pass it); (b) reach the same goal with a different tool; (c) stop and tell the user plainly what is blocking you and what you need from them. Do not issue this call again.`;
-  }
-  return `\`${tool}\` has now failed ${attempts} times in this run with these exact arguments.${got} Another identical attempt will not behave differently \u2014 this is not a flake. Read the error above and change what it names (most failures state the argument to pass instead), use a different tool to reach the same goal, or say plainly what is blocking you. Do not simply repeat the call.`;
-}
-
-// src/repeatedWrite.ts
-function contentWriteOf(tool, args) {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
-  const { path: path2, content } = args;
-  if (typeof path2 !== "string" || !path2.trim() || typeof content !== "string") return null;
-  return { path: path2.trim(), fingerprint: `${tool}:${stableStringify(args)}` };
-}
-function pathOf(args) {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
-  const path2 = args.path;
-  return typeof path2 === "string" && path2.trim() ? path2.trim() : null;
-}
-var WriteLedger = class {
-  written = /* @__PURE__ */ new Map();
-  /** Is this call a full-content write identical to the last one that landed on its
-   *  path, with nothing touching that path since? */
-  isRepeat(tool, args) {
-    const write = contentWriteOf(tool, args);
-    return !!write && this.written.get(write.path) === write.fingerprint;
-  }
-  /**
-   * A non-read call ran. A successful full-content write is remembered; anything else
-   * that names a path forgets that path; `unscoped` (a shell command, a checkout)
-   * forgets everything. A FAILED write forgets its path — the file's state is unknown.
-   */
-  record(tool, args, options) {
-    if (options.unscoped) {
-      this.written.clear();
-      return;
-    }
-    const write = options.ok ? contentWriteOf(tool, args) : null;
-    if (write) {
-      this.written.set(write.path, write.fingerprint);
-      return;
-    }
-    const path2 = pathOf(args);
-    if (path2) this.written.delete(path2);
-  }
-};
-function repeatedWriteNote(tool, path2) {
-  return `Not re-run: this exact \`${tool}\` of "${path2}" already succeeded earlier in this run and nothing has changed the file since, so it already holds this content \u2014 writing it again cannot change anything. If something still looks broken, the cause is not that the write failed: re-read the error (it may predate your write), look elsewhere for the cause, or tell the user what you see.`;
-}
 
 // src/codeChanges.ts
 var DELEGATION_TOOLS = /* @__PURE__ */ new Set(["spawn_agent", "spawn_agents", "wait_agents", HAND_OFF_TOOL]);
@@ -14318,8 +14587,8 @@ ${turnContext}` : systemPrompt),
     // the payload; and a target re-read at SHIFTING offsets gets an advisory once it
     // starts circling. Both are invalidated together, and only for what a later
     // mutation actually touched — never wiped wholesale by an unrelated call.
-    readCoverage: new ReadCoverage(),
-    // What this run has already FAILED at (see `repeatedFailure.ts`). The read guards
+    readCoverage: new ReadCoverage2(),
+    // What this run has already FAILED at (see `FailureTally` in `@builderforce/run-guards`). The read guards
     // above deliberately record only SUCCESSES, so an identical failing call — the same
     // `git_status` answered with the same remedy three times, the same platform read
     // answered 502 twice — got no pushback at all and could repeat until the budget was
@@ -17715,6 +17984,15 @@ function ratedTurnContext(messages, messageId) {
     toolName: ratedTurnTool(messages, messageId)
   };
 }
+function localRatingVerdict(messages, messageId, rating, chatId) {
+  if (rating === 0 || chatId == null) return null;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message2 = messages[i];
+    if (message2.role !== "assistant" || isStepMessage(message2)) continue;
+    return message2.id === messageId ? { chatId, passed: rating === 1 } : null;
+  }
+  return null;
+}
 function withRating(ratings, messageId, rating) {
   const next = { ...ratings };
   if (rating === 0) delete next[messageId];
@@ -17995,15 +18273,17 @@ ${refs}`;
   const rateMessage = (0, import_react9.useCallback)(async (msg, rating) => {
     setRatings((prev) => withRating(prev, msg.id, rating));
     const context = ratedTurnContext(messages, msg.id);
+    const localVerdict = localRatingVerdict(messages, msg.id, rating, chatId);
+    if (localVerdict) submitLocalTurnVerdict(localVerdict.chatId, localVerdict.passed);
     try {
       await persistence.setMessageFeedback(
         msg.id,
         rating === 1 ? "up" : rating === -1 ? "down" : null,
-        { toolName: context.toolName }
+        { toolName: context.toolName, ...localVerdict ? { localVerdict } : {} }
       );
     } catch {
     }
-  }, [persistence, messages]);
+  }, [persistence, messages, chatId]);
   const attach2 = (0, import_react9.useCallback)(async (file) => {
     setUploading(true);
     try {
@@ -20032,6 +20312,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   localFirstApplies,
   localFirstWorkload,
   localPickerView,
+  localRatingVerdict,
   localStorageConfirmationPersistence,
   localToolsIn,
   localTransport,
@@ -20139,6 +20420,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   streamChatCompletion,
   stripAskUser,
   studioToolsIn,
+  submitLocalTurnVerdict,
   subscribeRun,
   subscribeRunStore,
   subscribeToChatMessages,

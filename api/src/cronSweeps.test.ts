@@ -60,7 +60,9 @@ describe('CRON_SWEEPS registry', () => {
       // plan, so it is billable and declares the flag — listed here as the deliberate
       // decision this assertion exists to force.
       'agent-benchmark', 'auto-exec', 'mailbox-automation', 'manager', 'pr-merge', 'qa-sweep',
-      'security', 'validator',
+      // `specialist-evals` (cost lever E2) replays each job's eval set through the
+      // candidates and a frontier judge on the gateway — token spend, so it confirms.
+      'security', 'specialist-evals', 'validator',
     ]);
   });
 

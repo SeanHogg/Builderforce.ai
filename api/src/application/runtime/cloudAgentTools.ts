@@ -14,7 +14,14 @@
  */
 
 import { buildCoreToolRegistry, type Capability, SKILL_TOOLS, SUBAGENT_TOOLS, stableStringify } from '@builderforce/agent-tools';
+import { isCostLeverOn, type CostLeverId } from '@builderforce/cost-levers';
 import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
+import { TenantRole } from '../../domain/shared/types';
+
+/** The permission role every cloud run acts under — its platform-tool dispatch (durable
+ *  and container) and the principal its B4 answer replay is scoped to. One value, so a
+ *  replayed answer is always one produced under the role the run reads with. */
+export const CLOUD_RUN_TENANT_ROLE = TenantRole.MANAGER;
 
 /** Shape of one tool call in an OpenAI-compatible completion response. */
 export interface RawToolCall { id?: string; type?: string; function?: { name?: string; arguments?: string } }
@@ -225,12 +232,50 @@ export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capabilit
   'skill.author',
 ]);
 
+/**
+ * Capabilities a cost lever ADDS to a cloud surface — data, one row per lever. Lever
+ * off ⇒ the surface's constant set, exactly as before.
+ *
+ * C5 (`c5_cloud_repo_map`) adds `repo.semantic`, which unlocks the SHARED `repo_map` and
+ * `semantic_search` definitions (`@builderforce/agent-tools` semantic-tools):
+ *   • durable — backed by `createCloudRepoSemantic` (`repos/cloudRepoMap.ts`): one
+ *     tarball read per base commit, the TS twin of bf-index's ranker, graph cached in R2;
+ *   • container — backed by the image's own `bf-context` binary over its clone
+ *     (`container/repoIndex.mjs`). The image names the two tools in its handshake only
+ *     when the run spec turned the lever on AND its binary is present, so an older image
+ *     is never offered them.
+ */
+const COST_LEVER_CAPS: ReadonlyArray<{ lever: CostLeverId; caps: readonly Capability[] }> = [
+  { lever: 'c5_cloud_repo_map', caps: ['repo.semantic'] },
+];
+
+/** `base` plus every capability an ON lever adds for this tenant. */
+export function withCostLeverCaps(base: ReadonlySet<Capability>, env: unknown, tenantId: number | string | null | undefined): ReadonlySet<Capability> {
+  const added = COST_LEVER_CAPS.filter((row) => isCostLeverOn(env, row.lever, tenantId)).flatMap((row) => row.caps);
+  return added.length === 0 ? base : new Set<Capability>([...base, ...added]);
+}
+
+/** The durable surface's capability set for a tenant's run (levers applied). */
+export function cloudSurfaceCapsFor(env: unknown, tenantId: number | string | null | undefined): ReadonlySet<Capability> {
+  return withCostLeverCaps(CLOUD_SURFACE_CAPS, env, tenantId);
+}
+
+/** The container surface's capability set for a tenant's run (levers applied). */
+export function containerSurfaceCapsFor(env: unknown, tenantId: number | string | null | undefined): ReadonlySet<Capability> {
+  return withCostLeverCaps(CONTAINER_SURFACE_CAPS, env, tenantId);
+}
+
+/** The schema array for a capability set — the ONE derivation both constants below use. */
+export function cloudAgentToolsFor(caps: ReadonlySet<Capability>) {
+  return cloudToolRegistry.schemasForCapabilities(caps);
+}
+
 /** Durable/Worker schema array — derived from {@link CLOUD_SURFACE_CAPS}, not
  *  hand-maintained. */
-export const CLOUD_AGENT_TOOLS = cloudToolRegistry.schemasForCapabilities(CLOUD_SURFACE_CAPS);
+export const CLOUD_AGENT_TOOLS = cloudAgentToolsFor(CLOUD_SURFACE_CAPS);
 
 /** Container schema array — derived. Kept stable for the container image's loop. */
-export const CONTAINER_AGENT_TOOLS = cloudToolRegistry.schemasForCapabilities(CONTAINER_SURFACE_CAPS);
+export const CONTAINER_AGENT_TOOLS = cloudAgentToolsFor(CONTAINER_SURFACE_CAPS);
 
 // There is NO step cap on a cloud run (the durable and Worker surfaces). It used to be
 // 30: a real run burned all of an earlier 10 just exploring and shipped a PRD-only PR,

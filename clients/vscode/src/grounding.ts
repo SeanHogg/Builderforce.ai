@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { readRecentSessionNotes } from "./sessionNotes";
 import { desktopRepoMapSection } from "./desktopContext";
+import { hostCostLeverOn } from "./hostCostLevers";
 import { symbolIndexGrounding } from "./workspaceSymbols";
 
 /** Single source of truth for the current workspace grounding summary, shared by the
@@ -33,7 +34,7 @@ export async function getGroundingWithHistory(root: string | undefined): Promise
   if (!root) return map;
   const [notes, repoMap, symbols] = await Promise.all([
     readRecentSessionNotes(root),
-    desktopRepoMapSection(root),
+    desktopRepoMapSection(root, { adaptive: hostCostLeverOn("c4_adaptive_context") }),
     symbolIndexGrounding(root),
   ]);
   const history = notes ? `## Recent activity in this workspace\n${notes}` : "";

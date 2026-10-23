@@ -22,6 +22,9 @@ export interface ImageLoopIo {
   isCancelled(): boolean;
   /** Per-result budget for tool rows (PRD C7). Omitted ⇒ plain JSON rows. */
   toolResultPolicy?: (toolName: string, data: unknown) => string;
+  /** Which tools only read (PRD D8) — consecutive reads in a turn dispatch concurrently.
+   *  Omitted ⇒ every call in order. */
+  isReadOnly?: (toolName: string) => boolean;
 }
 
 export interface ImageLoopOutcome {

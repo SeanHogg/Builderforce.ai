@@ -15,6 +15,7 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
+import { hostCostLeverOn } from "./hostCostLevers";
 import { matchGlobInScope, dirMayContainGlobMatch, applyStringEdit, editFacts, normalizeScopeDir } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the agent-runtime Node provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
@@ -253,6 +254,6 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
   // The ONE local shell runner (`localShell.ts`) — shared with the workspace hooks.
   const shell = createLocalShell(rootResolved);
 
-  const semantic = options.semantic ?? desktopSemanticCapability(rootResolved);
+  const semantic = options.semantic ?? desktopSemanticCapability(rootResolved, { adaptive: hostCostLeverOn("c4_adaptive_context") });
   return { capabilities: LOCAL_SURFACE_CAPS, repoRead, repoWrite, symbols, semantic, shell };
 }

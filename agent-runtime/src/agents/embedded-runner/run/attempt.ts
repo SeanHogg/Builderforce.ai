@@ -60,6 +60,7 @@ import {
   catalogDesktopSemantic,
   setDesktopClientName,
 } from "@builderforce/agent-tools/node-desktop.js";
+import { isCostLeverOn } from "@builderforce/cost-levers";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveBuilderForceAgentsDocsPath } from "../../docs-path.js";
 import {
@@ -441,7 +442,10 @@ export async function runEmbeddedAttempt(
     if (!params.disableTools) setDesktopClientName("on-prem");
     const semantic = params.disableTools
       ? undefined
-      : await catalogDesktopSemantic(effectiveWorkspace);
+      : await catalogDesktopSemantic(effectiveWorkspace, {
+          // C4 for an on-device host (no tenant: on only when fully rolled out).
+          adaptive: isCostLeverOn(process.env, "c4_adaptive_context", null),
+        });
     const toolsRaw = params.disableTools
       ? []
       : createBuilderForceAgentsCodingTools({

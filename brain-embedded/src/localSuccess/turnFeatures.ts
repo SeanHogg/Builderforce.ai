@@ -19,7 +19,8 @@ export type TurnFeaturesBase = Omit<LocalTurnFeatures, 'priorLocalSuccessRate'>;
 /** Edits, diffs and stack traces — the turns a small local model most often fumbles. */
 const CODE_HEAVY = /```|^diff --git |^@@ [-+]\d|^\s+at \S+ \(?\S+:\d+:\d+\)?$|Traceback \(most recent call last\)/m;
 
-function contentText(content: ChatCompletionMessage['content']): string {
+/** The text of a message's content (text parts joined) — shared with the E5 verdict reader. */
+export function contentText(content: ChatCompletionMessage['content']): string {
   if (typeof content === 'string') return content;
   return content.map((p) => (p.type === 'text' ? p.text : '')).join('\n');
 }

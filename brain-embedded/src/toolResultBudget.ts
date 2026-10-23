@@ -22,7 +22,7 @@ import {
   shapeToolResult,
   type ShapedToolResult,
 } from '@builderforce/tool-output-policy';
-import { withAdvisory } from './readCoverage';
+import { withAdvisory } from '@builderforce/run-guards';
 
 /** Per-result cap (chars of JSON) for every tool that is not a file read. */
 export const MAX_TOOL_RESULT_CHARS = DEFAULT_TOOL_OUTPUT_CHARS;

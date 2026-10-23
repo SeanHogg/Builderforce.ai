@@ -2661,6 +2661,8 @@
         "engineeringDesc": "Qué enfoque de IA realmente se entrega: puntuación de resultados, tasa de fusión y coste por tipo de trabajo y modelo.",
         "llmUsage": "Uso de LLM",
         "llmUsageDesc": "Uso de tokens, solicitudes y estado de los modelos, además del gasto estimado por origen, proyecto, equipo, usuario y repositorio.",
+        "costEfficiency": "Eficiencia de costes",
+        "costEfficiencyDesc": "¿Cada dólar de modelo compra más trabajo entregado? Tasa de aciertos de caché, turnos y contexto por ejecución, coste por PR fusionado y qué palancas de coste compensan.",
         "recommendations": "Recomendaciones",
         "recommendationsDesc": "Acciones prescriptivas priorizadas y anomalías sobre las que actuar, extraídas de cada perspectiva."
       },
@@ -3863,6 +3865,118 @@
       "confirmMessage": "Se eliminan todas las grabaciones de este visitante en este sitio, con sus resúmenes de IA. No se puede deshacer.",
       "confirm": "Borrar",
       "done": "{count, plural, one {# grabación borrada.} other {# grabaciones borradas.}}"
+    },
+    "cost": {
+      "approx": "≈{value}",
+      "points": "{value} pp",
+      "subtitle": "Tasa de aciertos de caché, turnos y contexto por ejecución, y lo que cuesta un PR fusionado en gasto de modelo.",
+      "empty": "No hay uso de modelos registrado en este periodo.",
+      "loadFailed": "No se pudieron cargar las métricas de coste.",
+      "verdict": "En los últimos {days} días la caché sirvió el {cache} de los tokens de prompt, y un PR fusionado costó {cost} en gasto de modelo en {merged, plural, one {# ejecución fusionada} other {# ejecuciones fusionadas}}.",
+      "verdictNoPr": "En los últimos {days} días la caché sirvió el {cache} de los tokens de prompt; ninguna ejecución de este periodo ha fusionado un PR todavía.",
+      "basis": "Las cifras de tokens las informa el proveedor; el gasto es el coste registrado al anotar cada llamada.",
+      "unattributed": "Sin atribuir",
+      "metric": {
+        "cacheHitRate": "Tasa de aciertos de caché",
+        "outputInputRatio": "Salida / entrada",
+        "reasoningShare": "Proporción de razonamiento",
+        "medianContextTokens": "Contexto mediano por turno",
+        "medianTurns": "Turnos medianos por ejecución",
+        "costPerMergedPr": "Coste por PR fusionado"
+      },
+      "tone": {
+        "better": "Mejorando",
+        "worse": "Empeorando",
+        "flat": "Estable"
+      },
+      "kpi": {
+        "cacheHitRateSub": "Proporción de tokens de prompt leídos de caché",
+        "medianTurnsSub": "Ejecuciones completadas · {runs}",
+        "medianContextSub": "Tokens de prompt por llamada al modelo",
+        "costPerPrSub": "Mediana {median} · {merged} ejecuciones fusionadas",
+        "costPerPrNone": "No hay ejecuciones fusionadas en este periodo",
+        "outputInputSub": "Tokens de salida por token de entrada",
+        "reasoningShareSub": "De la salida, cuando el proveedor lo informa",
+        "reasoningUnreported": "Estos proveedores no lo informan",
+        "servedWithoutModel": "Atendidas sin modelo",
+        "servedWithoutModelSub": "{requests} solicitudes respondidas sin llamar a un modelo"
+      },
+      "col": {
+        "metric": "Métrica",
+        "calls": "Llamadas al modelo",
+        "spend": "Gasto"
+      },
+      "grouping": {
+        "label": "Agrupar por",
+        "actionType": "Tipo de trabajo",
+        "role": "Rol"
+      },
+      "group": {
+        "title": "A dónde va el gasto",
+        "aria": "Gasto por grupo",
+        "truncated": "Se muestran los {n} grupos principales."
+      },
+      "lever": {
+        "title": "Palancas de coste: activadas frente a desactivadas",
+        "desc": "Cada palanca desplegada parcialmente, comparando las llamadas en que estaba activada con aquellas en que estaba desactivada. Se omite el cambio cuando cualquiera de los grupos tiene menos de {calls} llamadas o {runs} ejecuciones.",
+        "empty": "Ninguna palanca está desplegada parcialmente en este periodo, así que no hay nada que comparar.",
+        "colOn": "Activada",
+        "colOff": "Desactivada",
+        "colDelta": "Cambio (activada − desactivada)",
+        "nameWithReq": "{lever} · {req}",
+        "sample": "{on} llamadas activada / {off} desactivada",
+        "insufficient": "Muestra insuficiente"
+      },
+      "run": {
+        "open": "Desglose de costes",
+        "title": "Ejecución #{id} · desglose de costes",
+        "empty": "No hay turnos de modelo registrados para esta ejecución.",
+        "outcome": "{action} · {status} tras {steps} pasos.",
+        "outcomeMerged": "{action} · {status} tras {steps} pasos · fusionada.",
+        "budgetUsed": "Presupuesto usado",
+        "noCap": "Esta ejecución no tiene un límite propio",
+        "turns": "Turnos",
+        "turnsSub": "Modelos usados: {models}",
+        "toolSchema": "Esquemas de herramientas",
+        "toolSchemaSub": "Tokens estimados para describir las herramientas",
+        "splitTitle": "A dónde fueron los tokens",
+        "contextTitle": "Contexto por origen (estimado)",
+        "colTurn": "Turno",
+        "colModel": "Modelo",
+        "turnMerged": "{n} ({calls} llamadas)",
+        "byo": "Clave propia",
+        "total": "Total",
+        "truncated": "Se muestran los primeros {n} turnos.",
+        "estimateNote": "≈ indica estimaciones: el gasto se calcula con la tarifa del modelo, y las cifras de esquemas de herramientas y de contexto se estiman por caracteres, no son recuentos del proveedor.",
+        "part": {
+          "uncached": "Entrada sin caché",
+          "cacheRead": "Lectura de caché",
+          "cacheWrite": "Escritura de caché",
+          "output": "Salida",
+          "reasoning": "Razonamiento"
+        },
+        "category": {
+          "system": "Prompt del sistema",
+          "tools": "Definiciones de herramientas",
+          "history": "Conversación",
+          "toolOutputs": "Salidas de herramientas",
+          "memory": "Memoria"
+        },
+        "budgetOfCap": "{share} del límite de {cap} · {source}",
+        "tokenBudget": "Presupuesto de tokens",
+        "budgetSource": {
+          "payload": "definido en esta ejecución",
+          "plan": "límite del plan",
+          "default": "valor predeterminado de la plataforma"
+        }
+      },
+      "trend": {
+        "title": "Tendencia diaria",
+        "desc": "Una métrica, día a día en el periodo: hacia dónde se mueve la eficiencia.",
+        "metric": "Métrica",
+        "empty": "Aún no hay días con datos de esta métrica en este periodo.",
+        "chartLabel": "{metric} por día"
+      }
     }
   },
   "cloudAgentForm": {
@@ -5588,6 +5702,7 @@
       "aiHubImpact": "Impacto de la IA",
       "aiHubEngineering": "Eficacia de la IA",
       "aiHubLlmUsage": "Uso de LLM",
+      "aiHubCostEfficiency": "Eficiencia de costes",
       "aiHubRecommendations": "Recomendaciones",
       "delivHubDelivery": "Entrega",
       "delivHubAutonomy": "Salud de la autonomía",
@@ -5859,6 +5974,7 @@
       "aiHubImpactDesc": "Tendencias de adopción y uso de modelos, una matriz de evaluación multiherramienta y una puntuación compuesta de productividad de IA.",
       "aiHubEngineeringDesc": "Qué enfoque de IA realmente se entrega: puntuación de resultados, tasa de fusión y coste por tipo de trabajo y modelo.",
       "aiHubLlmUsageDesc": "Uso de tokens, solicitudes y estado de los modelos, además del gasto estimado por origen, proyecto, equipo, usuario y repositorio.",
+      "aiHubCostEfficiencyDesc": "¿Cada dólar de modelo compra más trabajo entregado? Tasa de aciertos de caché, turnos y contexto por ejecución, coste por PR fusionado y qué palancas de coste compensan.",
       "aiHubRecommendationsDesc": "Acciones prescriptivas priorizadas y anomalías sobre las que actuar, extraídas de cada perspectiva.",
       "delivHubDeliveryDesc": "Burnup, previsión y desviación de alcance de un entregable en iniciativas, proyectos y versiones.",
       "delivHubAutonomyDesc": "¿El trabajo se terminó solo? Embudo del ciclo de vida según quién creó el ticket, reparto de movimientos autónomos y humanos, y dónde se detiene la autonomía.",

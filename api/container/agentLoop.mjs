@@ -9,7 +9,7 @@
  * Regenerate with `node scripts/gen-agent-loop-bundle.mjs` (from `api/`).
  * `--check` fails the build when the kernel source no longer matches the hash below.
  *
- * @source-sha256 7094ea85384f87868aa181ec190a6e462800385da0eddf77c40d772564f4d9dd
+ * @source-sha256 654c4ff2ba190d2e9944e8f1c8cd5df2628743a6c7d6505a4bf5e68b0a3925e7
  */
 // ── types.ts ──
 /**
@@ -265,6 +265,14 @@ class Ctx {
         this.signal = signal;
     }
 }
+/** How many calls from `start` may dispatch together: the run of consecutive read-only
+ *  calls there, when it is at least two long; otherwise 1 (the sequential path). */
+function readOnlySpan(calls, start, isReadOnly) {
+    let end = start;
+    while (end < calls.length && isReadOnly(calls[end]))
+        end++;
+    return end - start >= 2 ? end - start : 1;
+}
 export async function runAgentLoop(args) {
     const { codec, ports, budget, signal } = args;
     const hooks = args.hooks ?? {};
@@ -356,16 +364,11 @@ export async function runAgentLoop(args) {
             break;
         }
         ctx.messages.push(codec.assistant(turn));
-        for (let i = 0; i < calls.length; i++) {
-            let call = calls[i];
-            let result;
-            const pre = await hooks.beforeDispatch?.(call, ctx);
-            if (pre && "result" in pre)
-                result = pre.result;
-            else if (pre && "rewrite" in pre)
-                call = pre.rewrite;
-            if (!result)
-                result = await ports.dispatch(call, ctx);
+        // Settle one dispatched call, in call order: interpret its control signal, count it
+        // against the failure streak, push its row and run `afterDispatch`. True ⇒ the hook
+        // abandoned the rest of the turn (every later call already has its skipped row).
+        const settle = async (i, call, dispatched) => {
+            let result = dispatched;
             if (result.control?.kind === "finish") {
                 const block = await hooks.onFinish?.(ctx, result.control.summary, call);
                 if (block) {
@@ -389,12 +392,48 @@ export async function runAgentLoop(args) {
             const row = codec.tool(call, result);
             ctx.messages.push(row);
             const post = await hooks.afterDispatch?.(call, result, row, ctx);
-            if (post?.skipRemaining) {
-                const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
-                for (const rest of calls.slice(i + 1))
-                    ctx.messages.push(codec.tool(rest, skipped));
-                break;
+            if (!post?.skipRemaining)
+                return false;
+            const skipped = { data: post.skipRemaining.data, isError: post.skipRemaining.isError ?? true };
+            for (const rest of calls.slice(i + 1))
+                ctx.messages.push(codec.tool(rest, skipped));
+            return true;
+        };
+        for (let i = 0; i < calls.length;) {
+            // D8: a run of consecutive read-only calls is dispatched together. `beforeDispatch`
+            // still runs once per call, in order, BEFORE any of them dispatches; results are
+            // settled in call order, so the transcript and every later hook see exactly the
+            // sequential shape. A call whose `beforeDispatch` answered with a control signal,
+            // or rewrote it into a call that is not read-only, closes the batch at itself.
+            const span = ports.isReadOnly ? readOnlySpan(calls, i, ports.isReadOnly) : 1;
+            const prepared = [];
+            for (let j = i; j < i + span; j++) {
+                let call = calls[j];
+                let result;
+                const pre = await hooks.beforeDispatch?.(call, ctx);
+                if (pre && "result" in pre)
+                    result = pre.result;
+                else if (pre && "rewrite" in pre)
+                    call = pre.rewrite;
+                prepared.push(result ? { call, result } : { call });
+                if (span > 1 && (result?.control || (!result && !ports.isReadOnly(call))))
+                    break;
             }
+            const last = prepared[prepared.length - 1];
+            // A batch's trailing non-read-only rewrite runs AFTER the reads before it, alone.
+            const tail = prepared.length > 1 && !last.result && !ports.isReadOnly(last.call) ? last : undefined;
+            const batch = tail ? prepared.slice(0, -1) : prepared;
+            const results = batch.length > 1
+                ? await Promise.all(batch.map((p) => p.result ?? ports.dispatch(p.call, ctx)))
+                : [batch[0].result ?? (await ports.dispatch(batch[0].call, ctx))];
+            if (tail)
+                results.push(await ports.dispatch(tail.call, ctx));
+            let stop = false;
+            for (let k = 0; k < prepared.length && !stop; k++)
+                stop = await settle(i + k, prepared[k].call, results[k]);
+            if (stop)
+                break;
+            i += prepared.length;
         }
         const after = await hooks.afterToolCalls?.(ctx, finished);
         if (after && after.finished !== undefined)

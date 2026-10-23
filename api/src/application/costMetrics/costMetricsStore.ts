@@ -12,8 +12,9 @@
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { llmUsageLog, runModelOutcomes } from '../../infrastructure/database/schema';
-import { usageDatabaseOf } from '../llm/usageLedger';
+import { executionLimits, executions, llmUsageLog, runModelOutcomes } from '../../infrastructure/database/schema';
+import { usageDatabaseOf, usageRequestCountSql } from '../llm/usageLedger';
+import { SERVED_WITHOUT_MODEL_SOURCES } from '../llm/savingsLedger';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { resultRows } from '../kernel/metricRollup';
 import { COST_METRIC_GROUPS, type CostMetricGroupBy } from './costMetricGroups';
@@ -113,7 +114,7 @@ export async function readCostMetricRows(db: Db, tenantId: number, window: CostM
            r.completed_runs, r.median_turns, r.merged_runs, r.merged_cost, r.median_merged_cost
       FROM turns t
       LEFT JOIN run_stats r ON r.group_key = t.group_key AND r.arm = t.arm
-     ORDER BY t.cost_millicents DESC
+     ORDER BY ${sql.raw(g.series ? 't.group_key ASC' : 't.cost_millicents DESC')}
      LIMIT ${COST_METRIC_GROUP_LIMIT}
   `);
   return resultRows(result).map((r) => ({
@@ -133,6 +134,58 @@ export async function readCostMetricRows(db: Db, tenantId: number, window: CostM
     mergedCostMillicents: num(r.merged_cost),
     medianMergedCostMillicents: numOrNull(r.median_merged_cost),
   }));
+}
+
+/** Requests the window answered without a model, beside the ones a model served. */
+export interface ServedWithoutModelRow {
+  served: number;
+  dispatched: number;
+}
+
+/**
+ * The requests answered WITHOUT a model in the window — the `calls = 0` rows the stand-ins
+ * already write (`SERVED_WITHOUT_MODEL_SOURCES`: response cache incl. semantic hits and
+ * single-flight followers, memory / Evermind answer replays, the deterministic step) —
+ * and the requests a model served (`SUM(calls)`), on the same ledger and window.
+ */
+export async function readServedWithoutModel(db: Db, tenantId: number, window: CostMetricWindowSpec): Promise<ServedWithoutModelRow> {
+  const sources = sql.join(SERVED_WITHOUT_MODEL_SOURCES.map((s) => sql`${s}`), sql`, `);
+  const result = await usageDatabaseOf(db).execute(sql`
+    -- usage-count-ok: an answered-without-a-model row records calls = 0 by contract (it
+    -- stands for a request no model served), so ROWS are the unit for it; the rollup that
+    -- folds rows only touches rows older than any window this reads (90d > 30d).
+    SELECT COUNT(*) FILTER (WHERE u.calls = 0 AND u.savings_source IN (${sources}))::int AS served,
+           ${sql.raw(usageRequestCountSql('u'))} AS dispatched
+      FROM llm_usage_log u
+     WHERE u.tenant_id = ${tenantId}
+       AND ${windowFilter(window)}
+  `);
+  const [r] = resultRows(result);
+  return { served: num(r?.served), dispatched: num(r?.dispatched) };
+}
+
+/** What a run's budget is read from: its declared limits row and its dispatch payload. */
+export interface RunBudgetInputs {
+  /** `execution_limits.max_spend_millicents` — null when the run declared no row. */
+  declaredSpendMillicents: number | null;
+  /** The execution's raw payload (`containmentLimits` lives in it); null when absent. */
+  payload: string | null;
+  /** False when the execution does not exist for this tenant. */
+  found: boolean;
+}
+
+export async function readRunBudgetInputs(db: Db, tenantId: number, executionId: number): Promise<RunBudgetInputs> {
+  const [[run], [limits]] = await Promise.all([
+    db.select({ payload: executions.payload }).from(executions)
+      .where(and(eq(executions.tenantId, tenantId), eq(executions.id, executionId))).limit(1),
+    db.select({ maxSpendMillicents: executionLimits.maxSpendMillicents }).from(executionLimits)
+      .where(and(eq(executionLimits.tenantId, tenantId), eq(executionLimits.executionId, executionId))).limit(1),
+  ]);
+  return {
+    declaredSpendMillicents: limits?.maxSpendMillicents ?? null,
+    payload: run?.payload ?? null,
+    found: !!run,
+  };
 }
 
 /** One turn of one run, as the ledger recorded it. */

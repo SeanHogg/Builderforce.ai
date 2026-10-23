@@ -58,6 +58,13 @@ export interface ToolContext {
    * exact code path it uses for the final value.
    */
   readonly onUpdate?: (partial: ToolResult) => void;
+  /**
+   * The host's cost-lever C8 decision (`isCostLeverOn(env, "c8_token_compression", tenantId)`),
+   * resolved once by the host — agent-tools has no env. When true AND the surface backs
+   * `semantic.compress`, prose-heavy outputs (shell stdout, fetched pages) are compressed.
+   * Absent/false = outputs are returned verbatim.
+   */
+  readonly compressLargeOutputs?: boolean;
 }
 
 /**
