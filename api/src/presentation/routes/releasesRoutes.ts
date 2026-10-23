@@ -60,7 +60,7 @@ const ReleaseBody = z.looseObject({
 /**
  * The alias's wire row: the canonical row plus the `releaseDate` its deployed embed
  * callers still parse, for the deprecation period. Derived — never read from the
- * old `release_date` column (folded by 1266, dropped by the held contract migration): the day it
+ * old `release_date` column (folded by 1266, dropped by 1272): the day it
  * shipped, else the day it is planned for.
  *
  * @deprecated goes with the alias.

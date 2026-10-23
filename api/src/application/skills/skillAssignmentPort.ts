@@ -4,8 +4,8 @@
  * They live in `artifact_assignments`, the store `resolveArtifacts` reads for run
  * prompts, the skill library catalog and the on-prem sync. Until migration 1261 they
  * had a second home, `skill_assignments` (1108), which fed only the host panel — so a
- * grant made there never reached a run. 1261 folded its rows in; nothing reads or
- * writes `skill_assignments` any more, and the held contract migration drops it.
+ * grant made there never reached a run. 1261 folded its rows in; nothing read or
+ * wrote `skill_assignments` after that, and 1274 dropped it.
  *
  * The scope is a PARAMETER here rather than a second function: `scope: 'tenant'`
  * (scope_id = the tenant) and `scope: 'host'` (scope_id = the agent host) walk the

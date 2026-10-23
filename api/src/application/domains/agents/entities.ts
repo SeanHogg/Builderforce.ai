@@ -34,7 +34,6 @@ import {
   tenantSkills,
   workflowActions,
   previewSessions,
-  skillAssignments,
 } from '../../../infrastructure/database/schema/agents';
 import {
   webSearchDocuments,
@@ -91,13 +90,6 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
    *  closed by the preview op and the eviction sweep, and hand-editing one is how two
    *  tenants end up believing they hold the same instance. */
   entity(previewSessions, { readOnly: true }),
-  /** @deprecated — the pre-1261 skill-assignment store, folded into `artifact_assignments`
-   *  by migration 1261 and dropped by the held contract migration in the NEXT release.
-   *  RESTRICTED, so no generic path queries it: `countScope` skips it, list/get refuse it
-   *  before any SQL, and it is not writable. That is what lets the drop run while this
-   *  Worker is still serving. Kept registered only so the table is not cold before the
-   *  drop. This line, the import and the Drizzle declaration go with that migration. */
-  entity(skillAssignments, { restricted: true }),
   /** The workspace's OWN skills (migration 1135): procedures a run worked out and
    *  proposed, and the ones a human approved. Read-only — `status` is a REVIEW
    *  DECISION, and the whole safety property of agent-authored skills is that nothing

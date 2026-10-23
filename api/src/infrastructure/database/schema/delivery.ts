@@ -2377,12 +2377,9 @@ export const productReleases = pgTable('product_releases', {
   // Plan vs actual (1266): `targetDate` is the planned ship date; `releasedAt` is when
   // it actually shipped, stamped by the transition to `released`, cleared on a move
   // back to planned / in_progress, kept on cancel (domain/delivery/releaseSchedule.ts).
-  // The old ambiguous `release_date` was folded in by 1266. The column is still in the
-  // database for the deploy window but deliberately NOT declared here (app code never
-  // reads or writes it; its drift line is grandfathered in .schema-drift-allowlist.txt).
-  // The held contract migration drops it and adds CHECK
-  // `product_releases_released_at_status_chk` (released_at only on a released /
-  // cancelled row).
+  // The old ambiguous `release_date` was folded in by 1266, dropped by 1272, which also
+  // added CHECK `product_releases_released_at_status_chk` (released_at only on a
+  // released / cancelled row).
   targetDate:  timestamp('target_date'),
   releasedAt:  timestamp('released_at', { withTimezone: true }),
   status:      varchar('status', { length: 20 }).notNull().default('planned'),

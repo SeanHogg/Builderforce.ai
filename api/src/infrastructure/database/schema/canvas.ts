@@ -1512,7 +1512,8 @@ export const creationSessionConnections = pgTable('creation_session_connections'
 }, (t) => ({ bySession: index('idx_creation_connections_session').on(t.sessionId, t.createdAt) }));
 
 /**
- * Realtime PRESENCE on a board (migration 1264; window caught up by 1270).
+ * Realtime PRESENCE on a board (migration 1264; window caught up by 1270; access
+ * columns dropped by 1273).
  *
  * WHO is on a board, and with what role, is not read from here: a board's members are
  * kernel `memberships` rows on the board's registry object, read and written only
@@ -1523,11 +1524,8 @@ export const creationSessionConnections = pgTable('creation_session_connections'
  * permission read a write target — and `lastSeenRevision` is the replay cursor behind
  * the board's unread flag.
  *
- * The table keeps its legacy name, and its legacy access columns (`role`, `invited_by`,
- * `pinned`, `watch_state`, `joined_at`) are still in the database but deliberately NOT
- * declared here: nothing reads or writes them, and their database defaults satisfy the
- * NOT NULLs on insert. Their drift lines are grandfathered in .schema-drift-allowlist.txt
- * until the next canvas contract release drops them.
+ * Since 1273 this table carries presence only (the name is legacy): the old access
+ * columns (`role`, `invited_by`, `pinned`, `watch_state`, `joined_at`) are dropped.
  *
  * A member who has never ticked may have no row; readers LEFT JOIN it and default
  * every column. Removing a member deletes their row.
@@ -1545,6 +1543,7 @@ export const creationSessionPresence = pgTable('creation_session_members', {
 }, (t) => ({
   pk: primaryKey({ columns: [t.sessionId, t.userId] }),
   bySeen: index('idx_creation_members_presence').on(t.sessionId, t.lastSeenAt),
+  byUser: index('idx_creation_members_user_id').on(t.userId),
 }));
 
 /** One-time, expiring invitation to a Creation Session. Only a SHA-256 token

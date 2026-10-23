@@ -11,14 +11,13 @@ const read = (file: string) =>
 
 const EXPAND = '1266_release_dates_plan_vs_actual.sql';
 const expand = read(EXPAND);
-/** The contract step ships in a later push, after the 1266 Worker is live; its number is
- *  assigned then (`<n>_drop_release_date.sql`). Until it is in api/migrations its
- *  assertions skip. */
-const CONTRACT = readdirSync(resolve(repo, 'api/migrations')).find((file) => /^\d+_drop_release_date\.sql$/.test(file));
-const contract = CONTRACT ? read(CONTRACT) : '';
+/** The contract step (1272). Required: reading it throws if it is missing, so its
+ *  assertions can never silently skip. */
+const CONTRACT = '1272_drop_release_date.sql';
+const contract = read(CONTRACT);
 
 /**
- * The release-date fold (1266 expand, the held contract) is SQL, so its data-safety rules
+ * The release-date fold (1266 expand, 1272 contract) is SQL, so its data-safety rules
  * are asserted against the migrations themselves: a later edit that loosens one of
  * them fails here rather than on a production backfill.
  */
@@ -51,7 +50,12 @@ describe('1266 — release_date folds onto plan vs actual without losing data', 
   });
 });
 
-describe.skipIf(!CONTRACT)('contract step (<n>_drop_release_date.sql; skipped while it is held out of api/migrations)', () => {
+describe('1272 — contract step drops release_date after the fold', () => {
+  it('is the only drop_release_date migration', () => {
+    const contracts = readdirSync(resolve(repo, 'api/migrations')).filter((file) => /^\d+_drop_release_date\.sql$/.test(file));
+    expect(contracts).toEqual([CONTRACT]);
+  });
+
   it('drops release_date only after re-running the fold, then drops the fold function', () => {
     expect(contract).toMatch(/PERFORM\s+fold_product_release_date\(\)[\s\S]*DROP\s+COLUMN\s+release_date/i);
     expect(contract).toMatch(/DROP\s+FUNCTION\s+IF\s+EXISTS\s+fold_product_release_date\(\)/i);

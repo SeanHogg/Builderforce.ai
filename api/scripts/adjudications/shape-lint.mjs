@@ -210,8 +210,8 @@ export default {
       'registry object. What it carries is `viewport`, `cursor`, `selection`, `typing` and ' +
       '`followingUserId`, written on every presence tick and meaningless once the socket ' +
       'drops, plus `lastSeenRevision`, the replay cursor above. A member who never ticked ' +
-      'has no row. Its undeclared legacy access columns are dropped by the next canvas ' +
-      'contract release.',
+      'has no row. Its legacy access columns (`role`, `invited_by`, `pinned`, ' +
+      '`watch_state`, `joined_at`) were dropped by migration 1273.',
 
   "cron_jobs":
       'a SCHEDULE, not an execution. `schedule`, `enabled` and `nextRunAt` describe work that ' +

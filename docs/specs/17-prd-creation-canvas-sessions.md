@@ -619,9 +619,10 @@ carried a camera, and every reader LEFT JOINs it.
 `joined_at` columns) in place for the deploy window, while the 1264 Worker mirrored each
 settled role onto `role`. Migration 1270 is the final catch-up: it re-ran the backfill for
 window writes and retired the kernel memberships of members removed in the window. The
-Worker released with it no longer mirrors and does not declare the access columns. The
-table keeps its name; dropping the five access columns is pending, in the next canvas
-contract release.
+Worker released with it no longer mirrors and does not declare the access columns.
+Migration 1273 (the contract step, applied) dropped the five access columns and their
+`(user_id, joined_at)` index, replaced by `idx_creation_members_user_id (user_id)`. The
+table keeps its name and now carries presence only.
 
 ### `creation_session_events`
 

@@ -730,18 +730,6 @@ export const memberMetricsPeriod = pgTable('member_metrics_period', {
 
 
 // ---------------------------------------------------------------------------
-// Skill assignments
-// A skill from the marketplace can be assigned to an entire tenant (all agentHosts
-// inherit it) or to a specific BuilderForce Agents instance.
-// ---------------------------------------------------------------------------
-
-// Skill assignment moved to `schema/agents.ts` as the single `skill_assignments`
-// table (migration 1108): the tenant-level and host-level tables were one fact at
-// two scopes. It lives with `agent_hosts`, which is the aggregate a host-scoped
-// row names — Identity has no stake in which skills an agent may use.
-
-
-// ---------------------------------------------------------------------------
 // Chat sessions and messages
 // ---------------------------------------------------------------------------
 
