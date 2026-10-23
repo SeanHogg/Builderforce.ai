@@ -139,16 +139,18 @@ describe('cachedAppForSession', () => {
  * NEW EMPTY one — which is what "I converted my canvas and lost the session" was.
  */
 describe('appSessionForProject', () => {
-  /** Enough of a db to answer the one join, capturing nothing else. */
+  /**
+   * Enough of a db to answer the one read, capturing nothing else: link → board
+   * (inner) → project card (left). Board membership is a correlated EXISTS in the
+   * WHERE (`boardsOfMember(userId).isMember`), not a join, so it adds no link here.
+   */
   function dbWithRow(row: Record<string, unknown> | null) {
     return {
       select: () => ({
         from: () => ({
           innerJoin: () => ({
-            innerJoin: () => ({
-              leftJoin: () => ({
-                where: () => ({ limit: async () => (row ? [row] : []) }),
-              }),
+            leftJoin: () => ({
+              where: () => ({ limit: async () => (row ? [row] : []) }),
             }),
           }),
         }),

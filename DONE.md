@@ -1,4 +1,4 @@
-## ✅ RESOLVED 2026-10-23 — Route consolidation: the four data-migration duplicates folded into one store each (api 2026.10.70 · frontend 2026.10.85)
+## ✅ RESOLVED 2026-10-23 — Route consolidation: the four data-migration duplicates folded into one store each (api 2026.10.71 · frontend 2026.10.86)
 
 Operator decisions (2026-10-23): templates go into `catalog_items`, canvas relations go onto the kernel, `agent_assignments` is canonical, and releases carry plan vs actual dates. Each move ships expand/contract. Migrations 1263–1266 only add and backfill, so the old Worker keeps running through the deploy window. The drops (1267–1270) ship in the next release and reconcile what the old Worker wrote in the meantime.
 
