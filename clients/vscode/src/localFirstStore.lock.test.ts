@@ -28,7 +28,11 @@ describe("local-first file lock", () => {
   const directories: string[] = [];
 
   afterEach(async () => {
-    await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+    // A reclaimed lock's last write can land while the tree is being removed; `maxRetries`
+    // retries the ENOTEMPTY that race raises instead of failing the suite on cleanup.
+    await Promise.all(
+      directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 })),
+    );
   });
 
   it("polls and throws busy without stealing a lock older than 30s, then acquires after release", async () => {
