@@ -33,6 +33,9 @@ importers:
       '@builderforce/cost-levers':
         specifier: link:../packages/cost-levers
         version: link:../packages/cost-levers
+      '@builderforce/difficulty-router':
+        specifier: link:../packages/difficulty-router
+        version: link:../packages/difficulty-router
       '@builderforce/learned-routing':
         specifier: link:../packages/learned-routing
         version: link:../packages/learned-routing
