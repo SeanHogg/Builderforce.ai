@@ -66,7 +66,7 @@ export type {
   ReasoningTagTrim,
 } from "./reasoning.js";
 export { defaultToolRowSerializer, openAiChatCodec, readOpenAiToolCalls, toOpenAiToolCall } from "./openaiCodec.js";
-export type { OpenAiAssistantRow, OpenAiToolCallRow, OpenAiToolRow, ToolRowSerializer } from "./openaiCodec.js";
+export type { OpenAiAssistantRow, OpenAiChatCodecOptions, OpenAiToolCallRow, OpenAiToolRow, ToolResultPolicy, ToolRowSerializer } from "./openaiCodec.js";
 export type {
   AfterDispatchDecision,
   DispatchDecision,

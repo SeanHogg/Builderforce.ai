@@ -6,7 +6,7 @@
  * share the contract without importing the facade class.
  */
 
-import type { DispatchAttempt, UpstreamDiagnostic, VendorEgress, VendorEnv, VendorId } from './vendors';
+import type { DispatchAttempt, UpstreamDiagnostic, VendorEgress, VendorEnv, VendorId, VendorUsage } from './vendors';
 import type { TenantVendorKeys } from './tenantProviderKeyService';
 import type { OpenRouterConnection } from './openRouterConnectionService';
 
@@ -83,6 +83,25 @@ export interface LlmUsage {
    *  upstreams. Persisted so cost accounting can discount cache reads (~0.1x). */
   cacheReadTokens?:     number;
   cacheCreationTokens?: number;
+  /** Hidden reasoning tokens (subset of completionTokens), as the vendor reported them.
+   *  Absent — recorded as NULL, never 0 — when the vendor gives no split: Anthropic
+   *  bills extended thinking inside `output_tokens` and reports no separate count. */
+  reasoningTokens?: number;
+}
+
+/**
+ * The ONE vendor-wire → ledger usage mapping (snake_case `VendorUsage` → `LlmUsage`).
+ * Absent optional tiers stay absent, so "not reported" is never misrecorded as 0.
+ */
+export function toLlmUsage(u: VendorUsage): LlmUsage {
+  return {
+    promptTokens:     u.prompt_tokens     ?? 0,
+    completionTokens: u.completion_tokens ?? 0,
+    totalTokens:      u.total_tokens      ?? 0,
+    ...(u.cache_read_tokens     != null ? { cacheReadTokens:     u.cache_read_tokens     } : {}),
+    ...(u.cache_creation_tokens != null ? { cacheCreationTokens: u.cache_creation_tokens } : {}),
+    ...(u.reasoning_tokens      != null ? { reasoningTokens:     u.reasoning_tokens      } : {}),
+  };
 }
 
 /** One model attempt that failed before the resolved model succeeded. */
@@ -226,6 +245,9 @@ export interface ProxyEnv extends VendorEnv {
 }
 
 export interface LlmProxyOptions {
+  /** The tenant the call is billed to. Buckets per-tenant cost-lever rollouts
+   *  (`isCostLeverOn`) on the routing and dispatch paths; absent = tenant-less. */
+  tenantId?: number | null;
   modelPool?: readonly string[];
   preferredPoolSize?: number;
   productName?: ProductName;

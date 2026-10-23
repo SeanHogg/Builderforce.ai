@@ -43,6 +43,10 @@ export const HANDSHAKE_ONLY_TOOLS: readonly string[] = [
   // Background delegation relays through the `subagent` op, which an image from before it
   // has no arm for.
   'spawn_agents', 'wait_agents', 'message_agent', 'stop_agent',
+  // `repo.edit` joined the container set once the Container image gained a local
+  // `edit_file` handler (cost lever D5); an image from before that answers it with
+  // `unknown tool`.
+  'edit_file',
 ];
 
 /**

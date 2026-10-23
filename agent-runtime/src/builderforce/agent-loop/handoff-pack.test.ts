@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentMessage } from "../model/agent-types.js";
 import type { AssistantMessage, Model, ToolResultMessage } from "../model/types.js";
 import { packContextForModel } from "./handoff-pack.js";
@@ -52,5 +52,31 @@ describe("packContextForModel (stall failover hand-off)", () => {
       if (m.role === "assistant") for (const c of m.content) if (c.type === "toolCall") calls.add(c.id);
       if (m.role === "toolResult") expect(calls.has(m.toolCallId)).toBe(true);
     }
+  });
+
+  describe("long-context price tier (cost lever c9_price_tier_budget)", () => {
+    afterEach(() => vi.unstubAllEnvs());
+    // ~130K input tokens: inside a 1M window, past claude-haiku-5-5's 100K price boundary.
+    const big = (): AgentMessage[] => {
+      const out: AgentMessage[] = [{ role: "user", content: "Add the avatar filter.", timestamp: 0 }];
+      for (let i = 0; i < 26; i++) {
+        out.push(call(i), { ...result(i), content: [{ type: "text", text: "X".repeat(20_000) }] });
+      }
+      return out;
+    };
+    const tiered = () => ({ ...model("claude-haiku-5-5", 1_000_000), provider: "anthropic" }) as unknown as Model;
+
+    it("packs under the lowest price boundary instead of filling the window", async () => {
+      vi.stubEnv("COST_LEVER_C9_PRICE_TIER_BUDGET", "on");
+      const r = await packContextForModel({ messages: big(), systemPrompt: "sys", from: model("big", 1_000_000), to: tiered() });
+      expect(r.dropped).toBeGreaterThan(0);
+      expect(r.fits).toBe(true);
+    });
+
+    it("fills the window as before when the lever is off", async () => {
+      vi.stubEnv("COST_LEVER_C9_PRICE_TIER_BUDGET", "off");
+      const r = await packContextForModel({ messages: big(), systemPrompt: "sys", from: model("big", 1_000_000), to: tiered() });
+      expect(r.dropped).toBe(0);
+    });
   });
 });

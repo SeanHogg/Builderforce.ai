@@ -25,6 +25,8 @@ import { dailyCountSeries, dailySumSeries, seriesTotal, type MetricPoint } from 
 import { currentPeriodMonth } from '../../domain/shared/period';
 import { usageDatabaseOf } from '../llm/usageLedger';
 import { FOUNDER_METRICS } from './founderMetrics';
+import { tenantCostSummary } from '../costMetrics/costMetricsService';
+import type { CostGroupMetrics } from '../costMetrics/costMetricsShape';
 
 /** Millicents → USD (llm_usage_log.cost_usd_millicents is 1e-5 USD units). */
 const MILLICENTS_PER_USD = 100_000;
@@ -55,6 +57,23 @@ export interface MetricDef {
 }
 
 /** Current calendar month 'YYYY-MM' (UTC) — finance lens is month-keyed. */
+
+const pct = (ratio: number | null): number | null => (ratio == null ? null : ratio * 100);
+
+/** One scalar plucked from the tenant's A4 cost summary over the widget's window. */
+function costMetric(
+  label: string, unit: string, description: string, goodWhenUp: boolean | undefined,
+  pick: (m: CostGroupMetrics) => number | null,
+): MetricDef {
+  return {
+    label, unit, description,
+    ...(goodWhenUp !== undefined ? { goodWhenUp } : {}),
+    async compute(db, tenantId, days) {
+      const m = await tenantCostSummary(db, tenantId, days);
+      return m ? pick(m) : null;
+    },
+  };
+}
 
 /**
  * THE WHITELIST. Keys are stable, dotted `lens.metric` strings stored on widgets
@@ -101,6 +120,14 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
       return fin.totals.costPerMergedPrUsd;
     },
   },
+
+  // ── LLM cost efficiency (tenantCostSummary → the A4 cost metrics) ──────────
+  'cost.cacheHitRate': costMetric('Prompt cache hit rate', '%', 'Share of prompt tokens served from the provider prompt cache over the window.', true, (m) => pct(m.cacheHitRate)),
+  'cost.costPerMergedPr': costMetric('Cost per merged PR (per run)', 'USD', 'Spend of each merged run divided by merged runs over the window — attributed per run, not window spend.', false, (m) => m.costPerMergedPrUsd),
+  'cost.medianTurnsPerRun': costMetric('Median turns per completed run', '', 'Median LLM turns a completed agent run took over the window.', false, (m) => m.medianTurnsPerCompletedRun),
+  'cost.medianContextTokens': costMetric('Median context per turn', 'tokens', 'Median provider-reported prompt tokens per LLM turn over the window.', false, (m) => m.medianContextTokens),
+  'cost.outputInputRatio': costMetric('Output / input token ratio', '', 'Completion tokens per prompt token over the window.', undefined, (m) => m.outputInputRatio),
+  'cost.reasoningShare': costMetric('Reasoning share of output', '%', 'Share of output tokens spent on hidden reasoning, over calls whose vendor reports it.', undefined, (m) => pct(m.reasoningShare)),
 
   // ── DORA (computeDora → DoraRollup.*) ──────────────────────────────────────
   'dora.deployFreq': {

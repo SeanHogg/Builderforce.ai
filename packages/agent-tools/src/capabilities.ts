@@ -171,6 +171,11 @@ export interface RepoSemanticCapability {
   /** Get the repository's shape: files ordered by how much the rest of the code depends on
    *  them, each with its most-referenced definitions. */
   repoMap(opts?: { focus?: string[]; maxTokens?: number }): Promise<RepoMapResult>;
+  /** LLMLingua-2 token compression of large prose (PRD C8). Present only when the backing
+   *  service reports the compress feature — callers feature-detect, never assume it.
+   *  `rate` is the share of tokens to keep (0..1). Code fences, paths and numbers are
+   *  never altered by the service. Gate use on cost lever `c8_token_compression`. */
+  compress?(text: string, rate: number): Promise<CompressResult>;
 }
 
 /** Mutate the working tree. The provider owns the side effects of a write —
@@ -632,6 +637,16 @@ export interface SemanticSearchResult {
   results?: SemanticSearchHit[];
   /** True when the index is still being built — results may be incomplete. */
   indexing?: boolean;
+  error?: string;
+}
+
+export interface CompressResult {
+  ok: boolean;
+  /** The compressed text, present only when ok is true. */
+  text?: string;
+  /** Model tokens before / after compression. */
+  originalTokens?: number;
+  keptTokens?: number;
   error?: string;
 }
 

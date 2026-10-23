@@ -11,7 +11,8 @@
  *      owner-served vendor capped at `OWNER_SERVED_VENDOR_ATTEMPT_CAP` models.
  */
 
-import type { ActionModelRankStat } from '@builderforce/learned-routing';
+import type { ActionModelRankStat, RoutingExploration } from '@builderforce/learned-routing';
+import { isCostLeverOn } from '@builderforce/cost-levers';
 import { orderPoolForWorkload } from '@builderforce/model-router';
 import { profileWorkload } from '@builderforce/workload';
 import { tierForModel, vendorForModel, type VendorId } from './vendors';
@@ -26,7 +27,7 @@ import { composeFreeCappedCascade, buildCooldownPredicate } from './cascadeCompo
 import { loadCooldowns, loadCooledVendors } from '../../infrastructure/auth/cooldownStore';
 import { connectionModelRefs } from './openRouterConnectionService';
 import { loadDemotedVendors } from './vendors/vendorHealth';
-import { COOLDOWN_PREFETCH_LIMIT, byoAutoSeedModels, explicitModelPreemptsByo } from './modelPool';
+import { COOLDOWN_PREFETCH_LIMIT, byoAutoSeedModels, explicitModelPreemptsByo, resolveStrictPin } from './modelPool';
 import { rankConnectedForRole } from './modelRoles';
 import { registryCatalogView, type PriceBook } from './catalogView';
 import { fundedFloorHintDemoted, modelsFittingContext } from './requestFit';
@@ -94,6 +95,45 @@ export async function composeCompletionSeed(
   callerModel: unknown,
   opts?: SeedRoutingOptions,
 ): Promise<CompletionSeed> {
+  // A non-strict caller `model` is a HINT, not an override of the tenant's connected
+  // account. Honour it at the head ONLY when it PREEMPTS the BYO seed — nothing
+  // connected, or the model is itself served by a connected BYO vendor (see
+  // {@link explicitModelPreemptsByo}). A NON-BYO caller model (the VS Code Brain's
+  // configured `defaultModel`, a stale coder default, any SDK caller's pin) must NOT
+  // shadow the connected flagship: otherwise a tenant with a connected Claude account
+  // silently runs a weak free coder — the "should have selected Opus" regression. This
+  // is the SAME invariant `byoAwareModel`/`explicitModelPreemptsByo` enforce on the
+  // tenantProxy + /v1/messages paths; applying it centrally HERE stops the gateway
+  // completion seed from drifting from them (a caller model bypassed the gate before).
+  // A shadowed hint still joins the pool just BEHIND the flagship, so it's the first
+  // failover after the connected account rather than being dropped.
+  const hasCallerModel = typeof callerModel === 'string' && callerModel.length > 0;
+  const connectedByo = funding.connectedByoVendors;
+  // ONE rule, and it must see the REGISTERED refs too: an OpenRouter connection
+  // contributes no BYO vendor, so a vendor-only test would let a stale caller default
+  // lead over the connection the tenant ranked #1 (see explicitModelPreemptsByo).
+  // A FREE tenant's soft hint on a FUNDED floor model never leads. The hint is the
+  // canvas/Brain soft-pin ("keep the continuations of one turn on the model that
+  // began it"), and when turn 1 landed on the direct-Anthropic floor because nothing
+  // else fit the request, honouring the pin put fifteen more completions on our
+  // CLAUDE_API_KEY without the free pool being asked once (measured: session
+  // bf886fc1, 16 of 16 completions on `claude-sonnet-5`, account "shared", plan
+  // free). The floor stays reachable — it joins the chain BEHIND the plan pool as the
+  // fallback it is — so nothing is refused; the free coders get first refusal.
+  const hintIsFundedFloor = fundedFloorHintDemoted(hasCallerModel ? callerModel as string : undefined, cfg.isPro);
+  const callerLeads = hasCallerModel && !hintIsFundedFloor
+    && explicitModelPreemptsByo(callerModel as string, connectedByo, cfg.openRouterConnectionModels);
+  // D3 exploration (lever `d3_routing_exploration`, bucketed per tenant): the learned
+  // re-rankers below sample each model's evidence (Thompson) and now and then try a
+  // cold one, so a model that improved can win its slot back. Never for a call that
+  // NAMED its model — a strict pin, an honoured caller hint — nor inside the BYO
+  // boundary, where the chain is the tenant's own accounts in the tenant's own order.
+  const explore: RoutingExploration | undefined = isCostLeverOn(cfg.env, 'd3_routing_exploration', cfg.tenantId)
+    && !funding.byoStrict
+    && !resolveStrictPin(body as { model?: unknown; modelStrict?: unknown; strict?: unknown })
+    && !callerLeads
+    ? { rng: Math.random, nowMs: Date.now() }
+    : undefined;
   // 1) Pool composition is already TTFT-ordered (Cerebras → Ollama → NVIDIA
   //    → OpenRouter) because `autoRoutableModelsByTier` walks the registry's MODULES
   //    array in priority order. Shape-based reorder then floats capable
@@ -116,7 +156,8 @@ export async function composeCompletionSeed(
   });
   const catalogView = registryCatalogView(opts?.prices);
   const reorderedPool = reorderPoolByShape(body, orderPoolForWorkload(
-    cfg.modelPool, workload, catalogView, opts?.roleStats ? { stats: opts.roleStats } : undefined,
+    cfg.modelPool, workload, catalogView,
+    opts?.roleStats ? { stats: opts.roleStats, ...(explore ? { explore } : {}) } : undefined,
   ));
 
   // 1b) Quality-critical useCase (resume tailoring, cover letters, …): re-rank
@@ -163,34 +204,6 @@ export async function composeCompletionSeed(
   //    first), NOT a fixed vendor; Opus/Sonnet for Anthropic per turn shape. The
   //    cascade then fails over across the owner's other connected accounts, and the
   //    plan pool stays behind them all as final fallback. See byoAutoSeedModels.
-  // A non-strict caller `model` is a HINT, not an override of the tenant's connected
-  // account. Honour it at the head ONLY when it PREEMPTS the BYO seed — nothing
-  // connected, or the model is itself served by a connected BYO vendor (see
-  // {@link explicitModelPreemptsByo}). A NON-BYO caller model (the VS Code Brain's
-  // configured `defaultModel`, a stale coder default, any SDK caller's pin) must NOT
-  // shadow the connected flagship: otherwise a tenant with a connected Claude account
-  // silently runs a weak free coder — the "should have selected Opus" regression. This
-  // is the SAME invariant `byoAwareModel`/`explicitModelPreemptsByo` enforce on the
-  // tenantProxy + /v1/messages paths; applying it centrally HERE stops the gateway
-  // completion seed from drifting from them (a caller model bypassed the gate before).
-  // A shadowed hint still joins the pool just BEHIND the flagship, so it's the first
-  // failover after the connected account rather than being dropped.
-  const hasCallerModel = typeof callerModel === 'string' && callerModel.length > 0;
-  const connectedByo = funding.connectedByoVendors;
-  // ONE rule, and it must see the REGISTERED refs too: an OpenRouter connection
-  // contributes no BYO vendor, so a vendor-only test would let a stale caller default
-  // lead over the connection the tenant ranked #1 (see explicitModelPreemptsByo).
-  // A FREE tenant's soft hint on a FUNDED floor model never leads. The hint is the
-  // canvas/Brain soft-pin ("keep the continuations of one turn on the model that
-  // began it"), and when turn 1 landed on the direct-Anthropic floor because nothing
-  // else fit the request, honouring the pin put fifteen more completions on our
-  // CLAUDE_API_KEY without the free pool being asked once (measured: session
-  // bf886fc1, 16 of 16 completions on `claude-sonnet-5`, account "shared", plan
-  // free). The floor stays reachable — it joins the chain BEHIND the plan pool as the
-  // fallback it is — so nothing is refused; the free coders get first refusal.
-  const hintIsFundedFloor = fundedFloorHintDemoted(hasCallerModel ? callerModel as string : undefined, cfg.isPro);
-  const callerLeads = hasCallerModel && !hintIsFundedFloor
-    && explicitModelPreemptsByo(callerModel as string, connectedByo, cfg.openRouterConnectionModels);
   // Demote any connected vendor we KNOW is currently unhealthy out of the LEAD
   // position (it stays in the seed — see `byoAutoSeedModels`). Two independent
   // sources, unioned, because they answer different questions:
@@ -257,6 +270,7 @@ export async function composeCompletionSeed(
     arcStage: workload.arcStage,
     demotedVendors,
     ...(opts?.roleStats ? { stats: opts.roleStats } : {}),
+    ...(explore ? { explore } : {}),
   }, catalogView);
   // An honoured caller model LEADS, but it never stands alone: the tenant's OTHER
   // connected accounts follow it as failover. BYO is an execution boundary — the

@@ -78,4 +78,11 @@ describe('summarizeRunAnomalies', () => {
     const scores = issue.examples.map((e) => e.score);
     expect([...scores].sort((a, b) => b - a)).toEqual(scores);
   });
+
+  it('stamps each issue with when its most recent flagged run finished', () => {
+    const first = run({ costUsd: 6 });
+    const later = run({ costUsd: 7 });
+    const issue = summarizeRunAnomalies([...normal(12), first, ...normal(2), later]).issues.find((i) => i.metric === 'cost')!;
+    expect(issue.latestFlaggedAt).toBe(new Date(later.at).toISOString());
+  });
 });

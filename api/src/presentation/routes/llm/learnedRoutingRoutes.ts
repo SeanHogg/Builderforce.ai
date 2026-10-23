@@ -72,6 +72,11 @@ export function mountLearnedRoutingRoutes(router: Hono<HonoEnv>): void {
           ratedUp: m.ratedUp ?? 0,
           ratedDown: m.ratedDown ?? 0,
           rateLimitRate: Math.round((m.rateLimitRate ?? 0) * 1000) / 1000,
+          // Recency decay (cost PRD D3): the decayed run count and the epoch ms the
+          // stat was last folded at, so a host's Thompson exploration samples the SAME
+          // evidence the cloud router does. Absent on a blob built without decay.
+          ...(m.effectiveN != null ? { effectiveN: Math.round(m.effectiveN * 1000) / 1000 } : {}),
+          ...(m.at != null ? { at: m.at } : {}),
         })),
       }));
     return c.json({ scope: scopeToken(scope), updatedAt: table.updatedAt, byAction });

@@ -14,7 +14,7 @@
  */
 
 import type { ModelRole } from '@builderforce/agent-tools';
-import { rankModelsForAction, type ActionModelRankStat } from '@builderforce/learned-routing';
+import { rankModelsForAction, type ActionModelRankStat, type RoutingExploration } from '@builderforce/learned-routing';
 import type { CatalogView } from '@builderforce/model-catalog';
 import type { ArcStage } from '@builderforce/workload';
 import { resolveRoleObjective, roleUsesLearnedRanking } from './objective.js';
@@ -30,6 +30,10 @@ export interface RankConnectedOptions {
   minSamples?: number;
   /** Client SSM recall nudge on top of the learned score. */
   bias?: Record<string, number>;
+  /** Thompson exploration (cost PRD D3) — the host passes it only when the lever is on
+   *  and the call may explore (no strict pin, BYO-strict chain or premium override).
+   *  Absent = the deterministic learned order. */
+  explore?: RoutingExploration;
 }
 
 export function rankConnectedForRole(
@@ -40,6 +44,10 @@ export function rankConnectedForRole(
   const byRole = orderForRole(models, resolveRoleObjective(opts.role, opts.arcStage), view, opts.demotedVendors);
   if (!roleUsesLearnedRanking(opts.role, opts.arcStage)) return byRole;
   const bias = opts.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
-  const learned = rankModelsForAction(byRole, opts.stats, { minSamples: opts.minSamples, ...(bias ? { bias } : {}) });
+  const learned = rankModelsForAction(byRole, opts.stats, {
+    minSamples: opts.minSamples,
+    ...(bias ? { bias } : {}),
+    ...(opts.explore ? { explore: opts.explore } : {}),
+  });
   return orderForRole(learned, 0, view, opts.demotedVendors);
 }

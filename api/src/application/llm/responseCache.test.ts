@@ -118,8 +118,16 @@ describe('responseCacheKey', () => {
     expect(await responseCacheKey({ ...base, responseFormat: { type: 'json_object' } })).not.toBe(k);
   });
 
-  it('is tenant-prefixed so entries are attributable at a glance', async () => {
-    expect(await responseCacheKey({ ...base })).toMatch(/^respcache:1:[0-9a-f]{64}$/);
+  it('is scope-prefixed (tenant + internal principal) so entries are attributable at a glance', async () => {
+    expect(await responseCacheKey({ ...base })).toMatch(/^respcache:t1:p-:tenant:m-:[0-9a-f]{64}$/);
+  });
+
+  it('separates PRINCIPALS when the caller names one', async () => {
+    const k = await responseCacheKey({ ...base });
+    const alice = await responseCacheKey({ ...base, scope: { principal: 'member.user-alice' } });
+    const bob = await responseCacheKey({ ...base, scope: { principal: 'member.user-bob' } });
+    expect(alice).not.toBe(k);
+    expect(alice).not.toBe(bob);
   });
 });
 

@@ -23,8 +23,14 @@
  * agent ref, API key, and the BYO / premium / paid-overflow flags. Every quantity
  * anything sums: prompt, completion and total tokens, both cache tiers, retries,
  * `cost_usd_millicents` and the memory-savings figures (the `saved_*` / `recall_*`
- * quantities, with `savings_source` / `savings_estimated` kept as dimensions). `created_at` becomes the day's EARLIEST, so a folded row stays
- * inside the calendar day every range filter buckets it into.
+ * quantities, with `savings_source` / `savings_estimated` kept as dimensions), and the
+ * per-turn telemetry (1253): `reasoning_tokens` and `tool_schema_tokens` are SUMMED —
+ * `SUM` over all-NULL stays NULL, so "the vendor reported no reasoning split" survives
+ * the fold instead of becoming a reported zero — and `turn_index` keeps its MAX, which
+ * for a folded run row (grouped by `execution_id`) is the run's turn count, the one thing
+ * a position-in-the-loop still says once the loop's rows are one row. `created_at`
+ * becomes the day's EARLIEST, so a folded row stays inside the calendar day every range
+ * filter buckets it into.
  *
  * WHAT IT COSTS. Three columns that are already dead at the boundary, and the row count.
  *   • `trace_id`         — the pivot to `llm_traces`, which is itself purged at 30 days,
@@ -78,6 +84,9 @@ const foldDay = (db: Db, day: string) => db.execute(sql`
            SUM(saved_completion_tokens)::int   AS saved_completion_tokens,
            SUM(recall_prompt_tokens)::int      AS recall_prompt_tokens,
            SUM(saved_cost_usd_millicents)::int AS saved_cost_usd_millicents,
+           SUM(reasoning_tokens)::int      AS reasoning_tokens,
+           SUM(tool_schema_tokens)::int    AS tool_schema_tokens,
+           MAX(turn_index)                 AS turn_index,
            MIN(created_at)                 AS created_at
       FROM llm_usage_log
      WHERE created_at >= ${day}::date AND created_at < ${day}::date + interval '1 day'
@@ -96,14 +105,14 @@ const foldDay = (db: Db, day: string) => db.execute(sql`
        surface, role, streamed, savings_source, savings_estimated, calls, prompt_tokens,
        completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, retries,
        cost_usd_millicents, saved_prompt_tokens, saved_completion_tokens, recall_prompt_tokens,
-       saved_cost_usd_millicents, created_at)
+       saved_cost_usd_millicents, reasoning_tokens, tool_schema_tokens, turn_index, created_at)
     SELECT tenant_id, user_id, llm_product, model, chat_id, chat_mode, use_case,
            tenant_api_key_id, agent_host_id, cloud_agent_ref, execution_id, task_id,
            project_id, paid_overflow, premium, byo, byo_provider, byo_credential_id,
            surface, role, streamed, savings_source, savings_estimated, calls, prompt_tokens,
            completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, retries,
            cost_usd_millicents, saved_prompt_tokens, saved_completion_tokens, recall_prompt_tokens,
-           saved_cost_usd_millicents, created_at
+           saved_cost_usd_millicents, reasoning_tokens, tool_schema_tokens, turn_index, created_at
       FROM folded
     RETURNING 1
   )

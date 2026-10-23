@@ -2,11 +2,18 @@
  * The gateway completion USE CASE — the body of `LlmProxyService.complete()`, split
  * out of the facade. Orchestrates the steps the other `proxy*` modules own:
  *
- *   response cache → strict pin → seed + cooldowns → candidate chain →
+ *   exact response cache → semantic cache (B2) → single-flight (B3) →
+ *   strict pin → seed + cooldowns → candidate chain →
  *   (empty chain branch | primary cascade → schema downgrade → paid backstop) → finalize
+ *
+ * The two cache tiers and the single-flight join only ever answer a request the exact
+ * tier deems replayable (idempotent `useCase`, low temperature, no tools, no stream),
+ * and only when the caller granted caching (`responseCache`). Both stores run on the
+ * PRIMARY path's success, never on a backstop or schema-downgraded answer.
  */
 
 import type { ActionModelRankStat } from '@builderforce/learned-routing';
+import { isCostLeverOn } from '@builderforce/cost-levers';
 import { canonicalModelId, isPaidOverflowModel, resolveStrictPin } from './modelPool';
 import type { PriceBook } from './catalogView';
 import { downgradeResponseFormat, newTraceId } from './proxyFailover';
@@ -15,13 +22,19 @@ import { dispatchStrict } from './proxyStrictPin';
 import { buildCandidateChain, composeCompletionSeed, loadSeedCooldowns } from './proxySeed';
 import { resolveEmptyChain } from './proxyAllCooled';
 import { applyExcludedModels } from './requestFit';
+import { lookupSemanticChat, planSemanticChat, storeSemanticChat, type ResponseCacheGrant, type SemanticChatDeps } from './semanticChatCache';
+import { coalesceCompletion } from './proxySingleFlight';
 import type { ChatCompletionRequest, ProxyResult } from './proxyTypes';
 import type { ProxyRuntime } from './proxyConfig';
 
 /** Per-call options for `LlmProxyService.complete()`. */
 export interface CompleteOptions {
   estimatedTokens?: number;
-  responseCache?: { tenantId: number };
+  /** Permission to cache: the tenant, and optionally the project, principal and file
+   *  grounds the semantic tier scopes and invalidates by (see `ResponseCacheGrant`). */
+  responseCache?: ResponseCacheGrant;
+  /** Collaborators of the semantic step (embedder, facts revision, log) — tests only. */
+  semanticDeps?: SemanticChatDeps;
   /** Learned per-model stats for `body.role` (see `roleRoutingStats`) — reorders the
    *  connected-account seed by what each model actually delivered in that role. */
   roleStats?: ReadonlyArray<ActionModelRankStat>;
@@ -39,17 +52,63 @@ export async function completeChat(
   signal?: AbortSignal,
   opts?: CompleteOptions,
 ): Promise<ProxyResult> {
-  const { cfg, funding, dispatcher, finalize } = rt;
+  const { cfg, finalize } = rt;
   const startedAt = Date.now();
   const tid = traceId ?? newTraceId();
+  const grant = opts?.responseCache;
 
   // ── EXACT-MATCH RESPONSE CACHE ──────────────────────────────────────────
   // See `responseCacheKeyFor` for the double opt-in.
-  const cacheKey = await responseCacheKeyFor(body, opts?.responseCache?.tenantId);
+  const cacheKey = await responseCacheKeyFor(body, grant);
   if (cacheKey) {
     const hit = await readResponseCacheHit(cfg.env, cacheKey);
     if (hit) return finalize(hit, tid, startedAt, [hit.resolvedModel], 'response_cache_hit');
   }
+
+  // ── SEMANTIC CACHE (B2) ─────────────────────────────────────────────────
+  // A paraphrase of an answered request, scoped and grounds-checked — see
+  // `semanticChatCache`. Lever off ⇒ no embedding is ever computed.
+  const semantic = grant && isCostLeverOn(cfg.env, 'b2_semantic_cache', grant.tenantId)
+    ? await planSemanticChat(cfg.env, body, grant, opts?.semanticDeps)
+    : null;
+  if (semantic && grant) {
+    const hit = await lookupSemanticChat(cfg.env, semantic, grant, opts?.semanticDeps);
+    if (hit) return finalize(hit, tid, startedAt, [hit.resolvedModel], 'response_cache_hit');
+  }
+
+  const storeOnPrimarySuccess = async (primary: ProxyResult): Promise<void> => {
+    // The response body is consumed by CLONING inside each store — the original must
+    // still be readable by the caller. Best-effort: a failed store costs a future miss.
+    if (cacheKey) await storeInResponseCache(cfg.env, cacheKey, primary);
+    if (semantic) await storeSemanticChat(cfg.env, semantic, primary);
+  };
+  const dispatch = (): Promise<ProxyResult> =>
+    dispatchUncached(rt, body, requestHeaders, tid, startedAt, signal, opts, cacheKey, storeOnPrimarySuccess);
+
+  // ── SINGLE-FLIGHT (B3) ──────────────────────────────────────────────────
+  // Identical cacheable requests already in flight on this isolate share one upstream
+  // call (keyed on the exact cache key = tenant scope + normalized body hash). A
+  // follower is answered as a cache hit. Per-isolate only — see `singleFlight.ts`.
+  if (cacheKey && grant && isCostLeverOn(cfg.env, 'b3_single_flight', grant.tenantId)) {
+    return coalesceCompletion(cacheKey, dispatch, (shared) =>
+      finalize(shared, tid, startedAt, [shared.resolvedModel], 'response_cache_hit'));
+  }
+  return dispatch();
+}
+
+/** Everything after the caches: strict pin, or the seeded cascade with its recoveries. */
+async function dispatchUncached(
+  rt: ProxyRuntime,
+  body: ChatCompletionRequest,
+  requestHeaders: Record<string, string> | undefined,
+  tid: string,
+  startedAt: number,
+  signal: AbortSignal | undefined,
+  opts: CompleteOptions | undefined,
+  cacheKey: string | null,
+  storeOnPrimarySuccess: (primary: ProxyResult) => Promise<void>,
+): Promise<ProxyResult> {
+  const { cfg, funding, dispatcher, finalize } = rt;
   // Rewrite a superseded pin to its live successor BEFORE anything reads it. This is
   // the gateway-side seam of {@link canonicalModelId}: `body.model` is whatever the
   // caller had stored (an agent base_model, a lane default, an SDK pin), and that can
@@ -111,11 +170,9 @@ export async function completeChat(
     // api-key — free to us; see isTenantFunded), e.g. an owner whose connected-BYO
     // flagship (claude-*) seeded the head and served the turn on their own account.
     primary.paidOverflow = isPaidOverflowModel(primary.resolvedModel) && !funding.isTenantFunded(primary);
-    // Store for the exact-match cache. The response body is consumed by CLONING —
-    // the original must still be readable by the caller, and a Response body can be
-    // read exactly once. Best-effort and non-blocking on the read: a failed store
-    // costs a future cache miss and nothing else.
-    if (cacheKey) await storeInResponseCache(cfg.env, cacheKey, primary);
+    // Store for the exact-match and semantic caches (each CLONES — the caller still
+    // reads the original). Best-effort: a failed store costs a future miss, nothing else.
+    await storeOnPrimarySuccess(primary);
     return finalize(primary, tid, startedAt, candidates);
   }
 

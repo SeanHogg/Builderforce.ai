@@ -67,14 +67,23 @@ const headRow = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('qaCacheKey', () => {
+  const scope = { tenantId: 7, projectId: 42, principal: { userId: 'alice', role: 'member' } };
   it('is deterministic and normalizes case/spacing/punctuation to the same key', () => {
-    const a = qaCacheKey('How does auth work?');
-    expect(a).toMatch(/^qa:v2:[0-9a-f]{8}$/);
-    expect(qaCacheKey('  how   DOES auth WORK ')).toBe(a); // punctuation + case + spacing folded
-    expect(qaCacheKey('how does auth work')).toBe(a);
+    const a = qaCacheKey('How does auth work?', scope);
+    expect(a).toMatch(/^qa:v3:[0-9a-f]{8}:[0-9a-f]{8}$/);
+    expect(qaCacheKey('  how   DOES auth WORK ', scope)).toBe(a); // punctuation + case + spacing folded
+    expect(qaCacheKey('how does auth work', scope)).toBe(a);
   });
   it('maps genuinely different questions to different keys', () => {
-    expect(qaCacheKey('what is the db client')).not.toBe(qaCacheKey('how does auth work'));
+    expect(qaCacheKey('what is the db client', scope)).not.toBe(qaCacheKey('how does auth work', scope));
+  });
+  it('never shares a row across principals, roles or agent hosts (defect 10)', () => {
+    const q = 'How does auth work?';
+    const alice = qaCacheKey(q, scope);
+    expect(qaCacheKey(q, { ...scope, principal: { userId: 'bob', role: 'member' } })).not.toBe(alice);
+    expect(qaCacheKey(q, { ...scope, principal: { userId: 'alice', role: 'owner' } })).not.toBe(alice);
+    expect(qaCacheKey(q, { ...scope, principal: { userId: 'agentHost:9', role: 'developer' } })).not.toBe(alice);
+    expect(qaCacheKey(q, { ...scope, principal: null })).not.toBe(alice);
   });
 });
 

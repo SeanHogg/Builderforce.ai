@@ -33,7 +33,7 @@ import {
 } from '../../../application/shared/idempotentReplay';
 import { resolveTenantLlmCredentials, byoVendorIdsFromCredentials } from '../../../application/llm/tenantProviderKeyService';
 import { buildHostEgressForVendors } from '../../../application/llm/hostEgress';
-import { byoRoutingOptions } from '../../../application/llm/tenantProxy';
+import { byoRoutingOptions, recordCacheHitSaving } from '../../../application/llm/tenantProxy';
 import { pricesForCall } from '../../../application/llm/catalogView';
 import { GUEST_TOKEN_PREFIX } from '../../../application/guest/guestToken';
 import { proxyForCompletion, tenantCanSelfFund } from '../../../application/llm/gatewayCompletionProxy';
@@ -234,7 +234,23 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
       estimatedTokens,
       ...(roleStats ? { roleStats } : {}),
       ...(prices ? { prices } : {}),
+      // Permission to cache, scoped (`cacheScope.ts`) to the caller's principal + role
+      // and the project the turn is attributed to. The proxy still applies its own
+      // eligibility (idempotent useCase, low temperature, no tools, not streaming).
+      responseCache: {
+        tenantId: access.tenantId,
+        projectId: workHints.projectId ?? null,
+        principal: {
+          userId: access.userId,
+          agentHostId: access.agentHostId,
+          apiKeyId: access.tenantApiKeyId,
+          role: access.role,
+        },
+      },
     });
+    // A cache HIT dispatched nothing: it is never metered as spend (that would invent
+    // usage every rollup then sums), only recorded as the call it saved.
+    const cacheHit = result.outcome === 'response_cache_hit';
 
     // Did the PREMIUM model the tenant selected actually serve this turn? Only then
     // does the flat 1¢ surcharge apply — if the cascade failed over to a plan-pool
@@ -318,13 +334,18 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
 
     // Log any failovers, then log usage
     logCascadeFailovers();
-    logUsage(c.env, c.executionCtx, {
-      ...usageRow,
-      streamed: false,
-      usage: result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      surface: resolveUsageSurface(c, access),
-    });
-    recordBrainChatModelActivity();
+    if (cacheHit) {
+      const saving = recordCacheHitSaving(c.env, { tenantId: access.tenantId, userId: access.userId, projectId: workHints.projectId ?? null }, result);
+      if (saving) c.executionCtx?.waitUntil?.(saving);
+    } else {
+      logUsage(c.env, c.executionCtx, {
+        ...usageRow,
+        streamed: false,
+        usage: result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        surface: resolveUsageSurface(c, access),
+      });
+      recordBrainChatModelActivity();
+    }
 
     const traceErrorMessage = stampTraceIdOnError(upstream, traceId);
 

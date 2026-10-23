@@ -1,10 +1,11 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { SHELL_CAPTURE_CHARS, keepTail } from "@builderforce/tool-output-policy";
 import { createSessionSlug as createSessionSlugId } from "./session-slug.js";
 
 const DEFAULT_JOB_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const MIN_JOB_TTL_MS = 60 * 1000; // 1 minute
 const MAX_JOB_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours
-const DEFAULT_PENDING_OUTPUT_CHARS = 30_000;
+const DEFAULT_PENDING_OUTPUT_CHARS = SHELL_CAPTURE_CHARS.localPending;
 
 function clampTtl(value: number | undefined) {
   if (!value || Number.isNaN(value)) {
@@ -124,7 +125,9 @@ export function appendOutput(session: ProcessSession, stream: "stdout" | "stderr
     session.pendingStderrChars = pendingChars;
   }
   session.totalOutputChars += chunk.length;
-  const aggregated = trimWithCap(session.aggregated + chunk, session.maxOutputChars);
+  // The capture buffer keeps the TAIL (the shared policy's `keepTail`): a build or test
+  // run prints its verdict last.
+  const aggregated = keepTail(session.aggregated + chunk, session.maxOutputChars);
   session.truncated =
     session.truncated || aggregated.length < session.aggregated.length + chunk.length;
   session.aggregated = aggregated;
@@ -247,13 +250,6 @@ function capPendingBuffer(buffer: string[], pendingChars: number, cap: number) {
     pendingChars = cap;
   }
   return pendingChars;
-}
-
-export function trimWithCap(text: string, max: number) {
-  if (text.length <= max) {
-    return text;
-  }
-  return text.slice(text.length - max);
 }
 
 export function listRunningSessions() {

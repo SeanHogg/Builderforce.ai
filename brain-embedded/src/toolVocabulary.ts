@@ -92,7 +92,8 @@ export function synonymsFor(stem: string): readonly string[] {
  * Expand a set of query stems with every interchangeable term.
  *
  * Returned SEPARATELY from the original stems rather than merged into them, so the
- * scorer can weight an exact hit above a synonym hit. Never includes a stem the
+ * scorer can weight an exact hit above a synonym hit (`selectTools.ts` scores it as a
+ * field of its own). Never includes a stem the
  * caller already has.
  */
 export function expandWithSynonyms(stems: ReadonlySet<string>): Set<string> {

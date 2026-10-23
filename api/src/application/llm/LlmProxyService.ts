@@ -200,7 +200,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoAlertedVendors?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoSelectedModels?: Readonly<Record<string, readonly string[]>>; byoRequired?: boolean; allowGatewayAuto?: boolean; freeFirst?: boolean; byoDiagnostics?: ByoDiagnostics },
+  opts?: { tenantId?: number | null; backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoAlertedVendors?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoSelectedModels?: Readonly<Record<string, readonly string[]>>; byoRequired?: boolean; allowGatewayAuto?: boolean; freeFirst?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): LlmProxyService {
   const routing = resolveRouting(effectivePlan, premiumOverride);
   const { productName, modelPool } = routing;
@@ -215,6 +215,8 @@ export function llmProxyForPlan(
   // Without this the cascade walks the whole plan pool and "degrades" off the coders.
   const pool = opts?.codingOnly ? codingModelsForPlan(effectivePlan, premiumOverride) : modelPool;
   return new LlmProxyService(env, {
+    // The tenant the call is billed to — buckets per-tenant cost-lever rollouts.
+    ...(opts?.tenantId != null ? { tenantId: opts.tenantId } : {}),
     modelPool: pool,
     preferredPoolSize: PREFERRED_POOL_SIZE,
     productName,

@@ -11,7 +11,9 @@
  *     `semantic_search` / `repo_map` tools defined in this package run against it;
  *   • `desktopBackedTools` / `catalogDesktopSemantic` — catalog-time probe: keep those
  *     tools / advertise `repo.semantic` only while the service answers, never always-on;
- *   • `checkReferences` — which code names in a memory no longer exist (staleness).
+ *   • `checkReferences` — which code names in a memory no longer exist (staleness);
+ *   • `compress` — LLMLingua-2 token compression (PRD C8), attached to the capability
+ *     only while the health probe reports the service was built with it.
  *
  * Everything degrades to "not available" (null / the tools withheld). Node-only, so it
  * lives behind its own export condition: the package root stays node-builtin-free for
@@ -23,6 +25,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type {
+  CompressResult,
   RepoMapResult,
   RepoSemanticCapability,
   SemanticSearchHit,
@@ -51,6 +54,8 @@ export interface MissingReference {
 const PROBE_TTL_MS = 30_000;
 const PROBE_TIMEOUT_MS = 800;
 const REQUEST_TIMEOUT_MS = 10_000;
+/** Compression's first call loads (and on a fresh machine downloads) the model. */
+const COMPRESS_TIMEOUT_MS = 120_000;
 /** The repo map carried in every turn's grounding — enough to orient, small enough to keep. */
 const GROUNDING_MAP_TOKENS = 1200;
 
@@ -58,7 +63,7 @@ const SEMANTIC_TOOL_NAMES: ReadonlySet<string> = new Set(SEMANTIC_TOOLS.map((t) 
 
 type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
 let fetchImpl: FetchFn = (input, init) => fetch(input, init);
-let probe: { at: number; live: DesktopDiscovery | null } | null = null;
+let probe: { at: number; live: DesktopDiscovery | null; compress: boolean } | null = null;
 /** Shown under "Recent activity" on the desktop app. VS Code sets `"vscode"`; on-prem `"on-prem"`. */
 let desktopClientName = "vscode";
 
@@ -136,11 +141,22 @@ function serviceHeaders(d: DesktopDiscovery): Record<string, string> {
   return { Authorization: `Bearer ${d.token}`, "X-Builderforce-Client": desktopClientName };
 }
 
+/**
+ * Whether a health body says compression can run: the service reports `compress` as
+ * `idle` / `ready` when built with it, `disabled` without it, `unavailable` after the
+ * model failed to load. An older service omits the field — not available.
+ */
+export function healthReportsCompress(health: unknown): boolean {
+  const state = (health as { compress?: unknown } | null)?.compress;
+  return state === "idle" || state === "ready";
+}
+
 /** The running desktop service, or null. Cached for {@link PROBE_TTL_MS} either way. */
 export async function liveDesktop(): Promise<DesktopDiscovery | null> {
   if (probe && Date.now() - probe.at < PROBE_TTL_MS) return probe.live;
   const d = await readDiscovery();
   let live: DesktopDiscovery | null = null;
+  let compress = false;
   if (d) {
     try {
       const res = await fetchImpl(`http://127.0.0.1:${d.port}/v1/health`, {
@@ -148,12 +164,18 @@ export async function liveDesktop(): Promise<DesktopDiscovery | null> {
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       });
       live = res.ok ? d : null;
+      if (live) compress = healthReportsCompress(await res.json().catch(() => null));
     } catch {
       live = null;
     }
   }
-  probe = { at: Date.now(), live };
+  probe = { at: Date.now(), live, compress };
   return live;
+}
+
+/** True while the live service reports the compress feature (same cached probe). */
+export async function desktopCompressAvailable(): Promise<boolean> {
+  return (await liveDesktop()) != null && probe?.compress === true;
 }
 
 /**
@@ -161,7 +183,7 @@ export async function liveDesktop(): Promise<DesktopDiscovery | null> {
  * dropped so the next call re-checks); throws with the service's message when it
  * answered with an operation error.
  */
-async function call<T>(op: string, body: Record<string, unknown>): Promise<T | null> {
+async function call<T>(op: string, body: Record<string, unknown>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T | null> {
   const d = await liveDesktop();
   if (!d) return null;
   let res: Response;
@@ -170,7 +192,7 @@ async function call<T>(op: string, body: Record<string, unknown>): Promise<T | n
       method: "POST",
       headers: { ...serviceHeaders(d), "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     probe = null;
@@ -187,9 +209,25 @@ function indexing(status: DesktopIndexStatus | undefined): boolean {
 
 const NOT_RUNNING = "Builderforce Desktop is not running, so the semantic index is unavailable — use search_code / find_symbol instead.";
 
-/** The `repo.semantic` capability, backed by the desktop service for `root`. */
-export function desktopSemanticCapability(root: string): RepoSemanticCapability {
+/** Compress `text` through the desktop service. `ok: false` when absent or it failed. */
+async function desktopCompress(text: string, rate: number): Promise<CompressResult> {
+  try {
+    const r = await call<{ text: string; originalTokens: number; keptTokens: number }>("compress", { text, rate }, COMPRESS_TIMEOUT_MS);
+    if (!r) return { ok: false, error: "Builderforce Desktop is not running, so compression is unavailable." };
+    return { ok: true, text: r.text, originalTokens: r.originalTokens, keptTokens: r.keptTokens };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/**
+ * The `repo.semantic` capability, backed by the desktop service for `root`. `compress`
+ * is attached only when the caller has seen the health probe report it — use
+ * {@link catalogDesktopSemantic}, which decides that from the probe.
+ */
+export function desktopSemanticCapability(root: string, opts?: { compress?: boolean }): RepoSemanticCapability {
   return {
+    ...(opts?.compress ? { compress: desktopCompress } : {}),
     async search(query, opts): Promise<SemanticSearchResult> {
       try {
         const r = await call<{ results: SemanticSearchHit[]; status: DesktopIndexStatus }>("search", {
@@ -225,7 +263,8 @@ export function desktopSemanticCapability(root: string): RepoSemanticCapability 
  * Surfaces advertise `repo.semantic` only when this returns a capability — never always-on.
  */
 export async function catalogDesktopSemantic(root: string): Promise<RepoSemanticCapability | undefined> {
-  return (await liveDesktop()) ? desktopSemanticCapability(root) : undefined;
+  if (!(await liveDesktop())) return undefined;
+  return desktopSemanticCapability(root, { compress: await desktopCompressAvailable() });
 }
 
 /**

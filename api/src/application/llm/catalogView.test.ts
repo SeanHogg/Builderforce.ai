@@ -43,6 +43,18 @@ describe('price book', () => {
     expect(view.priceOf?.('openai/gpt-4.1')).toBeUndefined();
     expect(typeof view.vendorOf('openai/gpt-4.1')).toBe('string');
   });
+
+  it('a priced view carries long-context tiers so cost ordering sees the step-up (C9)', () => {
+    const view = registryCatalogView(priceBookFrom([
+      model('google/gemini-2.5-pro', 1.25e-6, 1e-5),
+      model('openai/gpt-4.1', 2e-6, 8e-6),
+    ]));
+    const tiered = view.priceOf?.('google/gemini-2.5-pro');
+    expect(tiered).toMatchObject({ input: 1.25e-6, output: 1e-5 });
+    expect(tiered?.priceTiers?.[0]?.aboveInputTokens).toBe(200_000);
+    // A flat-priced family is returned unchanged.
+    expect(view.priceOf?.('openai/gpt-4.1')).toEqual({ input: 2e-6, output: 8e-6 });
+  });
 });
 
 describe('pricesForCall', () => {

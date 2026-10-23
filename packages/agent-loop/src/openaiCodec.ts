@@ -37,12 +37,38 @@ export type ToolRowSerializer = (result: LoopDispatchResult, call: ParsedToolCal
 export const defaultToolRowSerializer: ToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
 
 /**
+ * A per-result budget for the model transcript: `(toolName, data) => content`. Typed
+ * structurally so the kernel stays dependency-free — the shared implementation is
+ * `modelToolResultPolicy()` from `@builderforce/tool-output-policy` (PRD C7).
+ */
+export type ToolResultPolicy = (toolName: string, data: unknown) => string;
+
+export interface OpenAiChatCodecOptions {
+  /** The surface's own serializer. Wins over {@link toolResultPolicy}. */
+  serialize?: ToolRowSerializer;
+  /** Bound every tool row by the shared tool-output policy. Omitted = plain JSON (today's behaviour). */
+  toolResultPolicy?: ToolResultPolicy;
+}
+
+function resolveSerializer(opts: ToolRowSerializer | OpenAiChatCodecOptions | undefined): ToolRowSerializer {
+  if (typeof opts === "function") return opts;
+  if (opts?.serialize) return opts.serialize;
+  const policy = opts?.toolResultPolicy;
+  if (policy) return (result, call) => policy(call.name, result.data ?? null);
+  return defaultToolRowSerializer;
+}
+
+/**
  * `M` is the surface's row type; it must be assignable FROM the assistant/tool rows
  * above (an `Array<Record<string, unknown>>` transcript qualifies).
+ *
+ * Takes the surface's serializer directly (the long-standing form), or options — where
+ * `toolResultPolicy` opts the surface into the shared per-result budget.
  */
 export function openAiChatCodec<M = OpenAiAssistantRow | OpenAiToolRow>(
-  serialize: ToolRowSerializer = defaultToolRowSerializer,
+  serializeOrOptions?: ToolRowSerializer | OpenAiChatCodecOptions,
 ): LoopCodec<M> {
+  const serialize = resolveSerializer(serializeOrOptions);
   return {
     assistant(turn: LoopTurn): M {
       const row: OpenAiAssistantRow = {

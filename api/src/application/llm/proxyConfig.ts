@@ -17,6 +17,9 @@ import type { ProxyDispatcher } from './proxyDispatcher';
 
 export interface ProxyConfig {
   readonly env: ProxyEnv;
+  /** The tenant this proxy serves — buckets per-tenant cost-lever rollouts. Null for an
+   *  internal, tenant-less proxy (a lever then applies only at a 100% rollout). */
+  readonly tenantId: number | null;
   readonly modelPool: readonly string[];
   readonly preferredPoolSize: number;
   readonly productName: ProductName;
@@ -50,6 +53,7 @@ export function resolveProxyConfig(env: ProxyEnv, options?: LlmProxyOptions): Pr
   const openRouterConnections = options?.openRouterConnections ?? [];
   return {
     env,
+    tenantId: options?.tenantId ?? null,
     modelPool,
     preferredPoolSize: Math.min(options?.preferredPoolSize ?? PREFERRED_POOL_SIZE, modelPool.length),
     productName,

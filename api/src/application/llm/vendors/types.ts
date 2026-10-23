@@ -305,6 +305,9 @@ export interface VendorUsage {
    */
   cache_read_tokens?: number;
   cache_creation_tokens?: number;
+  /** Hidden reasoning tokens — a SUBSET of `completion_tokens`, not additive. Absent
+   *  when the vendor reports no split (Anthropic counts thinking inside output). */
+  reasoning_tokens?: number;
 }
 
 export interface VendorCallResult {
@@ -558,6 +561,11 @@ export function pickUsage(u: unknown): VendorUsage {
   if (f.totalTokens         !== undefined) out.total_tokens          = f.totalTokens;
   if (f.cacheReadTokens     !== undefined) out.cache_read_tokens     = f.cacheReadTokens;
   if (f.cacheCreationTokens !== undefined) out.cache_creation_tokens = f.cacheCreationTokens;
+  // Read through a structural view: `reasoningTokens` joins the package's `UsageFields`
+  // in the next @seanhogg/builderforce-memory release, and this keeps the gateway
+  // compiling against either side of that dependency bump (absent ⇒ not reported).
+  const reasoning = (f as { reasoningTokens?: number }).reasoningTokens;
+  if (reasoning !== undefined) out.reasoning_tokens = reasoning;
   return out;
 }
 

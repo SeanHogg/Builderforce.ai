@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPromptCaching, markAnthropicHistoryBreakpoint, modelSupportsExplicitCaching } from './promptCaching';
+import { applyPromptCaching, markAnthropicHistoryBreakpoint, modelSupportsExplicitCaching, VOLATILE_TAIL_TAG } from './promptCaching';
 
 // ---------------------------------------------------------------------------
 // modelSupportsExplicitCaching — gate to the Anthropic family (the only gateway
@@ -119,6 +119,32 @@ describe('applyPromptCaching — history boundary', () => {
     expect(out[3]!.content).toBe('tool-result'); // tool turn never promoted on this path
     expect(out[2]!.content).toBe(''); // nothing to attach to
     expect(out[1]!.content).toEqual([{ type: 'text', text: 'q', cache_control: { type: 'ephemeral' } }]);
+  });
+
+  it('never marks the per-turn volatile tail (B1) — the breakpoint goes on the message before it', () => {
+    const tail = `${VOLATILE_TAIL_TAG}
+budget: 40%
+</run-state>`;
+    const messages = [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'q1' },
+      { role: 'assistant', content: 'a1' },
+      { role: 'user', content: tail },
+    ];
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
+    expect(out[3]!.content).toBe(tail);
+    expect(out[2]!.content).toEqual([{ type: 'text', text: 'a1', cache_control: { type: 'ephemeral' } }]);
+  });
+
+  it('also recognises a block-content volatile tail', () => {
+    const messages = [
+      { role: 'user', content: 'q1' },
+      { role: 'user', content: [{ type: 'text', text: `${VOLATILE_TAIL_TAG}
+x` }] },
+    ];
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
+    expect(out[1]).toBe(messages[1]);
+    expect(out[0]!.content).toEqual([{ type: 'text', text: 'q1', cache_control: { type: 'ephemeral' } }]);
   });
 });
 

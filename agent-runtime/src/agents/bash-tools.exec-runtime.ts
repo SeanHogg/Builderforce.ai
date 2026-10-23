@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { AgentToolResult } from "../builderforce/model/agent-types.js";
 import { Type } from "@sinclair/typebox";
+import { SHELL_CAPTURE_CHARS } from "@builderforce/tool-output-policy";
 import type { ExecAsk, ExecHost, ExecSecurity } from "../infra/exec-approvals.js";
 import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
 import { mergePathPrepend } from "../infra/path-prepend.js";
@@ -77,17 +78,19 @@ export function validateHostEnv(env: Record<string, string>): void {
     }
   }
 }
+// Capture-buffer sizes come from THE shared tool-output policy's table
+// (`SHELL_CAPTURE_CHARS`); env can lower them, never raise them past the local cap.
 export const DEFAULT_MAX_OUTPUT = clampWithDefault(
   readEnvInt("PI_BASH_MAX_OUTPUT_CHARS"),
-  200_000,
+  SHELL_CAPTURE_CHARS.local,
   1_000,
-  200_000,
+  SHELL_CAPTURE_CHARS.local,
 );
 export const DEFAULT_PENDING_MAX_OUTPUT = clampWithDefault(
   readEnvInt("BUILDERFORCE_AGENTS_BASH_PENDING_MAX_OUTPUT_CHARS"),
-  30_000,
+  SHELL_CAPTURE_CHARS.localPending,
   1_000,
-  200_000,
+  SHELL_CAPTURE_CHARS.local,
 );
 export const DEFAULT_PATH =
   process.env.PATH ?? "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";

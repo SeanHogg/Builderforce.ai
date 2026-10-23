@@ -9,6 +9,7 @@ import {
   qualityEvidence,
   rankModelsForAction,
   type ActionModelRankStat,
+  type RoutingExploration,
 } from '@builderforce/learned-routing';
 import type { ModelRole } from '@builderforce/agent-tools';
 import type { ArcStage } from '@builderforce/workload';
@@ -109,6 +110,11 @@ export interface PickCloudModelOptions {
    *  which then orders the BYO candidates and the plan coding pool by expected cost,
    *  exactly as the gateway completion seed does. Absent → tier / curated order. */
   prices?: PriceBook;
+  /** Thompson exploration (cost PRD D3, lever `d3_routing_exploration`) — the caller
+   *  passes it only while the lever is on for the run's tenant. Applied to the SOFT seed
+   *  rankings only: a strict pin returns before any ranking, and a premium override
+   *  never explores (the comped caller asked for a specific pool). Absent = deterministic. */
+  explore?: RoutingExploration;
 }
 
 export interface PickCloudModelResult {
@@ -212,6 +218,7 @@ export function pickCloudModel(
   // Same health demotion the gateway completion seed applies. Omitted here before,
   // which is why a cloud run could lock turn 1 onto a known-401 account.
   const byoDemoted = opts?.byoAlertedVendors?.length ? new Set(opts.byoAlertedVendors) : undefined;
+  const explore = !premiumOverride && opts?.explore ? opts.explore : undefined;
   const byoCandidates = opts?.preferredRegisteredModel
     ? [opts.preferredRegisteredModel]
     : byoAutoSeedModels(opts?.byoVendors, {
@@ -235,6 +242,7 @@ export function pickCloudModel(
       stats: opts?.actionStats,
       minSamples: opts?.minSamples,
       bias: byoBias,
+      ...(explore ? { explore } : {}),
     }, registryCatalogView(opts?.prices));
     const byoSeed = byoRanked[0];
     if (byoSeed) {
@@ -262,7 +270,7 @@ export function pickCloudModel(
     registryCatalogView(opts?.prices),
   );
   const bias = opts?.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
-  const ranked = rankModelsForAction(fitting, opts?.actionStats, { minSamples: opts?.minSamples, bias });
+  const ranked = rankModelsForAction(fitting, opts?.actionStats, { minSamples: opts?.minSamples, bias, ...(explore ? { explore } : {}) });
   const seed = ranked[0] ?? reachable[0] ?? CODING_DEFAULT_MODEL;
   // Evidence, not just runs: a seed chosen on a dozen human thumbs and no cloud run
   // IS a learned seed, and reporting 0 here made the timeline call it "cold-start".

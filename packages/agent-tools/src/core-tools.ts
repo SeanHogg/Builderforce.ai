@@ -36,6 +36,10 @@ import type {
 import { ToolRegistry } from "./registry.js";
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 import { readJsonKey } from "./jsonKeyRead.js";
+// The line window is its own dependency-free module so the build-less Container image can
+// run a compiled copy of it (see `fileWindow.ts`); re-exported for existing importers.
+import { READ_DEFAULT_LINE_LIMIT, fileWindowNote, windowFileContent } from "./fileWindow.js";
+export { READ_DEFAULT_LINE_LIMIT, fileWindowNote, windowFileContent, type FileWindow } from "./fileWindow.js";
 // The git/version-control subsystem lives in its own module (see `git-tools.ts`); it is
 // spliced into `CORE_TOOLS` here so the advertised catalog — name, order and all — is
 // exactly what it was before the split.
@@ -111,31 +115,6 @@ export const searchCodeTool: ToolDefinition = defineTool({
   },
 });
 
-/** Default line window for `read_file` — a large file returns a bounded slice the
- *  model pages through with `offset`/`limit`, instead of dumping (or failing) on it. */
-export const READ_DEFAULT_LINE_LIMIT = 2000;
-
-/**
- * Window file content to a 1-based line range, reporting whether more remains. This
- * is the SINGLE place large-file pagination lives, so every surface (cloud, on-prem,
- * VS Code) behaves identically: `read_file` returns the requested slice plus a
- * `truncated` flag + a "read the next chunk" note when the file is longer than the
- * window. A provider only has to return the file's content (or its own truncated
- * chunk); the windowing math is here, once.
- */
-export function windowFileContent(
-  content: string,
-  opts?: { offset?: number; limit?: number },
-): { content: string; truncated: boolean; totalLines: number; offset: number; returnedLines: number } {
-  const lines = content.split("\n");
-  const totalLines = lines.length;
-  const start = opts?.offset && opts.offset > 1 ? Math.min(Math.floor(opts.offset), totalLines + 1) : 1;
-  const limit = opts?.limit && opts.limit > 0 ? Math.floor(opts.limit) : READ_DEFAULT_LINE_LIMIT;
-  const slice = lines.slice(start - 1, start - 1 + limit);
-  const end = start - 1 + slice.length; // last line number included
-  return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
-}
-
 /** `read_file` with `key`: one JSON subtree (see `jsonKeyRead.ts`). */
 function readFileKey(path: string, file: RepoReadResult, key: string): Record<string, unknown> {
   if (file.truncated === true) {
@@ -190,10 +169,8 @@ export const readFileTool: ToolDefinition = defineTool({
       totalLines: win.totalLines,
       offset: win.offset,
     };
-    if (win.truncated) {
-      const lastLine = win.offset + win.returnedLines - 1;
-      data.note = `Showing lines ${win.offset}–${lastLine} of ${win.totalLines}. To continue, call read_file again with offset ${lastLine + 1}.`;
-    }
+    const note = fileWindowNote(win);
+    if (note) data.note = note;
     return { data: data as unknown as Record<string, unknown> };
   },
 });

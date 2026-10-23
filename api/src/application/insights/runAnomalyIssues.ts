@@ -60,6 +60,10 @@ export interface RunAnomalyIssue {
   sharePct: number;
   /** Cost above typical across this issue's runs (USD) — the money the outliers took. */
   excessCostUsd: number;
+  /** When the most recent run flagged for this reason finished (ISO) — what the
+   *  scheduled notifier compares against its last tick, so it alerts on NEW outliers
+   *  only rather than re-announcing the window every day. */
+  latestFlaggedAt: string;
   examples: RunAnomalyExample[];
 }
 
@@ -92,7 +96,7 @@ function metricValue(run: RunMetrics, metric: RunAnomalyMetric): number {
 /** Detect and group. `runs` must be chronological (oldest first). */
 export function summarizeRunAnomalies(runs: readonly RunAnomalyRun[]): RunAnomalySummary {
   const samples: MlSample[] = runs.map((r) => ({ x: Float32Array.from(runAnomalyFeatures(r)), y: 0 }));
-  const byMetric = new Map<RunAnomalyMetric, { runs: number; excess: number; examples: RunAnomalyExample[] }>();
+  const byMetric = new Map<RunAnomalyMetric, { runs: number; excess: number; latestAt: number; examples: RunAnomalyExample[] }>();
   let scored = 0;
   let flagged = 0;
 
@@ -117,8 +121,9 @@ export function summarizeRunAnomalies(runs: readonly RunAnomalyRun[]): RunAnomal
     const prior = runs.slice(from, i);
     const typical = median(prior.map((r) => metricValue(r, reason))) ?? 0;
     const typicalCost = median(prior.map((r) => r.costUsd)) ?? 0;
-    const bucket = byMetric.get(reason) ?? { runs: 0, excess: 0, examples: [] };
+    const bucket = byMetric.get(reason) ?? { runs: 0, excess: 0, latestAt: 0, examples: [] };
     bucket.runs++;
+    bucket.latestAt = Math.max(bucket.latestAt, run.at);
     bucket.excess += Math.max(0, run.costUsd - typicalCost);
     bucket.examples.push({
       executionId: run.executionId,
@@ -138,6 +143,7 @@ export function summarizeRunAnomalies(runs: readonly RunAnomalyRun[]): RunAnomal
       runs: b.runs,
       sharePct: scored > 0 ? Math.round((b.runs / scored) * 1000) / 10 : 0,
       excessCostUsd: Math.round(b.excess * 100) / 100,
+      latestFlaggedAt: new Date(b.latestAt).toISOString(),
       examples: b.examples.sort((a, c) => c.score - a.score).slice(0, RUN_ANOMALY_EXAMPLES),
     }))
     .sort((a, b) => b.runs - a.runs || b.excessCostUsd - a.excessCostUsd);

@@ -42,8 +42,39 @@ import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { cosineSimilarity } from '@seanhogg/builderforce-memory/retrieval';
 
-/** One stored association. `e` = embedding, `r` = response, `t` = stored-at ms. */
-interface SemanticEntry { e: number[]; r: string; t: number }
+/**
+ * What an entry RELIED ON when it was stored, so a lookup can refuse an answer whose
+ * grounds have since moved. `fr` = the project-facts revision token, `a` = the file
+ * anchors (path + content hash) the request declared. Optional: the
+ * `/v1/semantic-cache` route stores none, and an entry without it is judged on
+ * similarity alone exactly as before.
+ */
+export interface SemanticEntryMeta {
+  fr?: string;
+  a?: Array<{ p: string; h: string }>;
+}
+
+/** One stored association. `e` = embedding, `r` = response, `t` = stored-at ms, `m` = meta. */
+interface SemanticEntry { e: number[]; r: string; t: number; m?: SemanticEntryMeta }
+
+/** One candidate a lookup scored, best first. */
+export interface SemanticCandidate {
+  response: string;
+  score: number;
+  meta: SemanticEntryMeta | undefined;
+}
+
+/**
+ * How long a stored association lives — on EVERY KV write (defect 11: the bucket puts
+ * carried no `expirationTtl`, so an index nobody read again lived forever). Each write
+ * refreshes its bucket's TTL, so entries older than this are also dropped by age on
+ * read and on the next trim: a busy bucket cannot keep a week-old answer alive.
+ */
+export const SEMANTIC_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const SEMANTIC_CACHE_TTL_MS = SEMANTIC_CACHE_TTL_SECONDS * 1000;
+
+const isLive = (entry: SemanticEntry, now: number): boolean =>
+  typeof entry.t !== 'number' || now - entry.t <= SEMANTIC_CACHE_TTL_MS;
 
 /**
  * Independent hash tables. More tables = higher recall at linearly more KV
@@ -123,13 +154,43 @@ async function readBucket(env: Env, key: string): Promise<SemanticEntry[]> {
 }
 
 /**
- * Best-matching cached response at/above `threshold`, or null.
+ * Every distinct candidate at/above `floor`, best first.
  *
  * Reads exactly {@link HASH_TABLES} buckets — a fixed cost that does not grow with
  * the corpus. Cosine is still computed exactly, over the handful of CANDIDATES the
  * index returned rather than over everything stored: LSH decides what to compare,
  * never what matches, so a hit returned here is a true hit at the real threshold.
+ * Returning the ranked list (not just the best) lets a caller skip a candidate whose
+ * grounds went stale and take the next one, and log a near miss below its threshold.
  */
+export async function semanticCandidates(
+  env: Env,
+  tenantId: number,
+  namespace: string,
+  embedding: number[],
+  floor: number,
+): Promise<SemanticCandidate[]> {
+  if (!Array.isArray(embedding) || embedding.length === 0) return [];
+  const signatures = signaturesFor(embedding);
+  const buckets = await Promise.all(
+    signatures.map((sig, table) => readBucket(env, bucketKey(tenantId, namespace, table, sig)).catch(() => [])),
+  );
+  const now = Date.now();
+  const seen = new Set<string>();
+  const out: SemanticCandidate[] = [];
+  for (const bucket of buckets) {
+    for (const entry of bucket) {
+      // The same association lives in every table it hashed into; score it once.
+      if (seen.has(entry.r) || !isLive(entry, now)) continue;
+      seen.add(entry.r);
+      const score = cosineSimilarity(embedding, entry.e);
+      if (score >= floor) out.push({ response: entry.r, score, meta: entry.m });
+    }
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
+
+/** Best-matching cached response at/above `threshold`, or null. */
 export async function semanticLookup(
   env: Env,
   tenantId: number,
@@ -137,25 +198,8 @@ export async function semanticLookup(
   embedding: number[],
   threshold: number,
 ): Promise<{ response: string; score: number } | null> {
-  if (!Array.isArray(embedding) || embedding.length === 0) return null;
-  const signatures = signaturesFor(embedding);
-  const buckets = await Promise.all(
-    signatures.map((sig, table) => readBucket(env, bucketKey(tenantId, namespace, table, sig)).catch(() => [])),
-  );
-
-  let best: SemanticEntry | undefined;
-  let bestScore = -Infinity;
-  const seen = new Set<string>();
-  for (const bucket of buckets) {
-    for (const entry of bucket) {
-      // The same association lives in every table it hashed into; score it once.
-      if (seen.has(entry.r)) continue;
-      seen.add(entry.r);
-      const score = cosineSimilarity(embedding, entry.e);
-      if (score > bestScore) { bestScore = score; best = entry; }
-    }
-  }
-  return best && bestScore >= threshold ? { response: best.r, score: bestScore } : null;
+  const [best] = await semanticCandidates(env, tenantId, namespace, embedding, threshold);
+  return best ? { response: best.response, score: best.score } : null;
 }
 
 /**
@@ -169,20 +213,23 @@ export async function semanticStore(
   namespace: string,
   embedding: number[],
   response: string,
+  /** What the answer relied on — see {@link SemanticEntryMeta}. */
+  meta?: SemanticEntryMeta,
 ): Promise<void> {
   const kv = semanticKv(env);
   if (!kv) return;
   if (!Array.isArray(embedding) || embedding.length === 0 || embedding.length > MAX_EMBEDDING_DIMS) return;
   if (typeof response !== 'string' || response.length === 0) return;
 
-  const entry: SemanticEntry = { e: embedding, r: response, t: Date.now() };
+  const now = Date.now();
+  const entry: SemanticEntry = { e: embedding, r: response, t: now, ...(meta && (meta.fr || meta.a?.length) ? { m: meta } : {}) };
   const signatures = signaturesFor(embedding);
   await Promise.all(signatures.map(async (sig, table) => {
     const key = bucketKey(tenantId, namespace, table, sig);
     // Read the durable source directly (not the cache) so we trim against truth.
     const current = ((await kv.get(key, 'json').catch(() => null)) as SemanticEntry[] | null) ?? [];
-    const next = [entry, ...current.filter((e) => e.r !== response)].slice(0, MAX_ENTRIES_PER_BUCKET);
-    await kv.put(key, JSON.stringify(next)).catch((error) => { /* best-effort */
+    const next = [entry, ...current.filter((e) => e.r !== response && isLive(e, now))].slice(0, MAX_ENTRIES_PER_BUCKET);
+    await kv.put(key, JSON.stringify(next), { expirationTtl: SEMANTIC_CACHE_TTL_SECONDS }).catch((error) => { /* best-effort */
       reportCaughtError(error, { source: 'application/llm/semanticCache.ts', operation: 'semanticStore' });
     });
     await invalidateCached(env, key);

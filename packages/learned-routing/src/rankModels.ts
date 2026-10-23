@@ -9,6 +9,7 @@
  */
 
 import { blendedQualityScore, isChronicallyRateLimited, qualityEvidence } from './modelQualityScore.js';
+import { pickIndex, sampleQuality, shouldExploreCold, type DecayedEvidence, type RoutingExploration } from './exploration.js';
 
 /** Minimal per-model stat shape the learned router ranks on — a structural subset
  *  of `routingTable.ActionModelStat`, declared here so this pure module never imports
@@ -25,6 +26,9 @@ export interface ActionModelRankStat {
   /** Share of this bucket's runs that died on a provider 429 (migration 0485).
    *  An AVAILABILITY signal — see `modelQualityScore.isChronicallyRateLimited`. */
   rateLimitRate?: number;
+  /** Decayed evidence (cost PRD D3) — present on blobs the decayed table writes. */
+  effectiveN?: DecayedEvidence['effectiveN'];
+  at?: DecayedEvidence['at'];
 }
 
 export interface RankModelsOptions {
@@ -33,6 +37,13 @@ export interface RankModelsOptions {
   /** Optional client-computed SSM recall nudge (model → +/- weight) applied to the
    *  learned score BEFORE the sort. Personalization on top of the shared table. */
   bias?: Record<string, number>;
+  /**
+   * Thompson exploration (cost PRD D3, lever `d3_routing_exploration`). Absent = the
+   * deterministic order, exactly as before. The CALLER passes it only when the lever is
+   * on and the request may explore — never for a strict pin, a BYO-strict chain or a
+   * premium override (see `exploration.ts`).
+   */
+  explore?: RoutingExploration;
 }
 
 export const DEFAULT_MIN_SAMPLES = 8;
@@ -89,7 +100,15 @@ export function rankModelsForAction(
   // stands unchanged. A throttled model alone is still worth demoting.
   if (eligible.length === 0 && throttled.length === 0) return [...reachable];
 
-  const scoreOf = (m: string): number => blendedQualityScore(statByModel.get(m)!) + (bias[m] ?? 0);
+  const explore = opts?.explore;
+  // One draw per eligible model per call (Thompson); the deterministic blended score
+  // otherwise. Drawn ONCE up front so the comparator stays consistent.
+  const sampled = new Map<string, number>();
+  if (explore) {
+    for (const m of eligible) sampled.set(m, sampleQuality(statByModel.get(m)!, explore.rng, explore.nowMs));
+  }
+  const scoreOf = (m: string): number =>
+    (sampled.get(m) ?? blendedQualityScore(statByModel.get(m)!)) + (bias[m] ?? 0);
   eligible.sort((a, b) => {
     const d = scoreOf(b) - scoreOf(a);
     if (d !== 0) return d;
@@ -97,6 +116,12 @@ export function rankModelsForAction(
     if (c !== 0) return c;
     return (curatedIndex.get(a)! - curatedIndex.get(b)!);
   });
+  // The cold slot: at most `coldShare` of picks lead with ONE below-floor model, chosen
+  // uniformly — the only path by which a cold model reaches the front.
+  if (explore && shouldExploreCold(explore, rest.length)) {
+    const [cold] = rest.splice(pickIndex(explore.rng, rest.length), 1);
+    return [cold!, ...eligible, ...rest, ...throttled];
+  }
   return [...eligible, ...rest, ...throttled];
 }
 

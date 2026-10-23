@@ -27,14 +27,14 @@ import { checkResponseFormatConformance } from './responseFormat';
 import { stripStandardFields } from './poolRouting';
 import { sanitizeRequestToolCalls, restoreResponseToolNames, restoreStreamToolNames } from './toolNameSanitizer';
 import { loadCooledModelsForVendor, recordFailures } from '../../infrastructure/auth/cooldownStore';
-import { parseClientReasoningIntent } from './reasoningCapability';
+import { resolveDispatchReasoningIntent } from './dispatchReasoningIntent';
 import { reasoningReplayStore } from '../../infrastructure/cache/reasoningReplayStore';
 import { recordVendorUpstreamFaults, recordVendorUpstreamSuccess } from './vendors/vendorHealth';
 import { PREMIUM_VENDOR_CALL_TIMEOUT_MS, resolveCacheTtl, resolveVendorTimeoutOverride } from './modelPool';
 import { evermindToolChoiceMinMargin } from './evermindToolCall';
 import { attemptsToFailovers, fatalErrorAttempt, isRequestErrorStatus } from './proxyFailover';
 import { exhaustedResponse, requestErrorResponse, subrequestExhaustedResponse } from './proxyEnvelopes';
-import type { ChatCompletionRequest, FailoverEvent, ProxyResult } from './proxyTypes';
+import { toLlmUsage, type ChatCompletionRequest, type FailoverEvent, type ProxyResult } from './proxyTypes';
 import type { ProxyConfig } from './proxyConfig';
 import type { ProxyFunding } from './proxyFunding';
 
@@ -45,6 +45,9 @@ export interface DispatchOverrides {
   timeoutMs?: number;
   signal?: AbortSignal;
   ignoreCooldown?: boolean;
+  /** Raise the reasoning intent one level (cost PRD D4) — the D1 verifier cascade's
+   *  retry after a weak answer. Inert when the dispatch carries no intent. */
+  escalateReasoning?: boolean;
 }
 
 export class ProxyDispatcher {
@@ -115,7 +118,17 @@ export class ProxyDispatcher {
     // `isFirstTurn`: a request with no assistant turn yet is definitionally a planning
     // turn (a tool-result continuation always carries one), which is what makes Anthropic
     // extended thinking safe alongside tools — same rule the cloud loop uses.
-    const reasoningIntent = parseClientReasoningIntent((sanitizedBody as Record<string, unknown>).reasoning);
+    // With cost lever `d4_role_reasoning` on, a call that names no level takes its
+    // ROLE's default effort (`roleReasoning.ts`) — explicit always wins.
+    // The lever buckets on the tenant the proxy was built for; a tenant-less proxy
+    // (internal utilities) gets it only at a 100% rollout.
+    const reasoningIntent = await resolveDispatchReasoningIntent(this.cfg.env, {
+      reasoning: (sanitizedBody as Record<string, unknown>).reasoning,
+      role: (sanitizedBody as { role?: unknown }).role,
+      isFirstTurn: !messages.some((m) => m.role === 'assistant'),
+      tenantId: this.cfg.tenantId,
+      ...(overrides?.escalateReasoning ? { escalate: true } : {}),
+    });
     // Timeout precedence: an explicit dispatch override (e.g. the paid backstop
     // forcing the premium budget) wins; otherwise a per-request caller override
     // (`_builderforce.vendorTimeoutMs`, clamped) lets even a free-plan one-off
@@ -136,14 +149,7 @@ export class ProxyDispatcher {
       ...(sanitizedBody.temperature != null ? { temperature: sanitizedBody.temperature } : {}),
       ...(sanitizedBody.top_p       != null ? { topP:        sanitizedBody.top_p       } : {}),
       ...(Object.keys(extraBody).length > 0 ? { extraBody } : {}),
-      ...(reasoningIntent
-        ? {
-            reasoningIntent: {
-              execParams: reasoningIntent,
-              isFirstTurn: !messages.some((m) => m.role === 'assistant'),
-            },
-          }
-        : {}),
+      ...(reasoningIntent ? { reasoningIntent } : {}),
       ...(cacheTtl ? { cacheTtl } : {}),
       title: this.cfg.productName,
       ...(effectiveTimeoutMs ? { timeoutMs: effectiveTimeoutMs } : {}),
@@ -285,15 +291,7 @@ export class ProxyDispatcher {
       failovers: totalFailovers,
       outcome: 'success',
       attempts: result.attempts,
-      ...(result.usage ? {
-        usage: {
-          promptTokens:     result.usage.prompt_tokens     ?? 0,
-          completionTokens: result.usage.completion_tokens ?? 0,
-          totalTokens:      result.usage.total_tokens      ?? 0,
-          ...(result.usage.cache_read_tokens     != null ? { cacheReadTokens:     result.usage.cache_read_tokens     } : {}),
-          ...(result.usage.cache_creation_tokens != null ? { cacheCreationTokens: result.usage.cache_creation_tokens } : {}),
-        },
-      } : {}),
+      ...(result.usage ? { usage: toLlmUsage(result.usage) } : {}),
       ...(schemaRetries > 0 ? { schemaRetries } : {}),
     };
   }

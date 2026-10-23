@@ -26,6 +26,7 @@ import { addUsageToTenantTotals, getTenantUsageTotalsForEnv } from './tokenUsage
 import { pickPersistedMetadata } from './usageMetadata';
 import { loadTenantProviderRows } from './tenantProviderRows';
 import type { UsageSurface } from '@builderforce/spend-contract';
+import { COST_LEVER_ARMS_KEY, costLeverArmsStamp } from '../costMetrics/leverArms';
 
 /** Cache-tier multipliers relative to the base input (prompt) price. cache_read
  *  is billed ~0.1x input, cache_creation ~1.25x — both are subsets of
@@ -151,7 +152,14 @@ export function sanitizeUsage(usage: LlmUsage): LlmUsage {
     totalTokens:      clampTokenCount(usage.totalTokens),
     ...(usage.cacheReadTokens     != null ? { cacheReadTokens:     clampTokenCount(usage.cacheReadTokens) }     : {}),
     ...(usage.cacheCreationTokens != null ? { cacheCreationTokens: clampTokenCount(usage.cacheCreationTokens) } : {}),
+    ...(usage.reasoningTokens     != null ? { reasoningTokens:     clampTokenCount(usage.reasoningTokens) }     : {}),
   };
+}
+
+/** A nullable per-turn measurement (turn index, tool-schema tokens): clamped like a
+ *  token count when present, NULL — "not measured" — when absent. */
+function clampOptionalCount(n: number | null | undefined): number | null {
+  return n == null ? null : clampTokenCount(n);
 }
 
 /** Authoritative per-call cost in millicents (1/100000 USD), priced from the
@@ -365,6 +373,12 @@ export interface RecordUsageRow {
   calls?: number;
   /** What memory did on this row. Defaults to the run loop's `metadata.memory`. */
   savings?: UsageSavings | null;
+  /** 1-based position of this call within its run's loop (migration 1253 / 0019) —
+   *  null for a call outside a turn loop. */
+  turnIndex?: number | null;
+  /** ESTIMATED tokens the advertised tool schemas cost on this call (chars/4 over the
+   *  serialized `tools`) — null when the producer did not measure it. */
+  toolSchemaTokens?: number | null;
 }
 
 /** Minimal shape of a ProxyResult this helper needs — avoids importing the full type.
@@ -562,9 +576,17 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     // guest prompt text and was the bulk of this table's size. `savings` above already read
     // the full bag.
     const keptMetadata = pickPersistedMetadata(row.metadata);
-    const metadata = row.premiumSurcharge
-      ? { ...(keptMetadata ?? {}), premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS }
+    // The cost-lever arms this tenant was in when the row was written — A4's control
+    // group. Stamped here, the single writer, so every surface carries it; added AFTER
+    // the persistence filter so a caller cannot spoof its own arm, and bounded by
+    // construction (partial-rollout lever ids only — see costLeverArmsStamp).
+    const leverArms = costLeverArmsStamp(env, row.tenantId);
+    const stamped: Record<string, unknown> | null = leverArms
+      ? { ...(keptMetadata ?? {}), [COST_LEVER_ARMS_KEY]: leverArms }
       : keptMetadata;
+    const metadata = row.premiumSurcharge
+      ? { ...(stamped ?? {}), premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS }
+      : stamped;
     // Chat attribution is promoted OUT of metadata into real columns (0934) so
     // per-chat/per-mode spend is an indexed read rather than a JSON scan that
     // silently drops every row whose metadata is absent or not an object. It stays
@@ -590,6 +612,11 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       totalTokens:         usage.totalTokens,
       cacheReadTokens:     usage.cacheReadTokens     ?? 0,
       cacheCreationTokens: usage.cacheCreationTokens ?? 0,
+      // NULL, not 0, when the vendor reports no reasoning split (Anthropic) — so the
+      // reasoning share is computed only over rows that could have reported one.
+      reasoningTokens:     usage.reasoningTokens ?? null,
+      turnIndex:           clampOptionalCount(row.turnIndex),
+      toolSchemaTokens:    clampOptionalCount(row.toolSchemaTokens),
       retries:             row.retries ?? 0,
       streamed:            row.streamed ?? false,
       metadata:            metadata ?? null,

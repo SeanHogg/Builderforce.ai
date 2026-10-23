@@ -20,6 +20,8 @@ export interface ImageLoopIo {
   execTool(name: string, args: Record<string, unknown>, loop: ImageLoopToolState): Promise<unknown>;
   /** Whether the heartbeat saw the run cancelled. */
   isCancelled(): boolean;
+  /** Per-result budget for tool rows (PRD C7). Omitted ⇒ plain JSON rows. */
+  toolResultPolicy?: (toolName: string, data: unknown) => string;
 }
 
 export interface ImageLoopOutcome {

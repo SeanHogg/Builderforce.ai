@@ -11,7 +11,8 @@ import type { BrainToolSpec, ChatCompletionMessage } from '../streamChatCompleti
 import type { EvermindRunHooks, MemoryFirstAnswer } from '../evermindMemory';
 import { transcriptTokens } from '../workingTranscript';
 import type { RunCell } from './runCell';
-import { emit, nowIso, pushTrace, recordAppended } from './runCells';
+import { emit, nowIso, pushTrace, recordAppended, runTrace } from './runCells';
+import { readFileAnchors } from './answerAnchors';
 import { canonicalTurnText } from './turnPersistence';
 import { latestUserText } from './convoText';
 import type { BrainRunRequest } from './runTypes';
@@ -20,7 +21,8 @@ import type { RunLoopContext } from './runLoopContext';
 /** The pre-turn recall, the memory block it adds to the prompt, and that block's cost. */
 export interface RunRecall {
   recalled: EvermindRecallResult | null;
-  /** The block to append to the system prompt, or null when nothing was recalled. */
+  /** The memory block for this run's prompt (after the history under `b1_stable_prefix`,
+   *  else in the system prompt — see `runPreamble`), or null when nothing was recalled. */
   block: string | null;
   /** The prompt tokens the block adds to EVERY call of this run — the cost side of
    *  recall, sent with each call beside what compaction saved it. */
@@ -31,7 +33,7 @@ export interface RunRecall {
  * Evermind recall — before the FIRST turn, ask the project's self-learning model
  * which learned memories are relevant to this request. When it returns some, we
  * (a) record a visible `recall` step and (b) hand back the block the caller injects
- * into the system prompt so the recall actually GROUNDS the answer (not just a UI
+ * into the prompt so the recall actually GROUNDS the answer (not just a UI
  * badge). Best-effort: a non-project chat / unavailable recall / thrown fetch just
  * skips it.
  */
@@ -144,7 +146,7 @@ export async function answerFromMemory(
  * restated (write-through).
  */
 export function emitEvermindLearnReconcile(run: RunLoopContext, assistantMsg: BrainMessage | undefined, finalText: string): void {
-  const { c, convo, recalled } = run;
+  const { c, recalled } = run;
   const evermind = run.req.evermind;
   const learn = assistantMsg?.evermindLearn;
   if (learn?.learned) {
@@ -183,15 +185,22 @@ export function emitEvermindLearnReconcile(run: RunLoopContext, assistantMsg: Br
   // caches genuine model answers; the server guards length + skips trivial ones.
   // Best-effort, fire-and-forget — never delays or fails the reply.
   if (evermind?.cacheAnswer && run.memoryReplay) {
-    const q = latestUserText(convo);
+    // The user's OWN request, captured before the loop — never "the latest user
+    // message", which by now may be a recovery nudge the loop wrote or carry this run's
+    // per-turn context block (`turnContext`). The cache is keyed on these words.
+    const q = run.userRequest;
     // With what producing it cost, so every later replay is priced from a recorded figure.
     const spent = c.runUsage;
     const origin = spent.model && spent.promptTokens + spent.completionTokens > 0
       ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens }
       : undefined;
     if (q) {
-      // No origin ⇒ the two-argument call every pre-cost hook implements.
-      const cached = origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
+      // The files this run read — the server drops the cached answer when one changes.
+      const anchors = readFileAnchors(runTrace(c));
+      // No origin/anchors ⇒ the two-argument call every pre-cost hook implements.
+      const cached = anchors.length
+        ? evermind.cacheAnswer(q, finalText, origin, anchors)
+        : origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
       void Promise.resolve(cached).catch(() => { /* best-effort */ });
     }
   }

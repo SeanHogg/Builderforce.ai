@@ -22,6 +22,10 @@ COPY codeAnalysis.mjs ./
 # by api/scripts/gen-agent-loop-bundle.mjs, drift-checked by check:agent-loop) and the
 # image semantics on its hooks. The Actions runner inlines the SAME two files.
 COPY agentLoop.mjs agentImageLoop.mjs ./
+# THE tool-output policy (@builderforce/tool-output-policy), THE edit_file core
+# (packages/agent-tools/src/edit.ts) and THE read_file line window
+# (packages/agent-tools/src/fileWindow.ts), compiled by api/scripts/gen-container-shared.mjs.
+COPY toolOutputPolicy.mjs stringEdit.mjs fileWindow.mjs ./
 
 ENV NODE_ENV=production
 ENV PORT=8080

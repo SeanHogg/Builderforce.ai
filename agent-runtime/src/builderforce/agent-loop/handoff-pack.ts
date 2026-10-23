@@ -19,7 +19,9 @@ import {
   tokensOf,
   type HandoffMessage,
 } from "@seanhogg/builderforce-memory/handoff";
-import { handoffReserveTokens, toolSchemaTokens } from "@builderforce/run-policy";
+import { isCostLeverOn } from "@builderforce/cost-levers";
+import { priceTierBoundary } from "@builderforce/model-catalog";
+import { handoffReserveTokens, handoffTokenBudget, toolSchemaTokens } from "@builderforce/run-policy";
 import { resolveContextWindowTokens } from "../../agents/context-window.js";
 import type { AgentMessage, AgentTool } from "../model/agent-types.js";
 import type { Model } from "../model/types.js";
@@ -53,6 +55,19 @@ function toolsTokens(tools: readonly AgentTool<any>[] | undefined): number {
   return toolSchemaTokens(schemas, defaultEstimateTokens);
 }
 
+/**
+ * The window the packer fills for `to`: the model's context window, capped (cost PRD C9,
+ * lever `c9_price_tier_budget`) so the packed INPUT stays under the model's lowest
+ * long-context price boundary — the packer takes the reply reserve back off this, so the
+ * cap is the boundary plus that reserve. A flat-priced model packs to its window exactly.
+ */
+function packTargetTokens(to: Model, reserve: number): number {
+  const contextWindow = resolveContextWindowTokens(to);
+  const boundary = isCostLeverOn(process.env, "c9_price_tier_budget", null) ? priceTierBoundary(to.id) : undefined;
+  const budget = handoffTokenBudget({ contextWindow, reserveOutputTokens: reserve, priceTierBoundary: boundary });
+  return budget === undefined ? contextWindow : Math.min(contextWindow, budget + reserve);
+}
+
 export interface ModelHandoffInput {
   messages: readonly AgentMessage[];
   systemPrompt: string;
@@ -80,10 +95,11 @@ export async function packContextForModel(input: ModelHandoffInput): Promise<Mod
     return h;
   });
   const all = [system, ...mapped];
+  const reserve = handoffReserveTokens(input.maxTokens);
   const pack = await packHandoff({
     messages: all,
-    targetContextTokens: resolveContextWindowTokens(input.to),
-    reserveOutputTokens: handoffReserveTokens(input.maxTokens),
+    targetContextTokens: packTargetTokens(input.to, reserve),
+    reserveOutputTokens: reserve,
     toolsTokens: toolsTokens(input.tools),
     from: modelRef(input.from),
     to: modelRef(input.to),

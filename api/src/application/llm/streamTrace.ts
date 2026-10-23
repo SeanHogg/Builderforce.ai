@@ -22,7 +22,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { parseSseDataLine } from '@seanhogg/builderforce-memory/wire';
 import { pickUsage } from './vendors';
-import type { LlmUsage } from './LlmProxyService';
+import { toLlmUsage, type LlmUsage } from './proxyTypes';
 
 /** The reassembled completion an SSE stream carried, as a trace can store it. */
 export interface StreamedCompletion {
@@ -56,14 +56,9 @@ function safely(operation: string, fn: () => void): void {
 
 /** Normalise any vendor's raw usage object onto the ledger's shape. */
 function normalizeUsage(raw: unknown): LlmUsage {
-  const u = pickUsage(raw);
-  return {
-    promptTokens:     u.prompt_tokens     ?? 0,
-    completionTokens: u.completion_tokens ?? 0,
-    totalTokens:      u.total_tokens      ?? 0,
-    ...(u.cache_read_tokens     != null ? { cacheReadTokens:     u.cache_read_tokens     } : {}),
-    ...(u.cache_creation_tokens != null ? { cacheCreationTokens: u.cache_creation_tokens } : {}),
-  };
+  // THE wire → ledger mapping, so every tier (cache, reasoning) flows the same way
+  // on a stream as on a JSON response.
+  return toLlmUsage(pickUsage(raw));
 }
 
 /**

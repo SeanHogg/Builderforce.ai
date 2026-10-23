@@ -1,5 +1,30 @@
-import type { LlmUsage } from './LlmProxyService';
+import type { LlmUsage } from './proxyTypes';
 import { AnthropicStreamUsage, parseSseDataFrames } from '@seanhogg/builderforce-memory/wire';
+import { anthropicPromptTokens } from './vendors/anthropic';
+
+/** Anthropic-native token counts (input EXCLUDES both cache counts, as the API reports). */
+export interface AnthropicTokenCounts {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
+/**
+ * Anthropic-native counts in the ledger's {@link LlmUsage} shape. The cache counts are
+ * a SUBSET of `promptTokens` there (`usageLedger` prices `prompt − read − creation` as
+ * uncached), so the prompt is input + both cache counts — {@link anthropicPromptTokens}.
+ */
+export function anthropicUsageToLlmUsage(t: AnthropicTokenCounts): LlmUsage {
+  const promptTokens = anthropicPromptTokens(t);
+  return {
+    promptTokens,
+    completionTokens: t.outputTokens,
+    totalTokens: promptTokens + t.outputTokens,
+    cacheReadTokens: t.cacheReadTokens,
+    cacheCreationTokens: t.cacheCreationTokens,
+  };
+}
 
 /**
  * Token usage out of a full Anthropic Messages SSE stream (the concatenated `data:`
@@ -11,12 +36,5 @@ import { AnthropicStreamUsage, parseSseDataFrames } from '@seanhogg/builderforce
 export function parseAnthropicSseUsage(raw: string): LlmUsage {
   const usage = new AnthropicStreamUsage();
   for (const frame of parseSseDataFrames(raw)) usage.observe(frame);
-  const t = usage.result();
-  return {
-    promptTokens: t.inputTokens,
-    completionTokens: t.outputTokens,
-    totalTokens: t.inputTokens + t.outputTokens,
-    cacheReadTokens: t.cacheReadTokens,
-    cacheCreationTokens: t.cacheCreationTokens,
-  };
+  return anthropicUsageToLlmUsage(usage.result());
 }

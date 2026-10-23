@@ -88,11 +88,12 @@ export interface CompletionProxyOptions {
  */
 export function proxyForCompletion(
   env: Env,
-  access: Pick<TenantAccess, 'effectivePlan' | 'premiumOverride'>,
+  access: Pick<TenantAccess, 'tenantId' | 'effectivePlan' | 'premiumOverride'>,
   body: ChatCompletionRequest,
   opts: CompletionProxyOptions,
 ): ReturnType<typeof llmProxyForPlan> {
   return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
+    tenantId: access.tenantId,
     disablePaidOverflow: opts.disablePaidOverflow,
     ...(opts.hostEgress ? { hostEgress: opts.hostEgress } : {}),
     ...(isAgenticToolTurn(body as { tools?: unknown }) ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),

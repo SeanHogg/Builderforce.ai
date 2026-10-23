@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-agents",
-  "version": "2026.10.13",
+  "version": "2026.10.14",
   "description": "BuilderForce Agents — distributed AI coding agent runtime with secure orchestration",
   "keywords": [
     "ai",

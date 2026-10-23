@@ -45,6 +45,42 @@ import { runCodeAnalysis } from './codeAnalysis.mjs';
 // `agentLoop.mjs` by `api/scripts/gen-agent-loop-bundle.mjs`) with the image semantics
 // on its hooks — the same file the GitHub Actions runner inlines.
 import { runImageLoop } from './agentImageLoop.mjs';
+// THE tool-output policy (`@builderforce/tool-output-policy`, PRD C7), THE edit_file
+// core (`packages/agent-tools/src/edit.ts`) and THE read_file line window
+// (`packages/agent-tools/src/fileWindow.ts`), compiled for this build-less image by
+// `api/scripts/gen-container-shared.mjs`.
+import { SHELL_CAPTURE_CHARS, fitToolText, keepTail, modelToolResultPolicy, toolOutputCap } from './toolOutputPolicy.mjs';
+import { applyStringEdit, editFacts } from './stringEdit.mjs';
+import { fileWindowNote, windowFileContent } from './fileWindow.mjs';
+
+/** Tools this image runs against its clone beyond the shared image-local set — the
+ *  container's half of the capability handshake. The Actions runner does not implement
+ *  `edit_file`, so it is named here rather than in the shared relay list. */
+const CONTAINER_LOCAL_TOOL_NAMES = ['edit_file'];
+
+/** Whether the C7 lever is on for this run — decided by the Worker (it owns the tenant
+ *  and the env) and carried on the run spec. Absent ⇒ off: an older Worker never
+ *  turns on a behaviour it did not choose. */
+function toolOutputPolicyOn(spec) {
+  return spec.toolOutputPolicy === true;
+}
+
+/** A command's output as the model sees it. Defect 6: the capture buffer keeps the TAIL
+ *  (the verdict prints last) and the reply used to return the HEAD, dropping every
+ *  test/build summary — so it is head+tail with an elision marker, or, with the C7
+ *  lever on, the failure summary (failing tests, error lines, diffs, the last lines). */
+function commandOutput(spec, tool, output) {
+  return fitToolText(output, toolOutputCap(tool), { tool, summarize: toolOutputPolicyOn(spec) });
+}
+
+/** The image loop's per-result budget, or `undefined` (plain JSON) with the lever off.
+ *  `read_file` is shaped like every other tool: this image's `read_file` pages by the
+ *  `offset`/`limit` the schema advertises, so the policy's "call again with offset"
+ *  window is one the model can continue past. */
+function containerToolResultPolicy(spec) {
+  if (!toolOutputPolicyOn(spec)) return undefined;
+  return modelToolResultPolicy({ summarize: true });
+}
 
 const PORT = Number(process.env.PORT || 8080);
 // Live-preview passthrough: when a run starts a dev server on PREVIEW_PORT, the
@@ -121,7 +157,7 @@ function runShell(command, cwd, proc) {
     const child = spawn('bash', ['-lc', command], { cwd, env: process.env });
     if (proc) proc.current = child;
     let out = '';
-    const cap = (chunk) => { out += chunk; if (out.length > 60_000) out = out.slice(-60_000); };
+    const cap = (chunk) => { out = keepTail(out + chunk, SHELL_CAPTURE_CHARS.container); };
     child.stdout.on('data', cap);
     child.stderr.on('data', cap);
     const timer = setTimeout(() => { child.kill('SIGKILL'); }, COMMAND_TIMEOUT_MS);
@@ -337,14 +373,19 @@ async function execTool(spec, workdir, writtenPaths, readMemo, name, parsed, pro
     const path = typeof parsed.path === 'string' ? parsed.path : '';
     if (!path) return { ok: false, error: 'path is required' };
     if (!workdir) return { ok: false, error: 'no repository bound to this task' };
-    const cached = readMemo.get(path);
-    if (cached) return cached;
-    try {
-      const content = await readFile(join(workdir, path), 'utf8');
-      const result = { ok: true, path, content: content.slice(0, 100_000), truncated: content.length > 100_000 };
-      readMemo.set(path, result);
-      return result;
-    } catch (e) { return { ok: false, error: `read failed: ${e.message}` }; }
+    // The memo holds the WHOLE file; each call returns its own line window of it — the
+    // same `windowFileContent` every TypeScript surface pages with, so `offset`/`limit`
+    // behave here exactly as the shared `read_file` schema advertises.
+    let content = readMemo.get(path)?.ok ? readMemo.get(path).content : undefined;
+    if (content === undefined) {
+      try { content = await readFile(join(workdir, path), 'utf8'); } catch (e) { return { ok: false, error: `read failed: ${e.message}` }; }
+      readMemo.set(path, { ok: true, path, content });
+    }
+    const offset = typeof parsed.offset === 'number' && parsed.offset > 0 ? Math.floor(parsed.offset) : undefined;
+    const limit = typeof parsed.limit === 'number' && parsed.limit > 0 ? Math.floor(parsed.limit) : undefined;
+    const win = windowFileContent(content, { offset, limit });
+    const note = fileWindowNote(win);
+    return { ok: true, path, content: win.content, truncated: win.truncated, totalLines: win.totalLines, offset: win.offset, ...(note ? { note } : {}) };
   }
   if (name === 'write_file') {
     const path = typeof parsed.path === 'string' ? parsed.path : '';
@@ -358,6 +399,39 @@ async function execTool(spec, workdir, writtenPaths, readMemo, name, parsed, pro
     const r = await op(spec, { op: 'write', args: { path, content, summary: parsed.summary, isNew } });
     if (r.ok) { writtenPaths.add(path); readMemo.delete(path); }
     return r;
+  }
+  if (name === 'edit_file') {
+    // `repo.edit` on this surface: the SAME edit core as every other provider
+    // (`applyStringEdit` — unique match unless `replace_all`, EOL-tolerant, `nearest` on
+    // a miss), applied to the clone the run builds against, then committed through the
+    // Worker's existing `write` op like any other change — so the lease, the outbound
+    // inspection and the file-change ledger are the Worker's, not a second copy here.
+    const path = typeof parsed.path === 'string' ? parsed.path : '';
+    const oldString = typeof parsed.old_string === 'string' ? parsed.old_string : '';
+    const newString = typeof parsed.new_string === 'string' ? parsed.new_string : '';
+    const replaceAll = parsed.replace_all === true;
+    if (!path || !oldString) return { ok: false, error: 'path and old_string are required' };
+    if (!workdir) return { ok: false, error: 'no repository bound to this task' };
+    let current;
+    try { current = await readFile(join(workdir, path), 'utf8'); } catch (e) { return { ok: false, error: `cannot edit '${path}': ${e.message}` }; }
+    const edit = applyStringEdit(current, oldString, newString, replaceAll);
+    if (!edit.ok || edit.content == null) return { ok: false, ...editFacts(edit), error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}` };
+    const r = await op(spec, { op: 'write', args: { path, content: edit.content, summary: parsed.summary, isNew: false } });
+    if (!r.ok) return { ok: false, error: r.error || `could not commit the edit to '${path}'` };
+    // Mirror to local disk only once the commit landed, so the clone never holds an
+    // edit the branch does not.
+    try { await writeFile(join(workdir, path), edit.content); } catch { /* non-fatal; commit is source of truth */ }
+    writtenPaths.add(path);
+    readMemo.delete(path);
+    const facts = editFacts(edit);
+    return {
+      ok: true,
+      ...(r.branch ? { branch: r.branch } : {}),
+      ...(r.commitUrl ? { commitUrl: r.commitUrl } : {}),
+      replaced: facts.replaced,
+      ...(facts.region ? { region: facts.region } : {}),
+      ...(facts.excerpt ? { excerpt: facts.excerpt } : {}),
+    };
   }
   if (name === 'analyze_codebase') {
     if (!workdir) return { ok: false, error: 'no repository checked out' };
@@ -380,7 +454,7 @@ async function execTool(spec, workdir, writtenPaths, readMemo, name, parsed, pro
     const t0 = Date.now();
     const { exitCode, output } = await runShell(command, workdir, proc);
     await op(spec, { op: 'event', args: { toolName: 'run_command', category: 'tool', detail: { command, exitCode }, result: output.slice(0, 300), durationMs: Date.now() - t0 } }).catch(() => {});
-    return { ok: exitCode === 0, exitCode, output: output.slice(0, 20_000) };
+    return { ok: exitCode === 0, exitCode, output: commandOutput(spec, 'run_command', output) };
   }
   if (name.startsWith('git_')) {
     if (!workdir) return { ok: false, error: 'no repository checked out — git tools need a bound repo' };
@@ -425,7 +499,7 @@ async function gitTool(spec, workdir, proc, name, parsed) {
   const safe = (v) => (typeof v === 'string' && /^[\w./@-]+$/.test(v) ? v : null);
   const run = (cmd) => runShell(cmd, workdir, proc);
   const head = safe(spec.repo && spec.repo.headBranch) || 'HEAD';
-  const clip = (r) => ({ ok: r.exitCode === 0, exitCode: r.exitCode, output: r.output.slice(0, 20_000) });
+  const clip = (r) => ({ ok: r.exitCode === 0, exitCode: r.exitCode, output: commandOutput(spec, name, r.output) });
 
   if (name === 'git_status') return clip(await run('git status --short --branch'));
   if (name === 'git_diff') {
@@ -745,8 +819,11 @@ async function runLoop(spec) {
       // `CONTAINER_SURFACE_CAPS` the moment its Worker-side op exists rather than only
       // after every image has been rebuilt and deployed. An older image simply omits
       // the new name and is never offered the tool.
-      llm: (transcript) => op(spec, { op: 'llm', args: { messages: transcript, supportedTools: SUPPORTED_TOOL_NAMES, writtenPaths: [...writtenPaths] } }),
+      llm: (transcript) => op(spec, { op: 'llm', args: { messages: transcript, supportedTools: [...SUPPORTED_TOOL_NAMES, ...CONTAINER_LOCAL_TOOL_NAMES], writtenPaths: [...writtenPaths] } }),
       execTool: (name, parsed, loop) => execTool(spec, workdir, writtenPaths, readMemo, name, parsed, proc, loop),
+      // The C7 per-result budget on every tool row the model re-reads (logs summarized,
+      // large JSON projected). Off ⇒ plain JSON, as before.
+      toolResultPolicy: containerToolResultPolicy(spec),
       // A heartbeat may have observed a cancel (and killed an in-flight command)
       // since the last step — stop before spending another LLM call.
       isCancelled: () => cancelled,

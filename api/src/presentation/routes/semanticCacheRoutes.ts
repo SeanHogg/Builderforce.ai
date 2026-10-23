@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import { requireTenantAccess, respondToAccessError } from './llmRoutes';
 import { semanticInvalidate, semanticLookup, semanticStore } from '../../application/llm/semanticCache';
+import { cacheScopeKey, principalScope } from '../../application/llm/cacheScope';
 import { parseOptionalBody, z } from './requestBody';
 
 const DEFAULT_THRESHOLD = 0.92;
@@ -27,10 +28,19 @@ function sanitizeNamespace(ns: unknown): string {
   return ns.replace(/[^a-zA-Z0-9_.:-]/g, '_').slice(0, 64);
 }
 
-/** Cache answers never cross an authenticated principal or permission role. */
+/**
+ * Cache answers never cross an authenticated principal or permission role. The scope
+ * segment is THE one every answer cache uses (`cacheScope`), so this route, the
+ * gateway's own semantic step and the Q&A cache cannot disagree about who may read.
+ */
 function accessNamespace(access: Awaited<ReturnType<typeof requireTenantAccess>>, requested: unknown): string {
-  const principal = access.userId ? `user-${access.userId}` : access.agentHostId != null ? `host-${access.agentHostId}` : access.tenantApiKeyId ? `key-${access.tenantApiKeyId}` : 'anonymous';
-  return `${sanitizeNamespace(requested)}:${access.role}:${principal}`;
+  const principal = principalScope({
+    userId: access.userId ?? null,
+    agentHostId: access.agentHostId ?? null,
+    apiKeyId: access.tenantApiKeyId ?? null,
+    role: access.role ?? null,
+  });
+  return `${sanitizeNamespace(requested)}:${cacheScopeKey({ tenantId: access.tenantId, principal })}`;
 }
 
 export function createSemanticCacheRoutes(): Hono<HonoEnv> {

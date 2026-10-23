@@ -16,7 +16,7 @@
  * routing question but cost.
  */
 
-import { resolveModelTier, type CatalogView, type ModelPrice } from '@builderforce/model-catalog';
+import { resolveModelTier, withPriceTiers, type CatalogView, type ModelPrice } from '@builderforce/model-catalog';
 import { poolOrderIsCostFirst } from '@builderforce/model-router';
 import { isModelRole } from '@builderforce/agent-tools';
 import { isArcStage } from '@builderforce/workload';
@@ -104,12 +104,20 @@ export async function pricesForCall(env: Env, role: unknown, arcStage: unknown):
   return poolOrderIsCostFirst(workload) ? loadPriceBook(env) : undefined;
 }
 
-/** The registry view, optionally priced. */
+/**
+ * The registry view, optionally priced. Each price carries the model's long-context
+ * tiers (cost PRD C9, `withPriceTiers`), so cost-ordered routing prices a long request
+ * at the rate it will actually be billed at, not the flat catalog rate below the step.
+ */
 export function registryCatalogView(prices: PriceBook = EMPTY_PRICE_BOOK): CatalogView {
+  const tieredPriceOf = (model: string): ModelPrice | undefined => {
+    const flat = prices.priceOf(model);
+    return flat ? withPriceTiers(model, flat) : undefined;
+  };
   return {
     vendorOf: vendorForModel,
     tierOf: (model) => resolveModelTier({ catalogTier: tierForModel(model), price: prices.priceOf(model) }),
-    priceOf: (model) => prices.priceOf(model),
+    priceOf: tieredPriceOf,
     residencyOf: (model) => (vendorRequiresLocalEgress(vendorForModel(model)) ? 'local' : 'cloud'),
   };
 }

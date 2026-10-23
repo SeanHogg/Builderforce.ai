@@ -11,6 +11,8 @@
  *   • `actionTypes`        — the closed action-type vocabulary + the kill switch
  *   • `modelQualityScore`  — outcome/rating blend + the rate-limit availability test
  *   • `rankModels`         — `rankModelsForAction`, the pure re-ranker
+ *   • `exploration`        — Thompson draws + the capped cold-model slot (D3)
+ *   • `recencyDecay`       — the ONE routing half-life and decayed running means (D3)
  *   • `roleModels`         — role → catalog model id from config (documented default)
  *   • `routingScope`       — `project:<id> | tenant:<id> | global` and its token
  *   • `runOutcomeContract` — the `POST /llm/v1/run-outcome` body + its parser
@@ -46,6 +48,25 @@ export {
   type ActionModelRankStat,
   type RankModelsOptions,
 } from './rankModels.js';
+
+export {
+  DEFAULT_COLD_EXPLORATION_SHARE,
+  posteriorEvidence,
+  sampleQuality,
+  shouldExploreCold,
+  type DecayedEvidence,
+  type RandomSource,
+  type RoutingExploration,
+} from './exploration.js';
+
+export {
+  DECAYED_WINDOW_DAYS,
+  ROUTING_HALF_LIFE_DAYS,
+  decaySince,
+  decayWeight,
+  foldDecayedMean,
+  type DecayedMean,
+} from './recencyDecay.js';
 
 export {
   ROLE_MODELS_ENV,

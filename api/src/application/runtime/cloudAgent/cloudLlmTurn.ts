@@ -35,7 +35,12 @@ import {
 } from './cloudRunModelPolicy';
 import { emitCodingModelDegraded, hasVendorKeys, refuseCloudRunWithoutByo, requestedModelForRole } from './routing';
 import type { ContainerRunContext } from './runContext';
+import { cloudOutputCap, cloudReasoningExecParams, cloudRoutingExploration } from '../costLoop/runLevers';
 import { strictWhenConnected } from '../../llm/fundingOrder';
+import type { LlmUsage } from '../../llm/proxyTypes';
+import {
+  CONTEXT_CATEGORIES_KEY, contextCategoryTokens, type ContextCategoryTokens, type TurnInput,
+} from '../../costMetrics/contextCategories';
 
 export async function recordCloudUsage(
   env: Env,
@@ -43,6 +48,17 @@ export async function recordCloudUsage(
   args: {
     tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number;
     projectId?: number | null; model: string; inputTokens: number; outputTokens: number;
+    /** Provider-reported prompt-cache tiers (subsets of `inputTokens`). Dropping them
+     *  priced every cloud turn as fully uncached — the 0.1× read / 1.25× write
+     *  multipliers never applied. Absent = the upstream reported no cache split. */
+    cacheReadTokens?: number; cacheCreationTokens?: number;
+    /** Provider-reported reasoning tokens (subset of `outputTokens`); absent = no split. */
+    reasoningTokens?: number;
+    /** 1-based turn in the run's loop, and the ESTIMATED tool-schema / per-category
+     *  input tokens of that turn (A1 telemetry). */
+    turnIndex?: number | null;
+    toolSchemaTokens?: number | null;
+    context?: ContextCategoryTokens | null;
     byo?: boolean; byoProvider?: string | null;
     /** What kind of call this turn was — the parent loop's own turn is `code`, a
      *  `spawn_agent` child carries its delegation role. Stamped onto the usage row. */
@@ -64,13 +80,24 @@ export async function recordCloudUsage(
   // second `usage_snapshots` copy of the same tokens would only be 100+ MB of duplicates.
   const inputTokens = clampTokenCount(args.inputTokens);
   const outputTokens = clampTokenCount(args.outputTokens);
+  const usage: LlmUsage = {
+    promptTokens: inputTokens, completionTokens: outputTokens, totalTokens: inputTokens + outputTokens,
+    ...(args.cacheReadTokens     != null ? { cacheReadTokens:     args.cacheReadTokens }     : {}),
+    ...(args.cacheCreationTokens != null ? { cacheCreationTokens: args.cacheCreationTokens } : {}),
+    ...(args.reasoningTokens     != null ? { reasoningTokens:     args.reasoningTokens }     : {}),
+  };
   await recordUsageRow(db, env, {
     tenantId:   args.tenantId,
     userId:     null,
     llmProduct: 'builderforceLLM',
     model:      args.model,
-    usage:      { promptTokens: inputTokens, completionTokens: outputTokens, totalTokens: inputTokens + outputTokens },
-    metadata:   { engine: 'cloud', executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null, phase: args.phase ?? null },
+    usage,
+    metadata:   {
+      engine: 'cloud', executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null, phase: args.phase ?? null,
+      ...(args.context ? { [CONTEXT_CATEGORIES_KEY]: args.context } : {}),
+    },
+    turnIndex:        args.turnIndex ?? null,
+    toolSchemaTokens: args.toolSchemaTokens ?? null,
     useCase:    'task_execution',
     // Attribute the spend to the run's cloud agent + ticket + project so cost
     // rolls up ticket → project → account (0104 / 0103).
@@ -122,6 +149,20 @@ interface CloudLlmTurnCtx {
   role?: ModelRole;
   /** Policy phase of this turn, stamped on the usage row so verify is its own line. */
   phase?: string | null;
+  /** What this turn SENT (messages + advertised tools), for the A1 per-turn telemetry:
+   *  tool-schema tokens and the context-by-category split are estimated from it here,
+   *  once, for both loops. Absent ⇒ those fields are recorded as not measured. */
+  turnInput?: TurnInput;
+  /** The loop's own tool-schema token figure, when it already computed one — wins
+   *  over the estimate from `turnInput.tools`. */
+  toolSchemaTokens?: number | null;
+}
+
+/** The A1 per-turn measurements derived from what a turn sent. */
+function turnTelemetry(rc: Pick<CloudLlmTurnCtx, 'turnInput' | 'toolSchemaTokens'>): { toolSchemaTokens: number | null; context: ContextCategoryTokens | null } {
+  const context = rc.turnInput ? contextCategoryTokens(rc.turnInput) : null;
+  const tools = rc.toolSchemaTokens ?? context?.tools ?? null;
+  return { toolSchemaTokens: tools, context: context && tools != null ? { ...context, tools } : context };
 }
 
 /**
@@ -182,6 +223,13 @@ export async function recordCloudLlmTurn(
       ...(rc.phase ? { phase: rc.phase } : {}),
       ...(rc.effectivePlan ? { effectivePlan: rc.effectivePlan, premiumOverride: rc.premiumOverride ?? false } : {}),
       inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
+      // Provider-reported cache + reasoning tiers ride through untouched (defect 1).
+      ...(result.usage.cacheReadTokens     != null ? { cacheReadTokens:     result.usage.cacheReadTokens }     : {}),
+      ...(result.usage.cacheCreationTokens != null ? { cacheCreationTokens: result.usage.cacheCreationTokens } : {}),
+      ...(result.usage.reasoningTokens     != null ? { reasoningTokens:     result.usage.reasoningTokens }     : {}),
+      // The kernel's `step` is 0-based; the ledger column is the 1-based turn number.
+      turnIndex: opts.step != null ? opts.step + 1 : null,
+      ...turnTelemetry(rc),
       byo: result.byoFunded ?? false,
       byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
       platformSurcharge: result.platformSurcharge,
@@ -315,6 +363,8 @@ export async function imageRunTurn(
       role: pickRole,
       // A cost-first role (explore / utility / verify) orders by expected cost.
       prices: await pricesForCall(env, pickRole, undefined),
+      // D3: Thompson exploration on the soft seed while the lever is on for this tenant.
+      explore: cloudRoutingExploration(env, tenantId),
       // Context-aware seed: a small-window model isn't picked for a big turn.
       estimatedTokens: estimateRequestTokens(args.messages, args.tools),
       byoVendors,
@@ -339,25 +389,31 @@ export async function imageRunTurn(
     ...byoRoutingOptions(creds),
     ...strictWhenConnected(creds.configuredProviders.length > 0),
   });
-  const turnRun = await completeUnderRunPolicy(modelState, (req) => proxy.complete({
-    messages: args.messages as unknown as ChatMessage[], tools: args.tools,
-    ...turnRequestFields(req),
-    // Personality temperature — parity with the Worker/DO loop.
-    ...(ctx.execParams.temperature != null ? { temperature: ctx.execParams.temperature } : {}),
-    // Personality reasoning levers (thinkLevel/reasoningLevel) → the CORRECT vendor
-    // param for THIS model family (Anthropic `thinking` / OpenAI `reasoning_effort`),
-    // or nothing for a model that doesn't support one (reasoningCapability drops it).
-    // Only on a STRICT pin: an unpinned model may cascade to a different vendor that
-    // would reject the param, so we attach it solely when the resolved model is fixed.
-    // First-turn detection: no assistant turn yet in this slice.
-    ...(req.strict
-      ? reasoningParamsForModel(req.model, ctx.execParams, {
-          isFirstTurn: !args.messages.some((m) => (m as { role?: string }).role === 'assistant'),
-        }) ?? {}
-      : {}),
-    useCase: 'task_execution',
-    prompt_cache_key: `cloud:${executionId}`,
-  }, undefined, undefined, args.signal), (outcome) => recordModelCascade(db, { tenantId, cloudAgentRef, executionId }, outcome));
+  const turnRun = await completeUnderRunPolicy(modelState, (req) => {
+    // D5: the per-role reply cap — parity with the durable loop's session cap.
+    const maxTokens = cloudOutputCap(env, tenantId, req.role, undefined);
+    return proxy.complete({
+      messages: args.messages as unknown as ChatMessage[], tools: args.tools,
+      ...turnRequestFields(req),
+      ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
+      // Personality temperature — parity with the Worker/DO loop.
+      ...(ctx.execParams.temperature != null ? { temperature: ctx.execParams.temperature } : {}),
+      // Personality reasoning levers (thinkLevel/reasoningLevel) → the CORRECT vendor
+      // param for THIS model family (Anthropic `thinking` / OpenAI `reasoning_effort`),
+      // or nothing for a model that doesn't support one (reasoningCapability drops it).
+      // Only on a STRICT pin: an unpinned model may cascade to a different vendor that
+      // would reject the param, so we attach it solely when the resolved model is fixed.
+      // First-turn detection: no assistant turn yet in this slice.
+      // D4: with no persona level, the turn role's default effort while the lever is on.
+      ...(req.strict
+        ? reasoningParamsForModel(req.model, cloudReasoningExecParams(env, tenantId, ctx.execParams, req.role), {
+            isFirstTurn: !args.messages.some((m) => (m as { role?: string }).role === 'assistant'),
+          }) ?? {}
+        : {}),
+      useCase: 'task_execution',
+      prompt_cache_key: `cloud:${executionId}`,
+    }, undefined, undefined, args.signal);
+  }, (outcome) => recordModelCascade(db, { tenantId, cloudAgentRef, executionId }, outcome));
   // Shared post-`complete` processing (metering + telemetry) — identical to the
   // in-Worker loop, so a child's tokens are the tenant's tokens and a delegation that
   // quietly billed to nobody cannot happen.
@@ -367,6 +423,7 @@ export async function imageRunTurn(
     effectivePlan: ctx.effectivePlan, premiumOverride: ctx.premiumOverride,
     role: cloudRunRole(role),
     phase: turnRun.state.policy.phase,
+    turnInput: { messages: args.messages, tools: args.tools },
   }, { tGen0, notify: args.notify });
   if (!turn.ok) return { ok: false, error: turn.error, modelState: turnRun.state };
   return {

@@ -157,6 +157,7 @@ export async function tenantProxyForPlan(
   const registeredModels = creds.registeredModels ?? [];
 
   const proxy = llmProxyForPlan(env, plan.effectivePlan, plan.premiumOverride, {
+    tenantId,
     ...(opts?.codingOnly ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
     ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
     ...(creds.anthropicOAuthToken ? { anthropicOAuthToken: creds.anthropicOAuthToken } : {}),
@@ -230,6 +231,8 @@ export interface CompleteForTenantOptions {
   explicitModel?: string | null;
   traceId?: string;
   userId?: string | null;
+  /** The project the call is about — narrows the response-cache scope (`cacheScope.ts`). */
+  projectId?: number | null;
 }
 
 /**
@@ -261,7 +264,15 @@ export async function completeForTenant(
     undefined,
     opts?.traceId,
     undefined,
-    { responseCache: { tenantId } },
+    {
+      // THE cache scope: the person the call acts for (absent = tenant-internal) and the
+      // project it is about, so one principal's answer is never replayed to another.
+      responseCache: {
+        tenantId,
+        ...(opts?.userId ? { principal: { userId: opts.userId } } : {}),
+        ...(opts?.projectId != null ? { projectId: opts.projectId } : {}),
+      },
+    },
   );
   // A cache HIT dispatched nothing, so metering it would invent spend that did not
   // happen and inflate every per-model and per-tenant rollup that sums these rows.
@@ -274,18 +285,32 @@ export async function completeForTenant(
     });
   }
   // ...but it DID save the call it replayed, priced from the original call's own usage.
-  if (result.outcome === 'response_cache_hit' && result.cachedUsage) {
-    void recordAvoidedCall(buildDatabase(env), env, {
-      tenantId,
-      userId: opts?.userId ?? null,
-      source: 'response_cache',
-      model: result.resolvedModel,
-      promptTokens: result.cachedUsage.promptTokens,
-      completionTokens: result.cachedUsage.completionTokens,
-      estimated: false,
-    });
-  }
+  void recordCacheHitSaving(env, { tenantId, userId: opts?.userId ?? null, projectId: opts?.projectId ?? null }, result);
   return result;
+}
+
+/**
+ * A `response_cache_hit` dispatched nothing, so it is never metered as spend — but it
+ * DID save the call it replayed, priced from the original call's own usage. THE one
+ * recorder of that saving for every door that offers the response cache (this seam and
+ * `/v1/chat/completions`). No-op on anything but a hit carrying its upstream usage.
+ */
+export function recordCacheHitSaving(
+  env: Env,
+  who: { tenantId: number; userId?: string | null; projectId?: number | null },
+  result: ProxyResult,
+): Promise<void> | undefined {
+  if (result.outcome !== 'response_cache_hit' || !result.cachedUsage) return undefined;
+  return recordAvoidedCall(buildDatabase(env), env, {
+    tenantId: who.tenantId,
+    userId: who.userId ?? null,
+    ...(who.projectId != null ? { projectId: who.projectId } : {}),
+    source: 'response_cache',
+    model: result.resolvedModel,
+    promptTokens: result.cachedUsage.promptTokens,
+    completionTokens: result.cachedUsage.completionTokens,
+    estimated: false,
+  });
 }
 
 /**

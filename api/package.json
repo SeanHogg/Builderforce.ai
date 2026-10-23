@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.10.65",
+  "version": "2026.10.66",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -60,7 +60,9 @@
     "gen:agent-relay": "node scripts/gen-agent-relay-source.mjs",
     "check:agent-relay": "node scripts/gen-agent-relay-source.mjs --check",
     "gen:agent-loop": "node scripts/gen-agent-loop-bundle.mjs",
-    "check:agent-loop": "node scripts/gen-agent-loop-bundle.mjs --check"
+    "check:agent-loop": "node scripts/gen-agent-loop-bundle.mjs --check",
+    "gen:container-shared": "node scripts/gen-container-shared.mjs",
+    "check:container-shared": "node scripts/gen-container-shared.mjs --check"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

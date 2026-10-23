@@ -41,6 +41,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
 import { stableStringify } from '@builderforce/agent-tools';
+import { cacheScopeKey, TENANT_PRINCIPAL, type CacheScope } from './cacheScope';
 
 /**
  * The narrow env slice this needs. Widened from `Env` on purpose: the LLM proxy runs
@@ -83,6 +84,12 @@ const RESPONSE_CACHE_TTL_SECONDS = 15 * 60;
 
 export interface ResponseCacheKeyParts {
   tenantId: number;
+  /**
+   * Who the cached answer may be replayed to (see `cacheScope`). Absent = the
+   * tenant-internal principal — the scope this cache has always had for the
+   * classify/extract/score family, which acts for no person.
+   */
+  scope?: Omit<CacheScope, 'tenantId'>;
   /** The model as REQUESTED, not as resolved — a cascade may land elsewhere, and two
    *  requests that asked for different models are different questions. */
   model: string | undefined;
@@ -107,7 +114,8 @@ export async function responseCacheKey(parts: ResponseCacheKeyParts): Promise<st
     topP: parts.topP,
     responseFormat: parts.responseFormat,
   });
-  return `respcache:${parts.tenantId}:${await sha256Hex(canonical)}`;
+  const scope = cacheScopeKey({ principal: TENANT_PRINCIPAL, ...parts.scope, tenantId: parts.tenantId });
+  return `respcache:${scope}:${await sha256Hex(canonical)}`;
 }
 
 export interface CacheEligibilityInput {
@@ -115,6 +123,24 @@ export interface CacheEligibilityInput {
   temperature: number | null | undefined;
   hasTools: boolean;
   streaming: boolean;
+  /** The temperature ceiling for THIS tier. Defaults to {@link MAX_CACHEABLE_TEMPERATURE};
+   *  the semantic tier allows a little more (its match is already approximate). */
+  maxTemperature?: number;
+}
+
+/**
+ * The eligibility fields of a chat-completion body. ONE reading of "does this request
+ * carry tools / stream / a use case / a temperature", for every cache tier that gates
+ * on it — the body is untyped at this seam, so each tier re-deriving it was a drift risk.
+ */
+export function cacheEligibilityOf(body: unknown): CacheEligibilityInput {
+  const b = (body ?? {}) as { useCase?: unknown; temperature?: unknown; tools?: unknown; stream?: unknown };
+  return {
+    useCase: typeof b.useCase === 'string' ? b.useCase : null,
+    temperature: typeof b.temperature === 'number' ? b.temperature : null,
+    hasTools: Array.isArray(b.tools) && b.tools.length > 0,
+    streaming: b.stream === true,
+  };
 }
 
 /**
@@ -128,7 +154,7 @@ export interface CacheEligibilityInput {
 export function isCacheableRequest(input: CacheEligibilityInput): boolean {
   if (input.streaming || input.hasTools) return false;
   if (!input.useCase || !CACHEABLE_USE_CASES.has(input.useCase)) return false;
-  if (input.temperature != null && input.temperature > MAX_CACHEABLE_TEMPERATURE) return false;
+  if (input.temperature != null && input.temperature > (input.maxTemperature ?? MAX_CACHEABLE_TEMPERATURE)) return false;
   return true;
 }
 
@@ -166,9 +192,11 @@ export async function storeCachedResponse(
   env: ResponseCacheEnv,
   key: string,
   value: Omit<CachedResponse, 'at'>,
+  /** Override the exact tier's TTL — the semantic tier keeps its bodies as long as its index. */
+  ttlSeconds: number = RESPONSE_CACHE_TTL_SECONDS,
 ): Promise<void> {
   try {
-    await setCached(asEnv(env), key, { ...value, at: Date.now() }, { kvTtlSeconds: RESPONSE_CACHE_TTL_SECONDS });
+    await setCached(asEnv(env), key, { ...value, at: Date.now() }, { kvTtlSeconds: ttlSeconds });
   } catch (error) {
     // Best-effort: a failed store costs a future cache miss and nothing else, so it
     // must never propagate into the request that just succeeded.

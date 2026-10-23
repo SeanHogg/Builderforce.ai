@@ -98,3 +98,23 @@ describe('createHandoffFit', () => {
     expect(packed.length).toBeLessThan(msgs.length);
   });
 });
+
+describe('packForModel — long-context price tier (cost PRD C9)', () => {
+  // ~130K input tokens: inside a 1M window, past claude-haiku-5-5's 100K price boundary.
+  const long = (): ChatCompletionMessage[] => [
+    { role: 'user', content: 'Add the avatar filter.' },
+    ...Array.from({ length: 26 }, (): ChatCompletionMessage => ({ role: 'assistant', content: 'X'.repeat(20_000) })),
+    { role: 'user', content: 'Now wire it into the board.' },
+  ];
+
+  it('packs a tiered model under its lowest price boundary instead of filling the window', async () => {
+    const { pack } = await packForModel({ messages: long(), to: 'anthropic/claude-haiku-5-5', contextTokens: 1_000_000, timeoutMs: 50 });
+    expect(pack.dropped).toBeGreaterThan(0);
+    expect(pack.estimatedTokens).toBeLessThanOrEqual(100_000);
+  });
+
+  it('fills the window as before for a flat-priced model', async () => {
+    const { pack } = await packForModel({ messages: long(), to: 'local/webllm/Qwen3-1.7B-q4f16_1-MLC', contextTokens: 1_000_000, timeoutMs: 50 });
+    expect(pack.dropped).toBe(0);
+  });
+});

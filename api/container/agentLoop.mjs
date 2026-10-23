@@ -9,7 +9,7 @@
  * Regenerate with `node scripts/gen-agent-loop-bundle.mjs` (from `api/`).
  * `--check` fails the build when the kernel source no longer matches the hash below.
  *
- * @source-sha256 7ba69cc8b842f53e05746f9bfb2f3cdf00347bae8c5104bc59679e2bd31cd84a
+ * @source-sha256 7094ea85384f87868aa181ec190a6e462800385da0eddf77c40d772564f4d9dd
  */
 // ── types.ts ──
 /**
@@ -438,11 +438,25 @@ function toOpenAiToolCall(call) {
     return { id: call.id, type: "function", function: { name: call.name, arguments: call.arguments?.trim() ? call.arguments : "{}" } };
 }
 const defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
+function resolveSerializer(opts) {
+    if (typeof opts === "function")
+        return opts;
+    if (opts?.serialize)
+        return opts.serialize;
+    const policy = opts?.toolResultPolicy;
+    if (policy)
+        return (result, call) => policy(call.name, result.data ?? null);
+    return defaultToolRowSerializer;
+}
 /**
  * `M` is the surface's row type; it must be assignable FROM the assistant/tool rows
  * above (an `Array<Record<string, unknown>>` transcript qualifies).
+ *
+ * Takes the surface's serializer directly (the long-standing form), or options — where
+ * `toolResultPolicy` opts the surface into the shared per-result budget.
  */
-export function openAiChatCodec(serialize = defaultToolRowSerializer) {
+export function openAiChatCodec(serializeOrOptions) {
+    const serialize = resolveSerializer(serializeOrOptions);
     return {
         assistant(turn) {
             const row = {

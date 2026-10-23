@@ -5,7 +5,9 @@
  */
 
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { isCacheableRequest, responseCacheKey, readCachedResponse, storeCachedResponse } from './responseCache';
+import { cacheEligibilityOf, isCacheableRequest, responseCacheKey, readCachedResponse, storeCachedResponse } from './responseCache';
+import { principalScope } from './cacheScope';
+import type { ResponseCacheGrant } from './semanticChatCache';
 import type { VendorId } from './vendors';
 import type { ChatCompletionRequest, LlmUsage, ProxyEnv, ProxyResult } from './proxyTypes';
 
@@ -38,28 +40,22 @@ function cachedUsageOf(body: unknown): LlmUsage | undefined {
  */
 export async function responseCacheKeyFor(
   body: ChatCompletionRequest,
-  cacheTenantId: number | undefined,
+  grant: ResponseCacheGrant | undefined,
 ): Promise<string | null> {
-  const cacheable = cacheTenantId != null && isCacheableRequest({
-    useCase: typeof (body as unknown as { useCase?: unknown }).useCase === 'string'
-      ? (body as unknown as { useCase: string }).useCase : null,
-    temperature: typeof (body as { temperature?: unknown }).temperature === 'number'
-      ? (body as { temperature: number }).temperature : null,
-    hasTools: Array.isArray((body as unknown as { tools?: unknown }).tools)
-      && ((body as unknown as { tools: unknown[] }).tools.length > 0),
-    streaming: (body as { stream?: unknown }).stream === true,
+  if (!grant || !isCacheableRequest(cacheEligibilityOf(body))) return null;
+  const b = body as { model?: unknown; messages?: unknown; max_tokens?: number; temperature?: number; top_p?: number; response_format?: unknown };
+  return responseCacheKey({
+    tenantId: grant.tenantId,
+    // THE scope (`cacheScope.ts`): an answer produced for one principal / project is
+    // never replayed to another. No principal = the tenant-internal one.
+    scope: { projectId: grant.projectId ?? null, principal: principalScope(grant.principal) },
+    model: typeof b.model === 'string' ? b.model : undefined,
+    messages: b.messages,
+    maxTokens: b.max_tokens,
+    temperature: b.temperature,
+    topP: b.top_p,
+    responseFormat: b.response_format,
   });
-  return cacheable
-    ? await responseCacheKey({
-        tenantId: cacheTenantId,
-        model: typeof (body as { model?: unknown }).model === 'string' ? (body as { model: string }).model : undefined,
-        messages: (body as { messages?: unknown }).messages,
-        maxTokens: (body as { max_tokens?: number }).max_tokens,
-        temperature: (body as { temperature?: number }).temperature,
-        topP: (body as { top_p?: number }).top_p,
-        responseFormat: (body as { response_format?: unknown }).response_format,
-      })
-    : null;
 }
 
 /** A cache hit as an (un-finalized) ProxyResult, or null on a miss. */

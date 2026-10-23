@@ -13,7 +13,7 @@
  * the pool's latency order. Pure.
  */
 
-import { rankModelsForAction, type ActionModelRankStat } from '@builderforce/learned-routing';
+import { rankModelsForAction, type ActionModelRankStat, type RoutingExploration } from '@builderforce/learned-routing';
 import type { CatalogView } from '@builderforce/model-catalog';
 import type { WorkloadProfile } from '@builderforce/workload';
 import { orderByExpectedCost } from './expectedCost.js';
@@ -26,6 +26,8 @@ export interface PoolEvidence {
   /** Learned per-model stats for this call's role. */
   stats?: ReadonlyArray<ActionModelRankStat>;
   minSamples?: number;
+  /** Thompson exploration (cost PRD D3) — see {@link RankConnectedOptions.explore}. */
+  explore?: RoutingExploration;
 }
 
 /** Does this workload reorder a plan pool by price? Lets a host skip loading prices. */
@@ -41,5 +43,8 @@ export function orderPoolForWorkload(
 ): string[] {
   const ordered = poolOrderIsCostFirst(workload) ? orderByExpectedCost(pool, workload, view) : [...pool];
   if (!evidence.stats || !roleUsesLearnedRanking(workload.role, workload.arcStage)) return ordered;
-  return rankModelsForAction(ordered, evidence.stats, { minSamples: evidence.minSamples });
+  return rankModelsForAction(ordered, evidence.stats, {
+    minSamples: evidence.minSamples,
+    ...(evidence.explore ? { explore: evidence.explore } : {}),
+  });
 }

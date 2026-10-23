@@ -24,7 +24,7 @@ import { xaiOAuthModule } from './xaiOAuth';
 import { openAICompatibleModules, openAICompatibleModulesById } from './openaiCompatibleVendors';
 import { registerSchemaDialectResolver } from '../jsonSchemaSanitize';
 import { registerStrictShapeResolver } from '../messageShapeSanitizer';
-import { reasoningParamsForModel } from '../reasoningCapability';
+import { reasoningIntentOpts, reasoningParamsForModel } from '../reasoningCapability';
 import { declaredAttemptTimeoutMs, resolveAttemptTimeoutMs } from './attemptTimeout';
 import { ModelInputUnsupportedError, entryRefusesImages, requestCarriesImages } from './capabilityGate';
 import {
@@ -626,8 +626,14 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
     // speaks the OpenAI shape and correctly resolves to nothing. A family with no
     // reasoning support yields `undefined` → this attempt's body is untouched, so
     // the conservative "drop when unknown" default survives on every failover hop.
+    // An OpenRouter hop is named by its upstream slug so the catalog-driven
+    // `reasoning: { effort }` check (cost PRD D4) can see it; every other hop keeps
+    // classifying on the chain id alone.
     const reasoningParams = reasoningIntent
-      ? reasoningParamsForModel(model, reasoningIntent.execParams, { isFirstTurn: reasoningIntent.isFirstTurn })
+      ? reasoningParamsForModel(model, reasoningIntent.execParams, {
+          ...reasoningIntentOpts(reasoningIntent),
+          ...(vendorId === 'openrouter' ? { openRouterSlug: vendorModel } : {}),
+        })
       : undefined;
 
     // Without this gate every candidate in every cascade would be tunnelled through

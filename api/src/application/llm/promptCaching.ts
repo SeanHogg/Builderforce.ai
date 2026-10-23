@@ -49,6 +49,27 @@ function markerForTtl(ttl: CacheTtl | undefined): Record<string, unknown> {
 type Msg = Record<string, unknown>;
 
 /**
+ * Opening tag of a loop's per-turn VOLATILE block (cost lever B1): the affect block,
+ * budget line and task state a cloud run sends AFTER its history, outside the cached
+ * prefix. A message or block that starts with it is never given the history
+ * breakpoint — the breakpoint goes on the one before it, so the next turn reads the
+ * whole stable prefix from the cache instead of missing on bytes that change every
+ * turn. Shared by the OpenRouter placer below and the direct Anthropic vendor.
+ */
+export const VOLATILE_TAIL_TAG = '<run-state>';
+
+/** Does this OpenAI-format message carry the volatile tail (string or first text part)? */
+function isVolatileTailMessage(msg: Msg): boolean {
+  const content = (msg as { content?: unknown }).content;
+  if (typeof content === 'string') return content.startsWith(VOLATILE_TAIL_TAG);
+  if (Array.isArray(content)) {
+    const first = (content as Array<Record<string, unknown>>).find((p) => p?.type === 'text');
+    return typeof first?.text === 'string' && first.text.startsWith(VOLATILE_TAIL_TAG);
+  }
+  return false;
+}
+
+/**
  * Anthropic family reached through the gateway — the only upstreams that require
  * an explicit `cache_control` marker to cache. OpenRouter catalog ids are
  * `anthropic/...`; the `claude` substring also covers a caller-pinned id that
@@ -131,10 +152,13 @@ export function applyPromptCaching(messages: Array<Msg>, model: string, ttl?: Ca
   if (lastSystem >= 0) marks.add(lastSystem);
 
   // (2) The latest user/assistant turn that can carry a marker — walking back
-  // past tool turns and past an assistant tool-call turn with no text.
+  // past tool turns, past an assistant tool-call turn with no text, and past the
+  // per-turn volatile tail (B1), whose bytes change every turn and would make the
+  // breakpoint miss; the marker lands on the stable message before it instead.
   for (let i = messages.length - 1; i > lastSystem; i--) {
     const role = (messages[i] as { role?: unknown }).role;
     if (role !== 'user' && role !== 'assistant') continue;
+    if (isVolatileTailMessage(messages[i]!)) continue;
     if (withCacheControl(messages[i]!, marker) === messages[i]) continue; // nothing markable
     marks.add(i);
     break;

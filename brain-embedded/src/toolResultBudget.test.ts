@@ -122,3 +122,26 @@ describe('trimToolResult · every other tool keeps the generic head slice', () =
     expect(shown.matches).toEqual([]);
   });
 });
+
+describe('trimToolResult · the C7 lever (shared tool-output policy)', () => {
+  const rows = Array.from({ length: 352 }, (_, i) => ({ id: i, title: `task ${i}`, description: 'd'.repeat(40) }));
+
+  it('lever off: the legacy head slice', () => {
+    const t = trimToolResult('builtin_tasks_list', rows, { summarize: false });
+    expect(t.content).toContain('The full result had 352 items');
+    expect(t.content).not.toContain('projected to fit');
+  });
+
+  it('lever on: large JSON is projected — every key kept, the cut rows counted', () => {
+    const t = trimToolResult('builtin_tasks_list', { total: 352, rows }, { summarize: true });
+    expect(t.truncated).toBe(true);
+    expect(t.content).toContain('"total":352');
+    expect(t.content).toContain('more of 352 items');
+    expect(t.content.length).toBeLessThanOrEqual(MAX_TOOL_RESULT_CHARS);
+  });
+
+  it('lever on: the advisory still rides on a projected result', () => {
+    const t = trimToolResult('search_code', rows, { summarize: true, advisory: 'you have read this 3 times' });
+    expect(t.content.endsWith('you have read this 3 times')).toBe(true);
+  });
+});

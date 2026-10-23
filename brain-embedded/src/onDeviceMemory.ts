@@ -31,7 +31,7 @@
  * projects from sharing an answer.
  */
 
-import type { AnswerOriginCost, EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
+import type { AnswerFileAnchor, AnswerOriginCost, EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
 
 /**
  * The on-device answer store, as a port. Structurally satisfied by the
@@ -138,15 +138,22 @@ export function composeEvermindHooks(
       : {}),
     ...(caching.length
       ? {
-          cacheAnswer: (query: string, answer: string, origin?: AnswerOriginCost) => {
+          cacheAnswer: (query: string, answer: string, origin?: AnswerOriginCost, fileAnchors?: AnswerFileAnchor[]) => {
+            // Forward only the arguments the turn supplied, so a tier that takes two
+            // arguments sees exactly two; `fileAnchors` without an `origin` keeps its
+            // fourth position (an explicit `undefined` origin) so the server tier can
+            // still anchor the cached answer to the files the turn read.
+            const args: Parameters<NonNullable<EvermindRunHooks['cacheAnswer']>> = fileAnchors?.length
+              ? [query, answer, origin, fileAnchors]
+              : origin
+                ? [query, answer, origin]
+                : [query, answer];
             for (const layer of caching) {
               // try/catch AND .catch: a tier can fail synchronously (a store that
               // throws on construction) or asynchronously, and either way the tiers
               // after it must still be written.
               try {
-                // Pass `origin` only when there is one, so a tier that takes two arguments
-                // sees exactly two.
-                void Promise.resolve(origin ? layer.cacheAnswer?.(query, answer, origin) : layer.cacheAnswer?.(query, answer)).catch(() => { /* best-effort */ });
+                void Promise.resolve(layer.cacheAnswer?.(...args)).catch(() => { /* best-effort */ });
               } catch {
                 /* best-effort per layer */
               }

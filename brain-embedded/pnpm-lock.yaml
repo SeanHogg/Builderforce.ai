@@ -30,6 +30,9 @@ importers:
       '@builderforce/agent-tools':
         specifier: link:../packages/agent-tools
         version: link:../packages/agent-tools
+      '@builderforce/cost-levers':
+        specifier: link:../packages/cost-levers
+        version: link:../packages/cost-levers
       '@builderforce/learned-routing':
         specifier: link:../packages/learned-routing
         version: link:../packages/learned-routing
@@ -48,6 +51,9 @@ importers:
       '@builderforce/spend-contract':
         specifier: link:../packages/spend-contract
         version: link:../packages/spend-contract
+      '@builderforce/tool-output-policy':
+        specifier: link:../packages/tool-output-policy
+        version: link:../packages/tool-output-policy
       '@builderforce/workload':
         specifier: link:../packages/workload
         version: link:../packages/workload

@@ -220,7 +220,8 @@ describe("installSessionToolResultGuard", () => {
 
     const text = getToolResultText(getPersistedMessages(sm));
     expect(text.length).toBeLessThan(500_000);
-    expect(text).toContain("truncated");
+    expect(text.length).toBeLessThanOrEqual(400_000);
+    expect(text).toContain("truncated during persistence");
   });
 
   it("does not truncate tool results under the limit", () => {

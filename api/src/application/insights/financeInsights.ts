@@ -3,15 +3,15 @@
  *
  * Cost is already attributed (ticket→project→tenant, cache-aware, paid-overflow
  * flagged) — this turns *cost* into *FinOps*: spend rollup, budget-vs-actual,
- * a linear month-end forecast, overspend status, and cost-per-merged-PR (joining
- * `run_model_outcomes`). The math ({@link projectMonthlyBurn},
+ * a linear month-end forecast, overspend status, and cost-per-merged-PR (each merged
+ * run's own spend — `costMetrics/tenantCostSummary`). The math ({@link projectMonthlyBurn},
  * {@link budgetStatus}) is pure for unit testing; the route caches the rollup.
  */
 
 import { and, eq, gte, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { budgets, initiatives, llmUsageLog, projects, runModelOutcomes } from '../../infrastructure/database/schema';
-import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
+import { budgets, initiatives, llmUsageLog, projects } from '../../infrastructure/database/schema';
+import { tenantCostSummary } from '../costMetrics/costMetricsService';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { usageDatabaseOf } from '../llm/usageLedger';
 
@@ -168,13 +168,13 @@ export async function computeFinanceInsights(
     if (initiativeId != null) usdByInitiative.set(initiativeId, (usdByInitiative.get(initiativeId) ?? 0) + p.usd);
   }
 
-  // ── cost-per-merged-PR (join run_model_outcomes for the period) ────────────
-  const [outcomeAgg] = await runTelemetryDatabase(db)
-    .select({ merged: sql<string>`coalesce(sum(case when ${runModelOutcomes.merged} then 1 else 0 end),0)` })
-    .from(runModelOutcomes)
-    .where(and(eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, start), lt(runModelOutcomes.createdAt, end)));
-  const mergedRuns = num(outcomeAgg?.merged);
-  const costPerMergedPrUsd = mergedRuns > 0 ? spendUsd / mergedRuns : null;
+  // ── cost-per-merged-PR — each MERGED run's own attributed spend (usage rows
+  // execution_id ⋈ run_model_outcomes) ÷ merged runs, the A4 cost-metrics reading.
+  // Never window spend ÷ merges, which charged every chat, sweep and failed run to the
+  // PRs that happened to merge that month.
+  const runCost = await tenantCostSummary(db, tenantId, { start, end });
+  const mergedRuns = runCost?.mergedRuns ?? 0;
+  const costPerMergedPrUsd = runCost?.costPerMergedPrUsd ?? null;
 
   // ── forecast ───────────────────────────────────────────────────────────────
   const dim = daysInMonth(periodMonth);

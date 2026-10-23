@@ -31,6 +31,11 @@
  *     OpenRouter forward `reasoning_effort`. Non-reasoning OpenAI models (gpt-4.1 /
  *     gpt-4o) are deliberately excluded.
  *
+ *   • OpenRouter `reasoning: { effort }` — an OpenRouter hop (any upstream family,
+ *     including `anthropic/*`) whose slug the LIVE OpenRouter catalog lists with
+ *     `reasoning` in `supported_parameters` (cost PRD D4). The caller hands the slug and
+ *     the catalog's set in; with no set, nothing is sent — never a guess.
+ *
  *   • Everything else (generic OpenAI-compatible coders, Cloudflare `@cf/*`,
  *     deepseek, qwen, minimax, …) → `undefined`.
  *
@@ -38,6 +43,7 @@
  * without a live vendor.
  */
 import type { AgentExecParams, AgentThinkLevel } from '@builderforce/agent-tools';
+import { escalateThinkLevel } from './roleReasoning';
 
 /** Which reasoning param, if any, a model family accepts. */
 export type ModelReasoningSupport =
@@ -45,6 +51,8 @@ export type ModelReasoningSupport =
   | { kind: 'anthropic-thinking' }
   /** OpenAI o-series / gpt-5 — `reasoning_effort`. */
   | { kind: 'openai-reasoning' }
+  /** An OpenRouter slug the catalog says accepts `reasoning: { effort }`. */
+  | { kind: 'openrouter-reasoning' }
   /** Unknown/unsupported family — no reasoning param is safe to send. */
   | { kind: 'none' };
 
@@ -64,11 +72,16 @@ const OPENAI_REASONING_RE = /^(?:openai\/)?(?:o[1-9](?:-|$)|gpt-5)/i;
  * Classify a model id into its reasoning-capability family. Pure string inspection;
  * returns `{ kind: 'none' }` for an empty/unknown id so callers can switch safely.
  */
-export function detectReasoningSupport(modelId: string | undefined | null): ModelReasoningSupport {
+export function detectReasoningSupport(
+  modelId: string | undefined | null,
+  openRouter?: Pick<ReasoningParamOpts, 'openRouterSlug' | 'openRouterReasoning'>,
+): ModelReasoningSupport {
   const id = (modelId ?? '').trim();
   if (!id) return { kind: 'none' };
   if (ANTHROPIC_THINKING_RE.test(id)) return { kind: 'anthropic-thinking' };
   if (OPENAI_REASONING_RE.test(id)) return { kind: 'openai-reasoning' };
+  const slug = openRouter?.openRouterSlug?.trim();
+  if (slug && openRouter?.openRouterReasoning?.has(slug)) return { kind: 'openrouter-reasoning' };
   return { kind: 'none' };
 }
 
@@ -133,6 +146,16 @@ function openaiReasoningParams(execParams: AgentExecParams): Record<string, unkn
   return { reasoning_effort: effort };
 }
 
+/**
+ * OpenRouter's unified `reasoning: { effort }` — the same ladder as OpenAI's, since
+ * OpenRouter normalises every upstream (Anthropic, Gemini, …) onto it. Emitted on the
+ * same rule as {@link openaiReasoningParams}: a meaningful level or reasoning switched on.
+ */
+function openRouterReasoningParams(execParams: AgentExecParams): Record<string, unknown> | undefined {
+  const effort = openaiReasoningParams(execParams)?.reasoning_effort;
+  return effort ? { reasoning: { effort } } : undefined;
+}
+
 /** Per-call hints that refine the reasoning param beyond the model + exec levers. */
 export interface ReasoningParamOpts {
   /** True when this is the FIRST (planning) turn of a tool loop — the request carries
@@ -144,6 +167,28 @@ export interface ReasoningParamOpts {
    *  `reasoning_effort` path (valid on every turn). Because the hint only rides the
    *  anthropic branch, it never reaches an OpenAI-compatible vendor. */
   isFirstTurn?: boolean;
+  /** Raise the think level one step (`low` → `medium`, …) — the D1 verifier cascade's
+   *  retry after a weak answer. Applied before any family mapping, so every family
+   *  escalates the same way. */
+  escalate?: boolean;
+  /** The upstream slug when THIS hop is OpenRouter (set per candidate by the dispatcher). */
+  openRouterSlug?: string;
+  /** Slugs the live OpenRouter catalog lists with `reasoning` support. Absent = none. */
+  openRouterReasoning?: ReadonlySet<string>;
+}
+
+/** The per-call hints carried on a dispatch intent, without its exec levers — what the
+ *  dispatcher forwards to {@link reasoningParamsForModel} for each candidate. */
+export function reasoningIntentOpts(intent: { execParams: AgentExecParams } & ReasoningParamOpts): ReasoningParamOpts {
+  const { execParams: _execParams, ...opts } = intent;
+  return opts;
+}
+
+/** The exec levers after an `escalate` request: one step up the think-level ladder. A
+ *  request that named no level but switched reasoning on escalates from `medium`. */
+function escalated(execParams: AgentExecParams, escalate: boolean | undefined): AgentExecParams {
+  if (!escalate) return execParams;
+  return { ...execParams, thinkLevel: escalateThinkLevel(execParams.thinkLevel ?? 'medium') };
 }
 
 /**
@@ -165,16 +210,19 @@ export function reasoningParamsForModel(
   opts?: ReasoningParamOpts,
 ): Record<string, unknown> | undefined {
   if (!execParams) return undefined;
-  switch (detectReasoningSupport(modelId).kind) {
+  const levers = escalated(execParams, opts?.escalate);
+  switch (detectReasoningSupport(modelId, opts).kind) {
     case 'anthropic-thinking': {
-      const params = anthropicThinkingParams(execParams);
+      const params = anthropicThinkingParams(levers);
       if (!params) return undefined;
       // Thread the first-turn hint to vendors/anthropic.ts. It rides ONLY this
       // (anthropic) branch, so it can never leak to an OpenAI-compatible vendor.
       return opts?.isFirstTurn != null ? { ...params, firstTurn: opts.isFirstTurn } : params;
     }
     case 'openai-reasoning':
-      return openaiReasoningParams(execParams);
+      return openaiReasoningParams(levers);
+    case 'openrouter-reasoning':
+      return openRouterReasoningParams(levers);
     default:
       return undefined;
   }

@@ -19,6 +19,7 @@
  * failed kickoff means (dispatch degrades to the durable executor; resume leaves
  * the run parked and answerable).
  */
+import { isCostLeverOn } from '@builderforce/cost-levers';
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { CONTAINER_MAX_STEPS } from './cloudAgentTools';
 import { previewStepForRun } from './previewDevServer';
@@ -108,6 +109,9 @@ export async function launchContainerRun(
         userContent,
         maxSteps,
         repo: cloneSpec,
+        // C7: the image shapes tool results with the shared policy only when the Worker
+        // (which owns the tenant + env) turned the lever on; absent ⇒ off in the image.
+        toolOutputPolicy: isCostLeverOn(env, 'c7_tool_output_policy', args.tenantId),
         ...(preview ? { preview } : {}),
         ...(args.resume ? { resume: { messages: args.resume.messages, writtenPaths: args.resume.writtenPaths } } : {}),
       }),

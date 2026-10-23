@@ -4,6 +4,7 @@ import { __clearL1CacheForTests } from '../../infrastructure/cache/readThroughCa
 import {
   buildSkillAuthoringCapability,
   proposeSkill,
+  rankSkillsForTask,
   renderSkillBlock,
   reviewSkill,
   type TenantSkill,
@@ -108,5 +109,30 @@ describe('renderSkillBlock', () => {
     expect(block).toContain('## Workspace Skills (approved procedures)');
     expect(block).toContain('### Ship it (ship-it)');
     expect(block).toContain('Steps.');
+  });
+});
+
+describe('rankSkillsForTask (E1)', () => {
+  const skill = (slug: string, name: string, description: string, body = 'Steps.') =>
+    ({ slug, name, description, body } as TenantSkill);
+  const skills = [
+    skill('ship-schema-change', 'Ship a schema change', 'When a change needs a new database column or migration.'),
+    skill('write-release-notes', 'Write release notes', 'When a release ships.'),
+    skill('rotate-api-keys', 'Rotate API keys', 'When a credential leaks.'),
+  ];
+
+  it('keeps only the skills relevant to the task, best first', () => {
+    const ranked = rankSkillsForTask(skills, 'Add a migration for the new invoice column');
+    expect(ranked.map((s) => s.slug)).toEqual(['ship-schema-change']);
+  });
+
+  it('caps the result at the limit (default 5)', () => {
+    const many = Array.from({ length: 8 }, (_, i) => skill(`deploy-${i}`, `Deploy step ${i}`, 'When deploying.'));
+    expect(rankSkillsForTask(many, 'deploy the service')).toHaveLength(5);
+    expect(rankSkillsForTask(many, 'deploy the service', 2)).toHaveLength(2);
+  });
+
+  it('returns nothing when no skill matches', () => {
+    expect(rankSkillsForTask(skills, 'Refactor the canvas toolbar')).toEqual([]);
   });
 });

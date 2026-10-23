@@ -27,6 +27,7 @@ import { deleteProjectFact, upsertProjectFact } from '../../application/llm/proj
 import { chatAnswerOrigin, parseAnswerChatId, resolveAnswerChat } from '../../application/llm/memoryAnswerChat';
 import { cloudExecutionIdFromRequest } from '../../application/llm/cloudByoPolicy';
 import { resolveMemoryAnswer, cacheProjectAnswer } from '../../application/llm/projectMemory';
+import type { CachePrincipal } from '../../application/llm/cacheScope';
 import { recordMemoryAnswerSavings } from '../../application/llm/memoryAnswerSavings';
 import { normalizeUsageSurface } from '../../application/llm/savingsLedger';
 import { evermindGenerate, type ArtifactStore } from '../../application/llm/evermindRuntime';
@@ -58,6 +59,16 @@ const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 const pid = (c: Context): number => Number(c.req.param('projectId'));
+
+/**
+ * Who a Q&A cache row belongs to: the authenticated subject (a person, or the
+ * `agentHost:<id>` subject the host door publishes) under its role. Unlike `person(c)`
+ * below, a host is NOT null here — a host's answers are its own, not the tenant's.
+ */
+const cachePrincipal = (c: Context): CachePrincipal => ({
+  userId: (c.get('userId') as string | undefined) ?? null,
+  role: (c.get('role') as string | undefined) ?? null,
+});
 
 /**
  * The chat a memory request acts for. `absent` when none was named; `refused` carries
@@ -167,6 +178,7 @@ async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: 
   const answer = await resolveMemoryAnswer(env, db, tenantId, projectId, question, {
     ...(runEvermind ? { runEvermind } : {}),
     toolsAvailable,
+    principal: cachePrincipal(c),
   });
   if (!answer) return json({ answer: null });
   // A hit is a model call that did not happen — record what it would have cost. Off the
@@ -211,6 +223,7 @@ async function cacheAnswerCore(env: Env, db: Db, tenantId: number, projectId: nu
     await serverOrigin(db, tenantId, userId, gate),
     parseFactFileAnchors(body.fileAnchors),
     cloudExecutionIdFromRequest((name) => c.req.header(name)),
+    cachePrincipal(c),
   );
   return json({ ok: true });
 }

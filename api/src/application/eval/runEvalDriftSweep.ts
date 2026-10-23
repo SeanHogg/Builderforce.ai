@@ -13,12 +13,15 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 import { sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
-import { alertEvents, runModelOutcomes } from '../../infrastructure/database/schema';
+import { runModelOutcomes } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { buildTenantDriftReport } from './driftReport';
-import { notifyAlert } from '../alerts/runAlertSweep';
+import { raiseSystemAlert, SYSTEM_ALERT_METRICS } from '../alerts/systemAlert';
 import type { Env } from '../../env';
 import { DAY_MS } from '../../domain/shared/time';
+
+/** Just under the daily cron: a persisting regression re-alerts daily, a re-run does not. */
+export const EVAL_DRIFT_ALERT_COOLDOWN_HOURS = 20;
 
 export function buildEvalDriftAlertMessage(
   drifting: Array<{ group: string; result: { severity: string } }>,
@@ -56,29 +59,18 @@ export async function runEvalDriftSweep(env: Env, db: Db = buildDatabase(env)): 
       }
 
       // Eval drift is a SYSTEM alert: it fires whenever a regression is detected,
-      // independently of any user-defined rule. Raise an alert_event + notify the
-      // team over the same Slack/email channels the threshold sweep uses. Guarded
-      // so a notification/insert failure can't disrupt the drift sweep.
+      // independently of any user-defined rule — so it goes through THE system-alert
+      // raiser (one alert_event + the shared Slack/email notify), which is best-effort
+      // and never throws. The cooldown sits just under the daily cadence: a regression
+      // that persists re-alerts once a day, and a re-run of the same sweep does not.
       if (report.drifting.length > 0) {
-        try {
-          const message = buildEvalDriftAlertMessage(report.drifting);
-          const notified = await notifyAlert(env, db, {
-            tenantId,
-            message,
-            notifySlack: true,
-            notifyEmail: true,
-          });
-          await db.insert(alertEvents).values({
-            tenantId,
-            metric: 'eval_drift',
-            observedValue: report.drifting.length,
-            message,
-            notifiedSlack: notified.slack,
-            notifiedEmail: notified.email,
-          });
-        } catch (alertErr) {
-          reportCaughtError(alertErr, { source: "application/eval/runEvalDriftSweep.ts", operation: "runEvalDriftSweep", context: { logMessage: `[cron:eval-drift] tenant=${tenantId} alert raise failed`, details: alertErr } });
-        }
+        await raiseSystemAlert(env, db, {
+          tenantId,
+          metric: SYSTEM_ALERT_METRICS.evalDrift,
+          message: buildEvalDriftAlertMessage(report.drifting),
+          observedValue: report.drifting.length,
+          cooldownHours: EVAL_DRIFT_ALERT_COOLDOWN_HOURS,
+        });
       }
     } catch (err) {
       reportCaughtError(err, { source: "application/eval/runEvalDriftSweep.ts", operation: "runEvalDriftSweep", context: { logMessage: `[cron:eval-drift] tenant=${tenantId} failed`, details: err } });

@@ -71,6 +71,7 @@ import { createImportRoutes }      from './presentation/routes/importRoutes';
 import { createAiImpactRoutes }    from './presentation/routes/aiImpactRoutes';
 import { createAutonomyRoutes }    from './presentation/routes/autonomyRoutes';
 import { createRunAnomalyRoutes }  from './presentation/routes/runAnomalyRoutes';
+import { createCostMetricsRoutes } from './presentation/routes/costMetricsRoutes';
 import { createBenchmarkingRoutes } from './presentation/routes/benchmarkingRoutes';
 import { createRecommendationsRoutes } from './presentation/routes/recommendationsRoutes';
 import { createDevexRoutes }       from './presentation/routes/devexRoutes';
@@ -979,6 +980,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/insights',   createAiImpactRoutes(db));
   app.route('/api/insights',   createAutonomyRoutes(db));
   app.route('/api/insights',   createRunAnomalyRoutes(db));
+  app.route('/api/cost',       createCostMetricsRoutes(db));
   app.route('/api/insights',   createBenchmarkingRoutes(db));
   app.route('/api/insights',   createRecommendationsRoutes(db));
   app.route('/api/devex',      createDevexRoutes(db));

@@ -2,8 +2,8 @@
  * `@builderforce/model-catalog` — the catalog vocabulary shared by every routing host
  * (the Worker gateway, the editor, the on-prem runtime, the browser).
  *
- * Owns the words, not the model data: tier (and THE tier rule), price, residency and the
- * CatalogView port. Each host keeps its own registry and binds it to the port. The two
+ * Owns the words, not the model data: tier (and THE tier rule), price (with its
+ * long-context tiers, `priceTiers.ts`), residency and the CatalogView port. Each host keeps its own registry and binds it to the port. The two
  * tables it does own are ones every host must agree on word for word: the BYO provider
  * list (`providers.ts`) and Anthropic's release line (`anthropic.ts`) — plus the account's
  * cloud funding order (`cloudOrder.ts`), the free tier vs connected providers. Pure and
@@ -25,10 +25,14 @@ export {
   ZERO_PRICE,
   estimateCostUsd,
   isFreePrice,
+  lowestTierBoundary,
   perMillionToPerToken,
   perTokenToPerMillion,
+  rateForInput,
   type ModelPrice,
+  type PriceTier,
 } from './price.js';
+export { PRICE_TIERS, priceTierBoundary, priceTierFamily, priceTiersFor, withPriceTiers } from './priceTiers.js';
 export { residencyOf, type CatalogView, type ModelResidency } from './view.js';
 export {
   LLM_PROVIDERS,

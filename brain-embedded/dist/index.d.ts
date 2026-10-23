@@ -2426,6 +2426,15 @@ interface AnswerOriginCost {
     promptTokens: number;
     completionTokens: number;
 }
+/**
+ * A file a cached answer was about. `contentHash` when the host knows it; otherwise the
+ * server stamps it from its directory index at write time, and a later change to that
+ * file makes the cached answer stale instead of replayable.
+ */
+interface AnswerFileAnchor {
+    path: string;
+    contentHash?: string;
+}
 interface EvermindRunHooks {
     /** Recall the project's learned memories most relevant to `query`. */
     recall(query: string): Promise<EvermindRecallResult | null>;
@@ -2447,8 +2456,11 @@ interface EvermindRunHooks {
      * Remember a (question → answer) pair so an exact repeat short-circuits next time.
      * `origin` is what producing the answer cost (the run's served model + summed tokens):
      * stored with it, so each replay's saving is a recorded figure, not an estimate.
+     * `fileAnchors` are the files the turn read: the server drops the cached answer once
+     * one of them changes. Absent → the server-backed hooks derive them from the paths
+     * the answer cites ({@link citedPathAnchors}).
      */
-    cacheAnswer?(query: string, answer: string, origin?: AnswerOriginCost): void | Promise<void>;
+    cacheAnswer?(query: string, answer: string, origin?: AnswerOriginCost, fileAnchors?: AnswerFileAnchor[]): void | Promise<void>;
 }
 /**
  * The host's authenticated JSON transport, as a port. Both Brain hosts already have
@@ -4014,7 +4026,8 @@ type SummaryStreamFn = (opts: Omit<StreamChatOptions, 'transport'>) => Promise<P
  *   - `recall` — the run's Evermind recall for the latest directive, rendered by
  *     `formatEvermindMemoryBlock` exactly as the pre-turn recall is;
  *   - the budget inputs — the advertised tool schemas and the request's output reserve,
- *     sized by the shared `@builderforce/run-policy` helpers every host packs with;
+ *     sized by the shared `@builderforce/run-policy` helpers every host packs with, and
+ *     (cost PRD C9) the `to` model's long-context price boundary;
  *   - the `llm.handoff` trace, through the caller's hook.
  *
  * {@link createHandoffFit} wraps it as the per-attempt `fit` a local-first host lends
@@ -6403,51 +6416,51 @@ declare function failureReason(result: unknown): string | undefined;
 declare function repeatedFailureAdvisory(tool: string, attempts: number, reason?: string): string | null;
 
 /**
- * What a tool result costs the MODEL transcript — and how it is cut down when it costs
- * too much.
+ * THE tool-output policy: what a tool result costs the MODEL transcript, and how it is
+ * cut down when it costs too much. The full result always survives in the surface's
+ * own trace; only the copy the model re-reads every turn is bounded.
  *
- * The full result always survives in the trace (timeline + triage copy); only the copy
- * the model re-reads every turn is bounded. The generic rule is a head slice with a
- * marker, sized for the list-shaped platform results that first flooded the window (a
- * `tasks.list` of 352 rows). That rule was also applied to `read_file`, and it is why a
- * coding run could not make an edit:
+ *   • `read_file` is paged by line with the continuation offset rewritten
+ *     ({@link windowReadFile});
+ *   • with the C7 lever on (`summarize: true`), a shell/test/build log is summarized
+ *     ({@link summarizeShellOutput}) and any other large JSON is PROJECTED
+ *     ({@link projectJson}) instead of head-sliced;
+ *   • otherwise (and as the last resort) a head slice with an explicit marker, so the
+ *     model knows data was elided and can re-call with a narrower filter.
  *
- *   `read_file` returns up to 2,000 lines, then `{content, truncated, totalLines,
- *   offset, note}` — the continuation fields AFTER the content. Slicing the JSON at
- *   6,000 chars cut mid-line and, because they sit at the end, deleted every one of
- *   those fields. The model was handed ~10% of a 54 KB service file with no line
- *   number for where it stopped, no total, and no `offset` to continue from — while the
- *   re-read guard told it to "request the file WHOLE in a single call", which this very
- *   cap made impossible. Measured on chat #99: one file read six times, 45% of all
- *   calls revisiting ground already covered, nine results truncated before the model saw
- *   them, and the requested change never made.
- *
- * So a file read is trimmed the way the tool itself pages: at a LINE boundary, with the
- * structured fields rewritten to describe exactly what was returned and the precise
- * `offset` that continues it. A large file now costs several honest windows instead of
- * one dishonest one — and the model can page forward instead of guessing.
- *
- * Pure: no I/O, no clock. Owned here so the run loop states a budget rather than
- * implementing one.
+ * Pure: no I/O, no clock, no env. The lever decision arrives as a parameter.
  */
-/** Per-result cap (chars of JSON) for every tool that is not a file read. */
-declare const MAX_TOOL_RESULT_CHARS = 6000;
-/**
- * Per-result cap for `read_file`. Larger than the generic cap on purpose: reading source
- * is what a coding surface DOES, and a window this size (~4k tokens) still leaves the
- * 64k-token history budget room for a dozen-plus reads before compaction. Under it a 566-line
- * CSS module arrives in two windows; the service file above in four — each one saying
- * where the next begins.
- */
-declare const READ_FILE_RESULT_CHARS = 16000;
-interface TrimmedToolResult {
+
+interface ShapedToolResult {
     /** The string to store as the tool message the model sees. */
     content: string;
-    /** Size of the ORIGINAL result's JSON — what the diagnostics report as result bytes. */
+    /** Size of the ORIGINAL result's JSON — what diagnostics report as result bytes. */
     bytes: number;
     /** True when the model was handed less than the tool returned. */
     truncated: boolean;
 }
+
+/**
+ * What a tool result costs the MODEL transcript on the Brain — the Brain's adapter over
+ * THE shared policy, `@builderforce/tool-output-policy` (PRD C7).
+ *
+ * The full result always survives in the trace (timeline + triage copy); only the copy
+ * the model re-reads every turn is bounded. The rules — `read_file` paged at a LINE
+ * boundary with its continuation offset rewritten (the fix for chat #99, where a 6,000-
+ * char slice deleted the paging fields and the model re-read one file six times), the
+ * generic head slice with an item-count marker, and, with the C7 lever on, log
+ * summaries and JSON projection — live in that package, shared with agent-runtime, the
+ * cloud loop and the container. What stays here is the Brain's own convention for the
+ * loop-guard advisory: folded into the result's `note` (`withAdvisory`).
+ *
+ * Pure: no I/O, no clock.
+ */
+
+/** Per-result cap (chars of JSON) for every tool that is not a file read. */
+declare const MAX_TOOL_RESULT_CHARS = 6000;
+/** Per-result cap for `read_file` — paged by line, so a big file arrives in windows. */
+declare const READ_FILE_RESULT_CHARS: number;
+type TrimmedToolResult = ShapedToolResult;
 interface TrimOptions {
     /**
      * A loop-guard advisory to attach to the result (the re-read warning). Attached AFTER
@@ -6455,14 +6468,15 @@ interface TrimOptions {
      * tools' own guidance uses so the model meets one convention.
      */
     advisory?: string | null;
+    /**
+     * The C7 lever decision (log summaries + JSON projection). Defaults to the lever's
+     * manifest/rollout answer for an on-device host (no tenant: on only when fully on).
+     */
+    summarize?: boolean;
 }
 /**
- * Trim a tool result to what the model transcript can afford.
- *
- * `read_file` successes are paged by line (see {@link trimReadFile}); every other
- * result gets a head slice and an explicit marker so the model knows data was elided
- * and can re-call the tool with a narrower filter/limit instead of assuming it saw
- * everything. `bytes` is always the ORIGINAL size — the diagnostics report it.
+ * Trim a tool result to what the model transcript can afford. `bytes` is always the
+ * ORIGINAL size — the diagnostics report it.
  */
 declare function trimToolResult(tool: string, out: unknown, opts?: TrimOptions): TrimmedToolResult;
 
@@ -8738,7 +8752,9 @@ declare function getMcpToolStatus(): McpToolStatus;
  *     the prompt budget before the conversation is even considered.
  *
  * The selection is LEXICAL and deterministic — no embeddings, no extra round trip,
- * no network. It scores each tool against the live turn's text and keeps the best
+ * no network — and the scoring is the shared `rankLexically` from
+ * `@builderforce/agent-tools` (the same ranker the Worker's `tool_search` uses), fed
+ * this module's product synonyms as extra weighted fields. It scores each tool against the live turn's text and keeps the best
  * `limit`, while pinning anything the run has already touched so a multi-step task
  * never loses a tool mid-flight.
  *

@@ -71,6 +71,16 @@ describe('composeEvermindHooks', () => {
     expect(working.cacheAnswer).toHaveBeenCalledWith('q', 'a');
   });
 
+  it("forwards the turn's file anchors to every tier, keeping their fourth position", () => {
+    const tier = { cacheAnswer: vi.fn() };
+    const anchors = [{ path: 'api/src/auth.ts' }];
+    composeEvermindHooks(tier)?.cacheAnswer?.('q', 'a', undefined, anchors);
+    expect(tier.cacheAnswer).toHaveBeenCalledWith('q', 'a', undefined, anchors);
+    const origin = { model: 'm', promptTokens: 1, completionTokens: 2 };
+    composeEvermindHooks(tier)?.cacheAnswer?.('q', 'a', origin, anchors);
+    expect(tier.cacheAnswer).toHaveBeenLastCalledWith('q', 'a', origin, anchors);
+  });
+
   it('takes recall from the tier that has a corpus, and yields nothing when no tier does', async () => {
     const recall = vi.fn(async () => null);
     expect(composeEvermindHooks({ answer: async () => null }, { recall })?.recall).toBe(recall);

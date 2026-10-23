@@ -19,6 +19,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 import { slugify } from '@builderforce/creation-canvas-contract';
+import { LEXICAL_WEIGHTS, rankLexically } from '@builderforce/agent-tools';
 
 export type TenantSkillStatus = 'draft' | 'approved' | 'rejected';
 
@@ -261,4 +262,21 @@ export function renderSkillBlock(skills: readonly TenantSkill[]): string {
   if (skills.length === 0) return '';
   const lines = skills.map((s) => `### ${s.name} (${s.slug})\n${s.description}\n\n${s.body}`);
   return ['## Workspace Skills (approved procedures)', ...lines].join('\n\n');
+}
+
+/** How many approved skills a run is given under cost lever E1. */
+export const RANKED_SKILL_LIMIT = 5;
+
+/**
+ * The approved skills most relevant to a task (cost lever E1): ranked by lexical overlap
+ * of each skill's name/slug (strong), description — its trigger — and body (weak) with
+ * the task text, through the ONE shared scorer. Only skills that match at all are kept,
+ * best first, at most `limit`.
+ */
+export function rankSkillsForTask(skills: readonly TenantSkill[], taskText: string, limit = RANKED_SKILL_LIMIT): TenantSkill[] {
+  return rankLexically(skills, taskText, (s) => [
+    { text: `${s.name} ${s.slug.replace(/[-_]/g, ' ')}`, weight: LEXICAL_WEIGHTS.name },
+    { text: s.description, weight: LEXICAL_WEIGHTS.description * 3 },
+    { text: s.body, weight: LEXICAL_WEIGHTS.body },
+  ], limit);
 }

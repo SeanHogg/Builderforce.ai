@@ -49,7 +49,7 @@ import {
 } from './types';
 import { currentAnthropicModelId, supersededAnthropicModelIds } from '@builderforce/model-catalog';
 import { ANTHROPIC_OAUTH_BETA, CLAUDE_CODE_SYSTEM_PROMPT } from '../anthropicOAuth';
-import { markAnthropicHistoryBreakpoint } from '../promptCaching';
+import { markAnthropicHistoryBreakpoint, VOLATILE_TAIL_TAG } from '../promptCaching';
 import { applySchemaDialect } from '../jsonSchemaSanitize';
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
@@ -205,6 +205,25 @@ function anthropicRequestProfile(modelId: string): AnthropicRequestProfile {
 
 interface AnthropicBlock { type: string; [k: string]: unknown }
 interface AnthropicMessage { role: 'user' | 'assistant'; content: AnthropicBlock[] }
+
+// The volatile-tail tag (cost lever B1) lives with the cache-breakpoint placer that
+// both this vendor and the OpenRouter path share; re-exported at its existing address.
+export { VOLATILE_TAIL_TAG };
+
+function isVolatileTail(block: AnthropicBlock | undefined): block is AnthropicBlock {
+  return block?.type === 'text' && typeof block.text === 'string' && block.text.startsWith(VOLATILE_TAIL_TAG);
+}
+
+/** {@link markAnthropicHistoryBreakpoint}, but placed BEFORE a trailing volatile block. */
+function markStableHistory(messages: AnthropicMessage[], marker: Record<string, unknown>): AnthropicMessage[] {
+  const last = messages[messages.length - 1];
+  const tail = last?.content[last.content.length - 1];
+  if (!last || !isVolatileTail(tail)) return markAnthropicHistoryBreakpoint(messages, marker);
+  if (last.content.length === 1) return [...markAnthropicHistoryBreakpoint(messages.slice(0, -1), marker), last];
+  const marked = markAnthropicHistoryBreakpoint([...messages.slice(0, -1), { ...last, content: last.content.slice(0, -1) }], marker);
+  const head = marked[marked.length - 1]!;
+  return [...marked.slice(0, -1), { ...head, content: [...head.content, tail] }];
+}
 
 /**
  * JSON Schema keywords Anthropic's structured-outputs compiler REJECTS with a 400.
@@ -404,7 +423,8 @@ function toOpenAIResponse(raw: unknown, model: string): Record<string, unknown> 
     }
   }
   const u = r?.usage ?? {};
-  const inTok = Number(u['input_tokens'] ?? 0) || 0;
+  const cache = anthropicCacheCounts(u as Record<string, unknown>);
+  const inTok = anthropicPromptTokens({ inputTokens: Number(u['input_tokens'] ?? 0) || 0, ...cache });
   const outTok = Number(u['output_tokens'] ?? 0) || 0;
   const message: Record<string, unknown> = { role: 'assistant', content: text || (toolCalls.length ? null : '') };
   if (toolCalls.length) message.tool_calls = toolCalls;
@@ -463,9 +483,11 @@ function prepareAnthropicRequest(
   const maxTokens = anthropicOutputCap(params.maxTokens, stream, params.model);
   // Cache the large STABLE prefix (tools + system instructions/repo context) so a
   // multi-turn run pays ~0.1x for it after the first turn. `{type:'ephemeral'}` is the
-  // GA 5-minute cache. A SUBSCRIPTION (OAuth) token REQUIRES the Claude Code identity as
-  // the first system block — Anthropic 401s an OAuth Messages call without it.
-  const CACHE = { type: 'ephemeral' as const };
+  // GA 5-minute cache; a caller's `cacheTtl: '1h'` hint selects the 1-hour retention
+  // (~2x write) so a prefix survives idle gaps. A SUBSCRIPTION (OAuth) token REQUIRES
+  // the Claude Code identity as the first system block — Anthropic 401s an OAuth
+  // Messages call without it.
+  const CACHE = params.cacheTtl === '1h' ? { type: 'ephemeral' as const, ttl: '1h' as const } : { type: 'ephemeral' as const };
   const systemBlocks: Array<Record<string, unknown>> = [];
   if (isOAuth) systemBlocks.push({ type: 'text', text: CLAUDE_CODE_SYSTEM_PROMPT });
   if (req.system) systemBlocks.push({ type: 'text', text: req.system, cache_control: CACHE });
@@ -532,8 +554,9 @@ function prepareAnthropicRequest(
     max_tokens: maxTokens,
     // Third breakpoint (tools, system, and now the latest turn): the conversation so far
     // becomes a cached prefix the NEXT turn reads at ~0.1x, instead of the transcript
-    // being re-billed in full on every turn of a tool loop.
-    messages: markAnthropicHistoryBreakpoint(req.messages, CACHE),
+    // being re-billed in full on every turn of a tool loop. A trailing volatile block
+    // ({@link VOLATILE_TAIL_TAG}) stays outside it.
+    messages: markStableHistory(req.messages, CACHE),
     ...(system ? { system } : {}),
     ...(tools ? { tools } : {}),
     ...(req.tool_choice ? { tool_choice: req.tool_choice } : {}),
@@ -589,6 +612,28 @@ async function throwAnthropicHttpError(resp: Response, model: string, isOAuth: b
 // ---------------------------------------------------------------------------
 
 /** Cross-event streaming state (mutated as events arrive). */
+/**
+ * THE Anthropic → ledger prompt-token rule. Anthropic reports `input_tokens` EXCLUDING
+ * both cache counts, while the ledger (and the OpenAI wire this vendor emits) treats
+ * `cache_read` / `cache_creation` as a SUBSET of the prompt — `usageLedger` prices the
+ * uncached remainder as `prompt − read − creation`. Reporting input alone made that
+ * remainder negative on every cached turn. One rule for the JSON path, the stream
+ * translator and the BYO `/v1/messages` meter.
+ */
+export function anthropicPromptTokens(u: { inputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number }): number {
+  return (u.inputTokens ?? 0) + (u.cacheReadTokens ?? 0) + (u.cacheCreationTokens ?? 0);
+}
+
+/** The prompt-cache fields of an Anthropic usage object, as numbers (absent ⇒ undefined). */
+function anthropicCacheCounts(u: Record<string, unknown> | undefined): { cacheReadTokens?: number; cacheCreationTokens?: number } {
+  const read = Number(u?.['cache_read_input_tokens']);
+  const creation = Number(u?.['cache_creation_input_tokens']);
+  return {
+    ...(u?.['cache_read_input_tokens'] != null && Number.isFinite(read) ? { cacheReadTokens: read } : {}),
+    ...(u?.['cache_creation_input_tokens'] != null && Number.isFinite(creation) ? { cacheCreationTokens: creation } : {}),
+  };
+}
+
 export interface AnthropicStreamState {
   id: string;
   model: string;
@@ -598,6 +643,9 @@ export interface AnthropicStreamState {
   finishReason: string;
   inputTokens: number;
   outputTokens: number;
+  /** Prompt-cache counts from `message_start` — absent when the upstream reported none. */
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
 }
 
 export function newAnthropicStreamState(model: string): AnthropicStreamState {
@@ -633,8 +681,9 @@ export function anthropicEventToOpenAiChunks(
   };
   switch (type) {
     case 'message_start': {
-      const usage = (ev.message as { usage?: { input_tokens?: number } } | undefined)?.usage;
+      const usage = (ev.message as { usage?: Record<string, unknown> & { input_tokens?: number } } | undefined)?.usage;
       if (usage?.input_tokens != null) st.inputTokens = usage.input_tokens;
+      Object.assign(st, anthropicCacheCounts(usage));
       break;
     }
     case 'content_block_start': {
@@ -665,7 +714,17 @@ export function anthropicEventToOpenAiChunks(
     }
     case 'message_stop': {
       out.push(mk({}, st.finishReason));
-      out.push({ id: st.id, object: 'chat.completion.chunk', model: st.model, choices: [], usage: { prompt_tokens: st.inputTokens, completion_tokens: st.outputTokens, total_tokens: st.inputTokens + st.outputTokens } });
+      const prompt = anthropicPromptTokens(st);
+      out.push({
+        id: st.id, object: 'chat.completion.chunk', model: st.model, choices: [],
+        usage: {
+          prompt_tokens: prompt,
+          completion_tokens: st.outputTokens,
+          total_tokens: prompt + st.outputTokens,
+          ...(st.cacheReadTokens != null ? { cache_read_input_tokens: st.cacheReadTokens } : {}),
+          ...(st.cacheCreationTokens != null ? { cache_creation_input_tokens: st.cacheCreationTokens } : {}),
+        },
+      });
       break;
     }
     // 'ping' / 'content_block_stop' → nothing; 'error' handled by the wrapper.

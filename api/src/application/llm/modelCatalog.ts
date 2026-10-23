@@ -11,7 +11,7 @@
 
 import type { ListingTier } from '@builderforce/model-catalog';
 import type { Env } from '../../env';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, peekCached, type CacheEnv } from '../../infrastructure/cache/readThroughCache';
 import { finiteNumber } from '@seanhogg/builderforce-memory/wire';
 import { catalogEntry } from './vendors';
 
@@ -140,5 +140,38 @@ export async function getCatalogCached(env: Env): Promise<CatalogModel[]> {
     });
   } catch {
     return [];
+  }
+}
+
+/** The `supported_parameters` entry OpenRouter lists for a model that accepts its
+ *  unified `reasoning: { effort }` field. */
+const OPENROUTER_REASONING_PARAM = 'reasoning';
+
+/** Slugs in a catalog that accept OpenRouter's `reasoning` field (cost PRD D4). PURE. */
+export function openRouterReasoningSlugs(catalog: readonly CatalogModel[]): ReadonlySet<string> {
+  return new Set(catalog.filter((m) => m.supportedParameters?.includes(OPENROUTER_REASONING_PARAM)).map((m) => m.id));
+}
+
+const reasoningSlugMemo = new WeakMap<readonly CatalogModel[], ReadonlySet<string>>();
+
+/**
+ * The reasoning-capable OpenRouter slugs from the catalog ALREADY CACHED — a peek, never
+ * a fetch, because it is read on the dispatch path and a cold catalog must not put an
+ * OpenRouter round-trip in front of a completion. Cold/unreadable → `undefined`, which
+ * the reasoning mapping reads as "no OpenRouter hop is known to support it" (send
+ * nothing — today's behaviour). The set is memoised per cached array.
+ */
+export async function peekOpenRouterReasoningSlugs(env: CacheEnv): Promise<ReadonlySet<string> | undefined> {
+  try {
+    const catalog = await peekCached<CatalogModel[]>(env, CACHE_KEY);
+    if (!Array.isArray(catalog) || catalog.length === 0) return undefined;
+    let slugs = reasoningSlugMemo.get(catalog);
+    if (!slugs) {
+      slugs = openRouterReasoningSlugs(catalog);
+      reasoningSlugMemo.set(catalog, slugs);
+    }
+    return slugs;
+  } catch {
+    return undefined;
   }
 }

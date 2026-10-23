@@ -18,6 +18,7 @@ import {
   applyVerifyPhase, commitRunMemory, describeVerifyOutcome, recordRunVerifyEvents, runVerifyPhase,
 } from '../runtime/cloudAgent/runEndMemory';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { toolRowCodecOptions } from '../runtime/costLoop/runLevers';
 import { runAgentLoop, openAiChatCodec, readOpenAiToolCalls, trimRepetitionLoop, ASK_USER_TOOL, askUserBlock, liftProseAskUser, type StepRowInput } from '@builderforce/agent-loop';
 import { completeTraced, type BrainCallContext } from './brainLlmCall';
 import type { AgentReplyToolset } from './agentReplyPrompt';
@@ -179,8 +180,13 @@ export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<Rep
   let tStart = 0;
   const loop = await runAgentLoop<Record<string, unknown>>({
     messages: convo,
-    // Every tool result is size-capped for the transcript.
-    codec: openAiChatCodec<Record<string, unknown>>((r) => JSON.stringify(r.data ?? null).slice(0, 8000)),
+    // Every tool result is size-capped for the transcript. With C7 on, the shared
+    // tool-output policy shapes it (logs summarized, large JSON projected, read_file
+    // windowed) — the same budget the cloud loop and the images use; off, the legacy
+    // head slice.
+    codec: openAiChatCodec<Record<string, unknown>>(
+      toolRowCodecOptions(env, tenantId) ?? ((r) => JSON.stringify(r.data ?? null).slice(0, 8000)),
+    ),
     // No step cap: an addressed agent asked to review forty tickets makes forty
     // calls. The kernel's consecutive-tool-failure breaker is the only limit — the
     // same one the editor Brain and the cloud engine stop on.
@@ -188,7 +194,7 @@ export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<Rep
     hooks: {
       beforeTurn: async () => {
         // Sized to the model the policy asks for next when it names one (its catalog window).
-        const compaction = await compactMessages(convo, { ...CLOUD_COMPACT_DEFAULTS, tools, ...(s.policy.model ? { targetModel: s.policy.model } : {}) }, summarize);
+        const compaction = await compactMessages(convo, { ...CLOUD_COMPACT_DEFAULTS, tools, env, tenantId, ...(s.policy.model ? { targetModel: s.policy.model } : {}) }, summarize);
         if (compaction.compacted) convo.splice(0, convo.length, ...compaction.messages);
         return undefined;
       },

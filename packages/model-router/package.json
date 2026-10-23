@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/model-router",
-  "version": "2026.10.16",
+  "version": "2026.10.17",
   "private": true,
   "type": "module",
   "description": "THE ordering of candidate models for one call: role objective (code -> strongest, explore -> cheapest, plan -> the tenant's order), learned evidence, vendor health, and expected cost from the workload profile and per-token prices. Reads the catalog through the CatalogView port, so the gateway, the editor, the on-prem runtime and an offline browser rank identically. Pure; dispatch and I/O stay with the host.",

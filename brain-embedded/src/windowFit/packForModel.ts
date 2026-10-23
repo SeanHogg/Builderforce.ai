@@ -12,7 +12,8 @@
  *   - `recall` — the run's Evermind recall for the latest directive, rendered by
  *     `formatEvermindMemoryBlock` exactly as the pre-turn recall is;
  *   - the budget inputs — the advertised tool schemas and the request's output reserve,
- *     sized by the shared `@builderforce/run-policy` helpers every host packs with;
+ *     sized by the shared `@builderforce/run-policy` helpers every host packs with, and
+ *     (cost PRD C9) the `to` model's long-context price boundary;
  *   - the `llm.handoff` trace, through the caller's hook.
  *
  * {@link createHandoffFit} wraps it as the per-attempt `fit` a local-first host lends
@@ -21,7 +22,9 @@
 
 import { defaultEstimateTokens, packHandoff, type HandoffMessage, type HandoffPack } from '@seanhogg/builderforce-memory/handoff';
 import { formatEvermindMemoryBlock, type EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
-import { handoffReserveTokens, toolSchemaTokens as schemaTokens } from '@builderforce/run-policy';
+import { isCostLeverOn } from '@builderforce/cost-levers';
+import { priceTierBoundary } from '@builderforce/model-catalog';
+import { handoffReserveTokens, handoffTokenBudget, toolSchemaTokens as schemaTokens } from '@builderforce/run-policy';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { summarizeMiddle, type SummaryStreamFn } from '../workingTranscript';
 import type { LocalAttemptFit } from '../localFirstTransport';
@@ -77,6 +80,19 @@ export function toolSchemaTokens(tools: readonly unknown[] | undefined): number 
   return schemaTokens(tools, defaultEstimateTokens);
 }
 
+/**
+ * The window the packer fills for `to`: its context window, capped (cost PRD C9, lever
+ * `c9_price_tier_budget`) so the packed INPUT stays under the model's lowest long-context
+ * price boundary. The packer takes the reply reserve back off this, so the cap is the
+ * boundary plus that reserve. A flat-priced model packs to its window exactly. The Brain
+ * runs in a browser with no env and no tenant, so only a fully-on lever applies.
+ */
+function packTargetTokens(to: string, contextTokens: number, reserve: number): number {
+  const boundary = isCostLeverOn(undefined, 'c9_price_tier_budget', null) ? priceTierBoundary(to) : undefined;
+  const budget = handoffTokenBudget({ contextWindow: contextTokens, reserveOutputTokens: reserve, priceTierBoundary: boundary });
+  return budget === undefined ? contextTokens : Math.min(contextTokens, budget + reserve);
+}
+
 /** A `recall` callback for the packer: the run's recall rendered as the memory block. */
 function recallBlock(recall: WindowFitRecall): (query: string, budgetChars: number) => Promise<string> {
   return async (query, budgetChars) => {
@@ -90,10 +106,11 @@ function recallBlock(recall: WindowFitRecall): (query: string, budgetChars: numb
  *  or recall — the packer falls through to the next note source. */
 export async function packForModel(input: PackForModelInput): Promise<PackForModelResult> {
   const summarizer = input.summarizer;
+  const reserve = handoffReserveTokens(input.maxTokens);
   const pack = await packHandoff({
     messages: input.messages,
-    targetContextTokens: input.contextTokens,
-    reserveOutputTokens: handoffReserveTokens(input.maxTokens),
+    targetContextTokens: packTargetTokens(input.to, input.contextTokens, reserve),
+    reserveOutputTokens: reserve,
     toolsTokens: toolSchemaTokens(input.tools),
     ...(input.from ? { from: input.from } : {}),
     to: input.to,

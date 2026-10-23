@@ -147,7 +147,7 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * the SAME `agent_memory`/`project_facts` backing serves both cloud surfaces) — so it
  * advertises repo.read + repo.write + shell + memory, and NOT repo.search /
  * static-check (shell-free).
- * → list_files, read_file, write_file, run_command, memory_recall, memory_remember,
+ * → list_files, read_file, write_file, edit_file, run_command, memory_recall, memory_remember,
  * memory_forget, ask_human, finish — plus the six git tools `shell` also unlocks (git_status,
  * git_diff, git_history, git_sync_latest, git_undo, git_redo), which the image
  * genuinely implements in its `gitTool` handler. `memory_forget` relays through the
@@ -177,13 +177,18 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * offered it (and an image too old to send a manifest is covered by
  * `HANDSHAKE_ONLY_TOOLS`).
  *
- * `repo.edit` is INTENTIONALLY omitted (not a gap): unlike the shell-less durable
- * surface — which must do surgical edits over the git API (read blob → string-replace
- * → commit), hence advertises `repo.edit` — the container edits files IN its local
- * clone via the shell and delegates only the whole-file COMMIT back to the Worker via
- * the `write` container-op. There is no `edit` container-op, so advertising `repo.edit`
- * here would surface an `edit_file` tool that 400s. If the image ever gains an in-loop
- * edit handler, add both `repo.edit` here AND the `edit` op in `handleContainerOp`.
+ * `repo.edit` IS in the set now (cost lever D5 — defects 4/5). It used to be omitted
+ * because the image had no edit handler, so the container could only re-send whole files
+ * through the `write` op — the most expensive output a coding turn produces. The image
+ * now handles `edit_file` (search/replace with the SAME semantics as `edit_file` in
+ * `@builderforce/agent-tools` core-tools: {path, old_string, new_string, replace_all?})
+ * against its local clone (there is no `repo.edit` container op — the edit is applied
+ * in the image, then committed through the Worker's `write` op with `isNew: false`,
+ * which accepts the empty body an edit that clears a file produces). Only the Container
+ * implements it (`CONTAINER_LOCAL_TOOL_NAMES` in `container/server.mjs`); the Actions
+ * runner does not. The handshake (`imageToolHandshake.ts`) keeps both safe: an image
+ * whose manifest omits `edit_file` is never offered it, and `edit_file` is in
+ * `HANDSHAKE_ONLY_TOOLS`, so an image too old to send a manifest is not offered it either.
  *
  * `human` IS wired now (it was the last documented residual). Both images that run
  * this toolset — the Cloudflare Container and the GitHub Actions runner — handle
@@ -197,7 +202,7 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  * advertises to the gateway, so it MUST match what that image implements.
  */
 export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  'repo.read', 'repo.write', 'shell', 'memory', 'memory.forget', 'coordinate', 'prd.write', 'human',
+  'repo.read', 'repo.write', 'repo.edit', 'shell', 'memory', 'memory.forget', 'coordinate', 'prd.write', 'human',
   // Delegation — the SAME backing as the durable runner. Every delegation verb relays
   // to the `subagent` container-op, which runs the shared tool definitions against
   // `cloudLiveOrchestration.ts` with this image run as the owner: each child is its own

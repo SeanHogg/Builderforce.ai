@@ -80,3 +80,21 @@ describe('anthropicEventToOpenAiChunks — tool_use stream', () => {
     expect(finish!.choices[0]!.finish_reason).toBe('tool_calls');
   });
 });
+
+describe('anthropicEventToOpenAiChunks — prompt cache usage', () => {
+  it('counts cache read + creation inside prompt_tokens and passes the split through', () => {
+    const chunks = run([
+      { type: 'message_start', message: { usage: { input_tokens: 12, cache_read_input_tokens: 800, cache_creation_input_tokens: 50 } } },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 4 } },
+      { type: 'message_stop' },
+    ]);
+    const usage = chunks.find((c) => c.usage)!.usage as Record<string, number>;
+    expect(usage).toEqual({
+      prompt_tokens: 862,
+      completion_tokens: 4,
+      total_tokens: 866,
+      cache_read_input_tokens: 800,
+      cache_creation_input_tokens: 50,
+    });
+  });
+});

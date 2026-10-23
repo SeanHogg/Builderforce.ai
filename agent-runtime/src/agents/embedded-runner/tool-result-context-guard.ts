@@ -1,5 +1,7 @@
 import type { AgentMessage } from "../../builderforce/model/agent-types.js";
 import { CHARS_PER_TOKEN } from "@builderforce/workload";
+import { isCostLeverOn } from "@builderforce/cost-levers";
+import { cutHead, fitToolText } from "@builderforce/tool-output-policy";
 
 // Keep a conservative input budget to absorb tokenizer variance and provider framing overhead.
 const CONTEXT_INPUT_HEADROOM_RATIO = 0.75;
@@ -168,18 +170,18 @@ function truncateTextToBudget(text: string, maxChars: number): string {
     return CONTEXT_LIMIT_TRUNCATION_NOTICE;
   }
 
-  const bodyBudget = Math.max(0, maxChars - CONTEXT_LIMIT_TRUNCATION_SUFFIX.length);
-  if (bodyBudget <= 0) {
-    return CONTEXT_LIMIT_TRUNCATION_NOTICE;
-  }
-
-  let cutPoint = bodyBudget;
-  const newline = text.lastIndexOf("\n", bodyBudget);
-  if (newline > bodyBudget * 0.7) {
-    cutPoint = newline;
-  }
-
-  return text.slice(0, cutPoint) + CONTEXT_LIMIT_TRUNCATION_SUFFIX;
+  // THE shared tool-output policy (`@builderforce/tool-output-policy`): a line-snapped
+  // head with this guard's notice — or, with the C7 lever on, a summary of a
+  // shell/test/build log that keeps its failures and its tail.
+  return fitToolText(text, maxChars, {
+    summarize: isCostLeverOn(process.env, "c7_tool_output_policy", null),
+    fallback: (t, max) =>
+      cutHead(t, max, {
+        suffix: CONTEXT_LIMIT_TRUNCATION_SUFFIX,
+        snap: 0.7,
+        emptyNotice: CONTEXT_LIMIT_TRUNCATION_NOTICE,
+      }),
+  });
 }
 
 function replaceToolResultText(msg: AgentMessage, text: string): AgentMessage {

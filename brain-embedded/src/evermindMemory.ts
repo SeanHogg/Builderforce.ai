@@ -60,6 +60,39 @@ export interface AnswerOriginCost {
   completionTokens: number;
 }
 
+/**
+ * A file a cached answer was about. `contentHash` when the host knows it; otherwise the
+ * server stamps it from its directory index at write time, and a later change to that
+ * file makes the cached answer stale instead of replayable.
+ */
+export interface AnswerFileAnchor {
+  path: string;
+  contentHash?: string;
+}
+
+/** Anchors derived from an answer's own text, at most this many. */
+const MAX_CITED_ANCHORS = 16;
+
+/**
+ * Repo-relative file paths an answer CITES (`api/src/auth.ts`, `` `src/a.tsx:12` ``) —
+ * the fallback anchors when the run cannot say which files it read. A token counts only
+ * with a directory separator AND an extension, so prose ("and/or", "v1.2") is never
+ * mistaken for a file. A URL never matches: its segments are not preceded by a boundary.
+ */
+export function citedPathAnchors(answer: string): AnswerFileAnchor[] {
+  const out: AnswerFileAnchor[] = [];
+  const seen = new Set<string>();
+  const re = /(?:^|[\s`'"(\[])((?:\.{0,2}\/)?(?:[\w@.-]+\/)+[\w@.-]+\.[A-Za-z0-9]{1,8})(?::\d+)?(?=$|[\s`'"),.:;\]])/g;
+  for (const m of (answer ?? '').matchAll(re)) {
+    const path = m[1]!.replace(/^\.\/+/, '');
+    if (seen.has(path)) continue;
+    seen.add(path);
+    out.push({ path });
+    if (out.length >= MAX_CITED_ANCHORS) break;
+  }
+  return out;
+}
+
 export interface EvermindRunHooks {
   /** Recall the project's learned memories most relevant to `query`. */
   recall(query: string): Promise<EvermindRecallResult | null>;
@@ -78,8 +111,11 @@ export interface EvermindRunHooks {
    * Remember a (question → answer) pair so an exact repeat short-circuits next time.
    * `origin` is what producing the answer cost (the run's served model + summed tokens):
    * stored with it, so each replay's saving is a recorded figure, not an estimate.
+   * `fileAnchors` are the files the turn read: the server drops the cached answer once
+   * one of them changes. Absent → the server-backed hooks derive them from the paths
+   * the answer cites ({@link citedPathAnchors}).
    */
-  cacheAnswer?(query: string, answer: string, origin?: AnswerOriginCost): void | Promise<void>;
+  cacheAnswer?(query: string, answer: string, origin?: AnswerOriginCost, fileAnchors?: AnswerFileAnchor[]): void | Promise<void>;
 }
 
 /**
@@ -138,7 +174,11 @@ export function projectMemoryHooks(
         `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? '1' : '0'}`
           + `${chatParam}&surface=${surface}${opts.model ? `&model=${encodeURIComponent(opts.model)}` : ''}`,
       ).then((r) => r?.answer ?? null).catch(() => null),
-    cacheAnswer: (query: string, answer: string, origin?: AnswerOriginCost) => {
+    cacheAnswer: (query: string, answer: string, origin?: AnswerOriginCost, fileAnchors?: AnswerFileAnchor[]) => {
+      // The files the answer is about — what makes it stale server-side. The run's own
+      // reads when the loop passed them; otherwise the paths the answer cites (a host
+      // that layers these hooks may not forward the fourth argument).
+      const anchors = fileAnchors?.length ? fileAnchors : citedPathAnchors(answer);
       void request(`/api/projects/${projectId}/answer`, {
         method: 'POST',
         headers: json,
@@ -148,6 +188,7 @@ export function projectMemoryHooks(
           question: query, answer,
           ...(chatId != null && chatId > 0 ? { chatId } : {}),
           ...(origin ? { origin } : {}),
+          ...(anchors.length ? { fileAnchors: anchors } : {}),
         }),
       }).catch(() => { /* best-effort: never fail a reply to remember it */ });
     },

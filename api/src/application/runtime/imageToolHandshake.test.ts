@@ -19,6 +19,7 @@ import { CONTAINER_AGENT_TOOLS } from './cloudAgentTools';
 const here = dirname(fileURLToPath(import.meta.url));
 const apiRoot = resolve(here, '../../..');
 const relayModule = readFileSync(resolve(apiRoot, 'container/agentRelay.mjs'), 'utf8');
+const containerServer = readFileSync(resolve(apiRoot, 'container/server.mjs'), 'utf8');
 
 const tool = (name: string): ToolSchema => ({
   type: 'function',
@@ -83,13 +84,20 @@ describe('the images and the Worker agree about tool names', () => {
     expect(match, `${constName} not found in container/agentRelay.mjs`).toBeTruthy();
     return [...(match?.[1] ?? '').matchAll(/'([^']+)'/g)].map((m) => m[1]!);
   };
+  /** The Container image's own tools beyond the shared image-local set (`edit_file` —
+   *  the Actions runner has no handler for it), declared in `container/server.mjs`. */
+  const containerLocal = (): string[] => {
+    const match = /const CONTAINER_LOCAL_TOOL_NAMES = \[([^\]]*)\]/.exec(containerServer);
+    expect(match, 'CONTAINER_LOCAL_TOOL_NAMES not found in container/server.mjs').toBeTruthy();
+    return [...(match?.[1] ?? '').matchAll(/'([^']+)'/g)].map((m) => m[1]!);
+  };
 
   it('every tool the container surface advertises is one an image can dispatch', () => {
     // The core consolidation invariant. `CONTAINER_AGENT_TOOLS` is derived from the
     // capability set in TypeScript; the dispatch table is JavaScript in two shipped
     // images. Nothing but this test connects them.
     const relay = arrayLiteral('RELAY_TOOL_NAMES');
-    const local = arrayLiteral('IMAGE_LOCAL_TOOL_NAMES');
+    const local = [...arrayLiteral('IMAGE_LOCAL_TOOL_NAMES'), ...containerLocal()];
     const dispatchable = [...relay, ...local];
     const covers = (name: string) =>
       dispatchable.some((entry) => (entry.endsWith('*') ? name.startsWith(entry.slice(0, -1)) : entry === name));
@@ -112,6 +120,14 @@ describe('the images and the Worker agree about tool names', () => {
     expect(arrayLiteral('IMAGE_LOCAL_TOOL_NAMES')).not.toContain('skill_propose');
   });
 
+  it('a current Container is offered `edit_file`; an image too old to send a manifest is not', () => {
+    const current = names(imageAdvertisedTools(CONTAINER_AGENT_TOOLS, [
+      ...arrayLiteral('IMAGE_LOCAL_TOOL_NAMES'), ...arrayLiteral('RELAY_TOOL_NAMES'), ...containerLocal(),
+    ]));
+    expect(current).toContain('edit_file');
+    expect(names(imageAdvertisedTools(CONTAINER_AGENT_TOOLS, null))).not.toContain('edit_file');
+  });
+
   it('a current image is offered the skill tools; one too old to send a manifest is not', () => {
     const containerTools = names(CONTAINER_AGENT_TOOLS);
     expect(containerTools).toEqual(expect.arrayContaining(['skill_propose', 'skill_list']));
@@ -128,7 +144,7 @@ describe('the images and the Worker agree about tool names', () => {
     // A gated tool no image implements would be permanently invisible: withheld from an
     // old image by the gate, and from a new one by the intersection.
     const relay = arrayLiteral('RELAY_TOOL_NAMES');
-    const local = arrayLiteral('IMAGE_LOCAL_TOOL_NAMES');
+    const local = [...arrayLiteral('IMAGE_LOCAL_TOOL_NAMES'), ...containerLocal()];
     for (const name of HANDSHAKE_ONLY_TOOLS) {
       expect([...relay, ...local]).toContain(name);
     }

@@ -2,17 +2,20 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * projectMemory — the ONE shared "answer from memory, skip the LLM" capability.
  *
- * Every agent loop (web + VS Code webview Brain, the VS Code native participant, the
- * cloud engine, the on-prem runner) has the SAME need: before spending a paid model
- * call, check whether the project's own memory already holds the answer. That logic —
- * the exact-repeat Q&A cache, the Evermind-first gate, and the substantive-reply
- * threshold — lived only inside the cloud engine (model-pin based). It is extracted
- * here so all four surfaces call the SAME implementation instead of re-deriving it,
- * and so the storage stays exactly where the operator wants it: the builderforce-memory
- * fact tier (`project_facts`) plus the project's Evermind SSM.
+ * Before spending a paid model call, check whether the project's own memory already
+ * holds the answer: the exact-repeat Q&A cache, the Evermind-first gate, and the
+ * substantive-reply threshold, in one implementation the surfaces call over
+ * `GET/POST /api/projects/:id/answer` instead of re-deriving it. Storage stays where
+ * the operator wants it: the builderforce-memory fact tier (`project_facts`) plus the
+ * project's Evermind SSM.
+ *
+ * Who calls it TODAY: only the Brain run loop (web + VS Code webview + Rovr), and only
+ * on a run's FIRST turn (`runMemory.answerFromMemory`), via the route above. The cloud
+ * engine and the on-prem runner do not consult it yet — agent sub-question replay is a
+ * later wave behind the `b4_agent_answer_replay` cost lever.
  *
  * Storage:
- *   - Q&A cache   → `project_facts` rows under key `qa:v2:<hash(question)>`, source
+ *   - Q&A cache   → `project_facts` rows under key `qa:v3:<scope>:<hash(question)>`, source
  *                   `qa-cache` (excluded from the RAG facts block by projectFacts).
  *   - Evermind    → the project's registered SSM head (opt-in via `inferenceEnabled`).
  *
@@ -29,6 +32,7 @@ import { getProjectFactRecordByKey } from './projectFactsAnswerCache';
 import { upsertProjectFact } from './projectFactsWrite';
 import { EVERMIND_ANSWER_MIN_CHARS, isServableText } from '@seanhogg/builderforce-memory/evermind';
 import { memoryReplayable, promisesUnfinishedWork } from '@builderforce/agent-stall';
+import { cacheScopeDigest, principalScope, type CachePrincipal } from './cacheScope';
 
 /** Where a memory-first answer came from — drives the provenance chip the surfaces render. */
 export type MemoryAnswerSource = 'qa-cache' | 'evermind';
@@ -70,6 +74,12 @@ export interface ResolveMemoryDeps {
    * Pass `false` only for a genuinely tool-less caller.
    */
   toolsAvailable?: boolean;
+  /**
+   * Who is asking (see `cacheScope`). A cached answer is replayed only to the principal
+   * and role it was produced for — the same scope as the semantic and exact caches.
+   * Absent = the tenant-internal principal.
+   */
+  principal?: CachePrincipal | null;
 }
 
 /** Normalize a question so trivial vari(spacing/case/punctuation) hit the same cache row. */
@@ -94,18 +104,27 @@ function hashQuestion(normalized: string): string {
 
 /**
  * Generation of the Q&A cache keyspace. Bumped when the rules for what may be CACHED
- * change, so rows written under the old rules are never read again. `v2` (2026-09-13):
- * rows written before {@link memoryReplayable} gated the write held follow-up and status
- * answers ("status?" → another chat's ticket report) that are wrong in any other
- * conversation; the old `qa:<hash>` rows stay inert until the maintenance cleanup
- * (`purgeProjectQaCache`, keyed on source) removes them.
+ * — or who may READ it — change, so rows written under the old rules are never read
+ * again. `v2` (2026-09-13): rows written before {@link memoryReplayable} gated the write
+ * held follow-up and status answers. `v3` (2026-10-22): the key carries the principal /
+ * permission scope (defect 10) — a `v2` row was tenant + project only, so one person's
+ * answer replayed to every other person and host on the project. Old rows stay inert
+ * until their TTL or the maintenance cleanup (`purgeProjectQaCache`, keyed on source).
  */
-const QA_KEY_GENERATION = 'v2';
+const QA_KEY_GENERATION = 'v3';
+
+/** Whose Q&A row this is. Tenant and project are also row columns; the key adds the rest. */
+export interface QaCacheScope {
+  tenantId: number;
+  projectId: number;
+  principal?: CachePrincipal | null;
+}
 
 /** The stable `project_facts` key a question's cached answer lives under. Exported so
  *  the writer and reader (and tests) agree on the one key derivation. */
-export function qaCacheKey(question: string): string {
-  return `qa:${QA_KEY_GENERATION}:${hashQuestion(normalizeQuestion(question))}`;
+export function qaCacheKey(question: string, scope: QaCacheScope): string {
+  const who = cacheScopeDigest({ tenantId: scope.tenantId, projectId: scope.projectId, principal: principalScope(scope.principal) });
+  return `qa:${QA_KEY_GENERATION}:${who}:${hashQuestion(normalizeQuestion(question))}`;
 }
 
 /**
@@ -148,7 +167,8 @@ export async function resolveMemoryAnswer(
   if (!memoryReplayable(q)) return null;
 
   // 1) Exact-repeat Q&A cache.
-  const cached = await getProjectFactRecordByKey(env, db, tenantId, projectId, qaCacheKey(q)).catch(() => null);
+  const key = qaCacheKey(q, { tenantId, projectId, principal: deps.principal ?? null });
+  const cached = await getProjectFactRecordByKey(env, db, tenantId, projectId, key).catch(() => null);
   if (cached && cached.content.trim().length > 0) {
     // Requirement 5: a cached answer about a file that has since changed is not an
     // answer. Unanchored rows are not stale. A reader miss is not stale either.
@@ -224,6 +244,8 @@ export async function cacheProjectAnswer(
   fileAnchors?: FactFileAnchor[],
   /** The run that produced the answer, when the caller has one. */
   originExecutionId?: number | null,
+  /** Who the answer was produced for — only they (same role) get it replayed. */
+  principal?: CachePrincipal | null,
 ): Promise<void> {
   const q = (question ?? '').trim();
   const a = (answer ?? '').trim();
@@ -239,7 +261,7 @@ export async function cacheProjectAnswer(
   // Nothing resolveMemoryAnswer would refuse to serve (a work order, a status question,
   // a bare continuation) is worth writing — it would only ever be a row that is never read.
   if (!memoryReplayable(q)) return;
-  await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE, {
+  await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q, { tenantId, projectId, principal: principal ?? null }), a, QA_CACHE_SOURCE, {
     origin: origin ?? null,
     ...(originExecutionId != null ? { originExecutionId } : {}),
     // A cached answer replays verbatim on an exact repeat, so without a TTL it

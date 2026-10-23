@@ -59,6 +59,8 @@ import { runBloatReclaim, runTableVacuum } from './application/maintenance/table
 import { describeStoragePressure, runStoragePressureSweep } from './application/maintenance/storagePressure';
 import { runEvalDriftSweep } from './application/eval/runEvalDriftSweep';
 import { runAlertSweep } from './application/alerts/runAlertSweep';
+import { runCostAlertSweep } from './application/alerts/costAlertSweep';
+import { runRunAnomalyNotifySweep } from './application/insights/runAnomalyNotify';
 import { runValidatorReviewSweep } from './application/validation/validationDispatch';
 import { demoAccountsEnabled, reseedDemoTenants } from './application/demo/demoSeedService';
 import { runSecurityAuditSweep } from './application/security/securityDispatch';
@@ -442,6 +444,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env, db }) => {
       await runAlertSweep(env, db);
       return null;
+    },
+  },
+  {
+    key: 'run-anomaly-alerts',
+    cadence: 'daily',
+    description: 'Notify each tenant of agent runs newly flagged by the run-anomalies lens.',
+    run: async ({ env, db }) => {
+      const r = await runRunAnomalyNotifySweep(env, db);
+      return r.alerted > 0 ? `tenants=${r.tenants} alerted=${r.alerted}` : null;
     },
   },
   {
@@ -1133,6 +1144,15 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       return r.due > 0
         ? `due=${r.due} completed=${r.completed} abandoned=${r.abandoned} errors=${r.errors}`
         : null;
+    },
+  },  {
+    // Hourly by its own KV claim (no cron expression is hourly); see costAlertSweep.ts.
+    key: 'cost-alerts',
+    cadence: 'frequent',
+    description: 'Hourly: alert on a tenant daily-spend spike (>2x its 14-day median) or a run costing >3x its action-type p90.',
+    run: async ({ env, db }) => {
+      const r = await runCostAlertSweep(env, db);
+      return r.spikes > 0 || r.outliers > 0 ? `spikes=${r.spikes} outliers=${r.outliers}` : null;
     },
   },
 ];

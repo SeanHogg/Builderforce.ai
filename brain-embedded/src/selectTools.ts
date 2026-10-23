@@ -14,7 +14,9 @@
  *     the prompt budget before the conversation is even considered.
  *
  * The selection is LEXICAL and deterministic — no embeddings, no extra round trip,
- * no network. It scores each tool against the live turn's text and keeps the best
+ * no network — and the scoring is the shared `rankLexically` from
+ * `@builderforce/agent-tools` (the same ranker the Worker's `tool_search` uses), fed
+ * this module's product synonyms as extra weighted fields. It scores each tool against the live turn's text and keeps the best
  * `limit`, while pinning anything the run has already touched so a multi-step task
  * never loses a tool mid-flight.
  *
@@ -22,6 +24,7 @@
  * returned untouched, so small deployments behave exactly as before.
  */
 
+import { LEXICAL_WEIGHTS, lexicalStems, rankLexically, type LexicalField } from '@builderforce/agent-tools';
 import type { BrainToolSpec } from './streamChatCompletion';
 import { expandWithSynonyms } from './toolVocabulary';
 
@@ -32,72 +35,48 @@ import { expandWithSynonyms } from './toolVocabulary';
  */
 export const DEFAULT_TOOL_LIMIT = 64;
 
-/** Words too common to carry signal when matching a query against a tool. */
-const STOP_WORDS = new Set([
-  'the', 'a', 'an', 'and', 'or', 'of', 'for', 'to', 'in', 'on', 'is', 'are', 'was', 'be', 'by',
-  'with', 'from', 'this', 'that', 'these', 'those', 'it', 'its', 'as', 'at', 'me', 'my', '我',
-  'i', 'we', 'you', 'your', 'please', 'can', 'could', 'would', 'should', 'do', 'does', 'did',
-  'get', 'show', 'give', 'make', 'now', 'all', 'any', 'how', 'what', 'which', 'who', 'when',
-]);
-
-/** Split text into lower-cased, meaningful word stems. */
-function tokenize(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[^a-z0-9一-鿿]+/)
-    .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
-}
-
-/** Singular/plural-insensitive comparison ("tasks" matches "task"). */
-function stem(word: string): string {
-  if (word.length > 3 && word.endsWith('ies')) return `${word.slice(0, -3)}y`;
-  if (word.length > 3 && word.endsWith('es')) return word.slice(0, -2);
-  if (word.length > 2 && word.endsWith('s')) return word.slice(0, -1);
-  return word;
-}
-
 /** Score for a tool NAME stem the user typed verbatim. */
-const NAME_HIT = 10;
+const NAME_HIT = LEXICAL_WEIGHTS.name;
 /**
- * Score for a tool NAME stem reached through {@link expandWithSynonyms} — a user who
- * asked about "tickets" matching `builtin_tasks_list`. Deliberately below
- * {@link NAME_HIT} so a tool the user named exactly always outranks one found by
- * synonym, while still scoring far above any description match: before this existed,
- * the whole `tasks_*` domain scored ZERO on a question about tickets and was left out
- * of the advertised set entirely.
+ * Score for a tool NAME stem reached through {@link expandWithSynonyms} — a user who asked
+ * about "tickets" matching `builtin_tasks_list`. Deliberately below {@link NAME_HIT} so
+ * a tool the user named exactly always outranks one found by synonym, while still
+ * scoring far above any description match: before this existed, the whole `tasks_*`
+ * domain scored ZERO on a question about tickets and was left out of the advertised
+ * set entirely.
  */
 const NAME_SYNONYM_HIT = 7;
 /** Score for a description stem. Prose is weak evidence either way, so an exact hit
  *  and a synonym hit are worth the same here. */
-const DESCRIPTION_HIT = 1;
+const DESCRIPTION_HIT = LEXICAL_WEIGHTS.description;
 
 /**
- * Relevance of one tool to the turn's query terms.
- *
- * The NAME is weighted far above the description: `builtin_tasks_list` matching
- * "tasks" is a much stronger signal than the word appearing somewhere in prose.
- *
- * `synonymStems` carries the product-vocabulary expansion (see {@link ./toolVocabulary})
- * and is disjoint from `queryStems`, so the two loops cannot double-count one word.
+ * The product-vocabulary expansion of a field (see {@link ./toolVocabulary}): the
+ * words a USER would say for the catalog words in `text`, minus the field's own stems,
+ * so a term the user typed verbatim scores on the field itself and never twice.
+ * Equivalence classes are symmetric, so expanding the catalog side matches exactly
+ * the queries that expanding the query side used to.
  */
-function scoreTool(tool: BrainToolSpec, queryStems: Set<string>, synonymStems: Set<string>): number {
-  const name = (tool.function?.name ?? '').toLowerCase();
-  const description = (tool.function?.description ?? '').toLowerCase();
-  if (!name) return 0;
+function synonymText(text: string): string {
+  return [...expandWithSynonyms(lexicalStems(text))].join(' ');
+}
 
-  let score = 0;
-  const nameStems = new Set(tokenize(name).map(stem));
-  for (const s of nameStems) {
-    if (queryStems.has(s)) score += NAME_HIT;
-    else if (synonymStems.has(s)) score += NAME_SYNONYM_HIT;
-  }
-
-  const descStems = new Set(tokenize(description).map(stem));
-  for (const s of descStems) {
-    if (queryStems.has(s) || synonymStems.has(s)) score += DESCRIPTION_HIT;
-  }
-
-  return score;
+/**
+ * The weighted fields one tool is scored on by the shared lexical ranker
+ * (`@builderforce/agent-tools` `rankLexically`). The NAME is weighted far above the
+ * description: `builtin_tasks_list` matching "tasks" is a much stronger signal than the
+ * word appearing somewhere in prose. The synonym fields carry the product vocabulary.
+ */
+function toolFields(tool: BrainToolSpec): LexicalField[] {
+  const name = tool.function?.name ?? '';
+  if (!name) return [];
+  const description = tool.function?.description ?? '';
+  return [
+    { text: name, weight: NAME_HIT },
+    { text: synonymText(name), weight: NAME_SYNONYM_HIT },
+    { text: description, weight: DESCRIPTION_HIT },
+    { text: synonymText(description), weight: DESCRIPTION_HIT },
+  ];
 }
 
 export interface SelectToolsOptions {
@@ -147,11 +126,6 @@ export function selectToolsForTurn(
 
   const required = new Set(options.required ?? []);
   const pinned = new Set(options.pinned ?? []);
-  const queryStems = new Set(tokenize(options.query).map(stem));
-  // The product's words reaching the catalog's words. Disjoint from `queryStems` by
-  // construction, so a term is scored as an exact hit or a synonym hit, never both.
-  const synonymStems = expandWithSynonyms(queryStems);
-
   const chosen: BrainToolSpec[] = [];
   const taken = new Set<string>();
 
@@ -176,14 +150,10 @@ export function selectToolsForTurn(
     if (pinned.has(tool.function?.name ?? '')) take(tool);
   }
 
-  // 2. Relevance to the turn. Stable sort: equal scores keep catalog order.
-  const scored = tools
-    .map((tool, index) => ({ tool, index, score: scoreTool(tool, queryStems, synonymStems) }))
-    .filter((e) => e.score > 0)
-    .sort((a, b) => (b.score - a.score) || (a.index - b.index));
-  for (const entry of scored) {
+  // 2. Relevance to the turn — the ONE shared lexical ranker. Ties keep catalog order.
+  for (const tool of rankLexically(tools, options.query, toolFields, tools.length)) {
     if (chosen.length >= limit) break;
-    take(entry.tool);
+    take(tool);
   }
 
   // 3. Backfill in catalog order so a vague query still gets a full, stable set.

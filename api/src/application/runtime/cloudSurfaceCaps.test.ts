@@ -88,7 +88,7 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
 describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)', () => {
   it('advertises exactly what the image implements', () => {
     expect(names(CONTAINER_AGENT_TOOLS)).toEqual([
-      'analyze_codebase', 'ask_human', 'claim_resource', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status',
+      'analyze_codebase', 'ask_human', 'claim_resource', 'edit_file', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status',
       'git_sync_latest', 'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
       'message_agent', 'read_file', 'release_resource', 'run_command', 'skill_list', 'skill_propose',
       'spawn_agent', 'spawn_agents', 'stop_agent', 'update_prd', 'wait_agents', 'web_search',
@@ -127,10 +127,10 @@ describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)',
 
   it('omits the tools the image has no handler for (they would 400 mid-run)', () => {
     const got = names(CONTAINER_AGENT_TOOLS);
-    // `repo.edit` — no `edit` container-op; `repo.search` — it greps via the shell;
-    // `static-check` — shell-free validator. (`human` USED to be on this list; the
-    // image now implements the exit-and-redispatch pause, so it is advertised.)
-    for (const t of ['edit_file', 'delete_file', 'search_code', 'run_checks']) {
+    // `repo.search` — it greps via the shell; `static-check` — shell-free validator.
+    // (`human` and `repo.edit` USED to be on this list; the image now implements the
+    // pause and the in-clone `edit_file`, so both are advertised — handshake-gated.)
+    for (const t of ['delete_file', 'search_code', 'run_checks']) {
       expect(got).not.toContain(t);
     }
   });

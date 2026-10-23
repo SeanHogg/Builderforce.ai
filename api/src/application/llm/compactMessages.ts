@@ -33,7 +33,9 @@
  * Worker-safe: only the `/handoff` subpath is imported (pure, no `node:*`).
  */
 import { packHandoff, tokensOf, type HandoffMessage } from '@seanhogg/builderforce-memory/handoff';
-import { DEFAULT_HANDOFF_RESERVE_TOKENS } from '@builderforce/run-policy';
+import { DEFAULT_HANDOFF_RESERVE_TOKENS, handoffTokenBudget } from '@builderforce/run-policy';
+import { priceTierBoundary } from '@builderforce/model-catalog';
+import { isCostLeverOn } from '@builderforce/cost-levers';
 import { ideProxy, readProxyChoice, type ProxyEnv } from './LlmProxyService';
 import { estimateTokensFromChars } from './tokenUsage';
 import { catalogEntry } from './vendors/registry';
@@ -52,6 +54,11 @@ export interface CompactOptions {
   targetModel?: string;
   /** Tokens held back for the reply when sizing to `targetModel`'s window. */
   reserveOutputTokens?: number;
+  /** The Worker env + the tenant the run bills to — read only to decide cost lever C9
+   *  (`c9_price_tier_budget`): when on, a `targetModel` with long-context price tiers
+   *  caps the budget at its lowest tier boundary. Absent = lever off (no tier cap). */
+  env?: unknown;
+  tenantId?: string | number | null;
   /** Memory recall for the latest directive (an Evermind context source), at most
    *  `budgetChars` long — the note when the summarizer is absent or fails. */
   recall?: (query: string, budgetChars: number) => Promise<string>;
@@ -60,6 +67,12 @@ export interface CompactOptions {
   /** The tool schemas the request will advertise — their size is charged against the
    *  budget, so a tool-heavy request is packed tighter instead of 413ing upstream. */
   tools?: unknown;
+  /** Cost lever C2: mask tool results older than this many assistant turns (the
+   *  boundary advances in steps of the same size) BEFORE packing. Absent = no masking. */
+  maskObservationsAfterTurns?: number;
+  /** Keep the task brief (the FIRST user message) through packing even when a later
+   *  nudge/steer is the latest directive. Absent = only the latest directive is kept. */
+  pinTaskBrief?: boolean;
 }
 
 /** Defaults for the cloud coding loop. ~40K keeps a run comfortably inside the
@@ -80,6 +93,8 @@ export interface CompactResult {
   afterTokens: number;
   /** Messages removed (the middle collapsed to one memory note). */
   droppedMessages: number;
+  /** Tool results replaced by a one-line placeholder ({@link maskOldObservations}). */
+  maskedObservations?: number;
 }
 
 /** THE estimator — gate, packer and reporting all count with it. */
@@ -137,6 +152,59 @@ export function elideToFit(messages: readonly Msg[], budget: number): Msg[] {
   return out;
 }
 
+/** Steps the observation-mask boundary advances in (cost lever C2). */
+export const OBSERVATION_MASK_TURNS = 6;
+const MASK_PREFIX = '[masked tool output';
+/** Results smaller than this cost less to keep than to mask. */
+const MIN_MASK_CHARS = 400;
+
+/**
+ * Observation masking (cost lever C2): replace the content of tool results older than
+ * `turns` assistant turns with ONE line naming the tool, a short summary of its
+ * arguments and the original size. The message itself stays, so tool-call pairing is
+ * untouched. The boundary is quantised to whole steps of `turns` (results of the first
+ * `floor(A/turns)*turns - turns` assistant turns are masked), so the transcript prefix
+ * is rewritten once every `turns` turns rather than every turn — keeping the cached
+ * prefix stable in between. Idempotent; returns the input array when nothing changed.
+ */
+export function maskOldObservations(messages: readonly Msg[], turns = OBSERVATION_MASK_TURNS): { messages: Msg[]; masked: number } {
+  const assistants = messages.reduce((n, m) => n + (m.role === 'assistant' ? 1 : 0), 0);
+  const boundary = Math.floor(assistants / turns) * turns - turns;
+  if (turns <= 0 || boundary <= 0) return { messages: messages as Msg[], masked: 0 };
+  const calls = new Map<string, { name: string; args: string }>();
+  let ordinal = 0;
+  let masked = 0;
+  const out = messages.map((m) => {
+    if (m.role === 'assistant') {
+      ordinal += 1;
+      for (const tc of (Array.isArray(m.tool_calls) ? m.tool_calls : []) as Array<{ id?: string; function?: { name?: string; arguments?: string } }>) {
+        if (tc.id) calls.set(tc.id, { name: tc.function?.name ?? 'tool', args: tc.function?.arguments ?? '' });
+      }
+      return m;
+    }
+    if (m.role !== 'tool' || ordinal > boundary || typeof m.content !== 'string') return m;
+    const content = m.content;
+    if (content.length < MIN_MASK_CHARS || content.startsWith(MASK_PREFIX)) return m;
+    const call = calls.get(typeof m.tool_call_id === 'string' ? m.tool_call_id : '');
+    const args = (call?.args ?? '').replace(/\s+/g, ' ').slice(0, 120);
+    masked += 1;
+    return { ...m, content: `${MASK_PREFIX}: ${call?.name ?? 'tool'}(${args}) — ${content.length} chars; re-run the tool to see it again]` };
+  });
+  return masked > 0 ? { messages: out, masked } : { messages: messages as Msg[], masked: 0 };
+}
+
+/**
+ * Re-insert a pinned message the packer dropped, right after the leading system
+ * prefix. A no-op once the installed `packHandoff` honours `pinned` itself; it guards
+ * a host still on a memory package that predates the option.
+ */
+function ensurePinned(packed: Msg[], pinned: Msg | undefined): Msg[] {
+  if (!pinned || packed.includes(pinned)) return packed;
+  let at = 0;
+  while (at < packed.length && packed[at]?.role === 'system') at += 1;
+  return [...packed.slice(0, at), pinned, ...packed.slice(at)];
+}
+
 /** Render a slice of the conversation as role-tagged text for the summarizer, with
  *  per-message + total caps so the summarization call itself stays bounded. */
 function renderForSummary(middle: readonly Msg[]): string {
@@ -156,11 +224,18 @@ function renderForSummary(middle: readonly Msg[]): string {
   return parts.join('\n');
 }
 
-/** The token budget: the cost cap, or the serving model's window when that is smaller. */
+/** The token budget: the smallest of the cost cap, the serving model's window (less the
+ *  reply reserve) and — with C9 on — its long-context price-tier boundary. The bound
+ *  arithmetic is the shared hand-off rule (`@builderforce/run-policy` `handoffTokenBudget`). */
 export function compactionBudget(opts: CompactOptions): number {
   const window = opts.targetModel ? catalogEntry(opts.targetModel)?.contextWindow : undefined;
-  if (!window || window <= 0) return opts.maxTokens;
-  return Math.max(1, Math.min(opts.maxTokens, window - (opts.reserveOutputTokens ?? 0)));
+  const tierCap = opts.targetModel && opts.env !== undefined && isCostLeverOn(opts.env, 'c9_price_tier_budget', opts.tenantId);
+  return handoffTokenBudget({
+    costCapTokens: opts.maxTokens,
+    contextWindow: window,
+    reserveOutputTokens: opts.reserveOutputTokens,
+    ...(tierCap && opts.targetModel ? { priceTierBoundary: priceTierBoundary(opts.targetModel) } : {}),
+  }) ?? opts.maxTokens;
 }
 
 /**
@@ -178,10 +253,26 @@ export async function compactMessages(
   const budget = compactionBudget(opts);
   const untouched = (): CompactResult =>
     ({ messages: [...messages], compacted: false, summarized: false, beforeTokens, afterTokens: beforeTokens, droppedMessages: 0 });
-  if (messages.length === 0 || beforeTokens <= budget) return untouched();
+  // C2: mask stale observations first; packing (and its LLM summary) is the fallback
+  // only when masking alone does not fit the budget.
+  const mask = opts.maskObservationsAfterTurns
+    ? maskOldObservations(messages, opts.maskObservationsAfterTurns)
+    : { messages: messages as Msg[], masked: 0 };
+  const source = mask.messages;
+  const maskedTokens = mask.masked > 0 ? messagesTokens(source) + toolsTokens : beforeTokens;
+  if (source.length === 0 || maskedTokens <= budget) {
+    return mask.masked > 0
+      ? { messages: [...source], compacted: true, summarized: false, beforeTokens, afterTokens: maskedTokens, droppedMessages: 0, maskedObservations: mask.masked }
+      : untouched();
+  }
+  // The task brief is the FIRST user message; after a stall nudge or steer it is no
+  // longer the latest directive the packer protects, so it is pinned explicitly.
+  const briefIdx = opts.pinTaskBrief ? source.findIndex((m) => m.role === 'user') : -1;
+  const brief = briefIdx >= 0 ? source[briefIdx] : undefined;
 
   const pack = await packHandoff({
-    messages: messages as unknown as readonly HandoffMessage[],
+    messages: source as unknown as readonly HandoffMessage[],
+    ...(brief ? { pinned: (_m: HandoffMessage, i: number) => i === briefIdx } : {}),
     targetContextTokens: budget,
     reserveOutputTokens: 0,
     toolsTokens,
@@ -201,11 +292,11 @@ export async function compactMessages(
   });
   // Packing dropped nothing (or could not fit even the pinned anchors): start from the
   // original transcript and truncate bulky tool results instead of shipping it over cap.
-  const packed = pack.dropped > 0 ? (pack.messages as unknown as Msg[]) : [...messages];
+  const packed = pack.dropped > 0 ? ensurePinned(pack.messages as unknown as Msg[], brief) : [...source];
   const messageBudget = Math.max(0, budget - toolsTokens);
   const out = !pack.fits || messagesTokens(packed) > messageBudget ? elideToFit(packed, messageBudget) : packed;
   const elided = out.some((m, i) => m !== packed[i]);
-  if (pack.dropped === 0 && !elided) return untouched();
+  if (pack.dropped === 0 && !elided && mask.masked === 0) return untouched();
   return {
     messages: out,
     compacted: true,
@@ -213,6 +304,7 @@ export async function compactMessages(
     beforeTokens,
     afterTokens: messagesTokens(out) + toolsTokens,
     droppedMessages: pack.dropped,
+    ...(mask.masked > 0 ? { maskedObservations: mask.masked } : {}),
   };
 }
 

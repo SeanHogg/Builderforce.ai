@@ -45,10 +45,10 @@ import { pricesForCall } from '../llm/catalogView';
  * surface (CloudRunnerDO), and the worker-fallback path. Framework-free (no Hono)
  * so it is unit-testable against a mocked gateway/DB without standing up the Worker.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { buildMemoryCapability } from '../memory/memoryService';
-import { approvedSkillsForRun, buildSkillAuthoringCapability, renderSkillBlock } from '../skills/tenantSkillService';
+import { approvedSkillsForRun, buildSkillAuthoringCapability, rankSkillsForTask, renderSkillBlock } from '../skills/tenantSkillService';
 import { runEarnedReflection, skillReflectionDirective } from '../skills/skillReflection';
 import { isMemoryScope } from '../../domain/memory/memoryScope';
 import { buildCoordinationCapability, claimWriteLease, guardRepoWrite } from '../coordination/coordinationCapability';
@@ -77,13 +77,16 @@ import type { ArcStage } from '@builderforce/workload';
 import { byoRoutingOptions } from '../llm/tenantProxy';
 import { evaluatePremiumModelAccess } from '../../domain/tenant/planFeatures';
 import { TenantPlan } from '../../domain/shared/types';
-import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
+import { compactMessages, buildGatewaySummarizer, toolsTokensOf, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { resolveTenantLlmCredentials, byoVendorIdsFromCredentials, type TenantVendorKeys } from '../llm/tenantProviderKeyService';
 import { assertCloudRunByo, type CloudByoFailure } from '../llm/cloudByoPolicy';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
 import { TenantRole } from '../../domain/shared/types';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
-import { usageDatabaseOf } from '../llm/usageLedger';
+import { openCostLoopSession, type CostLoopState } from './costLoop/costLoopSession';
+import { workModeToolingPrompt } from './costLoop/workModePrompt';
+import { cloudReasoningExecParams, cloudRoutingExploration, toolRowCodecOptions } from './costLoop/runLevers';
+import { isCostLeverOn } from '@builderforce/cost-levers';
 import { ensureTaskPrdRecord, appendTaskPrdRevision, editTaskPrdSection, findTaskPrimarySpec } from '../prd/taskPrd';
 import { loadCapabilityContext, loadPersonaSetpoints } from '../artifact/capabilityContext';
 import { recordPersonalityEvent, compilePersonalityApplication } from '../persona/recordPersonalityEvent';
@@ -148,7 +151,7 @@ import { checkRunLimits } from '../../domain/containment/runLimits';
 import { isHumanOrExternalOutputTool, trustNotice } from '../../domain/trust/contentTrust';
 import { inspectOutboundContent, recordContextContribution } from '../trust/trustService';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
-import { boards, executionLimits, executions, llmUsageLog, tasks, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
+import { boards, executionLimits, executions, tasks, ideAgents, taskFileChanges } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
@@ -232,7 +235,7 @@ export async function handleContainerOp(
 /** Mid-run state the durable (DO) surface persists between alarm ticks so it can
  *  resume the loop one step at a time. (The Worker surface runs the whole loop in
  *  one call and never sets this.) */
-export interface CloudLoopState {
+export interface CloudLoopState extends CostLoopState {
   messages: Array<Record<string, unknown>>;
   writtenPaths: string[];
   /** Next absolute step index to run. */
@@ -976,7 +979,7 @@ async function runCloudToolLoop(
         role: runRole,
         arcStage: opts?.arcStage,
         // A cost-first role (explore / utility / verify) orders by expected cost.
-        prices: await pricesForCall(env, runRole, opts?.arcStage),
+        prices: await pricesForCall(env, runRole, opts?.arcStage), explore: cloudRoutingExploration(env, tenantId),
         // Context-aware seed: don't pick a small-window model for a big first turn.
         estimatedTokens: estimateRequestTokens(messages, cloudTools),
         // A free tenant may pin a model their connected provider (BYO) serves.
@@ -1062,6 +1065,13 @@ async function runCloudToolLoop(
   // a different call through the same gate is asked again.
   const policyGates: PolicyGate[] = opts?.resume?.policyGates ?? opts?.policyGates ?? [];
   const policyAskedGates = new Set<string>(opts?.resume?.policyAskedGates ?? []);
+  // The cost levers (costLoop/): advertised tools, volatile tail, output cap, run budget.
+  const cost = await openCostLoopSession({
+    env, db, tenantId, executionId, taskId: taskRow.id, meterExecutionId, plan: routing.effectivePlan, role: runRole, catalog: cloudTools,
+    ...(opts?.resume ? { resume: opts.resume } : {}), promptTexts: [effectiveSystemPrompt, userContent],
+    required: requiredSignoff ? ['builtin_kanban_signoff'] : [],
+    record: (toolName, category, detail, result) => recordCloudToolEvent(db, { tenantId, cloudAgentRef, executionId, toolName, category, detail, result }),
+  });
 
   // Hard cancel: a background watcher polls the (cross-isolate) execution status
   // and aborts the in-flight gateway fetch the instant it sees CANCELLED, so a
@@ -1111,11 +1121,10 @@ async function runCloudToolLoop(
   // ── THE loop ────────────────────────────────────────────────────────────────
   // The model→tools→model skeleton (step budget, cancel poll, argument parsing, the
   // assistant/tool rows, the finish / ask_human control signals) lives ONCE in
-  // `@builderforce/agent-loop` and is the same kernel the Brain, the canvas and the
-  // on-prem runtime drive. Everything cloud-specific below is a hook or a port that
-  // closes over this run's state — nothing here iterates.
+  // `@builderforce/agent-loop` — the same kernel the Brain, the canvas and the on-prem
+  // runtime drive. Everything cloud-specific below is a hook or a port; nothing iterates.
   type Row = Record<string, unknown>;
-  const codec = openAiChatCodec<Row>();
+  const codec = openAiChatCodec<Row>(toolRowCodecOptions(env, tenantId)); // C7: the shared tool-row budget
   const evt = { tenantId, cloudAgentRef, executionId };
   const dataOk = (data: unknown): boolean => !(data && typeof data === 'object' && (data as { ok?: unknown }).ok === false);
   // Per-call timer. Calls within a turn are dispatched sequentially, so one slot is exact.
@@ -1136,20 +1145,9 @@ async function runCloudToolLoop(
     },
 
     beforeTurn: async (ctx) => {
-      if (declaredLimits) {
-        // The run's spend so far, from the ledger's own database — read from the core
-        // copy it stayed at 0 and a declared spend limit could never trip.
-        const [spend] = await usageDatabaseOf(db).select({ total: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
-          .from(llmUsageLog)
-          .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.executionId, meterExecutionId)));
-        const limitReason = checkRunLimits(declaredLimits, {
-          files: writtenPaths.size, repositories: repoCtx ? 1 : 0, spendMillicents: Number(spend?.total ?? 0),
-        });
-        if (limitReason) {
-          await recordCloudToolEvent(db, { ...evt, toolName: 'containment.limit', category: 'tool', detail: { step: ctx.step, limits: declaredLimits }, result: limitReason });
-          return { action: 'stop', ok: false, output: `Run contained: ${limitReason}.` };
-        }
-      }
+      // Declared limits (+ the A2 token cap) against the run's spend so far.
+      const contained = await cost.beforeTurn(ctx.step, declaredLimits, writtenPaths.size, repoCtx ? 1 : 0);
+      if (contained) return { action: 'stop', ok: false, output: contained };
 
       // Mid-run steering: drain any user follow-ups posted to this execution since the
       // previous step and splice them in as user turns BEFORE the next paid call, so a
@@ -1166,7 +1164,7 @@ async function runCloudToolLoop(
       // Sized to the model the policy asks for next when it names one (its catalog window).
       const compaction = await compactMessages(
         messages,
-        { ...CLOUD_COMPACT_DEFAULTS, tools: cloudTools, ...(modelState.policy.model ? { targetModel: modelState.policy.model } : {}) },
+        { ...CLOUD_COMPACT_DEFAULTS, ...cost.compactOptions(), ...(modelState.policy.model ? { targetModel: modelState.policy.model } : {}) },
         buildGatewaySummarizer(env),
       );
       if (compaction.compacted) {
@@ -1175,8 +1173,8 @@ async function runCloudToolLoop(
         await recordCloudToolEvent(db, {
           ...evt,
           toolName: 'context.compacted', category: 'llm',
-          detail: { step: ctx.step, beforeTokens: compaction.beforeTokens, afterTokens: compaction.afterTokens, summarized: compaction.summarized, droppedMessages: compaction.droppedMessages },
-          result: `compressed ~${compaction.beforeTokens} → ~${compaction.afterTokens} tokens (${compaction.summarized ? 'builder-memory summary' : 'elided'})`,
+          detail: { step: ctx.step, beforeTokens: compaction.beforeTokens, afterTokens: compaction.afterTokens, summarized: compaction.summarized, droppedMessages: compaction.droppedMessages, maskedObservations: compaction.maskedObservations ?? 0 },
+          result: `compressed ~${compaction.beforeTokens} → ~${compaction.afterTokens} tokens (${compaction.summarized ? 'builder-memory summary' : compaction.droppedMessages === 0 && compaction.maskedObservations ? 'stale tool outputs masked' : 'elided'})`,
         });
       }
       return undefined;
@@ -1445,13 +1443,10 @@ async function runCloudToolLoop(
 
   const ports: LoopPorts<Row> = {
     complete: async (ctx) => {
-      // Per-step dynamic directive seam: prepend an ephemeral system directive
-      // (e.g. the V3 limbic affect block) to THIS request only — `messages` (the
-      // persisted conversation the loop owns) is left untouched, so the directive
-      // can change every tick without mutating saved state. None → unchanged.
-      const requestMessages = opts?.dynamicSystem
-        ? [{ role: 'system', content: opts.dynamicSystem }, ...messages]
-        : messages;
+      // Per-step dynamic directive seam (the V3 affect block, + budget / task state) on
+      // THIS request only — `messages` stays untouched. B1 trails it after the history.
+      const requestMessages = cost.turnMessages(messages, opts?.dynamicSystem);
+      const turnTools = cost.tools();
 
       const tGen0 = Date.now();
       // ONE turn under the run policy: it asks for the locked/pinned model, and when the
@@ -1463,7 +1458,7 @@ async function runCloudToolLoop(
       const turnRun = await completeUnderRunPolicy(modelState, (req) => proxy.complete(
         {
           messages: requestMessages as unknown as ChatMessage[],
-          tools: cloudTools,
+          tools: turnTools,
           ...turnRequestFields(req),
           // Sampling. Caller-configured `genParams` OUTRANK the personality-derived
           // temperature: an operator who set a temperature on the published model
@@ -1472,7 +1467,7 @@ async function runCloudToolLoop(
             ? { temperature: genParams.temperature ?? opts?.execParams?.temperature }
             : {},
           ...(genParams.topP != null ? { top_p: genParams.topP } : {}),
-          ...(genParams.maxTokens != null ? { max_tokens: genParams.maxTokens } : {}),
+          ...cost.turnFields(genParams.maxTokens),
           // Personality reasoning levers (thinkLevel/reasoningLevel) → the correct
           // vendor param via reasoningCapability (Anthropic `thinking` / OpenAI
           // `reasoning_effort`), surviving to the vendor as extraBody. Attached ONLY
@@ -1484,7 +1479,7 @@ async function runCloudToolLoop(
           // continuation turns (whose thinking block was lost in the OpenAI round-trip);
           // for a pinned OpenAI o-series/gpt-5 coder it lands `reasoning_effort`.
           ...(req.strict
-            ? reasoningParamsForModel(req.model, opts?.execParams, {
+            ? reasoningParamsForModel(req.model, cloudReasoningExecParams(env, tenantId, opts?.execParams, req.role), {
                 isFirstTurn: !messages.some((m) => (m as { role?: string }).role === 'assistant'),
               }) ?? {}
             : {}),
@@ -1496,6 +1491,7 @@ async function runCloudToolLoop(
         abortController.signal,
       ), (outcome) => recordModelCascade(db, evt, outcome, ctx.step));
       modelState = turnRun.state;
+      await cost.recordTurn(turnRun.result);
       // Shared post-`complete` processing (metering + `llm.complete`/degraded/agent.message
       // telemetry) — identical to the container `llm` op. `notify: false`: the loop streams
       // its own final turn. The degraded comparison is the seed/pin (`pick.model`), not the
@@ -1506,6 +1502,7 @@ async function runCloudToolLoop(
         effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
         role: runRole,
         phase: modelState.policy.phase,
+        turnInput: { messages: requestMessages, tools: turnTools }, toolSchemaTokens: toolsTokensOf(turnTools),
       }, { tGen0, step: ctx.step, notify: false });
       if (!turn.ok) return { failed: turn.error };
       lastResolvedModel = turn.resolvedModel;
@@ -1515,6 +1512,8 @@ async function runCloudToolLoop(
     },
 
     dispatch: async (call) => {
+      const meta = cost.dispatch(call);
+      if (meta) return meta;
       const platformTool = resolveCloudAgentPlatformTool(call.name, opts?.originatingChatId);
       if (platformTool) {
         // Curated platform tool (create task / update OKR / read remaining work) —
@@ -1607,6 +1606,7 @@ async function runCloudToolLoop(
     ciFailureBlocks,
     policyGates,
     policyAskedGates: [...policyAskedGates],
+    ...cost.snapshot(),
   });
 
   // Paused on a human question — do NOT finalize (no PR, not terminal). Hand back
@@ -2456,18 +2456,6 @@ export async function prepareCloudRun(
       + priorChanges.map((c) => `- \`${c.path}\` (${c.status})`).join('\n')
     : null;
 
-  // The tool loop runs against a real repository. The verification sentence differs
-  // by executor: the durable surface has NO shell (CI verifies), the Container
-  // surface has a REAL shell (run_command) so the agent verifies before finishing.
-  const shellLine = opts?.shell
-    ? 'Call git_sync_latest FIRST, before editing: your branch may have been created earlier and fallen behind the base branch, so working without syncing builds on stale code and your PR could revert newer work. ' +
-      'You also have git_status / git_diff / git_history to inspect the repo, and git_undo / git_redo to back out or reapply a commit. ' +
-      'You HAVE a real shell: use run_command to install dependencies and run the project build, type-check, lint, and tests in the checked-out repo BEFORE you finish. Fix anything that fails. Only claim a check passed if you actually ran it and saw it pass; CI on the PR re-verifies. ' +
-      // A human's explicit "merge/push to main" is their call: this surface has the clone
-      // and the push credential, so it does exactly that instead of substituting a PR.
-      "Your work normally ships as a pull request when you finish. If the human's directive EXPLICITLY asks you to merge into or push to the base branch (main), do exactly that with run_command — `git fetch origin`, merge your branch into the base branch, `git push origin <base>` — and report the resulting commit hash; do not substitute a pull request for an explicit instruction."
-    : 'You CANNOT run a local shell (there is NO run_command). After writing, call run_checks: it statically validates changed files AND polls CI (build/type-check/test) on this branch HEAD. If CI is red, fix before finishing. If CI is pending, wait and call run_checks again. Only claim a check passed when run_checks reported CI success. If no CI is configured yet (or it only runs after the PR opens), do not claim tests passed — the PR\'s CI is then the source of truth. If asked to merge or push to the base branch, say plainly that this executor cannot push it: your work ships as the pull request the human merges.';
-
   // ── The run's context, as BLOCKS ────────────────────────────────────────────
   //
   // Everything below is a `RunContextBlock` from `@builderforce/run-context`, not a
@@ -2533,23 +2521,11 @@ export async function prepareCloudRun(
     {
       kind: 'tooling', subject: `executor:${opts?.shell ? 'container' : 'durable'}`, channel: 'system',
       order: RUN_CONTEXT_ORDER.coreTooling, trustTier: 'operator', pinned: true,
-      body: 'You are a BuilderForce agent executing a project task against a real repository. Follow the PRD, architecture spec, and project rules exactly. ' +
-        'Workflow: use search_code FIRST to locate where a symbol/string/feature lives across the whole repo (one call) — do NOT read files one by one to find references; ' +
-        'use list_files to understand structure, read_file to read any file you intend to change (preserve existing code — only change what the task needs), ' +
-        'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. ' +
-        'If search_code returns 0 matches for the thing a task says to change/remove, that means it is not in the codebase — say so in your summary instead of inventing an unrelated edit. ' +
-        'If the bound repository (see "Repository / workspace") has no files related to the task, report that the wrong repo appears bound and name it — do NOT produce a conceptual stand-in against unrelated code. ' +
-        'Do not narrate your plan, repeat findings, or emit progress summaries between tool calls — act through the tools and reserve assistant text for information the user actually needs. ' +
-        'Do NOT call finish while any deliverable file is still a stub/placeholder or any requirement in the task/PRD is unimplemented — keep listing, reading and writing files until the task is genuinely complete. ' +
-        'Do not claim the task is completed merely because you investigated it or described a fix; completion requires the requested repository changes to be written and reconciled. ' +
-        'Reconcile the branch against the task, do not just append: if a file already on this branch (see "Files already on this branch") is dead code — a stub, an unreferenced file, or something that should not ship in this PR — remove it with delete_file (confirm it is unused via search_code first). The PR should contain only the files the task genuinely needs. ' +
-        'When you finish, your committed changes are opened as a PULL REQUEST for human review (a person approves the merge in-product); they are NOT auto-deployed — so the PR must contain the COMPLETE, working change, not a partial scaffold. Call finish with a summary only once everything the task requires has been written. ' +
-        shellLine + ' ' +
-        // The PRD is handed to the run as context and is now WRITABLE. Without this line
-        // the tool is advertised and never reached: a model told to "follow the PRD"
-        // does not infer that it may also correct one.
-        'The PRD above is the ticket\'s SHARED spec and you can write to it with `update_prd`: use mode "append" to record a decision you made, a constraint you discovered, or work you deliberately left out of scope, so the next run on this ticket does not re-derive or repeat it; use mode "section" ONLY to correct a section that is genuinely WRONG (it replaces that section\'s whole body). Do not use it to narrate progress — that is what your summary and `builtin_tasks_update` are for. ' +
-        'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
+      // The executor's tooling prompt (shell vs CI verification) with the D5 diff-edit
+      // and D8 parallel-read wording when their levers are on.
+      body: workModeToolingPrompt({
+        shell: opts?.shell, diffEdits: isCostLeverOn(env, 'd5_output_caps', tenantId), parallelReads: isCostLeverOn(env, 'd8_parallel_tool_calls', tenantId),
+      }),
     },
     {
       // Platform (project-management) tools — advertised alongside the repo tools on
@@ -2583,7 +2559,8 @@ export async function prepareCloudRun(
       // approved them, and an unapproved draft can never appear here.
       kind: 'capabilities', subject: `workspace-skills:${executionId}`, channel: 'system',
       order: RUN_CONTEXT_ORDER.capabilities, trustTier: 'tenant', pinned: true,
-      body: renderSkillBlock(workspaceSkills),
+      // E1: only the approved skills relevant to this task (top 5), not all 50.
+      body: renderSkillBlock(isCostLeverOn(env, 'e1_skill_ranking', tenantId) ? rankSkillsForTask(workspaceSkills, `${taskRow.title} ${taskRow.description ?? ''}`) : workspaceSkills),
     },
   ];
 

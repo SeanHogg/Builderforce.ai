@@ -6,6 +6,8 @@ import {
   catalogDesktopSemantic,
   checkReferences,
   desktopBackedTools,
+  desktopCompressAvailable,
+  healthReportsCompress,
   desktopRepoMapSection,
   desktopSemanticCapability,
   liveDesktop,
@@ -180,5 +182,68 @@ describe("desktop.json models.endpoint", () => {
     expect(readDesktopModelsEndpoint()).toBeNull();
     write({ models: {} });
     expect(readDesktopModelsEndpoint()).toBeNull();
+  });
+});
+
+describe("desktop compression", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "bf-desktop-compress-"));
+    process.env.BUILDERFORCE_DESKTOP_DISCOVERY = path.join(dir, "desktop.json");
+    fs.writeFileSync(process.env.BUILDERFORCE_DESKTOP_DISCOVERY, JSON.stringify({ port: 4999, token: "tok", pid: 1, version: "x" }));
+  });
+
+  afterEach(() => {
+    setDesktopFetchForTests(null);
+    delete process.env.BUILDERFORCE_DESKTOP_DISCOVERY;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** A service whose health reports `compress` as given; `/v1/compress` halves the text. */
+  function service(compress: string | undefined, sent: Array<Record<string, unknown>> = []) {
+    return async (url: string, init?: RequestInit): Promise<Response> => {
+      const op = url.split("/v1/")[1] ?? "";
+      if (op === "health") return new Response(JSON.stringify({ version: "x", ...(compress ? { compress } : {}) }), { status: 200 });
+      if (op === "compress") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { text: string; rate: number };
+        sent.push(body);
+        return new Response(JSON.stringify({ text: body.text.slice(0, body.text.length / 2), originalTokens: 10, keptTokens: 5 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: "nope" }), { status: 400 });
+    };
+  }
+
+  it("reads the compress feature from the health body", () => {
+    expect(healthReportsCompress({ compress: "idle" })).toBe(true);
+    expect(healthReportsCompress({ compress: "ready" })).toBe(true);
+    expect(healthReportsCompress({ compress: "disabled" })).toBe(false);
+    expect(healthReportsCompress({ compress: "unavailable" })).toBe(false);
+    expect(healthReportsCompress({ version: "old" })).toBe(false);
+    expect(healthReportsCompress(null)).toBe(false);
+  });
+
+  it("advertises compress only when the probe reports it", async () => {
+    setDesktopFetchForTests(service("disabled"));
+    expect(await desktopCompressAvailable()).toBe(false);
+    expect((await catalogDesktopSemantic("/repo"))?.compress).toBeUndefined();
+
+    setDesktopFetchForTests(service(undefined));
+    expect((await catalogDesktopSemantic("/repo"))?.compress).toBeUndefined();
+  });
+
+  it("compresses through POST /v1/compress when built in", async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    setDesktopFetchForTests(service("idle", sent));
+    expect(await desktopCompressAvailable()).toBe(true);
+    const cap = await catalogDesktopSemantic("/repo");
+    const r = await cap!.compress!("abcdefgh", 0.4);
+    expect(r).toEqual({ ok: true, text: "abcd", originalTokens: 10, keptTokens: 5 });
+    expect(sent).toEqual([{ text: "abcdefgh", rate: 0.4 }]);
+  });
+
+  it("is never attached by the plain capability factory", () => {
+    expect(desktopSemanticCapability("/repo").compress).toBeUndefined();
+    expect(desktopSemanticCapability("/repo", { compress: true }).compress).toBeTypeOf("function");
   });
 });

@@ -31,12 +31,14 @@
       "@builderforce/creation-canvas-contract": ["../packages/creation-canvas-contract/src/index.ts"],
       "@builderforce/agent-stall": ["../packages/agent-stall/src/index.ts"],
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
+      "@builderforce/cost-levers": ["../packages/cost-levers/src/index.ts"],
       "@builderforce/learned-routing": ["../packages/learned-routing/src/index.ts"],
       "@builderforce/local-inference": ["../packages/local-inference/src/index.ts"],
       "@builderforce/local-first": ["../packages/local-first/src/index.ts"],
       "@builderforce/model-catalog": ["../packages/model-catalog/src/index.ts"],
       "@builderforce/run-policy": ["../packages/run-policy/src/index.ts"],
       "@builderforce/spend-contract": ["../packages/spend-contract/src/index.ts"],
+      "@builderforce/tool-output-policy": ["../packages/tool-output-policy/src/index.ts"],
       "@builderforce/workload": ["../packages/workload/src/index.ts"],
       "@builderforce/write-outbox": ["../packages/write-outbox/src/index.ts"]
     }

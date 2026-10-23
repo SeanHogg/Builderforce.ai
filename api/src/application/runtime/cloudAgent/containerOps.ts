@@ -520,11 +520,20 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas(ctx.originatingChatId)],
       readToolManifest(args.supportedTools),
     );
+    // THE model hand-off policy for this run, carried between ops Worker-side: which
+    // model the turn asks for (locked after turn 1, released on 429/413/503) and the
+    // stall budget. The image makes no model decision at all.
+    const modelState = await loadContainerRunModelState(env, executionId);
     // Compress the conversation BEFORE the paid call so a long container run never
     // re-sends a ballooning history. The container owns its loop state, so the
     // compacted messages are RETURNED below for it to adopt — otherwise it would
-    // re-send (and re-summarize) the full history every turn.
-    const compaction = await compactMessages(messages, { ...CLOUD_COMPACT_DEFAULTS, tools: containerTools }, buildGatewaySummarizer(env));
+    // re-send (and re-summarize) the full history every turn. Sized to the model the
+    // policy asks for next (its window; its price-tier boundary under C9), as the
+    // durable loop does.
+    const targetModel = modelState?.policy.model;
+    const compaction = await compactMessages(messages, {
+      ...CLOUD_COMPACT_DEFAULTS, tools: containerTools, env, tenantId, ...(targetModel ? { targetModel } : {}),
+    }, buildGatewaySummarizer(env));
     const sendMessages = compaction.compacted ? compaction.messages : messages;
     if (compaction.compacted) {
       await recordCloudToolEvent(db, {
@@ -535,10 +544,6 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
       });
     }
     const tGen0 = Date.now();
-    // THE model hand-off policy for this run, carried between ops Worker-side: which
-    // model the turn asks for (locked after turn 1, released on 429/413/503) and the
-    // stall budget. The image makes no model decision at all.
-    const modelState = await loadContainerRunModelState(env, executionId);
     // ONE metered turn on the image's own transcript. The parent's own turn is always
     // the primary coding work this run exists for.
     const turn = await engine.imageRunTurn(
@@ -674,7 +679,9 @@ export const OP_HANDLERS: Record<string, ContainerOpHandler> = {
     const path = typeof args.path === 'string' ? args.path : '';
     const content = typeof args.content === 'string' ? args.content : '';
     const isNew = args.isNew !== false;
-    if (!path || !content) return { status: 200, body: { ok: false, error: 'path and content are both required' } };
+    // Empty content is a valid UPDATE (an `edit_file` that removed a file's last line
+    // posts `isNew: false`); only a CREATE with no body is refused.
+    if (!path || (!content && isNew)) return { status: 200, body: { ok: false, error: 'path and content are both required' } };
     const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), tenantId, taskId);
     if (!repo.ok) {
       // Ticket 3089: Brain/zero-setup projects have no git. The IDE workspace is

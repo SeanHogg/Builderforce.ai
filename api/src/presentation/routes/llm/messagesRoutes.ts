@@ -29,7 +29,7 @@ import {
 } from '../../../application/llm/tenantProviderKeyService';
 import { buildHostEgressForVendors } from '../../../application/llm/hostEgress';
 import { withClaudeCodeSystemPrompt, ANTHROPIC_OAUTH_BETA } from '../../../application/llm/anthropicOAuth';
-import { parseAnthropicSseUsage } from '../../../application/llm/anthropicSseUsage';
+import { anthropicUsageToLlmUsage, parseAnthropicSseUsage } from '../../../application/llm/anthropicSseUsage';
 import {
   anthropicToOpenAiRequest,
   openAiToAnthropicMessage,
@@ -166,13 +166,12 @@ export function mountMessagesRoutes(router: Hono<HonoEnv>): void {
           logUsage(c.env, c.executionCtx, {
             tenantId: access.tenantId, userId: access.userId, llmProduct: product, model,
             retries: 0, streamed: false,
-            usage: {
-              promptTokens: u.input_tokens ?? 0,
-              completionTokens: u.output_tokens ?? 0,
-              totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
+            usage: anthropicUsageToLlmUsage({
+              inputTokens: u.input_tokens ?? 0,
+              outputTokens: u.output_tokens ?? 0,
               cacheReadTokens: u.cache_read_input_tokens ?? 0,
               cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
-            },
+            }),
             metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId, ...workHints },
             // This branch IS the tenant's connected Anthropic credential serving the

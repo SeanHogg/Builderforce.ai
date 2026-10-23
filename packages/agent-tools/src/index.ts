@@ -34,3 +34,8 @@ export * from "./symbol-tools.js";
 export * from "./semantic-tools.js";
 export * from "./stableStringify.js";
 export * from './codeAnalysis.js';
+// The ONE lexical scorer (tool_search / skill ranking) + the deferred-tool meta tool.
+export * from "./toolSearch.js";
+// LLMLingua-2 compression policy for oversized prose (cost lever C8); the compressor is
+// injected and fenced code is never sent.
+export * from "./compress.js";

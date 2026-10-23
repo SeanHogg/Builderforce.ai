@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAnthropicSseUsage } from './anthropicSseUsage';
+import { anthropicUsageToLlmUsage, parseAnthropicSseUsage } from './anthropicSseUsage';
 
 describe('parseAnthropicSseUsage', () => {
   it('extracts input/output/cache tokens from a Messages SSE stream', () => {
@@ -16,10 +16,11 @@ describe('parseAnthropicSseUsage', () => {
       'data: [DONE]',
     ].join('\n');
 
+    // Cache counts are a SUBSET of the ledger's prompt: 120 uncached + 40 read + 10 written.
     expect(parseAnthropicSseUsage(sse)).toEqual({
-      promptTokens: 120,
+      promptTokens: 170,
       completionTokens: 35,
-      totalTokens: 155,
+      totalTokens: 205,
       cacheReadTokens: 40,
       cacheCreationTokens: 10,
     });
@@ -48,5 +49,11 @@ describe('parseAnthropicSseUsage', () => {
       'data: {"type":"message_delta","usage":{"output_tokens":3}}',
     ].join('\n');
     expect(parseAnthropicSseUsage(sse)).toMatchObject({ promptTokens: 7, completionTokens: 3 });
+  });
+
+  it('never leaves the uncached remainder negative (prompt − read − creation = input)', () => {
+    const u = anthropicUsageToLlmUsage({ inputTokens: 5, outputTokens: 2, cacheReadTokens: 900, cacheCreationTokens: 100 });
+    expect(u.promptTokens - (u.cacheReadTokens ?? 0) - (u.cacheCreationTokens ?? 0)).toBe(5);
+    expect(u.totalTokens).toBe(1007);
   });
 });

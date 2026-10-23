@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { compactMessages, compactionBudget, elideToFit, toolsTokensOf, CLOUD_COMPACT_DEFAULTS, type CompactionSummarizer } from './compactMessages';
+import { compactMessages, compactionBudget, elideToFit, maskOldObservations, toolsTokensOf, CLOUD_COMPACT_DEFAULTS, type CompactionSummarizer } from './compactMessages';
 
 type Msg = Record<string, unknown>;
 
@@ -112,6 +112,17 @@ describe('compactMessages', () => {
     expect(compactionBudget({ maxTokens: 200_000, targetModel: '@cf/zai-org/glm-4.7-flash', reserveOutputTokens: 4_096 })).toBe(131_072 - 4_096);
   });
 
+  it('C9: caps the budget at the target model\'s long-context price-tier boundary while the lever is on', () => {
+    // Gemini 2.5 Pro steps up above 200K input tokens; the family matches through any route prefix.
+    const target = 'openrouter/google/gemini-2.5-pro';
+    expect(compactionBudget({ maxTokens: 500_000, targetModel: target, env: {}, tenantId: 7 })).toBe(200_000);
+    expect(compactionBudget({ maxTokens: 500_000, targetModel: target, env: { COST_LEVER_C9_PRICE_TIER_BUDGET: 'off' }, tenantId: 7 })).toBe(500_000);
+    // No env = the caller did not opt in: no tier cap.
+    expect(compactionBudget({ maxTokens: 500_000, targetModel: target })).toBe(500_000);
+    // A flat-priced model is never capped by a tier.
+    expect(compactionBudget({ maxTokens: 40_000, targetModel: 'no-such-model-in-the-catalog', env: {}, tenantId: 7 })).toBe(40_000);
+  });
+
   it('charges the advertised tool schemas against the budget (no 413 on tool-heavy requests)', async () => {
     // ~3.3K tokens of messages: under the 5K cap alone, over it once ~2.5K of tool schemas ride along.
     const msgs = [SYS, TASK, ...round(1, 6_000), ...round(2, 6_000), ...round(3, 200)];
@@ -150,5 +161,51 @@ describe('compactMessages', () => {
     const msgs = [SYS, TASK, ...round(1, 100)];
     const out = elideToFit(msgs, 100_000);
     expect(out.every((m, i) => m === msgs[i])).toBe(true);
+  });
+});
+
+describe('observation masking (C2) + task-brief pin', () => {
+  const history = (rounds: number, payloadChars: number): Msg[] => {
+    const out: Msg[] = [SYS, TASK];
+    for (let i = 0; i < rounds; i++) out.push(...round(i, payloadChars));
+    return out;
+  };
+
+  it('masks nothing until the run is 12 assistant turns in, then masks the oldest 6 in one step', () => {
+    expect(maskOldObservations(history(11, 1_000)).masked).toBe(0);
+    const r = maskOldObservations(history(12, 1_000));
+    expect(r.masked).toBe(6);
+    const tools = r.messages.filter((m) => m.role === 'tool');
+    expect(String(tools[0]!.content)).toMatch(/^\[masked tool output: read_file\(\{\}\) — 1000 chars; re-run the tool to see it again\]$/);
+    expect(tools[6]!.content).toBe('X'.repeat(1_000));
+    assertPairingValid(r.messages);
+  });
+
+  it('is stable between steps (same boundary for 12..17 turns) and idempotent', () => {
+    const at12 = maskOldObservations(history(12, 1_000)).messages;
+    const at17 = maskOldObservations(history(17, 1_000)).messages;
+    expect(at17.slice(0, at12.length)).toEqual(at12);
+    expect(maskOldObservations(at12).masked).toBe(0);
+  });
+
+  it('masks before packing — and needs no summary when masking alone fits', async () => {
+    const summarize = vi.fn<CompactionSummarizer>(async () => 'S');
+    const r = await compactMessages(history(12, 2_000), { ...opts, maxTokens: 6_000, maskObservationsAfterTurns: 6 }, summarize);
+    expect(r.compacted).toBe(true);
+    expect(r.maskedObservations).toBe(6);
+    expect(r.droppedMessages).toBe(0);
+    expect(summarize).not.toHaveBeenCalled();
+  });
+
+  it('keeps the task brief through packing when a later nudge is the latest directive', async () => {
+    const nudge: Msg = { role: 'user', content: 'Keep going — use the tools.' };
+    const messages = [...history(10, 4_000), nudge, ...round(99, 4_000)];
+    const pinned = await compactMessages(messages, { ...opts, pinTaskBrief: true });
+    expect(pinned.compacted).toBe(true);
+    expect(pinned.messages).toContain(TASK);
+    expect(pinned.messages).toContain(nudge);
+    assertPairingValid(pinned.messages);
+    const unpinned = await compactMessages(messages, opts);
+    expect(unpinned.messages).not.toContain(TASK);
   });
 });

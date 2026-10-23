@@ -37,9 +37,12 @@ const PAUSED_SKIP = { ok: false, error: 'not run: the run paused on a question f
  * @param {(messages: Array<Record<string, unknown>>) => Promise<any>} io.llm Post the `llm` op.
  * @param {(name: string, args: Record<string, unknown>, loop: object) => Promise<any>} io.execTool Run one tool.
  * @param {() => boolean} io.isCancelled Whether the heartbeat saw the run cancelled.
+ * @param {((toolName: string, data: unknown) => string) | undefined} [io.toolResultPolicy]
+ *   The per-result budget for tool rows (PRD C7, the shared tool-output policy). Omitted
+ *   ⇒ plain JSON rows, as before — the Actions runner passes nothing.
  * @returns {Promise<{ output: string, cancelled: boolean, crashed: string | null, paused: boolean }>}
  */
-export async function runImageLoop({ messages, llm, execTool, isCancelled }) {
+export async function runImageLoop({ messages, llm, execTool, isCancelled, toolResultPolicy }) {
   let steering = [];
   let turnCallIds = [];
   let crashed = null;
@@ -57,7 +60,7 @@ export async function runImageLoop({ messages, llm, execTool, isCancelled }) {
 
   const loop = await runAgentLoop({
     messages,
-    codec: openAiChatCodec(),
+    codec: openAiChatCodec(toolResultPolicy ? { toolResultPolicy } : undefined),
     // No step cap: the kernel's failure-streak breaker is the only limit.
     budget: {},
     hooks: {

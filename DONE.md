@@ -1,3 +1,23 @@
+## ✅ RESOLVED 2026-10-22 — LLM cost optimization, wave 1: the audit's defects plus measurement, caching, context and routing levers (api 2026.10.66 · brain-embedded 2026.10.40 · agent-runtime 2026.10.14 · builderforce-memory 2026.10.22 · builderforce-inference 2026.10.11)
+
+Every lever is gated by `isCostLeverOn` in the new `@builderforce/cost-levers` (env `COST_LEVER_<ID>=on|off|<pct>`, tenant-hash rollout, `COST_LEVERS_ALL=off` kill switch); lever off = the previous behaviour.
+
+- **Defects closed (from the 2026-10-22 audit):**
+  - Cloud turns now record cache read/creation tokens, so cloud spend is priced with the cache multipliers (`cloudLlmTurn.ts`).
+  - Direct-Anthropic usage counted prompt tokens without cache tokens (underpriced, cache-hit rate could exceed 1); `anthropicPromptTokens()` fixes the JSON, stream and BYO `/v1/messages` meters, and the stream path now reports cache counts at all.
+  - The limbic affect block, budget line and task state ride one trailing `<run-state>` block after the history, so the cached prefix holds on the direct-Anthropic and OpenRouter paths; the direct vendor honours `cacheTtl: '1h'` (`costLoop/volatileTail.ts`, `promptCaching.ts`).
+  - Brain per-turn recall and limbic text moved out of the system prompt into a trailing `<turn_context>` block (`runStore/turnContext.ts`).
+  - Work-mode prompt prefers `edit_file`; the container surface has `edit_file` (`repo.edit`) with edit_file semantics; container tool output returns head + tail, not the head.
+  - Compaction pins the task brief; at most 5 relevance-ranked skills per run instead of 50 unranked.
+  - Memory-answer cache keys are principal-scoped (`qa:v3`, one `cacheScope.ts` builder for every cache) and Brain answers send file anchors; semantic-cache KV writes expire after 7 days.
+  - Per-run token cap alongside the $25 USD cap, so BYO runs (priced $0) are capped.
+  - builderforce-memory: compaction is lossless (archive sidecar, stub only after an Evermind recall probe), `memory_restore`, `.bak` rotation, one store-path resolver; recall applies importance + recency.
+- **Measurement (A1, A4, A5):** reasoning tokens, `turn_index`, `tool_schema_tokens` (migrations 1253 / transactional 0019), estimated context categories and lever arms on every usage row; `GET /api/cost/metrics` and `/api/cost/runs/:executionId`; spend-spike, run-outlier, containment-stop and run-anomaly alerts; cost per merged PR is per-run attributed everywhere.
+- **Caching (B1–B3):** semantic cache on tool-free chat (tenant + project + principal + model tier scope, facts-revision and file-anchor staleness); per-isolate single-flight.
+- **Context (C1–C3, C7, C9):** role core tool sets (≤20) + `tool_search`; observation masking every 6 turns; `update_task_state`; one `@builderforce/tool-output-policy` (caps table, line-boundary cuts, failure-focused shell/test summaries, JSON projection) used by the Brain, agent-runtime, the durable codec and the container; container `read_file` honours offset/limit; compaction respects long-context price tiers.
+- **Routing and output (D3, D4, D5, D8):** Thompson exploration (≤5% cold share) with a 30-day half-life, never for pins/BYO-strict/premium; role reasoning effort (OpenRouter `reasoning` too); per-role `max_tokens`; prompt asks for batched independent tool calls.
+- **Local engine (C5 ranking, C8, E4):** bf-index PageRank repo map + C#/Ruby/PHP/Kotlin/Swift; LLMLingua-2 compression in bf-context (feature `compress`); prompt-lookup speculative decoding and a byte-bounded LRU prefix cache in bfi.
+
 ## ✅ RESOLVED 2026-10-22 — One turn path on every surface: VSIX `s[i.method]` and `platform_send_disabled`, Studio/canvas no-model flow (frontend 2026.10.82 · VSIX 2026.10.60 · Rovr 2026.10.20 · brain-embedded 2026.10.39 · brain-ui 2026.10.20 · local-first 2026.10.23)
 
 - **VSIX `s[i.method] is not a function`:**

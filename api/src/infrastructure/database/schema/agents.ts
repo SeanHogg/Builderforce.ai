@@ -1934,6 +1934,18 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  reflects the discount instead of charging cached input at full rate. */
   cacheReadTokens:     integer('cache_read_tokens').notNull().default(0),
   cacheCreationTokens: integer('cache_creation_tokens').notNull().default(0),
+  /** Hidden reasoning tokens — a SUBSET of completion_tokens (migration 1253 /
+   *  transactional 0019). NULL when the vendor reports no split: OpenAI/OpenRouter
+   *  send `completion_tokens_details.reasoning_tokens`, Anthropic bills extended
+   *  thinking inside `output_tokens` with no separate count, so its rows stay NULL
+   *  and the reasoning share is computed only over rows that could report one. */
+  reasoningTokens:  integer('reasoning_tokens'),
+  /** 1-based position of the call within its run's turn loop (1253 / 0019). NULL
+   *  outside a loop. A folded day keeps the MAX — i.e. the run's turn count. */
+  turnIndex:        integer('turn_index'),
+  /** ESTIMATED tokens the advertised tool schemas cost on the call (chars/4 over the
+   *  serialized tools; 1253 / 0019). NULL when the producer did not measure it. */
+  toolSchemaTokens: integer('tool_schema_tokens'),
   retries:          integer('retries').notNull().default(0),
   streamed:         boolean('streamed').notNull().default(false),
   /** Caller-supplied metadata for billing trace-back ({ toolRunId, sessionId, userId, … }). */

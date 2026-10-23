@@ -103,7 +103,16 @@ describe('project facts front doors', () => {
       null,
       [{ path: 'src/auth.ts', contentHash: 'abc' }],
       91,
+      // The row is scoped to who produced it (defect 10).
+      { userId: 'u1', role: null },
     );
+  });
+
+  it('memory-first lookup is scoped to the caller, the same scope the write used', async () => {
+    mocks.resolveAnswer.mockResolvedValue(null);
+    const res = await createProjectFactsRoutes(db).request('/42/answer?query=q%3F', {}, ctxEnv, execCtx);
+    expect(res.status).toBe(200);
+    expect(mocks.resolveAnswer.mock.calls[0]![5]).toMatchObject({ principal: { userId: 'u1', role: null } });
   });
 
   it('agent-host door leaves other paths on the shared mount ungated', async () => {

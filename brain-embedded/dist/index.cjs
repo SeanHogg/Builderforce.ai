@@ -99,7 +99,7 @@ __export(src_exports, {
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
   PageEngineError: () => PageEngineError,
   PromptInput: () => PromptInput,
-  READ_FILE_RESULT_CHARS: () => READ_FILE_RESULT_CHARS,
+  READ_FILE_RESULT_CHARS: () => READ_FILE_RESULT_CHARS2,
   RESTING_CHAT_MODE: () => RESTING_CHAT_MODE,
   REVISIT_HARD_AT: () => REVISIT_HARD_AT,
   REVISIT_NUDGE_AT: () => REVISIT_NUDGE_AT,
@@ -1260,7 +1260,15 @@ function toOpenAiToolCall(call2) {
   return { id: call2.id, type: "function", function: { name: call2.name, arguments: call2.arguments?.trim() ? call2.arguments : "{}" } };
 }
 var defaultToolRowSerializer = (result) => JSON.stringify(result.data ?? null);
-function openAiChatCodec(serialize = defaultToolRowSerializer) {
+function resolveSerializer(opts) {
+  if (typeof opts === "function") return opts;
+  if (opts?.serialize) return opts.serialize;
+  const policy = opts?.toolResultPolicy;
+  if (policy) return (result, call2) => policy(call2.name, result.data ?? null);
+  return defaultToolRowSerializer;
+}
+function openAiChatCodec(serializeOrOptions) {
+  const serialize = resolveSerializer(serializeOrOptions);
   return {
     assistant(turn) {
       const row = {
@@ -2772,8 +2780,8 @@ function nextFallbackModel(surface, tried) {
     coding,
     pool
   ];
-  for (const tier of tiers) {
-    const hit = tier.find((m) => !used.has(m));
+  for (const tier2 of tiers) {
+    const hit = tier2.find((m) => !used.has(m));
     if (hit) return hit;
   }
   return void 0;
@@ -2995,6 +3003,15 @@ function toolSchemaTokens(schemas, estimate) {
 }
 function handoffReserveTokens(maxTokens) {
   return maxTokens && maxTokens > 0 ? maxTokens : DEFAULT_HANDOFF_RESERVE_TOKENS;
+}
+function handoffTokenBudget(input) {
+  const reserve = Math.max(0, input.reserveOutputTokens ?? 0);
+  const bounds = [];
+  if (input.costCapTokens && input.costCapTokens > 0) bounds.push(input.costCapTokens);
+  if (input.contextWindow && input.contextWindow > 0) bounds.push(input.contextWindow - reserve);
+  if (input.priceTierBoundary && input.priceTierBoundary > 0) bounds.push(input.priceTierBoundary);
+  if (bounds.length === 0) return void 0;
+  return Math.max(1, Math.min(...bounds));
 }
 
 // src/providerFailure.ts
@@ -3493,6 +3510,11 @@ var ACTION_TYPES = [
 var DEFAULT_ACTION_TYPE = "other";
 var ACTION_TYPE_SET = new Set(ACTION_TYPES);
 
+// ../packages/learned-routing/src/recencyDecay.ts
+var ROUTING_HALF_LIFE_DAYS = 30;
+var DECAYED_WINDOW_DAYS = 4 * ROUTING_HALF_LIFE_DAYS;
+var DAY_MS = 24 * 60 * 60 * 1e3;
+
 // ../packages/workload/src/actionClassifier.ts
 var MIN_CONFIDENCE = 0.45;
 var INSTRUCTION_CHARS = 600;
@@ -3816,6 +3838,23 @@ var TOOL_NAME_ALIASES = {
 function resolveToolAlias(name) {
   const key = name.trim().toLowerCase();
   return TOOL_NAME_ALIASES[key] ?? name;
+}
+
+// ../packages/agent-tools/src/fileWindow.ts
+var READ_DEFAULT_LINE_LIMIT = 2e3;
+function windowFileContent(content, opts) {
+  const lines = content.split("\n");
+  const totalLines = lines.length;
+  const start = opts?.offset && opts.offset > 1 ? Math.min(Math.floor(opts.offset), totalLines + 1) : 1;
+  const limit = opts?.limit && opts.limit > 0 ? Math.floor(opts.limit) : READ_DEFAULT_LINE_LIMIT;
+  const slice = lines.slice(start - 1, start - 1 + limit);
+  const end = start - 1 + slice.length;
+  return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
+}
+function fileWindowNote(win) {
+  if (!win.truncated) return void 0;
+  const lastLine = win.offset + win.returnedLines - 1;
+  return `Showing lines ${win.offset}\u2013${lastLine} of ${win.totalLines}. To continue, call read_file again with offset ${lastLine + 1}.`;
 }
 
 // ../packages/agent-tools/src/git-tools.ts
@@ -4867,16 +4906,6 @@ var searchCodeTool = defineTool({
     return { data: r };
   }
 });
-var READ_DEFAULT_LINE_LIMIT = 2e3;
-function windowFileContent(content, opts) {
-  const lines = content.split("\n");
-  const totalLines = lines.length;
-  const start = opts?.offset && opts.offset > 1 ? Math.min(Math.floor(opts.offset), totalLines + 1) : 1;
-  const limit = opts?.limit && opts.limit > 0 ? Math.floor(opts.limit) : READ_DEFAULT_LINE_LIMIT;
-  const slice = lines.slice(start - 1, start - 1 + limit);
-  const end = start - 1 + slice.length;
-  return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
-}
 function readFileKey(path2, file, key) {
   if (file.truncated === true) {
     return { ok: false, path: path2, key, error: "the file is too large to load whole, so `key` cannot be used \u2014 page it with offset/limit" };
@@ -4926,10 +4955,8 @@ var readFileTool = defineTool({
       totalLines: win.totalLines,
       offset: win.offset
     };
-    if (win.truncated) {
-      const lastLine = win.offset + win.returnedLines - 1;
-      data.note = `Showing lines ${win.offset}\u2013${lastLine} of ${win.totalLines}. To continue, call read_file again with offset ${lastLine + 1}.`;
-    }
+    const note = fileWindowNote(win);
+    if (note) data.note = note;
     return { data };
   }
 });
@@ -5707,6 +5734,86 @@ function stableStringify(value) {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record2[k])}`).join(",")}}`;
 }
 
+// ../packages/agent-tools/src/toolSearch.ts
+var STOP_WORDS = /* @__PURE__ */ new Set([
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "of",
+  "for",
+  "to",
+  "in",
+  "on",
+  "is",
+  "are",
+  "was",
+  "be",
+  "by",
+  "with",
+  "from",
+  "this",
+  "that",
+  "these",
+  "those",
+  "it",
+  "its",
+  "as",
+  "at",
+  "me",
+  "my",
+  "i",
+  "we",
+  "you",
+  "your",
+  "please",
+  "can",
+  "could",
+  "would",
+  "should",
+  "do",
+  "does",
+  "did",
+  "get",
+  "show",
+  "give",
+  "make",
+  "now",
+  "all",
+  "any",
+  "how",
+  "what",
+  "which",
+  "who",
+  "when"
+]);
+function lexicalTokens(text) {
+  return text.toLowerCase().split(/[^a-z0-9一-鿿]+/).filter((w) => w.length > 1 && !STOP_WORDS.has(w));
+}
+function lexicalStem(word) {
+  if (word.length > 3 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+  if (word.length > 3 && word.endsWith("es")) return word.slice(0, -2);
+  if (word.length > 2 && word.endsWith("s")) return word.slice(0, -1);
+  return word;
+}
+function lexicalStems(text) {
+  return new Set(lexicalTokens(text).map(lexicalStem));
+}
+var LEXICAL_WEIGHTS = { name: 10, description: 1, body: 0.25 };
+function lexicalScore(queryStems, fields) {
+  let score2 = 0;
+  for (const field of fields) {
+    for (const s of lexicalStems(field.text)) if (queryStems.has(s)) score2 += field.weight;
+  }
+  return score2;
+}
+function rankLexically(items, query, fieldsOf, limit) {
+  const queryStems = lexicalStems(query);
+  if (queryStems.size === 0 || limit <= 0) return [];
+  return items.map((item, index) => ({ item, index, score: lexicalScore(queryStems, fieldsOf(item)) })).filter((e) => e.score > 0).sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.item);
+}
+
 // ../packages/workload/src/profile.ts
 var TYPICAL_OUTPUT_TOKENS = {
   code: 4e3,
@@ -5957,6 +6064,156 @@ async function completeLocalFirst(input) {
 var import_handoff4 = require("@seanhogg/builderforce-memory/handoff");
 var import_evermind = require("@seanhogg/builderforce-memory/evermind");
 
+// ../packages/cost-levers/src/index.ts
+var COST_LEVERS = [
+  { id: "a2_run_budget", requirement: "A2", rollout: 100, summary: "Token + USD run budget, shown to the loop" },
+  { id: "a3_progress_detector", requirement: "A3", rollout: 100, summary: "Repeat-read / edit-revert / no-progress steer" },
+  { id: "b1_stable_prefix", requirement: "B1", rollout: 100, summary: "Volatile blocks after the cache breakpoint" },
+  { id: "b2_semantic_cache", requirement: "B2", rollout: 10, summary: "Scoped semantic cache on tool-free chat" },
+  { id: "b3_single_flight", requirement: "B3", rollout: 100, summary: "Coalesce identical in-flight requests" },
+  { id: "b4_agent_answer_replay", requirement: "B4", rollout: 10, summary: "Memory answer replay for agent sub-questions" },
+  { id: "c1_deferred_tools", requirement: "C1", rollout: 10, summary: "Role core tool set + tool_search" },
+  { id: "c2_observation_masking", requirement: "C2", rollout: 10, summary: "Mask tool outputs older than N turns" },
+  { id: "c3_task_state", requirement: "C3", rollout: 10, summary: "Structured task state kept through compaction" },
+  { id: "c4_adaptive_context", requirement: "C4", rollout: 10, summary: "Start retrieval small, widen on low confidence" },
+  { id: "c5_cloud_repo_map", requirement: "C5", rollout: 10, summary: "Graph-ranked repo map on cloud runs" },
+  { id: "c6_rerank", requirement: "C6", rollout: 10, summary: "Cross-encoder rerank after hybrid retrieval" },
+  { id: "c7_tool_output_policy", requirement: "C7", rollout: 100, summary: "One shared tool-output budget + failure summaries" },
+  { id: "c8_token_compression", requirement: "C8", rollout: 0, summary: "LLMLingua-2 token compression of large context" },
+  { id: "c9_price_tier_budget", requirement: "C9", rollout: 100, summary: "Compaction budget under long-context price tiers" },
+  { id: "d1_verifier_cascade", requirement: "D1", rollout: 10, summary: "Weak model first, verifier, escalate one tier" },
+  { id: "d2_difficulty_router", requirement: "D2", rollout: 10, summary: "Predict weak-model failure, skip the wasted attempt" },
+  { id: "d3_routing_exploration", requirement: "D3", rollout: 100, summary: "Thompson exploration + decay in learned routing" },
+  { id: "d4_role_reasoning", requirement: "D4", rollout: 10, summary: "Reasoning effort by role" },
+  { id: "d5_output_caps", requirement: "D5", rollout: 100, summary: "Diff edits + per-role max_tokens" },
+  { id: "d6_batch_api", requirement: "D6", rollout: 100, summary: "Provider batch APIs for deferred background work" },
+  { id: "d7_deterministic_handlers", requirement: "D7", rollout: 100, summary: "Deterministic handlers + post-edit checks" },
+  { id: "d8_parallel_tool_calls", requirement: "D8", rollout: 100, summary: "Batch independent tool calls in one turn" },
+  { id: "e1_skill_ranking", requirement: "E1", rollout: 100, summary: "Inject only the most relevant approved skills" },
+  { id: "e2_specialists", requirement: "E2", rollout: 10, summary: "Admitted small specialist models for narrow jobs" },
+  { id: "e3_free_embeddings", requirement: "E3", rollout: 0, summary: "Free Workers AI embeddings for memory" },
+  { id: "e5_verified_local_label", requirement: "E5", rollout: 100, summary: "Hybrid local label = passed the verifier" }
+];
+var BY_ID = new Map(COST_LEVERS.map((l) => [l.id, l]));
+function costLeverSpec(id) {
+  const spec = BY_ID.get(id);
+  if (!spec) throw new Error(`unknown cost lever: ${id}`);
+  return spec;
+}
+function costLeverEnvKey(id) {
+  return `COST_LEVER_${id.toUpperCase()}`;
+}
+function costLeverBucket(id, tenantId) {
+  const s = `${id}:${tenantId}`;
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h % 100;
+}
+function readEnv(env, key) {
+  const v = env?.[key];
+  return v === void 0 || v === null ? void 0 : String(v).trim().toLowerCase();
+}
+function costLeverRollout(env, id) {
+  const raw = readEnv(env, costLeverEnvKey(id));
+  if (raw !== void 0 && raw !== "") {
+    if (raw === "on" || raw === "1" || raw === "true") return 100;
+    if (raw === "off" || raw === "0" || raw === "false") return 0;
+    const n = Number(raw);
+    if (Number.isFinite(n)) return Math.max(0, Math.min(100, Math.round(n)));
+  }
+  const all = readEnv(env, "COST_LEVERS_ALL");
+  if (all === "off" || all === "0" || all === "false") return 0;
+  return costLeverSpec(id).rollout;
+}
+function isCostLeverOn(env, id, tenantId) {
+  const rollout = costLeverRollout(env, id);
+  if (rollout >= 100) return true;
+  if (rollout <= 0) return false;
+  if (tenantId === null || tenantId === void 0 || tenantId === "") return false;
+  return costLeverBucket(id, tenantId) < rollout;
+}
+
+// ../packages/model-catalog/src/price.ts
+var TOKENS_PER_MILLION = 1e6;
+function perMillionToPerToken(usdPerMillion) {
+  return usdPerMillion / TOKENS_PER_MILLION;
+}
+var ZERO_PRICE = Object.freeze({ input: 0, output: 0 });
+
+// ../packages/model-catalog/src/priceTiers.ts
+var tier = (aboveInputTokens, inputPerMillion, outputPerMillion) => ({
+  aboveInputTokens,
+  input: perMillionToPerToken(inputPerMillion),
+  output: perMillionToPerToken(outputPerMillion)
+});
+var PRICE_TIERS = Object.freeze({
+  // Google AI Studio / Vertex list price: $1.25 / $10 per M up to 200K prompt tokens,
+  // $2.50 / $15 above (ai.google.dev/gemini-api/docs/pricing). Verify against vendor pricing page.
+  "gemini-2-5-pro": [tier(2e5, 2.5, 15)],
+  // Anthropic long-context pricing for the 1M-window Sonnet 4 / 4.5: $3 / $15 per M up
+  // to 200K input, $6 / $22.50 above (docs.claude.com pricing, "long context").
+  // Verify against vendor pricing page.
+  "claude-sonnet-4": [tier(2e5, 6, 22.5)],
+  "claude-sonnet-4-5": [tier(2e5, 6, 22.5)],
+  // Claude Haiku 5.5: $0.10 / $0.50 per M for prompts up to 100K, $0.50 / $2.50 beyond
+  // (Anthropic model pricing table, 2026-10). Verify against vendor pricing page.
+  "claude-haiku-5-5": [tier(1e5, 0.5, 2.5)]
+});
+function priceTierFamily(modelId) {
+  let id = (modelId ?? "").trim().toLowerCase();
+  id = id.slice(id.lastIndexOf("/") + 1);
+  id = id.replace(/^(?:[a-z]{2,3}\.)?anthropic\./, "");
+  id = id.replace(/:.*$/, "");
+  id = id.replace(/\./g, "-");
+  id = id.replace(/-\d{8}(?:-v\d+)?$/, "");
+  return id;
+}
+function priceTiersFor(modelId) {
+  return PRICE_TIERS[priceTierFamily(modelId)];
+}
+function priceTierBoundary(modelId) {
+  const tiers = priceTiersFor(modelId);
+  return tiers && tiers.length > 0 ? Math.min(...tiers.map((t) => t.aboveInputTokens)) : void 0;
+}
+
+// ../packages/model-catalog/src/providers.ts
+var LLM_PROVIDER_INFO = [
+  { id: "anthropic", label: "Anthropic (Claude)", credential: "api_key", keyPlaceholder: "sk-ant-\u2026", subscription: "paste" },
+  { id: "openai", label: "OpenAI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "paste" },
+  { id: "google", label: "Google (Gemini)", credential: "api_key", keyPlaceholder: "AIza\u2026", subscription: null },
+  { id: "meta", label: "Meta AI (MUSE)", credential: "api_key", keyPlaceholder: "meta-\u2026", subscription: null },
+  // A Kimi Code subscription issues no API key at all — its own config leaves `api_key`
+  // empty beside an OAuth record — so it connects by device-code redirect, never paste.
+  { id: "kimi", label: "Kimi", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "device" },
+  { id: "moonshot", label: "Moonshot AI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "qwen", label: "Qwen", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "minimax", label: "MiniMax", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "xai", label: "xAI (Grok)", credential: "api_key", keyPlaceholder: "xai-\u2026", subscription: "paste" },
+  { id: "ollama", label: "Ollama Cloud", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  {
+    id: "ollama-local",
+    label: "Ollama",
+    credential: "local_runtime",
+    keyPlaceholder: "",
+    subscription: null,
+    localRuntime: { defaultBaseUrl: "http://127.0.0.1:11434", exampleModel: "llama3.1:8b" }
+  },
+  // FreeToken's engine default; it serves whatever model the tenant loaded, so no example.
+  {
+    id: "freetoken",
+    label: "FreeToken",
+    credential: "local_runtime",
+    keyPlaceholder: "",
+    subscription: null,
+    localRuntime: { defaultBaseUrl: "http://127.0.0.1:1919" }
+  }
+];
+var LLM_PROVIDERS = LLM_PROVIDER_INFO.map((p) => p.id);
+var INFO_BY_ID = new Map(LLM_PROVIDER_INFO.map((p) => [p.id, p]));
+
 // src/workingTranscript.ts
 var import_handoff3 = require("@seanhogg/builderforce-memory/handoff");
 var HISTORY_WINDOW = 80;
@@ -6097,6 +6354,11 @@ var DEFAULT_HANDOFF_TIMEOUT_MS = 2e4;
 function toolSchemaTokens2(tools) {
   return toolSchemaTokens(tools, import_handoff4.defaultEstimateTokens);
 }
+function packTargetTokens(to, contextTokens, reserve) {
+  const boundary = isCostLeverOn(void 0, "c9_price_tier_budget", null) ? priceTierBoundary(to) : void 0;
+  const budget = handoffTokenBudget({ contextWindow: contextTokens, reserveOutputTokens: reserve, priceTierBoundary: boundary });
+  return budget === void 0 ? contextTokens : Math.min(contextTokens, budget + reserve);
+}
 function recallBlock(recall) {
   return async (query, budgetChars) => {
     const result = await recall(query);
@@ -6106,10 +6368,11 @@ function recallBlock(recall) {
 }
 async function packForModel(input) {
   const summarizer = input.summarizer;
+  const reserve = handoffReserveTokens(input.maxTokens);
   const pack = await (0, import_handoff4.packHandoff)({
     messages: input.messages,
-    targetContextTokens: input.contextTokens,
-    reserveOutputTokens: handoffReserveTokens(input.maxTokens),
+    targetContextTokens: packTargetTokens(input.to, input.contextTokens, reserve),
+    reserveOutputTokens: reserve,
     toolsTokens: toolSchemaTokens2(input.tools),
     ...input.from ? { from: input.from } : {},
     to: input.to,
@@ -7777,7 +8040,7 @@ function createLocalModelStore(options) {
     if (!row) throw new Error(`unknown_model: ${ref}`);
     return row;
   };
-  async function describe(row, supports) {
+  async function describe2(row, supports) {
     const pending = inFlight.get(row.ref);
     if (pending) return { ...row, state: "downloading", progress: pending.progress };
     const backend = backendFor(row, options);
@@ -7801,7 +8064,7 @@ function createLocalModelStore(options) {
         })
       );
       const supports = new Map(answers);
-      return Promise.all(catalog.map((row) => describe(row, supports)));
+      return Promise.all(catalog.map((row) => describe2(row, supports)));
     },
     download(ref, onProgress, signal) {
       const existing = inFlight.get(ref);
@@ -8515,6 +8778,20 @@ async function prepareImageDataUrl(file) {
 }
 
 // src/evermindMemory.ts
+var MAX_CITED_ANCHORS = 16;
+function citedPathAnchors(answer2) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  const re = /(?:^|[\s`'"(\[])((?:\.{0,2}\/)?(?:[\w@.-]+\/)+[\w@.-]+\.[A-Za-z0-9]{1,8})(?::\d+)?(?=$|[\s`'"),.:;\]])/g;
+  for (const m of (answer2 ?? "").matchAll(re)) {
+    const path2 = m[1].replace(/^\.\/+/, "");
+    if (seen.has(path2)) continue;
+    seen.add(path2);
+    out.push({ path: path2 });
+    if (out.length >= MAX_CITED_ANCHORS) break;
+  }
+  return out;
+}
 function projectMemoryHooks(projectId, request, chatId, surface = "web") {
   const json = { "Content-Type": "application/json" };
   const chatParam = chatId != null && chatId > 0 ? `&chatId=${chatId}` : "";
@@ -8527,7 +8804,8 @@ function projectMemoryHooks(projectId, request, chatId, surface = "web") {
     answer: (query, opts) => request(
       `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? "1" : "0"}${chatParam}&surface=${surface}${opts.model ? `&model=${encodeURIComponent(opts.model)}` : ""}`
     ).then((r) => r?.answer ?? null).catch(() => null),
-    cacheAnswer: (query, answer2, origin) => {
+    cacheAnswer: (query, answer2, origin, fileAnchors) => {
+      const anchors = fileAnchors?.length ? fileAnchors : citedPathAnchors(answer2);
       void request(`/api/projects/${projectId}/answer`, {
         method: "POST",
         headers: json,
@@ -8537,7 +8815,8 @@ function projectMemoryHooks(projectId, request, chatId, surface = "web") {
           question: query,
           answer: answer2,
           ...chatId != null && chatId > 0 ? { chatId } : {},
-          ...origin ? { origin } : {}
+          ...origin ? { origin } : {},
+          ...anchors.length ? { fileAnchors: anchors } : {}
         })
       }).catch(() => {
       });
@@ -8598,10 +8877,11 @@ function composeEvermindHooks(...layers) {
       }
     } : {},
     ...caching.length ? {
-      cacheAnswer: (query, answer2, origin) => {
+      cacheAnswer: (query, answer2, origin, fileAnchors) => {
+        const args = fileAnchors?.length ? [query, answer2, origin, fileAnchors] : origin ? [query, answer2, origin] : [query, answer2];
         for (const layer of caching) {
           try {
-            void Promise.resolve(origin ? layer.cacheAnswer?.(query, answer2, origin) : layer.cacheAnswer?.(query, answer2)).catch(() => {
+            void Promise.resolve(layer.cacheAnswer?.(...args)).catch(() => {
             });
           } catch {
           }
@@ -11479,6 +11759,371 @@ function formatStaffingSummary(s, opts) {
   return lines;
 }
 
+// ../packages/tool-output-policy/src/caps.ts
+var DEFAULT_TOOL_OUTPUT_CHARS = 6e3;
+var TOOL_OUTPUT_CAPS = {
+  read_file: 16e3,
+  run_command: 2e4,
+  exec: 2e4,
+  bash: 2e4,
+  git_status: 2e4,
+  git_diff: 2e4,
+  git_history: 2e4,
+  git_sync_latest: 2e4,
+  git_undo: 2e4,
+  git_redo: 2e4
+};
+var READ_FILE_TOOL = "read_file";
+var SHELL_TOOLS = /* @__PURE__ */ new Set(["run_command", "exec", "bash", "shell", "process"]);
+function toolOutputCap(tool, caps = TOOL_OUTPUT_CAPS) {
+  return caps[tool] ?? DEFAULT_TOOL_OUTPUT_CHARS;
+}
+function isShellTool(tool) {
+  return SHELL_TOOLS.has(tool);
+}
+
+// ../packages/tool-output-policy/src/textCut.ts
+function keepTail(text, max) {
+  if (text.length <= max) return text;
+  return text.slice(text.length - max);
+}
+var DEFAULT_TRUNCATION_SUFFIX = "\n\n\u26A0\uFE0F [Content truncated \u2014 original was too large for the model's context window. The content above is a partial view. If you need more, request specific sections or use offset/limit parameters to read smaller chunks.]";
+function cutHead(text, maxChars, opts = {}) {
+  if (text.length <= maxChars) return text;
+  const suffix = opts.suffix ?? DEFAULT_TRUNCATION_SUFFIX;
+  const snap = opts.snap ?? 0.8;
+  const keep = Math.max(opts.minKeep ?? 0, maxChars - suffix.length);
+  if (keep <= 0) return opts.emptyNotice ?? suffix.trim();
+  let cutPoint = keep;
+  const lastNewline = text.lastIndexOf("\n", keep);
+  if (lastNewline > keep * snap) cutPoint = lastNewline;
+  return text.slice(0, cutPoint) + suffix;
+}
+var MARKER_RESERVE = 160;
+function countLines(text) {
+  let n = 0;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) n++;
+  return n;
+}
+function cutHeadTail(text, maxChars, opts = {}) {
+  if (text.length <= maxChars) return text;
+  const budget = maxChars - MARKER_RESERVE;
+  if (budget <= 0) return keepTail(text, Math.max(0, maxChars));
+  const headShare = Math.min(1, Math.max(0, opts.headShare ?? 0.25));
+  const headBudget = Math.floor(budget * headShare);
+  const tailBudget = budget - headBudget;
+  let headEnd = headBudget;
+  const nl = text.lastIndexOf("\n", headBudget);
+  if (nl > headBudget * 0.8) headEnd = nl;
+  let tailStart = text.length - tailBudget;
+  const nextNl = text.indexOf("\n", tailStart);
+  if (nextNl >= 0 && nextNl - tailStart < tailBudget * 0.2) tailStart = nextNl + 1;
+  const head = text.slice(0, headEnd);
+  const tail = text.slice(tailStart);
+  const elided = text.slice(headEnd, tailStart);
+  const marker = `
+\u2026[${elided.length.toLocaleString("en-US")} chars (${countLines(elided).toLocaleString("en-US")} lines) elided \u2014 showing the first ${head.length.toLocaleString("en-US")} and the last ${tail.length.toLocaleString("en-US")} of ${text.length.toLocaleString("en-US")} chars]\u2026
+`;
+  return `${head}${marker}${tail}`;
+}
+
+// ../packages/tool-output-policy/src/shellSummary.ts
+var DEFAULT_TAIL_LINES = 40;
+var MAX_DIFF_LINES = 24;
+var ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+function stripAnsi(text) {
+  return text.replace(ANSI, "");
+}
+var RUNNER_SIGNATURES = [
+  ["vitest", /\bvitest\b|^\s*(?:Test Files|Tests)\s+\d+\s+(?:failed|passed)|^\s*[❯›]\s+\S+\.(?:test|spec)\.[cm]?[jt]sx?/m],
+  ["jest", /^\s*(?:PASS|FAIL)\s+\S+\.(?:test|spec)\.[cm]?[jt]sx?|^Test Suites:\s+\d+/m],
+  ["pytest", /=+ test session starts =+|^(?:FAILED|ERROR) \S+::|=+ .*\b(?:passed|failed)\b.* in [\d.]+s =+/m],
+  ["cargo", /^\s*(?:Compiling|Finished|Running) .*|^test result: (?:ok|FAILED)\.|^error(?:\[E\d+\])?: /m],
+  ["tsc", /\berror TS\d+:/],
+  ["go", /^(?:---|===) (?:FAIL|RUN|PASS):|^(?:ok|FAIL)\s+\S+\s+[\d.]+s/m]
+];
+function detectRunner(text) {
+  for (const [runner, re] of RUNNER_SIGNATURES) if (re.test(text)) return runner;
+  return "unknown";
+}
+var NOISE = [
+  /^\s*[✓√✔]\s/,
+  /^\s*PASS\s/,
+  /^\s*PASSED\b/,
+  /\bPASSED\s*(?:\[\s*\d+%\])?$/,
+  /^test .* \.\.\. ok$/,
+  /^ok\s+\S+\s+[\d.]+s/,
+  /^=== RUN\s/,
+  /^--- PASS:/,
+  /^\s*Compiling\s/,
+  /^\s*Downloaded?\s/,
+  /^\s*$/
+];
+var ERROR_LINE = [
+  /\berror\b|\bERROR\b|\bError\b/,
+  /\bFAIL(?:ED|URE)?\b|\bfailed\b/,
+  /^\s*[✗×✕❌]\s/,
+  /\bpanic(?:ked)?\b|^Traceback \(most recent call last\)/,
+  /\bAssertion(?:Error)?\b|\bassert(?:ion)?\b/,
+  /^E\s{2,}/,
+  // pytest assertion detail
+  /^\s*●\s/,
+  // jest failing test header
+  /\berror TS\d+:/,
+  /^\s*-->\s.+:\d+:\d+$/
+  // cargo error location
+];
+var DIFF_HEADER = /^\s*(?:[-+]\s*Expected|[-+]\s*Received|Expected:|Received:|expected:|actual:|Difference:|- expected|\+ actual|assert .* ==)/;
+var DIFF_BODY = /^\s*[-+](?!-)|^\s{2,}\S/;
+var FAILING_TEST = [
+  /^\s*(?:FAIL|×|✕|✗)\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?(?:\s+>\s+.+?)?)(?:\s+\d+ms)?$/,
+  // vitest/jest file (+ test path)
+  /^\s*●\s+(.+?)\s*$/,
+  // jest
+  /^\s*[×✕✗]\s+(.+?)(?:\s+\d+ms)?$/,
+  // vitest/jest test line
+  /^FAILED\s+(\S+::\S+)/,
+  // pytest
+  /^test\s+(\S+)\s+\.\.\.\s+FAILED$/,
+  // cargo
+  /^---\s+FAIL:\s+(\S+)/
+  // go
+];
+function isNoise(line2) {
+  return NOISE.some((re) => re.test(line2));
+}
+function isErrorLine(line2) {
+  return ERROR_LINE.some((re) => re.test(line2));
+}
+function failingTestName(line2) {
+  for (const re of FAILING_TEST) {
+    const m = re.exec(line2);
+    if (m && m[1]) return m[1].trim();
+  }
+  return null;
+}
+function summarizeShellOutput(raw, opts) {
+  const tailLines = opts.tailLines ?? DEFAULT_TAIL_LINES;
+  if (raw.length <= opts.maxChars) {
+    return { text: raw, runner: detectRunner(raw), failingTests: [], droppedNoise: 0 };
+  }
+  const text = stripAnsi(raw).replace(/\r\n?/g, "\n");
+  const runner = detectRunner(text);
+  const lines = text.split("\n");
+  const tailFrom = Math.max(0, lines.length - tailLines);
+  const tail = lines.slice(tailFrom);
+  const failing = [];
+  const seenFailing = /* @__PURE__ */ new Set();
+  const kept = [];
+  const seenKept = /* @__PURE__ */ new Set();
+  let droppedNoise = 0;
+  let diffLeft = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line2 = lines[i];
+    const name = failingTestName(line2);
+    if (name && !seenFailing.has(name)) {
+      seenFailing.add(name);
+      failing.push(name);
+    }
+    if (i >= tailFrom) continue;
+    if (DIFF_HEADER.test(line2)) {
+      diffLeft = MAX_DIFF_LINES;
+      kept.push(line2);
+      continue;
+    }
+    if (diffLeft > 0) {
+      if (DIFF_BODY.test(line2) && !isNoise(line2)) {
+        kept.push(line2);
+        diffLeft--;
+        continue;
+      }
+      diffLeft = 0;
+    }
+    if (isNoise(line2)) {
+      droppedNoise++;
+      continue;
+    }
+    if (isErrorLine(line2)) {
+      const key = line2.trim();
+      if (seenKept.has(key)) continue;
+      seenKept.add(key);
+      kept.push(line2);
+    }
+  }
+  const header = `[output summarised${runner === "unknown" ? "" : ` (${runner})`}: ${lines.length.toLocaleString("en-US")} lines / ${raw.length.toLocaleString("en-US")} chars \u2192 failing tests, error lines, assertion diffs and the last ${tail.length} lines; ${droppedNoise.toLocaleString("en-US")} passing/progress lines dropped. Re-run a narrower command (one test file, grep) for more.]`;
+  const failingBlock = failing.length > 0 ? `Failing tests (${failing.length}):
+${failing.slice(0, 50).map((n) => `  - ${n}`).join("\n")}${failing.length > 50 ? `
+  \u2026 +${failing.length - 50} more` : ""}` : "";
+  const tailBlock = `--- last ${tail.length} lines ---
+${tail.join("\n")}`;
+  const fixed = [header, failingBlock, tailBlock].filter(Boolean).join("\n\n");
+  const room = opts.maxChars - fixed.length - 40;
+  let errorsBlock = "";
+  if (kept.length > 0 && room > 200) {
+    const body = `--- errors (${kept.length} lines) ---
+${kept.join("\n")}`;
+    errorsBlock = body.length <= room ? body : cutHead(body, room, { suffix: "\n\u2026[more error lines elided]" });
+  }
+  const assembled = [header, failingBlock, errorsBlock, tailBlock].filter(Boolean).join("\n\n");
+  const fitted = assembled.length <= opts.maxChars ? assembled : cutHeadTail(assembled, opts.maxChars, { headShare: 0.5 });
+  return { text: fitted, runner, failingTests: failing, droppedNoise };
+}
+
+// ../packages/tool-output-policy/src/jsonProjection.ts
+var STEPS = [
+  { depth: 4, arrayItems: 10, stringChars: 400 },
+  { depth: 3, arrayItems: 5, stringChars: 200 },
+  { depth: 2, arrayItems: 3, stringChars: 120 },
+  { depth: 2, arrayItems: 1, stringChars: 80 },
+  { depth: 1, arrayItems: 1, stringChars: 60 }
+];
+function describe(value) {
+  if (Array.isArray(value)) return `[array: ${value.length} items]`;
+  if (value && typeof value === "object") return `{object: ${Object.keys(value).length} keys}`;
+  return String(value);
+}
+function projectValue(value, step, depth) {
+  if (typeof value === "string") {
+    return value.length > step.stringChars ? `${value.slice(0, step.stringChars)}\u2026(+${value.length - step.stringChars} chars)` : value;
+  }
+  if (value === null || typeof value !== "object") return value;
+  if (depth >= step.depth) return describe(value);
+  if (Array.isArray(value)) {
+    const head = value.slice(0, step.arrayItems).map((v) => projectValue(v, step, depth + 1));
+    if (value.length > step.arrayItems) head.push(`\u2026(+${value.length - step.arrayItems} more of ${value.length} items)`);
+    return head;
+  }
+  const out = {};
+  for (const [k, v] of Object.entries(value)) out[k] = projectValue(v, step, depth + 1);
+  return out;
+}
+function projectJson(value, maxChars) {
+  let last = { value: void 0, json: "", fits: false };
+  for (const step of STEPS) {
+    const projected = projectValue(value, step, 0);
+    const json = JSON.stringify(projected);
+    last = { value: projected, json, fits: json.length <= maxChars };
+    if (last.fits) return last;
+  }
+  return last;
+}
+
+// ../packages/tool-output-policy/src/readFileWindow.ts
+var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
+function isReadFileResult(out) {
+  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && typeof out.content === "string";
+}
+function windowReadFile(out, opts = {}) {
+  const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
+  const withNote = (result) => opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(result, opts.advisory) : result;
+  const lines = out.content.split("\n");
+  const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
+  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
+  const alreadyPartial = out.truncated === true;
+  const build = (kept, note) => {
+    const lastLine = offset + kept.length - 1;
+    return withNote({ ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note });
+  };
+  const fits = (value) => JSON.stringify(value).length <= maxChars;
+  const whole = withNote({ ...out });
+  if (fits(whole)) return { value: whole, truncated: false };
+  const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString("en-US")} chars per read, so a large file arrives in several windows \u2014 call read_file again with offset ${lastLine + 1} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
+  let lo = 1;
+  let hi = lines.length;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = lo + hi >> 1;
+    if (fits(build(lines.slice(0, mid), continuation(offset + mid - 1)))) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  if (best === 0) {
+    const first = lines[0] ?? "";
+    const head = first.slice(0, Math.max(0, maxChars - 600));
+    const note = `Line ${offset} of ${totalLines} is longer than the ~${maxChars.toLocaleString("en-US")}-char read budget; the first ${head.length.toLocaleString("en-US")} of its ${first.length.toLocaleString("en-US")} chars are shown. Paging by offset cannot reach the rest of this line \u2014 use search_code for the specific symbol instead.`;
+    return { value: withNote({ ...out, content: head, offset, totalLines, truncated: true, note }), truncated: true };
+  }
+  return { value: build(lines.slice(0, best), continuation(offset + best - 1)), truncated: true };
+}
+
+// ../packages/tool-output-policy/src/policy.ts
+var LOG_FIELDS = ["output", "stdout", "stderr"];
+function isLogLike(text, tool) {
+  return tool !== void 0 && isShellTool(tool) || detectRunner(text) !== "unknown";
+}
+function fitToolText(text, maxChars, opts = {}) {
+  if (text.length <= maxChars) return text;
+  if (opts.summarize && isLogLike(text, opts.tool)) return summarizeShellOutput(text, { maxChars }).text;
+  return (opts.fallback ?? cutHeadTail)(text, maxChars);
+}
+function attach(value, opts) {
+  return opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(value, opts.advisory) : value;
+}
+function capFor(tool, opts) {
+  if (opts.maxChars !== void 0) return opts.maxChars;
+  if (!opts.summarize && tool !== READ_FILE_TOOL) return DEFAULT_TOOL_OUTPUT_CHARS;
+  return toolOutputCap(tool, opts.caps);
+}
+function shrinkLogFields(tool, out, cap2, overhead) {
+  const fields = LOG_FIELDS.filter((f) => typeof out[f] === "string" && out[f].length > 0);
+  if (fields.length === 0) return null;
+  const logChars = fields.reduce((n, f) => n + out[f].length, 0);
+  const rest = JSON.stringify({ ...out, ...Object.fromEntries(fields.map((f) => [f, ""])) }).length;
+  const escapedLog = fields.reduce((n, f) => n + JSON.stringify(out[f]).length - 2, 0);
+  const inflation = logChars > 0 ? escapedLog / logChars : 1;
+  const budget = Math.floor((cap2 - rest - overhead) / inflation);
+  if (budget < 500) return null;
+  const shrunk = { ...out };
+  for (const f of fields) {
+    const text = out[f];
+    const share = Math.max(200, Math.floor(budget * (text.length / logChars)));
+    shrunk[f] = fitToolText(text, share, { tool, summarize: true });
+  }
+  return shrunk;
+}
+function shapeToolResult(tool, out, opts = {}) {
+  const bytes = JSON.stringify(out ?? null).length;
+  if (tool === READ_FILE_TOOL && isReadFileResult(out)) {
+    const windowed2 = windowReadFile(out, { maxChars: opts.maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory });
+    return { content: JSON.stringify(windowed2.value), bytes, truncated: windowed2.truncated };
+  }
+  const cap2 = capFor(tool, opts);
+  const full = JSON.stringify(attach(out ?? null, opts));
+  if (full.length <= cap2) return { content: full, bytes, truncated: false };
+  const advisoryChars = opts.advisory ? opts.advisory.length + 16 : 0;
+  if (opts.summarize) {
+    if (typeof out === "string") {
+      const inflation = out.length > 0 ? (bytes - 2) / out.length : 1;
+      const shaped = fitToolText(out, Math.max(500, Math.floor((cap2 - advisoryChars - 32) / Math.max(1, inflation))), { tool, summarize: true });
+      const content2 = JSON.stringify(attach(shaped, opts));
+      if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
+    } else if (out && typeof out === "object" && !Array.isArray(out)) {
+      const shrunk = shrinkLogFields(tool, out, cap2, advisoryChars + 64);
+      if (shrunk) {
+        const content2 = JSON.stringify(attach(shrunk, opts));
+        if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
+      }
+    }
+    const marker2 = `
+[projected to fit the ~${cap2.toLocaleString("en-US")}-char tool-result budget (original ${bytes.toLocaleString("en-US")} chars): every top-level key is kept; arrays show their first items with a count of the rest and long strings are clipped. Re-call with a narrower filter, limit or id to see specific items.]`;
+    const projection = projectJson(out ?? null, cap2 - marker2.length - advisoryChars);
+    if (projection.fits) {
+      return { content: `${projection.json}${marker2}${opts.advisory ? `
+${opts.advisory}` : ""}`, bytes, truncated: true };
+    }
+  }
+  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
+  const head = JSON.stringify(out ?? null).slice(0, cap2);
+  const marker = `\u2026[truncated ${bytes - cap2} of ${bytes} chars to protect the context window.${itemNote}]`;
+  const content = `${head}
+${marker}${opts.advisory ? `
+${opts.advisory}` : ""}`;
+  return { content, bytes, truncated: true };
+}
+
 // src/readCoverage.ts
 var PATH_ARG_KEYS = /* @__PURE__ */ new Set(["path", "scope", "repo", "file", "filePath", "dir"]);
 function normalizePathArg(value) {
@@ -11780,66 +12425,15 @@ ${advisory}` : advisory;
 }
 
 // src/toolResultBudget.ts
-var MAX_TOOL_RESULT_CHARS = 6e3;
-var READ_FILE_RESULT_CHARS = 16e3;
-var READ_FILE_TOOL = "read_file";
-function isReadFileResult(out) {
-  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && typeof out.content === "string";
-}
-function withNote(result, advisory) {
-  return advisory ? withAdvisory(result, advisory) : result;
-}
-function trimReadFile(out, advisory) {
-  const lines = out.content.split("\n");
-  const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
-  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
-  const alreadyPartial = out.truncated === true;
-  const build = (kept, note) => {
-    const lastLine = offset + kept.length - 1;
-    return withNote(
-      { ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note },
-      advisory
-    );
-  };
-  const fits = (value) => JSON.stringify(value).length <= READ_FILE_RESULT_CHARS;
-  const whole = withNote({ ...out }, advisory);
-  if (fits(whole)) return { value: whole, truncated: false };
-  const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${READ_FILE_RESULT_CHARS.toLocaleString()} chars per read, so a large file arrives in several windows \u2014 call read_file again with offset ${lastLine + 1} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
-  let lo = 1;
-  let hi = lines.length;
-  let best = 0;
-  while (lo <= hi) {
-    const mid = lo + hi >> 1;
-    if (fits(build(lines.slice(0, mid), continuation(offset + mid - 1)))) {
-      best = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  if (best === 0) {
-    const head = lines[0].slice(0, Math.max(0, READ_FILE_RESULT_CHARS - 600));
-    const note = `Line ${offset} of ${totalLines} is longer than the ~${READ_FILE_RESULT_CHARS.toLocaleString()}-char read budget; the first ${head.length.toLocaleString()} of its ${lines[0].length.toLocaleString()} chars are shown. Paging by offset cannot reach the rest of this line \u2014 use search_code for the specific symbol instead.`;
-    return { value: withNote({ ...out, content: head, offset, totalLines, truncated: true, note }, advisory), truncated: true };
-  }
-  return { value: build(lines.slice(0, best), continuation(offset + best - 1)), truncated: true };
-}
+var MAX_TOOL_RESULT_CHARS = DEFAULT_TOOL_OUTPUT_CHARS;
+var READ_FILE_RESULT_CHARS2 = READ_FILE_RESULT_CHARS;
+var READ_FILE_TOOL2 = READ_FILE_TOOL;
 function trimToolResult(tool, out, opts = {}) {
-  const bytes = JSON.stringify(out ?? null).length;
-  if (tool === READ_FILE_TOOL && isReadFileResult(out)) {
-    const trimmed = trimReadFile(out, opts.advisory);
-    return { content: JSON.stringify(trimmed.value), bytes, truncated: trimmed.truncated };
-  }
-  const advised = opts.advisory ? withAdvisory(out ?? null, opts.advisory) : out ?? null;
-  const full = JSON.stringify(advised);
-  if (full.length <= MAX_TOOL_RESULT_CHARS) return { content: full, bytes, truncated: false };
-  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
-  const head = JSON.stringify(out ?? null).slice(0, MAX_TOOL_RESULT_CHARS);
-  const marker = `\u2026[truncated ${bytes - MAX_TOOL_RESULT_CHARS} of ${bytes} chars to protect the context window.${itemNote}]`;
-  const content = `${head}
-${marker}${opts.advisory ? `
-${opts.advisory}` : ""}`;
-  return { content, bytes, truncated: true };
+  return shapeToolResult(tool, out, {
+    advisory: opts.advisory,
+    attachAdvisory: withAdvisory,
+    summarize: opts.summarize ?? isCostLeverOn(void 0, "c7_tool_output_policy", null)
+  });
 }
 
 // src/brainTriage.ts
@@ -12158,7 +12752,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   for (const ev of toolEvents2) {
     const bytes = typeof ev.resultBytes === "number" ? ev.resultBytes : byteLen(ev.result);
     toolResultBytes += bytes;
-    const paged = ev.label === READ_FILE_TOOL;
+    const paged = ev.label === READ_FILE_TOOL2;
     if (ev.truncated) {
       if (paged) pagedReadWindows += 1;
       else truncatedToolResults += 1;
@@ -12784,6 +13378,32 @@ async function autoLinkCreatedItem(chatId, c, runTool, toolName, out) {
 // src/runStore/runMemory.ts
 var import_evermind2 = require("@seanhogg/builderforce-memory/evermind");
 
+// src/runStore/answerAnchors.ts
+var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
+var PATH_KEYS = ["path", "file", "filePath"];
+var MAX_ANSWER_ANCHORS = 16;
+function normalizePath(p) {
+  return p.trim().split("\\").join("/").replace(/^\.\/+/, "");
+}
+function readFileAnchors(trace) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const ev of trace) {
+    if (ev.category !== "tool" || ev.isError || !FILE_READ_TOOLS.has(ev.label)) continue;
+    const args = ev.args ?? {};
+    const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
+    for (const raw of paths) {
+      if (typeof raw !== "string") continue;
+      const path2 = normalizePath(raw);
+      if (!path2 || seen.has(path2)) continue;
+      seen.add(path2);
+      out.push({ path: path2 });
+      if (out.length >= MAX_ANSWER_ANCHORS) return out;
+    }
+  }
+  return out;
+}
+
 // src/runStore/convoText.ts
 function latestUserText(convo) {
   for (let i = convo.length - 1; i >= 0; i--) {
@@ -12888,7 +13508,7 @@ async function answerFromMemory(chatId, c, req, allTools, memoryReplay) {
   return true;
 }
 function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
-  const { c, convo, recalled } = run;
+  const { c, recalled } = run;
   const evermind = run.req.evermind;
   const learn = assistantMsg?.evermindLearn;
   if (learn?.learned) {
@@ -12918,11 +13538,12 @@ function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
     });
   }
   if (evermind?.cacheAnswer && run.memoryReplay) {
-    const q = latestUserText(convo);
+    const q = run.userRequest;
     const spent = c.runUsage;
     const origin = spent.model && spent.promptTokens + spent.completionTokens > 0 ? { model: spent.model, promptTokens: spent.promptTokens, completionTokens: spent.completionTokens } : void 0;
     if (q) {
-      const cached2 = origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
+      const anchors = readFileAnchors(runTrace(c));
+      const cached2 = anchors.length ? evermind.cacheAnswer(q, finalText, origin, anchors) : origin ? evermind.cacheAnswer(q, finalText, origin) : evermind.cacheAnswer(q, finalText);
       void Promise.resolve(cached2).catch(() => {
       });
     }
@@ -13532,10 +14153,50 @@ function createRunWindowFit(deps) {
   };
 }
 
+// src/runStore/turnContext.ts
+var OPEN = "<turn_context>\nContext for this turn only (recalled memory and run directives) \u2014 not part of the request:";
+var CLOSE = "</turn_context>";
+var attached = /* @__PURE__ */ new WeakMap();
+function turnContextBlock(parts) {
+  const body = parts.map((p) => (p ?? "").trim()).filter(Boolean).join("\n\n");
+  return body ? `${OPEN}
+
+${body}
+${CLOSE}` : null;
+}
+function restoreTurnContext(c) {
+  const prior = attached.get(c);
+  if (!prior) return;
+  if (prior.convo[prior.index] === prior.carrier) prior.convo[prior.index] = prior.original;
+  attached.delete(c);
+}
+function attachTurnContext(c, convo, block) {
+  restoreTurnContext(c);
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    const original = convo[i];
+    if (original.role !== "user") continue;
+    const content = typeof original.content === "string" ? `${original.content}
+
+${block}` : [...original.content, { type: "text", text: block }];
+    const carrier = { ...original, content };
+    convo[i] = carrier;
+    attached.set(c, { convo, index: i, carrier, original });
+    return true;
+  }
+  return false;
+}
+
 // src/runStore/runPreamble.ts
+function stablePrefixOn() {
+  const env = globalThis.process?.env;
+  return isCostLeverOn(env, "b1_stable_prefix", null);
+}
 async function prepareRunLoop(chatId, c, req, runKey) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
   const convo = c.transcript;
+  restoreTurnContext(c);
+  const stablePrefix = stablePrefixOn();
+  const turnParts = [];
   const canAskUser = !!runTool && (toolSpecs?.length ?? 0) > 0;
   const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
   const allTools = catalog && catalog.length > 0 ? catalog : void 0;
@@ -13548,9 +14209,13 @@ async function prepareRunLoop(chatId, c, req, runKey) {
     ...req.projectId != null ? { projectId: req.projectId } : {}
   };
   const { recalled, block: recallBlock2, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind);
-  let systemPrompt = recallBlock2 ? `${resolvedSystemPrompt}
+  let systemPrompt = resolvedSystemPrompt;
+  if (recallBlock2) {
+    if (stablePrefix) turnParts.push(recallBlock2);
+    else systemPrompt = `${systemPrompt}
 
-${recallBlock2}` : resolvedSystemPrompt;
+${recallBlock2}`;
+  }
   const priorRecall = { query: latestUserText(convo), result: recalled };
   const memoryReplay = memoryReplayable(latestUserText(convo), { followUp: isFollowUpTurn(convo) });
   if (await answerFromMemory(chatId, c, req, allTools, memoryReplay)) return null;
@@ -13558,7 +14223,8 @@ ${recallBlock2}` : resolvedSystemPrompt;
     try {
       const extra = await req.augmentSystemPrompt(latestUserText(convo));
       if (typeof extra === "string" && extra.trim()) {
-        systemPrompt = `${systemPrompt}
+        if (stablePrefix) turnParts.push(extra);
+        else systemPrompt = `${systemPrompt}
 
 ${extra}`;
       }
@@ -13584,7 +14250,8 @@ ${previewReviewDirective(chatId)}`;
 ${c.priorResearch}`;
   const userRequest = latestUserText(convo);
   if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
-    systemPrompt = `${systemPrompt}
+    if (stablePrefix) turnParts.push(continuationDirective());
+    else systemPrompt = `${systemPrompt}
 
 ${continuationDirective()}`;
     pushTrace(c, {
@@ -13594,8 +14261,11 @@ ${continuationDirective()}`;
       result: "The user's bare directive was resolved against the previous turn's unfinished proposal, so the run carries that proposal out instead of asking what to fix."
     });
   }
+  const turnContext = turnContextBlock(turnParts);
   const alwaysAdvertised = [
-    ...toolNamesMentionedIn(systemPrompt),
+    ...toolNamesMentionedIn(turnContext ? `${systemPrompt}
+
+${turnContext}` : systemPrompt),
     ...localToolsIn(catalogToolNames),
     // The Studio's workspace vocabulary, including the preview review its contract
     // requires — empty everywhere but the Studio (see `studioToolsIn`).
@@ -13703,6 +14373,11 @@ ${continuationDirective()}`;
     pendingRun: null,
     lastTurnInterruption: null
   };
+  if (turnContext && !attachTurnContext(c, convo, turnContext)) {
+    run.systemPrompt = `${systemPrompt}
+
+${turnContext}`;
+  }
   return run;
 }
 
@@ -13739,13 +14414,13 @@ var SYNONYMS = (() => {
   }
   return map;
 })();
-function synonymsFor(stem2) {
-  return SYNONYMS.get(stem2) ?? [];
+function synonymsFor(stem) {
+  return SYNONYMS.get(stem) ?? [];
 }
 function expandWithSynonyms(stems) {
   const expanded = /* @__PURE__ */ new Set();
-  for (const stem2 of stems) {
-    for (const synonym of synonymsFor(stem2)) {
+  for (const stem of stems) {
+    for (const synonym of synonymsFor(stem)) {
       if (!stems.has(synonym)) expanded.add(synonym);
     }
   }
@@ -13754,87 +14429,22 @@ function expandWithSynonyms(stems) {
 
 // src/selectTools.ts
 var DEFAULT_TOOL_LIMIT = 64;
-var STOP_WORDS = /* @__PURE__ */ new Set([
-  "the",
-  "a",
-  "an",
-  "and",
-  "or",
-  "of",
-  "for",
-  "to",
-  "in",
-  "on",
-  "is",
-  "are",
-  "was",
-  "be",
-  "by",
-  "with",
-  "from",
-  "this",
-  "that",
-  "these",
-  "those",
-  "it",
-  "its",
-  "as",
-  "at",
-  "me",
-  "my",
-  "\u6211",
-  "i",
-  "we",
-  "you",
-  "your",
-  "please",
-  "can",
-  "could",
-  "would",
-  "should",
-  "do",
-  "does",
-  "did",
-  "get",
-  "show",
-  "give",
-  "make",
-  "now",
-  "all",
-  "any",
-  "how",
-  "what",
-  "which",
-  "who",
-  "when"
-]);
-function tokenize(text) {
-  return text.toLowerCase().split(/[^a-z0-9一-鿿]+/).filter((w) => w.length > 1 && !STOP_WORDS.has(w));
-}
-function stem(word) {
-  if (word.length > 3 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
-  if (word.length > 3 && word.endsWith("es")) return word.slice(0, -2);
-  if (word.length > 2 && word.endsWith("s")) return word.slice(0, -1);
-  return word;
-}
-var NAME_HIT = 10;
+var NAME_HIT = LEXICAL_WEIGHTS.name;
 var NAME_SYNONYM_HIT = 7;
-var DESCRIPTION_HIT = 1;
-function scoreTool(tool, queryStems, synonymStems) {
-  const name = (tool.function?.name ?? "").toLowerCase();
-  const description = (tool.function?.description ?? "").toLowerCase();
-  if (!name) return 0;
-  let score2 = 0;
-  const nameStems = new Set(tokenize(name).map(stem));
-  for (const s of nameStems) {
-    if (queryStems.has(s)) score2 += NAME_HIT;
-    else if (synonymStems.has(s)) score2 += NAME_SYNONYM_HIT;
-  }
-  const descStems = new Set(tokenize(description).map(stem));
-  for (const s of descStems) {
-    if (queryStems.has(s) || synonymStems.has(s)) score2 += DESCRIPTION_HIT;
-  }
-  return score2;
+var DESCRIPTION_HIT = LEXICAL_WEIGHTS.description;
+function synonymText(text) {
+  return [...expandWithSynonyms(lexicalStems(text))].join(" ");
+}
+function toolFields(tool) {
+  const name = tool.function?.name ?? "";
+  if (!name) return [];
+  const description = tool.function?.description ?? "";
+  return [
+    { text: name, weight: NAME_HIT },
+    { text: synonymText(name), weight: NAME_SYNONYM_HIT },
+    { text: description, weight: DESCRIPTION_HIT },
+    { text: synonymText(description), weight: DESCRIPTION_HIT }
+  ];
 }
 function selectToolsForTurn(tools, options) {
   const available = tools?.length ?? 0;
@@ -13844,8 +14454,6 @@ function selectToolsForTurn(tools, options) {
   }
   const required = new Set(options.required ?? []);
   const pinned = new Set(options.pinned ?? []);
-  const queryStems = new Set(tokenize(options.query).map(stem));
-  const synonymStems = expandWithSynonyms(queryStems);
   const chosen = [];
   const taken = /* @__PURE__ */ new Set();
   const take = (tool) => {
@@ -13862,10 +14470,9 @@ function selectToolsForTurn(tools, options) {
     if (chosen.length >= limit) break;
     if (pinned.has(tool.function?.name ?? "")) take(tool);
   }
-  const scored = tools.map((tool, index) => ({ tool, index, score: scoreTool(tool, queryStems, synonymStems) })).filter((e) => e.score > 0).sort((a, b) => b.score - a.score || a.index - b.index);
-  for (const entry of scored) {
+  for (const tool of rankLexically(tools, options.query, toolFields, tools.length)) {
     if (chosen.length >= limit) break;
-    take(entry.tool);
+    take(tool);
   }
   for (const tool of tools) {
     if (chosen.length >= limit) break;
@@ -15899,7 +16506,7 @@ var MARKETPLACE_LISTING_KINDS = [
   }
 ];
 var LISTING_KIND_IDS = MARKETPLACE_LISTING_KINDS.map((spec) => spec.id);
-var DAY_MS = 24 * 60 * 60 * 1e3;
+var DAY_MS2 = 24 * 60 * 60 * 1e3;
 
 // ../packages/creation-canvas-contract/src/academic.ts
 var ACADEMIC_OBJECT_KINDS = [
@@ -17397,7 +18004,7 @@ ${refs}`;
     } catch {
     }
   }, [persistence, messages]);
-  const attach = (0, import_react9.useCallback)(async (file) => {
+  const attach2 = (0, import_react9.useCallback)(async (file) => {
     setUploading(true);
     try {
       const result = await persistence.upload(file);
@@ -17463,7 +18070,7 @@ ${refs}`;
     retryLastTurn,
     stop,
     rateMessage,
-    attach,
+    attach: attach2,
     removeAttachment,
     setError: setLocalError,
     clearError,

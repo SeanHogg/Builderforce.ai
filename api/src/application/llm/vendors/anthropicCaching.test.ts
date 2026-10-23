@@ -83,3 +83,27 @@ describe('direct-Anthropic prompt caching', () => {
     expect(JSON.stringify(body.messages.slice(0, -1))).not.toContain('cache_control');
   });
 });
+
+describe('direct-Anthropic usage — cache counts are a SUBSET of the prompt', () => {
+  it('reports prompt_tokens = input + cache read + cache creation, with the split passed through', async () => {
+    (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async () => new Response(
+      JSON.stringify({
+        content: [{ type: 'text', text: 'ok' }],
+        usage: { input_tokens: 20, output_tokens: 5, cache_read_input_tokens: 4000, cache_creation_input_tokens: 300 },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    )) as unknown as typeof fetch;
+    const result = await anthropicModule.call({
+      apiKey: 'sk-ant-test',
+      model: 'claude-sonnet-5',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(result.usage).toMatchObject({
+      prompt_tokens: 4320,
+      completion_tokens: 5,
+      total_tokens: 4325,
+      cache_read_tokens: 4000,
+      cache_creation_tokens: 300,
+    });
+  });
+});

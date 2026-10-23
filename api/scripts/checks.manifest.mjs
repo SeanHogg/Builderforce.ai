@@ -71,6 +71,10 @@ export default [
   // inlined into the Actions runner with agentImageLoop.mjs). This fails the build when
   // the kernel source changes without the copy being regenerated, or the inline drifts.
   ['check:agent-loop', 'gen-agent-loop-bundle.mjs', '--check'],
+  // The Container also imports compiled copies of the tool-output policy, the edit_file
+  // core and the read_file line window (container/toolOutputPolicy.mjs, stringEdit.mjs,
+  // fileWindow.mjs). This fails the build when a source changes without regenerating them.
+  ['check:container-shared', 'gen-container-shared.mjs', '--check'],
   ['check:trigger-palette', 'check-trigger-palette-parity.mjs'],
   ['check:no-burnrate-runtime', 'check-no-burnrate-runtime.mjs'],
   ['check:burnrate-policy', 'check-burnrate-cutover-policy.mjs'],

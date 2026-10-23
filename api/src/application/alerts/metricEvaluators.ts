@@ -24,6 +24,7 @@ import { buildTenantDriftReport } from '../eval/driftReport';
 import { millicentsToUsd } from '../../domain/shared/money';
 import { HOUR_MS } from '../../domain/shared/time';
 import { usageDatabaseOf } from '../llm/usageLedger';
+import { tenantCostSummary } from '../costMetrics/costMetricsService';
 
 /** The full set of metric keys a rule may target (kept in lockstep with the
  *  migration's CHECK-list and the schema AlertMetric type). */
@@ -57,13 +58,12 @@ async function tokenSpendUsd(db: Db, tenantId: number, since: Date, projectId?: 
   return millicentsToUsd(Number(row?.mc ?? 0));
 }
 
-/** Cost-per-merged-PR (USD) = window spend / merged runs in the window. Null when
- *  there were no merged runs (dividing would be meaningless, not "0 cost"). */
-async function costPerMergedPrUsd(db: Db, tenantId: number, since: Date, windowDays: number): Promise<number | null> {
-  const spend = await tokenSpendUsd(db, tenantId, since);
-  const eng = await computeEngineeringInsights(db, tenantId, windowDays);
-  const merged = eng.byApproach.reduce((a, b) => a + Math.round((b.mergedRatePct / 100) * b.runs), 0);
-  return merged > 0 ? spend / merged : null;
+/** Cost-per-merged-PR (USD) with TRUE per-run attribution: the spend each merged run
+ *  itself incurred (usage rows ⋈ run_model_outcomes by execution id) ÷ merged runs —
+ *  not "all window spend ÷ merges", which charged every chat and failed run to the PRs.
+ *  Null when no run merged (dividing would be meaningless, not "0 cost"). */
+async function costPerMergedPrUsd(db: Db, tenantId: number, windowDays: number): Promise<number | null> {
+  return (await tenantCostSummary(db, tenantId, windowDays))?.costPerMergedPrUsd ?? null;
 }
 
 /**
@@ -101,7 +101,7 @@ export async function evaluateMetric(
     }
 
     case 'cost_per_merged_pr_usd':
-      return { value: await costPerMergedPrUsd(db, tenantId, since, days) };
+      return { value: await costPerMergedPrUsd(db, tenantId, days) };
 
     case 'dora_change_failure_rate': {
       const dora = await computeDora(db, tenantId, days);

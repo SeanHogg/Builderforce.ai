@@ -7,6 +7,7 @@
 
 import { ASK_USER_TOOL, ASK_USER_TOOL_SPEC } from '@builderforce/agent-loop';
 import { initialRunPolicy } from '@builderforce/run-policy';
+import { isCostLeverOn } from '@builderforce/cost-levers';
 import {
   toolNamesMentionedIn,
   isContinuationDirective,
@@ -34,10 +35,28 @@ import { isFollowUpTurn, lastAssistantText, latestUserText } from './convoText';
 import { answerFromMemory, recallForRun } from './runMemory';
 import type { RunLoopContext } from './runLoopContext';
 import type { BrainRunRequest } from './runTypes';
+import { attachTurnContext, restoreTurnContext, turnContextBlock } from './turnContext';
+
+/**
+ * B1 (`b1_stable_prefix`): per-turn blocks ride AFTER the history instead of in the
+ * system prompt. On-device there is no tenant to bucket by, so this reads the manifest
+ * default plus any env a Node host exposes (`COST_LEVER_B1_STABLE_PREFIX=off`).
+ */
+function stablePrefixOn(): boolean {
+  const env = (globalThis as { process?: { env?: unknown } }).process?.env;
+  return isCostLeverOn(env, 'b1_stable_prefix', null);
+}
 
 export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey: number): Promise<RunLoopContext | null> {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
   const convo = c.transcript;
+  // The previous run's per-turn block goes back off its user message BEFORE anything
+  // here reads the history (recall query, follow-up test, routing query) — see `turnContext`.
+  restoreTurnContext(c);
+  // Volatile, per-run blocks: kept out of the system prompt when the lever is on, so
+  // the prompt prefix is byte-identical across runs of a chat and caches.
+  const stablePrefix = stablePrefixOn();
+  const turnParts: string[] = [];
   // The catalog the model is shown, PLUS the conversational `ask_user` tool.
   //
   // `ask_user` is injected here rather than registered as a host action because it is
@@ -80,7 +99,11 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   };
 
   const { recalled, block: recallBlock, blockTokens: recallBlockTokens } = await recallForRun(c, convo, evermind);
-  let systemPrompt = recallBlock ? `${resolvedSystemPrompt}\n\n${recallBlock}` : resolvedSystemPrompt;
+  let systemPrompt = resolvedSystemPrompt;
+  if (recallBlock) {
+    if (stablePrefix) turnParts.push(recallBlock);
+    else systemPrompt = `${systemPrompt}\n\n${recallBlock}`;
+  }
   const priorRecall = { query: latestUserText(convo), result: recalled };
 
   // May memory stand in for this turn at all — and may this turn's answer be stored for
@@ -100,7 +123,9 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     try {
       const extra = await req.augmentSystemPrompt(latestUserText(convo));
       if (typeof extra === 'string' && extra.trim()) {
-        systemPrompt = `${systemPrompt}\n\n${extra}`;
+        // Fetched per turn with the latest user text — volatile by construction.
+        if (stablePrefix) turnParts.push(extra);
+        else systemPrompt = `${systemPrompt}\n\n${extra}`;
       }
     } catch {
       // ignore — proceed without the augmentation
@@ -161,7 +186,8 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   // cannot answer.
   const userRequest = latestUserText(convo);
   if (isContinuationDirective(userRequest) && promisesUnfinishedWork(lastAssistantText(convo))) {
-    systemPrompt = `${systemPrompt}\n\n${continuationDirective()}`;
+    if (stablePrefix) turnParts.push(continuationDirective());
+    else systemPrompt = `${systemPrompt}\n\n${continuationDirective()}`;
     pushTrace(c, {
       ts: nowIso(),
       category: 'message',
@@ -185,8 +211,11 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
   // what this surface IS. Every one the host advertised is pinned, so relevance can
   // never decide whether the agent may touch the workspace it is sitting in. On a
   // surface without them (the web Brain) the intersection is empty and nothing changes.
+  // The per-turn block is model-facing prose too: a tool it names is pinned exactly as
+  // one named in the system prompt was when the block lived there.
+  const turnContext = turnContextBlock(turnParts);
   const alwaysAdvertised = [
-    ...toolNamesMentionedIn(systemPrompt),
+    ...toolNamesMentionedIn(turnContext ? `${systemPrompt}\n\n${turnContext}` : systemPrompt),
     ...localToolsIn(catalogToolNames),
     // The Studio's workspace vocabulary, including the preview review its contract
     // requires — empty everywhere but the Studio (see `studioToolsIn`).
@@ -299,5 +328,11 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     pendingRun: null,
     lastTurnInterruption: null,
   };
+  // Attached LAST: every read of the user's own words above (`userRequest`,
+  // `requestQuery`, `priorReply`, the follow-up gate) has already been taken. No user
+  // message to carry it → it stays where it always was, in the system prompt.
+  if (turnContext && !attachTurnContext(c, convo, turnContext)) {
+    run.systemPrompt = `${systemPrompt}\n\n${turnContext}`;
+  }
   return run;
 }

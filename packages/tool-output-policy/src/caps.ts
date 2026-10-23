@@ -1,0 +1,79 @@
+/**
+ * The budgets, as DATA. Every surface used to carry its own numbers — the Brain's 6,000
+ * generic / 16,000 `read_file`, agent-runtime's 30%-of-window with a 400K hard cap and a
+ * 2K floor, the local shell's 200K capture / 30K pending buffer, the container's 60K
+ * capture and 20K `run_command` reply. They live here once; a surface picks the row it
+ * needs instead of restating it.
+ */
+
+/** Per-result cap (chars) for a tool with no row in {@link TOOL_OUTPUT_CAPS}. */
+export const DEFAULT_TOOL_OUTPUT_CHARS = 6_000;
+
+/**
+ * Per-tool caps (chars of the model-facing result). `read_file` is larger on purpose:
+ * reading source is what a coding surface DOES, and it is paged by line with the offset
+ * that continues it, so a big file costs several honest windows rather than one lossy
+ * cut. Shell tools get room for a build/test summary plus the tail of the log.
+ */
+export const TOOL_OUTPUT_CAPS: Readonly<Record<string, number>> = {
+  read_file: 16_000,
+  run_command: 20_000,
+  exec: 20_000,
+  bash: 20_000,
+  git_status: 20_000,
+  git_diff: 20_000,
+  git_history: 20_000,
+  git_sync_latest: 20_000,
+  git_undo: 20_000,
+  git_redo: 20_000,
+};
+
+/** The tool whose results are paged by line rather than sliced by char. */
+export const READ_FILE_TOOL = 'read_file';
+
+/** Tool names whose result is a shell/build/test log. */
+export const SHELL_TOOLS: ReadonlySet<string> = new Set(['run_command', 'exec', 'bash', 'shell', 'process']);
+
+/** Even the largest window (~2M tokens) should not spend more than ~100K tokens on one result. */
+export const HARD_MAX_TOOL_RESULT_CHARS = 400_000;
+
+/** Max share of the context window one tool result may occupy (window-relative cap). */
+export const TOOL_RESULT_WINDOW_SHARE = 0.3;
+
+/** Rough chars-per-token used to turn a window share into a char budget. */
+export const TOOL_RESULT_CHARS_PER_TOKEN = 4;
+
+/** A cut never keeps less than this — the model must still see what the content was. */
+export const MIN_KEEP_CHARS = 2_000;
+
+/**
+ * Capture buffers for a running process (how much of a live log is HELD, not what the
+ * model is handed). The tail is kept: a build or test run prints its verdict last.
+ */
+export const SHELL_CAPTURE_CHARS = {
+  /** agent-runtime's aggregated exec buffer. */
+  local: 200_000,
+  /** agent-runtime's pending (not-yet-polled) buffer. */
+  localPending: 30_000,
+  /** The cloud container's per-command buffer. */
+  container: 60_000,
+} as const;
+
+/** The cap for one tool's result. `caps` overrides the table (tests, a surface's own row). */
+export function toolOutputCap(tool: string, caps: Readonly<Record<string, number>> = TOOL_OUTPUT_CAPS): number {
+  return caps[tool] ?? DEFAULT_TOOL_OUTPUT_CHARS;
+}
+
+/**
+ * The window-relative cap: {@link TOOL_RESULT_WINDOW_SHARE} of the context window, in
+ * chars, never above {@link HARD_MAX_TOOL_RESULT_CHARS}.
+ */
+export function windowToolResultCap(contextWindowTokens: number): number {
+  const maxTokens = Math.floor(contextWindowTokens * TOOL_RESULT_WINDOW_SHARE);
+  return Math.min(maxTokens * TOOL_RESULT_CHARS_PER_TOKEN, HARD_MAX_TOOL_RESULT_CHARS);
+}
+
+/** Whether a tool's output is a shell/build/test log. */
+export function isShellTool(tool: string): boolean {
+  return SHELL_TOOLS.has(tool);
+}

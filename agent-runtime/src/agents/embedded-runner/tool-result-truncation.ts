@@ -2,66 +2,53 @@ import type { AgentMessage } from "../../builderforce/model/agent-types.js";
 import type { TextContent } from "../../builderforce/model/types.js";
 import { SessionManager } from "../../builderforce/agent-loop/index.js";
 import { log } from "./logger.js";
+import { isCostLeverOn } from "@builderforce/cost-levers";
+import {
+  DEFAULT_TRUNCATION_SUFFIX,
+  HARD_MAX_TOOL_RESULT_CHARS,
+  MIN_KEEP_CHARS,
+  cutHead,
+  fitToolText,
+  windowToolResultCap,
+} from "@builderforce/tool-output-policy";
 
 /**
- * Maximum share of the context window a single tool result should occupy.
- * This is intentionally conservative – a single tool result should not
- * consume more than 30% of the context window even without other messages.
+ * The budgets and the cut are THE shared tool-output policy
+ * (`@builderforce/tool-output-policy`, PRD C7): 30% of the context window (~4 chars per
+ * token), a 400K hard cap, a 2K floor, cut at a line boundary. With the C7 lever on, a
+ * shell/test/build log is summarized (failing tests, error lines, assertion diffs, the
+ * tail) instead of head-cut, so the verdict at the end of a long run is never the part
+ * that is dropped.
  */
-const MAX_TOOL_RESULT_CONTEXT_SHARE = 0.3;
+export { HARD_MAX_TOOL_RESULT_CHARS };
+
+/** The C7 lever for an on-device host (no tenant: on only when fully rolled out). */
+function summarizeLogs(): boolean {
+  return isCostLeverOn(process.env, "c7_tool_output_policy", null);
+}
 
 /**
- * Hard character limit for a single tool result text block.
- * Even for the largest context windows (~2M tokens), a single tool result
- * should not exceed ~400K characters (~100K tokens).
- * This acts as a safety net when we don't know the context window size.
+ * Truncate a single text string to fit within maxChars, preserving the beginning — or,
+ * with the C7 lever on, summarizing it when it reads as a shell/test/build log.
+ * `suffix` is the notice a head cut ends with (the persistence guard says so in its own words).
  */
-export const HARD_MAX_TOOL_RESULT_CHARS = 400_000;
-
-/**
- * Minimum characters to keep when truncating.
- * We always keep at least the first portion so the model understands
- * what was in the content.
- */
-const MIN_KEEP_CHARS = 2_000;
-
-/**
- * Suffix appended to truncated tool results.
- */
-const TRUNCATION_SUFFIX =
-  "\n\n⚠️ [Content truncated — original was too large for the model's context window. " +
-  "The content above is a partial view. If you need more, request specific sections or use " +
-  "offset/limit parameters to read smaller chunks.]";
-
-/**
- * Truncate a single text string to fit within maxChars, preserving the beginning.
- */
-export function truncateToolResultText(text: string, maxChars: number): string {
-  if (text.length <= maxChars) {
-    return text;
-  }
-  const keepChars = Math.max(MIN_KEEP_CHARS, maxChars - TRUNCATION_SUFFIX.length);
-  // Try to break at a newline boundary to avoid cutting mid-line
-  let cutPoint = keepChars;
-  const lastNewline = text.lastIndexOf("\n", keepChars);
-  if (lastNewline > keepChars * 0.8) {
-    cutPoint = lastNewline;
-  }
-  return text.slice(0, cutPoint) + TRUNCATION_SUFFIX;
+export function truncateToolResultText(
+  text: string,
+  maxChars: number,
+  suffix: string = DEFAULT_TRUNCATION_SUFFIX,
+): string {
+  return fitToolText(text, maxChars, {
+    summarize: summarizeLogs(),
+    fallback: (t, max) => cutHead(t, max, { suffix, minKeep: MIN_KEEP_CHARS }),
+  });
 }
 
 /**
  * Calculate the maximum allowed characters for a single tool result
  * based on the model's context window tokens.
- *
- * Uses a rough 4 chars ≈ 1 token heuristic (conservative for English text;
- * actual ratio varies by tokenizer).
  */
 export function calculateMaxToolResultChars(contextWindowTokens: number): number {
-  const maxTokens = Math.floor(contextWindowTokens * MAX_TOOL_RESULT_CONTEXT_SHARE);
-  // Rough conversion: ~4 chars per token on average
-  const maxChars = maxTokens * 4;
-  return Math.min(maxChars, HARD_MAX_TOOL_RESULT_CHARS);
+  return windowToolResultCap(contextWindowTokens);
 }
 
 /**
@@ -88,10 +75,17 @@ function getToolResultTextLength(msg: AgentMessage): number {
 }
 
 /**
- * Truncate a tool result message's text content blocks to fit within maxChars.
- * Returns a new message (does not mutate the original).
+ * Truncate a tool result message's text content blocks to fit within maxChars, each
+ * block given its proportional share of the budget (never below the policy floor).
+ * Returns a new message (does not mutate the original). THE message-level cut: the
+ * context-overflow recovery below and the persistence guard
+ * (`session-tool-result-guard.ts`) both use it.
  */
-function truncateToolResultMessage(msg: AgentMessage, maxChars: number): AgentMessage {
+export function truncateToolResultMessage(
+  msg: AgentMessage,
+  maxChars: number,
+  opts: { suffix?: string } = {},
+): AgentMessage {
   const content = (msg as { content?: unknown }).content;
   if (!Array.isArray(content)) {
     return msg;
@@ -117,7 +111,7 @@ function truncateToolResultMessage(msg: AgentMessage, maxChars: number): AgentMe
     const blockBudget = Math.max(MIN_KEEP_CHARS, Math.floor(maxChars * blockShare));
     return {
       ...textBlock,
-      text: truncateToolResultText(textBlock.text, blockBudget),
+      text: truncateToolResultText(textBlock.text, blockBudget, opts.suffix),
     };
   });
 
