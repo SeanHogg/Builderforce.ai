@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TIMELINE_LABELS } from './BrainTimeline';
+import { DEFAULT_CHAT_ERROR_LABELS } from './ChatErrorBanner';
 import { DEFAULT_LIVE_ACTIVITY_LABELS } from './LiveActivity';
 import { liveActivityLabelsFrom, timelineCatalogLookup, timelineLabelsFrom } from './timelineCatalog';
 
@@ -29,7 +30,11 @@ describe('timeline catalog → labels', () => {
     expect(labels.copy).toBe(DEFAULT_TIMELINE_LABELS.copy);
     expect(labels.live.tool).toBe(DEFAULT_LIVE_ACTIVITY_LABELS.tool);
     expect(labels.activity.agentDispatched).toBe(DEFAULT_TIMELINE_LABELS.activity.agentDispatched);
-    expect(timelineLabelsFrom(timelineCatalogLookup(undefined))).toEqual(DEFAULT_TIMELINE_LABELS);
+    expect(labels.chatError).toEqual(DEFAULT_CHAT_ERROR_LABELS);
+    expect(timelineLabelsFrom(timelineCatalogLookup(undefined))).toEqual({
+      ...DEFAULT_TIMELINE_LABELS,
+      chatError: DEFAULT_CHAT_ERROR_LABELS,
+    });
   });
 
   it('lets a surface override what it words on purpose', () => {

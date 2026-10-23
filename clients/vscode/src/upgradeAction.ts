@@ -32,13 +32,6 @@ export interface UpgradeAction {
   url: string;
 }
 
-/** Whether the verdict has a pricing page (the keys of PATHS). */
-function hasPricingPath(
-  action: ChatErrorAction,
-): action is Extract<ChatErrorAction, { kind: keyof typeof PATHS }> {
-  return Object.prototype.hasOwnProperty.call(PATHS, action.kind);
-}
-
 /**
  * The same call-to-action, from an ALREADY-CLASSIFIED verdict.
  *
@@ -50,14 +43,14 @@ function hasPricingPath(
 export function upgradeActionForVerdict(action: ChatErrorAction | null): UpgradeAction | null {
   // Only a verdict with a pricing page gets a call-to-action here. Every other kind —
   // `auth`/`sign_in` (the host signs in), the model verdicts (`noLocalModelPrompt`'s
-  // remedies) and `platform_refused` (a mode/switch remedy) — has none. Checking against
-  // PATHS itself means a new verdict kind can never index a page that doesn't exist.
-  if (!action || !hasPricingPath(action)) return null;
-
-  const url = `${getWebBaseUrl()}${PATHS[action.kind]}`;
-  if (action.kind === "validate_card") {
-    return { label: vscode.l10n.t("Add a card"), url };
+  // remedies) and `platform_refused` (a mode/switch remedy) — has none. Matching each
+  // kind by name means a new verdict kind can never index a page that doesn't exist.
+  if (action?.kind === "validate_card") {
+    return { label: vscode.l10n.t("Add a card"), url: `${getWebBaseUrl()}${PATHS.validate_card}` };
   }
+  if (action?.kind !== "upgrade") return null;
+
+  const url = `${getWebBaseUrl()}${PATHS.upgrade}`;
   const plan = action.requiredPlan
     ? action.requiredPlan.replace(/^./, (ch) => ch.toUpperCase())
     : null;
