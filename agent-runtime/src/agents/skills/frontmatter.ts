@@ -1,5 +1,7 @@
 import type { Skill } from "./native-loader.js";
-import { parseFrontmatterBlock } from "../../markdown/frontmatter.js";
+import { parseFrontmatter as parseSkillFrontmatterBlock, splitSkillMarkdown } from "@builderforce/agent-skills";
+import YAML from "yaml";
+import { coerceFrontmatterValue } from "../../markdown/frontmatter.js";
 import {
   getFrontmatterString,
   normalizeStringList,
@@ -18,8 +20,25 @@ import type {
   SkillInvocationPolicy,
 } from "./types.js";
 
+/**
+ * THE read of a SKILL.md's frontmatter on this runtime — the shared Agent Skills parser
+ * with the full YAML parser. `null` when the file has no frontmatter block.
+ */
+export function readSkillFrontmatter(content: string): Record<string, unknown> | null {
+  const split = splitSkillMarkdown(content);
+  if (split.frontmatter === null) return null;
+  return parseSkillFrontmatterBlock(split.frontmatter, (block) => YAML.parse(block));
+}
+
+/** The same frontmatter as flat strings (nested values JSON-encoded), for the manifest readers. */
 export function parseFrontmatter(content: string): ParsedSkillFrontmatter {
-  return parseFrontmatterBlock(content);
+  const result: ParsedSkillFrontmatter = {};
+  for (const [rawKey, value] of Object.entries(readSkillFrontmatter(content) ?? {})) {
+    const key = rawKey.trim();
+    const coerced = key ? coerceFrontmatterValue(value) : undefined;
+    if (coerced !== undefined) result[key] = coerced;
+  }
+  return result;
 }
 
 function parseInstallSpec(input: unknown): SkillInstallSpec | undefined {

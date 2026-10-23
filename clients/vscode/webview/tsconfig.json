@@ -25,6 +25,7 @@
     // target resolves relative to THIS file — which is what these already are.
     "paths": {
       "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"],
+      "@builderforce/agent-skills": ["../../../packages/agent-skills/src/index.ts"],
       // The audit view types its code-analysis report off the agent-tools
       // `CodeAnalysisComparison`, so the webview needs the same specifier the
       // root tsconfig maps. Enforced by check:source-package-graph.

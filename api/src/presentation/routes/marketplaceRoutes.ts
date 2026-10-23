@@ -34,6 +34,14 @@ import type { Env, HonoEnv } from '../../env';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
 import { parseBody, z, zNumberLike, zNonEmptyString } from './requestBody';
 import { startSkillCheckout, completeSkillCheckout, ListingError } from '../../application/marketplace/skillCommerce';
+import {
+  exportPublishedMarketplaceSkill,
+  readMarketplaceSkillFolder,
+  saveMarketplaceSkillFolder,
+  createMarketplaceSkillListing,
+} from '../../application/skills/skillPortability';
+import { SKILL_DESCRIPTION_MAX, toSkillName, type SkillPackage } from '@builderforce/agent-skills';
+import { SkillFolderFiles } from './skillFolderSchema';
 
 // ---------------------------------------------------------------------------
 // Request bodies. Fields a handler answers "X is required" for stay optional so
@@ -49,10 +57,15 @@ const ProfileBody = z.object({
 
 const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
 
+/*
+ * `files` — an Agent Skills folder (`SkillFolderFiles`). When present it is the SOURCE
+ * of the listing's slug, description and readme, so a card can never describe a
+ * different skill than the folder an installer receives.
+ */
 const CreateSkillBody = z.object({
   name: z.string().nullish(),
   slug: z.string().nullish(),
-  description: z.string().nullish(),
+  description: z.string().max(SKILL_DESCRIPTION_MAX).nullish(),
   category: z.string().nullish(),
   tags: z.array(z.string()).nullish(),
   version: z.string().nullish(),
@@ -63,12 +76,13 @@ const CreateSkillBody = z.object({
   price: zNumberLike.nullish(),
   pricing_model: z.enum(PRICING_MODELS).nullish(),
   price_unit: z.string().nullish(),
+  files: SkillFolderFiles.nullish(),
 });
 
 /** `name` / `category` / `version` are NOT NULL columns, so they refuse `null`. */
 const UpdateSkillBody = z.object({
   name: z.string().optional(),
-  description: z.string().nullish(),
+  description: z.string().max(SKILL_DESCRIPTION_MAX).nullish(),
   category: z.string().optional(),
   tags: z.array(z.string()).nullish(),
   version: z.string().optional(),
@@ -76,6 +90,7 @@ const UpdateSkillBody = z.object({
   icon_url: z.string().nullish(),
   repo_url: z.string().nullish(),
   published: z.boolean().optional(),
+  files: SkillFolderFiles.nullish(),
 });
 
 /**
@@ -198,6 +213,21 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   });
 
   /**
+   * GET /marketplace/skills/:slug/export — a PUBLISHED skill as an Agent Skills folder
+   * (SKILL.md first, then its bundled files), ready to drop into any agent's skills
+   * directory. Public like the listing, and counted as a download like the detail read.
+   * A PAID listing 404s here: its folder is what checkout sells, and a buyer's workspace
+   * receives it through its assignment (`GET /llm/v1/skills/:name/package`).
+   */
+  router.get('/skills/:slug/export', async (c) => {
+    const slug = c.req.param('slug');
+    const folder = await exportPublishedMarketplaceSkill(c.env as Env, db, slug);
+    if (!folder) return c.json({ error: 'Skill not found' }, 404);
+    await recordHit(c.env as Env, db, 'skill.download', slug);
+    return c.json(folder);
+  });
+
+  /**
    * GET /marketplace/skills/:slug
    */
   router.get('/skills/:slug', async (c) => {
@@ -231,38 +261,43 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     // Read BEFORE the insert's try: its catch answers 500, and a bad body is a 400.
     const body = await parseBody(c, CreateSkillBody);
-    const { name, slug, description, category } = body;
+    // A folder, when sent, decides slug / description / readme (see SkillFolderFiles).
+    let folder: SkillPackage | null = null;
+    if (body.files) {
+      const read = readMarketplaceSkillFolder(c.env as Env, body.files);
+      if (!read.pkg) return c.json({ error: 'This folder is not a valid Agent Skill', details: { issues: read.issues } }, 422);
+      folder = read.pkg;
+    }
+    const name = body.name || folder?.manifest.metadata?.title || folder?.manifest.name;
+    // The slug IS the Agent Skills `name`: kebab-case, at most 64 characters.
+    const slug = folder?.manifest.name ?? (body.slug ? toSkillName(body.slug) : '');
+    const description = folder?.manifest.description ?? body.description;
+    const { category } = body;
     if (!name || !slug || !description || !category) {
       return c.json({ error: 'name, slug, description, and category are required' }, 400);
     }
 
     try {
-      const [skill] = await db
-        .insert(schema.marketplaceSkills)
-        .values({
+      const created = await createMarketplaceSkillListing(c.env as Env, db, {
           name,
           slug,
           description,
           authorId: userId,
           category,
           tags:         body.tags    ? JSON.stringify(body.tags) : null,
-          version:      body.version ?? '1.0.0',
-          readme:       body.readme  ?? null,
+          version:      body.version ?? folder?.manifest.metadata?.version ?? '1.0.0',
+          readme:       folder?.body ?? body.readme ?? null,
           iconUrl:      body.icon_url ?? null,
           repoUrl:      body.repo_url ?? null,
           priceCents:   body.price != null ? Math.round(Number(body.price) * 100) : 0,
           pricingModel: body.pricing_model ?? 'flat_fee',
           priceUnit:    body.price_unit ?? null,
-        })
-        .returning();
+        }, folder);
+      if (!created.ok) return c.json({ error: 'Slug already taken' }, 409);
       // A new published skill enters the list keyspace → orphan cached variants.
       await invalidateSkillsList(c.env as Env);
-      return c.json({ skill }, 201);
+      return c.json({ skill: created.skill }, 201);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('unique') || msg.includes('duplicate') || msg.includes('23505')) {
-        return c.json({ error: 'Slug already taken' }, 409);
-      }
       return failResponse(c, new InternalError('Failed to create skill', { cause: err }), { source: 'presentation/routes/marketplaceRoutes.ts', operation: 'createSkill' });
     }
   });
@@ -283,6 +318,16 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     if (existing.authorId !== userId) return c.json({ error: 'Forbidden' }, 403);
 
     const body = await parseBody(c, UpdateSkillBody);
+    let folder: SkillPackage | null = null;
+    if (body.files) {
+      const read = readMarketplaceSkillFolder(c.env as Env, body.files);
+      if (!read.pkg) return c.json({ error: 'This folder is not a valid Agent Skill', details: { issues: read.issues } }, 422);
+      // A listing's slug is its identity; a new version of the folder may not rename it.
+      if (read.pkg.manifest.name !== slug) {
+        return c.json({ error: `SKILL.md is named "${read.pkg.manifest.name}" but this listing is "${slug}"; they must match.` }, 422);
+      }
+      folder = read.pkg;
+    }
 
     const [updated] = await db
       .update(schema.marketplaceSkills)
@@ -300,6 +345,7 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       })
       .where(eq(schema.marketplaceSkills.slug, slug))
       .returning();
+    if (folder && updated) await saveMarketplaceSkillFolder(c.env as Env, db, updated.id, folder);
     // Invalidate the cloud capability cache so the next cloud run re-reads the
     // edited skill body (name/description/readme).
     await invalidateCapabilityCache(c.env, 'skill', slug);

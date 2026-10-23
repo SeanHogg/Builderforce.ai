@@ -166,24 +166,6 @@ export interface BuiltinSkill {
   priceUnit?: string;
 }
 
-export interface UserSkill {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  category: string;
-  version: string;
-  tags: string[];
-  shared: boolean;
-  image?: string;
-  likes: number;
-  downloads: number;
-  createdAt: string;
-  price?: number;
-  pricingModel?: PricingModel;
-  priceUnit?: string;
-}
-
 export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'GitHub', slug: 'github', description: 'GitHub operations via gh CLI: issues, PRs, CI runs, code review, API queries.', emoji: '🐙', category: 'Development', tags: ['git', 'ci', 'code-review', 'issues'], author: 'Builderforce', version: '1.0.0', likes: 456, downloads: 2100 },
   { name: 'Coding Agent', slug: 'coding-agent', description: 'Delegate coding tasks to Codex, Claude Code, or Pi agents via background process for building features, reviewing PRs, and refactoring.', emoji: '🧩', category: 'Development', tags: ['coding', 'agents', 'automation'], author: 'Builderforce', version: '1.0.0', likes: 389, downloads: 1800 },
@@ -194,9 +176,3 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: 'Weather', slug: 'weather', description: 'Get current weather and forecasts via wttr.in or Open-Meteo. No API key needed.', emoji: '🌤️', category: 'Utilities', tags: ['weather', 'forecasts'], author: 'wttr.in', version: '1.0.0', likes: 234, downloads: 1200 },
   { name: '1Password', slug: '1password', description: '1Password CLI integration for secure credential access and management.', emoji: '🔐', category: 'Security', tags: ['passwords', 'secrets', '1password'], author: '1Password', version: '1.0.0', likes: 312, downloads: 1450 },
 ];
-
-/** localStorage key for user-created skills (per tenant). */
-export function userSkillsKey(tenantId: string): string {
-  return `bf-user-skills-${tenantId || 'default'}`;
-}
-

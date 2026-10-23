@@ -277,7 +277,10 @@ export class BuilderforceRelayService implements IRelayService {
     taskId?: number,
   ): Promise<void> {
     try {
-      await this.gatewayClient?.request("artifacts.sync", { artifacts, executionId, taskId });
+      // The run's own workspace keys its sidecar, so concurrent tickets on this host
+      // never share (or overwrite) one assignment list.
+      const workspaceDir = this.runWorkspaceDir(taskId);
+      await this.gatewayClient?.request("artifacts.sync", { artifacts, executionId, taskId, workspaceDir });
     } catch (err) {
       logWarn(`[builderforce] artifacts.sync failed: ${String(err)}`);
     }
@@ -303,12 +306,17 @@ export class BuilderforceRelayService implements IRelayService {
    * Ensure the shared per-ticket workspace exists and (once) holds a clone of the
    * task's bound repo. Returns the working directory both engines run in.
    */
+  /** The directory a run works in: its ticket's shared workspace, or the base dir. */
+  private runWorkspaceDir(taskId: number | undefined): string {
+    const baseDir = this.opts.workspaceDir ?? process.cwd();
+    return taskId != null ? taskWorkspaceDir(baseDir, taskId) : baseDir;
+  }
+
   private async ensureTaskWorkspace(
     taskId: number | undefined,
     repo?: { repoId: string; defaultBranch: string | null },
   ): Promise<string> {
-    const baseDir = this.opts.workspaceDir ?? process.cwd();
-    const cwd = taskId != null ? taskWorkspaceDir(baseDir, taskId) : baseDir;
+    const cwd = this.runWorkspaceDir(taskId);
     await fs.mkdir(cwd, { recursive: true }).catch(() => {
       /* fall back to baseDir */
     });
@@ -458,7 +466,7 @@ export class BuilderforceRelayService implements IRelayService {
 
     // Assigned Skills/Personas/Content → appended to the SDK system prompt (the
     // V2 run path injects nothing otherwise). Mirrors the V1 embedded injection.
-    const appendSystemPrompt = await buildAssignedCapabilityAppend();
+    const appendSystemPrompt = await buildAssignedCapabilityAppend(cwd);
 
     // Register an abort handle so an `execution.cancel` frame can stop this run.
     const abortController = new AbortController();

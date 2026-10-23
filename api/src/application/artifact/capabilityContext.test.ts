@@ -35,7 +35,7 @@ const env = {} as Env;
 
 describe('loadCapabilityContext', () => {
   it('returns an empty block when nothing is assigned', async () => {
-    const res = await loadCapabilityContext(env, makeDb(null, null), {
+    const res = await loadCapabilityContext(env, makeDb(null, null), 7, {
       skills: [],
       personas: [],
       content: [],
@@ -56,7 +56,7 @@ describe('loadCapabilityContext', () => {
         outputPrefix: '🔒',
       },
     );
-    const res = await loadCapabilityContext(env, db, {
+    const res = await loadCapabilityContext(env, db, 7, {
       skills: ['cap-skill-a'],
       personas: ['cap-persona-a'],
       content: ['cap-doc-a'],
@@ -72,7 +72,7 @@ describe('loadCapabilityContext', () => {
 
   it('injects builtin skill bodies (github/coding-agent) when not in the marketplace', async () => {
     // marketplace returns null for the skill → falls back to the builtin registry.
-    const res = await loadCapabilityContext(env, makeDb(null, null), {
+    const res = await loadCapabilityContext(env, makeDb(null, null), 7, {
       skills: ['github'],
       personas: [],
       content: [],
@@ -86,7 +86,7 @@ describe('loadCapabilityContext', () => {
   });
 
   it('references assigned skills with no body by name (not flagged "missing"); personas with no body stay in missing', async () => {
-    const res = await loadCapabilityContext(env, makeDb(null, null), {
+    const res = await loadCapabilityContext(env, makeDb(null, null), 7, {
       skills: ['cap-ghost-skill'],
       personas: ['cap-ghost-persona'],
       content: [],

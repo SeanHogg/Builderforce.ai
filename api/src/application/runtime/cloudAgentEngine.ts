@@ -48,7 +48,8 @@ import { pricesForCall } from '../llm/catalogView';
 import { and, eq } from 'drizzle-orm';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { buildMemoryCapability } from '../memory/memoryService';
-import { approvedSkillsForRun, buildSkillAuthoringCapability, rankSkillsForTask, renderSkillBlock } from '../skills/tenantSkillService';
+import { approvedSkillsForRun, buildSkillAuthoringCapability } from '../skills/tenantSkillService';
+import { rankSkillsForTask, renderSkillCatalogBlock, workspaceSkillSummaries } from '../skills/skillLibrary';
 import { recordRunReflection, skillReflectionDirective } from '../skills/skillReflection';
 import { isMemoryScope } from '../../domain/memory/memoryScope';
 import { buildCoordinationCapability, claimWriteLease, guardRepoWrite } from '../coordination/coordinationCapability';
@@ -2192,7 +2193,7 @@ export async function prepareCloudRun(
   // did. Only the CLOUD path may create a PRD; every other surface reads the stored one.
   const prdPromise = ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model, opts?.readOnly === true);
   const [capabilities, workspace, workspaceSkills] = await Promise.all([
-    loadCapabilityContext(env, db, artifacts, agentPsychometric),
+    loadCapabilityContext(env, db, tenantId, artifacts, agentPsychometric),
     // The repo the agent runs against — its identity + top-level shape (so a wrong/
     // empty binding is visible before any LLM spend) AND what a prior pass already
     // committed to this branch (so a re-run reconciles instead of blindly appending).
@@ -2398,10 +2399,15 @@ export async function prepareCloudRun(
       // The workspace's OWN approved skills — procedures earlier runs worked out and
       // a human signed off. Same trust tier as assigned capabilities: a person
       // approved them, and an unapproved draft can never appear here.
+      //
+      // An Agent Skills CATALOG (name + description each), not the bodies: the run
+      // loads a skill's instructions — and any file bundled with it — through the
+      // platform `skills.read` tool when its task matches, which is the spec's
+      // progressive disclosure and costs one line per skill instead of the whole text.
       kind: 'capabilities', subject: `workspace-skills:${executionId}`, channel: 'system',
       order: RUN_CONTEXT_ORDER.capabilities, trustTier: 'tenant', pinned: true,
       // E1: only the approved skills relevant to this task (top 5), not all 50.
-      body: renderSkillBlock(isCostLeverOn(env, 'e1_skill_ranking', tenantId) ? rankSkillsForTask(workspaceSkills, `${taskRow.title} ${taskRow.description ?? ''}`) : workspaceSkills),
+      body: renderSkillCatalogBlock(workspaceSkillSummaries(isCostLeverOn(env, 'e1_skill_ranking', tenantId) ? rankSkillsForTask(workspaceSkills, `${taskRow.title} ${taskRow.description ?? ''}`) : workspaceSkills)),
     },
   ];
 

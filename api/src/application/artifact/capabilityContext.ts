@@ -19,6 +19,8 @@ import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getBuiltinSkillBody } from './builtinSkills';
+import { withholdUnpaidSkills } from '../marketplace/skillEntitlement';
+import { SKILL_READ_TOOL_NAME } from '@builderforce/agent-skills';
 import { meanLimbicSetpoints, type LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 import {
   buildPsychometricBlock,
@@ -31,7 +33,7 @@ import {
 /** Per-skill readme is capped so a few large skills can't blow the context budget. */
 const SKILL_BODY_MAX_CHARS = 4_000;
 
-type SkillBody = { name: string; description: string | null; readme: string | null } | null;
+export type SkillBody = { name: string; description: string | null; readme: string | null } | null;
 type PersonaBody = {
   name: string;
   description: string | null;
@@ -77,7 +79,10 @@ const personaCacheKey = (slug: string) => `cap:persona:${slug}`;
 const userPsychCacheKey = (userId: string) => `cap:psych:user:${userId}`;
 const agentPsychCacheKey = (tenantId: number, agentId: string) => `cap:psych:agent:${tenantId}:${agentId}`;
 
-async function loadSkillBody(env: Env, db: Db, slug: string): Promise<SkillBody> {
+/** One marketplace (or builtin) skill's name/description/readme — cached per slug. Shared
+ *  with the skill library, so a run's inlined skill and a `skills.read` load of it are
+ *  the same text from the same cache entry. */
+export async function loadSkillBody(env: Env, db: Db, slug: string): Promise<SkillBody> {
   return getOrSetCached<SkillBody>(env, skillCacheKey(slug), async () => {
     const [row] = await db
       .select({
@@ -341,7 +346,13 @@ function personaBlock(p: NonNullable<PersonaBody>): string {
 function skillBlock(slug: string, s: NonNullable<SkillBody>): string {
   const head = `### ${s.name} (${slug})`;
   const desc = s.description ? `\n${s.description}` : '';
-  const body = s.readme ? `\n\n${s.readme.slice(0, SKILL_BODY_MAX_CHARS)}` : '';
+  const readme = s.readme ?? '';
+  // A cut readme says so and names the way to the rest: the whole SKILL.md and its
+  // bundled files load on demand through the platform skill tool.
+  const cut = readme.length > SKILL_BODY_MAX_CHARS
+    ? `\n\n…(truncated — load the full skill and its bundled files with \`${SKILL_READ_TOOL_NAME}\` { name: "${slug}" })`
+    : '';
+  const body = readme ? `\n\n${readme.slice(0, SKILL_BODY_MAX_CHARS)}${cut}` : '';
   return `${head}${desc}${body}`.trim();
 }
 
@@ -353,6 +364,8 @@ function skillBlock(slug: string, s: NonNullable<SkillBody>): string {
 export async function loadCapabilityContext(
   env: Env,
   db: Db,
+  /** The run's workspace — a paid skill's body renders only with its entitlement. */
+  tenantId: number,
   artifacts: ResolvedArtifacts | undefined,
   /** The running agent's OWN psychometric JSON (ide_agents.psychometric), if any.
    *  Compiled alongside assigned personas so a per-agent personality is honored. */
@@ -371,8 +384,12 @@ export async function loadCapabilityContext(
   };
   if (skills.length === 0 && personas.length === 0 && content.length === 0 && !ownProfile) return empty;
 
+  // `loadSkillBody` is cached per slug, workspace-blind; the entitlement is the
+  // workspace's, so it gates here, at render time — which also covers paid-skill
+  // assignments written before assignments were gated.
+  const renderable = await withholdUnpaidSkills(db, tenantId, skills, 'capabilityContext');
   const [skillRows, personaRows] = await Promise.all([
-    Promise.all(skills.map(async (slug) => ({ slug, body: await loadSkillBody(env, db, slug) }))),
+    Promise.all(renderable.map(async (slug) => ({ slug, body: await loadSkillBody(env, db, slug) }))),
     Promise.all(personas.map(async (slug) => ({ slug, body: await loadPersonaBody(env, db, slug) }))),
   ]);
 

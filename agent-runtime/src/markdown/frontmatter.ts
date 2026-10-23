@@ -12,7 +12,7 @@ function stripQuotes(value: string): string {
   return value;
 }
 
-function coerceFrontmatterValue(value: unknown): string | undefined {
+export function coerceFrontmatterValue(value: unknown): string | undefined {
   if (value === null || value === undefined) {
     return undefined;
   }

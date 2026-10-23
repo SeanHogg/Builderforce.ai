@@ -68,6 +68,9 @@ export default {
   marketplace_skills:
     'a public marketplace LISTING. `author_id` names who published it, but the listing is browsable and installable by every workspace — that is what makes it a marketplace. Scoping it would make each listing visible only to its own publisher.',
 
+  skill_files:
+    'GLOBAL CATALOGUE for its marketplace half, inherited for its workspace half: each row is one file of exactly ONE skill folder (CHECK `skill_files_one_owner`), cascading with that skill. A file of a marketplace listing is as global as `marketplace_skills` itself; a file of a workspace skill cascades with its `tenant_skills` row and is only ever read through that row (`skillFileStore` takes the owner the tenant-scoped read returned). The inheritance check cannot see it only because the two owner FKs are each nullable by design; a `tenant_id` copy would be a second place for the owning skill tenant to be wrong, and null on every marketplace file.',
+
   newsletter_templates:
     'the platform marketing team\'s email templates. One set, used to send to one global subscriber list; there is no per-workspace newsletter for them to belong to.',
 

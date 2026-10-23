@@ -30,7 +30,8 @@ describe('reserveTalentSession', () => {
 
 describe('the talent listing Book CTA', () => {
   const detail = read('../../app/talent/[id]/TalentDetailClient.tsx');
-  const cards = read('../../app/marketplace/MarketplacePageClient.tsx');
+  // The talent card left MarketplacePageClient in the marketplace split.
+  const cards = read('../../app/marketplace/TalentCard.tsx');
 
   it('shows Book for a bound listing even when the visitor cannot hire', () => {
     expect(detail).toContain('canHire || bound');

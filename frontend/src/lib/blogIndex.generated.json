@@ -1,5 +1,20 @@
 [
   {
+    "slug": "bring-your-skills-with-you",
+    "title": "Bring your skills with you — one skill folder, every agent",
+    "date": "2026-10-23",
+    "description": "The procedures your team wrote for Claude Code, Codex or a repo's .agents folder now load in BuilderForce unchanged — scripts and references included — and every skill you write here leaves as the same standard folder. One skill, on the web, in VS Code, in Rovr, on the canvas and in every cloud run.",
+    "tags": [
+      "skills",
+      "agents",
+      "agent-skills",
+      "portability",
+      "marketplace",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "builderforce-in-your-editors-agent-chat-area",
     "title": "BuilderForce now sits in VS Code's agent chat area, next to your code",
     "date": "2026-10-22",

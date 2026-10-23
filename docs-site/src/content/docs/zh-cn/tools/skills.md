@@ -15,21 +15,24 @@ x-i18n:
 
 # Skills（BuilderForce Agents）
 
-BuilderForce Agents 使用**兼容 [AgentSkills](https://agentskills.io)** 的 Skills 文件夹来教智能体如何使用工具。每个 Skills 是一个包含带有 YAML frontmatter 和说明的 `SKILL.md` 的目录。BuilderForce Agents 加载**内置 Skills** 以及可选的本地覆盖，并在加载时根据环境、配置和二进制文件存在情况进行过滤。
+BuilderForce Agents 实现了开放的 **[Agent Skills](https://agentskills.io) 标准**。每个 Skill 是一个文件夹，包含 `SKILL.md`（YAML frontmatter 加说明），以及可选的 `scripts/`、`references/` 和 `assets/`。BuilderForce Agents 加载**内置 Skills** 以及本地和分配的 Skills，并在加载时根据环境、配置和二进制文件存在情况进行过滤。运行时、平台导入和市场都使用同一个校验器 `@builderforce/agent-skills` 检查 frontmatter。
 
 ## 位置和优先级
 
-Skills 从**三个**位置加载：
+Skills 从以下位置加载（优先级从低到高）：
 
-1. **内置 Skills**：随安装包一起发布（npm 包或 Builderforce.app）
-2. **托管/本地 Skills**：`~/.builderforce/skills`
-3. **工作区 Skills**：`<workspace>/skills`
+1. **额外文件夹**：`~/.builderforce/builderforce.json` 中的 `skills.load.extraDirs`，以及插件的 Skills 目录
+2. **内置 Skills**：随安装包一起发布（npm 包或 Builderforce.app）
+3. **托管/本地 Skills**：`~/.builderforce/skills`——**在门户中分配**的 Skills 会作为真实文件夹同步到这里（见下文）
+4. **个人标准文件夹**：`~/.claude/skills`，然后是 `~/.agents/skills`
+5. **项目标准文件夹**：`<workspace>/.claude/skills`，然后是 `<workspace>/.agents/skills`
+6. **工作区 Skills**：`<workspace>/skills`（最高）
 
-如果 Skills 名称冲突，优先级为：
+同名 Skill 以优先级高者为准。读取 `.claude/skills` 是为了让为 Claude Code 编写的 Skills 无需修改即可加载。
 
-`<workspace>/skills`（最高）→ `~/.builderforce/skills` → 内置 Skills（最低）
+### 分配的 Skills 会以文件夹形式同步
 
-此外，你可以通过 `~/.builderforce/builderforce.json` 中的 `skills.load.extraDirs` 配置额外的 Skills 文件夹（最低优先级）。
+当在门户中把 Skill 分配给主机或智能体时，`artifacts.sync` 会从平台的 Skill 库获取它（`GET /llm/v1/skills/<name>/package`，使用 `BUILDERFORCE_API_KEY` 认证），并写入 `~/.builderforce/skills/<name>/`，包括其脚本和参考资料。这样它会像任何本地 Skill 一样出现在 `<available_skills>` 中。同步从不覆盖不是它写入的文件夹：你自己创建的同名 Skill 始终优先，同步会将其报告为已跳过。
 
 ## 单智能体 vs 共享 Skills
 
@@ -67,24 +70,28 @@ AgentHub 是 BuilderForce Agents 的公共 Skills 注册表。浏览 https://age
 - `skills.entries.*.env` 和 `skills.entries.*.apiKey` 为该智能体轮次将秘密注入到**宿主机**进程中（而非沙箱）。将秘密保持在提示词和日志之外。
 - 有关更广泛的威胁模型和检查清单，参见[安全性](/gateway/security)。
 
-## 格式（AgentSkills + Pi 兼容）
+## 格式（Agent Skills 标准）
 
 `SKILL.md` 必须至少包含：
 
 ```markdown
 ---
 name: nano-banana-pro
-description: Generate or edit images via Gemini 3 Pro Image
+description: Generate or edit images via Gemini 3 Pro Image. Use when the user asks for an image.
 ---
 ```
 
+规范规则（加载时检查；违反时记录诊断信息，平台导入会拒绝）：
+
+- `name`：1–64 个字符，仅限小写字母、数字和连字符，不能以连字符开头或结尾，不能连续两个连字符，并且**必须与文件夹名称相同**。
+- `description`：1–1024 个字符。没有描述的 Skill 会被跳过（并报告），因为智能体永远无法匹配它。
+- 可选的规范键：`license`、`compatibility`（≤ 500 个字符）、`metadata`（字符串到字符串的映射）、`allowed-tools`（空格分隔；在规范中仍为实验性，会被记录并在导入/导出中保留）。
+
 注意事项：
 
-- 我们遵循 AgentSkills 规范的布局/意图。
-- 内嵌智能体使用的解析器仅支持**单行** frontmatter 键。
-- `metadata` 应该是**单行 JSON 对象**。
-- 在说明中使用 `{baseDir}` 来引用 Skills 文件夹路径。
-- 可选的 frontmatter 键：
+- frontmatter 是完整的 YAML，支持多行 `metadata` 块（包括下面的 JSON 风格块）。
+- 在说明中使用 `{baseDir}` 或相对于 Skill 根目录的路径来引用 Skill 文件夹中的文件。
+- BuilderForce 专用的可选键（导入/导出时保留）：
   - `homepage` — 在 macOS Skills UI 中显示为"Website"的 URL（也支持通过 `metadata.builderforce.homepage`）。
   - `user-invocable` — `true|false`（默认：`true`）。当为 `true` 时，Skills 作为用户斜杠命令暴露。
   - `disable-model-invocation` — `true|false`（默认：`false`）。当为 `true` 时，Skills 从模型提示词中排除（仍可通过用户调用使用）。
@@ -94,6 +101,16 @@ description: Generate or edit images via Gemini 3 Pro Image
 
     工具使用以下参数调用：
     `{ command: "<raw args>", commandName: "<slash command>", skillName: "<skill name>" }`。
+
+## 平台上的 Skills（云端、Brain、画布、Studio）
+
+工作区的 Skills 包括它已批准的 Skills，以及在整个租户范围内分配的 Skills。已批准的 Skills 包括在浏览器中编写的、以文件夹形式导入的，以及由智能体提议并经人工批准的。平台各界面通过网关目录（`GET /llm/v1/mcp/tools`、`POST /mcp`）中的一个工具 `builtin_skills_read` 使用它们：
+
+- 该工具的描述包含工作区的目录：每个 Skill 的名称和描述。
+- `{ name }` 返回说明及附带文件列表。
+- `{ name, path }` 返回单个附带文件。
+
+这一个工具服务于网页、VS Code 和 Rovr 中的 Brain，创建画布和 Studio，外部 MCP 客户端，以及云端和容器运行。云端运行还会以 `<available_skills>` 块的形式获得该目录。分配给某次运行、项目或智能体的 Skills 仍会作为必需能力被完整注入。
 
 ## 门控（加载时过滤）
 
@@ -248,7 +265,7 @@ BuilderForce Agents 在**会话开始时**对有资格的 Skills 进行快照，
 
 ## Token 影响（Skills 列表）
 
-当 Skills 有资格时，BuilderForce Agents 将可用 Skills 的紧凑 XML 列表注入到系统提示词中（通过 `pi-coding-agent` 中的 `formatSkillsForPrompt`）。成本是确定性的：
+当 Skills 有资格时，BuilderForce Agents 将可用 Skills 的紧凑 XML 列表注入到系统提示词中（通过 `@builderforce/agent-skills` 中的 `formatSkillCatalog`，与云端运行使用的格式化器相同）。成本是确定性的：
 
 - **基础开销（仅当 ≥1 个 Skills 时）：** 195 字符。
 - **每个 Skills：** 97 字符 + XML 转义的 `<name>`、`<description>` 和 `<location>` 值的长度。

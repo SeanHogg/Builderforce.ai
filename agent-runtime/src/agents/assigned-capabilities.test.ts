@@ -9,6 +9,7 @@ import {
   buildAssignedPersonaPrompt,
   readAssignedArtifactSlugs,
 } from "./assigned-capabilities.js";
+import { writeAssignedArtifactSlugs } from "./assigned-artifacts-sidecar.js";
 import { buildAgentSystemPrompt } from "./system-prompt.js";
 
 const TEST_PERSONA = "test-persona-xyz";
@@ -33,13 +34,9 @@ async function makeSidecar(slugs: {
   personas?: string[];
   content?: string[];
 }): Promise<string> {
+  // `dir` is the run's workspace; the sidecar is keyed by it (under the isolated test state dir).
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "cap-"));
-  await fs.mkdir(path.join(dir, ".builderforce"), { recursive: true });
-  await fs.writeFile(
-    path.join(dir, ".builderforce", "assigned-artifacts.json"),
-    JSON.stringify({ skills: [], personas: [], content: [], ...slugs }),
-    "utf-8",
-  );
+  await writeAssignedArtifactSlugs(dir, { skills: [], personas: [], content: [], ...slugs });
   return dir;
 }
 

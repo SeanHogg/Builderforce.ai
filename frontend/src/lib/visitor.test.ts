@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getExistingVisitorId, getVisitorId, VISITOR_MINTED_AT_KEY } from './visitor';
 

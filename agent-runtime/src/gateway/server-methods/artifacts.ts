@@ -8,6 +8,8 @@ import { globalPersonaRegistry } from "../../builderforce/personas.js";
  */
 import { loadPersonaAssignments, savePersonaAssignment } from "../../builderforce/project-context.js";
 import type { PersonaAssignment } from "../../builderforce/types.js";
+import { writeAssignedArtifactSlugs } from "../../agents/assigned-artifacts-sidecar.js";
+import { syncAssignedSkills } from "../../agents/skills/assigned-sync.js";
 import { logWarn } from "../../logger.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import type { GatewayRequestHandlers } from "./types.js";
@@ -25,6 +27,10 @@ export const artifactsHandlers: GatewayRequestHandlers = {
 
     const executionId = typeof params?.executionId === "number" ? params.executionId : undefined;
     const taskId = typeof params?.taskId === "number" ? params.taskId : undefined;
+    // The run's working directory (its ticket workspace), sent by the relay. Older relays
+    // omit it; the gateway's own root is then the run's workspace, as it always was.
+    const workspaceDir =
+      typeof params?.workspaceDir === "string" && params.workspaceDir.trim() ? params.workspaceDir : undefined;
 
     const projectRoot = process.cwd();
     const results: { personas: number; skills: number; content: number } = {
@@ -52,15 +58,41 @@ export const artifactsHandlers: GatewayRequestHandlers = {
       logWarn(`[artifacts.sync] applied ${results.personas} persona assignment(s)`);
     }
 
-    // ── Skill references ──────────────────────────────────────────────────
-    // Skills assigned via Builderforce are marketplace slugs. We store them
-    // in a lightweight side-file (.builderforce/assigned-artifacts.json) so the
-    // agent system prompt builder can inject them as context. Actual skill
-    // files are expected to already be present on the agentNode (synced or bundled).
-    if (artifacts.skills?.length) {
-      results.skills = artifacts.skills.length;
+    // ── Run sidecar ───────────────────────────────────────────────────────
+    // This run's assignment, keyed by the run's own workspace so concurrent runs on the
+    // host never overwrite each other's list. Written FIRST (and for an empty assignment
+    // too): the skill sync below counts every live run's sidecar, and the loader reads
+    // this run's to decide which synced skills it sees.
+    const runSkills = (artifacts.skills ?? []).map((s) => s.trim()).filter(Boolean);
+    try {
+      await writeAssignedArtifactSlugs(workspaceDir, {
+        skills: runSkills,
+        personas: artifacts.personas ?? [],
+        content: artifacts.content ?? [],
+        executionId,
+        taskId,
+      });
+    } catch (err) {
+      logWarn(`[artifacts.sync] failed to write the run's assigned-artifacts sidecar: ${String(err)}`);
+    }
+
+    // ── Skills ────────────────────────────────────────────────────────────
+    // The managed skills dir mirrors every skill this HOST may need: the gateway's host
+    // listing plus every live run's own assignment (task-scoped skills reach a run but
+    // not the host listing). New or changed ones are fetched as real Agent Skills
+    // folders; ones no listing and no live run claims are removed. Which of them THIS
+    // run loads is decided at load time from its own sidecar (see
+    // `filterSyncedSkillsForRun` in assigned-sync.ts).
+    if (Array.isArray(artifacts.skills)) {
+      const synced = await syncAssignedSkills({ runSkills });
+      results.skills = synced.written.length + synced.unchanged.length;
       logWarn(
-        `[artifacts.sync] received ${results.skills} skill assignment(s): ${artifacts.skills.join(", ")}`,
+        `[artifacts.sync] skills: ${synced.written.length} fetched, ${synced.unchanged.length} unchanged` +
+          (synced.written.length ? `: ${synced.written.join(", ")}` : "") +
+          (synced.removed.length ? `; removed unassigned ${synced.removed.join(", ")}` : "") +
+          (synced.skipped.length
+            ? `; skipped ${synced.skipped.map((s) => `${s.slug} (${s.reason})`).join(", ")}`
+            : ""),
       );
     }
 
@@ -70,36 +102,6 @@ export const artifactsHandlers: GatewayRequestHandlers = {
       logWarn(
         `[artifacts.sync] received ${results.content} content assignment(s): ${artifacts.content.join(", ")}`,
       );
-    }
-
-    // Persist all assigned artifact slugs to a sidecar file for other
-    // subsystems to read at execution time.
-    if (artifacts.skills?.length || artifacts.personas?.length || artifacts.content?.length) {
-      try {
-        const fs = await import("node:fs");
-        const path = await import("node:path");
-        const dir = path.join(projectRoot, ".builderforce");
-        const filePath = path.join(dir, "assigned-artifacts.json");
-        await fs.promises.mkdir(dir, { recursive: true });
-        await fs.promises.writeFile(
-          filePath,
-          JSON.stringify(
-            {
-              skills: artifacts.skills ?? [],
-              personas: artifacts.personas ?? [],
-              content: artifacts.content ?? [],
-              executionId,
-              taskId,
-              syncedAt: new Date().toISOString(),
-            },
-            null,
-            2,
-          ),
-          "utf-8",
-        );
-      } catch (err) {
-        logWarn(`[artifacts.sync] failed to write assigned-artifacts.json: ${String(err)}`);
-      }
     }
 
     // Bump the skills change counter so the agent picks up new skill assignments

@@ -29,6 +29,8 @@ import {
 } from '../../domain/shared/types';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { loadAgentManifests, invalidateAgentManifests } from '../../application/artifact/agentManifest';
+import { invalidateSkillAssignmentCaches } from '../../application/skills/skillAssignmentCache';
+import { hasPaidSkillEntitlement, SkillPaymentRequired } from '../../application/marketplace/skillEntitlement';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
@@ -122,6 +124,11 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
     const ownershipOk = await verifyScopeOwnership(db, tenantId, body.scope, body.scopeId);
     if (!ownershipOk) return c.json({ error: 'Scope entity not found' }, 404);
 
+    if (body.artifactType === 'skill' && !await hasPaidSkillEntitlement(db, tenantId, body.artifactSlug)) {
+      const refusal = new SkillPaymentRequired(body.artifactSlug);
+      return c.json({ error: refusal.message, code: refusal.code }, 402);
+    }
+
     await db
       .insert(artifactAssignments)
       .values({
@@ -137,6 +144,7 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
 
     // Keep the cached per-agent manifests (the /workforce cards) in sync on write.
     if (body.scope === AssignmentScope.AGENT) await invalidateAgentManifests(c.env as Env, tenantId);
+    if (body.artifactType === 'skill') await invalidateSkillAssignmentCaches(c.env as Env, tenantId);
 
     return c.json({
       ok: true,
@@ -174,6 +182,7 @@ export function createArtifactAssignmentRoutes(db: Db): Hono<HonoEnv> {
         ));
 
       if (scope === AssignmentScope.AGENT) await invalidateAgentManifests(c.env as Env, tenantId);
+      if (artifactType === 'skill') await invalidateSkillAssignmentCaches(c.env as Env, tenantId);
 
       return c.body(null, 204);
     },

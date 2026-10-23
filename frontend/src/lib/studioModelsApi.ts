@@ -8,6 +8,7 @@
 import { publishedEvermindModels, type TenantModelRow } from '@seanhogg/builderforce-brain-ui';
 import { apiRequest, apiRequestStream } from './apiClient';
 import { downloadBlob, filenameFromResponse } from './download';
+import { bytesToBase64 } from './base64Bytes';
 
 /** A published, callable Evermind model the tenant owns. */
 export interface PublishedEvermindModel {
@@ -19,16 +20,6 @@ export interface PublishedEvermindModel {
  *  same rule the console's seed picker uses. */
 export async function listEvermindModels(): Promise<PublishedEvermindModel[]> {
   return publishedEvermindModels((await apiRequest<{ models?: TenantModelRow[] }>('/api/llm/models')).models);
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  const chunk = 0x8000;
-  for (let offset = 0; offset < bytes.length; offset += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
-  }
-  return btoa(binary);
 }
 
 export interface PublishedEvermindResult extends PublishedEvermindModel {
@@ -50,7 +41,7 @@ export async function publishEvermindModel(input: {
   return apiRequest<PublishedEvermindResult>('/api/studio/models/publish', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...input, model: arrayBufferToBase64(input.model) }),
+    body: JSON.stringify({ ...input, model: bytesToBase64(new Uint8Array(input.model)) }),
   });
 }
 

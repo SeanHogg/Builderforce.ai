@@ -62,9 +62,11 @@ function resolveWatchPaths(workspaceDir: string, config?: BuilderForceAgentsConf
   if (workspaceDir.trim()) {
     paths.push(path.join(workspaceDir, "skills"));
     paths.push(path.join(workspaceDir, ".agents", "skills"));
+    paths.push(path.join(workspaceDir, ".claude", "skills"));
   }
   paths.push(path.join(CONFIG_DIR, "skills"));
   paths.push(path.join(os.homedir(), ".agents", "skills"));
+  paths.push(path.join(os.homedir(), ".claude", "skills"));
   const extraDirsRaw = config?.skills?.load?.extraDirs ?? [];
   const extraDirs = extraDirsRaw
     .map((d) => (typeof d === "string" ? d.trim() : ""))

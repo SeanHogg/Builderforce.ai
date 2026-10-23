@@ -1,16 +1,27 @@
 /**
  * Native skills loader — the pi-free replacement for `@mariozechner/pi-coding-agent`'s
  * `Skill` / `loadSkillsFromDir` / `formatSkillsForPrompt` (PI cutover). Discovers skills
- * (direct `.md` children + recursive `SKILL.md` under subdirs), parses their frontmatter
- * via the repo's own {@link parseFrontmatterBlock}, and renders the XML prompt block per
- * the Agent Skills standard. Faithful to pi 0.54's shapes + discovery rules (the
- * `.gitignore`-style ignore-file filtering pi layered on is dropped — dotfiles +
- * `node_modules` are still skipped).
+ * (direct `.md` children + recursive `SKILL.md` under subdirs) and renders the XML prompt
+ * block per the Agent Skills standard. The `.gitignore`-style ignore-file filtering pi
+ * layered on is dropped — dotfiles + `node_modules` are still skipped.
+ *
+ * Frontmatter is read and checked by `@builderforce/agent-skills`, the SAME validator the
+ * platform imports and publishes skills through, so a folder that loads here is a folder
+ * the web import accepts (and vice versa). The loader is lenient where the spec's client
+ * guidance says to be: a skill that breaks a naming rule still loads — under its declared
+ * name, or its folder's — with a diagnostic, because refusing it would hide a working
+ * procedure over a cosmetic fault. Only a missing description (the agent could never
+ * match it) or unreadable frontmatter drops a skill, and that is now reported too.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { parseFrontmatterBlock } from "../../markdown/frontmatter.js";
+import {
+  FILE_HOST_INSTRUCTIONS,
+  formatSkillCatalog,
+  validateSkillFrontmatter,
+} from "@builderforce/agent-skills";
+import { readSkillFrontmatter } from "./frontmatter.js";
 
 export interface Skill {
   name: string;
@@ -19,6 +30,8 @@ export interface Skill {
   baseDir: string;
   source: string;
   disableModelInvocation: boolean;
+  /** Spec `allowed-tools` (experimental): tools the skill pre-approves, as declared. */
+  allowedTools?: string[];
 }
 
 export interface ResourceDiagnostic {
@@ -43,14 +56,23 @@ function loadSkillFromFile(
 ): { skill: Skill | null; diagnostics: ResourceDiagnostic[] } {
   const diagnostics: ResourceDiagnostic[] = [];
   try {
-    const frontmatter = parseFrontmatterBlock(readFileSync(filePath, "utf-8")) as Record<
-      string,
-      unknown
-    >;
+    const frontmatter = readSkillFrontmatter(readFileSync(filePath, "utf-8"));
+    if (frontmatter === null) {
+      diagnostics.push({ type: "warning", message: "skipped: no YAML frontmatter (name + description)", path: filePath });
+      return { skill: null, diagnostics };
+    }
     const skillDir = dirname(filePath);
-    const description = typeof frontmatter.description === "string" ? frontmatter.description : "";
-    if (!description.trim()) return { skill: null, diagnostics };
-    const name = (typeof frontmatter.name === "string" && frontmatter.name) || basename(skillDir);
+    // A root-level `foo.md` has no folder of its own, so only a SKILL.md is held to
+    // the spec's "name equals its directory" rule.
+    const isFolderSkill = basename(filePath) === "SKILL.md";
+    const validation = validateSkillFrontmatter(frontmatter, isFolderSkill ? { directoryName: basename(skillDir) } : {});
+    for (const problem of validation.issues) {
+      diagnostics.push({ type: "warning", message: `${problem.field}: ${problem.message}`, path: filePath });
+    }
+    const description = typeof frontmatter.description === "string" ? frontmatter.description.trim() : "";
+    if (!description) return { skill: null, diagnostics };
+    const name = (typeof frontmatter.name === "string" && frontmatter.name.trim()) || basename(skillDir);
+    const allowedTools = validation.manifest?.allowedTools;
     return {
       skill: {
         name,
@@ -58,7 +80,8 @@ function loadSkillFromFile(
         filePath,
         baseDir: skillDir,
         source,
-        disableModelInvocation: frontmatter["disable-model-invocation"] === true,
+        disableModelInvocation: frontmatter["disable-model-invocation"] === true || frontmatter["disable-model-invocation"] === "true",
+        ...(allowedTools ? { allowedTools } : {}),
       },
       diagnostics,
     };
@@ -117,33 +140,11 @@ export function loadSkillsFromDir(options: LoadSkillsFromDirOptions): LoadSkills
   return loadSkillsFromDirInternal(options.dir, options.source, true);
 }
 
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
 /** Render the `<available_skills>` system-prompt block (model-invocable skills only). */
 export function formatSkillsForPrompt(skills: Skill[]): string {
   const visible = skills.filter((s) => !s.disableModelInvocation);
-  if (visible.length === 0) return "";
-  const lines = [
-    "\n\nThe following skills provide specialized instructions for specific tasks.",
-    "Use the read tool to load a skill's file when the task matches its description.",
-    "When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.",
-    "",
-    "<available_skills>",
-  ];
-  for (const skill of visible) {
-    lines.push("  <skill>");
-    lines.push(`    <name>${escapeXml(skill.name)}</name>`);
-    lines.push(`    <description>${escapeXml(skill.description)}</description>`);
-    lines.push(`    <location>${escapeXml(skill.filePath)}</location>`);
-    lines.push("  </skill>");
-  }
-  lines.push("</available_skills>");
-  return lines.join("\n");
+  return formatSkillCatalog(
+    visible.map((s) => ({ name: s.name, description: s.description, location: s.filePath })),
+    FILE_HOST_INSTRUCTIONS,
+  );
 }

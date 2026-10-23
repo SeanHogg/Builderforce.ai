@@ -26,6 +26,7 @@
 import { callConnectorTool, CONNECTOR_EXTENSION_ID, listConnectorTools } from '../connectors/connectorTools';
 import { BUILTIN_EXTENSION_ID, callBuiltinTool, listBuiltinTools } from './builtinMcpService';
 import { entitledBuiltinTools } from './builtinToolEntitlements';
+import { withSkillCatalog } from './skillLibraryToolCatalog';
 import { callMcpTool, listToolsForTenant, type McpToolEntry } from './mcpExtensionService';
 import {
   applyToolSurface,
@@ -93,8 +94,11 @@ export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<McpTo
       : [],
   ]);
   // Feature-gated rows (the Insights tools) are shown only to a workspace holding the feature.
+  // `skills.read` then carries THIS workspace's skill catalog in its description (or is
+  // dropped when the library is empty) — level one of the Agent Skills disclosure, so
+  // every consumer of this list learns which skills exist without a change of its own.
   const builtinTools = surfaceIncludesSource(surface, 'builtin')
-    ? await entitledBuiltinTools(ctx.env, ctx.tenantId, null, listBuiltinTools())
+    ? await withSkillCatalog(ctx.env, db, ctx.tenantId, await entitledBuiltinTools(ctx.env, ctx.tenantId, null, listBuiltinTools()))
     : [];
   return applyToolSurface([...builtinTools, ...connectorTools, ...extensionTools], surface);
 }

@@ -37,6 +37,9 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // Session introspection — read-only. Lets a run answer "what model am I on?" and
   // report the model/tier it is actually driving on the timeline.
   'session.current_model',
+  // Agent Skills — read-only. The run's catalog block names the workspace's approved
+  // skills; this is how it loads one (and a bundled file) when the task matches.
+  'skills.read',
   // Projects — read + write (no delete)
   'projects.list', 'projects.get', 'projects.create', 'projects.update', 'projects.check_key',
   // Tasks — read + write + move + assignees (no delete). "create other tasks for gaps".
@@ -175,6 +178,8 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
 export const CHAT_SCOPED_AGENT_TOOLS: readonly string[] = [
   'chats.get_messages', 'chats.list_tickets', 'chats.link_ticket', 'chats.unlink_ticket',
   'chats.ticket_lineage', 'chats.list_agents',
+  // (`skills.read` is NOT here: it needs no chat, so it lives in
+  // CLOUD_AGENT_PLATFORM_TOOLS, which the addressed reply also receives.)
   // Why the LAST run on this chat did not finish. Read-only, and the whole point is
   // that it is consulted BEFORE the failed attempt is repeated.
   'chats.diagnostics',

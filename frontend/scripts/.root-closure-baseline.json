@@ -213,6 +213,7 @@
     "lib/auth/members.ts",
     "lib/auth/session.ts",
     "lib/autonomyApi.ts",
+    "lib/base64Bytes.ts",
     "lib/benchmarkingApi.ts",
     "lib/betaPrograms.ts",
     "lib/brain/brainDataEvent.ts",

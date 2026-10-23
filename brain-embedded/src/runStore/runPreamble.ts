@@ -18,6 +18,7 @@ import {
 import type { CompletionMetadata } from '../streamChatCompletion';
 import { HAND_OFF_TOOL_SPEC } from '../planHandoff';
 import { canChangeCodeHere, canShipHere, canReviewInPreview, localToolsIn, memoryToolsIn, studioToolsIn } from '../localWorkspaceTools';
+import { skillToolsIn } from '../skillLibraryTools';
 import { chatModeDirective, normalizeChatMode } from '../chatMode';
 import { routingQueryForTurn, turnOptimizationDirective } from '../turnOptimization';
 import { selfReviewShipDirective } from '../selfReviewShip';
@@ -222,6 +223,9 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     // The project-memory pair (recall before re-reading; remember what was learned) is
     // the cheapest tool in the catalog and the first one relevance would drop.
     ...memoryToolsIn(catalogToolNames),
+    // The workspace's Agent Skills — its description IS the skill catalog, so dropping
+    // it on relevance would hide every reviewed procedure the workspace has.
+    ...skillToolsIn(catalogToolNames),
     // Asking the user is never off-topic: it is how the run stops when it cannot
     // proceed, so relevance against the request must not be what decides whether the
     // agent is allowed to ask. Its one schema is also the cheapest in the catalog.

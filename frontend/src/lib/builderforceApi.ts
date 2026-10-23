@@ -4578,51 +4578,6 @@ export const channelsApi = {
 };
 
 // ---------------------------------------------------------------------------
-// AgentHost Skills (tenant + agentHost-scoped skill assignments)
-// ---------------------------------------------------------------------------
-
-/** One marketplace skill assigned at a scope, as `/api/skill-assignments` returns it. */
-export interface AgentHostSkillAssignment {
-  skillSlug: string;
-  scope: 'tenant' | 'host';
-  assignedBy: string | null;
-  assignedAt: string;
-  skillName: string | null;
-  skillDesc: string | null;
-  skillIcon: string | null;
-  skillVer: string | null;
-}
-
-type ScopedAssignmentRow = Omit<AgentHostSkillAssignment, 'scope'>;
-
-/**
- * Skills on one host: the tenant-wide grants plus the host's own, from the two
- * `/api/skill-assignments` scopes. (These paths replaced `?agentHostId=`,
- * `/agentHost/:id` and `/:assignmentId`, which the API never served.)
- */
-export const agentHostSkillsApi = {
-  list: async (agentHostId: number): Promise<AgentHostSkillAssignment[]> => {
-    const [tenant, host] = await Promise.all([
-      request<{ assignments: ScopedAssignmentRow[] }>('/api/skill-assignments/tenant'),
-      request<{ assignments: ScopedAssignmentRow[] }>(`/api/skill-assignments/agent-hosts/${agentHostId}`),
-    ]);
-    return [
-      ...(tenant.assignments ?? []).map((a) => ({ ...a, scope: 'tenant' as const })),
-      ...(host.assignments ?? []).map((a) => ({ ...a, scope: 'host' as const })),
-    ];
-  },
-
-  assignToAgentHost: (agentHostId: number, skillSlug: string): Promise<void> =>
-    request<void>(`/api/skill-assignments/agent-hosts/${agentHostId}`, {
-      method: 'POST',
-      body: JSON.stringify({ skillSlug }),
-    }),
-
-  revoke: (agentHostId: number, skillSlug: string): Promise<void> =>
-    request<void>(`/api/skill-assignments/agent-hosts/${agentHostId}/${encodeURIComponent(skillSlug)}`, { method: 'DELETE' }),
-};
-
-// ---------------------------------------------------------------------------
 // LLM Proxy: usage + health (GAP-04)
 // ---------------------------------------------------------------------------
 
@@ -4964,23 +4919,12 @@ function mpHeaders(): Record<string, string> {
  * the request (locale header, error reporting, 402 handling) still comes from the
  * one transport.
  */
-async function mpRequest<T>(path: string, init?: RequestOptions): Promise<T> {
+export async function mpRequest<T>(path: string, init?: RequestOptions): Promise<T> {
   return apiRequest<T>(path, {
     ...init,
     auth: 'none',
     headers: { ...mpHeaders(), ...(init?.headers ?? {}) },
   });
-}
-
-export interface MarketplaceSkillDraft {
-  name: string;
-  slug: string;
-  description?: string;
-  category?: string;
-  tags?: string[];
-  version?: string;
-  repoUrl?: string;
-  iconUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -5002,26 +4946,6 @@ export const agentHostNodesApi = {
 
   unpair: (agentHostId: number, nodeId: string): Promise<void> =>
     request<void>(`/api/agent-hosts/${agentHostId}/nodes/${nodeId}`, { method: 'DELETE' }),
-};
-
-// Publishing only. Sign-in, sign-up and "who am I" are the ONE web auth client
-// (`/api/auth/web/*`, `/api/auth/me`); the old `/marketplace/auth/*` doors are
-// server-side aliases of those routes and had no caller here.
-export const marketplacePublisherApi = {
-  publishSkill: (skill: MarketplaceSkillDraft) =>
-    mpRequest<{ skill: MarketplaceSkill }>('/marketplace/skills', {
-      method: 'POST',
-      body: JSON.stringify(skill),
-    }),
-
-  updateSkill: (slug: string, updates: Partial<MarketplaceSkillDraft>) =>
-    mpRequest<{ skill: MarketplaceSkill }>(`/marketplace/skills/${slug}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    }),
-
-  // Likes are NOT here: every like button calls `marketplaceStats.toggleLike`
-  // (POST /api/marketplace-stats/like), the one like store.
 };
 
 // ---------------------------------------------------------------------------

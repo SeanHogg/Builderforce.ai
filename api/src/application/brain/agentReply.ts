@@ -42,6 +42,7 @@ import { ADVISORY_THREAD_AI_CONTEXT_ERROR, advisoryChatAdmittedToAiContext } fro
 import { appendRaw } from './brainMessageStore';
 import type { BrainCallContext } from './brainLlmCall';
 import { agentReplySystemPrompt, agentReplyToolset } from './agentReplyPrompt';
+import { renderSkillCatalogBlock, skillLibraryCatalog } from '../skills/skillLibrary';
 import { runAgentReplyLoop } from './agentReplyLoop';
 import { emptyReplyError, persistAgentReply, regenerateOnEvermind } from './agentReplyOutcome';
 import type { Db } from '../../infrastructure/database/connection';
@@ -154,9 +155,16 @@ export async function agentReply(
   const chatMode = resolveChatMode(chat as { origin?: string | null; mode?: string | null });
 
   const toolset = agentReplyToolset();
+  // The workspace's Agent Skills catalog, as a cloud run is shown it — the addressed
+  // agent loads a matching skill through `skills.read`, which its toolset carries.
+  const skillCatalog = await skillLibraryCatalog(env, db, tenantId, projectHint).then(renderSkillCatalogBlock).catch((error: unknown) => {
+    // A reply without the catalog is still a reply; `skills.read` lists what exists on a miss.
+    reportCaughtError(error, { source: 'application/brain/agentReply.ts', operation: 'agentReply.skillCatalog' });
+    return '';
+  });
   const systemPrompt = agentReplySystemPrompt({
     persona, agentName, chatId, projectHint, boardGrounding, isManagerChat, chatMode, nameFor: toolset.nameFor,
-  });
+  }) + skillCatalog;
 
   const convo: Array<Record<string, unknown>> = [
     { role: 'system', content: systemPrompt },

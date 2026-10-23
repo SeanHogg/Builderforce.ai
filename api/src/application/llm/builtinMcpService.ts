@@ -33,6 +33,9 @@ import { CHAT_DIAGNOSTICS_TOOLS } from './chatDiagnosticsToolCatalog';
 import { REPLAY_TOOLS } from './replayToolCatalog';
 import { AGENT_PERSONA_TOOLS } from './agentPersonaToolCatalog';
 import { APP_BLUEPRINT_TOOLS } from './appBlueprintToolCatalog';
+import { SKILL_LIBRARY_TOOLS } from './skillLibraryToolCatalog';
+import { invalidateSkillAssignmentCaches } from '../skills/skillAssignmentCache';
+import { assertSkillAssignable } from '../marketplace/skillEntitlement';
 import { AGENT_ASSIGNMENT_TOOLS } from './agentAssignmentToolCatalog';
 import { readTicketPendingChanges } from '../task/ticketPendingChangesPort';
 import { decideTicketPendingChanges } from '../task/ticketPendingChanges';
@@ -2549,11 +2552,14 @@ const CATALOG: BuiltinTool[] = [
     description: 'Attach a skill or persona artifact to a scope.',
     parameters: obj({ artifactType: { type: 'string', enum: ['skill', 'persona', 'agent'] }, artifactSlug: S, scope: S, scopeId: N, config: S }, ['artifactType', 'artifactSlug', 'scope', 'scopeId']),
     run: async (ctx, a) => {
+      // A paid skill needs a purchase, not just an assignment — throws a 402 the gateway relays.
+      await assertSkillAssignable(ctx.db, ctx.tenantId, str(a.artifactType), str(a.artifactSlug));
       const [row] = await ctx.db.insert(artifactAssignments).values({ tenantId: ctx.tenantId, artifactType: str(a.artifactType) as never, artifactSlug: str(a.artifactSlug), scope: str(a.scope) as never, scopeId: num(a.scopeId), config: a.config != null ? str(a.config) : null }).onConflictDoUpdate({ target: [artifactAssignments.tenantId, artifactAssignments.artifactType, artifactAssignments.artifactSlug, artifactAssignments.scope, artifactAssignments.scopeId], set: { config: a.config != null ? str(a.config) : null } }).returning();
+      if (str(a.artifactType) === 'skill') await invalidateSkillAssignmentCaches(ctx.env, ctx.tenantId);
       return row;
     },
   },
-  { tool: 'artifact_assignments.unassign', mutates: true, description: 'Detach an artifact from a scope.', parameters: obj({ artifactType: { type: 'string', enum: ['skill', 'persona', 'agent'] }, artifactSlug: S, scope: S, scopeId: N }, ['artifactType', 'artifactSlug', 'scope', 'scopeId']), run: async (ctx, a) => { const rows = await ctx.db.delete(artifactAssignments).where(and(eq(artifactAssignments.tenantId, ctx.tenantId), eq(artifactAssignments.artifactType, str(a.artifactType) as never), eq(artifactAssignments.artifactSlug, str(a.artifactSlug)), eq(artifactAssignments.scope, str(a.scope) as never), eq(artifactAssignments.scopeId, num(a.scopeId)))).returning({ slug: artifactAssignments.artifactSlug }); return { deleted: rows.length > 0 ? str(a.artifactSlug) : null }; } },
+  { tool: 'artifact_assignments.unassign', mutates: true, description: 'Detach an artifact from a scope.', parameters: obj({ artifactType: { type: 'string', enum: ['skill', 'persona', 'agent'] }, artifactSlug: S, scope: S, scopeId: N }, ['artifactType', 'artifactSlug', 'scope', 'scopeId']), run: async (ctx, a) => { const rows = await ctx.db.delete(artifactAssignments).where(and(eq(artifactAssignments.tenantId, ctx.tenantId), eq(artifactAssignments.artifactType, str(a.artifactType) as never), eq(artifactAssignments.artifactSlug, str(a.artifactSlug)), eq(artifactAssignments.scope, str(a.scope) as never), eq(artifactAssignments.scopeId, num(a.scopeId)))).returning({ slug: artifactAssignments.artifactSlug }); if (str(a.artifactType) === 'skill') await invalidateSkillAssignmentCaches(ctx.env, ctx.tenantId); return { deleted: rows.length > 0 ? str(a.artifactSlug) : null }; } },
 
   // ---- Governance (SOC 2) — soc_controls + soc_evidence. Both segment-scoped. The
   //       finops collision table was renamed to finops_soc_controls (mig 0254); these
@@ -4213,6 +4219,11 @@ const CATALOG: BuiltinTool[] = [
   // Tools for detecting, reading, and overriding project blueprints. These enable
   // the agent to understand the project's structure (framework, databases, services).
   ...APP_BLUEPRINT_TOOLS,
+  // ---- Agent Skills: load a reviewed procedure on demand (agentskills.io) -----
+  // The progressive-disclosure loader every catalog consumer shares — Brain (web, VS
+  // Code, Rovr), canvas, Studio, external MCP clients and cloud runs. Its description
+  // carries the workspace's catalog, rewritten per tenant by the gateway.
+  ...SKILL_LIBRARY_TOOLS,
   // ---- Agent assignments: project staffing, workspace identities, every scope ----
   // Through THE assignment use case and its role policy (agentAssignmentToolCatalog.ts).
   ...AGENT_ASSIGNMENT_TOOLS,

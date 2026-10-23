@@ -157,6 +157,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'how-to-build-a-3d-world-resume-in-hired-video-studio',
   ],
   product: [
+    'bring-your-skills-with-you',
     'no-account-no-gpu-you-choose-where-it-runs',
     'kimi-k3-from-your-own-account',
     'send-the-link-join-without-an-account',

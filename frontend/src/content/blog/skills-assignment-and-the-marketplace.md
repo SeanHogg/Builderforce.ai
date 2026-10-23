@@ -8,6 +8,8 @@ author: Sean Hogg
 
 # Skills, Assignments, and the Marketplace — Equipping Your Agents
 
+> **Update, 23 October 2026:** skills now follow the open Agent Skills standard. A skill is a folder (a `SKILL.md` plus its scripts and references), not a prompt fragment. Import one from Claude Code or any repo, download any skill as a folder, and use it from cloud runs, the Brain, the canvas and the Studio. Read [Bring your skills with you](/blog/bring-your-skills-with-you).
+
 An agent's built-in capabilities are its starting point. Skills are how you extend those capabilities — injecting domain knowledge, API integrations, structured workflows, and specialist behaviour without retraining the underlying model.
 
 Builderforce has two ways to get skills onto your agents: the **Skills Marketplace** (community-published, browse and assign) and **custom skills** (you build them, you own them). Both follow the same assignment model, and both are loaded automatically onto your BuilderForce Agents instances at startup.

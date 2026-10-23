@@ -21,6 +21,7 @@ import { createOutbox } from '@builderforce/write-outbox';
 import { apiRequestStream } from './apiClient';
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getVisitorId } from './visitor';
+import { bytesToBase64Url } from './base64Bytes';
 
 /** The kinds with structural meaning to the flow graph. Mirrors
  *  `VISITOR_JOURNEY_KINDS` on the server; a surface may send any other kind and
@@ -71,7 +72,7 @@ const journey = createOutbox<VisitorEventInput>({
 function randomToken(): string {
   const bytes = new Uint8Array(18);
   crypto.getRandomValues(bytes);
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return bytesToBase64Url(bytes);
 }
 
 function readStored(key: string): string | null {

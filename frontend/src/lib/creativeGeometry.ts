@@ -12,6 +12,8 @@
  * and in the browser alike, and it costs no renderer and no dependency.
  */
 
+import { base64ToBytes } from './base64Bytes';
+
 export interface GeometryPoint {
   x: number;
   y: number;
@@ -410,10 +412,7 @@ function trsMatrix(node: Record<string, unknown>): Matrix4 {
 
 function base64ToBuffer(payload: string): ArrayBuffer | null {
   try {
-    const binary = atob(payload);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    return bytes.buffer;
+    return base64ToBytes(payload).buffer;
   } catch {
     return null;
   }

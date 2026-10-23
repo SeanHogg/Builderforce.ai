@@ -14088,6 +14088,32 @@ ${childTaskBrief(t, plan.summary, ids2[i])}`).join("\n\n")}`
   };
 }
 
+// ../packages/agent-skills/src/spec.ts
+var SPEC_FIELDS = ["name", "description", "license", "compatibility", "metadata", "allowed-tools"];
+var SKILL_READ_TOOL_NAME = "builtin_skills_read";
+
+// ../packages/agent-skills/src/validate.ts
+var SPEC_FIELD_SET = new Set(SPEC_FIELDS);
+
+// ../packages/agent-skills/src/skillPackage.ts
+var DEFAULT_SKILL_PACKAGE_LIMITS = {
+  maxFiles: 64,
+  maxFileBytes: 256 * 1024,
+  maxTotalBytes: 1024 * 1024
+};
+
+// ../packages/agent-skills/src/catalog.ts
+var TOOL_HOST_INSTRUCTIONS = [
+  "The following skills provide specialized instructions for specific tasks.",
+  `When a task matches a skill's description, call \`${SKILL_READ_TOOL_NAME}\` with its name and follow the instructions it returns before acting.`,
+  `A skill may list bundled files (scripts, references); load one with \`${SKILL_READ_TOOL_NAME}\` { name, path } only when its instructions call for it.`
+];
+
+// src/skillLibraryTools.ts
+function skillToolsIn(toolNames) {
+  return toolNames.filter((name) => name === SKILL_READ_TOOL_NAME);
+}
+
 // src/turnOptimization.ts
 var MAX_ROUTING_QUERY_CHARS = 4e3;
 var ROUTING_USER_TURNS = 4;
@@ -14546,6 +14572,9 @@ ${turnContext}` : systemPrompt),
     // The project-memory pair (recall before re-reading; remember what was learned) is
     // the cheapest tool in the catalog and the first one relevance would drop.
     ...memoryToolsIn(catalogToolNames),
+    // The workspace's Agent Skills — its description IS the skill catalog, so dropping
+    // it on relevance would hide every reviewed procedure the workspace has.
+    ...skillToolsIn(catalogToolNames),
     // Asking the user is never off-topic: it is how the run stops when it cannot
     // proceed, so relevance against the request must not be what decides whether the
     // agent is allowed to ask. Its one schema is also the cheapest in the catalog.

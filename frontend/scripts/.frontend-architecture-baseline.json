@@ -9,7 +9,7 @@
   "oversizedProductionFileLines": {
     "app/incidents/IncidentsPageClient.tsx": 1208,
     "app/knowledge/[id]/KnowledgeDocClient.tsx": 1228,
-    "app/marketplace/MarketplacePageClient.tsx": 1316,
+    "app/marketplace/MarketplacePageClient.tsx": 1162,
     "components/AITrainingPanel.tsx": 1016,
     "components/ObservabilityContent.tsx": 1033,
     "components/ProviderKeysSettings.tsx": 1399,
@@ -21,7 +21,7 @@
     "components/workforce/WorkforceAgents.tsx": 893,
     "lib/adminApi.ts": 1779,
     "lib/api.ts": 990,
-    "lib/builderforceApi.ts": 10147,
+    "lib/builderforceApi.ts": 10071,
     "lib/founderObjects.ts": 1623,
     "lib/founderOpsApi.ts": 1077,
     "lib/managerDiagnostics.ts": 1879,

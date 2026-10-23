@@ -20,6 +20,7 @@ import {
   DIAGRAM_DEFAULT_FONT_SIZE, MAX_DIAGRAM_CELLS, clipToBox, diagramGraph,
   type DiagramEdge, type DiagramGraph, type DiagramShape, type DiagramPoint, type DiagramVertex,
 } from './diagramGraph';
+import { base64ToBytes } from './base64Bytes';
 
 const SAFE_COLOR = /^(?:#[0-9a-f]{3}|#[0-9a-f]{6}|none)$/i;
 
@@ -219,8 +220,7 @@ const DIAGRAM_TAG = /<diagram\b[^>]*>([\s\S]*?)<\/diagram>/i;
 
 function base64Bytes(value: string): Uint8Array | null {
   try {
-    const binary = atob(value.replace(/\s+/g, ''));
-    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    return base64ToBytes(value.replace(/\s+/g, ''));
   } catch {
     return null;
   }

@@ -10,6 +10,7 @@
  *   ./llm/messagesRoutes             POST /v1/responses, POST /v1/messages
  *   ./llm/embedSessionRoutes         POST /v1/embed-session
  *   ./llm/mcpGatewayRoutes           /v1/mcp/tools, /v1/mcp/surfaces, /v1/mcp/call
+ *   ./llm/skillLibraryRoutes         /v1/skills, /v1/skills/:name/package
  *   ./llm/chatCompletionsRoutes      POST /v1/chat/completions (multi-vendor cascade)
  *   ./llm/modelsRoutes               GET /v1/catalog, /v1/models, /v1/health
  *   ./llm/learnedRoutingRoutes       /v1/model-analytics, /v1/recall-seed, /v1/run-outcome
@@ -24,6 +25,7 @@ import { mountOpenRouterConnectionRoutes } from './llm/openRouterConnectionRoute
 import { mountMessagesRoutes } from './llm/messagesRoutes';
 import { mountEmbedSessionRoutes } from './llm/embedSessionRoutes';
 import { mountMcpGatewayRoutes } from './llm/mcpGatewayRoutes';
+import { mountSkillLibraryRoutes } from './llm/skillLibraryRoutes';
 import { mountChatCompletionsRoutes } from './llm/chatCompletionsRoutes';
 import { mountModelsRoutes } from './llm/modelsRoutes';
 import { mountLearnedRoutingRoutes } from './llm/learnedRoutingRoutes';
@@ -46,6 +48,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   mountMessagesRoutes(router);
   mountEmbedSessionRoutes(router);
   mountMcpGatewayRoutes(router);
+  mountSkillLibraryRoutes(router);
   mountChatCompletionsRoutes(router);
   mountModelsRoutes(router);
   mountLearnedRoutingRoutes(router);

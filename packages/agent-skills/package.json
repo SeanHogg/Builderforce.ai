@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/agent-skills",
+  "version": "2026.10.1",
+  "private": true,
+  "type": "module",
+  "description": "THE Agent Skills (agentskills.io) implementation every BuilderForce surface shares — SKILL.md frontmatter parsing, spec validation (name/description/compatibility/metadata/allowed-tools), skill-folder import + export, and the <available_skills> catalog block. Zero dependencies and no Node builtins: imported by the Worker (cloud), the browser (Brain + Canvas + Studio), Node (agent-runtime) and the VS Code extension host, so a skill means the same thing on every one of them.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

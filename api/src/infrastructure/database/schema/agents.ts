@@ -94,6 +94,8 @@ export const marketplaceSkills = pgTable('marketplace_skills', {
   pricingModel: pricingModelEnum('pricing_model').notNull().default('flat_fee'),
   priceUnit:    varchar('price_unit', { length: 100 }),
   searchVector: tsvector('search_vector'),
+  /** Optional Agent Skills frontmatter (migration 1259) — see `SkillManifestRecord`. */
+  manifest:     jsonb('manifest'),
   createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -817,12 +819,38 @@ export const tenantSkills = pgTable('tenant_skills', {
   reviewedBy:        varchar('reviewed_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   reviewedAt:        timestamp('reviewed_at'),
   reviewNote:        text('review_note'),
+  /** Optional Agent Skills frontmatter (migration 1259) — see `SkillManifestRecord`. */
+  manifest:          jsonb('manifest'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_tenant_skills_slug').on(t.tenantId, t.slug),
   index('tenant_skills_status_idx').on(t.tenantId, t.status, t.updatedAt),
 ]);
+
+/**
+ * The bundled files of an Agent Skills folder (migration 1259) — `scripts/`,
+ * `references/`, `assets/` — beside the SKILL.md whose body lives on the owning row.
+ * Exactly ONE owner, a workspace skill or a marketplace skill (CHECK
+ * `skill_files_one_owner`), and the file cascades with it. Written only through
+ * `application/skills/skillFileStore`, after `@builderforce/agent-skills` has checked
+ * every path stays inside the folder.
+ */
+export const skillFiles = pgTable('skill_files', {
+  id:                 uuid('id').primaryKey().defaultRandom(),
+  tenantSkillId:      uuid('tenant_skill_id').references(() => tenantSkills.id, { onDelete: 'cascade' }),
+  marketplaceSkillId: integer('marketplace_skill_id').references(() => marketplaceSkills.id, { onDelete: 'cascade' }),
+  path:               varchar('path', { length: 512 }).notNull(),
+  /** 'utf8' — text inline in `content`; 'base64' — binary bytes in R2 at `r2Key` (1262). */
+  encoding:           varchar('encoding', { length: 10 }).notNull().default('utf8'),
+  /** Text body; NULL for a binary asset (CHECK `skill_files_body_location`). */
+  content:            text('content'),
+  /** UPLOADS key of a binary asset; NULL for text. */
+  r2Key:              text('r2_key'),
+  /** Decoded size in bytes, text or binary. */
+  sizeBytes:          integer('size_bytes').notNull(),
+  createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const artifactAssignments = pgTable('artifact_assignments', {
   id:            serial('id').primaryKey(),

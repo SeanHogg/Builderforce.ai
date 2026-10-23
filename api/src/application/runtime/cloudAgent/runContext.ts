@@ -144,7 +144,7 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
         resolveArtifacts(db, { tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId, cloudAgentRef: agent.ref }),
         loadAgentPsychometric(env, exec.tenantId, agent.ref),
       ]);
-      execParams = (await loadCapabilityContext(env, db, artifacts, agentPsychometric)).execParams;
+      execParams = (await loadCapabilityContext(env, db, exec.tenantId, artifacts, agentPsychometric)).execParams;
     } catch (error) {
       reportCaughtError(error, { source: "application/runtime/cloudAgent/runContext.ts", operation: "loadContainerRunContext", context: { logMessage: '[cloud-container] execution personality context load failed', details: {
         tenantId: exec.tenantId,

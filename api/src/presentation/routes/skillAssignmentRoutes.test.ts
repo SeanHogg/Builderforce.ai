@@ -57,11 +57,11 @@ describe('skill assignments — host scope', () => {
       body: JSON.stringify({ skillSlug: 'lint' }),
     });
     expect(post.status).toBe(201);
-    expect(port.assignSkill).toHaveBeenCalledWith({}, 3, { scope: 'host', agentHostId: 5 }, { skillSlug: 'lint', assignedBy: 'user-1' });
+    expect(port.assignSkill).toHaveBeenCalledWith(undefined, {}, 3, { scope: 'host', agentHostId: 5 }, { skillSlug: 'lint', assignedBy: 'user-1' });
 
     const del = await app().request('/agent-hosts/5/lint', { method: 'DELETE' });
     expect(del.status).toBe(204);
-    expect(port.unassignSkill).toHaveBeenCalledWith({}, 3, { scope: 'host', agentHostId: 5 }, 'lint');
+    expect(port.unassignSkill).toHaveBeenCalledWith(undefined, {}, 3, { scope: 'host', agentHostId: 5 }, 'lint');
   });
 
   it('the alias DELETE still works (deprecated)', async () => {

@@ -7,6 +7,7 @@ import PublicDetailLayout, { PublicDetailSection } from '@/components/PublicDeta
 import { pageMetadata } from '@/lib/seo';
 import { marketplaceSkillSchema } from '@/lib/structured-data';
 import { getPublishedSkill } from '@/lib/marketplaceSeo';
+import { SkillFolderExportButton } from '@/components/skills/SkillFolderExportButton';
 
 /**
  * One published marketplace skill.
@@ -74,6 +75,8 @@ export default async function MarketplaceSkillPage({
               {t('getCta')}
             </Link>
             <Link className="pdl-btn pdl-btn-ghost" href="/marketplace">{t('browseCta')}</Link>
+            {/* The skill as an Agent Skills folder — for Claude Code, Codex or any agent that reads the standard. */}
+            <SkillFolderExportButton source={{ kind: 'marketplace', slug: skill.slug }} />
           </>
         }
       >

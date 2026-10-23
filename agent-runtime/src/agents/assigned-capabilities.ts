@@ -3,8 +3,9 @@
  *
  * Capabilities assigned to an agent via Builderforce arrive through the gateway
  * `artifacts.sync` handler, which (a) activates the matching personas in the
- * process-wide {@link globalPersonaRegistry} and (b) writes the assigned
- * skill/persona/content *slugs* to `.builderforce/assigned-artifacts.json`.
+ * process-wide {@link globalPersonaRegistry} and (b) records the assigned
+ * skill/persona/content *slugs* in the run's sidecar (keyed by its workspace; see
+ * `assigned-artifacts-sidecar.ts`).
  *
  * This module turns that state into prompt text so the running agent actually
  * adopts what was assigned — the single source shared by both engines:
@@ -23,38 +24,11 @@ import { mergeLimbicWithPsychometric } from "@builderforce/agent-tools";
 import { buildLimbicBlock } from "@seanhogg/builderforce-memory-engine/limbic";
 import { getLimbicSystemService } from "../infra/limbic-system-service.js";
 import { logDebug } from "../logger.js";
+import path from "node:path";
+import { CONFIG_DIR } from "../utils.js";
+import { readAssignedArtifactSlugs } from "./assigned-artifacts-sidecar.js";
 
-export type AssignedArtifactSlugs = {
-  skills: string[];
-  personas: string[];
-  content: string[];
-};
-
-function toStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
-}
-
-/**
- * Read the assigned-artifact slugs written by `artifacts.sync`. Defaults to the
- * gateway project root (`process.cwd()`) — where the sidecar is written —
- * independent of any per-ticket workspace the engine runs in.
- */
-export async function readAssignedArtifactSlugs(root?: string): Promise<AssignedArtifactSlugs> {
-  try {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const filePath = path.join(root ?? process.cwd(), ".builderforce", "assigned-artifacts.json");
-    const raw = await fs.promises.readFile(filePath, "utf-8");
-    const j = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      skills: toStringArray(j.skills),
-      personas: toStringArray(j.personas),
-      content: toStringArray(j.content),
-    };
-  } catch {
-    return { skills: [], personas: [], content: [] };
-  }
-}
+export { readAssignedArtifactSlugs, type AssignedArtifactSlugs } from "./assigned-artifacts-sidecar.js";
 
 /**
  * Build a system-prompt block from the personas currently active (assigned via
@@ -131,7 +105,7 @@ export function resolveCognitiveExecParams(): PsychometricExecParams {
  * the full persona definition plus assigned skill/content references (the SDK
  * agent reads the referenced SKILL.md via its Read tool). '' when nothing assigned.
  */
-export async function buildAssignedCapabilityAppend(root?: string): Promise<string> {
+export async function buildAssignedCapabilityAppend(workspaceDir?: string): Promise<string> {
   const sections: string[] = [];
 
   const persona = buildAssignedPersonaPrompt();
@@ -143,12 +117,16 @@ export async function buildAssignedCapabilityAppend(root?: string): Promise<stri
   const limbic = buildActiveLimbicPrompt();
   if (limbic) sections.push("## Affective state\n" + limbic);
 
-  const { skills, content } = await readAssignedArtifactSlugs(root);
+  const { skills, content } = await readAssignedArtifactSlugs(workspaceDir);
   if (skills.length > 0) {
     sections.push(
       "## Skills (mandatory)\n" +
         `You have been assigned these skills: ${skills.join(", ")}. ` +
-        "If a matching SKILL.md is present in the workspace, read it and follow it before acting.",
+        // `artifacts.sync` installs each one as an Agent Skills folder in the managed
+        // skills dir (see agents/skills/assigned-sync.ts); a same-named workspace skill wins.
+        `Each is an Agent Skills folder at ${path.join(CONFIG_DIR, "skills")}${path.sep}<name>${path.sep}SKILL.md ` +
+        "(or a same-named folder under the workspace's skills/, .agents/skills/ or .claude/skills/). " +
+        "Read its SKILL.md and follow it before acting; load a bundled file only when the instructions point at it.",
     );
   }
   if (content.length > 0) {

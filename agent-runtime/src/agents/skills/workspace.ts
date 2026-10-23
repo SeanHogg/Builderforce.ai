@@ -5,6 +5,7 @@ import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { CONFIG_DIR, resolveUserPath } from "../../utils.js";
 import { resolveSandboxPath } from "../sandbox-paths.js";
+import { filterSyncedSkillsForRun } from "./assigned-sync.js";
 import { resolveBundledSkillsDir } from "./bundled-dir.js";
 import { shouldIncludeSkill } from "./config.js";
 import { resolveSkillDependencies } from "./dependencies.js";
@@ -358,10 +359,15 @@ function loadSkillEntries(
       source: "builderforce-extra",
     });
   });
-  const managedSkills = loadSkills({
-    dir: managedSkillsDir,
-    source: "builderforce-managed",
-  });
+  // The managed dir mirrors every skill assigned anywhere on this host; a run sees only
+  // the synced ones assigned to IT (its own installs there pass untouched).
+  const managedSkills = filterSyncedSkillsForRun(
+    loadSkills({
+      dir: managedSkillsDir,
+      source: "builderforce-managed",
+    }),
+    workspaceDir,
+  );
   const personalAgentsSkillsDir = path.resolve(os.homedir(), ".agents", "skills");
   const personalAgentsSkills = loadSkills({
     dir: personalAgentsSkillsDir,
@@ -372,13 +378,24 @@ function loadSkillEntries(
     dir: projectAgentsSkillsDir,
     source: "agents-skills-project",
   });
+  // The other conventional Agent Skills home: `.claude/skills`, where Claude Code (and
+  // the tools that follow it) keep personal and project skills. Same spec, same folder
+  // shape — so a repo's skills load here untouched, at the same tier as `.agents/skills`.
+  const personalClaudeSkills = loadSkills({
+    dir: path.resolve(os.homedir(), ".claude", "skills"),
+    source: "claude-skills-personal",
+  });
+  const projectClaudeSkills = loadSkills({
+    dir: path.resolve(workspaceDir, ".claude", "skills"),
+    source: "claude-skills-project",
+  });
   const workspaceSkills = loadSkills({
     dir: workspaceSkillsDir,
     source: "builderforce-workspace",
   });
 
   const merged = new Map<string, Skill>();
-  // Precedence: extra < bundled < managed < agents-skills-personal < agents-skills-project < workspace
+  // Precedence: extra < bundled < managed < personal (.claude, then .agents) < project (.claude, then .agents) < workspace
   for (const skill of extraSkills) {
     merged.set(skill.name, skill);
   }
@@ -388,10 +405,10 @@ function loadSkillEntries(
   for (const skill of managedSkills) {
     merged.set(skill.name, skill);
   }
-  for (const skill of personalAgentsSkills) {
+  for (const skill of [...personalClaudeSkills, ...personalAgentsSkills]) {
     merged.set(skill.name, skill);
   }
-  for (const skill of projectAgentsSkills) {
+  for (const skill of [...projectClaudeSkills, ...projectAgentsSkills]) {
     merged.set(skill.name, skill);
   }
   for (const skill of workspaceSkills) {

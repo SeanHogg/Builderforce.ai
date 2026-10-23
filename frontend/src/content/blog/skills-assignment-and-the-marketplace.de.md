@@ -1,3 +1,5 @@
+> **Update, 23. Oktober 2026:** Skills folgen jetzt dem offenen Agent-Skills-Standard. Eine Skill ist ein Ordner (eine `SKILL.md` mit ihren Skripten und Referenzen), kein Prompt-Fragment. Importiere eine aus Claude Code oder einem beliebigen Repo, lade jede Skill als Ordner herunter und nutze sie in Cloud-Läufen, im Brain, im Canvas und im Studio. Lies [Bring deine Skills mit](/blog/bring-your-skills-with-you).
+
 Die eingebauten Fähigkeiten eines Agents sind sein Ausgangspunkt. Mit Skills erweitern Sie diese Fähigkeiten – Sie bringen Fachwissen, API-Integrationen, strukturierte Workflows und Spezialverhalten ein, ohne das zugrunde liegende Modell neu zu trainieren.
 
 Builderforce bietet zwei Wege, Skills auf Ihre Agents zu bringen: den **Skills-Marktplatz** (von der Community veröffentlicht, zum Durchstöbern und Zuweisen) und **eigene Skills** (Sie bauen sie, sie gehören Ihnen). Beide folgen demselben Zuweisungsmodell, und beide werden beim Start automatisch in Ihre BuilderForce Agents-Instanzen geladen.

@@ -73,6 +73,8 @@ const DELIVERY_DOMAINS = [
   'boards', 'board_data', 'specs', 'roadmap', 'objectives', 'key_results', 'initiatives',
   'portfolios', 'pmo', 'approvals', 'reviews', 'retro', 'poker', 'chats', 'project_files',
   'project_facts', 'project_agents', 'dashboards', 'session',
+  // How the work is done: the workspace's Agent Skills (read-only).
+  'skills',
 ] as const;
 
 /**

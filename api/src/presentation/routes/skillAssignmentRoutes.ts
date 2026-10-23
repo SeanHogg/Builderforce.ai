@@ -32,7 +32,8 @@ import {
   unassignSkill,
 } from '../../application/skills/skillAssignmentPort';
 import { TenantRole } from '../../domain/shared/types';
-import type { HonoEnv } from '../../env';
+import { SkillPaymentRequired } from '../../application/marketplace/skillEntitlement';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { parseBody, z } from './requestBody';
 
@@ -42,6 +43,7 @@ const SkillAssignmentBody = z.object({ skillSlug: z.string().nullish() });
 export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
+
 
   // ── Tenant-level ──────────────────────────────────────────────────────────
 
@@ -61,7 +63,12 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
 
     if (!await marketplaceSkillExists(db, body.skillSlug)) return c.json({ error: 'Skill not found' }, 404);
 
-    await assignSkill(db, tenantId, { scope: 'tenant' }, { skillSlug: body.skillSlug, assignedBy: userId });
+    try {
+      await assignSkill(c.env as Env, db, tenantId, { scope: 'tenant' }, { skillSlug: body.skillSlug, assignedBy: userId });
+    } catch (err) {
+      if (err instanceof SkillPaymentRequired) return c.json({ error: err.message, code: err.code }, 402);
+      throw err;
+    }
 
     return c.json({ ok: true, tenantId, skillSlug: body.skillSlug }, 201);
   });
@@ -70,7 +77,7 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
   router.delete('/tenant/:slug', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const skillSlug = c.req.param('slug');
-    await unassignSkill(db, tenantId, { scope: 'tenant' }, skillSlug);
+    await unassignSkill(c.env as Env, db, tenantId, { scope: 'tenant' }, skillSlug);
     return c.body(null, 204);
   });
 
@@ -102,7 +109,12 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
 
     if (!await marketplaceSkillExists(db, body.skillSlug)) return c.json({ error: 'Skill not found' }, 404);
 
-    await assignSkill(db, tenantId, { scope: 'host', agentHostId }, { skillSlug: body.skillSlug, assignedBy: userId });
+    try {
+      await assignSkill(c.env as Env, db, tenantId, { scope: 'host', agentHostId }, { skillSlug: body.skillSlug, assignedBy: userId });
+    } catch (err) {
+      if (err instanceof SkillPaymentRequired) return c.json({ error: err.message, code: err.code }, 402);
+      throw err;
+    }
 
     return c.json({ ok: true, agentHostId, skillSlug: body.skillSlug }, 201);
   });
@@ -112,7 +124,7 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId  = c.get('tenantId') as number;
     const agentHostId    = Number(c.req.param('agentHostId'));
     const skillSlug = c.req.param('slug');
-    await unassignSkill(db, tenantId, { scope: 'host', agentHostId }, skillSlug);
+    await unassignSkill(c.env as Env, db, tenantId, { scope: 'host', agentHostId }, skillSlug);
     return c.body(null, 204);
   });
 

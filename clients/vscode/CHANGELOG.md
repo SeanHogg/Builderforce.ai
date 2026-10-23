@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.64] — Your workspace's skills, in the editor's chat
+
+- **The chat follows your team's skills.** Every Agent Skill in your workspace (written in BuilderForce, imported from Claude Code or a repo's `.agents/skills`, or proposed by an agent and approved) is listed to the chat. When a request matches one, the chat loads the instructions and any bundled script or reference before it acts.
+- **Skills are never dropped by relevance.** The skill tool stays in every turn's tool list, so "ship the migration" still finds the "ship a schema change" procedure even though the words don't overlap.
+- **Same skills as the web and cloud runs.** One skill library feeds the editor, the web Brain, Rovr, the canvas and every cloud run, so a procedure refined in one place is the one followed everywhere.
+
 ## [2026.10.57] — Brain-embedded build fix & VSIX packaging
 
 - **Fixed brain-embedded TypeScript build** — The `tsup` config now correctly resolves `@seanhogg/bfi-web` types (a built package with its own dist) and `@seanhogg/builderforce-memory/evermind` subpath exports. The declaration build passes without `Cannot find module` errors.

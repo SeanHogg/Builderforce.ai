@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
-  agentHostSkillsApi,
+  artifactAssignments,
   listMarketplaceSkills,
-  type AgentHostSkillAssignment,
+  type ArtifactAssignment,
   type MarketplaceSkill,
 } from '@/lib/builderforceApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
@@ -19,154 +20,139 @@ const cardStyle: React.CSSProperties = {
   padding: 16,
 };
 
+const small: React.CSSProperties = { fontSize: 'var(--font-size-small)' };
+const eyebrow: React.CSSProperties = { fontSize: 'var(--font-size-eyebrow)' };
+
+/**
+ * The skills a self-hosted agent loads: the workspace-wide grants plus the ones given to
+ * this host. Both live in the ONE assignment store (`artifact_assignments`) that runs,
+ * the skill catalog and the host's skill sync read, so a grant made here reaches the
+ * host's next run.
+ */
 export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkillsContentProps) {
+  const t = useTranslations('agentHostSkills');
   const errorMessage = useErrorMessage();
-  const [assignments, setAssignments] = useState<AgentHostSkillAssignment[]>([]);
+  const [tenantRows, setTenantRows] = useState<ArtifactAssignment[]>([]);
+  const [hostRows, setHostRows] = useState<ArtifactAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [marketplaceSkills, setMarketplaceSkills] = useState<MarketplaceSkill[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [searchQ, setSearchQ] = useState('');
-  const [adding, setAdding] = useState<string | null>(null);
-  const [revoking, setRevoking] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    agentHostSkillsApi
-      .list(agentHostId)
-      .then(setAssignments)
+    Promise.all([
+      tenantId ? artifactAssignments.list('tenant', tenantId, 'skill') : Promise.resolve([]),
+      artifactAssignments.list('host', agentHostId, 'skill'),
+    ])
+      .then(([tenant, host]) => { setTenantRows(tenant); setHostRows(host); })
       .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false));
-  };
+  }, [agentHostId, tenantId, errorMessage]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [agentHostId]);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     if (!showAdd) return;
     listMarketplaceSkills({ q: searchQ || undefined, limit: 30 })
       .then((r) => setMarketplaceSkills(r.skills))
-      .catch(() => {});
+      .catch(() => setMarketplaceSkills([]));
   }, [showAdd, searchQ]);
 
-  const handleAssign = async (skillSlug: string) => {
-    setAdding(skillSlug);
+  const run = async (slug: string, act: () => Promise<unknown>) => {
+    setBusy(slug);
+    setError(null);
     try {
-      await agentHostSkillsApi.assignToAgentHost(agentHostId, skillSlug);
+      await act();
       load();
-    } catch {
-      // ignore
+    } catch (e: unknown) {
+      setError(errorMessage(e));
     } finally {
-      setAdding(null);
+      setBusy(null);
     }
   };
 
-  const handleRevoke = async (skillSlug: string) => {
-    setRevoking(skillSlug);
-    try {
-      await agentHostSkillsApi.revoke(agentHostId, skillSlug);
-      setAssignments((prev) => prev.filter((a) => !(a.scope === 'host' && a.skillSlug === skillSlug)));
-    } catch {
-      // ignore
-    } finally {
-      setRevoking(null);
-    }
-  };
+  const assigned = new Set([...tenantRows, ...hostRows].map((a) => a.artifactSlug));
+  const total = assigned.size;
 
-  const assignedSlugs = new Set(assignments.map((a) => a.skillSlug));
+  if (loading) return <div style={{ ...small, color: 'var(--text-muted)' }}>{t('loading')}</div>;
 
-  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading skills…</div>;
-  if (error) return <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>Error: {error}</div>;
+  const row = (a: ArtifactAssignment, badge: string, revocable: boolean) => (
+    <div key={`${a.scope}:${a.artifactSlug}`} style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 160px', minWidth: 0, ...small, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+        {a.artifactSlug}
+      </div>
+      <span style={{ ...eyebrow, fontWeight: 700, textTransform: 'uppercase', padding: '3px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', color: 'var(--text-muted)' }}>
+        {badge}
+      </span>
+      {revocable && (
+        <button
+          type="button"
+          onClick={() => void run(a.artifactSlug, () => artifactAssignments.unassign('skill', a.artifactSlug, 'host', agentHostId))}
+          disabled={busy === a.artifactSlug}
+          style={{ ...eyebrow, padding: '6px 10px', fontWeight: 600, background: 'none', color: 'var(--coral-bright)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', cursor: busy === a.artifactSlug ? 'wait' : 'pointer' }}
+        >
+          {busy === a.artifactSlug ? '…' : t('revoke')}
+        </button>
+      )}
+    </div>
+  );
 
-  const tenantAssignments = assignments.filter((a) => a.scope === 'tenant');
-  const agentHostAssignments = assignments.filter((a) => a.scope === 'host');
+  const heading = (text: string) => (
+    <div style={{ ...eyebrow, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>{text}</div>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-          Skills ({assignments.length})
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ ...small, fontWeight: 600, color: 'var(--text-primary)' }}>{t('heading', { count: total })}</div>
         <button
           type="button"
           onClick={() => setShowAdd(!showAdd)}
-          style={{
-            padding: '5px 12px',
-            fontSize: 12,
-            fontWeight: 600,
-            background: showAdd ? 'var(--bg-base)' : 'var(--surface-interactive)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-          }}
+          style={{ ...small, padding: '6px 12px', fontWeight: 600, background: showAdd ? 'var(--bg-base)' : 'var(--surface-interactive)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
         >
-          {showAdd ? 'Cancel' : '+ Add Skill'}
+          {showAdd ? t('cancel') : t('add')}
         </button>
       </div>
 
+      {error && <div style={{ ...cardStyle, ...small, color: 'var(--coral-bright)' }}>{error}</div>}
+
       {showAdd && (
         <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Add from Marketplace</div>
+          <div style={{ ...small, fontWeight: 600, color: 'var(--text-primary)' }}>{t('addFromMarketplace')}</div>
           <input
             type="text"
-            placeholder="Search skills…"
+            placeholder={t('searchPlaceholder')}
+            aria-label={t('searchPlaceholder')}
             value={searchQ}
             onChange={(e) => setSearchQ(e.target.value)}
-            style={{
-              padding: '8px 12px',
-              fontSize: 13,
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-md)',
-            }}
+            style={{ ...small, padding: '8px 12px', background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
             {marketplaceSkills.length === 0 && (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 8 }}>
-                No skills found.
-              </div>
+              <div style={{ ...eyebrow, color: 'var(--text-muted)', textAlign: 'center', padding: 8 }}>{t('noResults')}</div>
             )}
             {marketplaceSkills.map((skill) => {
-              const alreadyAssigned = assignedSlugs.has(skill.slug);
+              const already = assigned.has(skill.slug);
               return (
-                <div
-                  key={skill.slug}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--bg-elevated)',
-                    opacity: alreadyAssigned ? 0.5 : 1,
-                  }}
-                >
+                <div key={skill.slug} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: 'var(--bg-elevated)', opacity: already ? 0.6 : 1 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{skill.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                    <div style={{ ...small, fontWeight: 600, color: 'var(--text-primary)' }}>{skill.name}</div>
+                    <div style={{ ...eyebrow, color: 'var(--text-muted)', marginTop: 1, wordBreak: 'break-all' }}>
                       {skill.slug}
                       {skill.category ? ` · ${skill.category}` : ''}
                     </div>
                   </div>
                   <button
                     type="button"
-                    disabled={alreadyAssigned || adding === skill.slug}
-                    onClick={() => handleAssign(skill.slug)}
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      background: alreadyAssigned ? 'var(--bg-elevated)' : 'var(--coral-bright)',
-                      color: alreadyAssigned ? 'var(--text-muted)' : 'var(--text-on-accent)',
-                      border: 'none',
-                      borderRadius: 'var(--radius-sm)',
-                      cursor: alreadyAssigned || adding === skill.slug ? 'not-allowed' : 'pointer',
-                    }}
+                    disabled={already || busy === skill.slug}
+                    onClick={() => void run(skill.slug, () => artifactAssignments.assign('skill', skill.slug, 'host', agentHostId))}
+                    style={{ ...eyebrow, padding: '6px 10px', fontWeight: 600, background: already ? 'var(--bg-elevated)' : 'var(--coral-bright)', color: already ? 'var(--text-muted)' : 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: already || busy === skill.slug ? 'not-allowed' : 'pointer' }}
                   >
-                    {adding === skill.slug ? '…' : alreadyAssigned ? 'Added' : 'Add'}
+                    {busy === skill.slug ? '…' : already ? t('added') : t('addOne')}
                   </button>
                 </div>
               );
@@ -175,97 +161,22 @@ export function AgentHostSkillsContent({ agentHostId, tenantId }: AgentHostSkill
         </div>
       )}
 
-      {/* Tenant-level assignments */}
-      {tenantAssignments.length > 0 && (
+      {tenantRows.length > 0 && (
         <>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
-            Tenant-wide
-          </div>
-          {tenantAssignments.map((a) => (
-            <div key={`tenant:${a.skillSlug}`} style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {a.skillName ?? a.skillSlug}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {a.skillSlug}
-                  {a.skillVer ? ` · v${a.skillVer}` : ''}
-                </div>
-              </div>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  padding: '3px 8px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'var(--bg-elevated)',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                Tenant
-              </span>
-            </div>
-          ))}
+          {heading(t('tenantWide'))}
+          {tenantRows.map((a) => row(a, t('badgeTenant'), false))}
         </>
       )}
 
-      {/* AgentHost-level assignments */}
-      {agentHostAssignments.length > 0 && (
+      {hostRows.length > 0 && (
         <>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
-            AgentHost-specific
-          </div>
-          {agentHostAssignments.map((a) => (
-            <div key={`host:${a.skillSlug}`} style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {a.skillName ?? a.skillSlug}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {a.skillSlug}
-                  {a.skillVer ? ` · v${a.skillVer}` : ''}
-                </div>
-              </div>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  padding: '3px 8px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'rgba(0,229,204,0.12)',
-                  color: 'var(--cyan-bright, var(--cyan-bright))',
-                }}
-              >
-                AgentHost
-              </span>
-              <button
-                type="button"
-                onClick={() => handleRevoke(a.skillSlug)}
-                disabled={revoking === a.skillSlug}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  background: 'none',
-                  color: 'var(--coral-bright)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-sm)',
-                  cursor: revoking === a.skillSlug ? 'wait' : 'pointer',
-                }}
-              >
-                {revoking === a.skillSlug ? '…' : 'Revoke'}
-              </button>
-            </div>
-          ))}
+          {heading(t('hostSpecific'))}
+          {hostRows.map((a) => row(a, t('badgeHost'), true))}
         </>
       )}
 
-      {assignments.length === 0 && !showAdd && (
-        <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-          No skills assigned. Click &ldquo;Add Skill&rdquo; to assign skills from the marketplace.
-        </div>
+      {total === 0 && !showAdd && (
+        <div style={{ ...cardStyle, ...small, color: 'var(--text-muted)', textAlign: 'center' }}>{t('empty')}</div>
       )}
     </div>
   );

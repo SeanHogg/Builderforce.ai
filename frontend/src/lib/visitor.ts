@@ -9,6 +9,7 @@
  */
 
 import { readLocal, writeLocal } from './storage';
+import { bytesToBase64Url } from './base64Bytes';
 
 const VISITOR_KEY = 'bf_visitor_id';
 /**
@@ -32,7 +33,7 @@ function randomId(): string {
   // 24-char url-safe token (matches the API's /^[A-Za-z0-9_-]{8,64}$/ guard).
   const bytes = new Uint8Array(18);
   crypto.getRandomValues(bytes);
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return bytesToBase64Url(bytes);
 }
 
 /** Stable anonymous visitor id, created on first call. Null during SSR. */

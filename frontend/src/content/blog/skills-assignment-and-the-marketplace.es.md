@@ -1,3 +1,5 @@
+> **Actualización, 23 de octubre de 2026:** las skills siguen ahora el estándar abierto Agent Skills. Una skill es una carpeta (un `SKILL.md` con sus scripts y referencias), no un fragmento de prompt. Importa una desde Claude Code o cualquier repositorio, descarga cualquier skill como carpeta y úsala desde las ejecuciones en la nube, el Brain, el lienzo y el Studio. Lee [Trae tus skills contigo](/blog/bring-your-skills-with-you).
+
 Las capacidades integradas de un agente son su punto de partida. Las habilidades son la forma de ampliarlas: inyectar conocimiento del dominio, integraciones con API, flujos de trabajo estructurados y comportamiento especializado sin volver a entrenar el modelo subyacente.
 
 Builderforce tiene dos formas de llevar habilidades a tus agentes: el **Marketplace de habilidades** (publicadas por la comunidad: exploras y asignas) y las **habilidades personalizadas** (las creas tú y son tuyas). Ambas siguen el mismo modelo de asignación y ambas se cargan automáticamente en tus instancias de BuilderForce Agents al arrancar.

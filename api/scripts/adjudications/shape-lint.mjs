@@ -21,6 +21,14 @@
  * belongs in the baseline as work. If no, the argument goes here.
  */
 export default {
+  "skill_files":
+    'not an `artifacts` row: an artifact is a tenant-owned creation (`tenant_id NOT NULL`) ' +
+      'whose bytes live in R2 behind `storage_key`. This is one FILE of an Agent Skills ' +
+      'folder, keyed by its relative `path` within exactly one skill (workspace OR public ' +
+      'marketplace listing, which has no tenant), stored inline because the agent reads it ' +
+      'as text in the same query that resolves the skill. Its identity is (owner, path) and ' +
+      'it cascades with the skill; an `artifacts` row could hold neither the global owner ' +
+      'nor the per-folder uniqueness.',
   "system_audit_runs":
     'the EXECUTION is already a kernel row — `execution_id` points at the cloud run that ' +
       'reviews the source, and a local-executor audit has no execution at all. This row is ' +

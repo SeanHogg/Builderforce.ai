@@ -4,11 +4,10 @@ import { __clearL1CacheForTests } from '../../infrastructure/cache/readThroughCa
 import {
   buildSkillAuthoringCapability,
   proposeSkill,
-  rankSkillsForTask,
-  renderSkillBlock,
   reviewSkill,
-  type TenantSkill,
+  saveHumanSkill,
 } from './tenantSkillService';
+import { readSkillMarkdown } from '@builderforce/agent-skills';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -98,41 +97,56 @@ describe('buildSkillAuthoringCapability', () => {
   });
 });
 
-describe('renderSkillBlock', () => {
-  it('is empty with no approved skills, so callers inject unconditionally', () => {
-    expect(renderSkillBlock([])).toBe('');
-  });
-
-  it('renders each approved skill with its name, slug and body', () => {
-    const skill = { slug: 'ship-it', name: 'Ship it', description: 'When shipping.', body: 'Steps.' } as TenantSkill;
-    const block = renderSkillBlock([skill]);
-    expect(block).toContain('## Workspace Skills (approved procedures)');
-    expect(block).toContain('### Ship it (ship-it)');
-    expect(block).toContain('Steps.');
+describe('proposeSkill — Agent Skills name rule', () => {
+  it('holds the slug to the spec name (kebab-case, at most 64 characters)', async () => {
+    const db = fakeDb([[], []]);
+    const r = await proposeSkill(env, db as unknown as Db, 7, { ...proposal, slug: `Very ${'long '.repeat(30)}slug` });
+    expect(r.ok).toBe(true);
+    expect(r.slug!.length).toBeLessThanOrEqual(64);
+    expect(r.slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
   });
 });
 
-describe('rankSkillsForTask (E1)', () => {
-  const skill = (slug: string, name: string, description: string, body = 'Steps.') =>
-    ({ slug, name, description, body } as TenantSkill);
-  const skills = [
-    skill('ship-schema-change', 'Ship a schema change', 'When a change needs a new database column or migration.'),
-    skill('write-release-notes', 'Write release notes', 'When a release ships.'),
-    skill('rotate-api-keys', 'Rotate API keys', 'When a credential leaks.'),
-  ];
+describe('saveHumanSkill', () => {
+  const pkg = readSkillMarkdown([
+    '---',
+    'name: ship-a-schema-change',
+    'description: Use when a change needs a new column.',
+    'license: MIT',
+    'metadata:',
+    '  title: Ship a schema change',
+    '---',
+    '',
+    '1. Declare it.',
+  ].join('\n')).package!;
+  const row = {
+    id: 'abc', projectId: null, status: 'approved', slug: 'ship-a-schema-change', name: 'Ship a schema change', description: 'd', body: 'b',
+    authorKind: 'human', authorLabel: null, evidence: null, originExecutionId: null, originTaskId: null,
+    reviewedAt: new Date(), reviewNote: null, updatedAt: new Date(), manifest: { license: 'MIT', metadata: { title: 'Ship a schema change' }, extensions: {} },
+  };
 
-  it('keeps only the skills relevant to the task, best first', () => {
-    const ranked = rankSkillsForTask(skills, 'Add a migration for the new invoice column');
-    expect(ranked.map((s) => s.slug)).toEqual(['ship-schema-change']);
+  it('lands an imported folder APPROVED, signed off by the importer, with its manifest', async () => {
+    const db = fakeDb([[], [row], [], []]);
+    const r = await saveHumanSkill(env, db as unknown as Db, 7, { pkg, userId: 'u1' });
+    expect(r).toMatchObject({ ok: true, outcome: 'created' });
+    const insert = db.calls.find((c) => c.kind === 'insert');
+    expect(insert?.payload).toMatchObject({
+      tenantId: 7, slug: 'ship-a-schema-change', name: 'Ship a schema change', status: 'approved', authorKind: 'human', reviewedBy: 'u1',
+      manifest: { license: 'MIT' },
+    });
   });
 
-  it('caps the result at the limit (default 5)', () => {
-    const many = Array.from({ length: 8 }, (_, i) => skill(`deploy-${i}`, `Deploy step ${i}`, 'When deploying.'));
-    expect(rankSkillsForTask(many, 'deploy the service')).toHaveLength(5);
-    expect(rankSkillsForTask(many, 'deploy the service', 2)).toHaveLength(2);
+  it('replaces an existing skill of the same name rather than duplicating it', async () => {
+    const db = fakeDb([[{ id: 'abc' }], [row], [], []]);
+    const r = await saveHumanSkill(env, db as unknown as Db, 7, { pkg, userId: 'u1' });
+    expect(r).toMatchObject({ ok: true, outcome: 'replaced' });
+    expect(db.calls.some((c) => c.kind === 'update')).toBe(true);
   });
 
-  it('returns nothing when no skill matches', () => {
-    expect(rankSkillsForTask(skills, 'Refactor the canvas toolbar')).toEqual([]);
+  it('refuses a name already in use when writing a NEW skill, touching nothing', async () => {
+    const db = fakeDb([[{ id: 'abc', projectId: null }]]);
+    const r = await saveHumanSkill(env, db as unknown as Db, 7, { pkg, userId: 'u1', mode: 'create' });
+    expect(r).toMatchObject({ ok: false, conflict: true });
+    expect(db.calls.some((c) => c.kind === 'update' || c.kind === 'insert' || c.kind === 'delete')).toBe(false);
   });
 });

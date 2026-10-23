@@ -33,6 +33,8 @@
       "@builderforce/ide-templates": ["../packages/ide-templates/src/index.ts"],
       "@builderforce/ide-file-contract": ["../packages/ide-file-contract/src/index.ts"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
+
+      "@builderforce/agent-skills": ["../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-tools/symbols": ["../packages/agent-tools/src/symbols.ts"],
       "@builderforce/write-outbox": ["../packages/write-outbox/src/index.ts"],
       "@builderforce/local-first": ["../packages/local-first/src/index.ts"],

@@ -1,21 +1,25 @@
 /**
  * Skill assignments — the ONE place that reads and writes them, at either scope.
  *
- * Before migration 1108 this was two tables, and the consequence was not the
- * storage but the duplication above it: `skillAssignmentRoutes` and
- * `agentHostRoutes` each carried the same select-with-join twice, once per scope,
- * and each write path re-typed its own conflict target. Six copies of one query,
- * any of which could drift from the others.
+ * They live in `artifact_assignments`, the store `resolveArtifacts` reads for run
+ * prompts, the skill library catalog and the on-prem sync. Until migration 1261 they
+ * had a second home, `skill_assignments` (1108), which fed only the host panel — so a
+ * grant made there never reached a run. 1261 folded its rows in; nothing reads or
+ * writes `skill_assignments` any more, and the held contract migration drops it.
  *
- * The scope is now a column, so it is also a PARAMETER here rather than a second
- * function: `scope: 'tenant'` and `scope: 'host'` walk the same code, which is what
- * makes them impossible to drift apart. Callers never name the table.
+ * The scope is a PARAMETER here rather than a second function: `scope: 'tenant'`
+ * (scope_id = the tenant) and `scope: 'host'` (scope_id = the agent host) walk the
+ * same code. Callers never name the table. Every write drops the cached assignment
+ * reads through {@link invalidateSkillAssignmentCaches}.
  */
 
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { marketplaceSkills, skillAssignments } from '../../infrastructure/database/schema';
+import type { Env } from '../../env';
+import { artifactAssignments, marketplaceSkills } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { invalidateSkillAssignmentCaches } from './skillAssignmentCache';
+import { assertSkillAssignable } from '../marketplace/skillEntitlement';
 
 /** Which level an assignment applies at. A host-scoped target names its host. */
 export type SkillAssignmentTarget =
@@ -33,18 +37,23 @@ export interface AssignedSkill {
   skillVer: string | null;
 }
 
-/**
- * The predicate for one target, always tenant-scoped.
- *
- * `isNull(agentHostId)` is load-bearing on the tenant branch: without it a tenant
- * listing would also return every host-scoped row in the workspace, which is the
- * bug the two-table split made structurally impossible and a single table makes
- * available to anybody who forgets.
- */
-function targetWhere(tenantId: number, target: SkillAssignmentTarget) {
+/** The (scope, scope_id) one target names. */
+function scopeOf(tenantId: number, target: SkillAssignmentTarget): { scope: 'tenant' | 'host'; scopeId: number } {
   return target.scope === 'host'
-    ? scopedToTenant(skillAssignments, tenantId, eq(skillAssignments.agentHostId, target.agentHostId))
-    : scopedToTenant(skillAssignments, tenantId, isNull(skillAssignments.agentHostId));
+    ? { scope: 'host', scopeId: target.agentHostId }
+    : { scope: 'tenant', scopeId: tenantId };
+}
+
+/** The predicate for one target: always tenant-scoped, always skills only. */
+function targetWhere(tenantId: number, target: SkillAssignmentTarget) {
+  const { scope, scopeId } = scopeOf(tenantId, target);
+  return scopedToTenant(
+    artifactAssignments,
+    tenantId,
+    eq(artifactAssignments.artifactType, 'skill'),
+    eq(artifactAssignments.scope, scope),
+    eq(artifactAssignments.scopeId, scopeId),
+  );
 }
 
 /** Skills assigned at this target, with their marketplace metadata. */
@@ -55,16 +64,16 @@ export async function listAssignedSkills(
 ): Promise<AssignedSkill[]> {
   return db
     .select({
-      skillSlug: skillAssignments.skillSlug,
-      assignedBy: skillAssignments.assignedBy,
-      assignedAt: skillAssignments.assignedAt,
+      skillSlug: artifactAssignments.artifactSlug,
+      assignedBy: artifactAssignments.assignedBy,
+      assignedAt: artifactAssignments.assignedAt,
       skillName: marketplaceSkills.name,
       skillDesc: marketplaceSkills.description,
       skillIcon: marketplaceSkills.iconUrl,
       skillVer: marketplaceSkills.version,
     })
-    .from(skillAssignments)
-    .leftJoin(marketplaceSkills, eq(skillAssignments.skillSlug, marketplaceSkills.slug))
+    .from(artifactAssignments)
+    .leftJoin(marketplaceSkills, eq(artifactAssignments.artifactSlug, marketplaceSkills.slug))
     .where(targetWhere(tenantId, target));
 }
 
@@ -80,42 +89,43 @@ export async function marketplaceSkillExists(db: Db, skillSlug: string): Promise
 
 /**
  * Assign a skill. Idempotent: re-assigning an already-assigned skill is a no-op
- * rather than an error, which is what both callers relied on the old per-table
- * `onConflictDoNothing` for.
- *
- * The conflict target is left to the two partial unique indexes (migration 1108)
- * rather than named here — naming one would be naming the wrong one for the other
- * scope.
+ * rather than an error (the composite primary key is the conflict target). A paid skill
+ * the workspace has not bought throws `SkillPaymentRequired` (402).
  */
 export async function assignSkill(
+  env: Env | undefined,
   db: Db,
   tenantId: number,
   target: SkillAssignmentTarget,
   input: { skillSlug: string; assignedBy: string },
 ): Promise<void> {
+  await assertSkillAssignable(db, tenantId, 'skill', input.skillSlug);
   await db
-    .insert(skillAssignments)
+    .insert(artifactAssignments)
     .values({
       tenantId,
-      scope: target.scope,
-      agentHostId: target.scope === 'host' ? target.agentHostId : null,
-      skillSlug: input.skillSlug,
+      artifactType: 'skill',
+      artifactSlug: input.skillSlug,
+      ...scopeOf(tenantId, target),
       assignedBy: input.assignedBy,
     })
     .onConflictDoNothing();
+  await invalidateSkillAssignmentCaches(env, tenantId);
 }
 
 /** Remove an assignment at this target. Absent is success — the caller asked for
  *  it to be gone, and it is. */
 export async function unassignSkill(
+  env: Env | undefined,
   db: Db,
   tenantId: number,
   target: SkillAssignmentTarget,
   skillSlug: string,
 ): Promise<void> {
   await db
-    .delete(skillAssignments)
-    .where(and(targetWhere(tenantId, target), eq(skillAssignments.skillSlug, skillSlug)));
+    .delete(artifactAssignments)
+    .where(and(targetWhere(tenantId, target), eq(artifactAssignments.artifactSlug, skillSlug)));
+  await invalidateSkillAssignmentCaches(env, tenantId);
 }
 
 /** An effective skill, with the scope it was granted at. */
@@ -144,21 +154,25 @@ export async function effectiveSkillsForHost(
 ): Promise<EffectiveSkill[]> {
   const rows = await db
     .select({
-      skillSlug: skillAssignments.skillSlug,
-      assignedBy: skillAssignments.assignedBy,
-      assignedAt: skillAssignments.assignedAt,
-      agentHostId: skillAssignments.agentHostId,
+      skillSlug: artifactAssignments.artifactSlug,
+      assignedBy: artifactAssignments.assignedBy,
+      assignedAt: artifactAssignments.assignedAt,
+      scope: artifactAssignments.scope,
       skillName: marketplaceSkills.name,
       skillDesc: marketplaceSkills.description,
       skillIcon: marketplaceSkills.iconUrl,
       skillVer: marketplaceSkills.version,
     })
-    .from(skillAssignments)
-    .leftJoin(marketplaceSkills, eq(skillAssignments.skillSlug, marketplaceSkills.slug))
+    .from(artifactAssignments)
+    .leftJoin(marketplaceSkills, eq(artifactAssignments.artifactSlug, marketplaceSkills.slug))
     .where(scopedToTenant(
-      skillAssignments,
+      artifactAssignments,
       tenantId,
-      or(isNull(skillAssignments.agentHostId), eq(skillAssignments.agentHostId, agentHostId)),
+      eq(artifactAssignments.artifactType, 'skill'),
+      or(
+        and(eq(artifactAssignments.scope, 'tenant'), eq(artifactAssignments.scopeId, tenantId)),
+        and(eq(artifactAssignments.scope, 'host'), eq(artifactAssignments.scopeId, agentHostId)),
+      ),
     ));
 
   // Host grants are applied second so they overwrite the tenant grant for a slug
@@ -166,8 +180,8 @@ export async function effectiveSkillsForHost(
   // order it filled its Map, now stated rather than implied by statement order.
   const effective = new Map<string, EffectiveSkill>();
   for (const row of rows) {
-    const { agentHostId: host, ...rest } = row;
-    const source = host === null ? 'tenant' : 'host';
+    const { scope, ...rest } = row;
+    const source = scope === 'host' ? 'host' : 'tenant';
     if (source === 'tenant' && effective.has(row.skillSlug)) continue;
     effective.set(row.skillSlug, { ...rest, source });
   }

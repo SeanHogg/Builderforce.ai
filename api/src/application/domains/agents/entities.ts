@@ -30,10 +30,11 @@ import {
   geocoderCache,
   llmActionRatings,
   modelLocks,
-  skillAssignments,
+  skillFiles,
   tenantSkills,
   workflowActions,
   previewSessions,
+  skillAssignments,
 } from '../../../infrastructure/database/schema/agents';
 import {
   webSearchDocuments,
@@ -90,13 +91,10 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
    *  closed by the preview op and the eviction sweep, and hand-editing one is how two
    *  tenants end up believing they hold the same instance. */
   entity(previewSessions, { readOnly: true }),
-  /** Which marketplace skills a workspace, or one agent host, may use (migration 1108 —
-   *  formerly two tables, one per scope). Writable: assigning a skill is an ordinary
-   *  administrative act, and the CHECK plus the two partial unique indexes keep a
-   *  hand-made row honest about its scope. `application/skills/skillAssignmentPort` is
-   *  what the product uses; this registration is what makes the rows visible to the
-   *  generic reader alongside the rest of the agents seat. */
-  entity(skillAssignments),
+  /** @deprecated — the pre-1261 skill-assignment store, folded into `artifact_assignments`
+   *  by migration 1261 and dropped by the held contract migration. Read-only so the
+   *  generic reader can still show it during the deploy window, and nothing writes it. */
+  entity(skillAssignments, { readOnly: true }),
   /** The workspace's OWN skills (migration 1135): procedures a run worked out and
    *  proposed, and the ones a human approved. Read-only — `status` is a REVIEW
    *  DECISION, and the whole safety property of agent-authored skills is that nothing
@@ -104,6 +102,10 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
    *  write here is an approval nobody gave. `application/skills` owns the transition;
    *  this registration is what makes the rows readable beside the rest of the seat. */
   entity(tenantSkills, { readOnly: true }),
+  /** The bundled files of a skill folder (migration 1259). Read-only for the reason
+   *  the skill row is: a file under an approved skill is part of what every agent is
+   *  told to do, and `application/skills` is the only writer that checks its path. */
+  entity(skillFiles, { readOnly: true }),
   /** A benchmark CASE (migration 1136) — a fixed prompt plus the substrings a good
    *  answer contains. Writable: authoring and retiring cases is an ordinary
    *  administrative act, and it is the one half of the benchmark a person is meant

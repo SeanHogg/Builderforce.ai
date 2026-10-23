@@ -4,6 +4,7 @@ import { dxfPreviewSvg, meshFormatFromHint, stlPreviewSvg, svgDataUrl, type Mesh
 import { gamePosterDataUrl } from './gamePoster';
 import type { CanvasObjectData as CreationNodeData } from '@/domains/canvas/domain/canvasObject';
 import { websitePagesFrom, websiteThemeFrom, type WebsiteSection } from '@builderforce/creation-canvas-contract';
+import { base64ToBytes } from './base64Bytes';
 
 export type CreationDeliverableStatus = 'running' | 'delivered' | 'failed';
 
@@ -71,7 +72,7 @@ export function navigableArtifactUrl(url: string): string {
   const payload = url.slice(match[0].length);
   try {
     const body = parameters.includes('base64')
-      ? Uint8Array.from(atob(payload), (character) => character.charCodeAt(0))
+      ? base64ToBytes(payload)
       : decodeURIComponent(payload);
     return URL.createObjectURL(new Blob([body], { type: mimeType }));
   } catch {
@@ -511,18 +512,18 @@ export async function generateEvermindMedia(slug: string, input: { prompt?: stri
 /** Convert one raw RGB/RGBA model frame to a browser-previewable PNG. */
 export function mediaFrameDataUrl(frame: string, width: number, height: number, channels: number): string | null {
   if (typeof document === 'undefined' || (channels !== 3 && channels !== 4)) return null;
-  const binary = atob(frame);
-  if (binary.length < width * height * channels) return null;
+  const bytes = base64ToBytes(frame);
+  if (bytes.length < width * height * channels) return null;
   const canvas = document.createElement('canvas');
   canvas.width = width; canvas.height = height;
   const context = canvas.getContext('2d');
   if (!context) return null;
   const pixels = context.createImageData(width, height);
   for (let source = 0, target = 0; source < width * height * channels; source += channels, target += 4) {
-    pixels.data[target] = binary.charCodeAt(source);
-    pixels.data[target + 1] = binary.charCodeAt(source + 1);
-    pixels.data[target + 2] = binary.charCodeAt(source + 2);
-    pixels.data[target + 3] = channels === 4 ? binary.charCodeAt(source + 3) : 255;
+    pixels.data[target] = bytes[source]!;
+    pixels.data[target + 1] = bytes[source + 1]!;
+    pixels.data[target + 2] = bytes[source + 2]!;
+    pixels.data[target + 3] = channels === 4 ? bytes[source + 3]! : 255;
   }
   context.putImageData(pixels, 0, 0);
   return canvas.toDataURL('image/png');

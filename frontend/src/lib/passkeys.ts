@@ -14,21 +14,10 @@
 
 import { AUTH_API_URL } from './auth';
 import { fetchWithTransportReport } from './errors/transportFailure';
+import { base64UrlToBytes, bytesToBase64Url } from './base64Bytes';
 
-export function base64UrlToBuffer(value: string): ArrayBuffer {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/');
-  const binary = atob(padded.padEnd(padded.length + ((4 - (padded.length % 4)) % 4), '='));
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
-
-export function bufferToBase64Url(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
+const base64UrlToBuffer = (value: string): ArrayBuffer => base64UrlToBytes(value).buffer;
+const bufferToBase64Url = (buffer: ArrayBuffer): string => bytesToBase64Url(new Uint8Array(buffer));
 
 /** True when this browser can actually create and use a passkey. */
 export function isPasskeySupported(): boolean {

@@ -110,7 +110,11 @@ async function loadSkillsPage(
   return { skills: rows, total: Number(countRow?.count ?? 0), page: args.pageNum, limit: args.limitNum };
 }
 
-/** One published skill + its author, for the public detail / SSR surface. */
+/**
+ * One published skill + its author, for the public detail / SSR surface. A PAID skill's
+ * `readme` (its instructions — what checkout sells) is withheld: this surface has no
+ * caller to check an entitlement for, and it is cached publicly. `description` stays.
+ */
 export async function loadPublishedSkill(db: Db, slug: string) {
   const [row] = await db
     .select({
@@ -122,6 +126,7 @@ export async function loadPublishedSkill(db: Db, slug: string) {
       tags:            marketplaceSkills.tags,
       version:         marketplaceSkills.version,
       readme:          marketplaceSkills.readme,
+      price_cents:     marketplaceSkills.priceCents,
       icon_url:        marketplaceSkills.iconUrl,
       repo_url:        marketplaceSkills.repoUrl,
       downloads:       marketplaceSkills.downloads,
@@ -136,5 +141,6 @@ export async function loadPublishedSkill(db: Db, slug: string) {
     .innerJoin(users, eq(marketplaceSkills.authorId, users.id))
     .where(and(eq(marketplaceSkills.slug, slug), eq(marketplaceSkills.published, true)))
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+  return row.price_cents > 0 ? { ...row, readme: null } : row;
 }

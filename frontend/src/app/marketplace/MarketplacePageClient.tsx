@@ -2,6 +2,8 @@
 
 import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
+import { PublishSkillForm } from '@/components/marketplace/PublishSkillForm';
+import { useMarketplacePublisherToken } from '@/lib/marketplace/useMarketplacePublisherToken';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -9,21 +11,17 @@ import { useConfirm } from '@/components/ConfirmProvider';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { useIsMobile } from '@/lib/useIsMobile';
 import { contrastText } from '@/lib/contrastText';
 import { useCart, type ArtifactType } from '@/lib/CartContext';
 import {
   artifactAssignments,
-  marketplacePublisherApi,
   marketplaceStats,
-  setMarketplaceToken,
   type ArtifactStats,
 } from '@/lib/builderforceApi';
-import { invalidateInstalledArtifacts, invalidateMarketplaceAgents, invalidateMarketplaceSkills, invalidateMarketplaceStats, marketplaceReads } from '@/lib/marketplace/marketplaceReads';
+import { invalidateInstalledArtifacts, invalidateMarketplaceAgents, invalidateMarketplaceStats, marketplaceReads } from '@/lib/marketplace/marketplaceReads';
 import {
   BUILTIN_PERSONAS,
   BUILTIN_SKILLS,
-  userSkillsKey,
   type Persona,
   type BuiltinSkill,
 } from '@/lib/marketplaceData';
@@ -54,7 +52,6 @@ import { ModelsExplorer } from './ModelsExplorer';
 import { hasSearchSection, MarketplaceSearchSection } from './marketplaceSections';
 import { StartupDirectory } from '@/components/startups/StartupDirectory';
 import { signInHref } from '@/lib/auth';
-import { faultMessage } from '@/lib/apiClient';
 // Human freelancers ("Talent"), the live model catalog ("Models"), and open work to
 // bid on ("Gigs") are categories of the marketplace rather than standalone
 // /talent, /models, and /freelancer/gigs pages — same search box, one merged surface.
@@ -107,17 +104,6 @@ const filterControlStyle: React.CSSProperties = {
   borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 13, outline: 'none',
 };
 
-interface UserSkill {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  category: string;
-  tags?: string[];
-  version: string;
-  shared: boolean;
-}
-
 interface MarketplaceListing {
   id: string;
   type: 'persona' | 'skill';
@@ -134,31 +120,6 @@ interface MarketplaceListing {
   price?: number;
   pricingModel?: 'flat_fee' | 'consumption';
   priceUnit?: string;
-}
-
-function loadSharedSkills(tenantId: string): MarketplaceListing[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(userSkillsKey(tenantId));
-    if (!raw) return [];
-    const skills = JSON.parse(raw) as UserSkill[];
-    return skills
-      .filter((s) => s.shared)
-      .map((s) => ({
-        id: `skill:${s.id}`,
-        type: 'skill' as const,
-        artifactSlug: s.slug || s.id,
-        name: s.name,
-        description: s.description || '',
-        author: 'You',
-        version: s.version || '1.0.0',
-        tags: (s.tags?.length ? s.tags : s.category ? [s.category] : []),
-        downloads: 0,
-        likes: 0,
-      }));
-  } catch {
-    return [];
-  }
 }
 
 // Content blocks migrated from the retired /content-manager now live as knowledge
@@ -199,7 +160,7 @@ function builtinSkillToListing(b: BuiltinSkill): MarketplaceListing {
 }
 
 export default function MarketplacePageClient() {
-  const { tenant, user, webToken, isAuthenticated, hasTenant } = useAuth();
+  const { tenant, user, isAuthenticated, hasTenant } = useAuth();
   const { addItem, hasItem } = useCart();
   const tenantId = tenant?.id ?? '';
   const tm = useTranslations('marketplace');
@@ -218,7 +179,6 @@ export default function MarketplacePageClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const isMobile = useIsMobile();
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<MarketplaceCategory>('all');
@@ -255,42 +215,9 @@ export default function MarketplacePageClient() {
   const [selectedAgent, setSelectedAgent] = useState<PublishedAgent | null>(null);
   const [agentPanelTab, setAgentPanelTab] = useState<CloudAgentPanelTab>('details');
 
-  // Publish skill form
-  const [skillForm, setSkillForm] = useState({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '', price: '0', pricingModel: 'flat_fee' as 'flat_fee' | 'consumption', priceUnit: '' });
-  const [publishing, setPublishing] = useState(false);
-  const [publishError, setPublishError] = useState<string | null>(null);
-  const [publishSuccess, setPublishSuccess] = useState(false);
-
   // Bridge main web JWT → marketplace token so authenticated users can publish
   // without a separate "publisher account" login.
-  useEffect(() => {
-    if (webToken) setMarketplaceToken(webToken);
-  }, [webToken]);
-
-  const handlePublishSkill = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!skillForm.name.trim() || !skillForm.slug.trim()) return;
-    setPublishing(true);
-    setPublishError(null);
-    setPublishSuccess(false);
-    try {
-      invalidateMarketplaceSkills();
-      await marketplacePublisherApi.publishSkill({
-        name: skillForm.name.trim(),
-        slug: skillForm.slug.trim().toLowerCase().replace(/\s+/g, '-'),
-        description: skillForm.description.trim() || undefined,
-        category: skillForm.category.trim() || undefined,
-        version: skillForm.version.trim() || '1.0.0',
-        repoUrl: skillForm.repoUrl.trim() || undefined,
-      });
-      setPublishSuccess(true);
-      setSkillForm({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '', price: '0', pricingModel: 'flat_fee', priceUnit: '' });
-    } catch (e) {
-      setPublishError(faultMessage(e, tm('publish.failed')));
-    } finally {
-      setPublishing(false);
-    }
-  };
+  useMarketplacePublisherToken();
 
   // Keyed by ArtifactType so listing keys (persona|skill) and assignment keys
   // (which carry the full ArtifactType) collide correctly in the installed set.
@@ -321,12 +248,10 @@ export default function MarketplacePageClient() {
     } catch {
       // ignore
     }
-    const sharedSkills = loadSharedSkills(tenantId);
     const allListings = [
       ...personaListings,
       ...builtinSkillListings,
       ...apiSkills,
-      ...sharedSkills,
     ];
     setListings(allListings);
 
@@ -800,86 +725,7 @@ export default function MarketplacePageClient() {
                   <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>{user?.email}</div>
                 </div>
               </div>
-              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 24 }}>
-                <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', marginBottom: 16 }}>{tm('publish.heading')}</div>
-                {publishSuccess && (
-                  <div style={{ marginBottom: 12, padding: '10px 14px', fontSize: 'var(--font-size-small)', color: 'var(--success, var(--success))', background: 'rgba(34,197,94,0.08)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(34,197,94,0.2)' }}>
-                    {tm('publish.success')}
-                  </div>
-                )}
-                <form onSubmit={handlePublishSkill} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.name')} *</label>
-                      <input required type="text" placeholder={tm('publish.namePlaceholder')} value={skillForm.name}
-                        onChange={(e) => setSkillForm((f) => ({ ...f, name: e.target.value, slug: f.slug || e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.slug')} * {tm('publish.slugHint')}</label>
-                      <input required type="text" placeholder={tm('publish.slugPlaceholder')} value={skillForm.slug}
-                        onChange={(e) => setSkillForm((f) => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', fontFamily: 'var(--font-mono)', boxSizing: 'border-box' }} />
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.description')}</label>
-                    <textarea rows={3} placeholder={tm('publish.descriptionPlaceholder')} value={skillForm.description}
-                      onChange={(e) => setSkillForm((f) => ({ ...f, description: e.target.value }))}
-                      style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }} />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10 }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.category')}</label>
-                      <input type="text" placeholder={tm('publish.categoryPlaceholder')} value={skillForm.category}
-                        onChange={(e) => setSkillForm((f) => ({ ...f, category: e.target.value }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.version')}</label>
-                      <input type="text" value={skillForm.version}
-                        onChange={(e) => setSkillForm((f) => ({ ...f, version: e.target.value }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.repoUrl')}</label>
-                      <input type="url" placeholder={tm('publish.repoPlaceholder')} value={skillForm.repoUrl}
-                        onChange={(e) => setSkillForm((f) => ({ ...f, repoUrl: e.target.value }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10 }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.price')}</label>
-                      <input type="number" min="0" step="0.01" placeholder={tm('publish.pricePlaceholder')} value={skillForm.price}
-                        onChange={(e) => setSkillForm((f) => ({ ...f, price: e.target.value }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.pricingModel')}</label>
-                      <Select value={skillForm.pricingModel} onChange={(e) => setSkillForm((f) => ({ ...f, pricingModel: e.target.value as 'flat_fee' | 'consumption' }))}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }}>
-                        <option value="flat_fee">{tm('publish.flatFee')}</option>
-                        <option value="consumption">{tm('publish.consumption')}</option>
-                      </Select>
-                    </div>
-                    {skillForm.pricingModel === 'consumption' && (
-                      <div>
-                        <label style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.priceUnit')}</label>
-                        <input type="text" placeholder={tm('publish.priceUnitPlaceholder')} value={skillForm.priceUnit}
-                          onChange={(e) => setSkillForm((f) => ({ ...f, priceUnit: e.target.value }))}
-                          style={{ width: '100%', padding: '8px 10px', fontSize: 'var(--font-size-small)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
-                      </div>
-                    )}
-                  </div>
-                  {publishError && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)' }}>{publishError}</div>}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button type="submit" disabled={publishing || !skillForm.name.trim() || !skillForm.slug.trim()} className="btn btn-primary">
-                      {publishing ? tm('publish.submitting') : tm('publish.submit')}
-                    </button>
-                  </div>
-                </form>
-              </div>
+              <PublishSkillForm />
             </div>
           )}
         </div>

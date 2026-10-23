@@ -1,14 +1,16 @@
 /**
- * The review queue for skills this workspace's agents proposed.
+ * The workspace's own skills — the ones its agents proposed, the ones people wrote or
+ * imported as Agent Skills folders — and the review queue that decides which are in force.
  *
- * A run that reached a verified result can now distil what it did into a skill
- * DRAFT. This is the gate that decides whether a draft ever reaches another
- * agent's prompt — nothing an agent writes takes effect until someone approves it
- * here, so the panel deliberately shows the whole body and the run that proposed
- * it rather than a preview and a slug.
+ * A run that reached a verified result can distil what it did into a skill DRAFT. This
+ * is the gate that decides whether a draft ever reaches another agent's prompt —
+ * nothing an agent writes takes effect until someone approves it here, so the panel
+ * deliberately shows the whole body, its bundled files and the run that proposed it
+ * rather than a preview and a slug. Every skill can leave as a spec folder (Download)
+ * and an approved one can be published to the marketplace.
  *
- * Self-contained: it owns its fetch, decides its own entitlement, and renders
- * nothing when the workspace has no proposals — so it can sit on any surface.
+ * Self-contained: it owns its fetch and decides its own entitlement, so it can sit on
+ * any surface.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -21,6 +23,9 @@ import { usePanelTask } from '@/hooks/usePanelTask';
 import { statusColor, type StatusToneMap } from '@/lib/statusTone';
 import { workspaceSkillsApi, type WorkspaceSkill, type WorkspaceSkillStatus } from '@/lib/workspaceSkillsApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
+import { SkillFolderImport } from './SkillFolderImport';
+import { SkillFolderExportButton } from './SkillFolderExportButton';
+import { PublishWorkspaceSkillButton } from './PublishWorkspaceSkillButton';
 
 const FILTERS: readonly WorkspaceSkillStatus[] = ['draft', 'approved', 'rejected'];
 
@@ -60,13 +65,13 @@ const STATUS_TONE: StatusToneMap<WorkspaceSkillStatus> = {
   rejected: 'neutral',
 };
 
-export function WorkspaceSkillReview() {
+export function WorkspaceSkillReview({ initialStatus = 'draft' }: { initialStatus?: WorkspaceSkillStatus }) {
   const errorMessage = useErrorMessage();
   const t = useTranslations('workspaceSkills');
   const tc = useTranslations('common');
   const confirm = useConfirm();
   const { allowed } = usePermission('integrations.manage');
-  const [status, setStatus] = useState<WorkspaceSkillStatus>('draft');
+  const [status, setStatus] = useState<WorkspaceSkillStatus>(initialStatus);
   const [skills, setSkills] = useState<WorkspaceSkill[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -109,7 +114,10 @@ export function WorkspaceSkillReview() {
 
   return (
     <section>
-      <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('intro')}</p>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: 12 }}>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0, flex: '1 1 260px' }}>{t('intro')}</p>
+        <SkillFolderImport onImported={() => void load()} />
+      </div>
 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
         {FILTERS.map((value) => (
@@ -137,6 +145,9 @@ export function WorkspaceSkillReview() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 0 }}>
                 <strong style={{ color: 'var(--text-primary)' }}>{skill.name}</strong>
+                {skill.name !== skill.slug && (
+                  <code style={{ marginLeft: 8, fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', wordBreak: 'break-all' }}>{skill.slug}</code>
+                )}
                 <p style={{ margin: '4px 0 0', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{skill.description}</p>
               </div>
               <span style={{ color: statusColor(STATUS_TONE, skill.status), fontSize: 'var(--font-size-eyebrow)', fontWeight: 650 }}>● {t(`filter.${skill.status}`)}</span>
@@ -152,6 +163,18 @@ export function WorkspaceSkillReview() {
             )}
 
             <pre style={body}>{skill.body}</pre>
+            {skill.files.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', fontWeight: 650 }}>{t('bundledFiles')}</span>
+                <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+                  {skill.files.map((f) => <li key={f.path}>{f.path}</li>)}
+                </ul>
+              </div>
+            )}
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <SkillFolderExportButton source={{ kind: 'workspace', id: skill.id }} />
+              <PublishWorkspaceSkillButton skill={skill} />
+            </div>
 
             <RoleGate capability="integrations.manage" variant="inline">
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>

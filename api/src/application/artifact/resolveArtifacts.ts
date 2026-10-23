@@ -9,6 +9,8 @@
  */
 import { eq, and, or, inArray } from 'drizzle-orm';
 import {
+  agentHostProjects,
+  agentRegistrations,
   artifactAssignments,
   tasks,
 } from '../../infrastructure/database/schema';
@@ -131,6 +133,65 @@ export async function resolveArtifactsForCloudAgents(
       row.scope !== AssignmentScope.AGENT || row.scopeId === identityId)));
   }
   return result;
+}
+
+/**
+ * Everything resolvable for ANY run on one agent host: the tenant-wide and host grants,
+ * plus the project grants of every project bound to the host (`agent_host_projects`) and
+ * the agent grants of every agent registered on it. The on-prem runtime syncs its skills
+ * directory against this — a run on the host can resolve no artifact outside it — so the
+ * union is the same merge {@link resolveArtifacts} applies to one run, widened to every
+ * run the host can serve.
+ */
+export async function resolveArtifactsForHost(
+  db: Db,
+  tenantId: number,
+  agentHostId: number,
+): Promise<ResolvedArtifacts> {
+  const [scopeConditions, boundProjects, registrations] = await Promise.all([
+    sharedScopeConditions(db, { tenantId, agentHostId }),
+    db
+      .select({ projectId: agentHostProjects.projectId })
+      .from(agentHostProjects)
+      .where(scopedToTenant(agentHostProjects, tenantId, eq(agentHostProjects.agentHostId, agentHostId))),
+    db
+      .select({ id: agentRegistrations.id })
+      .from(agentRegistrations)
+      .where(scopedToTenant(agentRegistrations, tenantId, eq(agentRegistrations.agentHostId, agentHostId))),
+  ]);
+  const projectIds = [...new Set(boundProjects.map((p) => p.projectId))];
+  if (projectIds.length) {
+    scopeConditions.push(
+      and(
+        eq(artifactAssignments.scope, AssignmentScope.PROJECT),
+        inArray(artifactAssignments.scopeId, projectIds),
+      ),
+    );
+  }
+  const refs = registrations.map((r) => r.id);
+  const handles = refs.length
+    ? [...new Set((await new AgentAssignmentService(db).identityHandles(tenantId, 'registered', refs)).values())]
+    : [];
+  if (handles.length) {
+    scopeConditions.push(
+      and(
+        eq(artifactAssignments.scope, AssignmentScope.AGENT),
+        inArray(artifactAssignments.scopeId, handles),
+      ),
+    );
+  }
+  const rows = await db
+    .select({
+      artifactType: artifactAssignments.artifactType,
+      artifactSlug: artifactAssignments.artifactSlug,
+      scope:        artifactAssignments.scope,
+    })
+    .from(artifactAssignments)
+    .where(and(
+      eq(artifactAssignments.tenantId, tenantId),
+      or(...scopeConditions),
+    ));
+  return mergeAssignments(rows);
 }
 
 /** Tenant, host, project and task scope conditions: every level except the agent's. */

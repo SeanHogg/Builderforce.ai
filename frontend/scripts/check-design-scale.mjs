@@ -118,7 +118,7 @@ const BASELINE = {
    * `--success-bg` / `--success-border` / `--success-text` and the info family instead
    * of mixing `rgba(34,197,94,*)` / `rgba(59,130,246,*)` by hand.
    */
-  themeLockedColours: 156,
+  themeLockedColours: 154,
   /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé
@@ -297,7 +297,7 @@ const BASELINE = {
    * turned the deploy red. All thirty-six literals name roles now (12/13 = small,
    * 14 = body, 15 = card-title); the net is lower because other surfaces shrank too.
    */
-  offScaleFontSizes: 3323,
+  offScaleFontSizes: 3291,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

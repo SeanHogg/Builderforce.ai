@@ -8,22 +8,24 @@ title: "Skills"
 
 # Skills (BuilderForce Agents)
 
-BuilderForce Agents uses **[AgentSkills](https://agentskills.io)-compatible** skill folders to teach the agent how to use tools. Each skill is a directory containing a `SKILL.md` with YAML frontmatter and instructions. BuilderForce Agents loads **bundled skills** plus optional local overrides, and filters them at load time based on environment, config, and binary presence.
+BuilderForce Agents implements the open **[Agent Skills](https://agentskills.io) standard**. Each skill is a folder containing a `SKILL.md` (YAML frontmatter plus instructions) and, optionally, `scripts/`, `references/` and `assets/`. BuilderForce Agents loads **bundled skills** plus local and assigned ones, and filters them at load time based on environment, config, and binary presence. Every surface checks frontmatter with the same validator, `@builderforce/agent-skills`: the runtime, the platform import, and the marketplace.
 
 ## Locations and precedence
 
-Skills are loaded from **three** places:
+Skills are loaded from these places, lowest precedence first:
 
-1. **Bundled skills**: shipped with the install (npm package or Builderforce.app)
-2. **Managed/local skills**: `~/.builderforce/skills`
-3. **Workspace skills**: `<workspace>/skills`
+1. **Extra folders**: `skills.load.extraDirs` in `~/.builderforce/builderforce.json`, plus plugin skill dirs
+2. **Bundled skills**: shipped with the install (npm package or Builderforce.app)
+3. **Managed/local skills**: `~/.builderforce/skills`. Skills **assigned in the portal** are synced here as real folders (see below)
+4. **Personal standard folders**: `~/.claude/skills`, then `~/.agents/skills`
+5. **Project standard folders**: `<workspace>/.claude/skills`, then `<workspace>/.agents/skills`
+6. **Workspace skills**: `<workspace>/skills` (highest)
 
-If a skill name conflicts, precedence is:
+When a skill name exists in more than one place, the higher one wins. `.claude/skills` is read so that skills written for Claude Code load unchanged.
 
-`<workspace>/skills` (highest) → `~/.builderforce/skills` → bundled skills (lowest)
+### Assigned skills are synced as folders
 
-Additionally, you can configure extra skill folders (lowest precedence) via
-`skills.load.extraDirs` in `~/.builderforce/builderforce.json`.
+When a skill is assigned to a host or agent in the portal, `artifacts.sync` fetches it from the platform's skill library (`GET /llm/v1/skills/<name>/package`, authenticated with `BUILDERFORCE_API_KEY`). It then writes `~/.builderforce/skills/<name>/`, including its scripts and references, so the skill appears in `<available_skills>` like any local one. A folder the sync did not write is never overwritten: a same-named skill you made yourself always wins, and the sync reports it as skipped.
 
 ## Per-agent vs shared skills
 
@@ -74,24 +76,28 @@ that up as `<workspace>/skills` on the next session.
   for that agent turn (not the sandbox). Keep secrets out of prompts and logs.
 - For a broader threat model and checklists, see [Security](/gateway/security).
 
-## Format (AgentSkills + Pi-compatible)
+## Format (Agent Skills standard)
 
 `SKILL.md` must include at least:
 
 ```markdown
 ---
 name: nano-banana-pro
-description: Generate or edit images via Gemini 3 Pro Image
+description: Generate or edit images via Gemini 3 Pro Image. Use when the user asks for an image.
 ---
 ```
 
+Spec rules (checked on load; a violation is logged as a diagnostic, and the platform import refuses it):
+
+- `name`: 1–64 chars, lowercase letters, digits and hyphens, no leading/trailing/double hyphen, **equal to the folder name**.
+- `description`: 1–1024 chars. A skill with no description is skipped (and reported), because an agent could never match it.
+- Optional spec keys: `license`, `compatibility` (≤ 500 chars), `metadata` (string → string map), `allowed-tools` (space-delimited; experimental in the spec, recorded and round-tripped).
+
 Notes:
 
-- We follow the AgentSkills spec for layout/intent.
-- The parser used by the embedded agent supports **single-line** frontmatter keys only.
-- `metadata` should be a **single-line JSON object**.
-- Use `{baseDir}` in instructions to reference the skill folder path.
-- Optional frontmatter keys:
+- Frontmatter is full YAML. Multi-line `metadata` blocks (including the JSON-style block below) are supported.
+- Use `{baseDir}` in instructions to reference the skill folder path, or relative paths from the skill root.
+- BuilderForce-specific optional keys (preserved on import/export):
   - `homepage` — URL surfaced as “Website” in the macOS Skills UI (also supported via `metadata.builderforce.homepage`).
   - `user-invocable` — `true|false` (default: `true`). When `true`, the skill is exposed as a user slash command.
   - `disable-model-invocation` — `true|false` (default: `false`). When `true`, the skill is excluded from the model prompt (still available via user invocation).
@@ -101,6 +107,16 @@ Notes:
 
     The tool is invoked with params:
     `{ command: "<raw args>", commandName: "<slash command>", skillName: "<skill name>" }`.
+
+## Skills on the platform (cloud, Brain, canvas, Studio)
+
+A workspace's skills are its approved skills, plus skills assigned tenant-wide. Approved skills include ones written in the browser, imported as a folder, or proposed by an agent and approved by a person. Platform surfaces reach them through one tool, `builtin_skills_read`, in the gateway catalog (`GET /llm/v1/mcp/tools`, `POST /mcp`):
+
+- The tool's description carries the workspace's catalog: each skill's name and description.
+- `{ name }` returns the instructions plus the list of bundled files.
+- `{ name, path }` returns one bundled file.
+
+That one tool serves the Brain on the web, in VS Code and in Rovr, the creation canvas and the Studio, external MCP clients, and cloud and container runs. Cloud runs also get the catalog as an `<available_skills>` block. Skills assigned to a run, project or agent are still injected in full as mandatory capabilities.
 
 ## Gating (load-time filters)
 
@@ -266,7 +282,7 @@ By default, BuilderForce Agents watches skill folders and bumps the skills snaps
 
 ## Token impact (skills list)
 
-When skills are eligible, BuilderForce Agents injects a compact XML list of available skills into the system prompt (via `formatSkillsForPrompt` in `pi-coding-agent`). The cost is deterministic:
+When skills are eligible, BuilderForce Agents injects a compact XML list of available skills into the system prompt (via `formatSkillCatalog` in `@builderforce/agent-skills`, the same formatter cloud runs use). The cost is deterministic:
 
 - **Base overhead (only when ≥1 skill):** 195 characters.
 - **Per skill:** 97 characters + the length of the XML-escaped `<name>`, `<description>`, and `<location>` values.

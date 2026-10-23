@@ -21,6 +21,7 @@ import type {
   StackStepResult,
 } from '@seanhogg/builderforce-memory';
 import type { WorkflowDefinitionGraph, EvermindBuildKind, WorkflowNodeKind } from './builderforceApi';
+import { bytesToBase64 } from './base64Bytes';
 
 export type { StackDiagnosticResult, StackStepResult, WorkflowConfig };
 
@@ -202,10 +203,5 @@ export function evermindArtifactToBase64(artifact: unknown): string | null {
   else if (artifact instanceof ArrayBuffer) bytes = new Uint8Array(artifact);
   else if (ArrayBuffer.isView(artifact)) bytes = new Uint8Array(artifact.buffer);
   if (!bytes) return null;
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
+  return bytesToBase64(bytes);
 }
