@@ -45,6 +45,12 @@ vi.mock('../middleware/insightPlanGate', () => ({
   planFeatureGate: async () => null,
 }));
 
+// The finance lens reads cost-per-merged-PR through the cost-metrics store (raw SQL over
+// the usage ledger), which the chainable fake db does not model — stub that port.
+vi.mock('../../application/costMetrics/costMetricsService', () => ({
+  tenantCostSummary: async () => ({ mergedRuns: 0, costPerMergedPrUsd: null }),
+}));
+
 import { createInsightsRoutes } from './insightsRoutes';
 
 /** Chainable fake: every builder method returns the chain; awaiting (or

@@ -88,14 +88,16 @@ beforeEach(() => {
 });
 
 describe("project memory in a host-owned run", () => {
-  it("appends the api run context (facts, PRD, governance) to the system prompt, recalled with the user's request", async () => {
+  it("carries the api run context (facts, PRD, governance) in the turn's trailing context block, recalled with the user's request", async () => {
     const chatId = freshChatId();
     let systemSeen = "";
+    let turnSeen = "";
     const runContext = vi.fn(async () => "## Platform context\nProject memory: the chat list is served by GET /api/brain/chats.");
     const host = createBrainRunHost(
       ports({
         script: (ctx) => {
           systemSeen = String(ctx.messages[0]?.content ?? "");
+          turnSeen = String([...ctx.messages].reverse().find((m) => m.role === "user")?.content ?? "");
           return { text: "It comes from /api/brain/chats." };
         },
         runContext,
@@ -104,7 +106,10 @@ describe("project memory in a host-owned run", () => {
     await start(chatId, host, { projectId: 11, userTurn: "where does the chat list get its data?" });
     expect(runContext).toHaveBeenCalledWith(11, chatId, "where does the chat list get its data?");
     expect(systemSeen).toContain("You are the BuilderForce IDE agent.");
-    expect(systemSeen).toContain("GET /api/brain/chats");
+    // Per-turn recall rides after the history (cost lever B1) so the system prefix stays cacheable.
+    expect(systemSeen).not.toContain("GET /api/brain/chats");
+    expect(turnSeen).toContain("<turn_context>");
+    expect(turnSeen).toContain("GET /api/brain/chats");
   });
 
   it("asks for no context on a run with no project — there is no memory to recall", async () => {
