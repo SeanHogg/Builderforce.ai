@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { SkillAssignmentsContent } from './SkillAssignmentsContent';
 import { PersonaAssignmentsContent } from './PersonaAssignmentsContent';
 import { GovernanceContent } from './GovernanceContent';
-import type { ProjectAgent } from '@/lib/builderforceApi';
+import type { AgentAssignment } from '@/lib/builderforceApi';
 
 // 'content' was retired with migration 0982: content blocks only ever lived in
 // this browser's localStorage, so the tab could not name what it had assigned on
@@ -21,7 +21,7 @@ export interface CapabilitiesContentProps {
   /** Required for governance editing (project ID). For agentHost scope, pass associated project id if available. */
   projectId?: number;
   /** When scope is 'agent', the agent whose governance is edited. */
-  agentAssignment?: ProjectAgent;
+  agentAssignment?: AgentAssignment;
   /**
    * @deprecated Unused. It existed only to resolve the names of localStorage
    * content blocks for the Content tab, which migration 0982 retired. Kept

@@ -25,7 +25,8 @@
 
 import { and, eq, gte } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { creationSessionMembers, users } from '../../infrastructure/database/schema';
+import { creationSessionPresence, memberships, users } from '../../infrastructure/database/schema';
+import { activeSessionMemberWhere, type SessionKey } from './sessionMembers';
 
 /** Ceiling on the `known` map a caller may send — far above any real board's roster. */
 export const MAX_KNOWN_PRESENCE = 200;
@@ -44,24 +45,30 @@ export interface PresenceMemberRow {
   followingUserId: string | null;
 }
 
-/** The active members of one board (seen within the window), with their drawn presence. */
-export function listActivePresenceMembers(db: Db, sessionId: string, activeSince: Date): Promise<PresenceMemberRow[]> {
+/**
+ * The active members of one board (seen within the window), with their drawn presence.
+ * Presence rows are canvas-only (`creationSessionPresence`); the ROLE comes from the
+ * kernel membership, and the inner join is what keeps a removed member's stale row off
+ * the list.
+ */
+export function listActivePresenceMembers(db: Db, session: SessionKey, activeSince: Date): Promise<PresenceMemberRow[]> {
   return db.select({
-    userId: creationSessionMembers.userId,
-    role: creationSessionMembers.role,
+    userId: creationSessionPresence.userId,
+    role: memberships.role,
     displayName: users.displayName,
     // The picture the room puts on this person's figure (`PeerAvatar`).
     avatarUrl: users.avatarUrl,
-    lastSeenRevision: creationSessionMembers.lastSeenRevision,
-    lastSeenAt: creationSessionMembers.lastSeenAt,
-    viewport: creationSessionMembers.viewport,
-    cursor: creationSessionMembers.cursor,
-    selection: creationSessionMembers.selection,
-    typing: creationSessionMembers.typing,
-    followingUserId: creationSessionMembers.followingUserId,
-  }).from(creationSessionMembers)
-    .leftJoin(users, eq(users.id, creationSessionMembers.userId))
-    .where(and(eq(creationSessionMembers.sessionId, sessionId), gte(creationSessionMembers.lastSeenAt, activeSince)));
+    lastSeenRevision: creationSessionPresence.lastSeenRevision,
+    lastSeenAt: creationSessionPresence.lastSeenAt,
+    viewport: creationSessionPresence.viewport,
+    cursor: creationSessionPresence.cursor,
+    selection: creationSessionPresence.selection,
+    typing: creationSessionPresence.typing,
+    followingUserId: creationSessionPresence.followingUserId,
+  }).from(creationSessionPresence)
+    .innerJoin(memberships, and(activeSessionMemberWhere(session.tenantId, session.id), eq(memberships.memberRef, creationSessionPresence.userId)))
+    .leftJoin(users, eq(users.id, creationSessionPresence.userId))
+    .where(and(eq(creationSessionPresence.sessionId, session.id), gte(creationSessionPresence.lastSeenAt, activeSince)));
 }
 
 /** JSON with object keys sorted, so JSONB's key reordering never changes a fingerprint. */

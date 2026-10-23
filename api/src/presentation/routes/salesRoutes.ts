@@ -93,7 +93,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
   r.get('/canvas', async (c) => {
     const target = await owner(c);
     if (!target) return c.json({ error: 'Forbidden' }, 403);
-    return c.json(await sales.canvas(target.id, userId(c)));
+    return c.json(await sales.canvas(target.id, userId(c), c.env));
   });
 
   r.put('/settings', async (c) => {
@@ -135,7 +135,7 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     if (!target) return c.json({ error: 'Forbidden' }, 403);
     const body = await parseBody(c, SetCanvasBody);
     if (!body.sessionId) return c.json({ error: 'sessionId is required' }, 400);
-    const sessionId = await sales.setCanvas(target.id, userId(c), body.sessionId);
+    const sessionId = await sales.setCanvas(target.id, userId(c), body.sessionId, c.env);
     if (!sessionId) return c.json({ error: 'Canvas session not found' }, 404);
     return c.json({ sessionId });
   });

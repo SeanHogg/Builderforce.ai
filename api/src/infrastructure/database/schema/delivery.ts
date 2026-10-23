@@ -126,7 +126,7 @@ export const projects = pgTable('projects', {
   /** IDE: template used to seed initial files (e.g. "vanilla"). */
   template:        varchar('template', { length: 50 }),
   /** The KANBAN template selected for this project's board (migration 0274) — a
-   *  built-in slug ('standard-swe') or a kanban_templates.id. Distinct from
+   *  built-in slug ('standard-swe') or a `catalog_items.id` (kind 'kanban_template', 1263). Distinct from
    *  {@link template} (IDE file scaffold). Drives lane roles/requirements + the
    *  recommended roster. Null = the legacy hardcoded default board. */
   kanbanTemplateId: varchar('kanban_template_id', { length: 120 }),
@@ -591,18 +591,15 @@ export const taskStatusTransitions = pgTable('task_status_transitions', {
 
 
 /**
- * Agent identity + project attachments. Gives each agent (workforce or
- * registered) a numeric id so per-agent artifact assignments can reuse
- * artifact_assignments with scope='agent' and scope_id = project_agents.id.
+ * @deprecated — dropped by migration 1269. DO NOT USE FROM APP CODE.
  *
- * An agent is NOT tied to a project — it's used anywhere (IDE, Workflow,
- * on-prem, cloud) and associated with 0..N projects as swimlanes:
- *   projectId NULL     → the canonical, tenant-wide agent identity row.
- *                        Per-agent capabilities assigned here apply everywhere.
- *   projectId NOT NULL → a project (swimlane) attachment, layered on top.
- *
- *   agentKind 'workforce'  → agentRef holds PublishedAgent.id (string)
- *   agentKind 'registered' → agentRef holds agents.id (numeric, as string)
+ * `project_agents` (agent identity + project attachments) was folded into
+ * `agent_assignments` by migration 1265 — project staffing is `scope = 'project'`, the
+ * workspace identity `scope = 'workspace'` (see `schema/agents.ts`). The table survives
+ * 1265 only so the PREVIOUS Worker keeps working through the deploy window (expand /
+ * contract); 1269 reconciles what it wrote and drops it. It stays declared here until
+ * then because the schema-drift guard fails on a migrated table Drizzle does not know.
+ * Read and write agent staffing through `application/agent/AgentAssignmentService.ts`.
  */
 export const projectAgents = pgTable('project_agents', {
   id:         serial('id').primaryKey(),
@@ -617,7 +614,6 @@ export const projectAgents = pgTable('project_agents', {
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  // One canonical identity row per (tenant, kind, ref); many project attachments.
   uniqueIndex('uq_project_agents_identity')
     .on(t.tenantId, t.agentKind, t.agentRef)
     .where(sql`${t.projectId} IS NULL`),
@@ -625,6 +621,20 @@ export const projectAgents = pgTable('project_agents', {
     .on(t.tenantId, t.projectId, t.agentKind, t.agentRef)
     .where(sql`${t.projectId} IS NOT NULL`),
 ]);
+
+/**
+ * @deprecated — dropped by 1269 (held until the agent_assignments Worker is live).
+ * Migration 1265's fold ledger: which `project_agents` ids (agent handles) that fold
+ * carried, so 1269 can tell a row the old Worker wrote in the deploy window from one
+ * 1265 already folded. Written and read ONLY by the migrations (1265, 1269); app code
+ * MUST NOT touch it. Declared only so the schema-drift guard's reverse check holds
+ * during the expand/contract window. Delete with 1269 (see
+ * held-migrations/1269_drizzle.patch.md).
+ */
+export const projectAgentsFoldLedger = pgTable('project_agents_fold_ledger', {
+  handle:   integer('handle').primaryKey(),
+  foldedAt: timestamp('folded_at').notNull().defaultNow(),
+});
 
 
 // ---------------------------------------------------------------------------
@@ -967,7 +977,7 @@ export const boards = pgTable('boards', {
    *  OVERRIDE the gate so high/urgent work runs without approval (migration 0257). */
   requireExecutionApproval: boolean('require_execution_approval').notNull().default(true),
   /** The kanban template this board was provisioned from (migration 0274) — a
-   *  built-in slug ('standard-swe') or a kanban_templates.id. Null = the legacy
+   *  built-in slug ('standard-swe') or a `catalog_items.id` (kind 'kanban_template', 1263). Null = the legacy
    *  hardcoded default lanes. Records provenance; re-applying overwrites lanes. */
   templateId:          varchar('template_id', { length: 120 }),
   /** Lifecycle-managed (PRD §5.5): when true the ticket's Assignee is the COORDINATOR
@@ -1072,7 +1082,13 @@ export const swimlaneTransitions = pgTable('swimlane_transitions', {
 });
 
 
-/** A reusable / shareable / sellable kanban board definition (marketplace artifact). */
+/**
+ * @deprecated — dropped by 1267 (held until the catalog_items Worker is live).
+ * Migration 1263 copied every row into `catalog_items` (kind 'kanban_template'); app code
+ * MUST NOT read or write this table — use `application/templates/catalogTemplateStore.ts`.
+ * Declared only so the schema-drift guard's reverse check holds during the
+ * expand/contract window. Delete with 1267 (see held-migrations/1267_drizzle.patch.md).
+ */
 export const kanbanTemplates = pgTable('kanban_templates', {
   id:               varchar('id', { length: 36 }).primaryKey(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
@@ -1095,7 +1111,13 @@ export const kanbanTemplates = pgTable('kanban_templates', {
 });
 
 
-/** A lane within a kanban template. */
+/**
+ * @deprecated — dropped by 1267 (held until the catalog_items Worker is live).
+ * Migration 1263 copied every row into `catalog_items` (kind 'kanban_template — body.lanes'); app code
+ * MUST NOT read or write this table — use `application/templates/catalogTemplateStore.ts`.
+ * Declared only so the schema-drift guard's reverse check holds during the
+ * expand/contract window. Delete with 1267 (see held-migrations/1267_drizzle.patch.md).
+ */
 export const kanbanTemplateLanes = pgTable('kanban_template_lanes', {
   id:              varchar('id', { length: 36 }).primaryKey(),
   templateId:      varchar('template_id', { length: 36 }).notNull().references(() => kanbanTemplates.id, { onDelete: 'cascade' }),
@@ -1109,7 +1131,13 @@ export const kanbanTemplateLanes = pgTable('kanban_template_lanes', {
 });
 
 
-/** Roles responsible + checks (role sign-off / diagnostic) required at a template lane. */
+/**
+ * @deprecated — dropped by 1267 (held until the catalog_items Worker is live).
+ * Migration 1263 copied every row into `catalog_items` (kind 'kanban_template — body.lanes[].requirements'); app code
+ * MUST NOT read or write this table — use `application/templates/catalogTemplateStore.ts`.
+ * Declared only so the schema-drift guard's reverse check holds during the
+ * expand/contract window. Delete with 1267 (see held-migrations/1267_drizzle.patch.md).
+ */
 export const kanbanTemplateLaneRequirements = pgTable('kanban_template_lane_requirements', {
   id:             varchar('id', { length: 36 }).primaryKey(),
   laneId:         varchar('lane_id', { length: 36 }).notNull().references(() => kanbanTemplateLanes.id, { onDelete: 'cascade' }),
@@ -2457,13 +2485,21 @@ export const productReleases = pgTable('product_releases', {
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  // Project scope + delivery dates for the release-picker (EMP-10a, migration 0316).
+  // Project scope for the release-picker (EMP-10a, migration 0316).
   projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   name:        varchar('name', { length: 255 }).notNull(),
   version:     varchar('version', { length: 50 }),
-  releaseDate: timestamp('release_date'),
+  // Plan vs actual (1266): `targetDate` is the planned ship date; `releasedAt` is when
+  // it actually shipped, stamped by the transition to `released`, cleared on a move
+  // back to planned / in_progress, kept on cancel (domain/delivery/releaseSchedule.ts).
+  // The old ambiguous `release_date` is folded in by 1266 and kept only through the
+  // deploy window (expand/contract).
   targetDate:  timestamp('target_date'),
-  releasedAt:  timestamp('released_at'),
+  releasedAt:  timestamp('released_at', { withTimezone: true }),
+  /** @deprecated dropped by 1268 — remove together with that migration. Declared only
+   *  so the schema-drift guard matches the live table until then; app code never reads
+   *  or writes it (TIMESTAMP without time zone, as 0059 created it). */
+  releaseDate: timestamp('release_date'),
   status:      varchar('status', { length: 20 }).notNull().default('planned'),
   notes:       text('notes'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),

@@ -33,6 +33,7 @@ import { CHAT_DIAGNOSTICS_TOOLS } from './chatDiagnosticsToolCatalog';
 import { REPLAY_TOOLS } from './replayToolCatalog';
 import { AGENT_PERSONA_TOOLS } from './agentPersonaToolCatalog';
 import { APP_BLUEPRINT_TOOLS } from './appBlueprintToolCatalog';
+import { AGENT_ASSIGNMENT_TOOLS } from './agentAssignmentToolCatalog';
 import { readTicketPendingChanges } from '../task/ticketPendingChangesPort';
 import { decideTicketPendingChanges } from '../task/ticketPendingChanges';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
@@ -71,7 +72,7 @@ import { parseJsonObject } from '../../domain/shared/json';
 import { findNearDuplicateByTitle } from '../../domain/shared/nearDuplicateTitle';
 import { signJwt } from '../../infrastructure/auth/JwtService';
 import { invalidateHostCronJobs } from '../agentHost/hostCronCache';
-import { specStatusEnum, workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agentRegistrations, projectAgents, agentAssignments, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
+import { specStatusEnum, workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agentRegistrations, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { runTelemetryDatabase } from '../shared/runTelemetryDatabase';
 import { listAgentHostUsageSnapshots } from '../agentHost/agentHostUsage';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -2292,32 +2293,8 @@ const CATALOG: BuiltinTool[] = [
   // registered_agents.list is the tenant `agent_registrations` table (claude/openai/ollama/http
   // endpoints) under the web Brain's domain name so the dispatch layer (keyed on domain.method) reaches it.
   { tool: 'registered_agents.list', mutates: false, description: 'List tenant-registered endpoint agents (claude/openai/ollama/http).', parameters: obj({}), run: (ctx) => ctx.db.select().from(agentRegistrations).where(eq(agentRegistrations.tenantId, ctx.tenantId)).limit(200) },
-  // project_agents is tenant-scoped (NO segment_id).
-  { tool: 'project_agents.list', mutates: false, description: 'List agents attached to a project.', parameters: obj({ projectId: N }, ['projectId']), run: (ctx, a) => ctx.db.select().from(projectAgents).where(and(eq(projectAgents.tenantId, ctx.tenantId), eq(projectAgents.projectId, num(a.projectId)))).limit(200) },
-  {
-    tool: 'project_agents.add', mutates: true,
-    description: 'Attach an agent to a project. agentKind: workforce|registered.',
-    parameters: obj({ projectId: N, agentKind: { type: 'string', enum: ['workforce', 'registered'] }, agentRef: S, name: S, role: S }, ['projectId', 'agentKind', 'agentRef', 'name']),
-    run: async (ctx, a) => {
-      await ctx.projects.getProject(num(a.projectId), ctx.tenantId); // tenant-ownership guard
-      const [row] = await ctx.db.insert(projectAgents).values({ tenantId: ctx.tenantId, projectId: num(a.projectId), agentKind: str(a.agentKind), agentRef: str(a.agentRef), name: str(a.name), ...(a.role != null ? { role: str(a.role) } : {}) }).returning();
-      return row;
-    },
-  },
-  { tool: 'project_agents.remove', mutates: true, description: 'Detach an agent from a project.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const rows = await ctx.db.delete(projectAgents).where(and(eq(projectAgents.id, num(a.id)), eq(projectAgents.tenantId, ctx.tenantId))).returning({ id: projectAgents.id }); return { deleted: rows.length > 0 ? num(a.id) : null }; } },
-  // agent_assignments is segment-scoped.
-  { tool: 'agent_assignments.list', mutates: false, description: 'List agents assigned to a scope (project/workflow/security/swimlane/brain/global).', parameters: obj({ scope: S, scopeId: S }, ['scope']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const tenantIdWhere = a.scopeId != null ? and(eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg), eq(agentAssignments.scope, str(a.scope)), eq(agentAssignments.scopeId, str(a.scopeId))) : and(eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg), eq(agentAssignments.scope, str(a.scope))); return ctx.db.select().from(agentAssignments).where(tenantIdWhere).limit(200); } },
-  {
-    tool: 'agent_assignments.assign', mutates: true,
-    description: 'Assign a registered agent to a scope (project/workflow/security/swimlane/brain/global).',
-    parameters: obj({ agentKind: S, agentRef: S, scope: S, scopeId: S, role: S }, ['agentKind', 'agentRef', 'scope']),
-    run: async (ctx, a) => {
-      const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(agentAssignments).values({ tenantId: ctx.tenantId, segmentId: seg, agentKind: str(a.agentKind), agentRef: str(a.agentRef), scope: str(a.scope), scopeId: a.scopeId != null ? str(a.scopeId) : null, ...(a.role != null ? { role: str(a.role) } : {}) }).returning();
-      return row;
-    },
-  },
-  { tool: 'agent_assignments.remove', mutates: true, description: 'Remove an agent assignment by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(agentAssignments).where(and(eq(agentAssignments.id, str(a.id)), eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg))).returning({ id: agentAssignments.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+  // Project staffing + every other agent assignment: AGENT_ASSIGNMENT_TOOLS
+  // (agentAssignmentToolCatalog.ts), spread at the end of the catalog.
 
   // ---- Saved dashboards (segment-scoped) + widgets (tenant-scoped via parent dashboard) ----
   // THE dashboards application layer (application/dashboards/savedDashboards.ts) — the
@@ -4236,6 +4213,9 @@ const CATALOG: BuiltinTool[] = [
   // Tools for detecting, reading, and overriding project blueprints. These enable
   // the agent to understand the project's structure (framework, databases, services).
   ...APP_BLUEPRINT_TOOLS,
+  // ---- Agent assignments: project staffing, workspace identities, every scope ----
+  // Through THE assignment use case and its role policy (agentAssignmentToolCatalog.ts).
+  ...AGENT_ASSIGNMENT_TOOLS,
 ];
 
 

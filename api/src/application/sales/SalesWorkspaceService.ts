@@ -2,7 +2,7 @@ import { and, desc, eq, getTableColumns, isNotNull, or } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
-  creationSessionMembers, creationSessions, salesAssociateSettings, salesCampaigns,
+  creationSessions, salesAssociateSettings, salesCampaigns,
   salesCanvasSessions, salesCoachingNotes, salesCommissionRules, salesContacts,
   salesReferrals, salesWeeklyGoals, users,
 } from '../../infrastructure/database/schema';
@@ -13,6 +13,10 @@ import {
   buildSalesReport, earnedCommissionCents, recentReferrals, windowStart, type SalesReportWindow,
 } from './salesReports';
 import { invalidateSalesReferrals } from './salesReferralFacts';
+import {
+  addSessionMember, insertSessionMemberStatement, sessionMemberRole, sessionMembersChanged, sessionObjectIdFor,
+} from '../creation/sessionMembers';
+import { mirrorLegacyRoleStatement } from '../creation/sessionPresenceStore';
 
 export type SalesWorkspaceDb = Db;
 
@@ -128,12 +132,19 @@ export class SalesWorkspaceService {
     return { contacts, campaigns, goals: goalRows[0] ?? { ownerUserId, outreachTarget: 50, contactsTarget: 20, meetingsTarget: 3 }, notes, referrals, settings, commissionRules, performance: { signups: referrals.length, conversions: referrals.filter((row) => row.convertedAt).length, convertedRevenueCents: referrals.reduce((sum, row) => sum + (row.revenueCents ?? 0), 0), earnedCents: referrals.reduce((sum, row) => sum + (row.commissionCents ?? 0), 0) } };
   }
 
-  async canvas(ownerUserId: string, viewerId: string) {
+  async canvas(ownerUserId: string, viewerId: string, env?: Env) {
     const [row] = await this.db.select({ sessionId: salesCanvasSessions.sessionId, tenantId: salesCanvasSessions.tenantId }).from(salesCanvasSessions).where(eq(salesCanvasSessions.ownerUserId, ownerUserId)).limit(1);
     const settings = await this.settings(ownerUserId);
     if (!row) return { sessionId: null, referralCode: settings?.referralCode ?? null, salesCode: settings?.salesCode ?? null };
     const current = await this.viewer(viewerId);
-    if (current?.isSuperadmin) await this.db.insert(creationSessionMembers).values({ sessionId: row.sessionId, userId: current.id, role: 'editor', invitedBy: current.id }).onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role: 'editor' } });
+    if (current?.isSuperadmin) {
+      // A read of the associate's board, polled on every visit — write (and bump the
+      // board's grant cache) only when the superadmin is not already its editor.
+      const board = { id: row.sessionId, tenantId: row.tenantId };
+      if (await sessionMemberRole(this.db, board, current.id) !== 'editor') {
+        await addSessionMember(this.db, env, board, { userId: current.id, role: 'editor', invitedBy: current.id }, 'set-role');
+      }
+    }
     return { sessionId: row.sessionId, referralCode: settings?.referralCode ?? null, salesCode: settings?.salesCode ?? null };
   }
 
@@ -150,12 +161,25 @@ export class SalesWorkspaceService {
     return this.commissionRules();
   }
 
-  async setCanvas(ownerUserId: string, viewerId: string, sessionId: string) {
+  async setCanvas(ownerUserId: string, viewerId: string, sessionId: string, env?: Env) {
     const [session] = await this.db.select({ id: creationSessions.id, createdBy: creationSessions.createdBy, tenantId: creationSessions.tenantId }).from(creationSessions).where(eq(creationSessions.id, sessionId)).limit(1);
     if (!session || session.createdBy !== ownerUserId) return null;
     await this.db.insert(salesCanvasSessions).values({ ownerUserId, sessionId: session.id, tenantId: session.tenantId }).onConflictDoUpdate({ target: salesCanvasSessions.ownerUserId, set: { sessionId: session.id, tenantId: session.tenantId } });
     const admins = await this.db.select({ id: users.id }).from(users).where(eq(users.isSuperadmin, true));
-    if (admins.length) await this.db.insert(creationSessionMembers).values(admins.map((admin) => ({ sessionId: session.id, userId: admin.id, role: 'editor', invitedBy: viewerId }))).onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role: 'editor' } });
+    const board = { id: session.id, tenantId: session.tenantId };
+    const objectId = admins.length ? await sessionObjectIdFor(this.db, env, board) : null;
+    if (objectId) {
+      // Superadmins are seated on the associate's board in ITS tenant — the explicit
+      // membership the cross-tenant branch of the board gate requires.
+      await this.db.batch(admins.flatMap((admin) => [
+        insertSessionMemberStatement(
+          this.db, session.tenantId, objectId, { userId: admin.id, role: 'editor', invitedBy: viewerId }, 'set-role',
+        ),
+        // WINDOW-ONLY (1264 → 1270): keep the previous Worker's access column in step.
+        mirrorLegacyRoleStatement(this.db, session.id, admin.id, 'editor'),
+      ]) as unknown as Parameters<typeof this.db.batch>[0]);
+      await sessionMembersChanged(env, board, objectId);
+    }
     return session.id;
   }
 

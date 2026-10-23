@@ -3030,6 +3030,12 @@
       },
       "target": "cible {d}",
       "noTarget": "pas de date cible",
+      "released": "publiée le {d}",
+      "releasedOnTime": "publiée le {d} · dans les temps",
+      "releasedLate": "publiée le {d} · {n, plural, one {# jour de retard} other {# jours de retard}}",
+      "releaseOnTime": "Taux de versions livrées à temps",
+      "releaseOnTimeSub": "{onTime} sur {measured} livrées à la date cible",
+      "releaseOnTimeNone": "aucune version livrée avec une date cible pour l’instant",
       "forecast": "Achèvement prévu",
       "forecastBand": "{o} – {p}",
       "forecastNone": "débit requis pour prévoir",
@@ -33043,7 +33049,11 @@
       "loadFailed": "Chargement impossible.",
       "deleteFailed": "Échec de la suppression.",
       "saveFailed": "Échec de l’enregistrement (rôle manager requis pour les modifications).",
-      "required": "{field} est obligatoire"
+      "required": "{field} est obligatoire",
+      "release": {
+        "targetDate": "Date cible",
+        "releasedAt": "Publiée"
+      }
     }
   },
   "mcpServers": {

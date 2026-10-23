@@ -113,12 +113,11 @@ import { GuestPromptService } from './application/marketing/GuestPromptService';
 import { PlatformBroadcastService } from './application/marketing/PlatformBroadcastService';
 import { MarketingService } from './application/marketing/MarketingService';
 import { createAgentHostRoutes }        from './presentation/routes/agentHostRoutes';
-import { AGENT_HOST_BASE_PATH, LEGACY_AGENT_HOST_PATHS, LEGACY_MANAGED_AGENT_HOST_PATHS, MANAGED_AGENT_HOST_BASE_PATH, forwardToCanonical, mountWithLegacyAliases } from './presentation/middleware/legacyAlias';
+import { AGENT_ASSIGNMENT_BASE_PATH, AGENT_HOST_BASE_PATH, LEGACY_AGENT_ASSIGNMENT_PATHS, LEGACY_AGENT_HOST_PATHS, LEGACY_MANAGED_AGENT_HOST_PATHS, MANAGED_AGENT_HOST_BASE_PATH, forwardToCanonical, mountWithLegacyAliases } from './presentation/middleware/legacyAlias';
 import { AgentHostRepository }          from './infrastructure/repositories/AgentHostRepository';
 import { IAgentHostRepository }         from './domain/agentHost/IAgentHostRepository';
 import { createSkillAssignmentRoutes } from './presentation/routes/skillAssignmentRoutes';
 import { createArtifactAssignmentRoutes } from './presentation/routes/artifactAssignmentRoutes';
-import { createProjectAgentRoutes } from './presentation/routes/projectAgentRoutes';
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
 import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
@@ -134,6 +133,7 @@ import { syncStoresFor } from './application/sync/syncStoresFor';
 import { createObjectRoutes } from './presentation/routes/objectRoutes';
 import { createDomainRoutes } from './presentation/routes/domainRoutes';
 import { createObjectRegistry } from './application/kernel/ObjectRegistry';
+import { resolveSessionGrant } from './application/creation/sessionAccess';
 import { createDomainService } from './application/kernel/DomainService';
 import { createTeamRosterService } from './application/kernel/TeamRoster';
 import { createEntityService } from './application/domains/EntityService';
@@ -723,7 +723,14 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Both take an application-layer PORT rather than a database: `src/index.ts` is
   // outside the presentation layer, so this is where the connection is bound to
   // the use cases and the route files stay free of `src/infrastructure`.
-  app.route('/api/objects', createObjectRoutes(createObjectRegistry(db, env)));
+  //
+  // A board's members and shares are its ACCESS (migration 1264): the registry refuses
+  // generic writes to them, and admits a generic read only through the board's own
+  // grant — injected here so the kernel never imports the canvas domain.
+  app.route('/api/objects', createObjectRoutes(createObjectRegistry(db, env, {
+    creation_session: async ({ tenantId, refId, userId }) =>
+      (await resolveSessionGrant(db, refId, tenantId, userId, env)) !== null,
+  })));
   app.route('/api/timecards', createTimecardRoutes());
   // Two-sided marketplace: job postings + proposals (bidding) and the in-app feed.
   app.route('/api/jobs', createJobRoutes());
@@ -890,7 +897,6 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   mountWithLegacyAliases(app, AGENT_HOST_BASE_PATH, LEGACY_AGENT_HOST_PATHS, () => createAgentHostRoutes(db, agentHostService));
   app.route('/api/skill-assignments', createSkillAssignmentRoutes(db));
   app.route('/api/artifact-assignments', createArtifactAssignmentRoutes(db));
-  app.route('/api/project-agents', createProjectAgentRoutes(db));
   app.route('/api/marketplace-stats', createMarketplaceStatsRoutes(db));
   app.route('/api/personas', createPersonaRoutes(db));
   // Personality LEARNING + TRACKING (Gaps 6 & 7) — usage events + outcome-driven
@@ -1243,7 +1249,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/repos',             createRepoRoutes(db));
   app.route('/api/agent-runtime',     createAgentRuntimeRoutes(db));
   app.route('/api/git-proxy',         createGitProxyRoutes(db));
-  app.route('/api/agent-assignments', createAgentAssignmentRoutes(db));
+  // `/api/project-agents` is the pre-1265 project-staffing path, now a deprecated alias of
+  // the ONE assignment router (project staffing is `scope = 'project'`).
+  mountWithLegacyAliases(app, AGENT_ASSIGNMENT_BASE_PATH, LEGACY_AGENT_ASSIGNMENT_PATHS, () => createAgentAssignmentRoutes(db));
   app.route('/api/security',          createSecurityReviewRoutes(db));
   app.route('/api/incidents',         createIncidentRoutes(db));
   app.route('/api/monitoring',        createMonitoringRoutes(db));

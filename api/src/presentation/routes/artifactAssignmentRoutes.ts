@@ -20,7 +20,6 @@ import {
   artifactAssignments,
   agentHosts,
   projects,
-  projectAgents,
   tasks,
 } from '../../infrastructure/database/schema';
 import {
@@ -33,6 +32,8 @@ import { loadAgentManifests, invalidateAgentManifests } from '../../application/
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { loadProjectInTenant } from '../../application/project/projectOwnership';
+import { AgentAssignmentService } from '../../application/agent/AgentAssignmentService';
+import { CONFIGURABLE_SCOPES } from '../../application/agent/agentAssignmentModel';
 import { parseBody, z } from './requestBody';
 
 /** `POST /` — the handler answers its own "X is required" for each missing field. */
@@ -246,12 +247,10 @@ async function verifyScopeOwnership(
     }
 
     case AssignmentScope.AGENT: {
-      const [row] = await db
-        .select({ id: projectAgents.id })
-        .from(projectAgents)
-        .where(and(eq(projectAgents.id, scopeId), eq(projectAgents.tenantId, tenantId)))
-        .limit(1);
-      return !!row;
+      // `scopeId` is an agent assignment's integer handle — a project staffing row or a
+      // workspace identity (migration 1265 folded `project_agents` into both).
+      const row = await new AgentAssignmentService(db).find(tenantId, String(scopeId));
+      return !!row && CONFIGURABLE_SCOPES.includes(row.scope);
     }
 
     default:

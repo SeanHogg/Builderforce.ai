@@ -7,12 +7,12 @@
  * assignments. This gives users a union of everything assigned across the
  * hierarchy, with de-duplication by slug.
  */
-import { eq, and, or, isNull, inArray } from 'drizzle-orm';
+import { eq, and, or, inArray } from 'drizzle-orm';
 import {
   artifactAssignments,
-  projectAgents,
   tasks,
 } from '../../infrastructure/database/schema';
+import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   ArtifactType,
@@ -26,12 +26,12 @@ export type ResolutionContext = {
   taskId?:    number;
   agentHostId?:    number;
   projectId?: number;
-  /** project_agents.id — when executing as a specific agent, fold in its per-agent assignments. */
+  /** `agent_assignments.agent_handle` — when executing as a specific agent, fold in its per-agent assignments. */
   agentAssignmentId?: number;
   /**
-   * A workforce cloud agent's ide_agents.id. Resolved to the agent's canonical
-   * (project-less) project_agents identity row so its per-agent assignments
-   * follow it into any execution context, regardless of project.
+   * A workforce cloud agent's ide_agents.id. Resolved to the agent's workspace identity
+   * (`agent_assignments`, scope 'workspace') so its per-agent assignments follow it into
+   * any execution context, regardless of project.
    */
   cloudAgentRef?: string;
 };
@@ -48,22 +48,13 @@ export async function resolveArtifacts(
 ): Promise<ResolvedArtifacts> {
   const scopeConditions = await sharedScopeConditions(db, ctx);
 
-  // Agent-level — per-agent assignments keyed on project_agents.id. A workforce
-  // cloud agent is addressed by its ide_agents.id, resolved here to its
-  // canonical (project-less) identity row so capabilities follow the agent.
+  // Agent-level — per-agent assignments keyed on the assignment's integer handle. A
+  // workforce cloud agent is addressed by its ide_agents.id, resolved here to its
+  // workspace identity so capabilities follow the agent.
   let agentAssignmentId = ctx.agentAssignmentId;
   if (agentAssignmentId == null && ctx.cloudAgentRef != null) {
-    const [identity] = await db
-      .select({ id: projectAgents.id })
-      .from(projectAgents)
-      .where(and(
-        eq(projectAgents.tenantId, ctx.tenantId),
-        eq(projectAgents.agentKind, 'workforce'),
-        eq(projectAgents.agentRef, ctx.cloudAgentRef),
-        isNull(projectAgents.projectId),
-      ))
-      .limit(1);
-    agentAssignmentId = identity?.id;
+    const handles = await new AgentAssignmentService(db).identityHandles(ctx.tenantId, 'workforce', [ctx.cloudAgentRef]);
+    agentAssignmentId = handles.get(ctx.cloudAgentRef);
   }
   if (agentAssignmentId != null) {
     scopeConditions.push(
@@ -106,23 +97,10 @@ export async function resolveArtifactsForCloudAgents(
   const result = new Map<string, ResolvedArtifacts>();
   if (!refs.length) return result;
 
-  const [scopeConditions, identities] = await Promise.all([
+  const [scopeConditions, identityByRef] = await Promise.all([
     sharedScopeConditions(db, ctx),
-    db
-      .select({ id: projectAgents.id, agentRef: projectAgents.agentRef })
-      .from(projectAgents)
-      .where(and(
-        eq(projectAgents.tenantId, ctx.tenantId),
-        eq(projectAgents.agentKind, 'workforce'),
-        inArray(projectAgents.agentRef, refs),
-        isNull(projectAgents.projectId),
-      )),
+    new AgentAssignmentService(db).identityHandles(ctx.tenantId, 'workforce', refs),
   ]);
-  // First identity row per ref, as the single-agent path's `.limit(1)` takes.
-  const identityByRef = new Map<string, number>();
-  for (const row of identities) {
-    if (!identityByRef.has(row.agentRef)) identityByRef.set(row.agentRef, row.id);
-  }
   const identityIds = [...new Set(identityByRef.values())];
   if (identityIds.length) {
     scopeConditions.push(

@@ -6,8 +6,9 @@
  * catalogue trustworthy hold in one place rather than per route:
  *   1. a manifest is VALIDATED before it is stored, and re-validated on edit;
  *   2. a workspace key can never shadow a built-in (`isReservedTemplateKey`);
- *   3. any write invalidates the catalogue cache, because a template that is
- *      saved but absent from the gallery for five minutes reads as data loss.
+ *   3. any write invalidates the catalogue cache (the store bumps its version
+ *      token), because a template that is saved but absent from the gallery for
+ *      five minutes reads as data loss.
  *
  * Publishing is a VISIBILITY change on the row that already exists, not a second
  * table and not a copy. A template a workspace lists publicly is the same row
@@ -16,10 +17,8 @@
  * from the private one.
  */
 
-import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { catalogItems } from '../../infrastructure/database/schema';
 import {
   parseTemplateManifest,
   TemplateManifestError,
@@ -27,7 +26,8 @@ import {
 } from '../../domain/template/templateManifest';
 import { isReservedTemplateKey } from './defaults';
 import { outputKindSpec, uninstallableOutputError } from './outputKinds';
-import { invalidateTemplateCatalog, TEMPLATE_CATALOG_KIND } from './templateRegistry';
+import { TEMPLATE_CATALOG_KIND } from './templateRegistry';
+import { deleteTemplateRow, insertTemplate, updateTemplate, type TemplateValues } from './catalogTemplateStore';
 
 export class TemplateServiceError extends Error {
   constructor(message: string, public readonly status = 400, public readonly details?: string[]) {
@@ -91,53 +91,25 @@ export async function saveTemplate(db: Db, env: Env, args: SaveTemplateArgs): Pr
   }
 
   const visibility = args.publish ? 'public' : 'private';
-  const now = new Date();
-  const [existing] = await db
-    .select({ id: catalogItems.id })
-    .from(catalogItems)
-    .where(and(
-      eq(catalogItems.tenantId, args.tenantId),
-      eq(catalogItems.kind, TEMPLATE_CATALOG_KIND),
-      eq(catalogItems.slug, manifest.key),
-    ))
-    .limit(1);
-
-  const values = {
+  const values: TemplateValues = {
     name: manifest.name.slice(0, 200),
     summary: manifest.summary,
-    body: manifest as unknown as Record<string, unknown>,
+    body: manifest,
     category: manifest.category,
     tags: manifest.tags,
     visibility,
     priceCents: args.priceCents ?? null,
     currency: args.currency ?? (args.priceCents ? 'usd' : null),
     publisherRef: args.publisherRef,
-    // `isTemplate` is the template/instance flag `catalog_items` carries for the
-    // whole kernel; a row of kind 'template' that did not set it would be
-    // invisible to every generic surface that filters on it.
-    isTemplate: true,
-    ...(args.publish ? { publishedAt: now } : {}),
-    updatedAt: now,
+    ...(args.publish ? { publishedAt: new Date() } : {}),
   };
 
-  const id = existing?.id ?? crypto.randomUUID();
-  if (existing) {
-    await db.update(catalogItems).set(values).where(and(
-      eq(catalogItems.id, existing.id),
-      eq(catalogItems.tenantId, args.tenantId),
-    ));
-  } else {
-    await db.insert(catalogItems).values({
-      id,
-      tenantId: args.tenantId,
-      kind: TEMPLATE_CATALOG_KIND,
-      slug: manifest.key,
-      ...values,
-      createdAt: now,
-    });
-  }
+  // Keyed by (tenant, kind, slug): update the row under this key if there is one,
+  // otherwise insert it.
+  const target = { tenantId: args.tenantId, kind: TEMPLATE_CATALOG_KIND };
+  const id = (await updateTemplate(db, env, { ...target, match: { slug: manifest.key }, values }))
+    ?? (await insertTemplate(db, env, { ...target, values: { ...values, slug: manifest.key, name: manifest.name.slice(0, 200) } }));
 
-  await invalidateTemplateCatalog(env, args.tenantId);
   return { id, key: manifest.key, visibility, manifest };
 }
 
@@ -148,22 +120,16 @@ export async function setTemplateVisibility(
   env: Env,
   args: { tenantId: number; key: string; publish: boolean },
 ): Promise<{ visibility: string }> {
-  const now = new Date();
-  const result = await db
-    .update(catalogItems)
-    .set({
+  const found = await updateTemplate(db, env, {
+    tenantId: args.tenantId,
+    kind: TEMPLATE_CATALOG_KIND,
+    match: { slug: args.key },
+    values: {
       visibility: args.publish ? 'public' : 'private',
-      publishedAt: args.publish ? now : null,
-      updatedAt: now,
-    })
-    .where(and(
-      eq(catalogItems.tenantId, args.tenantId),
-      eq(catalogItems.kind, TEMPLATE_CATALOG_KIND),
-      eq(catalogItems.slug, args.key),
-    ))
-    .returning({ id: catalogItems.id });
-  if (result.length === 0) throw new TemplateServiceError('Template not found', 404);
-  await invalidateTemplateCatalog(env, args.tenantId);
+      publishedAt: args.publish ? new Date() : null,
+    },
+  });
+  if (!found) throw new TemplateServiceError('Template not found', 404);
   return { visibility: args.publish ? 'public' : 'private' };
 }
 
@@ -175,10 +141,5 @@ export async function deleteTemplate(
   if (isReservedTemplateKey(args.key)) {
     throw new TemplateServiceError('Built-in templates cannot be deleted', 409);
   }
-  await db.delete(catalogItems).where(and(
-    eq(catalogItems.tenantId, args.tenantId),
-    eq(catalogItems.kind, TEMPLATE_CATALOG_KIND),
-    eq(catalogItems.slug, args.key),
-  ));
-  await invalidateTemplateCatalog(env, args.tenantId);
+  await deleteTemplateRow(db, env, { tenantId: args.tenantId, kind: TEMPLATE_CATALOG_KIND, match: { slug: args.key } });
 }

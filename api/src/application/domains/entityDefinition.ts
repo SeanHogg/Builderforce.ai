@@ -33,7 +33,7 @@
  * than being left to each caller to remember: a redacted column is absent from
  * the projection, so no read path can select it and no write path can set it.
  */
-import { getTableColumns, getTableName, type Column } from 'drizzle-orm';
+import { getTableColumns, getTableName, type Column, type SQL } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import { DOMAINS } from '../kernel/ObjectRegistry';
 
@@ -164,6 +164,14 @@ export type EntitySpec = {
    * platform-wide version of the same idea; this is the per-entity one.
    */
   guarded?: string[];
+  /**
+   * A predicate every generic READ (list and get) ANDs in, for a table whose rows
+   * are not all the tenant's to browse. `catalog_items` is the case that forced it:
+   * a 'private' canvas template is its author's alone (migration 1263), and the
+   * template use case (`templates/catalogTemplateStore.ts`) is the one path that
+   * knows who the author is — so the generic reader never returns those rows.
+   */
+  visibleRows?: SQL;
 };
 
 export type EntityDef = {
@@ -189,6 +197,8 @@ export type EntityDef = {
   /** Physical names of the columns redaction removed, so the API can say a field
    *  exists and is withheld rather than pretend the table is narrower than it is. */
   redacted: string[];
+  /** See `EntitySpec.visibleRows`; null = every tenant row is browsable. */
+  visibleRows: SQL | null;
 };
 
 /**
@@ -296,6 +306,7 @@ export function defineDomainEntities(
       readable: spec.restricted !== true && (tenantKey !== null || spec.global === true),
       registers: spec.registers === true,
       redacted,
+      visibleRows: spec.visibleRows ?? null,
     };
   });
 }

@@ -25,10 +25,9 @@ import {
   artifactAssignments,
   executions,
   ideAgents,
-  projectAgents,
 } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requestActor } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import {
   PUBLIC_LIST_CACHE_KEY,
@@ -51,12 +50,8 @@ import {
 } from '../../application/marketplace/agentCommerce';
 import { demoTenantAgent, publicAgentScope } from '../../application/marketplace/publicAgentScope';
 import { BUILTIN_AGENT_CATALOGUE } from '../../application/agent/provisionBuiltinAgents';
-import {
-  ensureAgentIdentity,
-  provisionHiredAgent,
-  removeAgentIdentities,
-  revokeHiredAgent,
-} from '../../application/workforce/hiredAgents';
+import { provisionHiredAgent, revokeHiredAgent } from '../../application/workforce/hiredAgents';
+import { AgentAssignmentService } from '../../application/agent/AgentAssignmentService';
 import type { Env, HonoEnv } from '../../env';
 import { parseBody, z, zNonEmptyString } from './requestBody';
 
@@ -278,7 +273,6 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   router.post('/agents/:id/hire', authMiddleware, async (c) => {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
-    const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');
     const [agent] = await db
       .select({
@@ -341,19 +335,22 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
           eq(ideAgents.tenantId, Number(agent.tenant_id)),
         ));
     // PROVISION — the step that makes a hire more than a counter. Creates the
-    // canonical `project_agents` identity in the HIRING workspace, which is what
+    // agent's workspace identity (`agent_assignments`, scope 'workspace') in the HIRING workspace, which is what
     // the assignee picker, the per-agent capability panel and swimlane dispatch
     // address the agent by. Run on every hire, not only a fresh one, so a hire
     // that predates this route (or one whose identity was cleaned up) is repaired
     // the next time the buyer presses Hire.
-    const { projectAgentId } = await provisionHiredAgent(db, {
+    const { agentHandle } = await provisionHiredAgent(db, {
       tenantId,
       agentId: id,
       agentName: String(agent.name ?? id),
-      actorUserId: userId ?? null,
+      // A machine/agent principal's subject is not a users.id — record no adder.
+      actorUserId: requestActor(c).actorUserId ?? null,
     });
     await invalidateHireCaches(c.env as Env, tenantId, { publicListing: changed.length > 0 });
-    return c.json({ ...mapAgentRow(row), project_agent_id: projectAgentId });
+    // `project_agent_id` is the pre-1265 name of the same handle — shipped clients (the
+    // VSIX webview) still read it.
+    return c.json({ ...mapAgentRow(row), agent_handle: agentHandle, project_agent_id: agentHandle });
   });
 
   // POST /agents/:id/checkout — start a hosted payment for a PRICED agent.
@@ -586,21 +583,20 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     if (rows.length === 0) return c.json({ error: 'Agent not found' }, 404);
 
     // Same teardown an unhire performs, from the one definition of it.
-    await removeAgentIdentities(db, { tenantId, agentId: id });
+    await new AgentAssignmentService(db, c.env as Env).removeIdentities(tenantId, { agentRef: id });
     await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json({ deleted: true });
   });
 
   // ----- Canonical agent identity (for per-agent capability assignment) ----
-  // Ensures the tenant-wide, project-less project_agents row for a cloud agent
-  // and returns its numeric id. Per-agent skills/personas are assigned against
-  // it via artifact_assignments scope='agent' + scope_id = projectAgentId, so
-  // they follow the agent everywhere (IDE / Workflow / on-prem / cloud) rather
-  // than being tied to any one project (swimlane).
+  // Ensures the agent's workspace identity (`agent_assignments`, scope 'workspace')
+  // and returns its integer handle. Per-agent skills/personas are assigned against
+  // it via artifact_assignments scope='agent' + scope_id = agentHandle, so they
+  // follow the agent everywhere (IDE / Workflow / on-prem / cloud) rather than
+  // being tied to any one project.
   router.post('/agents/:id/bridge', authMiddleware, async (c) => {
     const db = requestDb(c);
     const tenantId = c.get('tenantId') as number;
-    const userId = c.get('userId') as string;
     const id = c.req.param('id');
 
     // OWNED agents only. A HIRED agent gets the same identity, but from the hire
@@ -611,14 +607,14 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       .where(and(eq(ideAgents.id, id), eq(ideAgents.tenantId, tenantId)));
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
 
-    // The upsert used to be spelled out here and nowhere else; it now lives in
-    // `hiredAgents.ensureAgentIdentity` so this route and the hire path create
-    // the SAME canonical row rather than two subtly different ones.
-    const projectAgentId = await ensureAgentIdentity(db, {
-      tenantId, agentId: id, name: agent.name, addedBy: userId,
+    // `AgentAssignmentService.ensureIdentity` is shared with the hire path, so both
+    // create the SAME canonical row rather than two subtly different ones.
+    const agentHandle = await new AgentAssignmentService(db, c.env as Env).ensureIdentity(tenantId, {
+      agentRef: id, name: agent.name, addedBy: requestActor(c).actorUserId ?? null,
     });
-    if (projectAgentId == null) throw new Error('project_agents identity upsert returned no row');
-    return c.json({ projectAgentId });
+    // `projectAgentId` is the pre-1265 key for the same handle — the shipped VSIX webview
+    // reads it, so it stays alongside the new name.
+    return c.json({ agentHandle, projectAgentId: agentHandle });
   });
 
   // ----- Owner-only: agent performance + buyer feedback (gap [1247]) -------

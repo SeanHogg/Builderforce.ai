@@ -3,7 +3,7 @@ import { render, fireEvent, waitFor } from '@testing-library/react';
 import { AgentCapabilitiesContent } from './AgentCapabilitiesContent';
 import * as api from '@/lib/api';
 import * as builderforceApi from '@/lib/builderforceApi';
-import type { ProjectAgent } from '@/lib/builderforceApi';
+import type { AgentAssignment } from '@/lib/builderforceApi';
 
 vi.mock('@/lib/api');
 vi.mock('@/lib/builderforceApi');
@@ -20,12 +20,15 @@ vi.mock('./ObservabilityContent', () => ({
   ObservabilityContent: () => <div data-testid="observability" />,
 }));
 
-const agent: ProjectAgent = {
-  id: 7,
-  tenantId: 1,
-  projectId: 1,
+const agent: AgentAssignment = {
+  id: '5b2f6a3e-0000-4000-8000-000000000007',
+  agentHandle: 7,
   agentKind: 'registered',
   agentRef: '42',
+  scope: 'project',
+  scopeId: '1',
+  projectId: 1,
+  executionScope: 'project',
   name: 'Reviewer Bot',
   role: 'default',
   governance: null,
@@ -41,7 +44,7 @@ describe('AgentCapabilitiesContent', () => {
     vi.spyOn(api, 'listMyAgents').mockResolvedValue([]);
     vi.spyOn(api, 'listPurchasedAgents').mockResolvedValue([]);
     vi.spyOn(builderforceApi.registeredAgents, 'list').mockResolvedValue([]);
-    vi.spyOn(builderforceApi.projectAgents, 'list').mockResolvedValue([agent]);
+    vi.spyOn(builderforceApi.agentAssignmentsApi, 'listForProject').mockResolvedValue([agent]);
   });
 
   it('lists project agents and switches capability scope from project to agent', async () => {
@@ -51,7 +54,7 @@ describe('AgentCapabilitiesContent', () => {
     await waitFor(() => getByRole('button', { name: 'Reviewer Bot' }));
     expect(getByTestId('capabilities').textContent).toBe('project:1');
 
-    // Selecting the agent chip scopes capabilities to project_agents.id.
+    // Selecting the agent chip scopes capabilities to the assignment's integer handle.
     fireEvent.click(getByRole('button', { name: 'Reviewer Bot' }));
     await waitFor(() => expect(getByTestId('capabilities').textContent).toBe('agent:7'));
   });

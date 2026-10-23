@@ -100,9 +100,16 @@ export function describeClaimBatchFailure(
   planned: readonly PlannedClaimWrite[],
 ): Record<string, unknown> {
   const { code, constraint } = pgFailureDetail(error);
-  const index = constraint
-    ? planned.findIndex((write) => constraint.toLowerCase().includes(write.table.toLowerCase()))
-    : -1;
+  // The LONGEST table name the constraint contains wins: `creation_session_objects_pkey`
+  // also contains `objects` (the board's registry row is in the same batch since 1264),
+  // and a first-match would send the reader to the wrong statement.
+  let index = -1;
+  if (constraint) {
+    const lowered = constraint.toLowerCase();
+    planned.forEach((write, at) => {
+      if (lowered.includes(write.table.toLowerCase()) && (index < 0 || write.table.length > planned[index]!.table.length)) index = at;
+    });
+  }
   return {
     pgCode: code,
     constraint,

@@ -4,7 +4,7 @@
  *
  * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────────
  * A canvas is tenant-scoped by construction (`sessionAccess.ts` resolves a board
- * through a `creation_session_members` row inside a tenant), so a collaborator holds
+ * through a board membership inside a tenant — `sessionMembers.ts`), so a collaborator holds
  * a `tenant_members` row whether they were shared a link or sent an email. The LINK
  * path seats them directly — capacity check, then `seatAsCollaborator`. The EMAIL
  * path did not: it relied entirely on the companion `kind: 'tenant'` invitation that

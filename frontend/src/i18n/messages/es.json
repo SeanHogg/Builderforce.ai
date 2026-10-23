@@ -3030,6 +3030,12 @@
       },
       "target": "objetivo {d}",
       "noTarget": "sin fecha objetivo",
+      "released": "publicada el {d}",
+      "releasedOnTime": "publicada el {d} · a tiempo",
+      "releasedLate": "publicada el {d} · {n, plural, one {# día de retraso} other {# días de retraso}}",
+      "releaseOnTime": "Tasa de lanzamientos a tiempo",
+      "releaseOnTimeSub": "{onTime} de {measured} publicadas en la fecha objetivo",
+      "releaseOnTimeNone": "aún no hay lanzamientos publicados con fecha objetivo",
       "forecast": "Finalización prevista",
       "forecastBand": "{o} – {p}",
       "forecastNone": "se necesita rendimiento para prever",
@@ -33043,7 +33049,11 @@
       "loadFailed": "No se pudo cargar.",
       "deleteFailed": "Error al eliminar.",
       "saveFailed": "Error al guardar (se requiere el rol de gestor para hacer cambios).",
-      "required": "{field} es obligatorio"
+      "required": "{field} es obligatorio",
+      "release": {
+        "targetDate": "Fecha objetivo",
+        "releasedAt": "Publicada"
+      }
     }
   },
   "mcpServers": {

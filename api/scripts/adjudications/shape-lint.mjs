@@ -197,12 +197,14 @@ export default {
       'anything.',
 
   "creation_session_members":
-      'realtime PRESENCE, not membership. `viewport`, `cursor`, `selection`, `typing` and ' +
-      '`followingUserId` are written many times a second and are meaningless the moment the ' +
-      'socket drops; `lastSeenRevision` is the replay cursor above. `memberships` answers ' +
-      '"may this principal act on this object", which is a durable authorisation fact. ' +
-      'Putting a cursor position on the kernel membership row would make every permission ' +
-      'read a write target.',
+      'realtime PRESENCE, not membership — since migration 1264 it is not read for access ' +
+      'at all: a board role is a kernel `memberships` row on the board registry object. ' +
+      'What this table still carries is `viewport`, `cursor`, `selection`, `typing` and ' +
+      '`followingUserId`, written on every presence tick and meaningless once the socket ' +
+      'drops, plus `lastSeenRevision`, the replay cursor above. Its legacy access columns ' +
+      'stay only for the expand/contract deploy window; the held contract migration 1270 ' +
+      'renames it to `creation_session_presence` (no longer a shape match) and drops them, ' +
+      'and this entry goes with it.',
 
   "cron_jobs":
       'a SCHEDULE, not an execution. `schedule`, `enabled` and `nextRunAt` describe work that ' +

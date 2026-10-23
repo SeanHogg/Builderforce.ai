@@ -564,17 +564,59 @@ created_by VARCHAR(36)
 created_at TIMESTAMPTZ
 ```
 
-### `creation_session_members`
+### Board members — kernel `memberships` (migrations 1264 → 1270)
+
+A board's members are **kernel relations of the board's registry object**, not a canvas
+table. Every board has one `objects` row (`kind = 'creation_session'`, `ref_id` = session
+id, `domain = 'canvas'`), written in the same batch as the session row by every creator
+(`newBoardOwnerStatements` in `application/creation/sessionMembers.ts`). A member is:
+
+```text
+memberships
+  tenant_id     INTEGER               -- the BOARD's tenant (a superadmin added across tenants keeps it)
+  object_id     UUID FK objects       -- the board's registry row
+  member_kind   'user'
+  member_ref    VARCHAR               -- users.id
+  role          VARCHAR               -- viewer | commenter | editor | runner | owner
+  state         'active' | 'removed'  -- removal RETIRES the row; who was on a board is kept
+  joined_at     TIMESTAMPTZ
+  metadata      JSONB                 -- { invitedBy?, pinned?, watchState? }
+```
+
+- **The board-role gate** (`sessionAccess.ts`) reads only these rows. A role outside the
+  five above grants nothing. Read gates are cached under a per-board version token that
+  every member write bumps; editor-and-above gates read the grant fresh.
+- **Conflict policy** on (re-)seating: `keep` (a link claim never demotes),
+  `keep-higher` (an accepted or direct invitation may promote, never demote — the last
+  owner cannot lose the board that way), `set-role` (a deliberate grant). A removed member
+  who rejoins gets a fresh `joined_at` and the new `invitedBy`; their `pinned` /
+  `watchState` are kept.
+- **Generic kernel surface.** `/api/objects/:id/members` and `/shares` refuse writes to a
+  board (403 `DOMAIN_GATED_RELATION`) and list them only for a board member — enforced by
+  the registry port. Board membership and share links are managed by the canvas routes.
+- **Shares and invitations** were already kernel: invite links are `share_links` rows
+  and email invitations `invitations` rows (kind `session`) on the same object.
+
+### `creation_session_presence` (canvas-only)
+
+Realtime presence, deliberately NOT on the kernel membership row (it is rewritten every
+presence tick; the row every permission check reads must not be a write target):
 
 ```text
 session_id UUID FK creation_sessions ON DELETE CASCADE
 user_id VARCHAR(36) FK users ON DELETE CASCADE
-role VARCHAR(16)                    -- viewer | commenter | editor | runner | owner
-invited_by VARCHAR(36)
-last_seen_revision BIGINT DEFAULT 0
-joined_at TIMESTAMPTZ
+last_seen_revision BIGINT DEFAULT 0   -- unread cursor
+last_seen_at TIMESTAMPTZ              -- "active" window
+viewport JSONB, cursor JSONB NULL, selection JSONB, typing BOOLEAN, following_user_id VARCHAR(36) NULL
 PRIMARY KEY(session_id,user_id)
 ```
+
+**Expand / contract.** Migration 1264 backfills `memberships` and leaves the old
+`creation_session_members` table (with its `role`, `invited_by`, `pinned`, `watch_state`,
+`joined_at` columns) in place, so a previous Worker still serving during a deploy keeps
+working; the new Worker mirrors each settled role onto the legacy `role` column for that
+window. The held contract migration 1270 re-runs the backfill for window writes, renames
+the table to `creation_session_presence` and drops the access columns.
 
 ### `creation_session_events`
 

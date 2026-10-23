@@ -206,8 +206,11 @@ export const TRACKER_CONFIGS: Record<string, TrackerSurfaceProps> = {
     fields: [
       { key: 'name', label: 'Release', required: true },
       { key: 'version', label: 'Version' },
-      { key: 'releaseDate', label: 'Date', type: 'date' },
+      // Plan vs actual (1266): the target is the plan; "Released" is stamped by the
+      // server when the status moves to released (editable only to back-date it).
+      { key: 'targetDate', label: 'Target date', labelKey: 'governance.tracker.release.targetDate', type: 'date' },
       { key: 'status', label: 'Status', type: 'select', options: ['planned', 'in_progress', 'released', 'cancelled'] },
+      { key: 'releasedAt', label: 'Released', labelKey: 'governance.tracker.release.releasedAt', type: 'date' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
   },

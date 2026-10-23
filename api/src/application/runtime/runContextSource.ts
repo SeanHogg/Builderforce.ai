@@ -29,7 +29,7 @@
  * TTL. The ticket-scoped blocks (PRD, task) are NOT cached: a PRD is rewritten by the run
  * itself, and serving a stale one would make an agent work from its own superseded draft.
  */
-import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import {
   RUN_CONTEXT_CONTRACT_VERSION,
   type RunContextBlock,
@@ -39,7 +39,6 @@ import {
   keyResults,
   objectiveLinks,
   objectives,
-  projectAgents,
   projects,
   specs,
 } from '../../infrastructure/database/schema';
@@ -53,6 +52,7 @@ import { buildProjectFactsBlock } from '../llm/projectFactsRecall';
 import { buildEvermindLessonsBlock } from '../llm/projectEvermind';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { loadProjectInTenant } from '../project/projectOwnership';
+import { AgentAssignmentService, agentAssignmentsVersion } from '../agent/AgentAssignmentService';
 
 /** Render order (ascending) — the cloud prompt's existing order, with strategy added. */
 export const RUN_CONTEXT_ORDER = {
@@ -78,8 +78,8 @@ export const RUN_CONTEXT_ORDER = {
 /**
  * The governance version token, scoped to the TENANT rather than the project.
  *
- * Deliberately coarse: a `project_agents` row with a NULL `project_id` is the agent's
- * identity-level policy and binds it on EVERY project, so a per-project token would leave
+ * Deliberately coarse: an agent's workspace-identity governance (`agent_assignments`,
+ * scope 'workspace') binds it on EVERY project, so a per-project token would leave
  * every other project serving the superseded rules until its own TTL lapsed. One token per
  * tenant makes a governance edit invalidate exactly what it can affect, and governance is
  * edited rarely enough that the extra recomputation is free.
@@ -92,7 +92,8 @@ export function projectGovernanceVersionKey(tenantId: number): string {
  * Invalidate the cached governance block for a project.
  *
  * Called by every route that edits a rule an agent run must honor —
- * `projects.governance` and `project_agents.governance` — so a rules change binds the
+ * `projects.governance` (per-agent governance on `agent_assignments` is covered by the
+ * assignment token {@link loadGovernanceContext} folds into its key) — so a rules change binds the
  * VERY NEXT run rather than the next run after a TTL. (An architecture-spec edit is
  * bounded by the TTL below instead: `specs` is written from a dozen places, and a token
  * only one of them bumps would be worse than an honest 60s ceiling.)
@@ -123,10 +124,17 @@ export async function loadGovernanceContext(
   projectId: number,
   agentRef?: string,
 ): Promise<string> {
-  const version = await getCacheVersion(env, projectGovernanceVersionKey(tenantId)).catch(() => '0');
+  const [version, assignmentsVersion] = await Promise.all([
+    getCacheVersion(env, projectGovernanceVersionKey(tenantId)).catch(() => '0'),
+    agentAssignmentsVersion(env, tenantId).catch((error: unknown) => {
+      // A missing token only costs the cache entry its assignment-edit invalidation; the TTL bounds it.
+      reportCaughtError(error, { source: 'application/runtime/runContextSource.ts', operation: 'loadGovernanceContext.assignmentsVersion', context: { details: { tenantId } } });
+      return '0';
+    }),
+  ]);
   return getOrSetCached(
     env,
-    `run-context:governance:${tenantId}:${projectId}:${agentRef ?? '-'}:${version}`,
+    `run-context:governance:${tenantId}:${projectId}:${agentRef ?? '-'}:${version}:${assignmentsVersion}`,
     async () => {
       const parts: string[] = [];
       try {
@@ -146,20 +154,16 @@ export async function loadGovernanceContext(
       } catch (error) {
         reportCaughtError(error, { source: 'application/runtime/runContextSource.ts', operation: 'loadGovernanceContext', context: { logMessage: '[run-context] project governance load failed', details: { tenantId, projectId, error } } });
       }
-      // Per-agent governance (project_agents.governance) — the rules configured for THIS
-      // agent specifically. Prefer the project-specific attachment, else the canonical
-      // project-less row.
+      // Per-agent governance — the rules configured for THIS agent specifically. Prefer
+      // its project staffing row, else its workspace identity.
       if (agentRef) {
         try {
-          const rows = await db
-            .select({ governance: projectAgents.governance, projectId: projectAgents.projectId })
-            .from(projectAgents)
-            .where(and(
-              eq(projectAgents.tenantId, tenantId),
-              eq(projectAgents.agentRef, agentRef),
-              or(isNull(projectAgents.projectId), eq(projectAgents.projectId, projectId)),
-            ));
-          const chosen = rows.find((r) => r.projectId === projectId) ?? rows.find((r) => r.projectId == null);
+          const assignments = new AgentAssignmentService(db, env);
+          const [staffing, identities] = await Promise.all([
+            assignments.listForProject(tenantId, projectId),
+            assignments.workspaceIdentities(tenantId),
+          ]);
+          const chosen = staffing.find((r) => r.agentRef === agentRef) ?? identities.find((r) => r.agentRef === agentRef);
           if (chosen?.governance?.trim()) {
             parts.push(`## Agent Rules / Governance (specific to you — must be followed)\n\n${chosen.governance.trim()}`);
           }

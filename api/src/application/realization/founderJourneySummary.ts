@@ -18,7 +18,8 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { ProofJourneySignalDto } from '@builderforce/interaction-contract';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { companies, creationSessionMembers, creationSessions, realizations } from '../../infrastructure/database/schema';
+import { companies, creationSessions, realizations } from '../../infrastructure/database/schema';
+import { boardsOfMember } from '../creation/sessionMembers';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { journeySignal } from './journeySignal';
@@ -51,8 +52,7 @@ async function loadSummary(env: Env, db: Db, scope: JourneyScope): Promise<Found
       return { stage: null, realizationId: null };
     }),
     db.select({ id: creationSessions.id }).from(creationSessions)
-      .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
-      .where(and(eq(creationSessions.tenantId, tenantId), eq(creationSessions.segmentId, segmentId), eq(creationSessions.status, 'active')))
+      .where(and(boardsOfMember(userId).isMember, eq(creationSessions.tenantId, tenantId), eq(creationSessions.segmentId, segmentId), eq(creationSessions.status, 'active')))
       .orderBy(desc(creationSessions.lastActivityAt))
       .limit(1),
   ]);

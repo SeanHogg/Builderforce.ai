@@ -72,6 +72,7 @@ import {
  */
 import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, isNull, or, sql } from 'drizzle-orm';
+import { sessionMemberCountSql } from '../../application/creation/sessionMembers';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { invalidateTenantPlan } from '../../application/tenant/tenantPlanCache';
 import { invalidateSessionVersion, revokeSessionTokens } from '../../application/auth/sessionRevocation';
@@ -983,7 +984,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         cs.last_activity_at AS "lastActivityAt",
         creator.email AS "creatorEmail",
         (SELECT COUNT(*)::int FROM creation_session_objects cso WHERE cso.session_id = cs.id) AS "objectCount",
-        (SELECT COUNT(*)::int FROM creation_session_members csm WHERE csm.session_id = cs.id) AS "memberCount",
+        ${sessionMemberCountSql(sql.raw('cs.id'), sql.raw('cs.tenant_id'))} AS "memberCount",
         COALESCE((
           SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
             'id', csi.id,

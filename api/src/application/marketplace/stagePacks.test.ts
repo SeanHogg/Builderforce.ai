@@ -197,7 +197,8 @@ describe('ensureStageToolkits', () => {
       if (!spec) continue;
       const card = stageToolkitCard(spec);
       queue.push(
-        [{ id: `sess-${i}` }],
+        // The board batch: session, registry object, owner membership, owner presence row.
+        [], [], [{ role: 'owner' }], [],
         [],
         [{ id: `sess-${i}`, title: spec.name }],
         [{ displayName: 'Ada', username: 'ada' }],

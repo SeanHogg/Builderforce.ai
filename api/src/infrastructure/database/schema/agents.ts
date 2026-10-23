@@ -36,7 +36,6 @@ import { brainChats, knowledgeDocuments } from './canvas';
 import { agentHostDirectoryStatusEnum, agentHostStatusEnum, agentTypeEnum, artifactTypeEnum, assignmentScopeEnum, executionStatusEnum, managedAgentHostRequestStatusEnum, objects, pricingModelEnum, tsvector, vector, workflowStatusEnum, workflowTypeEnum } from './kernel';
 import {
   boards,
-  projectAgents,
   projectFacts,
   projectRepositories,
   projects,
@@ -744,6 +743,11 @@ export const executionMessages = pgTable('execution_messages', {
 
 
 /**
+ * @deprecated — dropped by the held contract migration (1271). Migration 1261 folded
+ * every row into `artifact_assignments` (scope 'tenant' / 'host'); no code reads or
+ * writes this table, and the declaration stays only until the drop lands so the
+ * schema-drift reverse check holds through the deploy window.
+ *
  * Skill assignment, at either scope (migration 1108).
  *
  * Was two tables — `tenant_skill_assignments` and `agent_host_skill_assignments` —
@@ -837,13 +841,22 @@ export const artifactAssignments = pgTable('artifact_assignments', {
 
 /**
  * Canonical agent-assignment model (migration 0082). An agent is registered once
- * (tenant-scoped, identified by agentKind+agentRef — the same coordinates
- * project_agents uses) and ASSIGNED to many platform aspects from one place:
- *   scope          — project | workflow | architecture | security | swimlane | brain | global
- *   scopeId        — target id within that scope (project/workflow/swimlane id…); NULL for brain/global
+ * (tenant-scoped, identified by agentKind+agentRef) and ASSIGNED to many platform
+ * aspects from one place:
+ *   scope          — project | workflow | security | swimlane | brain | chat | global | workspace
+ *   scopeId        — target id within that scope (project/workflow/swimlane id…); NULL for brain/global/workspace
  *   executionScope — project | global (e.g. a workflow runs under a project, or tenant-wide)
- * This is the single source the surfaces read, superseding the fragmented
- * project_agents / swimlane target / assignedAgentHost notions over time.
+ * This is the single source the surfaces read. Read and write it through
+ * `application/agent/AgentAssignmentService.ts` (lane staffing through
+ * `application/swimlane/laneAgentAssignments.ts`).
+ *
+ * ── PROJECT STAFFING + THE WORKSPACE IDENTITY (migration 1265) ───────────────
+ * `project_agents` is folded in (expand); 1269 drops it (contract). A project attachment is `scope = 'project'`
+ * with the real `projectId` FK beside `scopeId`; an agent's tenant-wide identity (what a
+ * bridged/hired workforce agent is configured through) is `scope = 'workspace'`.
+ * `agentHandle` is the INTEGER id per-agent capability assignments
+ * (`artifact_assignments.scope = 'agent'`) and per-agent schedules
+ * (`cron_jobs.project_agent_id`) key on — folded rows kept their old project_agents id.
  *
  * ── THE SWIMLANE SCOPE IS NO LONGER ASPIRATIONAL (migration 1085) ───────────
  * `scope = 'swimlane'` was a documented value with zero rows while every reader of lane
@@ -882,13 +895,23 @@ export const agentAssignments = pgTable('agent_assignments', {
   model:          varchar('model', { length: 120 }),
   /** Order within a sequential stage. */
   position:       integer('position').notNull().default(0),
+  // ── PROJECT-STAFFING COLUMNS (migration 1265) ────────────────────────────
+  /** The integer handle per-agent capability assignments and schedules key on. */
+  agentHandle:    serial('agent_handle').notNull(),
+  /** The project a `scope = 'project'` row staffs — a real FK, so a project delete cascades. */
+  projectId:      integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  /** Per-agent rules bound into every run of this agent (project or workspace row). */
+  governance:     text('governance'),
+  addedBy:        varchar('added_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   // One assignment per (tenant, agent, scope, target). COALESCE collapses NULL
-  // scopeId so brain/global is unique per agent+scope. Mirrors migration 0082.
+  // scopeId so brain/global/workspace is unique per agent+scope. Mirrors migration 0082.
   uniqueIndex('uq_agent_assignments').on(t.tenantId, t.agentKind, t.agentRef, t.scope, sql`COALESCE(${t.scopeId}, '')`),
   index('idx_agent_assignments_scope').on(t.tenantId, t.scope, t.scopeId),
+  uniqueIndex('uq_agent_assignments_handle').on(t.agentHandle),
+  index('idx_agent_assignments_project').on(t.tenantId, t.projectId).where(sql`${t.projectId} IS NOT NULL`),
 ]);
 
 
@@ -1280,8 +1303,13 @@ export const cronJobs = pgTable('cron_jobs', {
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   agentHostId:      integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
   projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
-  /** Scopes the schedule to one attached agent (project_agents.id); NULL = project-wide. */
-  projectAgentId: integer('project_agent_id').references(() => projectAgents.id, { onDelete: 'cascade' }),
+  /** Scopes the schedule to one assigned agent (`agent_assignments.agent_handle`, migration
+   *  1265); NULL = project-wide. The column keeps its name — deployed hosts read
+   *  `projectAgentId` off the cron payload. Declared in the post-1269 shape: between 1265
+   *  and 1269 the database carries NO FK here (the old one targeted `project_agents`;
+   *  1269 adds this one), and `AgentAssignmentService` deletes a removed agent's
+   *  schedules itself, so nothing relies on the missing cascade. */
+  projectAgentId: integer('project_agent_id').references((): AnyPgColumn => agentAssignments.agentHandle, { onDelete: 'cascade' }),
   name:        varchar('name', { length: 255 }).notNull(),
   schedule:    varchar('schedule', { length: 255 }).notNull(),
   taskId:      integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),

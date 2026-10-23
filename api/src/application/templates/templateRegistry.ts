@@ -20,16 +20,14 @@
  * wrong. A workspace's own template beats a published one under the same key,
  * because the manifest its owner can see and edit is the one that should win.
  *
- * Reads are served through the shared read-through cache: the catalogue is hit
- * on every gallery render and every wizard open, and without it that is a table
- * scan per page view.
+ * Reads go through the ONE templates store (`catalogTemplateStore.ts`), which
+ * serves them from the shared read-through cache under version tokens every
+ * template write bumps: the catalogue is hit on every gallery render and every
+ * wizard open, and without the cache that is a table scan per page view.
  */
 
-import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { catalogItems } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
   parseTemplateManifest,
@@ -37,12 +35,14 @@ import {
   type TemplateManifest,
 } from '../../domain/template/templateManifest';
 import { BUILTIN_TEMPLATES, BUILTIN_TEMPLATE_LIST } from './defaults';
+import { listPublicTemplates, listTenantTemplates } from './catalogTemplateStore';
+import { TEMPLATE_KINDS, type StoredTemplate } from './templateKinds';
 
 /** Where a manifest came from — drives "Built-in" / "Yours" / "Marketplace". */
 export type TemplateOrigin = 'builtin' | 'tenant' | 'marketplace';
 
-/** The `catalog_items.kind` a template row carries. */
-export const TEMPLATE_CATALOG_KIND = 'template';
+/** The `catalog_items.kind` a manifest template row carries. */
+export const TEMPLATE_CATALOG_KIND = TEMPLATE_KINDS.manifest;
 
 export interface ResolvedTemplate {
   manifest: TemplateManifest;
@@ -56,23 +56,6 @@ export interface ResolvedTemplate {
   priceCents: number | null;
   currency: string | null;
   updatedAt: string | null;
-}
-
-/** `null` is the SIGNED-OUT catalogue — built-ins plus what publishers listed
- *  publicly — and it is a cache key of its own so a guest's answer is never
- *  served from (or written into) a workspace's slot. */
-const catalogCacheKey = (tenantId: number | null): string =>
-  tenantId === null ? 'templates:catalog:public' : `templates:catalog:${tenantId}`;
-
-/** Drop the cached catalogue for a workspace. Call after ANY template write.
- *  A publish changes what a SIGNED-OUT visitor sees too, so the public slot goes
- *  with it — otherwise a newly listed template stays invisible on the gallery
- *  every visitor lands on for five minutes. */
-export async function invalidateTemplateCatalog(env: Env, tenantId: number): Promise<void> {
-  await Promise.all([
-    invalidateCached(env, catalogCacheKey(tenantId)),
-    invalidateCached(env, catalogCacheKey(null)),
-  ]);
 }
 
 function builtinResolved(manifest: TemplateManifest): ResolvedTemplate {
@@ -89,8 +72,6 @@ function builtinResolved(manifest: TemplateManifest): ResolvedTemplate {
   };
 }
 
-type CatalogRow = typeof catalogItems.$inferSelect;
-
 /**
  * Turn a stored row into a resolved template, validating on READ.
  *
@@ -101,7 +82,7 @@ type CatalogRow = typeof catalogItems.$inferSelect;
  * visible and reportable, instead of rendering a step nothing knows how to
  * validate and installing whatever the person typed.
  */
-function rowToResolved(row: CatalogRow, origin: TemplateOrigin): ResolvedTemplate | null {
+function rowToResolved(row: StoredTemplate, origin: TemplateOrigin): ResolvedTemplate | null {
   try {
     return {
       manifest: withDerivedConnectSteps(parseTemplateManifest(row.body)),
@@ -112,7 +93,7 @@ function rowToResolved(row: CatalogRow, origin: TemplateOrigin): ResolvedTemplat
       version: row.version,
       priceCents: row.priceCents,
       currency: row.currency,
-      updatedAt: row.updatedAt.toISOString(),
+      updatedAt: row.updatedAt,
     };
   } catch (error) {
     reportCaughtError(error, {
@@ -124,42 +105,20 @@ function rowToResolved(row: CatalogRow, origin: TemplateOrigin): ResolvedTemplat
 }
 
 /** The workspace's own saved templates, drafts included. */
-async function loadTenantTemplates(db: Db, tenantId: number): Promise<ResolvedTemplate[]> {
-  const rows = await db
-    .select()
-    .from(catalogItems)
-    .where(and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.kind, TEMPLATE_CATALOG_KIND)))
-    .orderBy(desc(catalogItems.updatedAt));
+async function loadTenantTemplates(db: Db, env: Env | undefined, tenantId: number): Promise<ResolvedTemplate[]> {
+  const rows = await listTenantTemplates(db, env, { tenantId, kind: TEMPLATE_CATALOG_KIND });
   return rows.map((r) => rowToResolved(r, 'tenant')).filter((t): t is ResolvedTemplate => t !== null);
 }
 
 /**
- * Published marketplace templates.
- *
- * `tenantId IS NULL OR tenantId <> this workspace` is the cross-tenant read this
- * table exists to make legitimate: `catalog_items.tenant_id` is nullable
- * precisely because the public catalogue is platform-owned, and a listing marked
- * public is a listing its owner asked the world to see. The workspace's own rows
- * are excluded here so a template it published does not appear twice — it is
- * already in the tenant list, where it can be edited.
+ * Published marketplace templates — the platform-owned catalogue
+ * (`tenant_id IS NULL`, listed public and published). The workspace's own
+ * published rows are not repeated here: they are already in the tenant list,
+ * where they can be edited. A signed-out visitor reads exactly this list.
  */
-async function loadPublishedTemplates(db: Db, tenantId: number | null): Promise<ResolvedTemplate[]> {
-  const rows = await db
-    .select()
-    .from(catalogItems)
-    .where(and(
-      eq(catalogItems.kind, TEMPLATE_CATALOG_KIND),
-      eq(catalogItems.visibility, 'public'),
-      // A signed-out visitor has no workspace to widen the read for, so they see
-      // exactly the platform-owned listings.
-      tenantId === null
-        ? isNull(catalogItems.tenantId)
-        : or(isNull(catalogItems.tenantId), eq(catalogItems.tenantId, tenantId)),
-    ))
-    .orderBy(desc(catalogItems.installCount))
-    .limit(200);
+async function loadPublishedTemplates(db: Db, env: Env | undefined): Promise<ResolvedTemplate[]> {
+  const rows = await listPublicTemplates(db, env, { kind: TEMPLATE_CATALOG_KIND, scope: 'platform', limit: 200 });
   return rows
-    .filter((r) => r.tenantId !== tenantId && r.publishedAt !== null)
     .map((r) => rowToResolved(r, 'marketplace'))
     .filter((t): t is ResolvedTemplate => t !== null);
 }
@@ -184,21 +143,17 @@ export async function listTemplatesForTenant(
   tenantId: number | null,
   env?: Env,
 ): Promise<ResolvedTemplate[]> {
-  const load = async (): Promise<ResolvedTemplate[]> => {
-    // Independent reads, so they overlap rather than queue.
-    const [owned, published] = await Promise.all([
-      tenantId === null ? Promise.resolve<ResolvedTemplate[]>([]) : loadTenantTemplates(db, tenantId),
-      loadPublishedTemplates(db, tenantId),
-    ]);
-    const claimed = new Set([...BUILTIN_TEMPLATES.keys(), ...owned.map((t) => t.manifest.key)]);
-    return [
-      ...BUILTIN_TEMPLATE_LIST.map(builtinResolved),
-      ...owned,
-      ...published.filter((t) => !claimed.has(t.manifest.key)),
-    ];
-  };
-  if (!env) return load();
-  return getOrSetCached(env, catalogCacheKey(tenantId), load, { kvTtlSeconds: 300, l1TtlMs: 60_000 });
+  // Independent reads (each cached by the store), so they overlap rather than queue.
+  const [owned, published] = await Promise.all([
+    tenantId === null ? Promise.resolve<ResolvedTemplate[]>([]) : loadTenantTemplates(db, env, tenantId),
+    loadPublishedTemplates(db, env),
+  ]);
+  const claimed = new Set([...BUILTIN_TEMPLATES.keys(), ...owned.map((t) => t.manifest.key)]);
+  return [
+    ...BUILTIN_TEMPLATE_LIST.map(builtinResolved),
+    ...owned,
+    ...published.filter((t) => !claimed.has(t.manifest.key)),
+  ];
 }
 
 /**

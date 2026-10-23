@@ -29,6 +29,7 @@ import {
 } from '@builderforce/creation-canvas-contract';
 import { registerObject, findObject } from '../kernel/ObjectRegistry';
 import { creationSessionObjects, creationSessions, freelancerProfiles } from '../../infrastructure/database/schema';
+import { newBoardOwnerBatch } from '../creation/sessionMembers';
 import { TenantRepository } from '../../infrastructure/repositories/TenantRepository';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -77,14 +78,21 @@ async function ensureCareerSession(db: Db, tenantId: number, userId: string): Pr
     .limit(1);
   if (existing) return existing.id;
 
-  const [created] = await db.insert(creationSessions).values({
-    tenantId,
-    title: CAREER_SESSION_TITLE,
-    createdBy: userId,
-    updatedBy: userId,
-    canvasRevision: 1,
-  }).returning({ id: creationSessions.id });
-  return created!.id;
+  // The board, its registry object and its owner in ONE batch, so the person whose
+  // career board this is can always open it.
+  const sessionId = crypto.randomUUID();
+  await db.batch([
+    db.insert(creationSessions).values({
+      id: sessionId,
+      tenantId,
+      title: CAREER_SESSION_TITLE,
+      createdBy: userId,
+      updatedBy: userId,
+      canvasRevision: 1,
+    }),
+    ...newBoardOwnerBatch(db, { sessionId, tenantId, title: CAREER_SESSION_TITLE, ownerUserId: userId }),
+  ] as unknown as Parameters<typeof db.batch>[0]);
+  return sessionId;
 }
 
 /**

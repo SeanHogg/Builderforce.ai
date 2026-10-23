@@ -70,7 +70,6 @@ presentation/routes/pmoRoutes.ts
 presentation/routes/pokerRetroRoutes.ts
 presentation/routes/prdRoutes.ts
 presentation/routes/productRoutes.ts
-presentation/routes/projectAgentRoutes.ts
 presentation/routes/projectRoutes.ts
 presentation/routes/promptAnalyzerRoutes.ts
 presentation/routes/promptLibraryRoutes.ts

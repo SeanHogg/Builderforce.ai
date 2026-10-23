@@ -1511,20 +1511,48 @@ export const creationSessionConnections = pgTable('creation_session_connections'
   createdAt:      timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({ bySession: index('idx_creation_connections_session').on(t.sessionId, t.createdAt) }));
 
-export const creationSessionMembers = pgTable('creation_session_members', {
+/**
+ * Realtime PRESENCE on a board (migrations 1264 → 1270).
+ *
+ * WHO is on a board, and with what role, is not read from here: a board's members are
+ * kernel `memberships` rows on the board's registry object, read and written only
+ * through `application/creation/sessionMembers.ts` (backfilled by 1264). What this
+ * Worker uses this table for is the half that is genuinely canvas-only: `viewport`,
+ * `cursor`, `selection`, `typing` and `followingUserId` are rewritten on every presence
+ * tick and are meaningless once the socket drops — putting them on the kernel
+ * membership row would make every permission read a write target — and
+ * `lastSeenRevision` is the replay cursor behind the board's unread flag.
+ *
+ * EXPAND / CONTRACT. The table keeps its old name and its old access columns until
+ * the held contract migration 1270 renames it to `creation_session_presence` and drops
+ * them, so a previous-Worker isolate still serving during a deploy keeps working.
+ * The columns marked WINDOW-ONLY are never read by this Worker; `role` is kept truthful
+ * by `mirrorLegacyRoleStatement` (`sessionPresenceStore.ts`). Every one of them has a
+ * default, so a presence insert satisfies the old NOT NULLs. The edits to make when
+ * 1270 lands are in `held-migrations/1270_drizzle.patch.md`.
+ *
+ * A member who has never ticked may have no row; readers LEFT JOIN it and default
+ * every column. Removing a member deletes their row.
+ */
+export const creationSessionPresence = pgTable('creation_session_members', {
   sessionId:        uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
   userId:           varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  role:             varchar('role', { length: 16 }).notNull().default('viewer'),
-  invitedBy:        varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   lastSeenRevision: bigint('last_seen_revision', { mode: 'number' }).notNull().default(0),
   lastSeenAt:       timestamp('last_seen_at').notNull().defaultNow(),
   viewport:         jsonb('viewport').notNull().default(sql`'{"x":0,"y":0,"zoom":1}'::jsonb`),
   cursor:           jsonb('cursor'),
   selection:        jsonb('selection').notNull().default(sql`'[]'::jsonb`),
   typing:           boolean('typing').notNull().default(false),
-  pinned:           boolean('pinned').notNull().default(false),
-  watchState:       varchar('watch_state', { length: 24 }).notNull().default('mentions'),
   followingUserId:  varchar('following_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** WINDOW-ONLY (dropped by 1270). Mirrored from the kernel membership; never read. */
+  role:             varchar('role', { length: 16 }).notNull().default('viewer'),
+  /** WINDOW-ONLY (dropped by 1270). The inviter now lives in `memberships.metadata`. */
+  invitedBy:        varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** WINDOW-ONLY (dropped by 1270). Now `memberships.metadata.pinned`. */
+  pinned:           boolean('pinned').notNull().default(false),
+  /** WINDOW-ONLY (dropped by 1270). Now `memberships.metadata.watchState`. */
+  watchState:       varchar('watch_state', { length: 24 }).notNull().default('mentions'),
+  /** WINDOW-ONLY (dropped by 1270). Now `memberships.joined_at`. */
   joinedAt:         timestamp('joined_at').notNull().defaultNow(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.sessionId, t.userId] }),
@@ -1651,8 +1679,13 @@ export const creationSessionProjectLinks = pgTable('creation_session_project_lin
 export const SESSION_PROJECT_LINK_REFERENCE = 'reference';
 export const SESSION_PROJECT_LINK_APP = 'app';
 
-/** Tenant-authored reusable Session graphs. Built-in Marketplace packs remain
- * code-signed catalog entries; private/tenant variants persist here. */
+/**
+ * @deprecated — dropped by 1267 (held until the catalog_items Worker is live).
+ * Migration 1263 copied every row into `catalog_items` (kind 'canvas_template'); app code
+ * MUST NOT read or write this table — use `application/templates/catalogTemplateStore.ts`.
+ * Declared only so the schema-drift guard's reverse check holds during the
+ * expand/contract window. Delete with 1267 (see held-migrations/1267_drizzle.patch.md).
+ */
 export const creationSessionTemplates = pgTable('creation_session_templates', {
   id:                   uuid('id').primaryKey().defaultRandom(),
   tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),

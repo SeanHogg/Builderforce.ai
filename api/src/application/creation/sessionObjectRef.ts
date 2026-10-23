@@ -18,9 +18,12 @@
  * path quietly mutating the database.
  */
 
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { findObject, registerObject, type ObjectRef } from '../kernel/ObjectRegistry';
+import { objects } from '../../infrastructure/database/schema';
+import { findObject, invalidateObject, registerObject, type ObjectRef } from '../kernel/ObjectRegistry';
+import { SESSION_OBJECT_KIND, sessionMembersChanged, type SessionKey } from './sessionMembers';
 
 /** The three fields of a board any registry write needs. Deliberately not the whole row. */
 export type SessionRef = { id: string; tenantId: number; title: string };
@@ -28,7 +31,7 @@ export type SessionRef = { id: string; tenantId: number; title: string };
 export async function ensureSessionObject(db: Db, env: Env, session: SessionRef): Promise<ObjectRef> {
   return registerObject(db, env, {
     tenantId: session.tenantId,
-    kind: 'creation_session',
+    kind: SESSION_OBJECT_KIND,
     refId: session.id,
     domain: 'canvas',
     title: session.title,
@@ -36,5 +39,19 @@ export async function ensureSessionObject(db: Db, env: Env, session: SessionRef)
 }
 
 export async function findSessionObject(db: Db, session: SessionRef): Promise<ObjectRef | null> {
-  return findObject(db, session.tenantId, 'creation_session', session.id);
+  return findObject(db, session.tenantId, SESSION_OBJECT_KIND, session.id);
+}
+
+/**
+ * Drop a board's registry entry — for a board row that is being HARD-deleted (a
+ * create race the caller lost). `objects` has no foreign key to the domain row it
+ * registers, so without this the entry, and the memberships / shares / invitations
+ * that cascade from it, would outlive the board. Soft deletes keep the entry.
+ */
+export async function deleteSessionObject(db: Db, env: Env | undefined, session: SessionKey): Promise<void> {
+  const removed = await db.delete(objects)
+    .where(and(eq(objects.tenantId, session.tenantId), eq(objects.kind, SESSION_OBJECT_KIND), eq(objects.refId, session.id)))
+    .returning({ id: objects.id });
+  await Promise.all(removed.map((row) => invalidateObject(env, session.tenantId, row.id)));
+  await sessionMembersChanged(env, session);
 }

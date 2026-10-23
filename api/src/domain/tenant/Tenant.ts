@@ -202,7 +202,7 @@ export class Tenant {
    * different gate, and collapsing them would mean weakening the workspace one.
    * `addMember` replays the add under the person who sent the invite and requires
    * them to be an owner or manager, which is right for a workspace invite and
-   * wrong for this: board ownership is per-board (`creation_session_members.role`)
+   * wrong for this: board ownership is per-board (the board membership role)
    * and carries no workspace authority, so a developer who creates a canvas and
    * shares it produced an invitation that could never be seated. The check that
    * matters already happened — `POST /api/creation-sessions/:id/invite` requires

@@ -8,7 +8,7 @@ import { CANVAS_PRESENCE_FRAME, canvasPresenceFrame, type CanvasPresenceFrame, t
  * its realtime-editor quota — facts a reload must not lose, and facts that are still
  * true eight seconds later. The relay is EPHEMERAL: where a pointer is right now.
  * Putting a pointer on the durable channel is what made a collaborator's cursor up
- * to eight seconds stale and cost a `creation_session_members.cursor` write per tick.
+ * to eight seconds stale and cost a presence-row `cursor` write per tick.
  *
  * So this module holds only the ephemeral half — a map keyed by user id, fed by
  * relayed frames and merged over the roster the poll already returns. Nothing here

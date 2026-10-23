@@ -5,7 +5,7 @@
  * ── THE GAP THIS CLOSES ──────────────────────────────────────────────────────────
  * The product's whole differentiator is "describe your problem, watch it become real",
  * and the only two ways to show a prospect the board were a screen-share (they cannot
- * touch it) or a `creation_session_members` row (they need an account, which is the exact
+ * touch it) or a board membership (they need an account, which is the exact
  * friction a demo exists to avoid). Everything needed was already built and unwired:
  * `share_links` is the kernel's tokenised-access primitive, `GuestRoomDO` already runs
  * anonymous rooms for `/brainstorm`, and `objects` already makes `(kind, refId)` a real

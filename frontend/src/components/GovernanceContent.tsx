@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { fetchProject, updateProject } from '@/lib/api';
-import { projectAgents, type ProjectAgent } from '@/lib/builderforceApi';
+import { agentAssignmentsApi, type AgentAssignment } from '@/lib/builderforceApi';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 export interface GovernanceContentProps {
   projectId: number;
   /** When set, governance is read/written on this agent instead of the project. */
-  agentAssignment?: ProjectAgent;
+  agentAssignment?: AgentAssignment;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -55,7 +55,7 @@ export function GovernanceContent({ projectId, agentAssignment, className, style
     setError(null);
     try {
       if (agentAssignment) {
-        await projectAgents.updateGovernance(agentAssignment.id, draft);
+        await agentAssignmentsApi.updateGovernance(agentAssignment.id, draft);
       } else {
         await updateProject(projectId, { governance: draft });
       }

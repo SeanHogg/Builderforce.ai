@@ -57,7 +57,9 @@ export async function inviteChatAgent(
 export async function removeChatAgent(deps: ChatTicketDeps, tenantId: number, chatId: number, userId: string | null, assignmentId: string) {
   const chat = await accessibleChat(deps.db, chatId, tenantId, userId);
   if (!chat) return { error: 'Chat not found' as const };
-  const ok = await deps.assignments.unassign(tenantId, assignmentId);
+  // Only an invite INTO THIS CHAT: an assignment id from another chat (or a project /
+  // lane assignment) must not be removable through a chat the caller can open.
+  const ok = await deps.assignments.unassign(tenantId, assignmentId, { scope: CHAT_SCOPE, scopeId: String(chatId) });
   if (ok) await bumpChatStructure(chatId, deps.env);
   return { removed: ok };
 }

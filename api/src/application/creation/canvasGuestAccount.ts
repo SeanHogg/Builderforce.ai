@@ -4,7 +4,7 @@
  *
  * ── WHY AN ACCOUNT AT ALL, FOR SOMEBODY WHO REFUSED ONE ──────────────────────────
  * Because a durable canvas is tenant-scoped by construction. `sessionAccess.ts`
- * resolves a board through a `creation_session_members` row, presence writes a cursor
+ * resolves a board through a kernel board membership, presence writes a cursor
  * against a user id, comments carry an author, and the realtime relay stamps a
  * principal onto every frame. A person with no identity can be shown a board and can
  * do nothing on it, which is not what "join" means.

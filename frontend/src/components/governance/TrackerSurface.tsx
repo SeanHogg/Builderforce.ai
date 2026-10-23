@@ -17,7 +17,11 @@ import { segmentTrackerClient, type TrackerRow } from '@/lib/builderforceApi';
 
 export interface TrackerField {
   key: string;
+  /** English literal shown when there is no `labelKey`. */
   label: string;
+  /** Full next-intl key for the label; wins over `label` when set. Field labels
+   *  are migrating from literals to keys one tracker at a time. */
+  labelKey?: string;
   type?: 'text' | 'textarea' | 'number' | 'bool' | 'date' | 'select';
   options?: string[];
   required?: boolean;
@@ -70,6 +74,7 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction }: T
   // detail action can live in whatever namespace owns that surface.
   const tRoot = useTranslations();
   const api = useMemo(() => segmentTrackerClient(apiBase, { listKey }), [apiBase, listKey]);
+  const fieldLabel = (f: TrackerField): string => (f.labelKey ? tRoot(f.labelKey) : f.label);
   const listFields = fields.filter((f) => f.inList !== false && f.type !== 'textarea').slice(0, 5);
 
   const [rows, setRows] = useState<TrackerRow[]>([]);
@@ -102,7 +107,7 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction }: T
     if (!form) return;
     for (const f of fields) {
       if (f.required && (form[f.key] === '' || form[f.key] == null)) {
-        setError(tTracker('required', { field: f.label }));
+        setError(tTracker('required', { field: fieldLabel(f) }));
         return;
       }
     }
@@ -149,7 +154,7 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction }: T
           <div style={{ display: 'grid', gap: 10, gridTemplateColumns: '1fr 1fr' }}>
             {fields.map((f) => (
               <label key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{f.label}{f.required ? ' *' : ''}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{fieldLabel(f)}{f.required ? ' *' : ''}</span>
                 <FieldInput field={f} value={form[f.key]} onChange={(v) => setForm({ ...form, [f.key]: v })} />
               </label>
             ))}
@@ -165,7 +170,7 @@ export function TrackerSurface({ title, apiBase, listKey, fields, rowAction }: T
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr>
-              {listFields.map((f) => <th key={f.key} style={th}>{f.label}</th>)}
+              {listFields.map((f) => <th key={f.key} style={th}>{fieldLabel(f)}</th>)}
               <th style={th} />
             </tr>
           </thead>
@@ -209,7 +214,10 @@ function FieldInput({ field, value, onChange }: { field: TrackerField; value: un
     );
   }
   const type = field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text';
-  return <input {...common} type={type} value={String(value ?? '')} onChange={(e) => onChange(field.type === 'number' ? Number(e.target.value) : e.target.value)} />;
+  // A date column comes back as a full ISO timestamp; `<input type="date">` only
+  // shows a bare YYYY-MM-DD, so an edit form would otherwise open blank.
+  const shown = field.type === 'date' ? String(value ?? '').slice(0, 10) : String(value ?? '');
+  return <input {...common} type={type} value={shown} onChange={(e) => onChange(field.type === 'number' ? Number(e.target.value) : e.target.value)} />;
 }
 
 const btn: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };

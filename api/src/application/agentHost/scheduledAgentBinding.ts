@@ -5,9 +5,10 @@
  * they agreed:
  *
  *  1. `cron_jobs.agent_host_id` — the MACHINE the job executes on. Required.
- *  2. `project_agents` — an agent ATTACHED to a project (identity row + attachment rows).
- *  3. `cron_jobs.project_agent_id` — "run this schedule AS that attached agent";
- *     NULL means project-wide.
+ *  2. `agent_assignments` (scope 'project' / 'workspace') — an agent STAFFED on a project,
+ *     or the agent's workspace identity.
+ *  3. `cron_jobs.project_agent_id` — "run this schedule AS that agent", naming the
+ *     assignment's integer `agent_handle`; NULL means project-wide.
  *
  * Because the three were decoupled, a cron job could be created naming a project agent
  * attached to a DIFFERENT project than the job's own `project_id`, or attached to a
@@ -20,21 +21,20 @@
  * coherent, so the create path can REFUSE an incoherent one instead of persisting it and
  * the execution path can resolve the same answer without re-deriving the rule.
  *
- * It deliberately does NOT merge the tables. `project_agents` carries two different
- * things under one primary key — an agent IDENTITY row (`project_id IS NULL`) and its
- * per-project ATTACHMENT rows — and only the second is an assignment. Folding it into
- * `agent_assignments` (as lane staffing was folded by migration 1085) means splitting
- * that identity out first and re-keying `cron_jobs.project_agent_id` from an integer FK
- * to a uuid one. That is a separate migration with its own blast radius; what it would
- * BUY is exactly the coherence this module now enforces directly.
+ * Migration 1265 folded `project_agents` into `agent_assignments` (keeping each old id as
+ * the row's `agent_handle`, so `cron_jobs.project_agent_id` kept pointing at the same
+ * agent). The coherence rules below are unchanged by that: a project row must name the
+ * schedule's project; a workspace identity is the same agent, not pinned to any project.
  */
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHostProjects, projectAgents } from '../../infrastructure/database/schema';
+import { agentHostProjects } from '../../infrastructure/database/schema';
+import { AgentAssignmentService } from '../agent/AgentAssignmentService';
+import { CONFIGURABLE_SCOPES } from '../agent/agentAssignmentModel';
 
 /** Why a (host, project, project-agent) triple was refused. */
 export type ScheduledAgentProblem =
-  /** The named `project_agents` row does not exist in this tenant. */
+  /** The named agent assignment (by handle) does not exist in this tenant. */
   | 'agent_not_found'
   /** The agent is attached to a different project than the schedule's own. */
   | 'agent_project_mismatch'
@@ -112,19 +112,12 @@ export async function resolveScheduledAgentBinding(
     );
   }
 
-  // 4. THE AGENT ↔ PROJECT ATTACHMENT. An IDENTITY row (`project_id IS NULL`) is accepted
+  // 4. THE AGENT ↔ PROJECT STAFFING. A workspace IDENTITY row (no project) is accepted
   //    for the same agent — it is the same agent, simply not pinned to a project — which
-  //    is what keeps a tenant-level agent usable on a project schedule.
-  const [row] = await db
-    .select({
-      id: projectAgents.id,
-      projectId: projectAgents.projectId,
-      agentKind: projectAgents.agentKind,
-      agentRef: projectAgents.agentRef,
-    })
-    .from(projectAgents)
-    .where(and(eq(projectAgents.tenantId, args.tenantId), eq(projectAgents.id, args.projectAgentId)))
-    .limit(1);
+  //    is what keeps a tenant-level agent usable on a project schedule. Any other scope
+  //    (a lane, a chat invite) is not an agent a schedule can run as.
+  const found = await new AgentAssignmentService(db).find(args.tenantId, String(args.projectAgentId));
+  const row = found && CONFIGURABLE_SCOPES.includes(found.scope) ? found : null;
   if (!row) {
     return refuse('agent_not_found', `No attached agent ${args.projectAgentId} exists in this workspace.`);
   }
@@ -135,11 +128,5 @@ export async function resolveScheduledAgentBinding(
     );
   }
 
-  return { ok: true, projectAgentId: row.id, agentKind: row.agentKind, agentRef: row.agentRef };
+  return { ok: true, projectAgentId: row.agentHandle, agentKind: row.agentKind, agentRef: row.agentRef };
 }
-
-/**
- * The attached agents a schedule on this (host, project) may legitimately name — the set
- * a picker should offer, so an operator cannot choose an option the reconciliation above
- * would then refuse.
- */

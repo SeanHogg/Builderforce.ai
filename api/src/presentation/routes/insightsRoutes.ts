@@ -77,6 +77,7 @@ export {
 import {
   financeVersionKey, allocationVersionKey, qualityVersionKey,
   peopleVersionKey, aiProgramVersionKey, rdFinancialsVersionKey, prodIncidentVersionKeys,
+  deliveryVersionKey,
 } from '../../application/insights/versionKeys';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
 
@@ -223,7 +224,10 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const scopeId = c.req.query('id');
     if (!scopeKind || !scopeId) return c.json({ error: 'scope (initiative|project|release|sprint) and id are required' }, 400);
 
-    const key = `insights:deliv:t:${tenantId}:s:${scopeKind}:id:${scopeId}`;
+    // Release writes bump the delivery version token (releasesRoutes), so a release
+    // marked released or re-planned is graded fresh instead of after the TTL.
+    const ver = await getCacheVersion(env, deliveryVersionKey(tenantId));
+    const key = `insights:deliv:t:${tenantId}:s:${scopeKind}:id:${scopeId}:v:${ver}`;
     const result = await getOrSetCached(env, key, () => computeDeliveryInsights(db, tenantId, scopeKind, scopeId, now), SHORT_TTL);
     if (!result) return c.json({ error: 'deliverable not found' }, 404);
     return c.json(result);
@@ -243,7 +247,10 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const scopeId = c.req.query('id');
     if (!scopeKind || !scopeId) return c.json({ error: 'scope (initiative|project|release|sprint) and id are required' }, 400);
 
-    const key = `insights:deliv:t:${tenantId}:s:${scopeKind}:id:${scopeId}`;
+    // Release writes bump the delivery version token (releasesRoutes), so a release
+    // marked released or re-planned is graded fresh instead of after the TTL.
+    const ver = await getCacheVersion(env, deliveryVersionKey(tenantId));
+    const key = `insights:deliv:t:${tenantId}:s:${scopeKind}:id:${scopeId}:v:${ver}`;
     const baseline = await getOrSetCached(env, key, () => computeDeliveryInsights(db, tenantId, scopeKind, scopeId, now), SHORT_TTL);
     if (!baseline) return c.json({ error: 'deliverable not found' }, 404);
 

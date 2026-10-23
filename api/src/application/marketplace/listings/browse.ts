@@ -180,7 +180,11 @@ export async function getPublicListing(
       .select()
       .from(catalogItems)
       .where(acrossTenants(catalogItems, 'public_catalogue',
-        eq(catalogItems.slug, slug), eq(catalogItems.visibility, 'public')))
+        eq(catalogItems.slug, slug), eq(catalogItems.visibility, 'public'),
+        // Bounded to the sellable kinds, as the feed is: `catalog_items` also holds
+        // kanban and canvas templates (1263), policy packs and presets, and a slug
+        // that happens to match one of those must never resolve as a listing.
+        inArray(catalogItems.kind, [...LISTING_KIND_IDS])))
       .limit(1);
     return row ? toView(row, row.body as ListingBody | null, false) : null;
   }, { kvTtlSeconds: LISTINGS_TTL_SECONDS });

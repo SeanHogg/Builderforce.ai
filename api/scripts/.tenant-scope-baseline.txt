@@ -20,7 +20,6 @@ application/incident/OnCallService.ts:1
 application/incident/runEscalationSweep.ts:1
 application/insights/devexInsights.ts:2
 application/kanban/attributeRunToManifest.ts:3
-application/kanban/kanbanTemplateService.ts:1
 application/kanban/ticketParticipants.ts:3
 application/kernel/InvitationService.ts:2
 application/kernel/ObjectRegistry.ts:1

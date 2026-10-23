@@ -35,6 +35,13 @@ export const MANAGED_AGENT_HOST_BASE_PATH = '/api/managed-agent-hosts';
 /** `/api/managed-claws` predates the rebrand; published billing pages still call it. */
 export const LEGACY_MANAGED_AGENT_HOST_PATHS = ['/api/managed-claws'] as const;
 
+/** The canonical agent-assignment mount (project staffing included, migration 1265). */
+export const AGENT_ASSIGNMENT_BASE_PATH = '/api/agent-assignments';
+
+/** `/api/project-agents` served project staffing before `project_agents` was folded into
+ *  `agent_assignments`; the router still accepts its `?projectId=` / numeric-id contract. */
+export const LEGACY_AGENT_ASSIGNMENT_PATHS = ['/api/project-agents'] as const;
+
 /**
  * Stamp the deprecation headers naming `canonical` as the successor path. Pass a
  * function when the alias is a single route with params, so the Link names the

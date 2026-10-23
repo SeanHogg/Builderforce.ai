@@ -5,16 +5,16 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
 import {
   acceptInvitation,
-  acceptInvitationStatement,
   findAcceptedByTokenHash,
   findByTokenHash,
-  invalidateInvitations,
   invite,
   listPending,
   revokeInvitation,
 } from '../../application/kernel/InvitationService';
 import { getObject } from '../../application/kernel/ObjectRegistry';
 import { admitToBoard } from '../../application/creation/boardAdmission';
+import { seatInvitedSessionMember } from '../../application/creation/sessionMembers';
+import { isSessionRole } from '../../application/creation/sessionAccess';
 import { isActiveTenantMember } from '../../application/tenant/tenantRoles';
 import { loadMemberSecurityDetail } from '../../application/auth/sessionDirectory';
 import { invalidateNavigationFeatures, navigationFeaturesKey, tenantSnapshotKey, TENANT_READ_TTL } from '../../application/tenant/tenantReadCache';
@@ -49,7 +49,6 @@ import { changeMemberRole } from '../../application/tenant/memberRoleChange';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   sourceControlIntegrations,
-  creationSessionMembers,
   tenantMembers,
   tenants,
   users,
@@ -200,9 +199,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       : null;
     if (!target) return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
     const sessionId = target.refId;
-    const role = ['viewer', 'commenter', 'editor', 'runner', 'owner'].includes(invitation.role)
-      ? invitation.role as 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner'
-      : null;
+    const role = isSessionRole(invitation.role) ? invitation.role : null;
     if (!role) return c.json({ error: 'Invitation role is invalid' }, 409);
     await landPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
     // Whatever the companion workspace invitation did or did not do, the redeemed
@@ -220,14 +217,16 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       email: account.email,
     });
     if (refusal) return c.json(refusal, 403);
-    await db.batch([
-      db.insert(creationSessionMembers).values({ sessionId, userId, role, invitedBy: invitation.invitedBy })
-        .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } }),
-      acceptInvitationStatement(db, { id: invitation.id, tenantId: invitation.tenantId, inviteeRef: userId }),
-    ]);
-    // The batch bypasses `acceptInvitation`, so its cache drop happens here.
-    await invalidateInvitations(c.env as Env, invitation.tenantId);
-    return c.json({ sessionId, tenantId: invitation.tenantId, role });
+    const seatedRole = await seatInvitedSessionMember(db, c.env as Env, {
+      tenantId: invitation.tenantId,
+      objectId: target.id,
+      sessionId,
+      invitationId: invitation.id,
+      userId,
+      role,
+      invitedBy: invitation.invitedBy,
+    });
+    return c.json({ sessionId, tenantId: invitation.tenantId, role: seatedRole });
   });
 
   // PATCH /api/tenants/:id/name  – WebJWT required; renames a workspace (owner/manager only)

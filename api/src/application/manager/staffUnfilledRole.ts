@@ -130,7 +130,8 @@ function hireSpecFor(roleKey: string, tenantId: number): {
  * Pin an agent to a role for a project, so resolution is deterministic from now on.
  *
  * Through `RoleAssignmentService.create`, the ONE role-assignment writer: idempotent per
- * (project, role, agent), and it ATTACHES the agent to the project (`project_agents`). The
+ * (project, role, agent), and it STAFFS the agent on the project (`agent_assignments`,
+ * scope 'project'). The
  * inline insert this replaced pinned the role but never attached the agent, so a hired
  * teammate filled the role yet was missing from the project's agent list.
  */

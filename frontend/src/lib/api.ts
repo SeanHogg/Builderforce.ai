@@ -976,15 +976,14 @@ export async function dismissTraitReinforcement(
 }
 
 /**
- * Ensure the agent's canonical (project-less) identity row and return its
- * numeric id. Per-agent skills/personas are assigned against this id with
- * artifact_assignments scope='agent', so they follow the agent everywhere.
+ * Ensure the agent's workspace identity (assignment scope 'workspace') and return its handle — per-agent
+ * skills/personas are assigned against it (artifact_assignments scope='agent') and follow the agent everywhere.
  */
 export async function ensureWorkforceAgentBridge(agentId: string): Promise<number> {
-  const r = await apiRequest<{ projectAgentId: number }>(`/api/workforce/agents/${agentId}/bridge`, {
+  const r = await apiRequest<{ agentHandle: number }>(`/api/workforce/agents/${agentId}/bridge`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: '{}',
   });
-  return r.projectAgentId;
+  return r.agentHandle;
 }

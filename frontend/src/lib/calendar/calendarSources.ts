@@ -329,14 +329,19 @@ const RELEASES_SOURCE: CalendarSourceDefinition = {
       () => releasesApi.list().then((r) => r.releases),
       { ttlMs: READ_TTL_MS, staleWhileRevalidate: true },
     );
+    // A shipped release sits on the day it actually shipped; one still in plan sits
+    // on its target date.
     return releases
-      .filter((release) => release.releaseDate)
-      .map((release) => ({
+      .flatMap((release) => {
+        const day = release.releasedAt ?? release.targetDate;
+        return day ? [{ release, day }] : [];
+      })
+      .map(({ release, day }) => ({
         id: `releases:${release.id}`,
         ref: release.id,
         sourceId: 'releases',
         subject: release.version ? `${release.name} ${release.version}` : release.name,
-        startISO: release.releaseDate!.slice(0, 10),
+        startISO: day.slice(0, 10),
         allDay: true,
         category: 'deployment',
         ...(release.notes ? { details: release.notes } : {}),

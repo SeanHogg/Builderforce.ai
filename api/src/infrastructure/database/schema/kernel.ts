@@ -1099,13 +1099,21 @@ export const snapshots = pgTable('snapshots', {
 export const catalogItems = pgTable('catalog_items', {
   id:           uuid('id').primaryKey().defaultRandom(),
   tenantId:     integer('tenant_id'),
-  /** 'template' | 'preset' | 'pack' | 'listing' | 'offering' | 'skill' | 'policy_pack'. */
+  /** 'template' | 'kanban_template' | 'canvas_template' | 'preset' | 'pack' | 'listing'
+   *  | 'offering' | 'skill' | 'policy_pack'. The three template kinds are owned by
+   *  `application/templates/catalogTemplateStore.ts` (migration 1263 folded
+   *  `kanban_templates` and `creation_session_templates` in as kinds). */
   kind:         varchar('kind', { length: 32 }).notNull(),
+  /** Segment scoping for kinds that are per segment (canvas templates); FK in 1263. */
+  segmentId:    uuid('segment_id'),
+  /** The authoring user (`users.id`); a 'private' canvas template is visible to its
+   *  author only. FK (ON DELETE SET NULL) in 1263. */
+  createdBy:    varchar('created_by', { length: 36 }),
   slug:         varchar('slug', { length: 160 }).notNull(),
   name:         varchar('name', { length: 200 }).notNull(),
   summary:      text('summary'),
   body:         jsonb('body'),
-  category:     varchar('category', { length: 64 }),
+  category:     varchar('category', { length: 80 }),  // widened 64 → 80 by 1263
   tags:         jsonb('tags'),
   version:      varchar('version', { length: 24 }).notNull().default('1.0.0'),
   /** 'private' | 'tenant' | 'public'. */
@@ -1122,6 +1130,26 @@ export const catalogItems = pgTable('catalog_items', {
 }, (t) => [
   uniqueIndex('uq_catalog_items_slug').on(t.tenantId, t.kind, t.slug),
   index('idx_catalog_items_public').on(t.kind, t.visibility, t.publishedAt),
+  index('idx_catalog_items_tenant_kind').on(t.tenantId, t.kind, t.updatedAt),
+  index('idx_catalog_items_segment').on(t.tenantId, t.segmentId, t.kind).where(sql`${t.segmentId} IS NOT NULL`),
+]);
+
+/**
+ * @deprecated — dropped by 1267 (held until the catalog_items Worker is live).
+ * Migration 1263's fold ledger: which `catalog_items` row each legacy kanban /
+ * canvas template became, so 1267 can carry the old Worker's deletes during the
+ * deploy window and never resurrect a copy the new Worker deleted. Written and read
+ * ONLY by the migrations (`backfill_legacy_templates()`, 1267); app code MUST NOT
+ * touch it. Declared only so the schema-drift guard's reverse check holds during the
+ * expand/contract window. Delete with 1267 (see held-migrations/1267_drizzle.patch.md).
+ * No FK to `catalog_items` on purpose: a ledger row must outlive its copy.
+ */
+export const templatesFoldLedger = pgTable('templates_fold_ledger', {
+  catalogId:   uuid('catalog_id').primaryKey(),
+  legacyTable: text('legacy_table').notNull(),
+  legacyId:    text('legacy_id').notNull(),
+}, (t) => [
+  uniqueIndex('uq_templates_fold_ledger_legacy').on(t.legacyTable, t.legacyId),
 ]);
 
 // ---------------------------------------------------------------------------

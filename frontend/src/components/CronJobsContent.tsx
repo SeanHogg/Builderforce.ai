@@ -13,7 +13,7 @@ export interface CronJobsContentProps {
   agentHostId: number;
   /** When set, only show cron jobs for this project. */
   projectId?: number;
-  /** Scope to one attached agent (project_agents.id), or 'none' for project-wide
+  /** Scope to one assigned agent (its agent-assignment `agentHandle`), or 'none' for project-wide
    *  schedules only. Omitted → all schedules for the project. */
   projectAgentId?: number | 'none';
   /** Hide the project column (e.g. when embedded inside a project panel). */

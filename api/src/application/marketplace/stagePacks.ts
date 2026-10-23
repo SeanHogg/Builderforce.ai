@@ -29,6 +29,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { creationObjectSearchText } from '../creation/creationGraphWriter';
+import { newBoardOwnerBatch } from '../creation/sessionMembers';
 import {
   ListingError,
   browseCreationListings,
@@ -239,18 +240,21 @@ async function publishToolkit(
   spec: StageToolkitSpec,
 ): Promise<CreationListingView> {
   const card = stageToolkitCard(spec);
-  const [session] = await db
-    .insert(creationSessions)
-    .values({
+  // The board, its registry object and its owner in ONE batch — a board with no owner
+  // is unreachable by the person who published it.
+  const session = { id: crypto.randomUUID() };
+  await db.batch([
+    db.insert(creationSessions).values({
+      id: session.id,
       tenantId: publisher.tenantId,
       title: spec.name,
       description: spec.summary,
       createdBy: publisher.userId,
       updatedBy: publisher.userId,
       canvasRevision: 1,
-    })
-    .returning({ id: creationSessions.id });
-  if (!session) throw new ListingError('Could not open a board for the starter toolkit', 400);
+    }),
+    ...newBoardOwnerBatch(db, { sessionId: session.id, tenantId: publisher.tenantId, title: spec.name, ownerUserId: publisher.userId }),
+  ] as unknown as Parameters<typeof db.batch>[0]);
 
   // The column is a uuid. The card's stable id is only a label for Stage; using
   // it here would be rejected by Postgres the first time a founder seeded.

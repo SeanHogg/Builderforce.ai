@@ -67,7 +67,7 @@ BF	creation_sessions	Canvas & ideas	keep	creation_sessions
 BF	creation_session_objects	Canvas & ideas	keep	creation_session_objects
 BF	creation_session_timeline	Canvas & ideas	primitive	event_log
 BF	creation_session_connections	Canvas & ideas	primitive	connection
-BF	creation_session_members	Canvas & ideas	primitive	membership
+BF	creation_session_members	Canvas & ideas	primitive	membership (board role on the board's objects row, mig 1264); presence half kept as creation_session_presence (mig 1270)
 BF	creation_session_invites	Canvas & ideas	primitive	invitation
 BF	creation_session_snapshots	Canvas & ideas	primitive	snapshot
 BF	creation_session_events	Canvas & ideas	primitive	event_log

@@ -3030,6 +3030,12 @@
       },
       "target": "目标 {d}",
       "noTarget": "无目标日期",
+      "released": "已于 {d} 发布",
+      "releasedOnTime": "已于 {d} 发布 · 按时",
+      "releasedLate": "已于 {d} 发布 · {n, plural, other {延迟 # 天}}",
+      "releaseOnTime": "版本按时发布率",
+      "releaseOnTimeSub": "{measured} 个中有 {onTime} 个按目标日期发布",
+      "releaseOnTimeNone": "暂无带目标日期的已发布版本",
       "forecast": "预测完成",
       "forecastBand": "{o} – {p}",
       "forecastNone": "需要吞吐量才能预测",
@@ -33043,7 +33049,11 @@
       "loadFailed": "无法加载。",
       "deleteFailed": "删除失败。",
       "saveFailed": "保存失败（更改需要管理者角色）。",
-      "required": "{field}为必填项"
+      "required": "{field}为必填项",
+      "release": {
+        "targetDate": "目标日期",
+        "releasedAt": "已发布"
+      }
     }
   },
   "mcpServers": {

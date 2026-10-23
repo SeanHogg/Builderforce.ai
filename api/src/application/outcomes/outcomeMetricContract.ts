@@ -55,6 +55,7 @@
  */
 
 import { sql, type SQL } from 'drizzle-orm';
+import { sessionMemberCountSql } from '../creation/sessionMembers';
 
 /** The definition set these numbers were computed under. Bump on any change to
  *  a qualification rule, a denominator, or the action vocabulary below. */
@@ -207,7 +208,7 @@ export function outcomeFactsSql(cohort: SQL): SQL {
       EXTRACT(EPOCH FROM (marks.proof_chosen_at - COALESCE(marks.first_prompt_at, s.created_at))) AS time_to_proof_choice,
       (marks.first_build_at IS NOT NULL) AS built_any,
       (marks.read_at IS NOT NULL AND (marks.first_build_at IS NULL OR marks.read_at <= marks.first_build_at)) AS read_before_build,
-      (SELECT COUNT(*) FROM creation_session_members m WHERE m.session_id = s.id) AS members,
+      ${sessionMemberCountSql(sql.raw('s.id'), sql.raw('s.tenant_id'))} AS members,
       (SELECT COUNT(DISTINCT NULLIF(t.metadata #>> '{authoredBy,ref}', '')) FROM creation_session_timeline t
         WHERE t.session_id = s.id AND t.metadata #>> '{authoredBy,kind}' = 'agent') AS agents,
       EXISTS (

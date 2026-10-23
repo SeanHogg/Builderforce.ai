@@ -101,7 +101,7 @@ export interface TemplateLane {
 }
 
 export interface KanbanTemplate {
-  /** Built-in slug (e.g. 'standard-swe') or a kanban_templates.id (uuid). */
+  /** Built-in slug (e.g. 'standard-swe') or a `catalog_items.id` (uuid, kind 'kanban_template'). */
   id: string;
   slug: string;
   name: string;

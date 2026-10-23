@@ -21,12 +21,11 @@ import {
   brainChats,
   creationSessionEvents,
   creationSessionFolders,
-  creationSessionMembers,
   creationSessionObjects,
+  creationSessionPresence,
   creationSessionProjectLinks,
   SESSION_PROJECT_LINK_REFERENCE,
   creationSessionSnapshots,
-  creationSessionTemplates,
   creationSessionTimeline,
   creationSessions,
   ceremonySessions,
@@ -52,6 +51,13 @@ import {
   copyableLinkFilter,
 } from '../../application/canvas/convertSessionToApp';
 import { checkSubdomainAvailability } from '../../application/ide/siteHosting';
+import {
+  countCanvasTemplates,
+  createCanvasTemplate,
+  deleteOwnCanvasTemplate,
+  getCanvasTemplate,
+  listCanvasTemplates,
+} from '../../application/creation/canvasTemplates';
 import type { Db } from '../../infrastructure/database/connection';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env, HonoEnv } from '../../env';
@@ -60,7 +66,17 @@ import { resolveChatAccess } from '../../application/brain/chatAccess';
 import { BrainService } from '../../application/brain/BrainService';
 import { getLimits, type PlanLimits } from '../../domain/tenant/PlanLimits';
 import { resolveTenantEffectivePlan } from '../../application/tenant/tenantPlanSnapshot';
-import { PRESENCE_ACTIVE_WINDOW_MS, presenceWriteDue, resolvePresenceAccess } from '../../application/creation/sessionPresence';
+import {
+  PRESENCE_ACTIVE_WINDOW_MS, listSessionRoster, presenceRowOn, presenceWriteDue, resolvePresenceAccess,
+} from '../../application/creation/sessionPresence';
+import { writePresenceStatement } from '../../application/creation/sessionPresenceStore';
+// THE board member store — kernel `memberships` on the board's registry object
+// (migration 1264). Every member read and write below goes through it.
+import {
+  addSessionMember, boardsOfMember, countSessionMembers, listSessionMembers, removeSessionMember,
+  seatInvitedSessionMember, sessionHasMemberNamedSql, sessionMemberCountSql, sessionMemberIdsAmong,
+  sessionMemberRole, setSessionMemberPreferences, setSessionMemberRole, type SessionKey,
+} from '../../application/creation/sessionMembers';
 import { listActivePresenceMembers, parseKnownPresence, presenceDelta } from '../../application/creation/presenceDelta';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
@@ -110,15 +126,13 @@ import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { creationSessionQuotaError, resolveCreationSessionQuota } from '../../domain/tenant/creationSessionQuota';
 import {
   acceptInvitation,
-  acceptInvitationStatement,
   findByTokenHash,
-  invalidateInvitations,
   invite as inviteToObject,
   listForObject,
   revokeInvitation,
 } from '../../application/kernel/InvitationService';
 import {
-  resolveSessionAccess, SESSION_ROLE_RANK, tenantRoleForSessionRole, type SessionRole as SharedSessionRole,
+  grantReadFor, resolveSessionAccess, SESSION_ROLE_RANK, tenantRoleForSessionRole, type SessionRole as SharedSessionRole,
 } from '../../application/creation/sessionAccess';
 import { ensureSessionObject, findSessionObject, type SessionRef } from '../../application/creation/sessionObjectRef';
 import {
@@ -386,13 +400,12 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   /** Delegated to `sessionAccess.ts`, which the sell-motion routes read too. A second
    *  copy of an authorization check is the copy that keeps granting after the original
    *  learns to refuse — see that module's header. */
-  const membership = (sessionId: string, tenantId: number, userId: string) =>
-    resolveSessionAccess(db, sessionId, tenantId, userId);
-
   async function requireSession(c: Context<HonoEnv>, minimum: SessionRole = 'viewer') {
     const sessionId = c.req.param('id') ?? '';
     if (!UUID_RE.test(sessionId)) return null;
-    const access = await membership(sessionId, c.get('tenantId') as number, c.get('userId') as string);
+    // `c.env` makes a READ's board-role grant a cache hit (version-bumped on every
+    // membership write); editor-and-above reads it fresh (`grantReadFor`).
+    const access = await resolveSessionAccess(db, sessionId, c.get('tenantId') as number, c.get('userId') as string, c.env, grantReadFor(minimum));
     if (!access || ROLE_RANK[access.role as SessionRole] < ROLE_RANK[minimum]) return null;
     return access;
   }
@@ -465,7 +478,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return getLimits(await creationPlan(tenantId));
   }
 
-  async function countRows(tableName: 'creation_sessions' | 'creation_session_members' | 'creation_session_templates', clause: ReturnType<typeof sql>): Promise<number> {
+  async function countRows(tableName: 'creation_sessions', clause: ReturnType<typeof sql>): Promise<number> {
     const result = await db.execute(sql.raw(`SELECT COUNT(*)::int AS count FROM ${tableName} WHERE `).append(clause));
     return Number((result.rows[0] as { count?: number } | undefined)?.count ?? 0);
   }
@@ -522,9 +535,10 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return null;
   }
 
-  async function notifyAttention(c: Context<HonoEnv>, sessionId: string, input: { kind: string; title: string; body?: string; directUserIds?: string[]; allWatchers?: boolean }) {
+  async function notifyAttention(c: Context<HonoEnv>, session: SessionKey, input: { kind: string; title: string; body?: string; directUserIds?: string[]; allWatchers?: boolean }) {
     const actorId = c.get('userId') as string;
-    const members = await db.select({ userId: creationSessionMembers.userId, watchState: creationSessionMembers.watchState }).from(creationSessionMembers).where(eq(creationSessionMembers.sessionId, sessionId));
+    const sessionId = session.id;
+    const members = await listSessionMembers(db, session);
     const direct = new Set(input.directUserIds ?? []);
     const recipients = members.filter((member) => member.userId !== actorId && (direct.has(member.userId) || (input.allWatchers && member.watchState === 'all')));
     await Promise.all(recipients.map((member) => notify(db, c.env, {
@@ -648,6 +662,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.get('/', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
+    const mine = boardsOfMember(userId);
     const status = c.req.query('status') === 'archived' ? 'archived' : 'active';
     const limit = limitParam(c.req.query('limit'), 30, 100);
     const offset = offsetParam(c.req.query('offset'));
@@ -666,19 +681,18 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         revision: creationSessions.canvasRevision,
         lastActivityAt: creationSessions.lastActivityAt,
         createdAt: creationSessions.createdAt,
-        role: creationSessionMembers.role,
-        pinned: creationSessionMembers.pinned,
-        unread: sql<boolean>`${creationSessionMembers.lastSeenRevision} < ${creationSessions.canvasRevision}`,
-        collaboratorCount: sql<number>`(SELECT COUNT(*)::int FROM creation_session_members member_count WHERE member_count.session_id = ${creationSessions}.id)`,
+        role: mine.role,
+        pinned: mine.pinned,
+        // No presence row yet = never seen a revision, exactly the old column default.
+        unread: sql<boolean>`coalesce(${creationSessionPresence.lastSeenRevision}, 0) < ${creationSessions.canvasRevision}`,
+        collaboratorCount: sessionMemberCountSql(),
         projectIds: sql<number[]>`COALESCE((SELECT array_agg(project_id ORDER BY project_id) FROM creation_session_project_links project_link WHERE project_link.session_id = ${creationSessions}.id), ARRAY[]::integer[])`,
       })
       .from(creationSessions)
-      .innerJoin(creationSessionMembers, and(
-        eq(creationSessionMembers.sessionId, creationSessions.id),
-        eq(creationSessionMembers.userId, userId),
-      ))
+      .leftJoin(creationSessionPresence, presenceRowOn(userId))
       .leftJoin(creationSessionFolders, eq(creationSessionFolders.id, creationSessions.folderId))
       .where(and(
+        mine.isMember,
         eq(creationSessions.tenantId, tenantId),
         eq(creationSessions.segmentId, segmentId),
         eq(creationSessions.status, status),
@@ -705,7 +719,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const limits = await creationLimits(tenantId);
     const [sessions, templates] = await Promise.all([
       countRows('creation_sessions', sql`tenant_id = ${tenantId} AND status <> 'deleted'`),
-      countRows('creation_session_templates', sql`tenant_id = ${tenantId} AND segment_id = ${segmentId}`),
+      countCanvasTemplates(db, { tenantId, segmentId }),
     ]);
     const isSuperadmin = await resolveIsSuperadmin(c.env, c.get('userId') as string);
     return c.json({
@@ -725,6 +739,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.get('/search', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
+    const mine = boardsOfMember(userId);
     const q = (c.req.query('q') ?? '').trim().slice(0, 200);
     if (q.length < 2) return c.json({ sessions: [], hasMore: false });
     const searchLimit = limitParam(c.req.query('limit'), 30, 100);
@@ -750,8 +765,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       preview: creationSessions.preview,
       revision: creationSessions.canvasRevision,
       lastActivityAt: creationSessions.lastActivityAt,
-      role: creationSessionMembers.role,
-      pinned: creationSessionMembers.pinned,
+      role: mine.role,
+      pinned: mine.pinned,
       matchingObjectId: sql<string | null>`(
         SELECT object_match.id FROM creation_session_objects object_match
         WHERE object_match.session_id = ${creationSessions.id}
@@ -759,12 +774,9 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         ORDER BY object_match.updated_at DESC LIMIT 1
       )`,
     }).from(creationSessions)
-      .innerJoin(creationSessionMembers, and(
-        eq(creationSessionMembers.sessionId, creationSessions.id),
-        eq(creationSessionMembers.userId, userId),
-      ))
       .leftJoin(creationSessionFolders, eq(creationSessionFolders.id, creationSessions.folderId))
       .where(and(
+        mine.isMember,
         eq(creationSessions.tenantId, tenantId),
         eq(creationSessions.segmentId, segmentId),
         status === 'all'
@@ -776,17 +788,17 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
           ilike(creationSessions.status, pattern),
           sql`EXISTS (SELECT 1 FROM creation_session_objects searchable WHERE searchable.session_id = ${creationSessions}.id AND searchable.search_text ILIKE ${pattern} ESCAPE '\\')`,
           sql`EXISTS (SELECT 1 FROM creation_session_project_links searchable_project JOIN projects searchable_project_record ON searchable_project_record.id = searchable_project.project_id WHERE searchable_project.session_id = ${creationSessions}.id AND (searchable_project.project_id::text ILIKE ${pattern} ESCAPE '\\' OR searchable_project_record.name ILIKE ${pattern} ESCAPE '\\'))`,
-          sql`EXISTS (SELECT 1 FROM creation_session_members searchable_member JOIN users searchable_user ON searchable_user.id = searchable_member.user_id WHERE searchable_member.session_id = ${creationSessions}.id AND searchable_user.display_name ILIKE ${pattern} ESCAPE '\\')`,
+          sessionHasMemberNamedSql(pattern),
         ),
         kind ? sql`EXISTS (SELECT 1 FROM creation_session_objects kind_filter WHERE kind_filter.session_id = ${creationSessions}.id AND kind_filter.kind = ${kind})` : undefined,
         Number.isInteger(projectId) && projectId > 0 ? sql`EXISTS (SELECT 1 FROM creation_session_project_links project_filter WHERE project_filter.session_id = ${creationSessions}.id AND project_filter.project_id = ${projectId})` : undefined,
-        collaborator ? sql`EXISTS (SELECT 1 FROM creation_session_members collaborator_filter JOIN users collaborator_user ON collaborator_user.id = collaborator_filter.user_id WHERE collaborator_filter.session_id = ${creationSessions}.id AND collaborator_user.display_name ILIKE ${`%${collaborator}%`})` : undefined,
-        pinned === 'true' ? eq(creationSessionMembers.pinned, true) : pinned === 'false' ? eq(creationSessionMembers.pinned, false) : undefined,
-        shared === 'true' ? sql`(SELECT COUNT(*) FROM creation_session_members shared_filter WHERE shared_filter.session_id = ${creationSessions}.id) > 1` : shared === 'false' ? sql`(SELECT COUNT(*) FROM creation_session_members shared_filter WHERE shared_filter.session_id = ${creationSessions}.id) = 1` : undefined,
+        collaborator ? sessionHasMemberNamedSql(`%${collaborator}%`) : undefined,
+        pinned === 'true' ? sql`${mine.pinned} = true` : pinned === 'false' ? sql`${mine.pinned} = false` : undefined,
+        shared === 'true' ? sql`${sessionMemberCountSql()} > 1` : shared === 'false' ? sql`${sessionMemberCountSql()} = 1` : undefined,
         fromDate ? gte(creationSessions.lastActivityAt, fromDate) : undefined,
         toDate ? sql`${creationSessions.lastActivityAt} <= ${toDate}` : undefined,
       ))
-      .orderBy(desc(creationSessionMembers.pinned), desc(creationSessions.lastActivityAt))
+      .orderBy(desc(mine.pinned), desc(creationSessions.lastActivityAt))
       .limit(searchLimit)
       .offset(offsetParam(c.req.query('offset')));
     // Search matches are only hints. Revalidate every authoritative resource
@@ -847,11 +859,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.get('/templates', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
-    const templates = await db.select().from(creationSessionTemplates).where(and(
-      eq(creationSessionTemplates.tenantId, tenantId),
-      eq(creationSessionTemplates.segmentId, segmentId),
-      or(eq(creationSessionTemplates.visibility, 'tenant'), eq(creationSessionTemplates.createdBy, userId)),
-    )).orderBy(desc(creationSessionTemplates.updatedAt));
+    const templates = await listCanvasTemplates(db, c.env as Env, { tenantId, segmentId, userId });
     return c.json({ builtInIds: BUILT_IN_TEMPLATE_IDS, templates });
   });
 
@@ -865,19 +873,17 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const resourceError = await validateResourceAccess(graph.objects, tenantId, segmentId, userId);
     if (resourceError) return c.json({ error: resourceError, code: 'RESOURCE_ACCESS_DENIED' }, 403);
     const limits = await creationLimits(tenantId);
-    const used = await countRows('creation_session_templates', sql`tenant_id = ${tenantId} AND segment_id = ${segmentId}`);
+    const used = await countCanvasTemplates(db, { tenantId, segmentId });
     if (limits.maxCreationSessionTemplates !== -1 && used >= limits.maxCreationSessionTemplates) {
       return c.json({ error: 'Template limit reached', code: 'CREATION_TEMPLATE_QUOTA', usage: used, limit: limits.maxCreationSessionTemplates }, 403);
     }
-    const id = crypto.randomUUID();
-    await db.insert(creationSessionTemplates).values({
-      id, tenantId, segmentId, name,
+    const template = await createCanvasTemplate(db, c.env as Env, {
+      tenantId, segmentId, userId, name, graph,
       description: typeof body.description === 'string' ? body.description.trim().slice(0, 2_000) : null,
       category: typeof body.category === 'string' ? body.category.trim().slice(0, 80) || 'Custom' : 'Custom',
       visibility: body.visibility === 'tenant' ? 'tenant' : 'private',
-      graph, createdBy: userId, updatedBy: userId,
     });
-    return c.json({ template: { id, name } }, 201);
+    return c.json({ template }, 201);
   });
 
   router.delete('/templates/:templateId', async (c) => {
@@ -885,16 +891,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const templateId = c.req.param('templateId');
     if (!UUID_RE.test(templateId)) return c.json({ error: 'Invalid template id' }, 400);
-    const [owned] = await db.select({ id: creationSessionTemplates.id }).from(creationSessionTemplates).where(and(
-      eq(creationSessionTemplates.id, templateId), eq(creationSessionTemplates.tenantId, tenantId),
-      eq(creationSessionTemplates.segmentId, segmentId), eq(creationSessionTemplates.createdBy, userId),
-    )).limit(1);
-    if (!owned) return c.json({ error: 'Template not found or not editable' }, 404);
-    await db.delete(creationSessionTemplates).where(and(
-      eq(creationSessionTemplates.id, templateId),
-      eq(creationSessionTemplates.tenantId, tenantId),
-      eq(creationSessionTemplates.segmentId, segmentId),
-    ));
+    const deleted = await deleteOwnCanvasTemplate(db, c.env as Env, { tenantId, segmentId, userId, id: templateId });
+    if (!deleted) return c.json({ error: 'Template not found or not editable' }, 404);
     return c.body(null, 204);
   });
 
@@ -1126,9 +1124,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       // Every link, both kinds: this is a READ of what the board relates to, not
       // a copy, so the app link belongs in it.
       db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, access.session.id)),
-      db.select({ userId: creationSessionMembers.userId, role: creationSessionMembers.role, displayName: users.displayName, avatarUrl: users.avatarUrl, lastSeenAt: creationSessionMembers.lastSeenAt, viewport: creationSessionMembers.viewport, cursor: creationSessionMembers.cursor, selection: creationSessionMembers.selection, typing: creationSessionMembers.typing, watchState: creationSessionMembers.watchState, followingUserId: creationSessionMembers.followingUserId })
-        .from(creationSessionMembers).leftJoin(users, eq(users.id, creationSessionMembers.userId))
-        .where(eq(creationSessionMembers.sessionId, access.session.id)),
+      listSessionRoster(db, access.session),
       // The app this board became, if it became one. Rides the session read so
       // the convert action can decide its own state without a second request.
       appForSession(db, access.session.tenantId, access.session.id),
@@ -1683,8 +1679,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     }
     const requestedMentions = [...new Set((body.mentions ?? []).filter((id) => typeof id === 'string' && id.length <= 36))].slice(0, 20);
     const memberMentions = requestedMentions.length
-      ? await db.select({ userId: creationSessionMembers.userId }).from(creationSessionMembers)
-        .where(and(eq(creationSessionMembers.sessionId, access.session.id), inArray(creationSessionMembers.userId, requestedMentions)))
+      ? (await sessionMemberIdsAmong(db, access.session, requestedMentions)).map((memberId) => ({ userId: memberId }))
       : [];
     const userId = c.get('userId') as string;
     const anchor = cleanCommentAnchor(body.anchor);
@@ -1695,7 +1690,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     }).returning();
     await db.update(creationSessions).set({ lastActivityAt: new Date(), updatedAt: new Date(), updatedBy: userId })
       .where(and(eq(creationSessions.id, access.session.id), eq(creationSessions.tenantId, access.session.tenantId)));
-    await notifyAttention(c, access.session.id, {
+    await notifyAttention(c, access.session, {
       kind: parentCommentId ? 'creation.comment.reply' : 'creation.comment',
       title: parentCommentId ? `New reply in ${access.session.title}` : `New comment in ${access.session.title}`,
       body: content.slice(0, 500),
@@ -1755,7 +1750,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       eq(creationSessions.id, access.session.id),
       eq(creationSessions.tenantId, access.session.tenantId),
     )).returning();
-    if (body.status && body.status !== access.session.status) await notifyAttention(c, access.session.id, {
+    if (body.status && body.status !== access.session.status) await notifyAttention(c, access.session, {
       kind: body.status === 'archived' ? 'creation.session.archived' : 'creation.session.restored',
       title: `${access.session.title} was ${body.status === 'archived' ? 'archived' : 'restored'}`,
       allWatchers: true,
@@ -1821,9 +1816,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ session: deleted, recoverable: true });
   });
 
-  async function ownerCount(sessionId: string): Promise<number> {
-    return countRows('creation_session_members', sql`session_id = ${sessionId} AND role = 'owner'`);
-  }
+  const ownerCount = (session: SessionKey) => countSessionMembers(db, session, 'owner');
 
   router.patch('/:id/members/:userId', async (c) => {
     const access = await requireSession(c, 'owner');
@@ -1832,19 +1825,13 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const body = await parseOptionalBody(c, MemberBody);
     const role = cleanRole(body.role);
     if (!role) return c.json({ error: 'A valid role is required' }, 400);
-    const [target] = await db.select({ role: creationSessionMembers.role }).from(creationSessionMembers).where(and(
-      eq(creationSessionMembers.sessionId, access.session.id),
-      eq(creationSessionMembers.userId, targetUserId),
-    )).limit(1);
-    if (!target) return c.json({ error: 'Session member not found' }, 404);
-    if (target.role === 'owner' && role !== 'owner' && await ownerCount(access.session.id) <= 1) {
+    const targetRole = await sessionMemberRole(db, access.session, targetUserId);
+    if (!targetRole) return c.json({ error: 'Session member not found' }, 404);
+    if (targetRole === 'owner' && role !== 'owner' && await ownerCount(access.session) <= 1) {
       return c.json({ error: 'Transfer ownership before demoting the final owner', code: 'FINAL_SESSION_OWNER' }, 409);
     }
-    await db.update(creationSessionMembers).set({ role }).where(and(
-      eq(creationSessionMembers.sessionId, access.session.id),
-      eq(creationSessionMembers.userId, targetUserId),
-    ));
-    await notifyAttention(c, access.session.id, {
+    await setSessionMemberRole(db, c.env, access.session, targetUserId, role);
+    await notifyAttention(c, access.session, {
       kind: 'creation.session.role_changed', title: `Your role changed in ${access.session.title}`,
       body: `Access role: ${role}`, directUserIds: [targetUserId],
     });
@@ -1855,18 +1842,12 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const access = await requireSession(c, 'owner');
     if (!access) return c.json({ error: 'Session not found or membership is not editable' }, 404);
     const targetUserId = c.req.param('userId');
-    const [target] = await db.select({ role: creationSessionMembers.role }).from(creationSessionMembers).where(and(
-      eq(creationSessionMembers.sessionId, access.session.id),
-      eq(creationSessionMembers.userId, targetUserId),
-    )).limit(1);
-    if (!target) return c.json({ error: 'Session member not found' }, 404);
-    if (target.role === 'owner' && await ownerCount(access.session.id) <= 1) {
+    const targetRole = await sessionMemberRole(db, access.session, targetUserId);
+    if (!targetRole) return c.json({ error: 'Session member not found' }, 404);
+    if (targetRole === 'owner' && await ownerCount(access.session) <= 1) {
       return c.json({ error: 'Transfer ownership before removing the final owner', code: 'FINAL_SESSION_OWNER' }, 409);
     }
-    await db.delete(creationSessionMembers).where(and(
-      eq(creationSessionMembers.sessionId, access.session.id),
-      eq(creationSessionMembers.userId, targetUserId),
-    ));
+    await removeSessionMember(db, c.env, access.session, targetUserId);
     return c.body(null, 204);
   });
 
@@ -1875,9 +1856,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!access) return c.json({ error: 'Session not found' }, 404);
     const body = await parseOptionalBody(c, PinBody);
     if (typeof body.pinned !== 'boolean') return c.json({ error: 'pinned is required' }, 400);
-    await db.update(creationSessionMembers).set({ pinned: body.pinned }).where(and(
-      eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, c.get('userId') as string),
-    ));
+    await setSessionMemberPreferences(db, c.env, access.session, c.get('userId') as string, { pinned: body.pinned });
     return c.json({ pinned: body.pinned });
   });
 
@@ -1888,10 +1867,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (body.state !== 'all' && body.state !== 'mentions' && body.state !== 'muted') {
       return c.json({ error: 'state must be all, mentions, or muted' }, 400);
     }
-    await db.update(creationSessionMembers).set({ watchState: body.state }).where(and(
-      eq(creationSessionMembers.sessionId, access.session.id),
-      eq(creationSessionMembers.userId, c.get('userId') as string),
-    ));
+    await setSessionMemberPreferences(db, c.env, access.session, c.get('userId') as string, { watchState: body.state });
     return c.json({ state: body.state });
   });
 
@@ -1929,10 +1905,10 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!UUID_RE.test(objectId)) return c.json({ error: 'Invalid object id' }, 400);
     const [object, owners] = await Promise.all([
       db.select({ id: creationSessionObjects.id, kind: creationSessionObjects.kind }).from(creationSessionObjects).where(and(eq(creationSessionObjects.id, objectId), eq(creationSessionObjects.sessionId, access.session.id))).limit(1).then((rows) => rows[0]),
-      db.select({ userId: creationSessionMembers.userId }).from(creationSessionMembers).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.role, 'owner'))),
+      listSessionMembers(db, access.session).then((members) => members.filter((member) => member.role === 'owner')),
     ]);
     if (!object) return c.json({ error: 'Object not found' }, 404);
-    await notifyAttention(c, access.session.id, {
+    await notifyAttention(c, access.session, {
       kind: 'creation.resource.access_requested',
       title: `Access requested in ${access.session.title}`,
       body: `A collaborator requested access to a ${object.kind} object.`,
@@ -1989,7 +1965,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const sourceId = body.sourceSessionId ?? '';
     if (!UUID_RE.test(sourceId) || sourceId === targetAccess.session.id) return c.json({ error: 'A different source session is required' }, 400);
     const userId = c.get('userId') as string;
-    const sourceAccess = await membership(sourceId, targetAccess.session.tenantId, userId);
+    const sourceAccess = await resolveSessionAccess(db, sourceId, targetAccess.session.tenantId, userId, c.env, grantReadFor('editor'));
     if (!sourceAccess || ROLE_RANK[sourceAccess.role as SessionRole] < ROLE_RANK.editor || sourceAccess.session.segmentId !== targetAccess.session.segmentId) {
       return c.json({ error: 'Source session not found or not editable' }, 404);
     }
@@ -2103,11 +2079,9 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const templateId = c.req.param('templateId');
     if (!UUID_RE.test(templateId)) return c.json({ error: 'Invalid template id' }, 400);
     const userId = c.get('userId') as string;
-    const [template] = await db.select().from(creationSessionTemplates).where(and(
-      eq(creationSessionTemplates.id, templateId), eq(creationSessionTemplates.tenantId, access.session.tenantId),
-      eq(creationSessionTemplates.segmentId, access.session.segmentId!),
-      or(eq(creationSessionTemplates.visibility, 'tenant'), eq(creationSessionTemplates.createdBy, userId)),
-    )).limit(1);
+    const template = access.session.segmentId
+      ? await getCanvasTemplate(db, c.env as Env, { tenantId: access.session.tenantId, segmentId: access.session.segmentId, userId, id: templateId })
+      : null;
     if (!template) return c.json({ error: 'Template not found' }, 404);
     const templateGraph = parseTemplateGraph(template.graph);
     if (!templateGraph) return c.json({ error: 'Template graph is invalid' }, 422);
@@ -2392,7 +2366,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       // revision, and the caller has to be told — it is translated into the 409 below.
       snapshotOnConflictDoNothing: false,
     });
-    if (personalViewport) statements.push(db.update(creationSessionMembers).set({ viewport: personalViewport }).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, userId))));
+    if (personalViewport) statements.push(writePresenceStatement(db, access.session.id, userId, { viewport: personalViewport }));
     try {
       await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
     } catch (error) {
@@ -2454,14 +2428,11 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const target = invitation.objectId ? await getObject(db, c.env, tenantId, invitation.objectId) : null;
     if (!target) return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
     const sessionId = target.refId;
-    await db.batch([
-      db.insert(creationSessionMembers).values({ sessionId, userId, role, invitedBy: invitation.invitedBy })
-        .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } }),
-      acceptInvitationStatement(db, { tenantId, id: invitation.id, inviteeRef: userId }),
-    ]);
-    // The batch bypasses `acceptInvitation`, so its cache drop happens here.
-    await invalidateInvitations(c.env, tenantId);
-    return c.json({ sessionId, role });
+    // The EFFECTIVE role: accepting never demotes somebody already on the board.
+    const seatedRole = await seatInvitedSessionMember(db, c.env, {
+      tenantId, objectId: target.id, sessionId, invitationId: invitation.id, userId, role, invitedBy: invitation.invitedBy,
+    });
+    return c.json({ sessionId, role: seatedRole });
   });
 
   router.get('/:id/invitations', async (c) => {
@@ -2614,15 +2585,15 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
         emailSent,
       }, 201);
     }
-    const [existingMember] = await db.select({ userId: creationSessionMembers.userId }).from(creationSessionMembers).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, target.id))).limit(1);
+    const existingMember = await sessionMemberRole(db, access.session, target.id);
     const auditObject = await ensureSessionObject(db, c.env, access.session);
     const overCap = await collaboratorCapacity(
       c.env, tenantId, access.session.id, auditObject.id,
       { alreadyMember: Boolean(existingMember), email: target.email },
     );
     if (overCap) return c.json(overCap, 403);
-    await db.insert(creationSessionMembers).values({ sessionId: access.session.id, userId: target.id, role, invitedBy: c.get('userId') as string })
-      .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } });
+    // `keep-higher`: inviting somebody already on the board may promote, never demote.
+    await addSessionMember(db, c.env, access.session, { userId: target.id, role, invitedBy: c.get('userId') as string }, 'keep-higher');
     // Keep a durable invitation record even when the person already has an
     // account. acceptedAt distinguishes this immediate membership grant from a
     // pending cold-email invite while preserving the campaign/audit evidence.
@@ -2640,7 +2611,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     // session, `invite()` returned that row and this resolves it rather than
     // leaving it open beside a membership they now hold.
     await acceptInvitation(db, c.env, { id: auditRow.id, tenantId, inviteeRef: target.id });
-    await notifyAttention(c, access.session.id, {
+    await notifyAttention(c, access.session, {
       kind: existingMember ? 'creation.session.role_changed' : 'creation.session.invitation', title: existingMember ? `Your role changed in ${access.session.title}` : `You were invited to ${access.session.title}`,
       body: `Access role: ${role}`, directUserIds: [target.id],
     });
@@ -2676,7 +2647,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:id/presence', async (c) => {
     const sessionId = c.req.param('id') ?? '';
     const userId = c.get('userId') as string;
-    const access = UUID_RE.test(sessionId) ? await resolvePresenceAccess(db, sessionId, c.get('tenantId') as number, userId) : null;
+    const access = UUID_RE.test(sessionId) ? await resolvePresenceAccess(db, sessionId, c.get('tenantId') as number, userId, c.env) : null;
     if (!access || ROLE_RANK[access.role as SessionRole] < ROLE_RANK.viewer) return c.json({ error: 'Session not found' }, 404);
     const body = await parseOptionalBody(c, PresenceBody);
     const now = new Date();
@@ -2686,25 +2657,21 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const selection = Array.isArray(body.selection) ? body.selection.filter((id): id is string => typeof id === 'string' && UUID_RE.test(id)).slice(0, 100) : [];
     const followingUserId = typeof body.followingUserId === 'string' && body.followingUserId !== userId ? body.followingUserId : null;
     if (followingUserId) {
-      const [followTarget] = await db.select({ userId: creationSessionMembers.userId }).from(creationSessionMembers).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, followingUserId))).limit(1);
-      if (!followTarget) return c.json({ error: 'Follow target is not a session member' }, 400);
+      if (!(await sessionMemberRole(db, access.session, followingUserId))) return c.json({ error: 'Follow target is not a session member' }, 400);
     }
     const typing = body.typing === true;
     if (presenceWriteDue(access.self, { revision, viewport, cursor, selection, typing, followingUserId }, now)) {
-      await db.update(creationSessionMembers).set({ lastSeenAt: now, lastSeenRevision: revision, viewport, cursor, selection, typing, followingUserId }).where(and(
-        eq(creationSessionMembers.sessionId, access.session.id),
-        eq(creationSessionMembers.userId, userId),
-      ));
+      await writePresenceStatement(db, access.session.id, userId, { lastSeenAt: now, lastSeenRevision: revision, viewport, cursor, selection, typing, followingUserId });
     }
     const activeSince = new Date(now.getTime() - PRESENCE_ACTIVE_WINDOW_MS);
     const [members, plan] = await Promise.all([
-      listActivePresenceMembers(db, access.session.id, activeSince),
+      listActivePresenceMembers(db, access.session, activeSince),
       resolveTenantEffectivePlan(c.env, access.session.tenantId, db),
     ]);
     const limits = getLimits(plan);
     const activeEditors = members.filter((member) => ROLE_RANK[member.role as SessionRole] >= ROLE_RANK.editor).length;
     if (limits.maxCreationRealtimeEditors !== -1 && activeEditors > limits.maxCreationRealtimeEditors && ROLE_RANK[access.role as SessionRole] >= ROLE_RANK.editor) {
-      await db.update(creationSessionMembers).set({ typing: false, followingUserId: null }).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, userId)));
+      await writePresenceStatement(db, access.session.id, userId, { typing: false, followingUserId: null });
       return c.json({ error: 'Realtime editor limit reached; reopen as view-only', code: 'CREATION_REALTIME_QUOTA', usage: activeEditors, limit: limits.maxCreationRealtimeEditors }, 429);
     }
     // Only the members whose drawn presence changed since the caller's last answer
@@ -2839,9 +2806,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const [existing] = await db.select({ id: creationSessions.id, objectId: creationSessionObjects.id })
       .from(creationSessionProjectLinks)
       .innerJoin(creationSessions, eq(creationSessions.id, creationSessionProjectLinks.sessionId))
-      .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
       .innerJoin(creationSessionObjects, and(eq(creationSessionObjects.sessionId, creationSessions.id), eq(creationSessionObjects.resourceType, 'project'), eq(creationSessionObjects.resourceId, String(projectId))))
-      .where(and(eq(creationSessionProjectLinks.projectId, projectId), eq(creationSessions.tenantId, tenantId), sessionSegment, eq(creationSessions.status, 'active')))
+      .where(and(boardsOfMember(userId).isMember, eq(creationSessionProjectLinks.projectId, projectId), eq(creationSessions.tenantId, tenantId), sessionSegment, eq(creationSessions.status, 'active')))
       .orderBy(desc(creationSessions.lastActivityAt)).limit(1);
     if (existing) return c.json({ sessionId: existing.id, objectId: existing.objectId, created: false });
     const sessionId = crypto.randomUUID();
@@ -2888,8 +2854,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const [existing] = await db.select({ sessionId: creationSessions.id, objectId: creationSessionObjects.id })
       .from(creationSessionObjects)
       .innerJoin(creationSessions, eq(creationSessions.id, creationSessionObjects.sessionId))
-      .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
       .where(and(
+        boardsOfMember(userId).isMember,
         eq(creationSessions.tenantId, tenantId), sessionSegment, eq(creationSessions.status, 'active'),
         eq(creationSessionObjects.kind, kind), eq(creationSessionObjects.resourceType, 'ideProject'),
         eq(creationSessionObjects.resourceId, String(build.id)),
@@ -2989,8 +2955,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const [existing] = await db.select({ sessionId: creationSessions.id, objectId: creationSessionObjects.id })
       .from(creationSessionObjects)
       .innerJoin(creationSessions, eq(creationSessions.id, creationSessionObjects.sessionId))
-      .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
       .where(and(
+        boardsOfMember(userId).isMember,
         eq(creationSessions.tenantId, tenantId), sessionSegment, eq(creationSessions.status, 'active'),
         eq(creationSessionObjects.resourceType, resourceType), eq(creationSessionObjects.resourceId, resourceId),
       )).orderBy(desc(creationSessions.lastActivityAt)).limit(1);

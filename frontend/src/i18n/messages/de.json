@@ -3030,6 +3030,12 @@
       },
       "target": "Ziel {d}",
       "noTarget": "kein Zieldatum",
+      "released": "veröffentlicht am {d}",
+      "releasedOnTime": "veröffentlicht am {d} · pünktlich",
+      "releasedLate": "veröffentlicht am {d} · {n, plural, one {# Tag zu spät} other {# Tage zu spät}}",
+      "releaseOnTime": "Pünktliche Releases",
+      "releaseOnTimeSub": "{onTime} von {measured} bis zum Zieldatum ausgeliefert",
+      "releaseOnTimeNone": "noch kein ausgeliefertes Release mit Zieldatum",
       "forecast": "Voraussichtlicher Abschluss",
       "forecastBand": "{o} – {p}",
       "forecastNone": "Durchsatz für Prognose nötig",
@@ -33043,7 +33049,11 @@
       "loadFailed": "Laden fehlgeschlagen.",
       "deleteFailed": "Löschen fehlgeschlagen.",
       "saveFailed": "Speichern fehlgeschlagen (Manager-Rolle für Änderungen erforderlich).",
-      "required": "{field} ist erforderlich"
+      "required": "{field} ist erforderlich",
+      "release": {
+        "targetDate": "Zieldatum",
+        "releasedAt": "Veröffentlicht"
+      }
     }
   },
   "mcpServers": {

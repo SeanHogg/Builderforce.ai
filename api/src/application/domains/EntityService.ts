@@ -352,6 +352,7 @@ export async function listRows(
       const where: SQL[] = [];
       const scoped = tenantWhere(def, tenantId);
       if (scoped) where.push(scoped);
+      if (def.visibleRows) where.push(def.visibleRows);
       if (def.archiveKey && !opts.includeArchived) where.push(isNull(col(def, def.archiveKey)));
       if (q && def.titleKey) where.push(ilike(col(def, def.titleKey), `%${q}%`));
 
@@ -385,6 +386,7 @@ export async function getRow(
     const where: SQL[] = [eq(pk, coerce(pk, id, 'id'))];
     const scoped = tenantWhere(def, tenantId);
     if (scoped) where.push(scoped);
+    if (def.visibleRows) where.push(def.visibleRows);
     const [row] = await databaseForTable(db, def.name).select(projection(def)).from(def.table).where(and(...where)).limit(1);
     return (row as EntityRow | undefined) ?? null;
   });

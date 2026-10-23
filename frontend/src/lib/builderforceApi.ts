@@ -1242,47 +1242,6 @@ export const artifactAssignments = {
 };
 
 // ---------------------------------------------------------------------------
-// Project agents (agents attached to a project; numeric id scopes per-agent
-// skills/personas/content/governance)
-// ---------------------------------------------------------------------------
-
-/** An agent attached to a project. `agentRef` points back to its source agent. */
-export interface ProjectAgent {
-  id: number;
-  tenantId: number;
-  projectId: number;
-  /** 'workforce' → PublishedAgent.id; 'registered' → agents.id (numeric, as string). */
-  agentKind: 'workforce' | 'registered';
-  agentRef: string;
-  name: string;
-  role: string;
-  governance: string | null;
-  addedBy: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export const projectAgents = {
-  list: (projectId: number) =>
-    request<{ agents: ProjectAgent[] }>(`/api/project-agents?projectId=${projectId}`).then((r) => r.agents),
-
-  add: (body: { projectId: number; agentKind: 'workforce' | 'registered'; agentRef: string; name: string; role?: string }) =>
-    request<{ agent: ProjectAgent }>('/api/project-agents', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }).then((r) => r.agent),
-
-  remove: (id: number) =>
-    request<void>(`/api/project-agents/${id}`, { method: 'DELETE' }),
-
-  updateGovernance: (id: number, governance: string) =>
-    request<{ agent: ProjectAgent }>(`/api/project-agents/${id}/governance`, {
-      method: 'PUT',
-      body: JSON.stringify({ governance }),
-    }).then((r) => r.agent),
-};
-
-// ---------------------------------------------------------------------------
 // Registered agents (tenant endpoint agents: claude/openai/ollama/http)
 // ---------------------------------------------------------------------------
 
@@ -4063,18 +4022,33 @@ export type AgentAssignmentScope =
   | 'security'
   | 'swimlane'
   | 'brain'
-  | 'global';
+  | 'global'
+  /** The agent's tenant-wide identity in the workspace (what its capabilities hang off). */
+  | 'workspace';
 
 export type AgentExecutionScope = 'project' | 'global';
 
+/**
+ * One agent assignment. Project staffing is `scope = 'project'` (the former
+ * `project_agents`, folded in by migration 1265). `agentHandle` is the integer id
+ * per-agent capabilities (artifact scope `'agent'`) and per-agent schedules key on.
+ */
 export interface AgentAssignment {
   id: string;
+  agentHandle: number;
+  /** 'workforce' → PublishedAgent.id; 'registered' → agents.id (numeric, as string). */
   agentKind: string;
   agentRef: string;
   scope: AgentAssignmentScope;
   scopeId: string | null;
+  projectId: number | null;
   executionScope: AgentExecutionScope;
   role: string;
+  name: string | null;
+  governance: string | null;
+  addedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export const agentAssignmentsApi = {
@@ -4086,6 +4060,10 @@ export const agentAssignmentsApi = {
     );
   },
 
+  /** The agents staffed on a project. */
+  listForProject: (projectId: number): Promise<AgentAssignment[]> =>
+    agentAssignmentsApi.list('project', projectId),
+
   assign: (body: {
     agentKind: string;
     agentRef: string;
@@ -4093,6 +4071,8 @@ export const agentAssignmentsApi = {
     scopeId?: string | number | null;
     executionScope?: AgentExecutionScope;
     role?: string;
+    /** Display name captured at assign time (project staffing shows it). */
+    name?: string;
   }): Promise<AgentAssignment> =>
     request<{ assignment: AgentAssignment }>(`/api/agent-assignments`, {
       method: 'POST',
@@ -4101,6 +4081,13 @@ export const agentAssignmentsApi = {
 
   remove: (id: string): Promise<void> =>
     request<void>(`/api/agent-assignments/${id}`, { method: 'DELETE' }),
+
+  /** Set a staffed agent's per-agent governance rules. */
+  updateGovernance: (id: string, governance: string): Promise<AgentAssignment> =>
+    request<{ assignment: AgentAssignment }>(`/api/agent-assignments/${id}/governance`, {
+      method: 'PUT',
+      body: JSON.stringify({ governance }),
+    }).then((r) => r.assignment),
 };
 
 /** @deprecated Use tasksApi.list for full Task[]; kept for ArtifactAssigner. */
@@ -8405,6 +8392,11 @@ export interface DeliveryInsights {
   throughputPerWeek: number; activeContributors: number;
   forecastDate: string | null; forecastDateOptimistic: string | null; forecastDatePessimistic: string | null;
   targetDate: string | null; status: DeliveryStatus;
+  /** When a release actually shipped (plan vs actual, 1266), or null. Optional so a
+   *  rollup cached before the field existed still reads. */
+  releasedAt?: string | null;
+  /** Calendar days `releasedAt` landed after `targetDate` (negative = early). */
+  slipDays?: number | null;
   baselineDate: string | null; baselineScope: number; addedScope: number; addedScopePct: number;
   series: BurnPoint[];
   /** Forward completion ramp from today → forecast date (drawn dashed). */
@@ -10142,10 +10134,10 @@ export const agentCheckoutApi = {
    * Acquire the agent into this workspace. 402s with {@link AgentPurchaseRequired}
    * when the agent is priced and this workspace has not paid, which is the signal
    * to call {@link agentCheckoutApi.startCheckout}. On success the response carries
-   * `project_agent_id`: the canonical identity the hire PROVISIONED, which is what
+   * `agent_handle`: the handle of the workspace identity the hire PROVISIONED, which is what
    * makes the agent assignable and dispatchable here rather than merely counted.
    */
-  hire: (agentId: string): Promise<{ id: string; name: string; project_agent_id: number | null }> =>
+  hire: (agentId: string): Promise<{ id: string; name: string; agent_handle: number | null }> =>
     request(`/api/workforce/agents/${encodeURIComponent(agentId)}/hire`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

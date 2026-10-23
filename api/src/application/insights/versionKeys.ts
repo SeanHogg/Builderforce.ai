@@ -13,6 +13,10 @@ export const qualityVersionKey = (tenantId: number): string => `insights-quality
 export const peopleVersionKey = (tenantId: number): string => `insights-people-version:tenant:${tenantId}`;
 export const aiProgramVersionKey = (tenantId: number): string => `insights-ai-program-version:tenant:${tenantId}`;
 export const rdFinancialsVersionKey = (tenantId: number): string => `insights-rd-financials-version:tenant:${tenantId}`;
+/** The delivery lens (`/api/insights/delivery` + its scenario planner). Product
+ *  release writes bump it: a release's target / ship date is the lens's plan and
+ *  actual, so a release marked released must not read stale until the TTL. */
+export const deliveryVersionKey = (tenantId: number): string => `insights-delivery-version:tenant:${tenantId}`;
 export const incidentVersionKey = (tenantId: number): string => `incidents-version:tenant:${tenantId}`;
 /**
  * `prod_incidents` is read under TWO tokens: the incident-management surface

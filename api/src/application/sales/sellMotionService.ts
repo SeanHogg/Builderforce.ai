@@ -37,6 +37,7 @@ import {
   legalDocumentFiles,
 } from '../../infrastructure/database/schema';
 import { requireSessionRole, type SessionAccess } from '../creation/sessionAccess';
+import { newBoardOwnerBatch } from '../creation/sessionMembers';
 import { computeControlCoverage } from '../finops/socControls';
 import { condenseTranscript } from '../llm/condense';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -458,15 +459,20 @@ export async function handoffSession(
   ]);
 
   const sessionId = crypto.randomUUID();
-  await db.insert(creationSessions).values({
-    id: sessionId,
-    tenantId: input.tenantId,
-    segmentId: source.segmentId,
-    title: input.title,
-    createdBy: input.createdBy,
-    updatedBy: input.createdBy,
-    canvasRevision: 1,
-  });
+  // The board, its registry object and its owner (the person handing it off) in ONE
+  // batch — "no members" above means none COPIED, not that the new board has nobody.
+  await db.batch([
+    db.insert(creationSessions).values({
+      id: sessionId,
+      tenantId: input.tenantId,
+      segmentId: source.segmentId,
+      title: input.title,
+      createdBy: input.createdBy,
+      updatedBy: input.createdBy,
+      canvasRevision: 1,
+    }),
+    ...newBoardOwnerBatch(db, { sessionId, tenantId: input.tenantId, title: input.title, ownerUserId: input.createdBy }),
+  ] as unknown as Parameters<typeof db.batch>[0]);
 
   // New ids, mapped from the old ones — the edges are re-pointed through this map. A copy
   // that reused the source ids would collide on the primary key; a copy that dropped the

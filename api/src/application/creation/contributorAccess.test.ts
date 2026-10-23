@@ -33,7 +33,8 @@ describe('a canvas contributor', () => {
   });
 
   it('writes a canvas it is an editor of — the board role is the gate, not the tenant tier', async () => {
-    const db = fakeDb([[{ session: SESSION, role: 'editor' }]]);
+    // Read 1: the kernel-membership grant (migration 1264). Read 2: the board row.
+    const db = fakeDb([[{ role: 'editor', sessionTenantId: 9 }], [SESSION]]);
     const access = await requireSessionRole(db, 'sess-1', 9, 'guest-1', 'editor');
     expect(access?.role).toBe('editor');
   });
@@ -45,7 +46,7 @@ describe('a canvas contributor', () => {
   });
 
   it('cannot write a canvas above its board role', async () => {
-    const db = fakeDb([[{ session: SESSION, role: 'commenter' }]]);
+    const db = fakeDb([[{ role: 'commenter', sessionTenantId: 9 }], [SESSION]]);
     expect(await requireSessionRole(db, 'sess-1', 9, 'guest-1', 'editor')).toBeNull();
   });
 

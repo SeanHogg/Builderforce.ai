@@ -52,6 +52,11 @@ import { sha256Hex } from '../../domain/shared/hash';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Env } from '../../env';
 import { activityDatabase, getActivityLog, type ActivityLogRow } from '../activity/activityLog';
+import { assertRelationsReadable, assertRelationsWritable, type RelationReadGates } from './objectRelationGate';
+
+export {
+  DOMAIN_GATED_RELATION_CODE, DomainGatedRelationError, relationsAreDomainGated, type RelationReadGate, type RelationReadGates,
+} from './objectRelationGate';
 
 /**
  * The seats on the roster (PRD 20 §3). The schema's domain column, the permission
@@ -126,7 +131,7 @@ export const recentsCacheKey = (tenantId: number, actorRef: string, domain: stri
 
 /** Drop every cached read for one object. Called by each mutation below, and
  *  exported so a domain service that writes the underlying row can say so too. */
-export async function invalidateObject(env: Env, tenantId: number, id: string): Promise<void> {
+export async function invalidateObject(env: Env | undefined, tenantId: number, id: string): Promise<void> {
   await Promise.all([
     invalidateCached(env, objectCacheKey(tenantId, id)),
     ...OBJECT_RELATIONS.map((rel) => invalidateCached(env, relationCacheKey(tenantId, id, rel))),
@@ -146,7 +151,7 @@ export async function invalidateObject(env: Env, tenantId: number, id: string): 
  */
 export async function registerObject(
   db: Db,
-  env: Env,
+  env: Env | undefined,
   input: {
     tenantId: number;
     kind: string;
@@ -367,15 +372,19 @@ export async function addAnnotation(
 /** Who is on this thing. `state` is never deleted — who WAS on a thing is the
  *  question an audit asks. */
 export async function getObjectMembers(db: Db, env: Env, tenantId: number, id: string, limit?: number) {
-  const take = pageSize(limit);
-  return getOrSetCached(env, `${relationCacheKey(tenantId, id, 'members')}:${take}`, async () => {
+  // ONE cached page per object, at the maximum size, under the exact key
+  // {@link invalidateObject} drops — a per-limit key (`…:members:50`) was never
+  // invalidated by a member write, so a removed member stayed listed until its TTL.
+  // The canvas writes members here since 1264, which is what made that visible.
+  const all = await getOrSetCached(env, relationCacheKey(tenantId, id, 'members'), async () => {
     return db
       .select()
       .from(memberships)
       .where(and(eq(memberships.objectId, id), eq(memberships.tenantId, tenantId), eq(memberships.state, 'active')))
       .orderBy(memberships.role, memberships.memberRef)
-      .limit(take);
+      .limit(MAX_PAGE_SIZE);
   });
+  return all.slice(0, pageSize(limit));
 }
 
 export async function addMember(
@@ -630,7 +639,13 @@ export async function recordRevision(
  * application layer chooses the adapter, and the layer above depends on the
  * interface.
  */
-export function createObjectRegistry(db: Db, env: Env) {
+export function createObjectRegistry(db: Db, env: Env, readGates: RelationReadGates = {}) {
+  // Domain-gated kinds (a board) — see `objectRelationGate.ts`. Enforced HERE, in the
+  // port, so no caller of the facade can reach a gated relation around it.
+  const writable = async (tenantId: number, objectId: string) =>
+    assertRelationsWritable(await getObject(db, env, tenantId, objectId));
+  const readable = async (tenantId: number, objectId: string, viewerRef: string | null | undefined) =>
+    assertRelationsReadable(await getObject(db, env, tenantId, objectId), tenantId, viewerRef, readGates);
   return {
     get: (tenantId: number, id: string) => getObject(db, env, tenantId, id),
     find: (tenantId: number, kind: string, refId: string | number) => findObject(db, tenantId, kind, refId),
@@ -645,14 +660,31 @@ export function createObjectRegistry(db: Db, env: Env) {
       getObjectAnnotations(db, env, tenantId, id, opts),
     addAnnotation: (input: Parameters<typeof addAnnotation>[2]) => addAnnotation(db, env, input),
 
-    members: (tenantId: number, id: string, limit?: number) => getObjectMembers(db, env, tenantId, id, limit),
-    addMember: (input: Parameters<typeof addMember>[2]) => addMember(db, env, input),
-    removeMember: (input: Parameters<typeof removeMember>[2]) => removeMember(db, env, input),
+    members: async (tenantId: number, id: string, viewerRef: string | null | undefined, limit?: number) => {
+      await readable(tenantId, id, viewerRef);
+      return getObjectMembers(db, env, tenantId, id, limit);
+    },
+    addMember: async (input: Parameters<typeof addMember>[2]) => {
+      await writable(input.tenantId, input.objectId);
+      return addMember(db, env, input);
+    },
+    removeMember: async (input: Parameters<typeof removeMember>[2]) => {
+      await writable(input.tenantId, input.objectId);
+      return removeMember(db, env, input);
+    },
 
-    shares: (tenantId: number, id: string) => getObjectShares(db, env, tenantId, id),
-    createShare: (input: Parameters<typeof createShareLink>[2]) => createShareLink(db, env, input),
-    revokeShare: (tenantId: number, objectId: string, shareId: string) =>
-      revokeShareLink(db, env, tenantId, objectId, shareId),
+    shares: async (tenantId: number, id: string, viewerRef: string | null | undefined) => {
+      await readable(tenantId, id, viewerRef);
+      return getObjectShares(db, env, tenantId, id);
+    },
+    createShare: async (input: Parameters<typeof createShareLink>[2]) => {
+      await writable(input.tenantId, input.objectId);
+      return createShareLink(db, env, input);
+    },
+    revokeShare: async (tenantId: number, objectId: string, shareId: string) => {
+      await writable(tenantId, objectId);
+      return revokeShareLink(db, env, tenantId, objectId, shareId);
+    },
     resolveShare: (token: string) => resolveShareToken(db, token),
 
     revisions: (tenantId: number, id: string, limit?: number) => getObjectRevisions(db, env, tenantId, id, limit),

@@ -18,7 +18,8 @@ import {
 
 const plan: PlannedClaimWrite[] = [
   { table: 'creation_sessions', rows: 1, statement: null },
-  { table: 'creation_session_members', rows: 1, statement: null },
+  { table: 'objects', rows: 1, statement: null },
+  { table: 'memberships', rows: 1, statement: null },
   { table: 'creation_session_claims', rows: 1, statement: null },
   { table: 'creation_session_events', rows: 1, statement: null },
   { table: 'creation_session_snapshots', rows: 1, statement: null },
@@ -45,10 +46,16 @@ describe('describeClaimBatchFailure', () => {
   it('maps a constraint back to the statement that carried it, with its row count', () => {
     const error = new Error('duplicate key value violates unique constraint "creation_session_objects_pkey"');
     const report = describeClaimBatchFailure(error, plan);
-    expect(report.statementIndex).toBe(5);
+    // `objects` (index 1) is ALSO a substring of this constraint; the longer table wins.
+    expect(report.statementIndex).toBe(6);
     expect(report.statementTable).toBe('creation_session_objects');
     expect(report.statementRows).toBe(12);
-    expect(report.statementCount).toBe(6);
+    expect(report.statementCount).toBe(7);
+  });
+
+  it('attributes the board registry row and the owner membership to their own statements', () => {
+    expect(describeClaimBatchFailure(Object.assign(new Error('dup'), { constraint: 'uq_objects_ref' }), plan).statementTable).toBe('objects');
+    expect(describeClaimBatchFailure(Object.assign(new Error('dup'), { constraint: 'uq_memberships_member' }), plan).statementTable).toBe('memberships');
   });
 
   it('says the index is unknown rather than asserting one, when the constraint matches nothing', () => {

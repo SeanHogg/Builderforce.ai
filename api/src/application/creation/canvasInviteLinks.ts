@@ -23,17 +23,17 @@
  * link may carry, and the UI reads it from here rather than listing roles of its own.
  *
  * ── WHAT A CLAIM DOES ────────────────────────────────────────────────────────────
- * It adds one `creation_session_members` row and one collaborator membership. Whether
+ * It adds one board membership (`sessionMembers.ts`) and one collaborator seat. Whether
  * the claimer is a signed-in teammate or somebody who has just refused to sign up
  * changes only WHERE the identity came from (`canvasGuestAccount.ts`); everything
  * downstream — presence, comments, the relay principal, the plan cap — is the path
  * that already existed.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { creationSessionMembers, creationSessions } from '../../infrastructure/database/schema';
+import { creationSessions } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   createShareLink,
@@ -45,6 +45,7 @@ import {
 } from '../kernel/ObjectRegistry';
 import { ensureSessionObject, findSessionObject, type SessionRef } from './sessionObjectRef';
 import { requireSessionRole, tenantRoleForSessionRole } from './sessionAccess';
+import { addSessionMember, sessionMemberRole } from './sessionMembers';
 import { collaboratorCapacity, type CollaboratorCapacityRefusal } from './canvasCollaboratorCapacity';
 import { createGuestUser, seatAsCollaborator, type CanvasGuestIdentity } from './canvasGuestAccount';
 import { HOUR_MS } from '../../domain/shared/time';
@@ -102,9 +103,9 @@ export const CANVAS_LINK_TOKEN_RE = /^[0-9a-f]{64}$/i;
  */
 export async function ownedCanvasSession(
   db: Db,
-  input: { sessionId: string; tenantId: number; userId: string },
+  input: { sessionId: string; tenantId: number; userId: string; env?: Env },
 ): Promise<SessionRef | null> {
-  const access = await requireSessionRole(db, input.sessionId, input.tenantId, input.userId, 'owner');
+  const access = await requireSessionRole(db, input.sessionId, input.tenantId, input.userId, 'owner', input.env);
   if (!access) return null;
   const [row] = await db
     .select({ id: creationSessions.id, tenantId: creationSessions.tenantId, title: creationSessions.title })
@@ -276,14 +277,7 @@ export async function claimCanvasInviteLink(
   if (!target) return { ok: false, reason: 'invalid' };
 
   if (input.claimant.kind === 'user') {
-    const [member] = await db
-      .select({ userId: creationSessionMembers.userId })
-      .from(creationSessionMembers)
-      .where(and(
-        eq(creationSessionMembers.sessionId, target.sessionId),
-        eq(creationSessionMembers.userId, input.claimant.userId),
-      ))
-      .limit(1);
+    const member = await sessionMemberRole(db, { id: target.sessionId, tenantId: target.tenantId }, input.claimant.userId);
     if (member) {
       return { ok: true, target, userId: input.claimant.userId, guest: null, alreadyMember: true };
     }
@@ -320,9 +314,10 @@ export async function claimCanvasInviteLink(
     userId,
     role: tenantRoleForSessionRole(target.role),
   }, env);
-  await db.insert(creationSessionMembers)
-    .values({ sessionId: target.sessionId, userId, role: target.role })
-    .onConflictDoNothing();
+  // `keep`: a link must never demote somebody who already holds a better role.
+  await addSessionMember(db, env, { id: target.sessionId, tenantId: target.tenantId, title: target.title }, {
+    userId, role: target.role,
+  }, 'keep');
 
   return { ok: true, target, userId, guest, alreadyMember: false };
 }

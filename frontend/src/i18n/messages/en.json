@@ -3030,6 +3030,12 @@
       },
       "target": "target {d}",
       "noTarget": "no target date",
+      "released": "released {d}",
+      "releasedOnTime": "released {d} · on time",
+      "releasedLate": "released {d} · {n, plural, one {# day late} other {# days late}}",
+      "releaseOnTime": "Release on-time rate",
+      "releaseOnTimeSub": "{onTime} of {measured} shipped by target",
+      "releaseOnTimeNone": "no shipped release with a target yet",
       "forecast": "Forecast completion",
       "forecastBand": "{o} – {p}",
       "forecastNone": "needs throughput to forecast",
@@ -33043,7 +33049,11 @@
       "loadFailed": "Could not load.",
       "deleteFailed": "Delete failed.",
       "saveFailed": "Save failed (manager role required for changes).",
-      "required": "{field} is required"
+      "required": "{field} is required",
+      "release": {
+        "targetDate": "Target date",
+        "releasedAt": "Released"
+      }
     }
   },
   "mcpServers": {

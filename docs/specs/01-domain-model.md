@@ -181,7 +181,7 @@ sits in decides whether it reads as backlog or board.
 | impact tracking (`impactCategory` … `impactNotes`) | `feature_roi` (+ `roi_timeline_entries`) |
 | feature flags (`isFeatureFlag` … `targetUserSegments`) | `feature_flags` |
 | experiments (`isExperiment` … `experimentEndDate`) | `experiments`, `ab_tests` (+ `ab_test_variants`, `ab_test_segments`) |
-| release planning (`targetReleaseId`, `releaseVersion`, `releaseDate`, `releasedAt`, `releaseNotes`) | `tasks.release_id` → `product_releases` (`version`, `target_date`, `release_date`, `released_at`, `notes`); published notes are `release_notes` / `changelog_entries` |
+| release planning (`targetReleaseId`, `releaseVersion`, `releaseDate`, `releasedAt`, `releaseNotes`) | `tasks.release_id` → `product_releases` (`version`, `target_date` = plan, `released_at` = actual ship time stamped on the move to `released` (1266 folds `release_date` in; 1268 drops it), `notes`); published notes are `release_notes` / `changelog_entries` |
 | product analytics (`featureAdoptionRate` … `lastUsageTrackedAt`) | `feature_roi.usage` + `metric_facts` |
 | `linkedObjectiveId`, `linkedKeyResultId`, `goalContribution` | `objective_links` (`link_kind` task / epic, `task_id`) → `objectives` / `key_results`. Local rows, not external ids. |
 | `agentRunId` | `executions.task_id` (every run of the ticket) |

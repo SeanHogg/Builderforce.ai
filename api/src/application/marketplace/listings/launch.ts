@@ -4,8 +4,9 @@
  * it, the copy an install puts on the buyer's own board, and the install counter.
  * Split out of `../creationListings.ts`, which re-exports the public names.
  */
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import {
+  LISTING_KIND_IDS,
   listingKindSpec,
   resolveListingAccess,
   SNAPSHOT_REASON_PUBLICATION,
@@ -15,7 +16,6 @@ import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import {
   catalogItems,
-  creationSessionMembers,
   creationSessionObjects,
   creationSessions,
   snapshots,
@@ -23,7 +23,7 @@ import {
 import { getOrSetCached } from '../../../infrastructure/cache/readThroughCache';
 import { acrossTenants } from '../../../infrastructure/database/tenantScope';
 import { creationObjectSearchText } from '../../creation/creationSessionModel';
-import { registerObject } from '../../kernel/ObjectRegistry';
+import { newBoardOwnerBatch } from '../../creation/sessionMembers';
 import { liveUrl, runnableDocument, type StageObject } from '../stageChecks';
 import { hostedListingStatus, isHostedListing, type HostedListingStatus } from '../creationListings.hosted';
 import { SNAPSHOT_TTL_SECONDS, invalidateListingCaches, snapshotCacheKey } from './cache';
@@ -96,6 +96,13 @@ export function launchPayloadFor(
  * rather than resolving through the shop window and 404-ing the customer.
  *
  * Exported for the install path, which needs the same reading.
+ *
+ * What it DOES still require: a sellable kind (`catalog_items` also holds kanban
+ * and canvas templates since 1263, policy packs and presets, none of which is a
+ * listing whatever its slug), and a row that was published at some point
+ * (`published_at` set). Withdrawing keeps `published_at`, so a buyer of a withdrawn
+ * listing still resolves it and `resolveListingAccess` applies the licence rule;
+ * a draft or a private template that was never listed resolves to nothing.
  */
 export async function resolveListingBySlug(
   db: Db,
@@ -104,7 +111,10 @@ export async function resolveListingBySlug(
   const [row] = await db
     .select()
     .from(catalogItems)
-    .where(acrossTenants(catalogItems, 'public_catalogue', eq(catalogItems.slug, slug)))
+    .where(acrossTenants(catalogItems, 'public_catalogue',
+      eq(catalogItems.slug, slug),
+      inArray(catalogItems.kind, [...LISTING_KIND_IDS]),
+      isNotNull(catalogItems.publishedAt)))
     .limit(1);
   return row ?? null;
 }
@@ -291,19 +301,12 @@ export async function installListingIntoCanvas(
       canvasRevision: 1,
       lastActivityAt: now,
     }),
-    db.insert(creationSessionMembers).values({
-      sessionId, userId: input.userId, role: 'owner', invitedBy: input.userId,
-    }),
+    // The board's registry object and the owner's kernel membership on it, in the
+    // same batch (1264) — a board with no member is unreachable, so the two cannot
+    // be a second round trip that might not happen.
+    ...newBoardOwnerBatch(db, { sessionId, tenantId: input.tenantId, title: listing.name, ownerUserId: input.userId }),
     db.insert(creationSessionObjects).values(objectRows),
   ] as unknown as Parameters<typeof db.batch>[0]);
-
-  await registerObject(db, env, {
-    tenantId: input.tenantId,
-    kind: 'creation_session',
-    refId: sessionId,
-    domain: 'canvas',
-    title: listing.name,
-  });
 
   return { sessionId, title: listing.name, objectCount: objectRows.length };
 }

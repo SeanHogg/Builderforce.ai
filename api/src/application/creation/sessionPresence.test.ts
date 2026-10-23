@@ -83,7 +83,7 @@ function fakeDb(results: unknown[][]) {
       columns.push(Object.keys(cols));
       const rows = results.shift() ?? [];
       const chain = {
-        from: () => chain, innerJoin: () => chain, where: () => chain, limit: () => chain,
+        from: () => chain, innerJoin: () => chain, leftJoin: () => chain, where: () => chain, limit: () => chain,
         then: (resolve: (v: unknown) => void, reject: (e: unknown) => void) => Promise.resolve(rows).then(resolve, reject),
       };
       return chain;
@@ -92,23 +92,27 @@ function fakeDb(results: unknown[][]) {
   return { db, columns };
 }
 
+/** The second read: the board's presence fields plus the caller's presence row. */
 const ROW = {
-  id: 's1', tenantId: 3, canvasRevision: 9, sessionViewport: { x: 0, y: 0, zoom: 1 }, role: 'editor',
+  id: 's1', tenantId: 3, canvasRevision: 9, sessionViewport: { x: 0, y: 0, zoom: 1 },
   lastSeenAt: NOW, lastSeenRevision: 9, viewport: { x: 1, y: 1, zoom: 1 }, cursor: null, selection: [], typing: false, followingUserId: null,
 };
+/** The first read: the kernel-membership grant (migration 1264). */
+const GRANT = { role: 'editor', sessionTenantId: 3 };
 
 describe('resolvePresenceAccess', () => {
   it('never selects the preview JSONB or any session column presence does not use', async () => {
-    const { db, columns } = fakeDb([[ROW]]);
+    const { db, columns } = fakeDb([[GRANT], [ROW]]);
     await resolvePresenceAccess(db, 's1', 3, 'u1');
-    expect(columns[0]).not.toContain('preview');
-    expect(columns[0]).not.toContain('session');
+    expect(columns[1]).not.toContain('preview');
+    expect(columns[1]).not.toContain('session');
   });
 
-  it('answers from the tenant-scoped member read without a second query', async () => {
-    const { db, columns } = fakeDb([[ROW]]);
+  it('reads the role from the kernel grant and presence from its own row — two reads, no more', async () => {
+    const { db, columns } = fakeDb([[GRANT], [ROW]]);
     const access = await resolvePresenceAccess(db, 's1', 3, 'u1');
-    expect(columns).toHaveLength(1);
+    expect(columns).toHaveLength(2);
+    expect(columns[0]).toEqual(['role', 'sessionTenantId']);
     expect(access).toEqual({
       session: { id: 's1', tenantId: 3, canvasRevision: 9, viewport: { x: 0, y: 0, zoom: 1 } },
       role: 'editor',
@@ -116,12 +120,25 @@ describe('resolvePresenceAccess', () => {
     });
   });
 
+  it('treats a member who has never ticked (no presence row) as due for a write', async () => {
+    const blank = { ...ROW, lastSeenAt: null, lastSeenRevision: null, viewport: null, cursor: null, selection: null, typing: null, followingUserId: null };
+    const { db } = fakeDb([[GRANT], [blank]]);
+    const access = await resolvePresenceAccess(db, 's1', 3, 'u1');
+    expect(access?.self.lastSeenAt).toBeNull();
+    expect(presenceWriteDue(access!.self, next, NOW)).toBe(true);
+  });
+
   it('falls through to the superadmin-member read, and refuses when neither matches', async () => {
-    const admin = fakeDb([[], [ROW]]);
+    const admin = fakeDb([[], [{ role: 'editor', sessionTenantId: 3 }], [ROW]]);
     expect((await resolvePresenceAccess(admin.db, 's1', 99, 'u1'))?.role).toBe('editor');
-    expect(admin.columns).toHaveLength(2);
+    expect(admin.columns).toHaveLength(3);
 
     const none = fakeDb([[], []]);
     expect(await resolvePresenceAccess(none.db, 's1', 99, 'u1')).toBeNull();
+  });
+
+  it('grants nothing for a kernel membership role the board gate does not know', async () => {
+    const { db } = fakeDb([[{ role: 'member', sessionTenantId: 3 }], []]);
+    expect(await resolvePresenceAccess(db, 's1', 3, 'u1')).toBeNull();
   });
 });

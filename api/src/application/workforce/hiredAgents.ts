@@ -32,11 +32,12 @@
  * ── PROVISIONING: A HIRE HAS TO CREATE SOMETHING ─────────────────────────────
  * Reading the entitlement is not enough on its own. A workforce agent is
  * addressed for per-agent capability assignment, chat participation and role
- * assignment through its CANONICAL IDENTITY ROW in `project_agents`
- * (tenant-scoped, `project_id IS NULL`, `agent_kind = 'workforce'`) — the id
- * `artifact_assignments.scope = 'agent'` points at. An owned agent gets one on
- * demand from `POST /agents/:id/bridge`, which only ever ran for agents the
- * caller owns. A hired agent had none and could not get one.
+ * assignment through its WORKSPACE IDENTITY — the `agent_assignments` row with
+ * `scope = 'workspace'` (migration 1265 folded the old `project_agents` identity
+ * rows in), whose integer `agentHandle` is what `artifact_assignments.scope =
+ * 'agent'` points at. An owned agent gets one on demand from
+ * `POST /agents/:id/bridge`, which only ever ran for agents the caller owns. A
+ * hired agent had none and could not get one.
  *
  * {@link provisionHiredAgent} creates that identity in the HIRING workspace, so
  * a bought agent is configurable and assignable there the moment it is hired;
@@ -44,20 +45,16 @@
  * it) on unhire, so releasing an agent releases the configuration with it rather
  * than leaving orphan capability rows pointing at an identity nobody holds.
  *
- * The identity helpers are shared with the owner-side bridge route, which used to
- * spell the same upsert out inline — one definition of "the canonical identity of
- * a workforce agent in a workspace", used by both paths.
+ * Both go through `AgentAssignmentService.ensureIdentity` / `removeIdentities` —
+ * the same calls the owner-side bridge and agent DELETE make — so there is one
+ * definition of "the canonical identity of a workforce agent in a workspace".
  */
 
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import {
-  agentPurchases,
-  artifactAssignments,
-  ideAgents,
-  projectAgents,
-} from '../../infrastructure/database/schema';
+import { agentPurchases, ideAgents } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 
 /**
  * The ids of the agents this workspace currently HOLDS a hire on.
@@ -92,89 +89,6 @@ export function usableByTenant(tenantId: number, hiredAgentIds: readonly string[
 }
 
 /**
- * The canonical, project-less `project_agents` identity for a workforce agent in
- * a workspace — created if it is not there yet.
- *
- * Idempotent by the partial unique index the insert targets
- * (`(tenant_id, agent_kind, agent_ref) WHERE project_id IS NULL`); the re-read
- * after `onConflictDoNothing` is what makes a lost insert race still return the
- * identity rather than nothing.
- */
-export async function ensureAgentIdentity(
-  db: Db,
-  input: { tenantId: number; agentId: string; name: string; addedBy: string | null },
-): Promise<number | null> {
-  const identityWhere = scopedToTenant(projectAgents, input.tenantId,
-    eq(projectAgents.agentKind, 'workforce'),
-    eq(projectAgents.agentRef, input.agentId),
-    isNull(projectAgents.projectId));
-
-  const [existing] = await db.select({ id: projectAgents.id }).from(projectAgents).where(identityWhere);
-  if (existing) return existing.id;
-
-  const [created] = await db
-    .insert(projectAgents)
-    .values({
-      tenantId: input.tenantId,
-      projectId: null,
-      agentKind: 'workforce',
-      agentRef: input.agentId,
-      name: input.name,
-      addedBy: input.addedBy,
-    })
-    // `where` here is the CONFLICT TARGET predicate (drizzle's name for the
-    // partial-index qualifier), matching the partial unique index the raw
-    // statement targeted: ON CONFLICT (...) WHERE project_id IS NULL DO NOTHING.
-    .onConflictDoNothing({
-      target: [projectAgents.tenantId, projectAgents.agentKind, projectAgents.agentRef],
-      where: isNull(projectAgents.projectId),
-    })
-    .returning({ id: projectAgents.id });
-  if (created) return created.id;
-
-  // Lost an insert race — read the row the other request created.
-  const [row] = await db.select({ id: projectAgents.id }).from(projectAgents).where(identityWhere);
-  return row?.id ?? null;
-}
-
-/**
- * Drop a workspace's identity rows for an agent, and the per-agent capability
- * assignments that hang off them.
- *
- * Shared with agent DELETE, which had this sequence inline: the assignments MUST
- * go first, because `artifact_assignments.scope_id` holds a `project_agents.id`
- * with no foreign key behind it (it is polymorphic across scopes), so deleting
- * the identity first would leave rows pointing at an id that will eventually be
- * reissued to a different agent.
- *
- * Returns how many identity rows were removed.
- */
-export async function removeAgentIdentities(
-  db: Db,
-  input: { tenantId: number; agentId: string },
-): Promise<number> {
-  const bridges = await db
-    .select({ id: projectAgents.id })
-    .from(projectAgents)
-    .where(scopedToTenant(projectAgents, input.tenantId,
-      eq(projectAgents.agentKind, 'workforce'),
-      eq(projectAgents.agentRef, input.agentId),
-      isNull(projectAgents.projectId)));
-  const bridgeIds = bridges.map((b) => b.id);
-  if (bridgeIds.length === 0) return 0;
-
-  await db
-    .delete(artifactAssignments)
-    .where(scopedToTenant(artifactAssignments, input.tenantId,
-      eq(artifactAssignments.scope, 'agent'),
-      inArray(artifactAssignments.scopeId, bridgeIds)));
-  await db
-    .delete(projectAgents)
-    .where(scopedToTenant(projectAgents, input.tenantId, inArray(projectAgents.id, bridgeIds)));
-  return bridgeIds.length;
-}
-
-/**
  * Bind a just-hired agent into the hiring workspace.
  *
  * This is the step that turns "a row says I bought it" into "I can use it": the
@@ -185,14 +99,13 @@ export async function removeAgentIdentities(
 export async function provisionHiredAgent(
   db: Db,
   input: { tenantId: number; agentId: string; agentName: string; actorUserId: string | null },
-): Promise<{ projectAgentId: number | null }> {
-  const projectAgentId = await ensureAgentIdentity(db, {
-    tenantId: input.tenantId,
-    agentId: input.agentId,
+): Promise<{ agentHandle: number }> {
+  const agentHandle = await new AgentAssignmentService(db).ensureIdentity(input.tenantId, {
+    agentRef: input.agentId,
     name: input.agentName,
     addedBy: input.actorUserId,
   });
-  return { projectAgentId };
+  return { agentHandle };
 }
 
 /**
@@ -208,6 +121,6 @@ export async function revokeHiredAgent(
   db: Db,
   input: { tenantId: number; agentId: string },
 ): Promise<{ removed: number }> {
-  const removed = await removeAgentIdentities(db, input);
+  const removed = await new AgentAssignmentService(db).removeIdentities(input.tenantId, { agentRef: input.agentId });
   return { removed };
 }

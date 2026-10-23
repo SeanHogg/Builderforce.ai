@@ -1,3 +1,23 @@
+## ✅ RESOLVED 2026-10-23 — Route consolidation: the four data-migration duplicates folded into one store each (api 2026.10.70 · frontend 2026.10.85)
+
+Operator decisions (2026-10-23): templates go into `catalog_items`, canvas relations go onto the kernel, `agent_assignments` is canonical, and releases carry plan vs actual dates. Each move ships expand/contract. Migrations 1263–1266 only add and backfill, so the old Worker keeps running through the deploy window. The drops (1267–1270) ship in the next release and reconcile what the old Worker wrote in the meantime.
+
+- **Templates → `catalog_items` (1263):** kanban and canvas templates are catalog rows, read and written by one `catalogTemplateStore` (split into `templateKinds` / `templateCache`).
+  - The generic entity surface is read-only for the catalog and hides private canvas templates.
+  - Marketplace listing lookups filter to listing kinds.
+  - The copy is recorded in a fold ledger, so window edits are refreshed (newest write wins) and window deletes are removed by 1267.
+- **Canvas members → kernel `memberships` (1264):** board access is a kernel membership on the board's object, cached per grant and bumped on every write.
+  - Fixed: board share links could be minted and revoked by non-members; the gate now sits in `ObjectRegistry`. Accepting an invitation can no longer demote the last owner. Three board creators now seat an owner. The roster listing is gated.
+  - 1270 renames the remaining table to `creation_session_presence`.
+- **`project_agents` → `agent_assignments` (1265):** one assignment store with integer handles.
+  - Removal must name its target scope, so a chat member can't delete other assignments.
+  - The MCP tools moved out of `builtinMcpService` and are MANAGER-gated through the same policy as REST.
+  - The bridge and hire return both `agentHandle` and `projectAgentId`.
+- **Release dates, plan vs actual (1266):** `target_date` / `released_at` replace `release_date`.
+  - Legacy statuses are mapped and unknown ones abort. A date the new pair can't carry is kept in notes.
+  - The legacy alias still returns `releaseDate`.
+  - Release writes now invalidate the delivery-insights cache through a version token.
+
 ## ✅ RESOLVED 2026-10-23 — LLM cost optimization, wave 3: operator decisions applied, builderforce-memory 2026.10.22 published, lossless compaction in VS Code (api 2026.10.68 · brain-embedded 2026.10.42 · cost-levers 2026.10.1 · VSIX 2026.10.62 · builderforce-memory 2026.10.22)
 
 Operator decisions (2026-10-23): pick the best approach for durable dense search, always take the cheaper option, keep free embeddings always on.

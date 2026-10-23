@@ -15,16 +15,16 @@
  * write that project — and no other.
  */
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import {
-  creationSessionMembers,
   creationSessionProjectLinks,
   creationSessions,
 } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hasMinRole, TenantRole } from '../../domain/shared/types';
 import { SESSION_ROLE_RANK, type SessionRole } from '../creation/sessionAccess';
+import { boardsOfMember } from '../creation/sessionMembers';
 
 /** Board roles that edit a board — derived from the rank, not restated. */
 const BOARD_EDIT_ROLES = (Object.keys(SESSION_ROLE_RANK) as SessionRole[])
@@ -48,15 +48,11 @@ export async function mayWriteProjectFiles(
     .select({ sessionId: creationSessionProjectLinks.sessionId })
     .from(creationSessionProjectLinks)
     .innerJoin(creationSessions, eq(creationSessions.id, creationSessionProjectLinks.sessionId))
-    .innerJoin(creationSessionMembers, and(
-      eq(creationSessionMembers.sessionId, creationSessionProjectLinks.sessionId),
-      eq(creationSessionMembers.userId, userId),
-    ))
     .where(scopedToTenant(
       creationSessions,
       tenantId,
       eq(creationSessionProjectLinks.projectId, projectId),
-      inArray(creationSessionMembers.role, BOARD_EDIT_ROLES),
+      boardsOfMember(userId, { roles: BOARD_EDIT_ROLES }).isMember,
     ))
     .limit(1);
   return !!link;

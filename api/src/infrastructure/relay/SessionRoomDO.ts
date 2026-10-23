@@ -18,7 +18,7 @@ import { PeerRelay, type RelayPeer } from './peerRelay';
  * ── PEER RELAY (canvas rooms only) ───────────────────────────────────────────
  * A pointer cannot ride the fan-out. Remote cursors used to arrive on the canvas's
  * 8-second `/presence` REST poll — correct, and up to eight seconds behind where
- * the collaborator actually was, with a `creation_session_members.cursor` write on
+ * the collaborator actually was, with a presence-row `cursor` write on
  * every tick to pay for it.
  *
  * A connection the ROUTE marks `x-bf-relay-mode: peer` may therefore send frames

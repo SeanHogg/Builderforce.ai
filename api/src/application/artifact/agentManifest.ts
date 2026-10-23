@@ -16,15 +16,15 @@
  * per-agent N+1): one identities query, one assignments query, two batched name
  * lookups.
  */
-import { eq, and, inArray, isNull } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import {
   artifactAssignments,
-  projectAgents,
   marketplaceSkills,
   platformPersonas,
 } from '../../infrastructure/database/schema';
 import { AssignmentScope, ArtifactType } from '../../domain/shared/types';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { AgentAssignmentService, agentAssignmentsVersion } from '../agent/AgentAssignmentService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -43,7 +43,10 @@ export interface AgentManifest {
   content: NamedArtifact[];
 }
 
-const cacheKey = (tenantId: number) => `agent-manifests:tenant:${tenantId}`;
+/** Folds the assignment token in: removing an agent's workspace identity drops the
+ *  capabilities on it, and that write bumps the token rather than knowing this cache. */
+const cacheKey = async (env: Env, tenantId: number) =>
+  `agent-manifests:tenant:${tenantId}:${await agentAssignmentsVersion(env, tenantId)}`;
 
 const byDisplay = (a: NamedArtifact, b: NamedArtifact) =>
   (a.name ?? a.slug).localeCompare(b.name ?? b.slug);
@@ -58,20 +61,13 @@ export async function loadAgentManifests(
   db: Db,
   tenantId: number,
 ): Promise<Record<string, AgentManifest>> {
-  return getOrSetCached<Record<string, AgentManifest>>(env, cacheKey(tenantId), async () => {
-    // Canonical (project-less) workforce identities — the rows whose `id` is the
-    // `scope_id` for this agent's `scope='agent'` assignments.
-    const identities = await db
-      .select({ id: projectAgents.id, agentRef: projectAgents.agentRef })
-      .from(projectAgents)
-      .where(and(
-        eq(projectAgents.tenantId, tenantId),
-        eq(projectAgents.agentKind, 'workforce'),
-        isNull(projectAgents.projectId),
-      ));
-    if (identities.length === 0) return {};
+  return getOrSetCached<Record<string, AgentManifest>>(env, await cacheKey(env, tenantId), async () => {
+    // Workforce workspace identities — the rows whose `agentHandle` is the `scope_id`
+    // for this agent's `scope='agent'` assignments.
+    const handleByRef = await new AgentAssignmentService(db, env).identityHandles(tenantId, 'workforce');
+    if (handleByRef.size === 0) return {};
 
-    const refByScopeId = new Map<number, string>(identities.map((i) => [i.id, i.agentRef]));
+    const refByScopeId = new Map<number, string>([...handleByRef].map(([ref, handle]) => [handle, ref]));
     const rows = await db
       .select({
         scopeId: artifactAssignments.scopeId,
@@ -82,7 +78,7 @@ export async function loadAgentManifests(
       .where(and(
         eq(artifactAssignments.tenantId, tenantId),
         eq(artifactAssignments.scope, AssignmentScope.AGENT),
-        inArray(artifactAssignments.scopeId, identities.map((i) => i.id)),
+        inArray(artifactAssignments.scopeId, [...refByScopeId.keys()]),
       ));
     if (rows.length === 0) return {};
 
@@ -136,5 +132,5 @@ export async function loadAgentManifests(
 /** Drop the cached manifest map for a tenant. Call from every agent-scoped artifact
  *  assignment mutation so the next /workforce read reflects the change immediately. */
 export async function invalidateAgentManifests(env: Env, tenantId: number): Promise<void> {
-  await invalidateCached(env, cacheKey(tenantId));
+  await invalidateCached(env, await cacheKey(env, tenantId));
 }

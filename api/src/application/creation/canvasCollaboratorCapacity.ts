@@ -20,12 +20,12 @@
  * Returns null when there is room, or the 403 body to answer with.
  */
 
-import { sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { listPending } from '../kernel/InvitationService';
 import { resolveTenantEffectivePlan } from '../tenant/tenantPlanSnapshot';
 import { getLimits } from '../../domain/tenant/PlanLimits';
+import { countSessionMembers } from './sessionMembers';
 
 export interface CollaboratorCapacityRefusal {
   error: string;
@@ -59,8 +59,7 @@ export async function collaboratorCapacity(
   if (input.arrival.alreadyMember) return null;
   if (input.limit === -1) return null;
   const [members, pending] = await Promise.all([
-    db.execute(sql`SELECT COUNT(*)::int AS count FROM creation_session_members WHERE session_id = ${input.sessionId}`)
-      .then((result) => Number((result.rows[0] as { count?: number } | undefined)?.count ?? 0)),
+    countSessionMembers(db, { id: input.sessionId, tenantId: input.tenantId }),
     input.objectId
       ? listPending(db, env, input.tenantId, 'session').then((rows) => rows.filter((row) =>
         row.objectId === input.objectId && row.email !== (input.arrival.email ?? null)).length)

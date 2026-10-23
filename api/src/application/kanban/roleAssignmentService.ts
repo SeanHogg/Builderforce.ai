@@ -10,7 +10,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *   - <id>  → a project-specific assignment (the project's Recommended Roster card).
  */
 import { and, eq, isNull } from 'drizzle-orm';
-import { projectAgents, projectRoleAssignments } from '../../infrastructure/database/schema';
+import { projectRoleAssignments } from '../../infrastructure/database/schema';
+import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -45,18 +46,19 @@ export class RoleAssignmentService {
   constructor(private readonly db: Db) {}
 
   /**
-   * The `project_agents` attachment behind a role assignment.
+   * The project staffing (`agent_assignments`, scope 'project') behind a role assignment.
    *
-   * `onConflictDoNothing` on purpose: the agent may already be attached (added
-   * by hand, or staffed onto a second role), and re-staffing must not renumber
-   * the row — `artifact_assignments.scope_id` points at that id, so a new row
-   * would silently orphan every per-agent skill and persona.
+   * `onExisting: 'keep'` on purpose: the agent may already be staffed (added by hand, or
+   * staffed onto a second role), and re-staffing must neither renumber the row —
+   * `artifact_assignments.scope_id` points at its handle, so a new row would silently
+   * orphan every per-agent skill and persona — nor overwrite the role it already holds.
    *
-   * Deliberately NOT reversed on unassign: an attachment can outlive the role
-   * that created it (the same agent may be doing other work on the project), so
-   * detaching is an explicit act on the capabilities tab.
+   * Deliberately NOT reversed on unassign: an attachment can outlive the role that
+   * created it (the same agent may be doing other work on the project), so detaching is
+   * an explicit act on the capabilities tab.
    */
   private async attachRoleAgent(
+    env: Env,
     tenantId: number,
     projectId: number,
     roleKey: string,
@@ -64,15 +66,16 @@ export class RoleAssignmentService {
     assigneeName: string | null,
     createdBy: string | null,
   ): Promise<void> {
-    await this.db.insert(projectAgents).values({
-      tenantId,
-      projectId,
+    await new AgentAssignmentService(this.db, env).assign(tenantId, {
       agentKind: 'workforce',
       agentRef: assigneeRef,
-      name: assigneeName?.trim() || assigneeRef,
+      scope: 'project',
+      scopeId: String(projectId),
       role: roleKey.slice(0, 64),
+      name: assigneeName?.trim() || assigneeRef,
       addedBy: createdBy,
-    }).onConflictDoNothing();
+      onExisting: 'keep',
+    });
   }
 
   /** All assignments for a tenant (both workspace-default and project-scoped). Cached. */
@@ -129,19 +132,18 @@ export class RoleAssignmentService {
       createdBy,
       createdAt: new Date(),
     });
-    // MATERIALIZE the capability target. The Agent/Capabilities tab reads
-    // `project_agents`; the roster writes `project_role_assignments`. While those
-    // were two independent lists, an agent staffed onto a role through the roster
-    // never appeared in the capabilities "Agents (N)" list, and the per-agent
-    // skills/personas/content that hang off `project_agents.id` had nowhere to
-    // attach. One staffing decision, one attachment row — created here rather
+    // MATERIALIZE the capability target. The Agent/Capabilities tab reads the project's
+    // staffing (`agent_assignments`, scope 'project'); the roster writes
+    // `project_role_assignments`. While those were two independent lists, an agent
+    // staffed onto a role through the roster never appeared in the capabilities
+    // "Agents (N)" list, and the per-agent skills/personas that hang off its handle had
+    // nowhere to attach. One staffing decision, one attachment row — created here rather
     // than by a UI, so every writer (roster, manager auto-staffing, MCP) gets it.
     //
-    // Only for a real project: a workspace-default assignment (projectId null)
-    // is a default, not an attachment, and `uq_project_agents_identity` reserves
-    // the NULL-project row for the agent's canonical identity.
+    // Only for a real project: a workspace-default assignment (projectId null) is a
+    // default, not an attachment — the agent's workspace identity is a separate scope.
     if (body.assigneeKind === 'agent' && projectId != null) {
-      await this.attachRoleAgent(tenantId, projectId, roleKey, assigneeRef, body.assigneeName ?? null, createdBy);
+      await this.attachRoleAgent(env, tenantId, projectId, roleKey, assigneeRef, body.assigneeName ?? null, createdBy);
     }
 
     await invalidateCached(env, assignmentsKey(tenantId));

@@ -118,7 +118,7 @@ export enum TenantRole {
   /**
    * Seated by a canvas share that grants EDIT on a board (operator decision
    * 2026-09-12). A contributor reads the workspace like a viewer and writes only
-   * the canvases they hold a `creation_session_members` row on — canvas writes are
+   * the canvases they hold a board membership on — canvas writes are
    * gated by the BOARD role (`application/creation/sessionAccess.ts`), never by a
    * tenant tier. Ranked below developer so every `>= developer` gate refuses it.
    */

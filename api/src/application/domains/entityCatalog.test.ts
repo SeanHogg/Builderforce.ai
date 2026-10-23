@@ -17,6 +17,7 @@ import { ENTITY_SCOPES, isEntityScope, singularize } from './entityDefinition';
 import { DOMAINS, isDomain } from '../kernel/ObjectRegistry';
 import { DOMAIN_MANIFEST } from '../kernel/DomainService';
 import { collectCreatedTables } from '../../../scripts/lib/tableAdoption.mjs';
+import { CATALOG_BROWSABLE_ROWS } from '../templates/templateKinds';
 
 const api = resolve(__dirname, '..', '..', '..');
 
@@ -430,5 +431,29 @@ describe('the roster and the catalog', () => {
     for (const domain of DOMAINS) expect(isEntityScope(domain)).toBe(true);
     expect(isEntityScope('kernel')).toBe(true);
     expect(isEntityScope('nonsense')).toBe(false);
+  });
+});
+
+describe('catalog_items through the generic surface (1263)', () => {
+  // Templates live in `catalog_items` since 1263, and their one writer is
+  // `templates/catalogTemplateStore.ts` — it owns publication and bumps the
+  // catalogue's cache tokens. A generic PATCH could publish a template past both.
+  it('is read-only', () => {
+    const def = findEntity('kernel', 'catalog_items');
+    expect(def).not.toBeNull();
+    expect(def!.readable).toBe(true);
+    expect(def!.writable).toBe(false);
+  });
+
+  // A 'private' canvas template is its author's alone; only the template use case
+  // knows who is asking, so the generic reader filters those rows out.
+  it('never returns a private canvas template', () => {
+    const def = findEntity('kernel', 'catalog_items')!;
+    expect(def.visibleRows).toBe(CATALOG_BROWSABLE_ROWS);
+  });
+
+  it('is the only kernel entity carrying a row filter', () => {
+    const filtered = entitiesForScope('kernel').filter((d) => d.visibleRows !== null).map((d) => d.name);
+    expect(filtered).toEqual(['catalog_items']);
   });
 });

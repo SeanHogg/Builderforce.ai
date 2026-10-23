@@ -12,22 +12,40 @@
  *
  * The superadmin branch is the part that most needed one home. Platform superadmins
  * collaborate in associate-owned sales canvases ACROSS tenant boundaries, and they must
- * still be explicit session members — a rule that is one `innerJoin` away from being
+ * still be explicit board members — a rule that is one `innerJoin` away from being
  * "superadmins can open any board in the product", and that must therefore be written once.
+ *
+ * ── WHERE THE ROLE IS READ FROM ──────────────────────────────────────────────────
+ * A board's members are kernel `memberships` rows on the board's registry object
+ * (migration 1264, `sessionMembers.ts`). The gate reads only those.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { eq, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { creationSessionMembers, creationSessions, users } from '../../infrastructure/database/schema';
+import type { Env } from '../../env';
+import { creationSessions, memberships, objects, users } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { TenantRole } from '../../domain/shared/types';
+import { SESSION_MEMBER_KIND, SESSION_OBJECT_KIND, sessionMembersVersionKey } from './sessionMembers';
+import { SESSION_ROLE_RANK, isSessionRole, type SessionRole } from './sessionRoles';
 
-export type SessionRole = 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
+// The vocabulary lives in `sessionRoles.ts`; re-exported because every caller has
+// always imported it from the gate.
+export { SESSION_ROLE_RANK, isSessionRole, type SessionRole };
 
-/** Ordered, so "at least an editor" is a comparison rather than a set membership test. */
-export const SESSION_ROLE_RANK: Record<SessionRole, number> = {
-  viewer: 0, commenter: 1, editor: 2, runner: 3, owner: 4,
-};
+/** How a caller wants the grant read. `fresh` skips the cache — see {@link grantReadFor}. */
+export type GrantRead = { fresh?: boolean };
+
+/**
+ * The read a gate with this minimum needs. Anything that WRITES the board (editor and
+ * above) reads the grant fresh: a cached grant can outlive a demotion or removal by up
+ * to the cache TTL on another isolate, and that window must never cover a write.
+ * Viewer / commenter reads take the cache.
+ */
+export function grantReadFor(minimum: SessionRole): GrantRead {
+  return { fresh: SESSION_ROLE_RANK[minimum] >= SESSION_ROLE_RANK.editor };
+}
 
 export type SessionAccess = {
   session: typeof creationSessions.$inferSelect;
@@ -35,77 +53,138 @@ export type SessionAccess = {
 };
 
 /**
- * Resolve one person's membership of one board, or null.
+ * One person's grant on one board: their board role, and the tenant the board is in
+ * (which differs from the caller's only on the superadmin branch).
+ */
+export type SessionGrant = { role: SessionRole; sessionTenantId: number };
+
+/** The membership predicates for one person on one board, in any tenant. */
+function memberOfBoard(sessionId: string, userId: string): SQL[] {
+  return [
+    eq(objects.kind, SESSION_OBJECT_KIND),
+    eq(objects.refId, sessionId),
+    eq(memberships.memberKind, SESSION_MEMBER_KIND),
+    eq(memberships.memberRef, userId),
+    eq(memberships.state, 'active'),
+  ];
+}
+
+/** A stored role the gate does not know grants NOTHING — a kernel membership written
+ *  with the generic default `member` must never read as "at least a viewer". */
+function toGrant(row: { role: string; sessionTenantId: number } | undefined): SessionGrant | null {
+  return row && isSessionRole(row.role) ? { role: row.role, sessionTenantId: row.sessionTenantId } : null;
+}
+
+/** "Are you a member of a board in YOUR workspace" — the read that is cached. */
+async function loadTenantGrant(db: Db, sessionId: string, tenantId: number, userId: string): Promise<SessionGrant | null> {
+  const [row] = await db
+    .select({ role: memberships.role, sessionTenantId: memberships.tenantId })
+    .from(memberships)
+    .innerJoin(objects, eq(objects.id, memberships.objectId))
+    .where(scopedToTenant(memberships, tenantId, ...memberOfBoard(sessionId, userId)))
+    .limit(1);
+  return toGrant(row);
+}
+
+/**
+ * "Are you a platform superadmin who has been added to a board in somebody else's."
  *
- * TWO reads and not one, because they answer different questions: the first is "are you a
- * member of a board in YOUR workspace", the second is "are you a platform superadmin who
- * has been added to a board in somebody else's". Collapsing them into one query with an OR
- * would make the cross-tenant grant depend on a boolean buried in a join condition, which
- * is precisely the shape nobody re-reads before changing.
+ * DECLARED, not forgotten. The whole point of this branch is that the board is in
+ * ANOTHER tenant — an associate-owned sales canvas a platform superadmin was added to.
+ * Two predicates still govern it and neither is optional: the caller is a superadmin,
+ * AND they hold an explicit active membership on this exact board. Drop either one and
+ * this becomes "superadmins can open any board in the product". Deliberately uncached:
+ * a revoked superadmin flag must stop working on the next request.
+ */
+async function loadSuperadminGrant(db: Db, sessionId: string, userId: string): Promise<SessionGrant | null> {
+  const [row] = await db
+    .select({ role: memberships.role, sessionTenantId: memberships.tenantId })
+    .from(memberships)
+    .innerJoin(objects, eq(objects.id, memberships.objectId))
+    .innerJoin(users, eq(users.id, userId))
+    .where(acrossTenants(memberships, 'platform_admin', ...memberOfBoard(sessionId, userId), eq(users.isSuperadmin, true)))
+    .limit(1);
+  return toGrant(row);
+}
+
+/** Cache key for one person's in-tenant grant at one version of the board's roster. */
+export const sessionGrantCacheKey = (tenantId: number, sessionId: string, userId: string, version: string) =>
+  `canvas:grant:${tenantId}:${sessionId}:${userId}:v:${version}`;
+
+/**
+ * Resolve one person's grant on one board, or null — THE board-role gate.
+ *
+ * TWO reads and not one, because they answer different questions (see
+ * {@link loadSuperadminGrant}); collapsing them into one query with an OR would make the
+ * cross-tenant grant depend on a boolean buried in a join condition, which is precisely
+ * the shape nobody re-reads before changing.
+ *
+ * With `env`, the in-tenant read is cached under the board's member version token,
+ * which every membership writer bumps (`sessionMembersChanged`) — every canvas request
+ * resolves this, so a READ costs a cache hit. Staleness is bounded, not zero: the token
+ * has a 2 s L1 per isolate, and a grant entry lives at most 60 s in KV, so a removal
+ * or demotion is seen by the isolate that made it immediately and by others within
+ * seconds (or, if a token bump itself fails — reported loudly — within the 60 s TTL).
+ * That window is acceptable for reads only: board WRITES pass `{ fresh: true }`
+ * ({@link grantReadFor}) and never see a cached grant.
+ */
+export async function resolveSessionGrant(
+  db: Db,
+  sessionId: string,
+  tenantId: number,
+  userId: string,
+  env?: Env,
+  read: GrantRead = {},
+): Promise<SessionGrant | null> {
+  const load = () => loadTenantGrant(db, sessionId, tenantId, userId);
+  let own: SessionGrant | null;
+  if (env && !read.fresh) {
+    const version = await getCacheVersion(env, sessionMembersVersionKey(sessionId), { l1TtlMs: 2_000 });
+    own = await getOrSetCached(env, sessionGrantCacheKey(tenantId, sessionId, userId, version), load, {
+      kvTtlSeconds: 60,
+      l1TtlMs: 5_000,
+    });
+  } else {
+    own = await load();
+  }
+  return own ?? loadSuperadminGrant(db, sessionId, userId);
+}
+
+/** The predicate that reads the board a grant was resolved for — tenant-scoped, or the
+ *  declared superadmin cross-tenant read when the grant says the board is elsewhere. */
+export function grantedSessionWhere(grant: SessionGrant, sessionId: string, tenantId: number): SQL {
+  return grant.sessionTenantId === tenantId
+    ? scopedToTenant(creationSessions, tenantId, eq(creationSessions.id, sessionId))
+    : acrossTenants(
+      creationSessions,
+      'platform_admin',
+      eq(creationSessions.id, sessionId),
+      // The grant already proved superadmin + explicit membership on this board.
+      eq(creationSessions.tenantId, grant.sessionTenantId),
+    );
+}
+
+/**
+ * Resolve one person's membership of one board, with the board row, or null.
+ * Pass `env` on request paths so a read's grant is served from cache; a write passes
+ * `grantReadFor(minimum)` so it is not.
  */
 export async function resolveSessionAccess(
   db: Db,
   sessionId: string,
   tenantId: number,
   userId: string,
+  env?: Env,
+  read: GrantRead = {},
 ): Promise<SessionAccess | null> {
-  return resolveSessionMembership<SessionAccess>(db, sessionId, tenantId, userId, {
-    session: creationSessions,
-    role: creationSessionMembers.role,
-  });
-}
-
-/** What a caller may project from the board ⋈ its own member row. */
-export type SessionMembershipColumns = NonNullable<Parameters<Db['select']>[0]>;
-
-/**
- * THE two membership reads, with the projection supplied by the caller — so a hot path
- * (canvas presence polls every 8 s) can select four columns instead of the whole row,
- * `preview` JSONB included, WITHOUT carrying its own copy of the predicates. Every
- * access decision on a board goes through here; there is no second place to update.
- */
-export async function resolveSessionMembership<T>(
-  db: Db,
-  sessionId: string,
-  tenantId: number,
-  userId: string,
-  columns: SessionMembershipColumns,
-): Promise<T | null> {
-  const [row] = await db
-    .select(columns)
+  const grant = await resolveSessionGrant(db, sessionId, tenantId, userId, env, read);
+  if (!grant) return null;
+  const [session] = await db
+    .select()
     .from(creationSessions)
-    .innerJoin(creationSessionMembers, and(
-      eq(creationSessionMembers.sessionId, creationSessions.id),
-      eq(creationSessionMembers.userId, userId),
-    ))
-    .where(scopedToTenant(creationSessions, tenantId, eq(creationSessions.id, sessionId)))
+    .where(grantedSessionWhere(grant, sessionId, tenantId))
     .limit(1);
-  if (row) return row as T;
-
-  // Platform superadmins collaborate in associate-owned sales canvases across tenant
-  // boundaries. They must still be explicit session members; this does not grant blanket
-  // access to every canvas.
-  const [adminMember] = await db
-    .select(columns)
-    .from(creationSessions)
-    .innerJoin(creationSessionMembers, and(
-      eq(creationSessionMembers.sessionId, creationSessions.id),
-      eq(creationSessionMembers.userId, userId),
-    ))
-    .innerJoin(users, eq(users.id, userId))
-    // DECLARED, not forgotten. The whole point of this branch is that the board is in
-    // ANOTHER tenant — an associate-owned sales canvas a platform superadmin was added to.
-    // Two predicates still govern it and neither is optional: the caller is a superadmin,
-    // AND they hold an explicit `creation_session_members` row on this exact board. Drop
-    // either one and this becomes "superadmins can open any board in the product".
-    .where(acrossTenants(
-      creationSessions,
-      'platform_admin',
-      eq(creationSessions.id, sessionId),
-      eq(users.isSuperadmin, true),
-    ))
-    .limit(1);
-  return (adminMember as T | undefined) ?? null;
+  return session ? { session, role: grant.role } : null;
 }
 
 /**
@@ -121,9 +200,9 @@ export async function resolveSessionMembership<T>(
  * workspace `viewer`, and a role that edits or runs the board gets `contributor`
  * (operator decision 2026-09-12) — NOT `developer`. The canvas write paths gate on
  * the BOARD role ({@link requireSessionRole}), so the edit grant already lives on
- * `creation_session_members`; the workspace seat only has to let the board
- * resolve. `contributor` ranks below `developer`, so every task, project, agent
- * and run gate (`>= developer`) keeps refusing a person shared one canvas.
+ * the board membership; the workspace seat only has to let the board resolve.
+ * `contributor` ranks below `developer`, so every task, project, agent and run
+ * gate (`>= developer`) keeps refusing a person shared one canvas.
  */
 export function tenantRoleForSessionRole(role: SessionRole): TenantRole {
   return SESSION_ROLE_RANK[role] >= SESSION_ROLE_RANK.editor
@@ -140,8 +219,9 @@ export async function requireSessionRole(
   tenantId: number,
   userId: string,
   minimum: SessionRole,
+  env?: Env,
 ): Promise<SessionAccess | null> {
-  const access = await resolveSessionAccess(db, sessionId, tenantId, userId);
+  const access = await resolveSessionAccess(db, sessionId, tenantId, userId, env, grantReadFor(minimum));
   if (!access) return null;
   return SESSION_ROLE_RANK[access.role as SessionRole] >= SESSION_ROLE_RANK[minimum] ? access : null;
 }

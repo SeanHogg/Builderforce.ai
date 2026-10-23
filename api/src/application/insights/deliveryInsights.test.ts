@@ -138,4 +138,23 @@ describe('summarizeDelivery', () => {
     const r = summarizeDelivery(rows, opts());
     expect(r.activeContributors).toBe(2); // u1 + u2 completed in-window; u3 not completed, null ignored
   });
+
+  it('grades a shipped release plan vs actual: done, with the calendar-day slip', () => {
+    const rows = [task(20, 10), task(15, null)]; // open work does not un-ship a release
+    const late = summarizeDelivery(rows, opts({ scope: 'release', targetDate: at(5), releasedAt: at(2) }));
+    expect(late.status).toBe('done');
+    expect(late.releasedAt).toBe(at(2).toISOString().slice(0, 10));
+    expect(late.slipDays).toBe(3);
+
+    const early = summarizeDelivery(rows, opts({ scope: 'release', targetDate: at(2), releasedAt: at(4) }));
+    expect(early.slipDays).toBe(-2);
+
+    const unplanned = summarizeDelivery(rows, opts({ scope: 'release', targetDate: null, releasedAt: at(1) }));
+    expect(unplanned.slipDays).toBeNull();
+
+    const notShipped = summarizeDelivery(rows, opts({ scope: 'release', targetDate: at(-30) }));
+    expect(notShipped.releasedAt).toBeNull();
+    expect(notShipped.slipDays).toBeNull();
+    expect(notShipped.status).not.toBe('done');
+  });
 });

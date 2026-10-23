@@ -51,10 +51,12 @@ import {
   signatureRequests,
   snapshots,
   syncStates,
+  templatesFoldLedger,
   threads,
   workItems,
 } from '../../../infrastructure/database/schema/kernel';
 import { defineDomainEntities, entity } from '../entityDefinition';
+import { CATALOG_BROWSABLE_ROWS } from '../../templates/templateKinds';
 
 export const KERNEL_ENTITIES = defineDomainEntities('kernel', [
   entity(objects, { kind: 'object', readOnly: true }),
@@ -76,7 +78,24 @@ export const KERNEL_ENTITIES = defineDomainEntities('kernel', [
   artifacts,
   revisions,
   snapshots,
-  catalogItems,
+  /**
+   * READ-ONLY, and filtered. Templates, listings and packs are written by their
+   * use cases — a template by `templates/catalogTemplateStore.ts`, which bumps the
+   * catalogue's cache tokens and owns publication — so a generic PATCH that could
+   * set `visibility = 'public'` would publish a template past every check and
+   * leave the marketplace cache serving the old answer. And a 'private' canvas
+   * template is its AUTHOR's (migration 1263), which only the template use case
+   * can tell, so those rows are never returned here.
+   */
+  entity(catalogItems, { readOnly: true, visibleRows: CATALOG_BROWSABLE_ROWS }),
+  /**
+   * @deprecated — dropped by 1267. Migration 1263's fold ledger: migration-only
+   * bookkeeping with no tenant column, registered READ-ONLY so it is neither listed
+   * nor edited through the generic layer (tenant-less readability is opt-in). It is
+   * here only because every consolidated table must sit in an `entities.ts`; delete
+   * this line with the table (held-migrations/1267_drizzle.patch.md).
+   */
+  entity(templatesFoldLedger, { readOnly: true }),
   threads,
   messages,
   questionSets,

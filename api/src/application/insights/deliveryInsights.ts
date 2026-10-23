@@ -18,6 +18,8 @@
 
 import { and, eq, inArray, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { bumpCacheVersionSafe } from '../../infrastructure/cache/readThroughCache';
+import type { Env } from '../../env';
 import { clampScore } from '../../domain/shared/numbers';
 import {
   initiatives,
@@ -30,6 +32,8 @@ import {
 import { notSystemTask } from '../task/taskScope';
 import { loadProjectInTenant } from '../project/projectOwnership';
 import { DAY_MS } from '../../domain/shared/time';
+import { calendarDaySlip } from '../../domain/delivery/releaseSchedule';
+import { deliveryVersionKey } from './versionKeys';
 
 const MAX_TASKS = 5_000;
 /** Cap on logged time-entry rows pulled for the effort (FTE) line. */
@@ -93,6 +97,11 @@ export interface DeliveryInsights {
   forecastDateOptimistic: string | null;
   forecastDatePessimistic: string | null;
   targetDate: string | null;
+  /** When the deliverable actually shipped (a release's `released_at`), or null. */
+  releasedAt: string | null;
+  /** Calendar days `releasedAt` landed after `targetDate` (negative = early), or
+   *  null unless both are known — the plan-vs-actual grade of a shipped release. */
+  slipDays: number | null;
   status: DeliveryStatus;
   /** Scope creep (EMP-8). */
   baselineDate: string | null;
@@ -134,8 +143,10 @@ export interface SummarizeOpts {
   now: number;
   /** Deliverable baseline (start) for scope-creep + the series left edge. */
   baselineDate: Date | null;
-  /** Deliverable target/release date for the on-track verdict. */
+  /** Deliverable target (planned) date for the on-track verdict. */
   targetDate: Date | null;
+  /** When it actually shipped (releases only). A shipped deliverable is `done`. */
+  releasedAt?: Date | null;
   /** Throughput window in days (recent completions used to forecast). */
   throughputWindowDays?: number;
   /** Logged effort for the scoped tasks → the development FTE line. */
@@ -208,7 +219,7 @@ export function summarizeDelivery(rows: DeliveryTaskRow[], opts: SummarizeOpts):
 
   // ── Status verdict.
   let status: DeliveryStatus;
-  if (total > 0 && open === 0) status = 'done';
+  if (opts.releasedAt || (total > 0 && open === 0)) status = 'done';
   else if (open > 0 && throughputPerWeek === 0) status = 'no_signal';
   else if (forecastDate && opts.targetDate) {
     status = forecastVsTarget(new Date(forecastDate).getTime(), opts.targetDate.getTime());
@@ -261,6 +272,8 @@ export function summarizeDelivery(rows: DeliveryTaskRow[], opts: SummarizeOpts):
     activeContributors,
     forecastDate, forecastDateOptimistic: optimistic, forecastDatePessimistic: pessimistic,
     targetDate: opts.targetDate ? iso(opts.targetDate) : null,
+    releasedAt: opts.releasedAt ? iso(opts.releasedAt) : null,
+    slipDays: calendarDaySlip(opts.releasedAt ?? null, opts.targetDate),
     status,
     baselineDate: opts.baselineDate ? iso(opts.baselineDate) : null,
     baselineScope, addedScope, addedScopePct,
@@ -274,7 +287,7 @@ export function summarizeDelivery(rows: DeliveryTaskRow[], opts: SummarizeOpts):
 export async function computeDeliveryInsights(
   db: Db, tenantId: number, scope: DeliverableScope, scopeId: string, now: number,
 ): Promise<DeliveryInsights | null> {
-  let name = '', baselineDate: Date | null = null, targetDate: Date | null = null;
+  let name = '', baselineDate: Date | null = null, targetDate: Date | null = null, releasedAt: Date | null = null;
   let taskFilter;
 
   if (scope === 'initiative') {
@@ -291,11 +304,11 @@ export async function computeDeliveryInsights(
     name = row.name; baselineDate = row.createdAt;
     taskFilter = eq(tasks.projectId, pid);
   } else if (scope === 'release') {
-    const [row] = await db.select({ name: productReleases.name, version: productReleases.version, releaseDate: productReleases.releaseDate, createdAt: productReleases.createdAt })
+    const [row] = await db.select({ name: productReleases.name, version: productReleases.version, targetDate: productReleases.targetDate, releasedAt: productReleases.releasedAt, createdAt: productReleases.createdAt })
       .from(productReleases).where(and(eq(productReleases.id, scopeId), eq(productReleases.tenantId, tenantId))).limit(1);
     if (!row) return null;
     name = row.version ? `${row.name} (${row.version})` : row.name;
-    baselineDate = row.createdAt; targetDate = row.releaseDate;
+    baselineDate = row.createdAt; targetDate = row.targetDate; releasedAt = row.releasedAt;
     taskFilter = eq(tasks.releaseId, scopeId);
   } else { // sprint
     const [row] = await db.select({ name: sprints.name, startDate: sprints.startDate, endDate: sprints.endDate, createdAt: sprints.createdAt })
@@ -325,5 +338,16 @@ export async function computeDeliveryInsights(
     effortEntries = er.map((r) => ({ date: r.date, minutes: r.minutes }));
   }
 
-  return summarizeDelivery(rows, { scope, scopeId, name, now, baselineDate, targetDate, effortEntries });
+  return summarizeDelivery(rows, { scope, scopeId, name, now, baselineDate, targetDate, releasedAt, effortEntries });
+}
+
+/**
+ * Orphan every cached delivery-lens read for `tenantId`. A release write changes the
+ * lens's plan / actual for that release, so it bumps the lens's per-tenant version
+ * token and the next `/api/insights/delivery` read recomputes. Never throws: a failed
+ * bump is reported and the lens falls back to its TTL. Lives beside the computation
+ * it invalidates so a route calls a function instead of reaching into the cache.
+ */
+export async function bumpDeliveryInsightsVersion(env: Env, tenantId: number, operation: string): Promise<void> {
+  await bumpCacheVersionSafe(env, deliveryVersionKey(tenantId), operation, { tenantId });
 }

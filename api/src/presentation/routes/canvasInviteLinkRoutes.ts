@@ -53,6 +53,7 @@ export function createCanvasInviteLinkRoutes(db: Db): Hono<HonoEnv> {
       sessionId,
       tenantId: c.get('tenantId') as number,
       userId: c.get('userId') as string,
+      env: c.env as Env,
     });
   };
 

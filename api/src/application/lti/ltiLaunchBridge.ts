@@ -56,7 +56,6 @@ import { and, count, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   creationSessionEvents,
-  creationSessionMembers,
   creationSessionObjects,
   creationSessionSnapshots,
   creationSessions,
@@ -77,6 +76,8 @@ import {
 import type { LtiRegistration } from './LtiService';
 import type { Env } from '../../env';
 import { membershipChanged } from '../tenant/membershipChanged';
+import { addSessionMember, newBoardOwnerBatch } from '../creation/sessionMembers';
+import { deleteSessionObject } from '../creation/sessionObjectRef';
 
 /** The provider value on `oauth_accounts`. Fixed and short: the column is
  *  varchar(50) and an issuer URL does not fit, so the issuer goes in the account
@@ -274,7 +275,8 @@ async function insertBoard(
       description: input.description,
       createdBy: userId, updatedBy: userId, canvasRevision: 1, mode: 'work',
     }),
-    db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
+    // The board's registry object and the owner's kernel membership on it (1264).
+    ...newBoardOwnerBatch(db, { sessionId, tenantId: input.tenantId, title: input.title, ownerUserId: userId }),
     db.insert(creationSessionObjects).values(rows),
     db.insert(creationSessionSnapshots).values({
       sessionId, revision: 1,
@@ -366,6 +368,7 @@ async function resolveBoard(
   registration: LtiRegistration,
   context: LtiLaunchContext,
   userId: string,
+  env?: Env,
 ): Promise<{ bindingId: number; sessionId: string; cohortObjectId: string | null }> {
   const existing = await findContextBinding(db, context);
 
@@ -386,7 +389,7 @@ async function resolveBoard(
           eq(creationSessionObjects.sessionId, existing.sessionId),
         ));
     }
-    await joinBoard(db, existing.sessionId, userId);
+    await joinBoard(db, env, registration.tenantId, existing.sessionId, userId);
     return { bindingId: existing.id, sessionId: existing.sessionId, cohortObjectId: existing.cohortObjectId };
   }
 
@@ -413,20 +416,18 @@ async function resolveBoard(
   // Lost the race. Adopt the winner's board and drop ours — an orphan board with
   // one cohort object is worse than a wasted uuid.
   await db.delete(creationSessions).where(scopedToTenant(creationSessions, registration.tenantId, eq(creationSessions.id, created.sessionId)));
+  await deleteSessionObject(db, env, { id: created.sessionId, tenantId: registration.tenantId });
   const winner = await findContextBinding(db, context);
   if (!winner) throw new Error('LTI context binding vanished between insert and read.');
-  await joinBoard(db, winner.sessionId, userId);
+  await joinBoard(db, env, registration.tenantId, winner.sessionId, userId);
   return { bindingId: winner.id, sessionId: winner.sessionId, cohortObjectId: winner.cohortObjectId };
 }
 
 /** A second instructor launching into an existing course board joins it as an
- *  editor. `onConflictDoNothing` so a repeat launch is not a role reset — the
- *  board's owner must not be demoted by their own second click. */
-async function joinBoard(db: Db, sessionId: string, userId: string): Promise<void> {
-  await db
-    .insert(creationSessionMembers)
-    .values({ sessionId, userId, role: 'editor', invitedBy: userId })
-    .onConflictDoNothing({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId] });
+ *  editor. `keep` so a repeat launch is not a role reset — the board's owner
+ *  must not be demoted by their own second click. */
+async function joinBoard(db: Db, env: Env | undefined, tenantId: number, sessionId: string, userId: string): Promise<void> {
+  await addSessionMember(db, env, { id: sessionId, tenantId }, { userId, role: 'editor', invitedBy: userId }, 'keep');
 }
 
 /**
@@ -617,6 +618,7 @@ async function resolveLearnerBoard(
   registration: LtiRegistration,
   context: LtiLaunchContext,
   userId: string,
+  env?: Env,
 ): Promise<LaunchBridgeResult> {
   const binding = await findContextBinding(db, context);
   if (!binding) return { ok: false, status: 404, error: NOT_OPENED_HERE };
@@ -660,7 +662,7 @@ async function resolveLearnerBoard(
           isNull(ltiLearnerBoards.learnerUserId),
         ));
     }
-    await joinOwnBoard(db, existing.sessionId, userId);
+    await joinOwnBoard(db, env, registration.tenantId, existing.sessionId, userId);
     return { ok: true, userId, sessionId: existing.sessionId, redirect: `/create/${existing.sessionId}`, capability: context.capability };
   }
 
@@ -735,20 +737,18 @@ async function resolveLearnerBoard(
   // the winner's board rather than leaving the learner with two copies of one
   // piece of work.
   await db.delete(creationSessions).where(scopedToTenant(creationSessions, registration.tenantId, eq(creationSessions.id, sessionId)));
+  await deleteSessionObject(db, env, { id: sessionId, tenantId: registration.tenantId });
   const winner = await findLearnerBoard(db, registration.tenantId, binding.id, assignmentKey, learnerKey);
   if (!winner) throw new Error('LTI learner board vanished between insert and read.');
-  await joinOwnBoard(db, winner.sessionId, userId);
+  await joinOwnBoard(db, env, registration.tenantId, winner.sessionId, userId);
   return { ok: true, userId, sessionId: winner.sessionId, redirect: `/create/${winner.sessionId}`, capability: context.capability };
 }
 
 /** The learner on their own board. `owner` because it IS theirs — the work, the
- *  drafts and the declaration on it are the learner's own — and
- *  `onConflictDoNothing` so a re-launch is not a role reset. */
-async function joinOwnBoard(db: Db, sessionId: string, userId: string): Promise<void> {
-  await db
-    .insert(creationSessionMembers)
-    .values({ sessionId, userId, role: 'owner', invitedBy: userId })
-    .onConflictDoNothing({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId] });
+ *  drafts and the declaration on it are the learner's own — and `keep` so a
+ *  re-launch is not a role reset. */
+async function joinOwnBoard(db: Db, env: Env | undefined, tenantId: number, sessionId: string, userId: string): Promise<void> {
+  await addSessionMember(db, env, { id: sessionId, tenantId }, { userId, role: 'owner', invitedBy: userId }, 'keep');
 }
 
 // ---------------------------------------------------------------------------
@@ -791,10 +791,10 @@ export async function bridgeLaunch(
   // A learner NEVER reaches `resolveBoard`. That path creates and joins the
   // cohort board, which is the disclosure this whole branch exists to prevent.
   if (context.capability === 'learn') {
-    return resolveLearnerBoard(db, registration, context, resolved.userId);
+    return resolveLearnerBoard(db, registration, context, resolved.userId, env);
   }
 
-  const board = await resolveBoard(db, registration, context, resolved.userId);
+  const board = await resolveBoard(db, registration, context, resolved.userId, env);
   await resolveAssignment(db, registration, context, board.bindingId, board.sessionId, resolved.userId);
 
   return {

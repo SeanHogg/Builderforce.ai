@@ -4,7 +4,7 @@ import { TenantRole } from '../../domain/shared/types';
 
 describe('mayRunBuiltinTool — the tool-path twin of the route gates', () => {
   it('refuses a contributor every workspace write: tasks, projects, agents, runs', () => {
-    for (const tool of ['tasks.create', 'tasks.update', 'projects.create', 'project_agents.create', 'cloud_agents.create', 'chats.dispatch_agent', 'attachments.write']) {
+    for (const tool of ['tasks.create', 'tasks.update', 'projects.create', 'project_agents.add', 'cloud_agents.create', 'chats.dispatch_agent', 'attachments.write']) {
       expect(mayRunBuiltinTool(tool, true, TenantRole.CONTRIBUTOR)).toBe(false);
       expect(mayRunBuiltinTool(tool, true, TenantRole.VIEWER)).toBe(false);
       expect(() => assertMayRunBuiltinTool(tool, true, TenantRole.CONTRIBUTOR)).toThrow(/'developer' role/);

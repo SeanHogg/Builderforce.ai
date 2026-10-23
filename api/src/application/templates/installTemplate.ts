@@ -17,17 +17,15 @@
  *      "used 41,287 times" is a fact rather than a decoration.
  */
 
-import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { catalogItems, projects } from '../../infrastructure/database/schema';
-import { acrossTenants } from '../../infrastructure/database/tenantScope';
-import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { projects } from '../../infrastructure/database/schema';
 import { bindAnswers } from '../../domain/guidedSetup/guidedPlan';
 import type { GuidedAnswers } from '../../domain/guidedSetup/guidedStep';
 import type { TemplateOutput } from '../../domain/template/templateManifest';
 import { outputKindSpec, uninstallableOutputError, type MaterializeOutputContext, type OutputResult } from './outputKinds';
-import { invalidateTemplateCatalog, TEMPLATE_CATALOG_KIND, type ResolvedTemplate } from './templateRegistry';
+import { TEMPLATE_CATALOG_KIND, type ResolvedTemplate } from './templateRegistry';
+import { recordTemplateInstall } from './catalogTemplateStore';
 import { resolveTemplateSetup } from './templateSetup';
 import { loadProjectInTenant } from '../project/projectOwnership';
 
@@ -99,38 +97,11 @@ function resolveRunTarget(answers: GuidedAnswers): Pick<
   return { runTargetRuntime: 'cloud', runTargetAgentHostId: null, runTargetCloudAgentRef: null };
 }
 
-/**
- * Move the install counter on a stored template.
- *
- * DELIBERATELY CROSS-TENANT. The whole point of a marketplace template is that
- * another workspace installs it, and the row being counted belongs to the
- * PUBLISHER — scoping this write to the installing tenant would silently count
- * nothing for exactly the templates whose counts matter. The access predicate is
- * the id the registry already resolved plus the row's kind, and the only column
- * it can touch is a counter.
- *
- * Best-effort by design: a counter that failed to increment must never fail an
- * install that worked.
- */
-async function recordInstall(db: Db, env: Env, tenantId: number, template: ResolvedTemplate): Promise<void> {
+/** Count the install against the catalogue row — best-effort and cross-tenant by
+ *  design; the reasoning lives on {@link recordTemplateInstall}. */
+async function recordInstall(db: Db, env: Env, template: ResolvedTemplate): Promise<void> {
   if (!template.id) return; // built-ins have no row to count against
-  try {
-    await db
-      .update(catalogItems)
-      .set({ installCount: sql`${catalogItems.installCount} + 1`, updatedAt: new Date() })
-      .where(acrossTenants(
-        catalogItems,
-        'public_catalogue',
-        eq(catalogItems.id, template.id),
-        eq(catalogItems.kind, TEMPLATE_CATALOG_KIND),
-      ));
-    await invalidateTemplateCatalog(env, tenantId);
-  } catch (error) {
-    reportCaughtError(error, {
-      source: 'application/templates/installTemplate.ts',
-      operation: `recordInstall:${template.manifest.key}`,
-    });
-  }
+  await recordTemplateInstall(db, env, { kind: TEMPLATE_CATALOG_KIND, id: template.id });
 }
 
 export async function installTemplate(args: InstallTemplateArgs): Promise<InstallTemplateResult> {
@@ -193,7 +164,7 @@ export async function installTemplate(args: InstallTemplateArgs): Promise<Instal
   }
 
   // 4 — record.
-  await recordInstall(db, env, tenantId, template);
+  await recordInstall(db, env, template);
 
   return { ok: true, outputs, complete: outputs.every((o) => o.ok) };
 }

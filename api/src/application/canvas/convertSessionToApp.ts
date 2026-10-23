@@ -48,13 +48,13 @@ import type { Env } from '../../env';
 import {
   SESSION_PROJECT_LINK_APP,
   SESSION_PROJECT_LINK_REFERENCE,
-  creationSessionMembers,
   creationSessionObjects,
   creationSessionProjectLinks,
   creationSessions,
   projectSites,
   projects,
 } from '../../infrastructure/database/schema';
+import { boardsOfMember } from '../creation/sessionMembers';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { buildProjectKey } from '../project/projectKey';
@@ -264,10 +264,6 @@ export async function appSessionForProject(
     .select({ sessionId: creationSessions.id, objectId: creationSessionObjects.id })
     .from(creationSessionProjectLinks)
     .innerJoin(creationSessions, eq(creationSessions.id, creationSessionProjectLinks.sessionId))
-    .innerJoin(creationSessionMembers, and(
-      eq(creationSessionMembers.sessionId, creationSessions.id),
-      eq(creationSessionMembers.userId, userId),
-    ))
     // LEFT, not inner: the card is a bonus that lets the caller focus something,
     // and requiring it is the exact mistake this function was written to undo.
     .leftJoin(creationSessionObjects, and(
@@ -276,6 +272,7 @@ export async function appSessionForProject(
       eq(creationSessionObjects.resourceId, String(projectId)),
     ))
     .where(and(
+      boardsOfMember(userId).isMember,
       eq(creationSessionProjectLinks.projectId, projectId),
       eq(creationSessionProjectLinks.linkKind, SESSION_PROJECT_LINK_APP),
       // The tenant gate is on the SESSION: the link table carries no tenant of

@@ -12,6 +12,10 @@
  *   GET    /api/objects/:id/shares
  *   POST   /api/objects/:id/shares             returns the raw token ONCE
  *   DELETE /api/objects/:id/shares/:shareId    THE revocation path
+ *
+ *   For a DOMAIN-GATED kind (a board) members/shares writes are 403 and reads need
+ *   the domain's own grant — enforced by the registry port (`objectRelationGate.ts`),
+ *   answered here as 403 `DOMAIN_GATED_RELATION`.
  *   GET    /api/objects/:id/revisions
  *   POST   /api/objects/:id/revisions
  *   GET    /api/objects/recents                derived, never a stored list
@@ -27,10 +31,10 @@
  * zero, so a new file joining it would be moving the wrong way.
  */
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
-import { isDomain, type ObjectRegistry } from '../../application/kernel/ObjectRegistry';
+import { DomainGatedRelationError, isDomain, type ObjectRegistry } from '../../application/kernel/ObjectRegistry';
 import type { HonoEnv } from '../../env';
 import { parseBody, z } from './requestBody';
 
@@ -68,6 +72,17 @@ const RevisionBody = z.object({
 function parseLimit(raw: string | undefined): number | undefined {
   const n = Number(raw);
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : undefined;
+}
+
+/** A domain-gated relation (a board's members or shares) answers 403 with one code.
+ *  The REFUSAL is the registry's (`objectRelationGate.ts`); this only serialises it. */
+async function gated(c: Context<HonoEnv>, run: () => Promise<Response>): Promise<Response> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof DomainGatedRelationError) return c.json({ error: error.message, code: error.code }, 403);
+    throw error;
+  }
 }
 
 export function createObjectRoutes(registry: ObjectRegistry): Hono<HonoEnv> {
@@ -154,14 +169,14 @@ export function createObjectRoutes(registry: ObjectRegistry): Hono<HonoEnv> {
 
   // ── members ──────────────────────────────────────────────────────────────
 
-  router.get('/:id/members', async (c) => {
+  router.get('/:id/members', (c) => gated(c, async () => {
     const { tenantId } = scope(c);
-    return c.json(
-      await registry.members(tenantId, c.req.param('id'), parseLimit(c.req.query('limit'))),
-    );
-  });
+    return c.json(await registry.members(
+      tenantId, c.req.param('id'), c.get('userId') as string | undefined, parseLimit(c.req.query('limit')),
+    ));
+  }));
 
-  router.post('/:id/members', async (c) => {
+  router.post('/:id/members', (c) => gated(c, async () => {
     const { tenantId } = scope(c);
     const objectId = c.req.param('id');
     if (!(await registry.get(tenantId, objectId))) return c.json({ error: 'not found' }, 404);
@@ -176,9 +191,9 @@ export function createObjectRoutes(registry: ObjectRegistry): Hono<HonoEnv> {
       role: body.role,
     });
     return c.json(row, 201);
-  });
+  }));
 
-  router.delete('/:id/members/:kind/:ref', async (c) => {
+  router.delete('/:id/members/:kind/:ref', (c) => gated(c, async () => {
     const { tenantId } = scope(c);
     await registry.removeMember({
       tenantId,
@@ -187,16 +202,16 @@ export function createObjectRoutes(registry: ObjectRegistry): Hono<HonoEnv> {
       memberRef: c.req.param('ref'),
     });
     return c.body(null, 204);
-  });
+  }));
 
   // ── shares ───────────────────────────────────────────────────────────────
 
-  router.get('/:id/shares', async (c) => {
+  router.get('/:id/shares', (c) => gated(c, async () => {
     const { tenantId } = scope(c);
-    return c.json(await registry.shares(tenantId, c.req.param('id')));
-  });
+    return c.json(await registry.shares(tenantId, c.req.param('id'), c.get('userId') as string | undefined));
+  }));
 
-  router.post('/:id/shares', async (c) => {
+  router.post('/:id/shares', (c) => gated(c, async () => {
     const { tenantId } = scope(c);
     const objectId = c.req.param('id');
     if (!(await registry.get(tenantId, objectId))) return c.json({ error: 'not found' }, 404);
@@ -212,13 +227,13 @@ export function createObjectRoutes(registry: ObjectRegistry): Hono<HonoEnv> {
     });
     // The raw token is returned exactly once. Only its hash was stored.
     return c.json(created, 201);
-  });
+  }));
 
-  router.delete('/:id/shares/:shareId', async (c) => {
+  router.delete('/:id/shares/:shareId', (c) => gated(c, async () => {
     const { tenantId } = scope(c);
     await registry.revokeShare(tenantId, c.req.param('id'), c.req.param('shareId'));
     return c.body(null, 204);
-  });
+  }));
 
   // ── revisions ────────────────────────────────────────────────────────────
 

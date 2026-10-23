@@ -2,20 +2,20 @@
  * Kanban template service — the spine of the Agentic Workforce Kanban.
  *
  * Merges built-in templates (code) with tenant-authored / forked / installed
- * templates (kanban_templates + lanes + requirements). Applying a template
- * materialises its lanes onto a project's board swimlanes and its per-lane
- * requirements onto swimlane_requirements, so the live board is self-describing for
- * the audit + gating engines. Also powers the marketplace (publish / list public /
- * install a public template into your tenant).
+ * templates — `catalog_items` rows of kind 'kanban_template' (migration 1263),
+ * read and written through the ONE templates store
+ * (`templates/catalogTemplateStore.ts`), with the lanes + requirements in the
+ * row's body (`kanbanTemplateCodec.ts`). Applying a template materialises its
+ * lanes onto a project's board swimlanes and its per-lane requirements onto
+ * swimlane_requirements, so the live board is self-describing for the audit +
+ * gating engines. Also powers the marketplace (publish / list public / install a
+ * public template into your tenant).
  *
- * Cached read-through, invalidated on every write.
+ * Reads are cached by the store under version tokens every write bumps.
  */
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import {
   boards,
-  kanbanTemplateLaneRequirements,
-  kanbanTemplateLanes,
-  kanbanTemplates,
   projects,
   swimlaneRequirements,
   swimlanes,
@@ -23,7 +23,6 @@ import {
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { findOrCreateBoard } from '../swimlane/findOrCreateBoard';
 import { isParkedLane } from '../swimlane/nextLane';
 import { seedLaneStaffingFromWorkforce } from '../swimlane/seedLaneStaffing';
@@ -32,14 +31,21 @@ import type { KanbanTemplate, TemplateLane, TemplateVisibility } from './types';
 import { slugify as slugifyBase } from '@builderforce/creation-canvas-contract';
 import { invalidateSwimlaneOrdinals } from '../swimlane/laneOrdinals';
 import { invalidateBoardLanesCache } from '../swimlane/boardReads';
+import {
+  deleteTemplateRow,
+  getPublicTemplate,
+  getTenantTemplate,
+  insertTemplate,
+  listPublicTemplates,
+  listTenantTemplates,
+  recordTemplateInstall,
+  updateTemplate,
+  type TemplateValues,
+} from '../templates/catalogTemplateStore';
+import { TEMPLATE_KINDS } from '../templates/templateKinds';
+import { kanbanBodyOf, kanbanPriceValues, kanbanTemplateFromStored, parseKanbanBody } from './kanbanTemplateCodec';
 
-const listKey = (tenantId: number) => `kanban:templates:${tenantId}`;
-
-/** Static-ish data, dropped by every write in this service, so the KV TTL is only the backstop. */
-const TEMPLATE_CACHE = { kvTtlSeconds: 3_600 };
-const publicKey = () => `kanban:templates:public`;
-const oneKey = (tenantId: number, id: string) => `kanban:template:${tenantId}:${id}`;
-const publicOneKey = (tenantId: number, id: string) => `kanban:template-public:${tenantId}:${id}`;
+const KIND = TEMPLATE_KINDS.kanban;
 
 function slugify(input: string): string {
   return slugifyBase(input, { maxLength: 110, fallback: 'template' });
@@ -75,136 +81,26 @@ function summarize(t: KanbanTemplate): TemplateSummary {
 export class KanbanTemplateService {
   constructor(private readonly db: Db) {}
 
-  /** Load a tenant template's full shape (lanes + requirements) from the DB. */
-  private async loadDbTemplate(tenantId: number, id: string): Promise<KanbanTemplate | null> {
-    const [row] = await this.db
-      .select()
-      .from(kanbanTemplates)
-      .where(and(eq(kanbanTemplates.tenantId, tenantId), eq(kanbanTemplates.id, id)))
-      .limit(1);
-    if (!row) return null;
-    return this.assembleDbTemplate(row);
-  }
-
-  private async assembleDbTemplate(row: typeof kanbanTemplates.$inferSelect): Promise<KanbanTemplate> {
-    const laneRows = await this.db
-      .select()
-      .from(kanbanTemplateLanes)
-      .where(eq(kanbanTemplateLanes.templateId, row.id))
-      .orderBy(asc(kanbanTemplateLanes.position));
-    const laneIds = laneRows.map((l) => l.id);
-    const reqRows = laneIds.length
-      ? await this.db
-          .select()
-          .from(kanbanTemplateLaneRequirements)
-          .where(inArray(kanbanTemplateLaneRequirements.laneId, laneIds))
-          .orderBy(asc(kanbanTemplateLaneRequirements.position))
-      : [];
-    const lanes: TemplateLane[] = laneRows.map((l) => ({
-      key: l.key, name: l.name, position: l.position, isTerminal: l.isTerminal,
-      gate: (l.gate as 'auto' | 'human') ?? 'auto',
-      requirementGate: (l.requirementGate as TemplateLane['requirementGate']) ?? 'soft',
-      requirements: reqRows
-        .filter((r) => r.laneId === l.id)
-        .map((r) => ({
-          kind: r.kind as TemplateLane['requirements'][number]['kind'],
-          ref: r.ref,
-          responsibility: (r.responsibility as TemplateLane['requirements'][number]['responsibility']) ?? undefined,
-          isRequired: r.isRequired,
-          description: r.description ?? undefined,
-          position: r.position,
-          ticketType: r.ticketType ?? null,
-          quorum: r.quorum ?? null,
-          condition: (r.condition as TemplateLane['requirements'][number]['condition']) ?? null,
-        })),
-    }));
-    return {
-      id: row.id, slug: row.slug, name: row.name, description: row.description ?? undefined,
-      category: row.category, teamType: row.teamType ?? undefined, builtin: false,
-      parentTemplateId: row.parentTemplateId, authorId: row.authorId,
-      visibility: row.visibility as TemplateVisibility, published: row.published,
-      priceCents: row.priceCents, pricingModel: row.pricingModel, priceUnit: row.priceUnit,
-      installCount: row.installCount, version: row.version, lanes,
-    };
-  }
-
   /** Built-ins + this tenant's templates, as summaries. */
   async list(env: Env, tenantId: number): Promise<TemplateSummary[]> {
-    const custom = await getOrSetCached(env, listKey(tenantId), async () => {
-      const rows = await this.db
-        .select()
-        .from(kanbanTemplates)
-        .where(eq(kanbanTemplates.tenantId, tenantId))
-        .orderBy(desc(kanbanTemplates.updatedAt));
-      const full = await Promise.all(rows.map((r) => this.assembleDbTemplate(r)));
-      return full.map(summarize);
-    }, TEMPLATE_CACHE);
-    return [...BUILTIN_TEMPLATES.map(summarize), ...custom];
+    const rows = await listTenantTemplates(this.db, env, { tenantId, kind: KIND });
+    return [...BUILTIN_TEMPLATES.map(summarize), ...rows.map((r) => summarize(kanbanTemplateFromStored(r, tenantId)))];
   }
 
-  /** Public marketplace listings (other tenants' published templates + built-ins). */
+  /** Public marketplace listings (every workspace's published templates + built-ins). */
   async listPublic(env: Env): Promise<TemplateSummary[]> {
-    const published = await getOrSetCached(env, publicKey(), async () => {
-      const rows = await this.db
-        .select()
-        .from(kanbanTemplates)
-        .where(and(eq(kanbanTemplates.published, true), eq(kanbanTemplates.visibility, 'public')))
-        .orderBy(desc(kanbanTemplates.installCount));
-      const full = await Promise.all(rows.map((r) => this.assembleDbTemplate(r)));
-      return full.map(summarize);
-    });
-    return [...BUILTIN_TEMPLATES.map(summarize), ...published];
+    const rows = await listPublicTemplates(this.db, env, { kind: KIND, scope: 'all' });
+    return [...BUILTIN_TEMPLATES.map(summarize), ...rows.map((r) => summarize(kanbanTemplateFromStored(r, null)))];
   }
 
   /** Full template (built-in or tenant-owned or a public one being previewed). */
   async get(env: Env, tenantId: number, id: string): Promise<KanbanTemplate | null> {
     if (isBuiltinTemplateId(id)) return getBuiltinTemplate(id) ?? null;
-    const own = await getOrSetCached(env, oneKey(tenantId, id), () => this.loadDbTemplate(tenantId, id), TEMPLATE_CACHE);
-    if (own) return own;
-    // Fall back to a public template (for marketplace preview / install). Wrapped, because
-    // the cache treats a bare null as a miss and a "not found" would otherwise cost two
-    // statements on every read.
-    const { template } = await getOrSetCached(env, publicOneKey(tenantId, id), async () => {
-      const [pub] = await this.db
-        .select()
-        .from(kanbanTemplates)
-        .where(scopedToTenant(kanbanTemplates, tenantId, eq(kanbanTemplates.id, id), eq(kanbanTemplates.published, true), eq(kanbanTemplates.visibility, 'public')))
-        .limit(1);
-      return { template: pub ? await this.assembleDbTemplate(pub) : null };
-    }, TEMPLATE_CACHE);
-    return template;
-  }
-
-  /** Persist a template's lanes + requirements (replace-children write). */
-  private async writeLanes(templateId: string, lanes: TemplateLane[]): Promise<void> {
-    // Remove existing children (requirements cascade from lanes) then re-insert.
-    const existing = await this.db
-      .select({ id: kanbanTemplateLanes.id })
-      .from(kanbanTemplateLanes)
-      .where(eq(kanbanTemplateLanes.templateId, templateId));
-    if (existing.length) {
-      await this.db.delete(kanbanTemplateLanes).where(eq(kanbanTemplateLanes.templateId, templateId));
-    }
-    const now = new Date();
-    for (const [i, lane] of lanes.entries()) {
-      const laneId = crypto.randomUUID();
-      await this.db.insert(kanbanTemplateLanes).values({
-        id: laneId, templateId, key: lane.key, name: lane.name,
-        position: lane.position ?? i, isTerminal: lane.isTerminal, gate: lane.gate,
-        requirementGate: lane.requirementGate, createdAt: now,
-      });
-      if (lane.requirements.length) {
-        await this.db.insert(kanbanTemplateLaneRequirements).values(
-          lane.requirements.map((r, j) => ({
-            id: crypto.randomUUID(), laneId, kind: r.kind, ref: r.ref,
-            responsibility: r.responsibility ?? null, isRequired: r.isRequired,
-            description: r.description ?? null, position: r.position ?? j,
-            ticketType: r.ticketType ?? null, quorum: r.quorum ?? null, condition: r.condition ?? null,
-            createdAt: now,
-          })),
-        );
-      }
-    }
+    const own = await getTenantTemplate(this.db, env, { tenantId, kind: KIND, id });
+    if (own) return kanbanTemplateFromStored(own, tenantId);
+    // Fall back to a public template (for marketplace preview / install).
+    const pub = await getPublicTemplate(this.db, env, { kind: KIND, id });
+    return pub ? kanbanTemplateFromStored(pub, tenantId) : null;
   }
 
   /** Create a new tenant template (optionally forked from a built-in / existing one). */
@@ -225,24 +121,31 @@ export class KanbanTemplateService {
       lanes = lanes ?? src.lanes;
       parentTemplateId = src.id;
     }
-    lanes = lanes ?? [];
 
     const id = crypto.randomUUID();
-    const slug = slugify(input.slug || name) + '-' + id.slice(0, 6);
-    const now = new Date();
-    await this.db.insert(kanbanTemplates).values({
-      id, tenantId, slug, name,
-      description: input.description ?? null,
-      category: input.category ?? 'software',
-      teamType: input.teamType ?? null,
-      parentTemplateId,
-      authorId,
-      published: false, visibility: 'private',
-      priceCents: input.priceCents ?? null, pricingModel: input.pricingModel ?? null, priceUnit: input.priceUnit ?? null,
-      installCount: 0, version: 1, createdAt: now, updatedAt: now,
+    await insertTemplate(this.db, env, {
+      tenantId,
+      kind: KIND,
+      id,
+      values: {
+        slug: slugify(input.slug || name) + '-' + id.slice(0, 6),
+        name,
+        summary: input.description ?? null,
+        category: input.category ?? 'software',
+        version: '1',
+        visibility: 'private',
+        publishedAt: null,
+        createdBy: authorId,
+        ...kanbanPriceValues(input.priceCents ?? null),
+        body: kanbanBodyOf({
+          teamType: input.teamType ?? null,
+          parentTemplateId,
+          pricingModel: input.pricingModel ?? null,
+          priceUnit: input.priceUnit ?? null,
+          lanes: lanes ?? [],
+        }),
+      },
     });
-    await this.writeLanes(id, lanes);
-    await this.invalidate(env, tenantId, id);
     return (await this.get(env, tenantId, id))!;
   }
 
@@ -253,24 +156,30 @@ export class KanbanTemplateService {
     input: Partial<KanbanTemplate> & { lanes?: TemplateLane[] },
   ): Promise<KanbanTemplate> {
     if (isBuiltinTemplateId(id)) throw new Error('built-in templates cannot be edited — fork it first');
-    const set: Record<string, unknown> = { updatedAt: new Date() };
-    if (input.name) set.name = input.name.trim();
-    if (input.description !== undefined) set.description = input.description || null;
-    if (input.category) set.category = input.category;
-    if (input.teamType !== undefined) set.teamType = input.teamType || null;
-    if (input.priceCents !== undefined) set.priceCents = input.priceCents;
-    if (input.pricingModel !== undefined) set.pricingModel = input.pricingModel || null;
-    if (input.priceUnit !== undefined) set.priceUnit = input.priceUnit || null;
-    await this.db.update(kanbanTemplates).set(set).where(and(eq(kanbanTemplates.tenantId, tenantId), eq(kanbanTemplates.id, id)));
-    if (input.lanes) await this.writeLanes(id, input.lanes);
-    await this.invalidate(env, tenantId, id);
+    const existing = await getTenantTemplate(this.db, env, { tenantId, kind: KIND, id });
+    if (!existing) throw new Error(`template '${id}' not found`);
+    const body = parseKanbanBody(existing.body);
+    const values: TemplateValues = {
+      ...kanbanPriceValues(input.priceCents),
+      body: kanbanBodyOf({
+        teamType: input.teamType !== undefined ? input.teamType || null : body.teamType,
+        parentTemplateId: body.parentTemplateId,
+        legacyId: body.legacyId,
+        pricingModel: input.pricingModel !== undefined ? input.pricingModel || null : body.pricingModel,
+        priceUnit: input.priceUnit !== undefined ? input.priceUnit || null : body.priceUnit,
+        lanes: input.lanes ?? body.lanes,
+      }),
+    };
+    if (input.name) values.name = input.name.trim();
+    if (input.description !== undefined) values.summary = input.description || null;
+    if (input.category) values.category = input.category;
+    await updateTemplate(this.db, env, { tenantId, kind: KIND, match: { id }, values });
     return (await this.get(env, tenantId, id))!;
   }
 
   async remove(env: Env, tenantId: number, id: string): Promise<void> {
     if (isBuiltinTemplateId(id)) throw new Error('built-in templates cannot be deleted');
-    await this.db.delete(kanbanTemplates).where(and(eq(kanbanTemplates.tenantId, tenantId), eq(kanbanTemplates.id, id)));
-    await this.invalidate(env, tenantId, id);
+    await deleteTemplateRow(this.db, env, { tenantId, kind: KIND, match: { id } });
   }
 
   /** Publish / unpublish a tenant template to the marketplace. */
@@ -281,19 +190,23 @@ export class KanbanTemplateService {
     opts: { published: boolean; visibility?: TemplateVisibility; priceCents?: number | null; pricingModel?: string | null; priceUnit?: string | null },
   ): Promise<void> {
     if (isBuiltinTemplateId(id)) throw new Error('built-in templates are already public');
-    await this.db
-      .update(kanbanTemplates)
-      .set({
-        published: opts.published,
-        visibility: opts.visibility ?? (opts.published ? 'public' : 'private'),
-        ...(opts.priceCents !== undefined ? { priceCents: opts.priceCents } : {}),
-        ...(opts.pricingModel !== undefined ? { pricingModel: opts.pricingModel } : {}),
-        ...(opts.priceUnit !== undefined ? { priceUnit: opts.priceUnit } : {}),
-        updatedAt: new Date(),
-      })
-      .where(and(eq(kanbanTemplates.tenantId, tenantId), eq(kanbanTemplates.id, id)));
-    await this.invalidate(env, tenantId, id);
-    await invalidateCached(env, publicKey());
+    const existing = await getTenantTemplate(this.db, env, { tenantId, kind: KIND, id });
+    if (!existing) throw new Error(`template '${id}' not found`);
+    const values: TemplateValues = {
+      // Re-publishing keeps the original publish date; unpublishing clears it.
+      publishedAt: opts.published ? new Date(existing.publishedAt ?? Date.now()) : null,
+      visibility: opts.visibility ?? (opts.published ? 'public' : 'private'),
+      ...kanbanPriceValues(opts.priceCents),
+    };
+    if (opts.pricingModel !== undefined || opts.priceUnit !== undefined) {
+      const body = parseKanbanBody(existing.body);
+      values.body = kanbanBodyOf({
+        ...body,
+        pricingModel: opts.pricingModel !== undefined ? opts.pricingModel : body.pricingModel,
+        priceUnit: opts.priceUnit !== undefined ? opts.priceUnit : body.priceUnit,
+      });
+    }
+    await updateTemplate(this.db, env, { tenantId, kind: KIND, match: { id }, values });
   }
 
   /** Install a public template (built-in or another tenant's) as a private copy. */
@@ -308,14 +221,8 @@ export class KanbanTemplateService {
       lanes: src.lanes,
       parentTemplateId: src.id,
     });
-    // Bump the source's install count (skip built-ins, which live in code).
-    if (!isBuiltinTemplateId(sourceId)) {
-      await this.db
-        .update(kanbanTemplates)
-        .set({ installCount: (src.installCount ?? 0) + 1 })
-        .where(scopedToTenant(kanbanTemplates, tenantId, eq(kanbanTemplates.id, sourceId)));
-      await invalidateCached(env, publicKey());
-    }
+    // Count the install against the source row (built-ins live in code: a no-op).
+    if (!isBuiltinTemplateId(sourceId)) await recordTemplateInstall(this.db, env, { kind: KIND, id: sourceId });
     return copy;
   }
 
@@ -418,11 +325,5 @@ export class KanbanTemplateService {
     // drop the cached ordinal map the ticket-move path reads.
     await Promise.all([invalidateSwimlaneOrdinals(env, projectId), invalidateBoardLanesCache(env, tenantId, boardId)]);
     return { boardId, lanesApplied: template.lanes.length, requirementsApplied, lanesStaffed: seeded.staffed };
-  }
-
-  private async invalidate(env: Env, tenantId: number, id: string): Promise<void> {
-    await invalidateCached(env, listKey(tenantId));
-    await invalidateCached(env, oneKey(tenantId, id));
-    await invalidateCached(env, publicOneKey(tenantId, id));
   }
 }

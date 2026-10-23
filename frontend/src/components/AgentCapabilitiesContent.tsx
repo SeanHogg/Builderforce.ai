@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { projectAgents, type ProjectAgent } from '@/lib/builderforceApi';
+import { agentAssignmentsApi, type AgentAssignment } from '@/lib/builderforceApi';
 import { loadAgentPool, AGENT_KIND_LABEL, type PoolAgent } from '@/lib/agentPool';
 import { CapabilitiesContent } from './CapabilitiesContent';
 import { CronJobsContent } from './CronJobsContent';
@@ -18,29 +18,29 @@ export interface AgentCapabilitiesContentProps {
 }
 
 /**
- * The "Agent / Capabilities" panel. Lists the agents attached to a project and
- * lets capabilities (skills/personas/content/governance) be assigned either
- * project-wide or scoped to a single agent. Reuses {@link CapabilitiesContent}
+ * The "Agent / Capabilities" panel. Lists the agents staffed on a project (agent
+ * assignments with scope 'project') and lets capabilities (skills/personas/governance)
+ * be assigned either project-wide or scoped to a single agent by its `agentHandle`. Reuses {@link CapabilitiesContent}
  * for the section UI; the agent target only changes the scope/scopeId passed in.
  */
 export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, className, style }: AgentCapabilitiesContentProps) {
   const confirm = useConfirm();
   const tc = useTranslations('common');
   const t = useTranslations('agentCapabilities');
-  const [attached, setAttached] = useState<ProjectAgent[]>([]);
+  const [attached, setAttached] = useState<AgentAssignment[]>([]);
   const [pool, setPool] = useState<PoolAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [busy, setBusy] = useState(false);
-  /** null = project-wide; otherwise the selected ProjectAgent.id. */
+  /** null = project-wide; otherwise the selected assignment's agentHandle. */
   const [target, setTarget] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [list, poolAgents] = await Promise.all([projectAgents.list(projectId), loadAgentPool()]);
+      const [list, poolAgents] = await Promise.all([agentAssignmentsApi.listForProject(projectId), loadAgentPool()]);
       setAttached(list);
       setPool(poolAgents);
     } catch (e) {
@@ -65,7 +65,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
     setBusy(true);
     setError(null);
     try {
-      await projectAgents.add({ projectId, agentKind: p.kind, agentRef: p.ref, name: p.name });
+      await agentAssignmentsApi.assign({ scope: 'project', scopeId: projectId, agentKind: p.kind, agentRef: p.ref, name: p.name });
       await load();
     } catch (e) {
       setError(faultMessage(e, t('failedAddAgent')));
@@ -74,13 +74,13 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
     }
   };
 
-  const handleRemove = async (agent: ProjectAgent) => {
-    if (!(await confirm(tc('removeAgentFromProjectConfirm', { name: agent.name })))) return;
+  const handleRemove = async (agent: AgentAssignment) => {
+    if (!(await confirm(tc('removeAgentFromProjectConfirm', { name: displayName(agent) })))) return;
     setBusy(true);
     setError(null);
     try {
-      await projectAgents.remove(agent.id);
-      if (target === agent.id) setTarget(null);
+      await agentAssignmentsApi.remove(agent.id);
+      if (target === agent.agentHandle) setTarget(null);
       setAttached((prev) => prev.filter((a) => a.id !== agent.id));
     } catch (e) {
       setError(faultMessage(e, t('failedRemoveAgent')));
@@ -89,7 +89,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
     }
   };
 
-  const selectedAgent = target != null ? attached.find((a) => a.id === target) ?? null : null;
+  const selectedAgent = target != null ? attached.find((a) => a.agentHandle === target) ?? null : null;
 
   return (
     <div className={className} style={{ display: 'flex', flexDirection: 'column', gap: 16, ...style }}>
@@ -175,9 +175,9 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
                   borderRadius: 'var(--radius-md)',
                 }}
               >
-                <AgentKindBadge kind={a.agentKind} />
+                <AgentKindBadge kind={a.agentKind as PoolAgent['kind']} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{a.name}</div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{displayName(a)}</div>
                 </div>
                 <button
                   type="button"
@@ -204,8 +204,8 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
           {t('projectWide')}
         </button>
         {attached.map((a) => (
-          <button key={a.id} type="button" onClick={() => setTarget(a.id)} style={chipStyle(target === a.id)}>
-            {a.name}
+          <button key={a.id} type="button" onClick={() => setTarget(a.agentHandle)} style={chipStyle(target === a.agentHandle)}>
+            {displayName(a)}
           </button>
         ))}
       </div>
@@ -214,7 +214,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
       {selectedAgent ? (
         <CapabilitiesContent
           scope="agent"
-          scopeId={selectedAgent.id}
+          scopeId={selectedAgent.agentHandle}
           projectId={projectId}
           agentAssignment={selectedAgent}
           tenantId={tenantId}
@@ -236,14 +236,14 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
             {t('scheduledRunsCron')}
             {selectedAgent && (
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}> · {selectedAgent.name}</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}> · {displayName(selectedAgent)}</span>
             )}
           </div>
           {agentHostId ? (
             <CronJobsContent
               agentHostId={agentHostId}
               projectId={projectId}
-              projectAgentId={selectedAgent ? selectedAgent.id : 'none'}
+              projectAgentId={selectedAgent ? selectedAgent.agentHandle : 'none'}
               hideProjectColumn
             />
           ) : (
@@ -262,6 +262,11 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
       </div>
     </div>
   );
+}
+
+/** A staffed agent's label: the name captured at assign time, else its ref. */
+function displayName(a: AgentAssignment): string {
+  return a.name ?? a.agentRef;
 }
 
 function AgentKindBadge({ kind }: { kind: PoolAgent['kind'] }) {

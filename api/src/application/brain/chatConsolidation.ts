@@ -101,7 +101,7 @@ export async function consolidateChats(
     const invites = await assignments.list(tenantId, CHAT_SCOPE, String(sid));
     for (const inv of invites) {
       await assignments.assign(tenantId, { agentKind: inv.agentKind, agentRef: inv.agentRef, scope: CHAT_SCOPE, scopeId: String(input.targetChatId), role: inv.role });
-      await assignments.unassign(tenantId, inv.id);
+      await assignments.unassign(tenantId, inv.id, { scope: CHAT_SCOPE, scopeId: String(sid) });
     }
   }
 

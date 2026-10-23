@@ -36,11 +36,11 @@ import type { Db } from '../../infrastructure/database/connection';
 import {
   creationSessionConnections,
   creationSessionEvents,
-  creationSessionMembers,
   creationSessionObjects,
   creationSessionSnapshots,
   creationSessions,
 } from '../../infrastructure/database/schema';
+import { newBoardOwnerStatements } from './sessionMembers';
 /**
  * Only user-visible labels are searchable. Never serialize arbitrary content.
  *
@@ -149,7 +149,7 @@ export interface CreationGraphWrite {
    * The viewport the snapshot records, when it differs from the board's.
    *
    * `POST /:id/commands` is the case: a `viewport.set` command moves the CALLER's
-   * camera, which belongs on their `creation_session_members` row and must not
+   * camera, which belongs on their presence row and must not
    * scroll the board for everyone else — but a snapshot is a reading of what this
    * writer saw, so it records the camera the write happened under. Defaults to
    * `viewport`, so the ordinary caller never thinks about it.
@@ -298,8 +298,9 @@ export interface NewCreationSession {
  * `db.batch` would force those back into a second transaction.
  *
  * The ORDER is load-bearing: the session row first (everything references it),
- * then the owner (a board with no member is unreachable), then the graph, then
- * the bookkeeping whose unique constraints serialize concurrent writers.
+ * then its registry object and the owner's membership on it (a board with no member
+ * is unreachable), then the graph, then the bookkeeping whose unique constraints
+ * serialize concurrent writers.
  */
 export function newCreationSessionStatements(db: Db, input: NewCreationSession): PlannedCreationWrite[] {
   const { sessionId, tenantId, authorUserId } = input;
@@ -324,17 +325,12 @@ export function newCreationSessionStatements(db: Db, input: NewCreationSession):
         ...(input.columns ?? {}),
       }),
     },
-    {
-      table: 'creation_session_members',
-      rows: 1,
-      statement: db.insert(creationSessionMembers).values({
-        sessionId,
-        userId: authorUserId,
-        role: 'owner',
-        invitedBy: authorUserId,
-        ...(input.memberViewport === undefined ? {} : { viewport: input.memberViewport }),
-      }),
-    },
+    // The board's registry object, the owner's kernel membership on it (1264), and
+    // the owner's presence row (their camera, when the claim carried one) — one
+    // primitive for every creator of a board, so none can forget the owner.
+    ...newBoardOwnerStatements(db, {
+      sessionId, tenantId, title: input.title, ownerUserId: authorUserId, ownerViewport: input.memberViewport,
+    }).map((write) => ({ ...write, rows: 1 })),
   ];
 
   if (objects.length) {

@@ -9,11 +9,18 @@
  * Neon awake.
  *
  * ── ACCESS ────────────────────────────────────────────────────────────────────
- * {@link resolvePresenceAccess} runs the ONE membership check
- * (`resolveSessionMembership` in `sessionAccess.ts`, the same reads and predicates as
- * `resolveSessionAccess`) with a narrow projection: the four session fields presence
- * uses plus the caller's own member row — which is what lets the write throttle below
- * decide without an extra read.
+ * {@link resolvePresenceAccess} runs the ONE board-role gate (`resolveSessionGrant` in
+ * `sessionAccess.ts`, cached under the board's member version token), then ONE read
+ * with a narrow projection: the four session fields presence uses plus the caller's
+ * own presence row — which is what lets the write throttle below decide without an
+ * extra read.
+ *
+ * ── WHERE PRESENCE LIVES ──────────────────────────────────────────────────────
+ * The presence table (`creationSessionPresence`; `creation_session_members` until
+ * migration 1270 renames it) — canvas-only realtime state, deliberately NOT on the
+ * kernel membership row (migration 1264): every tick writes it, and the row every
+ * permission check reads must not be a write target. A member who has never ticked
+ * has no row; every reader LEFT JOINs it and defaults.
  *
  * ── WRITE THROTTLE ────────────────────────────────────────────────────────────
  * The member UPDATE is skipped when the caller's stored row already says exactly
@@ -25,9 +32,14 @@
  * unread flag, so a revision change always writes.
  */
 
+import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { creationSessionMembers, creationSessions } from '../../infrastructure/database/schema';
-import { resolveSessionMembership } from './sessionAccess';
+import type { Env } from '../../env';
+import {
+  creationSessionPresence, creationSessions, memberships, objects, users,
+} from '../../infrastructure/database/schema';
+import { grantedSessionWhere, resolveSessionGrant } from './sessionAccess';
+import { SESSION_OBJECT_KIND, sessionMemberColumns, sessionMemberOn, type SessionKey } from './sessionMembers';
 
 /** A member counts as active (on the presence list, against the realtime editor cap) for this long after their last write. */
 export const PRESENCE_ACTIVE_WINDOW_MS = 60_000;
@@ -67,14 +79,13 @@ const presenceColumns = {
   tenantId: creationSessions.tenantId,
   canvasRevision: creationSessions.canvasRevision,
   sessionViewport: creationSessions.viewport,
-  role: creationSessionMembers.role,
-  lastSeenAt: creationSessionMembers.lastSeenAt,
-  lastSeenRevision: creationSessionMembers.lastSeenRevision,
-  viewport: creationSessionMembers.viewport,
-  cursor: creationSessionMembers.cursor,
-  selection: creationSessionMembers.selection,
-  typing: creationSessionMembers.typing,
-  followingUserId: creationSessionMembers.followingUserId,
+  lastSeenAt: creationSessionPresence.lastSeenAt,
+  lastSeenRevision: creationSessionPresence.lastSeenRevision,
+  viewport: creationSessionPresence.viewport,
+  cursor: creationSessionPresence.cursor,
+  selection: creationSessionPresence.selection,
+  typing: creationSessionPresence.typing,
+  followingUserId: creationSessionPresence.followingUserId,
 };
 
 type PresenceRow = {
@@ -97,18 +108,31 @@ function toAccess(row: PresenceRow): PresenceAccess {
   };
 }
 
+/** One person's presence row on one board — the join every presence reader uses. */
+export function presenceRowOn(userId: string) {
+  return and(eq(creationSessionPresence.sessionId, creationSessions.id), eq(creationSessionPresence.userId, userId))!;
+}
+
 /**
  * The caller's membership of one board, narrowed to what presence needs, or null.
- * The predicates live once, in `resolveSessionMembership` — this only names the columns.
+ * The predicates live once, in `sessionAccess.ts` — this only names the columns.
  */
 export async function resolvePresenceAccess(
   db: Db,
   sessionId: string,
   tenantId: number,
   userId: string,
+  env?: Env,
 ): Promise<PresenceAccess | null> {
-  const row = await resolveSessionMembership<PresenceRow>(db, sessionId, tenantId, userId, presenceColumns);
-  return row ? toAccess(row) : null;
+  const grant = await resolveSessionGrant(db, sessionId, tenantId, userId, env);
+  if (!grant) return null;
+  const [row] = await db
+    .select(presenceColumns)
+    .from(creationSessions)
+    .leftJoin(creationSessionPresence, presenceRowOn(userId))
+    .where(grantedSessionWhere(grant, sessionId, tenantId))
+    .limit(1);
+  return row ? toAccess({ ...row, role: grant.role }) : null;
 }
 
 /** Structural JSON equality, insensitive to object key order (JSONB reorders keys). */
@@ -147,4 +171,38 @@ export function presenceWriteDue(stored: StoredPresence, next: NextPresence, now
   if (!jsonEquivalent(stored.cursor ?? null, next.cursor ?? null)) return true;
   if (!jsonEquivalent(stored.selection ?? [], next.selection)) return true;
   return false;
+}
+
+/**
+ * Everyone on a board, with what the board draws for each — `GET /:id`'s `members`.
+ * The roster is the kernel membership; the drawn presence is the canvas-only presence
+ * row, absent until a member's first tick, so every presence field defaults exactly as
+ * the old member-row columns did.
+ */
+export function listSessionRoster(db: Db, session: SessionKey) {
+  return db.select({
+    userId: memberships.memberRef,
+    role: memberships.role,
+    displayName: users.displayName,
+    avatarUrl: users.avatarUrl,
+    lastSeenAt: creationSessionPresence.lastSeenAt,
+    viewport: sql<unknown>`coalesce(${creationSessionPresence.viewport}, '{"x":0,"y":0,"zoom":1}'::jsonb)`.mapWith(creationSessionPresence.viewport),
+    cursor: creationSessionPresence.cursor,
+    selection: sql<unknown>`coalesce(${creationSessionPresence.selection}, '[]'::jsonb)`.mapWith(creationSessionPresence.selection),
+    typing: sql<boolean>`coalesce(${creationSessionPresence.typing}, false)`,
+    watchState: sessionMemberColumns.watchState,
+    followingUserId: creationSessionPresence.followingUserId,
+  })
+    .from(objects)
+    .innerJoin(memberships, sessionMemberOn())
+    .leftJoin(users, eq(users.id, memberships.memberRef))
+    .leftJoin(creationSessionPresence, and(
+      eq(creationSessionPresence.sessionId, session.id),
+      eq(creationSessionPresence.userId, memberships.memberRef),
+    ))
+    .where(and(
+      eq(objects.tenantId, session.tenantId),
+      eq(objects.kind, SESSION_OBJECT_KIND),
+      eq(objects.refId, session.id),
+    ));
 }

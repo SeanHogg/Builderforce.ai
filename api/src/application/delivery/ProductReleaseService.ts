@@ -18,22 +18,33 @@
  * segment rule: a caller with a segment sees its segment's rows plus the
  * tenant-wide (segment-less) ones, and new rows carry the caller's segment.
  */
-import { desc, eq, isNull, or, type SQL } from 'drizzle-orm';
+import { desc, eq, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { productReleases } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
-
-export const RELEASE_STATUSES = ['planned', 'in_progress', 'released', 'cancelled'] as const;
-export type ReleaseStatus = (typeof RELEASE_STATUSES)[number];
+import {
+  RELEASED_STATUS,
+  applyReleasedAtPlan,
+  foldDeprecatedReleaseDate,
+  isReleaseStatus,
+  planReleasedAt,
+  type ReleasedAtPlan,
+} from '../../domain/delivery/releaseSchedule';
 
 export interface ReleaseInput {
   name?: string;
   version?: string;
   projectId?: number | null;
   status?: string;
+  /** The planned ship date. */
   targetDate?: string | null;
+  /** When it actually shipped. Honoured only on a write that marks the release
+   *  released, or as a correction to one that already is; otherwise the status
+   *  transition owns it (see `planReleasedAt`). */
   releasedAt?: string | null;
-  /** The release-planning tracker's single "Date" field (column `release_date`). */
+  /** @deprecated the old single "Date" field — folded onto `targetDate` (or onto
+   *  `releasedAt` on a write that marks the release released) by
+   *  `foldDeprecatedReleaseDate`. Accepted for one release. */
   releaseDate?: string | null;
   notes?: string;
 }
@@ -63,20 +74,44 @@ function positiveInt(raw: unknown): number | undefined {
   return Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
+/**
+ * The `released_at` SET clause for an update — `applyReleasedAtPlan` in SQL, so it
+ * reads the row's CURRENT `released_at` / `status` inside the one UPDATE rather
+ * than a separate read a concurrent transition could slip between. Undefined =
+ * leave the column alone.
+ */
+function releasedAtSet(plan: ReleasedAtPlan): SQL | Date | null | undefined {
+  switch (plan.kind) {
+    case 'keep': return undefined;
+    case 'clear': return null;
+    case 'set': return plan.at;
+    case 'stamp': return sql`COALESCE(${productReleases.releasedAt}, ${plan.at.toISOString()}::timestamptz)`;
+    case 'correct':
+      return sql`CASE WHEN ${productReleases.status} = ${RELEASED_STATUS} THEN ${plan.at.toISOString()}::timestamptz ELSE ${productReleases.releasedAt} END`;
+  }
+}
+
+/**
+ * The ONE wire projection of a release row, used by every read and every
+ * `.returning()`. Explicit rather than `select()` / `returning()` so the deprecated
+ * `release_date` column (kept until 1268 drops it) never reaches a response.
+ */
+const RELEASE_COLUMNS = {
+  id: productReleases.id, name: productReleases.name, version: productReleases.version,
+  projectId: productReleases.projectId, status: productReleases.status,
+  targetDate: productReleases.targetDate, releasedAt: productReleases.releasedAt,
+  notes: productReleases.notes,
+  createdAt: productReleases.createdAt, updatedAt: productReleases.updatedAt,
+};
+
 export class ProductReleaseService {
   constructor(private readonly db: Db) {}
 
   /** Releases in scope, optionally narrowed to one project (the picker's
-   *  "releases for this project" mode). Newest target/release date first. */
+   *  "releases for this project" mode). Newest planned (target) date first. */
   async list(scope: ReleaseScope, projectId?: number) {
     return this.db
-      .select({
-        id: productReleases.id, name: productReleases.name, version: productReleases.version,
-        projectId: productReleases.projectId, status: productReleases.status,
-        targetDate: productReleases.targetDate, releasedAt: productReleases.releasedAt,
-        releaseDate: productReleases.releaseDate, notes: productReleases.notes,
-        createdAt: productReleases.createdAt, updatedAt: productReleases.updatedAt,
-      })
+      .select(RELEASE_COLUMNS)
       .from(productReleases)
       .where(scopedToTenant(productReleases, scope.tenantId, segmentRule(scope), projectId != null ? eq(productReleases.projectId, projectId) : undefined))
       .orderBy(desc(productReleases.targetDate), desc(productReleases.createdAt))
@@ -84,7 +119,10 @@ export class ProductReleaseService {
   }
 
   /** @throws never — the caller validates that `name` is present. */
-  async create(scope: ReleaseScope, input: ReleaseInput & { name: string }) {
+  async create(scope: ReleaseScope, raw: ReleaseInput & { name: string }, now: Date = new Date()) {
+    const input = foldDeprecatedReleaseDate(raw);
+    const status = isReleaseStatus(input.status) ? input.status : 'planned';
+    const releasedAt = applyReleasedAtPlan(planReleasedAt({ status, releasedAt: parseDate(input.releasedAt) }, now), null);
     const [row] = await this.db
       .insert(productReleases)
       .values({
@@ -93,34 +131,37 @@ export class ProductReleaseService {
         name: input.name.trim().slice(0, 255),
         version: typeof input.version === 'string' ? input.version.trim().slice(0, 50) : null,
         projectId: positiveInt(input.projectId) ?? null,
-        status: RELEASE_STATUSES.includes(input.status as ReleaseStatus) ? (input.status as ReleaseStatus) : 'planned',
+        status,
         targetDate: parseDate(input.targetDate),
-        releasedAt: parseDate(input.releasedAt),
-        releaseDate: parseDate(input.releaseDate),
+        releasedAt,
         notes: typeof input.notes === 'string' ? input.notes.slice(0, 4000) : null,
       })
-      .returning();
+      .returning(RELEASE_COLUMNS);
     return row!;
   }
 
   /** Partial update. Only keys PRESENT in `input` are written, so an omitted
-   *  field keeps its value and an explicit null clears it. */
-  async update(scope: ReleaseScope, id: string, input: ReleaseInput) {
-    const set: Record<string, unknown> = { updatedAt: new Date() };
+   *  field keeps its value and an explicit null clears it — except `releasedAt`,
+   *  which follows the status transition (stamped on the move to released, cleared
+   *  on a move back to planned / in_progress, kept on cancel; see `planReleasedAt`). */
+  async update(scope: ReleaseScope, id: string, raw: ReleaseInput, now: Date = new Date()) {
+    const input = foldDeprecatedReleaseDate(raw);
+    const status = isReleaseStatus(input.status) ? input.status : undefined;
+    const set: Record<string, unknown> = { updatedAt: now };
     if (typeof input.name === 'string' && input.name.trim()) set.name = input.name.trim().slice(0, 255);
     if (typeof input.version === 'string') set.version = input.version.trim().slice(0, 50);
     if ('projectId' in input) set.projectId = positiveInt(input.projectId) ?? null;
-    if (RELEASE_STATUSES.includes(input.status as ReleaseStatus)) set.status = input.status;
+    if (status) set.status = status;
     if ('targetDate' in input) set.targetDate = parseDate(input.targetDate);
-    if ('releasedAt' in input) set.releasedAt = parseDate(input.releasedAt);
-    if ('releaseDate' in input) set.releaseDate = parseDate(input.releaseDate);
+    const releasedAt = releasedAtSet(planReleasedAt({ status, releasedAt: parseDate(input.releasedAt) }, now));
+    if (releasedAt !== undefined) set.releasedAt = releasedAt;
     if (typeof input.notes === 'string') set.notes = input.notes.slice(0, 4000);
 
     const [row] = await this.db
       .update(productReleases)
       .set(set)
       .where(scopedToTenant(productReleases, scope.tenantId, segmentRule(scope), eq(productReleases.id, id)))
-      .returning();
+      .returning(RELEASE_COLUMNS);
     return row ?? null;
   }
 

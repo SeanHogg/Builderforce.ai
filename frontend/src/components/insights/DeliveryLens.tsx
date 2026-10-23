@@ -2,52 +2,45 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   insightsApi, pmoApi, agileMetricsApi,
-  type DeliveryInsights, type DeliverableScope, type DeliveryStatus, type BurnPoint,
+  type DeliveryInsights, type DeliverableScope, type BurnPoint,
   type Initiative, type VelocityInsights,
-  type DeliverableUpdate, type DeliverableUpdateStatus,
-  type ScenarioResponse, type LifecycleInsights, type LifecyclePhase, type ScopeEffortPoint,
+  type ScopeEffortPoint,
 } from '@/lib/builderforceApi';
-import { releasesApi, type Release } from '@/lib/releasesApi';
+import { releasesApi, type ReleaseList, type ReleaseSchedule } from '@/lib/releasesApi';
 import { ValueStreamGraph } from './ValueStreamGraph';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { Select } from '@/components/Select';
-import { TrendChart } from '@/components/charts/TrendChart';
-import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { KpiGrid } from './LensShell';
 import { pct } from './format';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
-import { statusColor, type StatusToneMap } from '@/lib/statusTone';
-
-/** Compact hours → "Xd Yh" / "Yh" / "Zm" for lifecycle phase durations. */
-function fmtDur(hours: number): string {
-  if (hours <= 0) return '—';
-  if (hours < 1) return `${Math.round(hours * 60)}m`;
-  if (hours < 24) return `${hours.toFixed(hours < 10 ? 1 : 0)}h`;
-  const d = Math.floor(hours / 24);
-  const h = Math.round(hours % 24);
-  return h ? `${d}d ${h}h` : `${d}d`;
-}
-
-const STATUS_TONE: StatusToneMap<DeliveryStatus> = {
-  on_track: 'success', at_risk: 'warning', late: 'danger', done: 'info', no_signal: 'neutral',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
-};
-const btnStyle: React.CSSProperties = {
-  padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',
-  color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
-};
+import { statusColor } from '@/lib/statusTone';
+import { STATUS_TONE, PROJECTION_COLOR, inputStyle } from './deliveryLensShared';
+import { DeliverableUpdatesFeed } from './DeliverableUpdatesFeed';
+import { DeliveryLifecycleExplorer } from './DeliveryLifecycleExplorer';
+import { DeliveryScenarioPlanner } from './DeliveryScenarioPlanner';
 
 interface Pick { scope: DeliverableScope; id: string; label: string }
 
-const PROJECTION_COLOR = 'var(--purple-bright)';
+const EMPTY_RELEASES: ReleaseList = {
+  releases: [],
+  schedule: { released: 0, measured: 0, onTime: 0, late: 0, onTimeRatePct: null, avgDaysLate: null, overdue: 0, upcoming: 0 },
+};
+
+/** The Status card's sub-line: a shipped release is graded plan vs actual
+ *  (released on/before target, or N days late); anything else shows its target. */
+function statusSub(t: ReturnType<typeof useTranslations>, data: DeliveryInsights): string {
+  if (data.releasedAt) {
+    if (data.slipDays == null) return t('deliv.released', { d: data.releasedAt });
+    return data.slipDays > 0
+      ? t('deliv.releasedLate', { d: data.releasedAt, n: data.slipDays })
+      : t('deliv.releasedOnTime', { d: data.releasedAt });
+  }
+  return data.targetDate ? t('deliv.target', { d: data.targetDate }) : t('deliv.noTarget');
+}
 
 /**
  * Value-delivery chart — historical burnup (scope dashed, completed filled) plus a
@@ -162,207 +155,25 @@ function ScopeEffortChart({ points, hasEffort }: { points: ScopeEffortPoint[]; h
   );
 }
 
-const UPDATE_STATUSES: DeliverableUpdateStatus[] = ['note', 'on_track', 'at_risk', 'blocked', 'done'];
-const UPDATE_TONE: StatusToneMap<DeliverableUpdateStatus> = {
-  note: 'neutral', on_track: 'success', at_risk: 'warning', blocked: 'danger', done: 'info',
-};
-
-/** Qualitative update/comment stream for the selected deliverable (EMP-11). */
-function UpdatesFeed({ scope, id }: { scope: DeliverableScope; id: string }) {
-  const t = useTranslations('insights');
-  const [draft, setDraft] = useState('');
-  const [status, setStatus] = useState<DeliverableUpdateStatus>('note');
-  const [busy, setBusy] = useState(false);
-  const { data, error, reload } = usePmData<DeliverableUpdate[]>(() => insightsApi.deliverableUpdates.list(scope, id), [scope, id]);
-
-  const run = async (fn: () => Promise<unknown>) => { setBusy(true); try { await fn(); reload(); } finally { setBusy(false); } };
-
-  return (
-    <PmCard title={t('deliv.updates')}>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <Select style={{ ...inputStyle, width: 130 }} value={status} onChange={(e) => setStatus(e.target.value as DeliverableUpdateStatus)} aria-label={t('deliv.updateStatus')}>
-          {UPDATE_STATUSES.map((s) => <option key={s} value={s}>{t(`deliv.updateStatusLabel.${s}`)}</option>)}
-        </Select>
-        <input
-          style={{ ...inputStyle, flex: 1 }} value={draft} onChange={(e) => setDraft(e.target.value)}
-          placeholder={t('deliv.updatePlaceholder')}
-          onKeyDown={(e) => { if (e.key === 'Enter' && draft.trim() && !busy) run(async () => { await insightsApi.deliverableUpdates.create({ scopeKind: scope, scopeId: id, body: draft, statusLabel: status }); setDraft(''); }); }}
-        />
-        <button
-          type="button" style={btnStyle} disabled={busy || !draft.trim()}
-          onClick={() => run(async () => { await insightsApi.deliverableUpdates.create({ scopeKind: scope, scopeId: id, body: draft, statusLabel: status }); setDraft(''); })}
-        >
-          {t('deliv.postUpdate')}
-        </button>
-      </div>
-      {error ? <PmError message={error} /> : !data || data.length === 0 ? (
-        <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{t('deliv.noUpdates')}</span>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {data.map((u) => (
-            <div key={u.id} style={{ display: 'flex', flexDirection: 'column', gap: 2, borderLeft: `3px solid ${u.statusLabel ? statusColor(UPDATE_TONE, u.statusLabel, 'solid') : 'var(--border-subtle)'}`, paddingLeft: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                <span>
-                  {u.statusLabel && <span style={{ color: statusColor(UPDATE_TONE, u.statusLabel), fontWeight: 600 }}>{t(`deliv.updateStatusLabel.${u.statusLabel}`)} · </span>}
-                  {u.authorName ?? t('deliv.someone')} · {u.createdAt.slice(0, 10)}
-                </span>
-                <button type="button" disabled={busy} title={t('common.delete')} onClick={() => run(() => insightsApi.deliverableUpdates.remove(u.id))}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
-              </div>
-              <div style={{ fontSize: '0.86rem', whiteSpace: 'pre-wrap' }}>{u.body}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </PmCard>
-  );
-}
-
-const PHASE_ORDER: LifecyclePhase[] = ['refinement', 'work', 'review', 'deploy'];
-
-const sliderRow: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 };
-const sliderLabel: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-secondary)' };
-
-/**
- * Scenario planner — model the deliverable's completion under different team size,
- * focus, and scope, graded against its target. Server-computed off the live
- * delivery baseline (single source of truth); debounced as the levers move.
- * Keyed by deliverable in the parent so the levers reset on a deliverable switch.
- */
-function ScenarioPlanner({ scope, id, baseline }: { scope: DeliverableScope; id: string; baseline: DeliveryInsights }) {
-  const t = useTranslations('insights');
-  const [developers, setDevelopers] = useState(Math.max(1, baseline.activeContributors));
-  const [attentionPct, setAttentionPct] = useState(100);
-  const [scopeDelta, setScopeDelta] = useState(0);
-  const [res, setRes] = useState<ScenarioResponse | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    const h = setTimeout(() => {
-      insightsApi.deliveryScenario(scope, id, { developers, attentionPct, scopeDelta })
-        .then((r) => { if (alive) setRes(r); })
-        .catch(() => { if (alive) setRes(null); });
-    }, 250);
-    return () => { alive = false; clearTimeout(h); };
-  }, [scope, id, developers, attentionPct, scopeDelta]);
-
-  const s = res?.scenario;
-  const deltaLabel = s?.deltaDaysVsTarget == null ? null
-    : s.deltaDaysVsTarget > 0 ? t('deliv.scenario.daysLate', { n: s.deltaDaysVsTarget })
-    : s.deltaDaysVsTarget < 0 ? t('deliv.scenario.daysEarly', { n: -s.deltaDaysVsTarget })
-    : t('deliv.scenario.onTheDay');
-
-  return (
-    <PmCard title={t('deliv.scenario.title')}>
-      <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 0 }}>{t('deliv.scenario.subtitle')}</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
-        <div style={sliderRow}>
-          <span style={sliderLabel}><span>{t('deliv.scenario.developers')}</span><strong>{developers}</strong></span>
-          <input type="range" min={0} max={Math.max(12, baseline.activeContributors * 3)} step={1} value={developers}
-            onChange={(e) => setDevelopers(Number(e.target.value))} aria-label={t('deliv.scenario.developers')} />
-          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t('deliv.scenario.developersHint', { n: Math.max(1, baseline.activeContributors) })}</span>
-        </div>
-        <div style={sliderRow}>
-          <span style={sliderLabel}><span>{t('deliv.scenario.attention')}</span><strong>{attentionPct}%</strong></span>
-          <input type="range" min={0} max={100} step={5} value={attentionPct}
-            onChange={(e) => setAttentionPct(Number(e.target.value))} aria-label={t('deliv.scenario.attention')} />
-          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t('deliv.scenario.attentionHint')}</span>
-        </div>
-        <div style={sliderRow}>
-          <span style={sliderLabel}><span>{t('deliv.scenario.scope')}</span><strong>{scopeDelta > 0 ? `+${scopeDelta}` : scopeDelta}</strong></span>
-          <input type="range" min={-baseline.openTasks} max={Math.max(20, baseline.openTasks)} step={1} value={scopeDelta}
-            onChange={(e) => setScopeDelta(Number(e.target.value))} aria-label={t('deliv.scenario.scope')} />
-          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t('deliv.scenario.scopeHint', { n: s?.adjustedOpenTasks ?? baseline.openTasks })}</span>
-        </div>
-      </div>
-
-      <KpiGrid>
-        <StatCard label={t('deliv.scenario.projectedDate')} value={s?.projectedDate ?? '—'}
-          sub={deltaLabel ?? (baseline.targetDate ? t('deliv.target', { d: baseline.targetDate }) : t('deliv.noTarget'))} />
-        <StatCard label={t('deliv.status')} value={s ? t(`deliv.statusLabel.${s.status}`) : '—'}
-          sub={baseline.forecastDate ? t('deliv.scenario.baselineForecast', { d: baseline.forecastDate }) : t('deliv.forecastNone')} />
-        <StatCard label={t('deliv.scenario.projectedPace')} value={s ? `${s.projectedThroughputPerWeek.toFixed(1)}/${t('deliv.week')}` : '—'}
-          sub={t('deliv.scenario.baselinePace', { n: baseline.throughputPerWeek.toFixed(1) })} />
-        <StatCard label={t('deliv.scenario.effort')} value={s?.effortPersonWeeks != null ? t('deliv.scenario.personWeeks', { n: s.effortPersonWeeks.toFixed(1) }) : '—'}
-          sub={s?.projectedWeeks != null ? t('deliv.scenario.weeksRemaining', { n: s.projectedWeeks.toFixed(1) }) : '—'} />
-      </KpiGrid>
-      {s && (
-        <div style={{ marginTop: 10, fontSize: '0.8rem', color: statusColor(STATUS_TONE, s.status), fontWeight: 600 }}>
-          {t(`deliv.scenario.verdict.${s.status}`)}
-        </div>
-      )}
-    </PmCard>
-  );
-}
-
-/** Life cycle explorer — time per SDLC phase (Refinement → Work → Review → Deploy)
- *  and the end-to-end lifecycle trend over recent months. */
-function LifecycleExplorer() {
-  const t = useTranslations('insights');
-  const { currentProjectId } = useProjectScope();
-  const { data, error } = usePmData<LifecycleInsights>(() => insightsApi.lifecycle(30, currentProjectId), [currentProjectId]);
-  if (error) return <PmError message={error} />;
-  if (!data) return null;
-
-  const maxAvg = Math.max(1, ...data.byPhase.map((p) => p.avgHours));
-  const phases = [...data.byPhase].sort((a, b) => PHASE_ORDER.indexOf(a.phase) - PHASE_ORDER.indexOf(b.phase));
-
-  return (
-    <PmCard title={t('deliv.lifecycle.title')}>
-      <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 0 }}>
-        {t('deliv.lifecycle.subtitle', { d: fmtDur(data.totalAvgHours), n: data.sampleSize })}
-      </p>
-      {data.sampleSize === 0 ? (
-        <PmEmpty message={t('deliv.lifecycle.empty')} />
-      ) : (
-        <>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-            {phases.map((p, i) => (
-              <div key={p.phase} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 84px', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>{t(`deliv.lifecycle.phase.${p.phase}`)}</span>
-                <div style={{ background: 'var(--surface-sunken)', borderRadius: 'var(--radius-sm)', height: 18, overflow: 'hidden' }}>
-                  <div style={{ width: `${(p.avgHours / maxAvg) * 100}%`, height: '100%', background: colorAt(i), borderRadius: 'var(--radius-sm)', minWidth: p.avgHours > 0 ? 2 : 0 }} />
-                </div>
-                <span style={{ fontSize: '0.82rem', textAlign: 'right', fontWeight: 600 }} title={t('deliv.lifecycle.median', { d: fmtDur(p.medianHours) })}>
-                  {fmtDur(p.avgHours)}
-                </span>
-              </div>
-            ))}
-          </div>
-          {data.trend.length >= 2 && (
-            <div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 6 }}>{t('deliv.lifecycle.trend')}</div>
-              <TrendChart
-                labels={data.trend.map((p) => p.period)}
-                series={[{ key: 'lifecycle', label: t('deliv.lifecycle.trendSeries'), values: data.trend.map((p) => p.avgLifecycleHours / 24), color: PROJECTION_COLOR }]}
-                formatValue={(v) => `${v.toFixed(0)}d`}
-                area
-                ariaLabel={t('deliv.lifecycle.trendAria')}
-              />
-            </div>
-          )}
-        </>
-      )}
-    </PmCard>
-  );
-}
-
 export function DeliveryLens() {
   const t = useTranslations('insights');
   const { currentProjectId } = useProjectScope();
   const [picks, setPicks] = useState<Pick[]>([]);
   const [selected, setSelected] = useState<string>(''); // "scope:id"
+  const [releaseSchedule, setReleaseSchedule] = useState<ReleaseSchedule | null>(null);
 
   // Build the deliverable picker from initiatives + projects + releases.
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [inits, projs, rels] = await Promise.all([
+      const [inits, projs, releaseList] = await Promise.all([
         pmoApi.initiatives.list().catch(() => [] as Initiative[]),
         fetchProjects().catch(() => [] as Project[]),
-        releasesApi.list().then((r) => r.releases).catch(() => [] as Release[]),
+        releasesApi.list().catch(() => EMPTY_RELEASES),
       ]);
       if (!alive) return;
+      const rels = releaseList.releases;
+      setReleaseSchedule(releaseList.schedule);
       const list: Pick[] = currentProjectId == null ? [
         ...inits.map((i) => ({ scope: 'initiative' as const, id: i.id, label: `${t('deliv.kind.initiative')}: ${i.name}` })),
         ...projs.map((p) => ({ scope: 'project' as const, id: String(p.id), label: `${t('deliv.kind.project')}: ${p.name}` })),
@@ -415,9 +226,19 @@ export function DeliveryLens() {
         <>
           <KpiGrid>
             <StatCard label={t('deliv.progress')} value={pct(data.completionPct)} sub={t('deliv.progressSub', { done: data.completedTasks, total: data.totalTasks })} />
-            <StatCard label={t('deliv.status')} value={t(`deliv.statusLabel.${data.status}`)} sub={data.targetDate ? t('deliv.target', { d: data.targetDate }) : t('deliv.noTarget')} />
+            <StatCard label={t('deliv.status')} value={t(`deliv.statusLabel.${data.status}`)} sub={statusSub(t, data)} />
             <StatCard label={t('deliv.forecast')} value={data.forecastDate ?? '—'} sub={data.forecastDate ? t('deliv.forecastBand', { o: data.forecastDateOptimistic ?? '—', p: data.forecastDatePessimistic ?? '—' }) : t('deliv.forecastNone')} />
             <StatCard label={t('deliv.scopeCreep')} value={pct(data.addedScopePct)} sub={t('deliv.scopeCreepSub', { added: data.addedScope, base: data.baselineScope })} />
+            {/* Plan vs actual across releases: shipped on or before the target date. */}
+            {scope === 'release' && releaseSchedule && (
+              <StatCard
+                label={t('deliv.releaseOnTime')}
+                value={releaseSchedule.onTimeRatePct != null ? pct(releaseSchedule.onTimeRatePct) : '—'}
+                sub={releaseSchedule.measured > 0
+                  ? t('deliv.releaseOnTimeSub', { onTime: releaseSchedule.onTime, measured: releaseSchedule.measured })
+                  : t('deliv.releaseOnTimeNone')}
+              />
+            )}
           </KpiGrid>
 
           <PmCard title={t('deliv.burnup')}>
@@ -450,7 +271,7 @@ export function DeliveryLens() {
 
           {/* What-if completion modelling for this deliverable. Keyed so the levers
               reset to the new baseline when the deliverable changes. */}
-          {scope && id && <ScenarioPlanner key={`${scope}:${id}`} scope={scope} id={id} baseline={data} />}
+          {scope && id && <DeliveryScenarioPlanner key={`${scope}:${id}`} scope={scope} id={id} baseline={data} />}
 
           <PmCard title={t('deliv.detail')}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, fontSize: '0.85rem' }}>
@@ -462,7 +283,7 @@ export function DeliveryLens() {
           </PmCard>
 
           {/* Qualitative update stream for this deliverable (EMP-11) */}
-          {scope && id && <UpdatesFeed scope={scope} id={id} />}
+          {scope && id && <DeliverableUpdatesFeed scope={scope} id={id} />}
         </>
       )}
 
@@ -499,7 +320,7 @@ export function DeliveryLens() {
       )}
 
       {/* Life cycle explorer — scoped time per SDLC phase + lifecycle trend. */}
-      <LifecycleExplorer />
+      <DeliveryLifecycleExplorer />
 
       {/* Value stream — the cross-artifact initiative dependency graph + critical
           path. Self-hides when there are no initiatives in scope. */}

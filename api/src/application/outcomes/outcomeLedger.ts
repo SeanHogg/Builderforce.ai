@@ -28,7 +28,8 @@
  */
 
 import { and, eq, ne } from 'drizzle-orm';
-import { creationOutcomeEvents, creationSessionMembers, creationSessions } from '../../infrastructure/database/schema';
+import { creationOutcomeEvents, creationSessions } from '../../infrastructure/database/schema';
+import { sessionMemberRole } from '../creation/sessionMembers';
 import type { Db } from '../../infrastructure/database/connection';
 import { OUTCOME_PHASES, type OutcomePhase } from './outcomeMetricContract';
 
@@ -141,10 +142,6 @@ export async function resolveOutcomeSession(
     ))
     .limit(1);
   if (!row) return null;
-  const [member] = await db
-    .select({ userId: creationSessionMembers.userId })
-    .from(creationSessionMembers)
-    .where(and(eq(creationSessionMembers.sessionId, sessionId), eq(creationSessionMembers.userId, args.userId)))
-    .limit(1);
+  const member = await sessionMemberRole(db, { id: sessionId, tenantId: args.tenantId }, args.userId);
   return member ? sessionId : null;
 }

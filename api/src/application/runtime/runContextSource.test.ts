@@ -129,7 +129,9 @@ describe('assembleRunContext', () => {
     await assembleRunContext(env, db, { tenantId: 1, projectId: 2, taskId: 3, agentRef: 'agent-9' });
     const keys = getOrSetCached.mock.calls.map((c) => String(c[1]));
     expect(keys).toContain('run-context:strategy:1:2:3:v1');
-    expect(keys).toContain('run-context:governance:1:2:agent-9:v1');
+    // Governance folds BOTH the governance token and the agent-assignment token (per-agent
+    // rules live on `agent_assignments` since migration 1265).
+    expect(keys).toContain('run-context:governance:1:2:agent-9:v1:v1');
   });
 
   it('survives a total read failure rather than failing the run', async () => {
