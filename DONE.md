@@ -1,4 +1,4 @@
-## ✅ RESOLVED 2026-10-23 — Every consumer on builderforce-memory 2026.10.23 (api 2026.10.73 · frontend 2026.10.88 · agent-runtime 2026.10.17 · brain-embedded 2026.10.44 · VSIX 2026.10.65)
+## ✅ RESOLVED 2026-10-23 — Every consumer on builderforce-memory 2026.10.23 (api 2026.10.74 · frontend 2026.10.89 · agent-runtime 2026.10.17 · brain-embedded 2026.10.44 · VSIX 2026.10.65)
 
 - agent-runtime (and its memory-lancedb extension), brain-embedded and frontend were still on `^2026.10.3`. They never received 2026.10.22: lossless compaction, `memory_restore`, the recall ranking signals, packHandoff `pinned`, and reasoning tokens in wire usage. Every `@seanhogg/builderforce-memory*` range is now `^2026.10.23`, and the lockfiles are reinstalled.
 - The `gen-agent-relay-source` and `gen-code-analysis` `--check` modes now compare the checked-out output as LF. A Windows `core.autocrlf` checkout turns it into CRLF, and before this the check failed on every fresh worktree.
