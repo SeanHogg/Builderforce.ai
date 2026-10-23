@@ -3,6 +3,7 @@
   "view.welcome": "Welcome",
   "welcome.signIn": "Sign in to BuilderForce to use Sessions, Projects & Tasks, Inbox, Insights, Evermind, Diagnostics and Meetings.\n[Sign In](command:builderforce.signIn)\n\nSelf-hosted AI coding agent — chat with a codebase-aware agent right here in your sidebar.",
   "view.evermind": "Evermind",
+  "view.chat": "Chat",
   "command.openChat": "BuilderForce: Open Chat",
   "command.openCreateCanvas": "BuilderForce: Create on Canvas",
   "command.openVisualization": "BuilderForce: Open Visualization",

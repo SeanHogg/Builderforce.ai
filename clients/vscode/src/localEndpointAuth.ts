@@ -2,7 +2,7 @@
  * Attach the credential a local endpoint needs, immediately before the call.
  *
  * The ONE place that decides this, because two surfaces make local requests — the chat
- * route (`modelRouting`) and the panel's host-performed fetch (`builderforcePanel`) — and a
+ * route (`modelRouting`) and the panel's host-performed fetch (`localFetchProxy`) — and a
  * second copy of "does this provider need a bearer, and where does a fresh one come
  * from?" is how one of them ends up sending a stale token or none at all.
  *

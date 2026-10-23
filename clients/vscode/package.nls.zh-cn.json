@@ -3,6 +3,7 @@
   "view.welcome": "欢迎",
   "welcome.signIn": "登录 BuilderForce 即可使用会话、项目与任务、收件箱、洞察、Evermind、诊断和会议。\n[登录](command:builderforce.signIn)\n\n自托管的 AI 编码智能体——直接在侧边栏中与了解你代码库的智能体对话。",
   "view.evermind": "Evermind",
+  "view.chat": "聊天",
   "command.openChat": "BuilderForce：打开对话",
   "command.openCreateCanvas": "BuilderForce：在画布上创建",
   "command.openVisualization": "BuilderForce：打开可视化面板",

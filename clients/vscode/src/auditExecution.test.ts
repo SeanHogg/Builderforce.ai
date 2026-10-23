@@ -26,7 +26,7 @@ vi.mock('./systemAuditApi', () => ({
 }));
 vi.mock('./bfApi', () => ({ appendBrainMessages: vi.fn(async () => null), listSystemAudits: vi.fn(async () => []) }));
 vi.mock('./auditResultsPanel', () => ({ AuditResultsPanel: { open: vi.fn() } }));
-vi.mock('./builderforcePanel', () => ({ BuilderForcePanel: { open: vi.fn() } }));
+vi.mock('./openWorkspace', () => ({ openWorkspace: vi.fn() }));
 vi.mock('./projectState', () => ({ getSelectedProject: () => ({ id: 7 }), onProjectChange: () => ({ dispose() {} }) }));
 vi.mock('./platformPolicy', () => ({
   platformPolicy: () => ({

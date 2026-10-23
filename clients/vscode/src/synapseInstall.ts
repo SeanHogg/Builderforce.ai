@@ -6,7 +6,7 @@
  * exists for every other on-device runtime.
  */
 import * as vscode from "vscode";
-import { BuilderForcePanel } from "./builderforcePanel";
+import { refreshWorkspaceSurfaces } from "./workspaceSurface";
 import { getLocalModelsConfig } from "./gateway";
 import { listLocalModels } from "./localModels";
 import {
@@ -53,7 +53,7 @@ export async function runSynapseInstall(model: string): Promise<boolean> {
         return false;
       }
       void vscode.window.showInformationMessage(vscode.l10n.t("Installed {0}.", name));
-      BuilderForcePanel.refresh();
+      refreshWorkspaceSurfaces();
       return true;
     },
   );

@@ -8,6 +8,9 @@ import { promptSignInAgain, watchRejectedEditorKey } from "./editorKeyGuard";
 import { initActivity, trackVsix } from "./activity";
 import { BoardPanel } from "./boardPanel";
 import { BuilderForcePanel } from "./builderforcePanel";
+import { openWorkspace } from "./openWorkspace";
+import { configureWorkspaceSurfaces, notifyChatDeleted, refreshWorkspaceSurfaces } from "./workspaceSurface";
+import { registerChatView } from "./chatView";
 import { Project360Panel } from "./project360Panel";
 import { ProjectPagePanel, projectPageChoices } from "./projectPagePanel";
 import { registerChatParticipant } from "./chatParticipant";
@@ -132,7 +135,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Installs the fetch guard now; the policy RESOLVES after the signed-in read —
   // `platformPolicyResolved()`, which every platform call started below waits on.
   void bindPlatformPolicy(context, SECRET_KEY);
-  registerInferenceModeCommands(context, () => BuilderForcePanel.refresh());
+  registerInferenceModeCommands(context, () => refreshWorkspaceSurfaces());
   // G08: install the local audit-close path at activation. `AuditExecution.closeLocally`
   // now routes through `closeAuditLocally`, which recovers interrupted runs and refuses
   // the cloud launch, but the helper surface is only reachable once activation has
@@ -166,7 +169,7 @@ export function activate(context: vscode.ExtensionContext): void {
   configurePolicyGatesPersistence(createPolicyGatesPersistence(localFirst.store, {
     deviceId: context.globalState.get<string>("builderforce.localDeviceId") ?? "",
   }));
-  context.subscriptions.push({ dispose: platformPolicy().subscribe(() => BuilderForcePanel.refresh()) });
+  context.subscriptions.push({ dispose: platformPolicy().subscribe(() => refreshWorkspaceSurfaces()) });
   initProjectState(context.workspaceState);
   // Gate the sidebar on auth before anything else registers: until this resolves the
   // key is falsy, so the login (Welcome) panel shows and the feature views stay hidden.
@@ -247,7 +250,7 @@ export function activate(context: vscode.ExtensionContext): void {
       try {
         const session = await bfApi.createCreationSession(context.secrets, prompt);
         trackVsix("navigation", { ref: `creation-session:${session.id}` });
-        await BuilderForcePanel.open(context, undefined, { surface: "graph", sessionId: session.id });
+        await openWorkspace(context, undefined, { surface: "graph", sessionId: session.id });
       } catch (error) {
         surfaceError(error, "command:openCreateCanvas",
           vscode.l10n.t("Could not create a Canvas session: {0}", (error as Error).message));
@@ -261,14 +264,14 @@ export function activate(context: vscode.ExtensionContext): void {
           description: new Date(session.lastActivityAt).toLocaleString(),
           session,
         })), { title: vscode.l10n.t("Open Creation Session"), placeHolder: vscode.l10n.t("Choose a shared canvas") });
-        if (picked) await BuilderForcePanel.open(context, undefined, { surface: "graph", sessionId: picked.session.id });
+        if (picked) await openWorkspace(context, undefined, { surface: "graph", sessionId: picked.session.id });
       } catch (error) {
         surfaceError(error, "command:openCreationSession",
           vscode.l10n.t("Could not open Creation Sessions: {0}", (error as Error).message));
       }
     }),
     vscode.commands.registerCommand("builderforce.openCreationSessionItem", (session: bfApi.BfCreationSessionSummary) =>
-      BuilderForcePanel.open(context, undefined, { surface: "graph", sessionId: session.id })),
+      openWorkspace(context, undefined, { surface: "graph", sessionId: session.id })),
     attention.onDidChange(() => {
       // Live state moved: repaint the Sessions icons/"Running" from the held list at
       // once, and revalidate it (throttled — it repaints again only if the list moved).
@@ -303,14 +306,18 @@ export function activate(context: vscode.ExtensionContext): void {
   void installRunRecovery(context);
   const runHost = createVsCodeRunHost(context, { onChatsChanged, onPlatformWrite });
   context.subscriptions.push({ dispose: () => runHost.dispose() });
-  BuilderForcePanel.configure({
+  configureWorkspaceSurfaces({
     runHost,
     // The webview's bfi model store is a view of the host's file cache — one download.
     modelFiles: hostBfi.files,
     onChatsChanged,
     onPlatformWrite,
     onSelectProject: (projectId) => void selectProjectById(context, projects, projectId),
+    openBoard: (sessionId) => void openWorkspace(context, undefined, { surface: "graph", sessionId }),
   });
+  // BuilderForce in the editor's agent chat area (secondary sidebar), beside Chat /
+  // Claude Code / Codex — the same workspace surface as the editor tab.
+  registerChatView(context);
   // Restore the workspace the editor was last acting as (re-scopes the tenant JWT).
   const savedTenant = context.globalState.get<number>(SELECTED_TENANT_KEY);
   if (typeof savedTenant === "number") bfApi.setSelectedWorkspace(savedTenant);
@@ -467,19 +474,19 @@ export function activate(context: vscode.ExtensionContext): void {
     // Work Inbox entry points — each hands the unified Brain a job to do with its
     // shared platform + git tools (one Brain, one tool catalog; no bespoke dashboards).
     vscode.commands.registerCommand("builderforce.reviewPullRequests", () =>
-      BuilderForcePanel.open(context, {
+      openWorkspace(context, {
         kind: "seed",
         text: vscode.l10n.t("Review my open pull requests: use repos.list_pull_requests to list them, summarize each PR's status and any failing CI checks, and flag anything stale or blocked so I can triage."),
       }),
     ),
     vscode.commands.registerCommand("builderforce.fixErrors", () =>
-      BuilderForcePanel.open(context, {
+      openWorkspace(context, {
         kind: "seed",
         text: vscode.l10n.t("Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix."),
       }),
     ),
     vscode.commands.registerCommand("builderforce.openPullRequest", () =>
-      BuilderForcePanel.open(context, {
+      openWorkspace(context, {
         kind: "seed",
         text: vscode.l10n.t("Review my current changes with git_status and git_diff, then commit them on a new branch, push, and open a pull request. Confirm the branch name and PR title with me first."),
       }),
@@ -488,11 +495,11 @@ export function activate(context: vscode.ExtensionContext): void {
     // Internal: repaint the server-backed Sessions list (after auth / chat writes).
     vscode.commands.registerCommand("builderforce.refreshSessions", () => tree.refresh()),
     vscode.commands.registerCommand("builderforce.newSession", () =>
-      BuilderForcePanel.open(context, { kind: "new" }),
+      openWorkspace(context, { kind: "new" }),
     ),
     vscode.commands.registerCommand("builderforce.openSession", (id: number | string) => {
       const chatId = chatIdOf(id);
-      BuilderForcePanel.open(context, chatId != null ? { kind: "focus", chatId } : { kind: "new" });
+      openWorkspace(context, chatId != null ? { kind: "focus", chatId } : { kind: "new" });
     }),
     vscode.commands.registerCommand("builderforce.selectProject", () => selectProject(context, projects)),
     vscode.commands.registerCommand("builderforce.createProject", () => createProject(context, projects)),
@@ -554,7 +561,7 @@ export function activate(context: vscode.ExtensionContext): void {
       // ticket kind; everything else is a plain task).
       const projectId = getSelectedProject()?.id;
       const ticketKind = t.taskType === "epic" ? "epic" : t.taskType === "gap" ? "gap" : "task";
-      BuilderForcePanel.open(context, {
+      openWorkspace(context, {
         kind: "task",
         task: { id: t.id, key: t.key, title: t.title, taskType: t.taskType, projectId },
         ticket: { kind: ticketKind, ref: String(t.id), title: t.title, projectId },
@@ -628,7 +635,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await bfApi.deleteBrainChat(context.secrets, id);
         tree.refresh();
         // Only a panel showing THIS chat leaves it; every other one just re-reads its list.
-        BuilderForcePanel.chatDeleted(id);
+        notifyChatDeleted(id);
       } catch (e) {
         surfaceError(e, "command:deleteSession", `BuilderForce: could not delete chat (${(e as Error).message}).`);
       }
@@ -662,7 +669,7 @@ export function activate(context: vscode.ExtensionContext): void {
         tree.archiveSession(`chat:${chat.id}`);
         tree.refresh();
         // Only a panel showing THIS chat leaves it; every other one just re-reads its list.
-        BuilderForcePanel.chatDeleted(chat.id);
+        notifyChatDeleted(chat.id);
       } catch (e) {
         surfaceError(e, "command:archiveSession", `BuilderForce: could not archive chat (${(e as Error).message}).`);
       }
@@ -685,7 +692,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // still names it. Only `openBrain` is contributed to the palette — the two
     // palette entries for one action were the duplication, not the ids.
     ...["builderforce.openBrain", "builderforce.openChat", "builderforce.editorChat"].map((id) =>
-      vscode.commands.registerCommand(id, () => BuilderForcePanel.open(context)),
+      vscode.commands.registerCommand(id, () => openWorkspace(context)),
     ),
     vscode.commands.registerCommand("builderforce.signIn", () => withPlatformAuthentication(() => signIn(context, auth))),
     vscode.commands.registerCommand("builderforce.signOut", () => signOut(context, auth)),
@@ -712,20 +719,20 @@ export function activate(context: vscode.ExtensionContext): void {
     // prompt (and new-chat scoping) tracks the current project without a reopen.
     // (The Work view relabels its own header from the same selection.)
     onProjectChange(() => {
-      BuilderForcePanel.refresh();
+      refreshWorkspaceSurfaces();
       evermindView?.refresh();
       // The workspace digest belongs in the project the user is now working in.
       void syncWorkspaceFacts(context.secrets);
     }),
     // A manual model pick re-pushes Brain init so an open chat switches immediately
     // (parity with project change; the native participant re-resolves per turn).
-    onModelChange(() => BuilderForcePanel.refresh()),
+    onModelChange(() => refreshWorkspaceSurfaces()),
     // Changing the permission setting has to reach an ALREADY-OPEN panel. The
     // participant re-reads it per turn, so without this the two surfaces disagree for
     // as long as the panel stays open — which is the whole failure this seam exists to
     // prevent, just delayed.
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration(PERMISSION_MODE_SETTING)) BuilderForcePanel.refresh();
+      if (e.affectsConfiguration(PERMISSION_MODE_SETTING)) refreshWorkspaceSurfaces();
       // Local-model settings changed: re-discover the Kimi Code install on the next read.
       if (e.affectsConfiguration("builderforce.localModels")) invalidateKimiInstallMemo();
     }),
@@ -1106,7 +1113,7 @@ async function runTask(
     // the unified Brain seeded for this task so the user can follow up / steer it.
     bfApi.invalidateTasks(getSelectedProject()?.id);
     projects.refresh();
-    BuilderForcePanel.open(context, {
+    openWorkspace(context, {
       kind: "task",
       task: { id: task.id, key: task.key, title: task.title, projectId: getSelectedProject()?.id, dispatched: true },
     });
@@ -1251,7 +1258,7 @@ export async function deactivate(): Promise<void> {
  *  panel both gate on the tenant JWT in `init`; a missed refresh leaves them on
  *  the sign-in wall while the host already knows a key is stored. */
 function refreshAuthBoundSurfaces(): void {
-  BuilderForcePanel.refresh();
+  refreshWorkspaceSurfaces();
   evermindView?.refresh();
   void vscode.commands.executeCommand("builderforce.refreshSessions");
   void vscode.commands.executeCommand("builderforce.refreshInbox");

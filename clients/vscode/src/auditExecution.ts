@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { BrainRunHost } from './brainRunHost';
 import { createBrainChat, startSystemAudit, getSystemAuditRun } from './systemAuditApi';
-import { BuilderForcePanel } from './builderforcePanel';
+import { openWorkspace } from './openWorkspace';
 import { getSelectedProject, onProjectChange } from './projectState';
 import { appendBrainMessages, listSystemAudits } from './bfApi';
 import { AuditResultsPanel } from './auditResultsPanel';
@@ -122,7 +122,7 @@ export class AuditExecution implements vscode.Disposable {
     await appendBrainMessages(this.ctx.secrets, chatId, [{ role: 'user', content: run.briefing }]);
     const detach = this.host.attach({ post: (message) => {
       if (message.chatId === chatId && message.type === 'run.sync' && message.snapshot.pendingConfirm) {
-        void BuilderForcePanel.open(this.ctx, { kind: 'focus', chatId });
+        void openWorkspace(this.ctx, { kind: 'focus', chatId });
       }
     } });
     void vscode.commands.executeCommand('builderforce.refreshSessions');
@@ -133,7 +133,7 @@ export class AuditExecution implements vscode.Disposable {
       });
       const saved = await getSystemAuditRun(this.ctx.secrets, auditId, projectId, run.runId);
       if (saved.status !== 'completed') {
-        await BuilderForcePanel.open(this.ctx, { kind: 'focus', chatId });
+        await openWorkspace(this.ctx, { kind: 'focus', chatId });
         throw new Error(saved.error ?? vscode.l10n.t('The audit has not saved its findings. Open its conversation to continue.'));
       }
       await vscode.commands.executeCommand('builderforce.refreshDiagnostics');
@@ -145,7 +145,7 @@ export class AuditExecution implements vscode.Disposable {
         result: saved.result, ticketIds: saved.ticketIds, projectId,
       });
       const action = await vscode.window.showInformationMessage(vscode.l10n.t('Audit complete. Findings and remediation tickets are saved.'), vscode.l10n.t('Open audit conversation'));
-      if (action) await BuilderForcePanel.open(this.ctx, { kind: 'focus', chatId });
+      if (action) await openWorkspace(this.ctx, { kind: 'focus', chatId });
     } finally { detach(); }
   }
 
@@ -193,7 +193,7 @@ export class AuditExecution implements vscode.Disposable {
     const unregister = registerAuditFindingsSink(started.runId, { store, deviceId });
     const detach = this.host.attach({ post: (message) => {
       if (message.chatId === chat.id && message.type === 'run.sync' && message.snapshot.pendingConfirm) {
-        void BuilderForcePanel.open(this.ctx, { kind: 'focus', chatId: chat.id });
+        void openWorkspace(this.ctx, { kind: 'focus', chatId: chat.id });
       }
     } });
     void vscode.commands.executeCommand('builderforce.refreshSessions');
@@ -205,7 +205,7 @@ export class AuditExecution implements vscode.Disposable {
       });
       const saved = await getLocalAuditRun(store, started.runId);
       if (saved?.record.payload.status !== 'completed') {
-        await BuilderForcePanel.open(this.ctx, { kind: 'focus', chatId: chat.id });
+        await openWorkspace(this.ctx, { kind: 'focus', chatId: chat.id });
         throw new Error(saved?.record.payload.error ?? vscode.l10n.t('The audit has not saved its findings. Open its conversation to continue.'));
       }
       await vscode.commands.executeCommand('builderforce.refreshDiagnostics');
@@ -220,7 +220,7 @@ export class AuditExecution implements vscode.Disposable {
         },
       });
       const action = await vscode.window.showInformationMessage(vscode.l10n.t('Audit complete. Findings and remediation tickets are saved.'), vscode.l10n.t('Open audit conversation'));
-      if (action) await BuilderForcePanel.open(this.ctx, { kind: 'focus', chatId: chat.id });
+      if (action) await openWorkspace(this.ctx, { kind: 'focus', chatId: chat.id });
     } catch (error) {
       const current = await getLocalAuditRun(store, started.runId);
       if (current?.record.payload.status === 'running') {

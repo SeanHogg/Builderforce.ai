@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { getTenantJwt } from "./bfApi";
-import { BuilderForcePanel } from "./builderforcePanel";
+import { openWorkspace } from "./openWorkspace";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { authLabels } from "./authLabels";
 import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
@@ -90,7 +90,7 @@ export class ProjectPagePanel extends WebviewPanelBase<ProjectPageInbound> {
       case "brain":
         // Seed a chat with the row's prompt, and (for a roadmap/spec/etc. row) auto-link
         // the item so the conversation is tied to it — the same way a task session links.
-        BuilderForcePanel.open(this.ctx, {
+        openWorkspace(this.ctx, {
           kind: "seed",
           text: action.text ?? "",
           ticket: action.ticket

@@ -1,3 +1,14 @@
+## ✅ RESOLVED 2026-10-22 — BuilderForce in the VS Code agent chat area (VSIX 2026.10.59)
+
+- **Where it shows:** a `viewsContainers.secondarySidebar` container (`builderforce-chat`) holds the webview view `builderforce.chatView`, so BuilderForce gets its own tab in the secondary sidebar next to Chat, Claude Code and Codex.
+- **Older editors:** VS Code before 1.106 has no secondary-sidebar contribution point. There, `builderforce.doesNotSupportSecondarySidebar` is set and the same view appears in the BuilderForce activity-bar container as `builderforce.chatViewSidebar`. The version gate is the one Claude Code and Codex use.
+- **One surface, two hosts:** the webview logic moved out of the 1,148-line `builderforcePanel.ts` into the host-agnostic `WorkspaceSurface`, which holds the bridge, run attach, page engines, model files and editor/pending-changes pushes.
+  - It is backed by `workspaceInit.ts` (the `init` frame), `localFetchProxy.ts` (the fenced on-device fetch), `contextPicker.ts` and `brainChatLabels.ts`.
+  - The editor tab (`BuilderForcePanel`, now about 170 lines) and the sidebar view (`chatView.ts`) each compose that surface. They differ only in their chrome: tab registry and status, or view description.
+- **Callers:** `refreshWorkspaceSurfaces`, `notifyChatDeleted` and `configureWorkspaceSurfaces` replaced the panel-only statics, so sign-in, model, project, policy and permission changes now reach the sidebar view too. Canvas links followed from any surface open the board through the `openBoard` hook.
+- **One way in:** `openWorkspace.ts` decides where every open request lands. A chat in the default `reuse` tab mode goes to the chat view (`revealChatView`, which queues the intent until the view resolves). Boards and `perSession` tabs go to `BuilderForcePanel`. All callers were migrated: extension commands, `auditExecution`, `project360Panel`, `projectPagePanel` and the `openBoard` hook. `openWorkspace.test.ts` fails if anything else calls `BuilderForcePanel.open`.
+- **Shipped as new:** release note migration `1252` and the post `/blog/builderforce-in-your-editors-agent-chat-area` (en/de/es/fr/zh).
+- **Guards:** `authPanelSync.test.ts` checks that the view's listener is registered before its HTML is set and checks the manifest contribution. `modelRouting.test.ts` now reads `workspaceInit.ts` and `localFetchProxy.ts`.
 ## ✅ RESOLVED 2026-10-21 — bfi CPU threads and the CPU-backend review fixes (builderforce-inference 2026.10.9)
 
 - **Threads:** `wasm-bindgen-rayon` 1.3, built behind the `threads` feature on pinned `nightly-2026-10-15`.

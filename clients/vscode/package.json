@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.10.57",
+  "version": "2026.10.59",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -69,9 +69,25 @@
           "title": "BuilderForce",
           "icon": "media/icon.png"
         }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "builderforce-chat",
+          "title": "BuilderForce",
+          "icon": "media/icon.png",
+          "when": "!builderforce.doesNotSupportSecondarySidebar"
+        }
       ]
     },
     "views": {
+      "builderforce-chat": [
+        {
+          "id": "builderforce.chatView",
+          "type": "webview",
+          "name": "%view.chat%",
+          "when": "!builderforce.doesNotSupportSecondarySidebar"
+        }
+      ],
       "builderforce": [
         {
           "id": "builderforce.welcome",
@@ -102,6 +118,12 @@
           "type": "webview",
           "name": "%view.evermind%",
           "when": "builderforce.signedIn"
+        },
+        {
+          "id": "builderforce.chatViewSidebar",
+          "type": "webview",
+          "name": "%view.chat%",
+          "when": "builderforce.doesNotSupportSecondarySidebar"
         }
       ]
     },

@@ -49,7 +49,7 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
   }
 
   /** Re-push init (token / project / manager gate) to the live view — on project
-   *  switch and sign-in/out, mirroring BuilderForcePanel.refresh. No-op when not resolved. */
+   *  switch and sign-in/out, mirroring refreshWorkspaceSurfaces. No-op when not resolved. */
   refresh(): void {
     void this.sendInit();
   }

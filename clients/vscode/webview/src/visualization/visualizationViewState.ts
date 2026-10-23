@@ -16,7 +16,7 @@
  * ── WHAT COUNTS AS "THE RUN HAS BEGUN MUTATING" ─────────────────────────────────
  * The extension host already streams run activity to every webview that attaches a
  * sink — `src/brainRunHostProtocol.ts` defines the frames, `src/brainRunHost.ts`
- * broadcasts each one to every registered `RunSink`, and `builderforcePanel.ts:568`
+ * broadcasts each one to every registered `RunSink`, and `workspaceSurface.ts`
  * registers this panel's sink on `ready`. So there is nothing to invent:
  *
  *   • `run.sync` — `RunSyncMessage` carries `snapshot.running` (from

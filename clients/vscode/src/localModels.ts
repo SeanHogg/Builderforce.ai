@@ -67,7 +67,7 @@ const globalFetch: FetchLike = (input, init) => fetch(input, init);
 /**
  * The endpoint `url` belongs to, or null when this machine serves no such endpoint — the
  * destination fence for the webview's host-performed fetch (`llm.fetch` in
- * `builderforcePanel.ts`), which also names the credential that destination takes. The
+ * `localFetchProxy.ts`), which also names the credential that destination takes. The
  * credential never reaches the webview: the HOST attaches the Authorization header.
  */
 export function resolveLocalChatEndpoint(

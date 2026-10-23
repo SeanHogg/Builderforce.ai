@@ -3,7 +3,7 @@
  * trailing button, the `/` Work panel (Mode, Effort, Model), its Status tab (plan,
  * meters, Evermind), the spend & savings readouts and the @/# pickers.
  *
- * The host translates every string through `vscode.l10n` (see `builderforcePanel.ts`
+ * The host translates every string through `vscode.l10n` (see `brainChatLabels.ts`
  * and `src/workStatusLabels.ts`). The key tables and the English defaults are
  * brain-ui's (`brainComposerLabelsFrom`, `spendLabelsFrom`); this file only says where
  * each canonical key lives in the editor's bundle. Figures are formatted for the

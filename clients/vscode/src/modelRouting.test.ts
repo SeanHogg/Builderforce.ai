@@ -108,11 +108,14 @@ describe("model routing is centralized", () => {
     // The panel is the third AI surface and the one that could most easily grow its own
     // answer, because it runs in a webview and receives its config by message. It must
     // be HANDED the route (`localRoute` in `init`), never resolve one.
-    const host = stripComments(fs.readFileSync(path.join(SRC, "builderforcePanel.ts"), "utf8"));
+    // Every host of the workspace surface (editor tab, chat view) is handed `init` by
+    // `workspaceInit.ts`, and every one proxies local fetches through `localFetchProxy.ts`.
+    const host = stripComments(fs.readFileSync(path.join(SRC, "workspaceInit.ts"), "utf8"));
     expect(host).toContain("resolveModelRoute");
     expect(host).not.toContain("resolveEffectiveModelChoice");
     // …and the proxy it exposes must be fenced by the shared rule, not a local copy.
-    expect(host).toContain("resolveLocalChatEndpoint");
+    const proxy = stripComments(fs.readFileSync(path.join(SRC, "localFetchProxy.ts"), "utf8"));
+    expect(proxy).toContain("resolveLocalChatEndpoint");
   });
 
   it("routes every completion surface through the seam", () => {
@@ -140,7 +143,7 @@ describe("the permission mode is decided in one place", () => {
   });
 
   it("hands the panel the resolved value instead of letting it derive one", () => {
-    const host = stripComments(fs.readFileSync(path.join(SRC, "builderforcePanel.ts"), "utf8"));
+    const host = stripComments(fs.readFileSync(path.join(SRC, "workspaceInit.ts"), "utf8"));
     expect(host).toContain("autoApproveDefault");
   });
 

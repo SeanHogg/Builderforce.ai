@@ -50,6 +50,24 @@ describe("post-login auth surface sync", () => {
     expect(ctor.indexOf("onDidReceiveMessage")).toBeLessThan(ctor.indexOf("webview.html"));
   });
 
+  it("registers the agent-chat-area view's listener before setting html", () => {
+    const chatView = src("chatView.ts");
+    const resolve = chatView.slice(chatView.indexOf("resolveWebviewView"), chatView.indexOf("export function registerChatView"));
+    expect(resolve.indexOf("onDidReceiveMessage")).toBeGreaterThan(-1);
+    expect(resolve.indexOf("onDidReceiveMessage")).toBeLessThan(resolve.indexOf("webview.html"));
+    // The view answers the host-owned cases (token.refresh / signin) like every surface.
+    expect(resolve).toContain("handleSharedHostMessage");
+  });
+
+  it("contributes the chat view to the secondary sidebar with an activity-bar fallback", () => {
+    const manifest = JSON.parse(src("..", "package.json")) as {
+      contributes: { viewsContainers: Record<string, { id: string }[]>; views: Record<string, { id: string; when?: string }[]> };
+    };
+    const secondary = manifest.contributes.viewsContainers.secondarySidebar ?? [];
+    expect(secondary.map((c) => c.id)).toContain("builderforce-chat");
+    expect(manifest.contributes.views["builderforce-chat"].map((v) => v.id)).toEqual(["builderforce.chatView"]);
+    expect(manifest.contributes.views.builderforce.map((v) => v.id)).toContain("builderforce.chatViewSidebar");
+  });
   it("shows the sign-in wall only when signedIn is false, not when the token is late", () => {
     // `!signedIn || !getToken()` conflated a missing JWT with logged-out and
     // contradicted the host toast.
@@ -86,7 +104,7 @@ describe("post-login auth surface sync", () => {
   });
 
   it("ships the shared auth labels to every auth-gated surface", () => {
-    for (const file of ["builderforcePanel.ts", "evermindView.ts", "project360Panel.ts", "projectPagePanel.ts"]) {
+    for (const file of ["workspaceInit.ts", "evermindView.ts", "project360Panel.ts", "projectPagePanel.ts"]) {
       expect(src(file)).toContain("...authLabels()");
     }
   });

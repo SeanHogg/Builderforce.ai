@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { getTenantJwt } from "./bfApi";
-import { BuilderForcePanel } from "./builderforcePanel";
+import { openWorkspace } from "./openWorkspace";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { authLabels } from "./authLabels";
 import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
@@ -77,7 +77,7 @@ export class Project360Panel extends WebviewPanelBase<Project360Inbound> {
         void vscode.commands.executeCommand("builderforce.humanRequests");
         break;
       case "brain":
-        BuilderForcePanel.open(this.ctx, { kind: "seed", text: action.text ?? "" });
+        openWorkspace(this.ctx, { kind: "seed", text: action.text ?? "" });
         break;
       case "run-task":
         if (action.task) void vscode.commands.executeCommand("builderforce.runTask", { kind: "task", task: action.task });

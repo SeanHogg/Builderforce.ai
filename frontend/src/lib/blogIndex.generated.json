@@ -1,5 +1,19 @@
 [
   {
+    "slug": "builderforce-in-your-editors-agent-chat-area",
+    "title": "BuilderForce now sits in VS Code's agent chat area, next to your code",
+    "date": "2026-10-22",
+    "description": "The BuilderForce chat now has its own tab in VS Code's agent chat area, beside Chat, Claude Code and Codex. Your code stays in the editor, the conversation that changes it stays beside it, and every way of opening a chat lands in that one place.",
+    "tags": [
+      "vscode",
+      "editor",
+      "agents",
+      "chat",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "no-account-no-gpu-you-choose-where-it-runs",
     "title": "No account, no GPU, no network — and you choose where every word goes",
     "date": "2026-10-21",
