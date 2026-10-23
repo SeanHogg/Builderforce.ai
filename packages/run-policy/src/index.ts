@@ -27,3 +27,4 @@ export {
 export { coderHandoffBrief, isCoderReask, type HandoffCall } from './coderHandoff.js';
 export { resolveStallStep, type StallFailoverSource, type StallStep, type StallTurn } from './stallStep.js';
 export { DEFAULT_HANDOFF_RESERVE_TOKENS, handoffReserveTokens, toolSchemaTokens } from './handoffBudget.js';
+export { ROLE_OUTPUT_CAPS, cappedMaxTokens, roleOutputCap, type OutputCapRole } from './outputCaps.js';
