@@ -24,13 +24,14 @@ beforeEach(() => {
 });
 
 describe("platformCallGate", () => {
-  it("refuses a platform socket the host would deny, and allows it only when that capability is granted", () => {
-    const url = "wss://api.builderforce.ai/api/meetings/rooms/room/ws";
-    expect(() => assertPlatformSocketAllowed(url)).toThrow(PlatformAccessDenied);
-    platformPolicy().set({ gatewayInference: true });
-    expect(() => assertPlatformSocketAllowed(url)).toThrow(PlatformAccessDenied);
-    platformPolicy().set({ connectedFeatures: true });
-    expect(() => assertPlatformSocketAllowed(url)).not.toThrow();
+  it("decides a platform socket with the shared request gate: Local only refuses a content socket whatever is granted", () => {
+    // Unresolved (no sign-in read yet) is Local only — the same answer the web and Rovr give.
+    const content = "wss://api.builderforce.ai/api/meetings/rooms/room/ws";
+    expect(() => assertPlatformSocketAllowed(content)).toThrow(PlatformAccessDenied);
+    platformPolicy().set({ gatewayInference: true, connectedFeatures: true });
+    expect(() => assertPlatformSocketAllowed(content)).toThrow(PlatformAccessDenied);
+    // A socket that only says "something changed" carries no content and goes.
+    expect(() => assertPlatformSocketAllowed("wss://api.builderforce.ai/api/notifications/ws")).not.toThrow();
   });
 
   it("does not gate a non-platform socket", () => {
@@ -46,6 +47,7 @@ describe("platformCallGate", () => {
     expect(frame.platformPolicy).toEqual(platformPolicy().snapshot());
     expect(frame.platformPolicy.synchronize).toBe(true);
     expect(frame.platformPolicy.connectedFeatures).toBe(false);
+    expect(frame.inferenceMode).toBe("local-only");
   });
 
   it("reads a websocket URL off a host message and ignores an https URL", () => {

@@ -6,10 +6,19 @@
  */
 
 import type { LocalDeviceSupport } from '@builderforce/local-inference';
+import { reportPageEngineFailure } from './engineFailure';
+import { SettleTimeoutError, withTimeout } from './settleWithin';
+
+/**
+ * The longest an adapter request may take. `requestAdapter()` can hang without ever
+ * settling (a wedged GPU process, a driver reset); unbounded, every turn that asked
+ * "is there WebGPU?" never settled with it. Past this it reads as no WebGPU.
+ */
+export const WEBGPU_ADAPTER_TIMEOUT_MS = 5_000;
 
 interface GpuAdapterLike {
-  features: { has(name: string): boolean };
-  limits: { maxStorageBufferBindingSize?: number; maxBufferSize?: number };
+  features?: { has(name: string): boolean };
+  limits?: { maxStorageBufferBindingSize?: number; maxBufferSize?: number };
 }
 
 interface GpuLike {
@@ -40,18 +49,29 @@ export function hasWebGPU(): boolean {
   return pageGpu() != null;
 }
 
-/** The adapter's support record. Never throws: no WebGPU reads as unsupported. */
-export async function webGpuSupport(gpu: GpuLike | undefined = pageGpu()): Promise<LocalDeviceSupport> {
+/** The adapter's support record. Never throws, never hangs: no WebGPU — or an adapter
+ *  request that did not settle within {@link WEBGPU_ADAPTER_TIMEOUT_MS} — reads as
+ *  unsupported, with the reason recorded. */
+export async function webGpuSupport(
+  gpu: GpuLike | undefined = pageGpu(),
+  timeoutMs: number = WEBGPU_ADAPTER_TIMEOUT_MS,
+): Promise<LocalDeviceSupport> {
   if (!gpu) return UNSUPPORTED('webgpu_missing');
+  let adapter: GpuAdapterLike | null;
   try {
-    const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });
+    adapter = await withTimeout(gpu.requestAdapter({ powerPreference: 'high-performance' }), timeoutMs, 'WebGPU requestAdapter');
+  } catch (e) {
+    reportPageEngineFailure('webllm', 'support', e);
+    return UNSUPPORTED(e instanceof SettleTimeoutError ? 'adapter_timeout' : e instanceof Error ? e.message : String(e));
+  }
+  try {
     if (!adapter) return UNSUPPORTED('no_adapter');
-    const maxBufferSizeBytes = adapter.limits.maxBufferSize ?? 0;
-    const maxStorageBufferBindingSizeBytes = adapter.limits.maxStorageBufferBindingSize ?? 0;
+    const maxBufferSizeBytes = adapter.limits?.maxBufferSize ?? 0;
+    const maxStorageBufferBindingSizeBytes = adapter.limits?.maxStorageBufferBindingSize ?? 0;
     return {
       contractVersion: 2,
       supported: true,
-      f16: adapter.features.has('shader-f16'),
+      f16: adapter.features?.has('shader-f16') ?? false,
       maxBufferBytes: maxBufferSizeBytes,
       maxBufferSizeBytes,
       maxStorageBufferBindingSizeBytes,

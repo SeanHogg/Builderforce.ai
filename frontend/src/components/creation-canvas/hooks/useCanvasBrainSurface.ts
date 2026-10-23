@@ -16,6 +16,7 @@ import { trackActivity } from '@/lib/activity/tracker';
 import { canvasSurface } from '@/lib/canvasHost';
 import { useBrainUnreadReplies } from '../useBrainUnreadReplies';
 import type { BrainSurfaceContextValue } from '../brainSurfaceContext';
+import { useCanvasRefusalBanner } from './useCanvasTurnGate';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { CanvasSurfaceDef } from '@/lib/canvasSurfaces';
 import type { CanvasTimelineMessage } from '../canvasBoardTypes';
@@ -39,6 +40,9 @@ export interface UseCanvasBrainSurfaceDeps {
   edges: Edge[];
   evermindProjectId: number | null;
   guestLimit: GuestLimitRefusal | null;
+  /** The last turn's no-model refusal and the composer its banner opens — rendered as
+   *  THE banner (`useCanvasRefusalBanner`) on every Brain placement. */
+  refusal: Omit<Parameters<typeof useCanvasRefusalBanner>[0], 'startCanvasTurnRef'>;
   inRoom: boolean;
   joinedCollaborator: { userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; } | null;
   liveMembers: { userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; }[];
@@ -66,7 +70,7 @@ export interface UseCanvasBrainSurfaceDeps {
   updateNodeData: (nodeId: string, patch: Partial<CreationNodeData>) => void;
 }
 
-export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStartedAt, brainTrace, cardActBoard, cardsEditable, currentUserId, deleteObjects, edges, evermindProjectId, guestLimit, inRoom, joinedCollaborator, liveMembers, livePresence, members, nodes, openBrainDock, persistence, presenceSelfId, presentMode, sendPresence, sessionId, boardPath, setSelectedId, setSelectedIds, sharedRoom, startCanvasTurnRef, surfaceDef, t, thinking, timeline, title, updateBrainDock, updateNodeData }: UseCanvasBrainSurfaceDeps) {
+export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStartedAt, brainTrace, cardActBoard, cardsEditable, currentUserId, deleteObjects, edges, evermindProjectId, guestLimit, inRoom, joinedCollaborator, liveMembers, livePresence, members, nodes, openBrainDock, persistence, presenceSelfId, presentMode, sendPresence, sessionId, boardPath, refusal, setSelectedId, setSelectedIds, sharedRoom, startCanvasTurnRef, surfaceDef, t, thinking, timeline, title, updateBrainDock, updateNodeData }: UseCanvasBrainSurfaceDeps) {
   const brainNode = nodes.find((node) => node.data.kind === 'chat') ?? null;
   /**
    * Where the ONE Brain surface actually renders.
@@ -251,6 +255,9 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
    * what "unread" means and why the mark is taken while the surface is open.
    */
   const brainUnreadReplies = useBrainUnreadReplies(brainMessages, brainSurfaceOpen);
+  // The no-model refusal as THE banner, for every placement and the conversation props.
+  const { modelRefusal, setModelRefusal, composerId: refusalComposerId } = refusal;
+  const brainRefusal = useCanvasRefusalBanner({ modelRefusal, setModelRefusal, composerId: refusalComposerId, startCanvasTurnRef });
   const brainSurface = useMemo<BrainSurfaceContextValue>(() => ({
     open: brainSurfaceOpen,
     unreadReplies: brainUnreadReplies,
@@ -272,10 +279,11 @@ export function useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStart
     // rather than pretend — the component decides its own visibility from this.
     ...(persistence === 'server' ? { onRateMessage: rateBrainMessage, ratings: brainRatings } : {}),
     guestSignup: guestSignupPrompt,
+    refusal: brainRefusal,
     onOpen: (nodeId) => { setSelectedId(nodeId); setSelectedIds([nodeId]); openBrainDock(); },
     onModeChange: (mode) => updateBrainDock({ mode }),
     onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
     onClose: () => updateBrainDock({ open: false }),
-  }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, replayBrainMessage, answerBrainQuestion, sessionId, setSelectedId, setSelectedIds, updateBrainDock]);
-  return { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies };
+  }), [brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunShownStartedAt, brainRunning, brainSurfaceOpen, brainTrace, brainUnreadReplies, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence, presentMode, rateBrainMessage, brainRefusal, replayBrainMessage, answerBrainQuestion, sessionId, setSelectedId, setSelectedIds, updateBrainDock]);
+  return { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies, brainRefusal };
 }

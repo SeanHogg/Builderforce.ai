@@ -18,6 +18,7 @@
 import { DEFAULT_TIMELINE_LABELS, type BrainTimelineLabels } from './BrainTimeline';
 import { DEFAULT_LIVE_ACTIVITY_LABELS, type LiveActivityLabels } from './LiveActivity';
 import { stringsFrom, type LabelLookup } from './labelCatalog';
+import { DEFAULT_CHAT_ERROR_LABELS } from './ChatErrorBanner';
 
 /** A string for a canonical key path, or undefined when the catalog has none — the
  *  package-wide {@link LabelLookup} contract, read by key path. */
@@ -68,6 +69,7 @@ export function timelineLabelsFrom(lookup: TimelineCatalogLookup, overrides?: Pa
       frozen: lookup('learnSkipReasonFrozen') ?? d.learnSkipReason.frozen,
     },
     activity: chatActivityLabelsFrom(lookup),
+    chatError: stringsFrom(DEFAULT_CHAT_ERROR_LABELS, lookup, 'chatError.'),
     ...overrides,
   };
 }

@@ -11838,7 +11838,18 @@
       "learnTargetSkipped": "已跳过 {name}（项目 #{projectId}）— {reason}",
       "replay": "重新发送",
       "rateUp": "回答很好",
-      "rateDown": "回答不佳"
+      "rateDown": "回答不佳",
+      "chatError": {
+        "noModel": "没有可用的模型。请登录，或在此设备上启动一个模型。",
+        "noLocalModel": "本设备上没有可以回答的模型。请切换到混合模式，或下载一个本地模型。",
+        "noSpecificModel": "已开启“指定模型”，但尚未选择模型。请选择一个模型，或切换到混合模式。",
+        "engineCrashed": "设备上的模型已崩溃。请重新发送以重启它。",
+        "engineDetached": "设备上的模型在完成前停止了。请重新发送以重试。",
+        "modelKeepsCrashing": "此模型在本设备上反复崩溃。请将其移除，或换用其他模型。",
+        "platformRefusedMode": "“仅本地”会让此次运行留在本设备上，因此无法连接 BuilderForce。请在 / 菜单的“模型”中切换到混合模式以允许连接。",
+        "platformRefusedSync": "账户同步已关闭，因此无法保存到你的账户。请在平台设置中开启同步，或继续在本地工作。",
+        "platformRefusedSetting": "你的某项平台设置关闭了此次运行所需的功能。请在平台设置中更改，或在 / 菜单中选择其他模型。"
+      }
     },
     "tickets": {
       "none": "尚未关联任何工单。",
@@ -12158,7 +12169,10 @@
     "engineCrashed": "设备上的模型已崩溃。请重新发送以重启它。",
     "engineDetached": "设备上的模型在完成前停止了。请重新发送以重试。",
     "modelKeepsCrashing": "此模型在本设备上反复崩溃。请将其移除，或换用其他模型。",
-    "manageLocalModels": "管理设备上的模型"
+    "manageLocalModels": "管理设备上的模型",
+    "platformRefusedMode": "“仅本地”会让此次运行留在本设备上，因此无法连接 BuilderForce。请在 / 菜单的“模型”中切换到混合模式以允许连接。",
+    "platformRefusedSync": "账户同步已关闭，因此无法保存到你的账户。请在平台设置中开启同步，或继续在本地工作。",
+    "platformRefusedSetting": "你的某项平台设置关闭了此次运行所需的功能。请在平台设置中更改，或在 / 菜单中选择其他模型。"
   },
   "chatMessage": {
     "copy": "复制",

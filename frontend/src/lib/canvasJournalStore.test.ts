@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { readStoredJournal, writeStoredJournal } from './canvasJournalStore';
+import { readStoredJournal, sessionCanvasJournal, writeStoredJournal } from './canvasJournalStore';
 import { createCanvasJournal } from './canvasActionJournal';
 
 const SESSION = 'local-abc';
@@ -52,5 +52,23 @@ describe('canvasJournalStore', () => {
     writeStoredJournal(SESSION, [{ seq: 1, at: '2026-08-13T10:00:00.000Z', kind: 'user', label: 'a' }]);
     writeStoredJournal(SESSION, []);
     expect(window.sessionStorage.getItem(`builderforce:canvas-journal:${SESSION}`)).toBeNull();
+  });
+
+  it('is ONE journal per board per page: a turn opened before a remount closes on the span the report reads', () => {
+    writeStoredJournal('local-remount', [{ seq: 3, at: '2026-10-22T01:23:00.000Z', kind: 'user', label: 'earlier' }]);
+    // The first mount: hydrated from this tab's storage, then a turn begins.
+    const first = sessionCanvasJournal('local-remount');
+    expect(first.entries().map((action) => action.label)).toEqual(['earlier']);
+    const done = first.begin('turn', 'brain.turn');
+    // The board remounts (a lens switch, a route change) while the run store keeps the turn.
+    writeStoredJournal('local-remount', first.entries());
+    const second = sessionCanvasJournal('local-remount');
+    expect(second).toBe(first);
+    // The turn settles through the journal it was opened on — and the remounted board sees it.
+    done({ ok: false, detail: 'no_local_model' });
+    const turn = second.entries().find((action) => action.label === 'brain.turn');
+    expect(turn?.durationMs).toEqual(expect.any(Number));
+    expect(turn?.ok).toBe(false);
+    expect(sessionCanvasJournal('local-other-board')).not.toBe(first);
   });
 });

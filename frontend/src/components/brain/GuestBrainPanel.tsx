@@ -61,7 +61,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
   // model" open THIS composer's Model tab (keyed by its id), which exists because the
   // composer below is handed the on-device model list.
   const composerId = useId();
-  const { labels: remedyLabels, ...remedies } = useModelRemedies(conv.clearError, composerId);
+  const { labels: remedyLabels, ...remedies } = useModelRemedies(conv.clearError, composerId, conv.retryLastTurn);
   const isPage = variant === 'page';
   const layout = isPage ? 'page' : 'docked';
 

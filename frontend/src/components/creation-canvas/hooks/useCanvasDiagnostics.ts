@@ -7,6 +7,7 @@ import { type CreationOutcomeMetrics, type CreationSessionInvitation, creationSe
 import { buildProofJourneyDiagnosticsReport } from '@/lib/proofJourneyDiagnostics';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import { faultMessage } from '@/lib/apiClient';
+import { readStoredInferenceMode, webInferenceModeNow, webSignedIn } from '@/lib/localFirst/webInferenceMode';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { Edge } from '@xyflow/react';
 import type { CanvasTimelineMessage } from '../canvasBoardTypes';
@@ -83,6 +84,11 @@ export function useCanvasDiagnostics({ allMembers, autoApplyRef, brainRunStarted
     brainRuntime: {
       selection: modelSelection,
       mode: sessionMode,
+      // WHERE models run and why — the stored choice (or none), the default it fell back
+      // to, and whether a session made that default Hybrid. A no-model report is
+      // unreadable without them: "Local only, never chosen, signed out" and "Local only,
+      // chosen" are two different bugs.
+      inference: { mode: webInferenceModeNow(), chosen: readStoredInferenceMode() !== null, signedIn: webSignedIn() },
       memoryEnabled,
       autoApply: autoApplyRef.current,
       runStartedAt: brainRunStartedAt == null ? null : new Date(brainRunStartedAt).toISOString(),

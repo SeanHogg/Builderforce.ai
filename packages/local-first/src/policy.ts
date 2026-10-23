@@ -84,13 +84,27 @@ export function createPlatformPolicy(initial: Partial<PlatformPolicySnapshot> = 
   };
 }
 
+/** Whether the person's mode reaches the platform at all (not Local only): gateway,
+ *  connected features or sync is on. */
+export function platformReachable(snapshot: Readonly<PlatformPolicySnapshot>): boolean {
+  return snapshot.gatewayInference || snapshot.connectedFeatures || snapshot.synchronize;
+}
+
+/**
+ * The administrative gate a host's durable platform outboxes wait on: open while the
+ * person's mode reaches the platform at all (gateway, connected features or sync — i.e.
+ * not Local only). It is NOT the `synchronize` switch: an outbox's activity beat, error
+ * report or run outcome is not the sync transport, and gating them on sync held every
+ * queue (and, in the editor, a Hybrid run's own writes — `platform_send_disabled`) while
+ * sync was off. Each request that leaves is still decided by `platformRequestRefusal`.
+ */
 export function platformSendPermission(policy: PlatformPolicy): {
   isAllowed(): boolean;
   subscribe(listener: (allowed: boolean) => void): () => void;
 } {
   return {
-    isAllowed: () => policy.allows('synchronize'),
-    subscribe: (listener) => policy.subscribe((snapshot) => listener(snapshot.synchronize)),
+    isAllowed: () => platformReachable(policy.snapshot()),
+    subscribe: (listener) => policy.subscribe((snapshot) => listener(platformReachable(snapshot))),
   };
 }
 
@@ -108,12 +122,21 @@ export function createGuardedPlatformFetch(options: {
   fetch: (input: string, init?: RequestInit) => Promise<Response>;
   onRequest?(record: PlatformRequestRecord): void;
   now?: () => Date;
+  /**
+   * The decision for a request, when it is not the bare capability check: the capability
+   * that refuses it, or null. A host's GLOBAL guard passes the shared request gate
+   * (`platformRequestRefusal`) here; an explicit capability call (`platformFetch(…,
+   * 'synchronize')`) keeps the default, `policy.allows(capability)`.
+   */
+  decide?(capability: PlatformCapability, input: string, init: RequestInit | undefined): PlatformCapability | null;
 }): (input: string, init: RequestInit | undefined, capability?: PlatformCapability) => Promise<Response> {
   const now = options.now ?? (() => new Date());
+  const decide = options.decide ?? ((capability: PlatformCapability) => (options.policy.allows(capability) ? null : capability));
   return async (input, init, capability = 'connected-feature') => {
-    if (!options.policy.allows(capability)) {
-      options.onRequest?.({ capability, url: input, outcome: 'blocked', at: now().toISOString() });
-      throw new PlatformAccessDenied(capability);
+    const refused = decide(capability, input, init);
+    if (refused) {
+      options.onRequest?.({ capability: refused, url: input, outcome: 'blocked', at: now().toISOString() });
+      throw new PlatformAccessDenied(refused);
     }
     options.onRequest?.({ capability, url: input, outcome: 'attempted', at: now().toISOString() });
     return options.fetch(input, { ...init, redirect: 'error' });

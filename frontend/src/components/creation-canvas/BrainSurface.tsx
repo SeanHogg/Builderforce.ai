@@ -4,9 +4,10 @@ import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import { WebAiSurface } from '@/components/ai-surface/WebAiSurface';
 import { useBrainTimelineLabels } from '@/i18n/useBrainTimelineLabels';
 import '@seanhogg/builderforce-brain-ui/styles.css';
-import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainMessage, BrainTraceEvent, ChatErrorAction } from '@seanhogg/builderforce-brain-embedded';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
+import { BrainErrorBanner } from '@/components/brain/BrainErrorBanner';
 import { useModelIdentity } from '@/lib/useLlmModels';
 import { Icon } from '@/components/ui/Icon';
 import type { Edge } from '@xyflow/react';
@@ -63,6 +64,20 @@ export interface BrainSurfaceBodyProps {
    *  an account. Null on every signed-in board, where the CTA renders nothing. */
   guestSignup?: GuestSignupPrompt | null;
   /**
+   * The last turn's no-model refusal (`brainTurn/modelRefusal.ts`) — rendered by THE web
+   * banner (`BrainErrorBanner`, the shared `ChatErrorBanner`) with its remedies: Switch to
+   * Hybrid (which re-sends `onRetry`), Download a local model, Pick a model — the last two
+   * open the `/` menu of the composer `composerId` names. Null when the last turn was not
+   * refused that way.
+   */
+  refusal?: {
+    error: string;
+    action: ChatErrorAction;
+    composerId: string;
+    onDismiss: () => void;
+    onRetry: () => void;
+  } | null;
+  /**
    * Scroll this transcript message into view and highlight it. Used by the room: a
    * speech bubble quotes a reply whose full text lives here. The nonce lets the same
    * bubble be clicked twice. Absent ⇒ the transcript does not jump.
@@ -92,6 +107,7 @@ export function BrainSurface({
   node, nodes, edges, collaborators = [], joinedCollaborator = null, onReplayMessage, onAnswerQuestion,
   onRateMessage, ratings,
   guestSignup = null,
+  refusal = null,
   revealMessage = null,
 }: BrainSurfaceProps) {
   const t = useTranslations('creationCanvas');
@@ -177,7 +193,10 @@ export function BrainSurface({
       // transcript; this is the button that sentence was asking for. A notice, OUTSIDE
       // the scroller, so a blocked guest cannot scroll away from the only thing they can
       // still do.
-      notices={tab === 'chat' && guestSignup ? <GuestSignupCta prompt={guestSignup} /> : undefined}
+      notices={tab === 'chat' && (guestSignup || refusal) ? <>
+        {refusal && <BrainErrorBanner error={refusal.error} action={refusal.action} onDismiss={refusal.onDismiss} onRetry={refusal.onRetry} composerId={refusal.composerId} />}
+        {guestSignup && <GuestSignupCta prompt={guestSignup} />}
+      </> : undefined}
       // No activity strip above the prompt: the transcript's live node already says what
       // Brain is doing right now, and a strip here reported the same moment twice.
       // THE web footer: the run's tool approval (from the run store, by `runKey`), the

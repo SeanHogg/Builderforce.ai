@@ -853,7 +853,23 @@ function isWasmTrap(e) {
   return RuntimeError !== void 0 && e instanceof RuntimeError || e instanceof Error && e.name === "RuntimeError";
 }
 
+// src/pageEngines/settleWithin.ts
+var SettleTimeoutError = class extends Error {
+  constructor(what, ms) {
+    super(`${what} did not settle within ${ms} ms`);
+    this.name = "SettleTimeoutError";
+  }
+};
+function withTimeout(promise, ms, what) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new SettleTimeoutError(what, ms)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 // src/pageEngines/webgpu.ts
+var WEBGPU_ADAPTER_TIMEOUT_MS = 5e3;
 var UNSUPPORTED = (reason) => ({
   contractVersion: 2,
   supported: false,
@@ -868,17 +884,23 @@ var pageGpu = () => globalThis.navigator?.gpu;
 function hasWebGPU() {
   return pageGpu() != null;
 }
-async function webGpuSupport(gpu = pageGpu()) {
+async function webGpuSupport(gpu = pageGpu(), timeoutMs = WEBGPU_ADAPTER_TIMEOUT_MS) {
   if (!gpu) return UNSUPPORTED("webgpu_missing");
+  let adapter;
   try {
-    const adapter = await gpu.requestAdapter({ powerPreference: "high-performance" });
+    adapter = await withTimeout(gpu.requestAdapter({ powerPreference: "high-performance" }), timeoutMs, "WebGPU requestAdapter");
+  } catch (e) {
+    reportPageEngineFailure("webllm", "support", e);
+    return UNSUPPORTED(e instanceof SettleTimeoutError ? "adapter_timeout" : e instanceof Error ? e.message : String(e));
+  }
+  try {
     if (!adapter) return UNSUPPORTED("no_adapter");
-    const maxBufferSizeBytes = adapter.limits.maxBufferSize ?? 0;
-    const maxStorageBufferBindingSizeBytes = adapter.limits.maxStorageBufferBindingSize ?? 0;
+    const maxBufferSizeBytes = adapter.limits?.maxBufferSize ?? 0;
+    const maxStorageBufferBindingSizeBytes = adapter.limits?.maxStorageBufferBindingSize ?? 0;
     return {
       contractVersion: 2,
       supported: true,
-      f16: adapter.features.has("shader-f16"),
+      f16: adapter.features?.has("shader-f16") ?? false,
       maxBufferBytes: maxBufferSizeBytes,
       maxBufferSizeBytes,
       maxStorageBufferBindingSizeBytes,
@@ -1284,6 +1306,7 @@ export {
   createEngineWorker,
   serveEngineWorker,
   isWasmTrap,
+  withTimeout,
   hasWebGPU,
   webGpuSupport,
   BFI_UNSUPPORTED,
@@ -1296,4 +1319,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-JEIL76LJ.mjs.map
+//# sourceMappingURL=chunk-3ZKSWQDQ.mjs.map

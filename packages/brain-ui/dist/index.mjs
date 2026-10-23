@@ -1266,7 +1266,146 @@ function ReconcileRow({ node, labels }) {
 }
 
 // src/timeline/StepRows.tsx
-import { activityIcon, activityTone, chatActivityText } from "@seanhogg/builderforce-brain-embedded";
+import { activityIcon, activityTone, chatActivityText, chatErrorAction } from "@seanhogg/builderforce-brain-embedded";
+
+// src/chatErrorMessage.ts
+function engineMessage(code, labels, fallback) {
+  switch (code) {
+    case "bfi_engine_crashed":
+      return labels.engineCrashed;
+    case "page_engine_detached":
+      return labels.engineDetached;
+    case "model_keeps_crashing":
+      return labels.modelKeepsCrashing;
+    default:
+      return fallback;
+  }
+}
+function platformRefusedMessage(setting, labels) {
+  if (setting === "synchronize") return labels.platformRefusedSync;
+  if (setting === "inferenceMode" || setting === void 0) return labels.platformRefusedMode;
+  return labels.platformRefusedSetting;
+}
+function chatErrorMessage(error, action, labels) {
+  switch (action?.kind) {
+    case "sign_in":
+      return labels.noModel;
+    case "no_local_model":
+      return labels.noLocalModel;
+    case "no_specific_model":
+      return labels.noSpecificModel;
+    case "local_engine_failed":
+      return engineMessage(action.engineCode, labels, error);
+    case "platform_refused":
+      return platformRefusedMessage(action.setting, labels);
+    default:
+      return error;
+  }
+}
+
+// src/ChatErrorBanner.tsx
+import { jsx as jsx11, jsxs as jsxs10 } from "react/jsx-runtime";
+var DEFAULT_CHAT_ERROR_LABELS = {
+  reconnect: "Reconnect",
+  upgrade: "Upgrade",
+  upgradeToPlan: "Upgrade to {plan}",
+  addCard: "Add a card",
+  signIn: "Sign in",
+  noModel: "No model is available. Sign in, or start a model on this device.",
+  noLocalModel: "No model on this device can answer. Switch to Hybrid, or download a local model.",
+  switchToHybrid: "Switch to Hybrid",
+  downloadLocalModel: "Download a local model",
+  noSpecificModel: "Specific model is on, but no model is picked. Pick one, or switch to Hybrid.",
+  pickModel: "Pick a model",
+  engineCrashed: "The on-device model crashed. Send again to restart it.",
+  engineDetached: "The on-device model stopped before it finished. Send again to retry.",
+  modelKeepsCrashing: "This model keeps crashing on this device. Remove it, or try another model.",
+  manageLocalModels: "Manage on-device models",
+  platformRefusedMode: "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.",
+  platformRefusedSync: "Account sync is off, so this could not be saved to your account. Turn on sync in your platform settings, or keep working locally.",
+  platformRefusedSetting: "One of your platform settings turned off what this run needed. Change it in your platform settings, or pick another model in the / menu.",
+  dismiss: "Dismiss"
+};
+function planLabel(plan) {
+  return plan.replace(/^./, (ch) => ch.toUpperCase());
+}
+function ChatErrorBanner({
+  error,
+  action,
+  onDismiss,
+  onReconnect,
+  onUpgrade,
+  onValidateCard,
+  onSignIn,
+  onSwitchToHybrid,
+  onDownloadLocalModel,
+  onPickModel,
+  labels: labelOverrides,
+  style,
+  className,
+  role = "alert"
+}) {
+  const labels = { ...DEFAULT_CHAT_ERROR_LABELS, ...labelOverrides };
+  if (!error) return null;
+  const kind = action?.kind;
+  const keepsCrashing = kind === "local_engine_failed" && action?.engineCode === "model_keeps_crashing";
+  const plan = action?.requiredPlan ? planLabel(action.requiredPlan) : null;
+  const primary = kind === "auth" && onReconnect ? { label: labels.reconnect, onClick: onReconnect } : kind === "upgrade" && onUpgrade ? {
+    label: plan ? labels.upgradeToPlan.replace("{plan}", plan) : labels.upgrade,
+    onClick: onUpgrade
+  } : kind === "validate_card" && onValidateCard ? { label: labels.addCard, onClick: onValidateCard } : kind === "sign_in" && onSignIn ? { label: labels.signIn, onClick: onSignIn } : (kind === "no_local_model" || kind === "platform_refused" && action?.setting === "inferenceMode") && onSwitchToHybrid ? { label: labels.switchToHybrid, onClick: onSwitchToHybrid } : kind === "no_local_model" && onDownloadLocalModel ? { label: labels.downloadLocalModel, onClick: onDownloadLocalModel } : (kind === "no_specific_model" || keepsCrashing) && onPickModel ? { label: labels.pickModel, onClick: onPickModel } : keepsCrashing && onDownloadLocalModel ? { label: labels.manageLocalModels, onClick: onDownloadLocalModel } : null;
+  const secondary = kind === "no_local_model" && onSwitchToHybrid && onDownloadLocalModel ? { label: labels.downloadLocalModel, onClick: onDownloadLocalModel } : keepsCrashing && onPickModel && onDownloadLocalModel ? { label: labels.manageLocalModels, onClick: onDownloadLocalModel } : null;
+  const message = chatErrorMessage(error, action, labels);
+  const actionStyle = {
+    flex: "0 0 auto",
+    padding: "4px 10px",
+    fontSize: 12,
+    fontWeight: 700,
+    color: "inherit",
+    background: "transparent",
+    border: "1px solid currentColor",
+    borderRadius: 6,
+    cursor: "pointer"
+  };
+  return /* @__PURE__ */ jsxs10(
+    "div",
+    {
+      className,
+      role,
+      style: {
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 8,
+        flexWrap: "wrap",
+        fontSize: 13,
+        ...style
+      },
+      children: [
+        /* @__PURE__ */ jsx11("span", { style: { flex: 1, minWidth: 0, overflowWrap: "anywhere" }, children: message }),
+        [primary, secondary].map((entry) => entry && /* @__PURE__ */ jsx11("button", { type: "button", onClick: entry.onClick, style: actionStyle, children: entry.label }, entry.label)),
+        /* @__PURE__ */ jsx11(
+          "button",
+          {
+            type: "button",
+            onClick: onDismiss,
+            title: labels.dismiss,
+            "aria-label": labels.dismiss,
+            style: {
+              flex: "0 0 auto",
+              background: "transparent",
+              border: "none",
+              color: "inherit",
+              cursor: "pointer",
+              lineHeight: 0,
+              padding: 2
+            },
+            children: /* @__PURE__ */ jsx11("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", "aria-hidden": true, children: /* @__PURE__ */ jsx11("path", { d: "M6 6l12 12M18 6L6 18" }) })
+          }
+        )
+      ]
+    }
+  );
+}
 
 // src/ToolStep.tsx
 import { useState as useState5 } from "react";
@@ -1387,7 +1526,7 @@ function toolStepView({ args, result, isError }) {
 }
 
 // src/ToolStep.tsx
-import { Fragment as Fragment3, jsx as jsx11, jsxs as jsxs10 } from "react/jsx-runtime";
+import { Fragment as Fragment3, jsx as jsx12, jsxs as jsxs11 } from "react/jsx-runtime";
 function IoPanel({
   heading,
   text,
@@ -1395,90 +1534,90 @@ function IoPanel({
   extra,
   className
 }) {
-  return /* @__PURE__ */ jsxs10("div", { className: "bf-tl__io", children: [
-    /* @__PURE__ */ jsxs10("div", { className: "bf-tl__io-label", children: [
-      /* @__PURE__ */ jsxs10("span", { children: [
+  return /* @__PURE__ */ jsxs11("div", { className: "bf-tl__io", children: [
+    /* @__PURE__ */ jsxs11("div", { className: "bf-tl__io-label", children: [
+      /* @__PURE__ */ jsxs11("span", { children: [
         heading,
         extra
       ] }),
-      /* @__PURE__ */ jsx11(CopyButton, { text, labels })
+      /* @__PURE__ */ jsx12(CopyButton, { text, labels })
     ] }),
-    /* @__PURE__ */ jsx11("pre", { className: className ? `bf-tl__io-pre ${className}` : "bf-tl__io-pre", children: /* @__PURE__ */ jsx11("code", { children: text }) })
+    /* @__PURE__ */ jsx12("pre", { className: className ? `bf-tl__io-pre ${className}` : "bf-tl__io-pre", children: /* @__PURE__ */ jsx12("code", { children: text }) })
   ] });
 }
 function DiffLines({ text, sign }) {
   const cls = sign === "+" ? "bf-tl__diff-add" : "bf-tl__diff-del";
-  return /* @__PURE__ */ jsx11(Fragment3, { children: text.split("\n").map((line, i) => /* @__PURE__ */ jsxs10("div", { className: `bf-tl__diff-line ${cls}`, children: [
-    /* @__PURE__ */ jsx11("span", { className: "bf-tl__diff-sign", "aria-hidden": true, children: sign }),
-    /* @__PURE__ */ jsx11("span", { className: "bf-tl__diff-text", children: line || " " })
+  return /* @__PURE__ */ jsx12(Fragment3, { children: text.split("\n").map((line, i) => /* @__PURE__ */ jsxs11("div", { className: `bf-tl__diff-line ${cls}`, children: [
+    /* @__PURE__ */ jsx12("span", { className: "bf-tl__diff-sign", "aria-hidden": true, children: sign }),
+    /* @__PURE__ */ jsx12("span", { className: "bf-tl__diff-text", children: line || " " })
   ] }, i)) });
 }
 function ChangePreview({ preview, labels }) {
   const text = preview.kind === "edit" ? preview.newText : preview.content;
   if (preview.kind === "write") {
-    return /* @__PURE__ */ jsx11(IoPanel, { heading: `${labels.preview}${preview.path ? ` \xB7 ${preview.path}` : ""}`, text, labels });
+    return /* @__PURE__ */ jsx12(IoPanel, { heading: `${labels.preview}${preview.path ? ` \xB7 ${preview.path}` : ""}`, text, labels });
   }
-  return /* @__PURE__ */ jsxs10("div", { className: "bf-tl__io", children: [
-    /* @__PURE__ */ jsxs10("div", { className: "bf-tl__io-label", children: [
-      /* @__PURE__ */ jsxs10("span", { children: [
+  return /* @__PURE__ */ jsxs11("div", { className: "bf-tl__io", children: [
+    /* @__PURE__ */ jsxs11("div", { className: "bf-tl__io-label", children: [
+      /* @__PURE__ */ jsxs11("span", { children: [
         labels.preview,
         preview.path ? ` \xB7 ${preview.path}` : ""
       ] }),
-      /* @__PURE__ */ jsx11(CopyButton, { text, labels })
+      /* @__PURE__ */ jsx12(CopyButton, { text, labels })
     ] }),
-    /* @__PURE__ */ jsxs10("div", { className: "bf-tl__diff", children: [
-      /* @__PURE__ */ jsx11(DiffLines, { text: preview.oldText, sign: "-" }),
-      /* @__PURE__ */ jsx11(DiffLines, { text: preview.newText, sign: "+" })
+    /* @__PURE__ */ jsxs11("div", { className: "bf-tl__diff", children: [
+      /* @__PURE__ */ jsx12(DiffLines, { text: preview.oldText, sign: "-" }),
+      /* @__PURE__ */ jsx12(DiffLines, { text: preview.newText, sign: "+" })
     ] })
   ] });
 }
 function CommandCard({ run, labels }) {
   const failed = run.exitCode != null && run.exitCode !== 0;
-  return /* @__PURE__ */ jsxs10(Fragment3, { children: [
-    /* @__PURE__ */ jsxs10("div", { className: "bf-tl__io", children: [
-      /* @__PURE__ */ jsxs10("div", { className: "bf-tl__io-label", children: [
-        /* @__PURE__ */ jsx11("span", { children: labels.input }),
-        /* @__PURE__ */ jsx11(CopyButton, { text: run.command, labels })
+  return /* @__PURE__ */ jsxs11(Fragment3, { children: [
+    /* @__PURE__ */ jsxs11("div", { className: "bf-tl__io", children: [
+      /* @__PURE__ */ jsxs11("div", { className: "bf-tl__io-label", children: [
+        /* @__PURE__ */ jsx12("span", { children: labels.input }),
+        /* @__PURE__ */ jsx12(CopyButton, { text: run.command, labels })
       ] }),
-      /* @__PURE__ */ jsx11("pre", { className: "bf-tl__io-pre bf-tl__cmd-in", children: /* @__PURE__ */ jsxs10("code", { children: [
-        /* @__PURE__ */ jsx11("span", { className: "bf-tl__cmd-prompt", "aria-hidden": true, children: "$" }),
+      /* @__PURE__ */ jsx12("pre", { className: "bf-tl__io-pre bf-tl__cmd-in", children: /* @__PURE__ */ jsxs11("code", { children: [
+        /* @__PURE__ */ jsx12("span", { className: "bf-tl__cmd-prompt", "aria-hidden": true, children: "$" }),
         run.command
       ] }) })
     ] }),
-    /* @__PURE__ */ jsxs10("div", { className: "bf-tl__io", children: [
-      /* @__PURE__ */ jsxs10("div", { className: "bf-tl__io-label", children: [
-        /* @__PURE__ */ jsxs10("span", { children: [
+    /* @__PURE__ */ jsxs11("div", { className: "bf-tl__io", children: [
+      /* @__PURE__ */ jsxs11("div", { className: "bf-tl__io-label", children: [
+        /* @__PURE__ */ jsxs11("span", { children: [
           labels.output,
-          failed && /* @__PURE__ */ jsx11("em", { className: "bf-tl__cmd-exit", children: labels.exitCode.replace("{code}", String(run.exitCode)) })
+          failed && /* @__PURE__ */ jsx12("em", { className: "bf-tl__cmd-exit", children: labels.exitCode.replace("{code}", String(run.exitCode)) })
         ] }),
-        run.output && /* @__PURE__ */ jsx11(CopyButton, { text: run.output, labels })
+        run.output && /* @__PURE__ */ jsx12(CopyButton, { text: run.output, labels })
       ] }),
-      run.output ? /* @__PURE__ */ jsx11("pre", { className: `bf-tl__io-pre bf-tl__cmd-out${run.ok ? "" : " bf-tl__cmd-out--error"}`, children: /* @__PURE__ */ jsx11("code", { children: run.output }) }) : /* @__PURE__ */ jsx11("p", { className: "bf-tl__cmd-empty", children: labels.noOutput })
+      run.output ? /* @__PURE__ */ jsx12("pre", { className: `bf-tl__io-pre bf-tl__cmd-out${run.ok ? "" : " bf-tl__cmd-out--error"}`, children: /* @__PURE__ */ jsx12("code", { children: run.output }) }) : /* @__PURE__ */ jsx12("p", { className: "bf-tl__cmd-empty", children: labels.noOutput })
     ] })
   ] });
 }
 function ToolStep({ node, labels }) {
   const view = toolStepView(node);
   const [open, setOpen] = useState5(view.defaultOpen);
-  return /* @__PURE__ */ jsxs10(
+  return /* @__PURE__ */ jsxs11(
     "details",
     {
       className: `bf-tl__tool${node.isError ? " bf-tl__tool--error" : ""}`,
       open,
       onToggle: (e) => setOpen(e.currentTarget.open),
       children: [
-        /* @__PURE__ */ jsxs10("summary", { className: "bf-tl__tool-head", children: [
-          /* @__PURE__ */ jsx11("span", { className: "bf-tl__tool-status", "aria-hidden": true, children: node.isError ? "\u2717" : "\u2713" }),
-          /* @__PURE__ */ jsx11("span", { className: "bf-tl__tool-name", children: node.label }),
-          view.subject && /* @__PURE__ */ jsx11("span", { className: `bf-tl__tool-subject${view.subjectIsPath ? " bf-tl__tool-subject--path" : ""}`, title: view.subject, children: view.subjectIsPath ? /* @__PURE__ */ jsx11("bdi", { dir: "ltr", children: view.subject }) : view.subject }),
-          node.durationMs != null && /* @__PURE__ */ jsx11("span", { className: "bf-tl__tool-dur", children: formatDuration(node.durationMs) }),
-          /* @__PURE__ */ jsx11("span", { className: "bf-tl__tool-caret", "aria-hidden": true, children: "\u25B8" })
+        /* @__PURE__ */ jsxs11("summary", { className: "bf-tl__tool-head", children: [
+          /* @__PURE__ */ jsx12("span", { className: "bf-tl__tool-status", "aria-hidden": true, children: node.isError ? "\u2717" : "\u2713" }),
+          /* @__PURE__ */ jsx12("span", { className: "bf-tl__tool-name", children: node.label }),
+          view.subject && /* @__PURE__ */ jsx12("span", { className: `bf-tl__tool-subject${view.subjectIsPath ? " bf-tl__tool-subject--path" : ""}`, title: view.subject, children: view.subjectIsPath ? /* @__PURE__ */ jsx12("bdi", { dir: "ltr", children: view.subject }) : view.subject }),
+          node.durationMs != null && /* @__PURE__ */ jsx12("span", { className: "bf-tl__tool-dur", children: formatDuration(node.durationMs) }),
+          /* @__PURE__ */ jsx12("span", { className: "bf-tl__tool-caret", "aria-hidden": true, children: "\u25B8" })
         ] }),
-        /* @__PURE__ */ jsxs10("div", { className: "bf-tl__tool-body", children: [
-          view.command && /* @__PURE__ */ jsx11(CommandCard, { run: view.command, labels }),
-          view.preview && /* @__PURE__ */ jsx11(ChangePreview, { preview: view.preview, labels }),
-          view.argsText && /* @__PURE__ */ jsx11(IoPanel, { heading: labels.input, text: view.argsText, labels }),
-          view.resultText && /* @__PURE__ */ jsx11(IoPanel, { heading: labels.output, text: view.resultText, labels })
+        /* @__PURE__ */ jsxs11("div", { className: "bf-tl__tool-body", children: [
+          view.command && /* @__PURE__ */ jsx12(CommandCard, { run: view.command, labels }),
+          view.preview && /* @__PURE__ */ jsx12(ChangePreview, { preview: view.preview, labels }),
+          view.argsText && /* @__PURE__ */ jsx12(IoPanel, { heading: labels.input, text: view.argsText, labels }),
+          view.resultText && /* @__PURE__ */ jsx12(IoPanel, { heading: labels.output, text: view.resultText, labels })
         ] })
       ]
     }
@@ -1486,37 +1625,37 @@ function ToolStep({ node, labels }) {
 }
 
 // src/timeline/StepRows.tsx
-import { jsx as jsx12, jsxs as jsxs11 } from "react/jsx-runtime";
+import { jsx as jsx13, jsxs as jsxs12 } from "react/jsx-runtime";
 function ThinkingRow({ node, labels }) {
   const label = labels.thoughtFor.replace("{duration}", formatDuration(node.durationMs));
-  return /* @__PURE__ */ jsxs11("li", { className: "bf-tl__item bf-tl__item--thinking", children: [
-    /* @__PURE__ */ jsx12("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx12("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
-    /* @__PURE__ */ jsx12("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsx12("span", { className: "bf-tl__thinking", children: label }) })
+  return /* @__PURE__ */ jsxs12("li", { className: "bf-tl__item bf-tl__item--thinking", children: [
+    /* @__PURE__ */ jsx13("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx13("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("thinking") }) }),
+    /* @__PURE__ */ jsx13("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsx13("span", { className: "bf-tl__thinking", children: label }) })
   ] });
 }
 function ToolRow({ node, labels }) {
-  return /* @__PURE__ */ jsxs11("li", { className: "bf-tl__item bf-tl__item--tool", children: [
-    /* @__PURE__ */ jsx12("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx12("span", { className: `bf-tl__dot${node.isError ? " bf-tl__dot--error" : ""}`, children: dotIcon("tool", node.isError) }) }),
-    /* @__PURE__ */ jsx12("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsx12(ToolStep, { node, labels }) })
+  return /* @__PURE__ */ jsxs12("li", { className: "bf-tl__item bf-tl__item--tool", children: [
+    /* @__PURE__ */ jsx13("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx13("span", { className: `bf-tl__dot${node.isError ? " bf-tl__dot--error" : ""}`, children: dotIcon("tool", node.isError) }) }),
+    /* @__PURE__ */ jsx13("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsx13(ToolStep, { node, labels }) })
   ] });
 }
 function ErrorRow({ node, labels }) {
-  return /* @__PURE__ */ jsxs11("li", { className: "bf-tl__item bf-tl__item--error", children: [
-    /* @__PURE__ */ jsx12("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx12("span", { className: "bf-tl__dot bf-tl__dot--error", children: dotIcon("error") }) }),
-    /* @__PURE__ */ jsxs11("div", { className: "bf-tl__body", children: [
-      /* @__PURE__ */ jsx12("div", { className: "bf-tl__role bf-tl__role--error", children: labels.error }),
-      /* @__PURE__ */ jsx12("div", { className: "bf-tl__bubble bf-tl__bubble--error", children: node.message })
+  return /* @__PURE__ */ jsxs12("li", { className: "bf-tl__item bf-tl__item--error", children: [
+    /* @__PURE__ */ jsx13("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx13("span", { className: "bf-tl__dot bf-tl__dot--error", children: dotIcon("error") }) }),
+    /* @__PURE__ */ jsxs12("div", { className: "bf-tl__body", children: [
+      /* @__PURE__ */ jsx13("div", { className: "bf-tl__role bf-tl__role--error", children: labels.error }),
+      /* @__PURE__ */ jsx13("div", { className: "bf-tl__bubble bf-tl__bubble--error", children: chatErrorMessage(node.message, chatErrorAction(node.message), { ...DEFAULT_CHAT_ERROR_LABELS, ...labels.chatError }) })
     ] })
   ] });
 }
 function ActivityRow({ node, labels }) {
   const text = chatActivityText(node.activity, labels.activity) || node.fallbackText;
   const tone = activityTone(node.activity);
-  return /* @__PURE__ */ jsxs11("li", { className: `bf-tl__item bf-tl__item--activity bf-tl__item--activity-${tone}`, children: [
-    /* @__PURE__ */ jsx12("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx12("span", { className: "bf-tl__dot bf-tl__dot--activity", "aria-hidden": true, children: activityIcon(node.activity) }) }),
-    /* @__PURE__ */ jsxs11("div", { className: "bf-tl__body", children: [
-      /* @__PURE__ */ jsx12("span", { className: "bf-tl__activity-line", children: text }),
-      node.activity.kind === "milestone" && node.activity.note && /* @__PURE__ */ jsx12("span", { className: "bf-tl__activity-note", children: node.activity.note })
+  return /* @__PURE__ */ jsxs12("li", { className: `bf-tl__item bf-tl__item--activity bf-tl__item--activity-${tone}`, children: [
+    /* @__PURE__ */ jsx13("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx13("span", { className: "bf-tl__dot bf-tl__dot--activity", "aria-hidden": true, children: activityIcon(node.activity) }) }),
+    /* @__PURE__ */ jsxs12("div", { className: "bf-tl__body", children: [
+      /* @__PURE__ */ jsx13("span", { className: "bf-tl__activity-line", children: text }),
+      node.activity.kind === "milestone" && node.activity.note && /* @__PURE__ */ jsx13("span", { className: "bf-tl__activity-note", children: node.activity.note })
     ] })
   ] });
 }
@@ -1527,17 +1666,17 @@ function StreamingRow({
   renderStreaming,
   onInternalLink
 }) {
-  return /* @__PURE__ */ jsxs11("li", { className: "bf-tl__item bf-tl__item--assistant bf-tl__item--streaming", children: [
-    /* @__PURE__ */ jsx12("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx12("span", { className: "bf-tl__dot bf-tl__dot--pulse", children: dotIcon("assistant") }) }),
-    /* @__PURE__ */ jsxs11("div", { className: "bf-tl__body", children: [
-      /* @__PURE__ */ jsx12("div", { className: "bf-tl__role", children: assistant }),
-      /* @__PURE__ */ jsx12("div", { className: "bf-tl__bubble", children: renderStreaming ? renderStreaming(node.text) : /* @__PURE__ */ jsx12(Markdown, { content: node.text, onInternalLink, labels }) })
+  return /* @__PURE__ */ jsxs12("li", { className: "bf-tl__item bf-tl__item--assistant bf-tl__item--streaming", children: [
+    /* @__PURE__ */ jsx13("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx13("span", { className: "bf-tl__dot bf-tl__dot--pulse", children: dotIcon("assistant") }) }),
+    /* @__PURE__ */ jsxs12("div", { className: "bf-tl__body", children: [
+      /* @__PURE__ */ jsx13("div", { className: "bf-tl__role", children: assistant }),
+      /* @__PURE__ */ jsx13("div", { className: "bf-tl__bubble", children: renderStreaming ? renderStreaming(node.text) : /* @__PURE__ */ jsx13(Markdown, { content: node.text, onInternalLink, labels }) })
     ] })
   ] });
 }
 
 // src/BrainTimeline.tsx
-import { jsx as jsx13, jsxs as jsxs12 } from "react/jsx-runtime";
+import { jsx as jsx14, jsxs as jsxs13 } from "react/jsx-runtime";
 function BrainTimelineInner({
   messages,
   trace,
@@ -1571,7 +1710,7 @@ function BrainTimelineInner({
   }, [settled, streamingText, isRunning]);
   const stranded = useMemo3(() => strandedReplyKey(nodes, isRunning), [nodes, isRunning]);
   const { scrollRef, contentRef, onScroll } = useTranscriptScroll(autoScroll, revealMessage);
-  const renderMsg = (msg, role, text) => renderMessage ? renderMessage(msg, { role, text }) : /* @__PURE__ */ jsx13(
+  const renderMsg = (msg, role, text) => renderMessage ? renderMessage(msg, { role, text }) : /* @__PURE__ */ jsx14(
     Markdown,
     {
       content: text,
@@ -1588,14 +1727,14 @@ function BrainTimelineInner({
   );
   const focusedId = revealMessage?.id ?? null;
   const focusClass = (messageId) => focusedId === messageId ? " bf-tl__item--focus" : "";
-  return /* @__PURE__ */ jsxs12("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
-    loading && /* @__PURE__ */ jsx13("div", { className: "bf-tl-status", children: labels.loading }),
-    isEmpty && (emptyState ?? /* @__PURE__ */ jsx13("div", { className: "bf-tl-empty", children: labels.empty })),
-    /* @__PURE__ */ jsxs12("ol", { className: "bf-tl", ref: contentRef, children: [
+  return /* @__PURE__ */ jsxs13("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
+    loading && /* @__PURE__ */ jsx14("div", { className: "bf-tl-status", children: labels.loading }),
+    isEmpty && (emptyState ?? /* @__PURE__ */ jsx14("div", { className: "bf-tl-empty", children: labels.empty })),
+    /* @__PURE__ */ jsxs13("ol", { className: "bf-tl", ref: contentRef, children: [
       nodes.map((node) => {
         switch (node.kind) {
           case "user":
-            return /* @__PURE__ */ jsx13(
+            return /* @__PURE__ */ jsx14(
               UserRow,
               {
                 node,
@@ -1607,7 +1746,7 @@ function BrainTimelineInner({
               node.key
             );
           case "assistant":
-            return /* @__PURE__ */ jsx13(
+            return /* @__PURE__ */ jsx14(
               AssistantRow,
               {
                 node,
@@ -1627,25 +1766,25 @@ function BrainTimelineInner({
               node.key
             );
           case "thinking":
-            return /* @__PURE__ */ jsx13(ThinkingRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx14(ThinkingRow, { node, labels }, node.key);
           case "tool":
-            return /* @__PURE__ */ jsx13(ToolRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx14(ToolRow, { node, labels }, node.key);
           case "error":
-            return /* @__PURE__ */ jsx13(ErrorRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx14(ErrorRow, { node, labels }, node.key);
           case "recall":
-            return /* @__PURE__ */ jsx13(RecallRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx14(RecallRow, { node, labels }, node.key);
           case "memoryAnswer":
-            return /* @__PURE__ */ jsx13(MemoryAnswerRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx14(MemoryAnswerRow, { node, labels }, node.key);
           case "learn":
-            return /* @__PURE__ */ jsx13(LearnRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx14(LearnRow, { node, labels }, node.key);
           case "activity":
-            return /* @__PURE__ */ jsx13(ActivityRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx14(ActivityRow, { node, labels }, node.key);
           case "modelMove":
-            return /* @__PURE__ */ jsx13(ModelMoveStep, { move: node.move, labels }, node.key);
+            return /* @__PURE__ */ jsx14(ModelMoveStep, { move: node.move, labels }, node.key);
           case "reconcile":
-            return /* @__PURE__ */ jsx13(ReconcileRow, { node, labels }, node.key);
+            return /* @__PURE__ */ jsx14(ReconcileRow, { node, labels }, node.key);
           default:
-            return /* @__PURE__ */ jsx13(
+            return /* @__PURE__ */ jsx14(
               StreamingRow,
               {
                 node,
@@ -1658,7 +1797,7 @@ function BrainTimelineInner({
             );
         }
       }),
-      isRunning && !(streamingText.trim() && activity?.phase === "writing") && /* @__PURE__ */ jsx13(LiveActivity, { activity, isRunning, labels: labels.live })
+      isRunning && !(streamingText.trim() && activity?.phase === "writing") && /* @__PURE__ */ jsx14(LiveActivity, { activity, isRunning, labels: labels.live })
     ] })
   ] });
 }
@@ -1748,13 +1887,14 @@ function timelineLabelsFrom(lookup, overrides) {
       frozen: lookup("learnSkipReasonFrozen") ?? d.learnSkipReason.frozen
     },
     activity: chatActivityLabelsFrom(lookup),
+    chatError: stringsFrom(DEFAULT_CHAT_ERROR_LABELS, lookup, "chatError."),
     ...overrides
   };
 }
 
 // src/inlineTitle/InlineChatTitle.tsx
 import { useEffect as useEffect3, useRef as useRef2, useState as useState6 } from "react";
-import { jsx as jsx14, jsxs as jsxs13 } from "react/jsx-runtime";
+import { jsx as jsx15, jsxs as jsxs14 } from "react/jsx-runtime";
 var DEFAULT_INLINE_CHAT_TITLE_LABELS = {
   edit: "Edit chat title",
   label: "Chat title",
@@ -1823,8 +1963,8 @@ function InlineChatTitle({
   const text = shown ?? title;
   const name = editing ? labels.label : `${labels.edit}: ${text}`;
   if (!editing) {
-    if (chatId == null) return /* @__PURE__ */ jsx14("span", { className: ["bf-inline-title", titleClassName].filter(Boolean).join(" "), children: text });
-    return /* @__PURE__ */ jsx14("span", { className: ["bf-inline-title", className].filter(Boolean).join(" "), children: /* @__PURE__ */ jsx14(
+    if (chatId == null) return /* @__PURE__ */ jsx15("span", { className: ["bf-inline-title", titleClassName].filter(Boolean).join(" "), children: text });
+    return /* @__PURE__ */ jsx15("span", { className: ["bf-inline-title", className].filter(Boolean).join(" "), children: /* @__PURE__ */ jsx15(
       "button",
       {
         type: "button",
@@ -1837,8 +1977,8 @@ function InlineChatTitle({
       }
     ) });
   }
-  return /* @__PURE__ */ jsxs13("span", { className: ["bf-inline-title", className].filter(Boolean).join(" "), children: [
-    /* @__PURE__ */ jsx14(
+  return /* @__PURE__ */ jsxs14("span", { className: ["bf-inline-title", className].filter(Boolean).join(" "), children: [
+    /* @__PURE__ */ jsx15(
       "input",
       {
         ref: input,
@@ -1861,7 +2001,7 @@ function InlineChatTitle({
         title: labels.label
       }
     ),
-    /* @__PURE__ */ jsxs13("span", { className: "bf-inline-title__hint", style: TITLE_HINT, "aria-hidden": true, children: [
+    /* @__PURE__ */ jsxs14("span", { className: "bf-inline-title__hint", style: TITLE_HINT, "aria-hidden": true, children: [
       labels.save,
       " \xB7 ",
       labels.cancel
@@ -1894,119 +2034,6 @@ var TITLE_INPUT = {
   maxWidth: "100%"
 };
 var TITLE_HINT = { display: "none" };
-
-// src/ChatErrorBanner.tsx
-import { jsx as jsx15, jsxs as jsxs14 } from "react/jsx-runtime";
-var DEFAULT_CHAT_ERROR_LABELS = {
-  reconnect: "Reconnect",
-  upgrade: "Upgrade",
-  upgradeToPlan: "Upgrade to {plan}",
-  addCard: "Add a card",
-  signIn: "Sign in",
-  noModel: "No model is available. Sign in, or start a model on this device.",
-  noLocalModel: "No model on this device can answer. Switch to Hybrid, or download a local model.",
-  switchToHybrid: "Switch to Hybrid",
-  downloadLocalModel: "Download a local model",
-  noSpecificModel: "Specific model is on, but no model is picked. Pick one, or switch to Hybrid.",
-  pickModel: "Pick a model",
-  engineCrashed: "The on-device model crashed. Send again to restart it.",
-  engineDetached: "The on-device model stopped before it finished. Send again to retry.",
-  modelKeepsCrashing: "This model keeps crashing on this device. Remove it, or try another model.",
-  manageLocalModels: "Manage on-device models",
-  dismiss: "Dismiss"
-};
-function engineMessage(code, labels, fallback) {
-  switch (code) {
-    case "bfi_engine_crashed":
-      return labels.engineCrashed;
-    case "page_engine_detached":
-      return labels.engineDetached;
-    case "model_keeps_crashing":
-      return labels.modelKeepsCrashing;
-    default:
-      return fallback;
-  }
-}
-function planLabel(plan) {
-  return plan.replace(/^./, (ch) => ch.toUpperCase());
-}
-function ChatErrorBanner({
-  error,
-  action,
-  onDismiss,
-  onReconnect,
-  onUpgrade,
-  onValidateCard,
-  onSignIn,
-  onSwitchToHybrid,
-  onDownloadLocalModel,
-  onPickModel,
-  labels: labelOverrides,
-  style,
-  className,
-  role = "alert"
-}) {
-  const labels = { ...DEFAULT_CHAT_ERROR_LABELS, ...labelOverrides };
-  if (!error) return null;
-  const kind = action?.kind;
-  const keepsCrashing = kind === "local_engine_failed" && action?.engineCode === "model_keeps_crashing";
-  const plan = action?.requiredPlan ? planLabel(action.requiredPlan) : null;
-  const primary = kind === "auth" && onReconnect ? { label: labels.reconnect, onClick: onReconnect } : kind === "upgrade" && onUpgrade ? {
-    label: plan ? labels.upgradeToPlan.replace("{plan}", plan) : labels.upgrade,
-    onClick: onUpgrade
-  } : kind === "validate_card" && onValidateCard ? { label: labels.addCard, onClick: onValidateCard } : kind === "sign_in" && onSignIn ? { label: labels.signIn, onClick: onSignIn } : kind === "no_local_model" && onSwitchToHybrid ? { label: labels.switchToHybrid, onClick: onSwitchToHybrid } : kind === "no_local_model" && onDownloadLocalModel ? { label: labels.downloadLocalModel, onClick: onDownloadLocalModel } : (kind === "no_specific_model" || keepsCrashing) && onPickModel ? { label: labels.pickModel, onClick: onPickModel } : keepsCrashing && onDownloadLocalModel ? { label: labels.manageLocalModels, onClick: onDownloadLocalModel } : null;
-  const secondary = kind === "no_local_model" && onSwitchToHybrid && onDownloadLocalModel ? { label: labels.downloadLocalModel, onClick: onDownloadLocalModel } : keepsCrashing && onPickModel && onDownloadLocalModel ? { label: labels.manageLocalModels, onClick: onDownloadLocalModel } : null;
-  const message = kind === "sign_in" ? labels.noModel : kind === "no_local_model" ? labels.noLocalModel : kind === "no_specific_model" ? labels.noSpecificModel : kind === "local_engine_failed" ? engineMessage(action?.engineCode, labels, error) : error;
-  const actionStyle = {
-    flex: "0 0 auto",
-    padding: "4px 10px",
-    fontSize: 12,
-    fontWeight: 700,
-    color: "inherit",
-    background: "transparent",
-    border: "1px solid currentColor",
-    borderRadius: 6,
-    cursor: "pointer"
-  };
-  return /* @__PURE__ */ jsxs14(
-    "div",
-    {
-      className,
-      role,
-      style: {
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 8,
-        flexWrap: "wrap",
-        fontSize: 13,
-        ...style
-      },
-      children: [
-        /* @__PURE__ */ jsx15("span", { style: { flex: 1, minWidth: 0, overflowWrap: "anywhere" }, children: message }),
-        [primary, secondary].map((entry) => entry && /* @__PURE__ */ jsx15("button", { type: "button", onClick: entry.onClick, style: actionStyle, children: entry.label }, entry.label)),
-        /* @__PURE__ */ jsx15(
-          "button",
-          {
-            type: "button",
-            onClick: onDismiss,
-            title: labels.dismiss,
-            "aria-label": labels.dismiss,
-            style: {
-              flex: "0 0 auto",
-              background: "transparent",
-              border: "none",
-              color: "inherit",
-              cursor: "pointer",
-              lineHeight: 0,
-              padding: 2
-            },
-            children: /* @__PURE__ */ jsx15("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", "aria-hidden": true, children: /* @__PURE__ */ jsx15("path", { d: "M6 6l12 12M18 6L6 18" }) })
-          }
-        )
-      ]
-    }
-  );
-}
 
 // src/ModelFallbackNotice.tsx
 import { useSyncExternalStore } from "react";
@@ -4005,36 +4032,68 @@ function InferenceModeFirstRun({ labels, onChoose }) {
 import { useCallback as useCallback9, useEffect as useEffect10, useRef as useRef12, useState as useState16 } from "react";
 function useInferenceModeGate(inferenceMode) {
   const needsChoice = !!inferenceMode?.needsChoice;
-  const held = useRef12(null);
+  const held = useRef12([]);
   const [holding, setHolding] = useState16(false);
   const onChange = inferenceMode?.onChange;
   const onChangeRef = useRef12(onChange);
   onChangeRef.current = onChange;
+  const answered = useRef12(false);
   const needsRef = useRef12(needsChoice);
-  needsRef.current = needsChoice;
+  needsRef.current = needsChoice && !answered.current;
+  const release = useCallback9(() => {
+    const sends = held.current;
+    held.current = [];
+    setHolding(false);
+    return sends;
+  }, []);
   const request = useCallback9((send) => {
     if (!needsRef.current) {
       send();
       return true;
     }
-    held.current = send;
+    held.current = [...held.current, send];
     setHolding(true);
     return false;
   }, []);
   const choose = useCallback9((mode) => {
-    const send = held.current;
-    held.current = null;
-    setHolding(false);
-    void Promise.resolve(onChangeRef.current?.(mode)).finally(() => send?.());
-  }, []);
+    answered.current = true;
+    needsRef.current = false;
+    const sends = release();
+    const run = () => {
+      for (const send of sends) send();
+    };
+    void Promise.resolve(onChangeRef.current?.(mode)).then(run, run);
+  }, [release]);
   useEffect10(() => {
-    if (needsChoice || !held.current) return;
-    const send = held.current;
-    held.current = null;
-    setHolding(false);
-    send();
-  }, [needsChoice]);
-  return { asking: holding && needsChoice, request, choose };
+    if (needsChoice || held.current.length === 0) return;
+    for (const send of release()) send();
+  }, [needsChoice, release]);
+  return { asking: holding && needsChoice && !answered.current, request, choose };
+}
+
+// src/inferenceMode/modelRemedies.ts
+function modelRemedies({ mode, setMode, composerId, onDismiss, downloadLocalModel, retry }) {
+  const openModelTab = () => requestComposerMenu(composerId, "model");
+  return {
+    ...mode === "local-only" ? {
+      onSwitchToHybrid: () => {
+        onDismiss();
+        const resend = () => retry?.();
+        void Promise.resolve(setMode("hybrid")).then(resend, resend);
+      }
+    } : {},
+    onDownloadLocalModel: () => {
+      (downloadLocalModel ?? openModelTab)();
+      onDismiss();
+    },
+    onPickModel: () => {
+      openModelTab();
+      onDismiss();
+    }
+  };
+}
+function inferenceModeOption(state) {
+  return { value: state.value, onChange: state.onChange, needsChoice: !state.chosen };
 }
 
 // src/index.ts
@@ -9139,6 +9198,7 @@ export {
   cachedConsumptionSnapshot,
   chatActivityLabelsFrom,
   chatDiagnosticsReads,
+  chatErrorMessage,
   chatHistoryLabelsFrom,
   chatSwitcherLabel,
   chatTicketsLabelsFrom,
@@ -9166,6 +9226,7 @@ export {
   groupAbsorbed,
   healthRingColor,
   inferenceModeCopy,
+  inferenceModeOption,
   initialsOf,
   invalidateConsumptionSnapshot,
   isManagerRole,
@@ -9176,6 +9237,7 @@ export {
   modelInUse2 as modelInUse,
   modelMoveLine,
   modelMoveOf,
+  modelRemedies,
   modelSelectionFrom,
   parseAskUser,
   pendingChangesSummary,

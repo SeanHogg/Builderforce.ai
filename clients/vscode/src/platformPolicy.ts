@@ -4,9 +4,11 @@ import {
   createGuardedPlatformFetch,
   createPlatformPolicy,
   platformRequestMethod,
+  platformRequestRefusal,
   platformRequestUrl,
   platformSendPermission,
   resolveInferencePolicy,
+  type InferenceMode,
   type PlatformCapability,
   type PlatformPolicySnapshot,
   type PlatformRequestRecord,
@@ -14,6 +16,13 @@ import {
 import { bindInferenceMode, inferenceModeState, onDidChangeInferenceMode } from "./inferenceModeSetting";
 
 const policy = createPlatformPolicy();
+/** The mode in force — refused (`local-only`) until the first signed-in read resolves it. */
+let mode: InferenceMode = "local-only";
+
+/** The inference mode the request gate decides with (carried to the webview realm too). */
+export function platformInferenceMode(): InferenceMode {
+  return mode;
+}
 const requests: PlatformRequestRecord[] = [];
 const nativeFetch = globalThis.fetch.bind(globalThis);
 let restoreFetch: (() => void) | undefined;
@@ -45,25 +54,52 @@ function configuredOrigins(): Set<string> {
   return origins;
 }
 
-/** The capability a request needs — the shared route table, for this editor's origins. */
-export function platformCapabilityFor(input: string | URL | Request, init?: RequestInit): PlatformCapability | null {
+/** The URL when it is this editor's platform (a configured origin), else null. */
+function platformUrl(input: string | URL | Request): URL | null {
   let url: URL;
   try {
     url = new URL(platformRequestUrl(input));
   } catch {
     return null;
   }
-  if (!configuredOrigins().has(url.origin)) return null;
-  return classifyPlatformRequest(url.pathname, platformRequestMethod(input, init));
+  return configuredOrigins().has(url.origin) ? url : null;
 }
 
+/** The capability a request needs — the shared route table, for this editor's origins. */
+export function platformCapabilityFor(input: string | URL | Request, init?: RequestInit): PlatformCapability | null {
+  const url = platformUrl(input);
+  return url ? classifyPlatformRequest(url.pathname, platformRequestMethod(input, init)) : null;
+}
+
+/**
+ * Which capability refuses this request, or null when it may go — THE shared gate
+ * (`platformRequestRefusal`), the same decision the web app and Rovr make for the same
+ * URL in the same mode. Not the platform ⇒ null.
+ */
+export function platformRequestRefusalFor(input: string | URL | Request, init?: RequestInit): PlatformCapability | null {
+  const url = platformUrl(input);
+  if (!url) return null;
+  return platformRequestRefusal({ pathname: url.pathname, method: platformRequestMethod(input, init) }, { mode, snapshot: policy.snapshot() });
+}
+
+const recordRequest = (record: PlatformRequestRecord): void => {
+  requests.push(record);
+  if (requests.length > 1_000) requests.splice(0, requests.length - 1_000);
+};
+
+/** An explicit capability call (`platformFetch(…, 'synchronize')`): that capability, strictly. */
 const guarded = createGuardedPlatformFetch({
   policy,
   fetch: (input, init) => nativeFetch(input, init),
-  onRequest(record) {
-    requests.push(record);
-    if (requests.length > 1_000) requests.splice(0, requests.length - 1_000);
-  },
+  onRequest: recordRequest,
+});
+
+/** Every other platform request (the global `fetch`): the shared request gate. */
+const gatedGlobal = createGuardedPlatformFetch({
+  policy,
+  fetch: (input, init) => nativeFetch(input, init),
+  onRequest: recordRequest,
+  decide: (_capability, input, init) => platformRequestRefusalFor(input, init),
 });
 
 export function platformFetch(
@@ -102,9 +138,10 @@ function explicitOverrides(): Partial<PlatformPolicySnapshot> {
 /** The mode-derived policy (`resolveInferencePolicy`), then the explicit overrides. The
  *  scoped `authenticate` grant of a sign-in in flight is left as it stands. */
 function refreshPolicy(): void {
-  const { mode, chosen, signedIn } = inferenceModeState();
-  const { snapshot } = resolveInferencePolicy({ mode: chosen ? mode : null, signedIn, overrides: explicitOverrides() });
-  const { authenticate: _authenticate, ...derived } = snapshot;
+  const state = inferenceModeState();
+  const resolved = resolveInferencePolicy({ mode: state.chosen ? state.mode : null, signedIn: state.signedIn, overrides: explicitOverrides() });
+  const { authenticate: _authenticate, ...derived } = resolved.snapshot;
+  mode = resolved.mode;
   policy.set(derived);
 }
 
@@ -153,7 +190,7 @@ export function bindPlatformPolicy(context: vscode.ExtensionContext, secretKey?:
     const capability = platformCapabilityFor(input, init);
     if (!capability) return nativeFetch(input, init);
     const url = platformRequestUrl(input);
-    return guarded(url, { ...init, redirect: "error" }, capability);
+    return gatedGlobal(url, { ...init, redirect: "error" }, capability);
   };
   globalThis.fetch = guardedGlobal;
   restoreFetch = () => {

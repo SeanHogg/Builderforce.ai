@@ -99,4 +99,17 @@ describe('chatErrorAction', () => {
   it('keeps the gateway verdicts ahead of an engine code in the prose', () => {
     expect(chatErrorAction(brainRequestError(401, { error: 'page_engine_detached' }))?.kind).toBe('auth');
   });
+
+  it('turns a platform-policy refusal into a typed verdict naming the switch, never the raw code', () => {
+    // The 2026.10.57 run ended `agent.run failed: platform_send_disabled`.
+    const send = Object.assign(new Error('platform_send_disabled'), { code: 'PLATFORM_SEND_DISABLED' });
+    expect(chatErrorAction(send)).toEqual({ kind: 'platform_refused', capability: 'send', setting: 'inferenceMode' });
+    expect(chatErrorAction(new Error('agent.run failed: platform_send_disabled'))).toEqual({ kind: 'platform_refused', capability: 'send', setting: 'inferenceMode' });
+    // A PlatformAccessDenied carries its capability.
+    const denied = Object.assign(new Error('platform_synchronize_disabled'), { name: 'PlatformAccessDenied', code: 'PLATFORM_ACCESS_DENIED', capability: 'synchronize' });
+    expect(chatErrorAction(denied)).toEqual({ kind: 'platform_refused', capability: 'synchronize', setting: 'synchronize' });
+    expect(chatErrorAction(new Error('platform_gateway_inference_disabled'))).toEqual({ kind: 'platform_refused', capability: 'gateway-inference', setting: 'inferenceMode' });
+    expect(chatErrorAction(new Error('platform_external_mcp_disabled'))?.setting).toBe('externalMcp');
+    expect(chatErrorAction(new Error('xplatform_send_disabled_y'))).toBeNull();
+  });
 });

@@ -861,6 +861,18 @@
     "message": "Gestionar modelos del dispositivo",
     "description": "Button: open Settings, where on-device models are managed and removed"
   },
+  "platformRefusedMode": {
+    "message": "Solo local mantiene esta ejecución en este dispositivo, así que no pudo llegar a BuilderForce. Cambia a Híbrido en el menú /, en Modelo, para permitirlo.",
+    "description": "Chat error: Local only refused a call this run needed to reach the platform"
+  },
+  "platformRefusedSync": {
+    "message": "La sincronización de la cuenta está desactivada, así que esto no se pudo guardar en tu cuenta. Activa la sincronización en la configuración de la plataforma o sigue trabajando en local.",
+    "description": "Chat error: account sync is off, so the run could not save to the account"
+  },
+  "platformRefusedSetting": {
+    "message": "Uno de tus ajustes de la plataforma desactivó lo que esta ejecución necesitaba. Cámbialo en la configuración de la plataforma o elige otro modelo en el menú /.",
+    "description": "Chat error: a platform setting turned off what this run needed"
+  },
   "modelFallback": {
     "message": "Su elección $1 falló; se respondió con Auto.",
     "description": "Notice: the picked model failed (Hybrid) and the turn was answered with Auto; $1 = the picked model"

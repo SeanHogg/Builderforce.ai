@@ -4,7 +4,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { getRunSnapshot, subscribeRun, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
-import type { PromptOptionsInferenceMode } from '@seanhogg/builderforce-brain-ui';
+import { inferenceModeOption, type PromptOptionsInferenceMode } from '@seanhogg/builderforce-brain-ui';
 import type { PanelServices } from '../host/panelServices';
 import type { RovrInferenceModeState } from '../platform/policy';
 import type { RovrSettings } from '../platform/settings';
@@ -67,15 +67,17 @@ export function useInferenceModeState(): RovrInferenceModeState {
   );
 }
 
-/** The composer's `/` menu wiring for the mode — and the first-run question, asked only
- *  of a signed-in person who has not chosen. Undefined until the policy's first read has
- *  landed: the control renders nothing rather than the refused placeholder (Local only). */
+/** The composer's `/` menu wiring for the mode — and the first-run question, asked of
+ *  anyone who has not chosen (signed in or not): brain-ui's ONE wiring
+ *  (`inferenceModeOption`), the rule the web and the editor ask by too. Undefined until
+ *  the policy's first read has landed: the control renders nothing rather than the
+ *  refused placeholder (Local only). */
 export function useInferenceModeOption(): PromptOptionsInferenceMode | undefined {
   const { policy } = useServices();
   const state = useInferenceModeState();
   return useMemo<PromptOptionsInferenceMode | undefined>(
     () => (state.loaded
-      ? { value: state.mode, onChange: (mode) => policy.setInferenceMode(mode), needsChoice: state.signedIn && !state.chosen }
+      ? inferenceModeOption({ value: state.mode, chosen: state.chosen, onChange: (mode) => policy.setInferenceMode(mode) })
       : undefined),
     [policy, state],
   );

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLocalCreationSession, creationStorageKey, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { CreationCanvas } from './CreationCanvas';
-import { AUTHORED_EVALUATION, answerCanvasTurns, holdCanvasTurns } from '@/test/canvasTurnRunnerMock';
+import { AUTHORED_EVALUATION, answerCanvasTurns, chooseWhereModelsRun, holdCanvasTurns } from '@/test/canvasTurnRunnerMock';
 
 // Only the model call is replaced — see `canvasTurnRunnerMock`. Every turn stays in flight
 // unless a test answers it, so nothing leaves jsdom.
@@ -17,6 +17,7 @@ vi.mock('@/lib/creationCanvasAi', async (importOriginal) => (await import('@/tes
 describe('CreationCanvas with the real XYFlow store', () => {
   beforeEach(() => {
     holdCanvasTurns();
+    chooseWhereModelsRun();
   });
 
   afterEach(() => {

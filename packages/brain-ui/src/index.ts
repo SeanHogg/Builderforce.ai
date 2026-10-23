@@ -55,6 +55,7 @@ export type { AskUserPayload, AskUserOption, AskUserLabels, PendingAskUser, AskU
 // upgrade / add a card). Shared so the VS Code webview and the web app's BrainPanel
 // can't drift on what a given entitlement failure lets the user do about it.
 export { ChatErrorBanner, DEFAULT_CHAT_ERROR_LABELS } from './ChatErrorBanner';
+export { chatErrorMessage } from './chatErrorMessage';
 // "Your pick X failed; answered with Auto" — every host's one-line Hybrid fallback notice.
 export { ModelFallbackNotice, useModelFallback, DEFAULT_MODEL_FALLBACK_LABELS } from './ModelFallbackNotice';
 export type { ModelFallbackNoticeProps, ModelFallbackNoticeLabels } from './ModelFallbackNotice';
@@ -145,6 +146,10 @@ export { InferenceModeFirstRun } from './inferenceMode/InferenceModeFirstRun';
 // THE first-run gate (Send and a host's own send alike) and THE radio-group keyboard model.
 export { useInferenceModeGate } from './inferenceMode/useInferenceModeGate';
 export type { InferenceModeGate } from './inferenceMode/useInferenceModeGate';
+// THE no-model remedies (Switch to Hybrid + re-send · Download · Pick a model) and THE
+// composer mode wiring every host builds from its own mode facts.
+export { modelRemedies, inferenceModeOption } from './inferenceMode/modelRemedies';
+export type { ModelRemedies, ModelRemedyPorts } from './inferenceMode/modelRemedies';
 export { useRovingRadioGroup, rovingRadioNextIndex } from './useRovingRadioGroup';
 export type { RovingRadioItemProps } from './useRovingRadioGroup';
 export type { InferenceModeFirstRunProps } from './inferenceMode/InferenceModeFirstRun';

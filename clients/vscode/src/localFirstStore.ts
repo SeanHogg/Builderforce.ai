@@ -7,15 +7,19 @@
  *   - `localFirstLock.ts`         — the cross-window file lock, with dead-holder reclaim
  *   - `localFirstJournalIo.ts`    — the journal file over `node:fs`
  *   - `localFirstSnapshotFile.ts` — the snapshot cache's classification
- *   - `localChatPersistence.ts`   — chat and message rows
+ *   - brain-embedded `createLocalBrainPersistence` — chat and message rows: the SAME
+ *     full Brain adapter the web runs on, so every method the webview proxies
+ *     (`LOCAL_PERSISTENCE_METHODS`) exists here. A write-only twin of it
+ *     (`localChatPersistence.ts`, deleted) had no `listChats`, and the panel opened on
+ *     `s[i.method] is not a function`.
  *
  * This module is the only one that touches `vscode`.
  */
 
-import type * as vscode from "vscode";
+import * as vscode from "vscode";
 import type { LocalFirstStore } from "@builderforce/local-first";
+import { createLocalBrainPersistence, type BrainPersistenceAdapter } from "@seanhogg/builderforce-brain-embedded";
 import { createDurableLocalFirstStore, type DurableLocalFirstStore } from "./durableLocalFirstStore";
-import { createLocalChatPersistence, type LocalChatPersistence } from "./localChatPersistence";
 
 /** The durable store over this extension's global storage. */
 export function createVsCodeLocalFirstStore(
@@ -29,7 +33,7 @@ interface LocalApplication {
   store: LocalFirstStore;
   /** G03: the journal-backed store. The JSON snapshot is its cache, not its state. */
   durableStore: DurableLocalFirstStore;
-  persistence: LocalChatPersistence;
+  persistence: BrainPersistenceAdapter;
 }
 
 const applications = new WeakMap<vscode.ExtensionContext, LocalApplication>();
@@ -51,7 +55,11 @@ export function localBrainApplication(ctx: vscode.ExtensionContext): LocalApplic
   const application = {
     store,
     durableStore: store,
-    persistence: createLocalChatPersistence(store, deviceId),
+    persistence: createLocalBrainPersistence({
+      store,
+      deviceId,
+      summarizeUnavailable: vscode.l10n.t("Summarizing a chat needs a BuilderForce account. This conversation is only on this machine."),
+    }),
   };
   applications.set(ctx, application);
   return application;

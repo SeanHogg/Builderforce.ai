@@ -24,6 +24,8 @@ export function BrainErrorBanner({
   action,
   onDismiss,
   composerId,
+  onRetry,
+  className,
 }: {
   error: string;
   action: ChatErrorAction | null;
@@ -31,12 +33,16 @@ export function BrainErrorBanner({
   /** The composer beside this banner — the one a "Pick a model" / "Download a local
    *  model" remedy opens the `/` menu of. */
   composerId: string;
+  /** Re-send the refused turn after "Switch to Hybrid" moved the mode. Omitted ⇒ the
+   *  person sends it again themselves. */
+  onRetry?: () => void;
+  className?: string;
 }) {
   const t = useTranslations('brain');
   const tCommon = useTranslations('common');
   const router = useRouter();
   const { start: startCardValidation, error: cardError } = useStartCardValidation();
-  const { labels: remedyLabels, ...remedies } = useModelRemedies(onDismiss, composerId);
+  const { labels: remedyLabels, ...remedies } = useModelRemedies(onDismiss, composerId, onRetry);
 
   // A failed card attempt belongs with the message it was meant to fix, not in a
   // second banner the user has to correlate.
@@ -54,6 +60,7 @@ export function BrainErrorBanner({
 
   return (
     <ChatErrorBanner
+      {...(className ? { className } : {})}
       error={message}
       action={action}
       onDismiss={onDismiss}

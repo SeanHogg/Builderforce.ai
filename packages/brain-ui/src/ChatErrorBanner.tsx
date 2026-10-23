@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ChatErrorAction } from '@seanhogg/builderforce-brain-embedded';
+import { chatErrorMessage } from './chatErrorMessage';
 
 /**
  * The chat's error banner — the message AND the fix.
@@ -54,6 +55,14 @@ export interface ChatErrorBannerLabels {
   /** Open where on-device models are managed (removed) — offered beside "Pick a model"
    *  for a model that keeps crashing. */
   manageLocalModels: string;
+  /** `platform_refused` where only the mode opens it (Local only holds the cloud, or the
+   *  queue that carries the run's writes) — replaces `platform_*_disabled`. */
+  platformRefusedMode: string;
+  /** `platform_refused` by the account-sync switch — replaces `platform_synchronize_disabled`. */
+  platformRefusedSync: string;
+  /** `platform_refused` by another advanced platform switch (model downloads, direct
+   *  providers, external MCP, git remotes). */
+  platformRefusedSetting: string;
   dismiss: string;
 }
 
@@ -73,6 +82,9 @@ export const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels = {
   engineDetached: 'The on-device model stopped before it finished. Send again to retry.',
   modelKeepsCrashing: 'This model keeps crashing on this device. Remove it, or try another model.',
   manageLocalModels: 'Manage on-device models',
+  platformRefusedMode: 'Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.',
+  platformRefusedSync: 'Account sync is off, so this could not be saved to your account. Turn on sync in your platform settings, or keep working locally.',
+  platformRefusedSetting: 'One of your platform settings turned off what this run needed. Change it in your platform settings, or pick another model in the / menu.',
   dismiss: 'Dismiss',
 };
 
@@ -119,20 +131,6 @@ export interface ChatErrorBannerProps {
   role?: 'alert' | 'status';
 }
 
-/** The banner's sentence for an on-device engine failure, by its code. */
-function engineMessage(code: ChatErrorAction['engineCode'], labels: ChatErrorBannerLabels, fallback: string): string {
-  switch (code) {
-    case 'bfi_engine_crashed':
-      return labels.engineCrashed;
-    case 'page_engine_detached':
-      return labels.engineDetached;
-    case 'model_keeps_crashing':
-      return labels.modelKeepsCrashing;
-    default:
-      return fallback;
-  }
-}
-
 /** Title-case a plan key for display ('pro' → 'Pro'). */
 function planLabel(plan: string): string {
   return plan.replace(/^./, (ch) => ch.toUpperCase());
@@ -176,7 +174,7 @@ export function ChatErrorBanner({
           ? { label: labels.addCard, onClick: onValidateCard }
           : kind === 'sign_in' && onSignIn
             ? { label: labels.signIn, onClick: onSignIn }
-            : kind === 'no_local_model' && onSwitchToHybrid
+            : (kind === 'no_local_model' || (kind === 'platform_refused' && action?.setting === 'inferenceMode')) && onSwitchToHybrid
               ? { label: labels.switchToHybrid, onClick: onSwitchToHybrid }
               : kind === 'no_local_model' && onDownloadLocalModel
                 ? { label: labels.downloadLocalModel, onClick: onDownloadLocalModel }
@@ -193,15 +191,7 @@ export function ChatErrorBanner({
       ? { label: labels.manageLocalModels, onClick: onDownloadLocalModel }
       : null;
   // The verdict names the case; the raw sentinel is never what a person reads.
-  const message = kind === 'sign_in'
-    ? labels.noModel
-    : kind === 'no_local_model'
-      ? labels.noLocalModel
-      : kind === 'no_specific_model'
-        ? labels.noSpecificModel
-        : kind === 'local_engine_failed'
-          ? engineMessage(action?.engineCode, labels, error)
-          : error;
+  const message = chatErrorMessage(error, action, labels);
   const actionStyle: React.CSSProperties = {
     flex: '0 0 auto',
     padding: '4px 10px',

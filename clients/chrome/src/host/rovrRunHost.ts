@@ -1,31 +1,25 @@
 /**
- * Rovr's RUN HOST — the Chrome twin of the VS Code extension's `brainRunHost.ts`: it
- * turns "the person asked for something" into ONE shared Brain run (`startRun` from
- * brain-embedded — the same loop, run store, model hand-off and step persistence as the
- * web app and the editor) with the host's own stream, tools, persistence and gate.
+ * Rovr's RUN PORTS — what Rovr adds to THE shared conversation (`useBrainConversation`,
+ * the same hook the web Brain and the VS Code webview mount): the parts of a run only
+ * Rovr can know, resolved at each run's start through the hook's `prepareRun` seam, and
+ * the safety gate's decline record. The turn itself — persisting it, the queue, the run,
+ * the stream, Stop, the error and its remedies, "Switch to Hybrid" re-sending — is the
+ * hook's, exactly as on every other surface.
  *
  * WHERE IT RUNS: the side panel document, not the service worker. An MV3 worker is torn
  * down after ~30 s without an event and capped at minutes of work, while a run streams
  * for as long as the model talks and pauses for as long as the person takes to answer a
- * confirmation — so the long-lived document the person is looking at owns the run, and
- * the worker owns only what must happen with the panel closed (syncing the backlog). A
- * panel closed mid-run loses only the run's remaining turns: every turn and step already
- * taken is in the device record and the durable outboxes.
+ * confirmation — so the long-lived document the person is looking at owns the run (the
+ * hook lives in it), and the worker owns only what must happen with the panel closed
+ * (syncing the backlog).
  *
- * This module owns no `chrome` import — every browser-bound piece arrives as a port
- * (`rovrRunHostPorts.ts`), so the wiring is tested with fakes.
+ * This module owns no `chrome` import — every browser-bound piece arrives as a port, so
+ * the wiring is tested with fakes.
  */
 import {
-  clearRunError,
   getRunSnapshot,
-  isRunning,
   resolveRunConfirm,
-  startRun,
-  stopRun,
-  transcriptSeedFrom,
-  type BrainMessage,
-  type BrainRunPersistence,
-  type BrainStreamFn,
+  type BrainRunRequest,
   type BrainToolSpec,
 } from '@seanhogg/builderforce-brain-embedded';
 import { ROVR_DEFAULT_CHAT_MODE, type RovrRunOptions } from './runOptions';
@@ -39,12 +33,6 @@ export interface RunCatalog {
 }
 
 export interface RovrRunHostPorts {
-  /** Local-first streamer (`inference/route.ts`). */
-  stream: BrainStreamFn;
-  /** Local-first persistence (`persistence/localFirstPersistence.ts`). */
-  persistence: BrainRunPersistence;
-  /** The chat's history, for the transcript seed. */
-  history(chatId: number): Promise<BrainMessage[]>;
   /** Built per run: the browser tools act for THIS chat (ledger, tasks). */
   catalog(chatId: number): Promise<RunCatalog>;
   /** Rovr's system prompt for this run (playbooks, working tab, allowed sites). */
@@ -57,58 +45,39 @@ export interface RovrRunHostPorts {
 }
 
 export interface RovrRunHost {
-  /** Persist the person's turn and run the loop on it. Resolves when the run settles. */
-  send(chatId: number, text: string): Promise<void>;
-  stop(chatId: number): void;
+  /** The conversation hook's `prepareRun`: Rovr's catalog, prompt and options for `chatId`. */
+  prepareRun(chatId: number): Promise<Partial<BrainRunRequest>>;
+  /** Answer the safety gate's pause; a decline is recorded on the ledger first. */
   confirm(chatId: number, ok: boolean): void;
-  clearError(chatId: number): void;
 }
 
 export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
-  /** Chats with a turn being set up — claimed before the async setup (a double submit). */
-  const starting = new Set<number>();
-
   return {
-    async send(chatId, text) {
-      const turn = text.trim();
-      if (!turn || starting.has(chatId) || isRunning(chatId)) return;
-      starting.add(chatId);
-      try {
-        const prior = await ports.history(chatId);
-        await ports.persistence.sendMessages(chatId, [{ role: 'user', content: turn }]);
-        const [catalog, systemPrompt, options] = await Promise.all([
-          ports.catalog(chatId),
-          ports.systemPrompt(),
-          ports.runOptions ? ports.runOptions(chatId) : Promise.resolve(null),
-        ]);
-        await startRun(chatId, {
-          resolvedSystemPrompt: options?.directives ? `${systemPrompt}\n\n${options.directives}` : systemPrompt,
-          tools: catalog.specs,
-          runTool: catalog.run,
-          needsConfirm: catalog.needsConfirm,
-          stream: ports.stream,
-          persistence: ports.persistence,
-          seed: transcriptSeedFrom(prior),
-          userTurn: turn,
-          // A personal assistant answers and acts on the person's explicit request; it
-          // opens and staffs board work only when the chat is switched to Work
-          // (`chatMode.ts`).
-          chatMode: options?.chatMode ?? ROVR_DEFAULT_CHAT_MODE,
-          ...(options ? { maxTokens: options.maxTokens } : {}),
-          ...(options?.reasoning ? { reasoning: options.reasoning } : {}),
-          ...(options?.evermind ? { evermind: options.evermind } : {}),
-          projectId: null,
-        });
-      } finally {
-        starting.delete(chatId);
-      }
+    async prepareRun(chatId) {
+      const [catalog, systemPrompt, options] = await Promise.all([
+        ports.catalog(chatId),
+        ports.systemPrompt(),
+        ports.runOptions ? ports.runOptions(chatId) : Promise.resolve(null),
+      ]);
+      return {
+        resolvedSystemPrompt: options?.directives ? `${systemPrompt}\n\n${options.directives}` : systemPrompt,
+        tools: catalog.specs,
+        runTool: catalog.run,
+        needsConfirm: catalog.needsConfirm,
+        // A personal assistant answers and acts on the person's explicit request; it
+        // opens and staffs board work only when the chat is switched to Work
+        // (`chatMode.ts`).
+        chatMode: options?.chatMode ?? ROVR_DEFAULT_CHAT_MODE,
+        ...(options ? { maxTokens: options.maxTokens } : {}),
+        ...(options?.reasoning ? { reasoning: options.reasoning } : {}),
+        ...(options?.evermind ? { evermind: options.evermind } : {}),
+        projectId: null,
+      };
     },
-    stop: (chatId) => stopRun(chatId),
     confirm(chatId, ok) {
       const pending = getRunSnapshot(chatId).pendingConfirm;
       if (!ok && pending) ports.onDeclined?.(chatId, pending);
       resolveRunConfirm(chatId, ok);
     },
-    clearError: (chatId) => clearRunError(chatId),
   };
 }

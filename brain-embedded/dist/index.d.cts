@@ -3,13 +3,195 @@ import { ReactNode } from 'react';
 import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel, P as PageEngine, d as LocalBackend, e as LocalModelUnfit, B as BfiWorkerEngineOptions, H as HfModelStore } from './bfiWorkerEngine-BTMv49rL.cjs';
 export { f as BfiEngineInstance, g as BfiEngineStatic, h as BfiModelInfo, i as BfiModule, j as BfiWorkerEngine, C as ChatCompletionChunk, k as ChatCompletionsRequest, E as ENGINE_WORKER_FATAL, l as ENGINE_WORKER_IDLE_MS, m as ENGINE_WORKER_INVALIDATE, n as EngineWorker, o as EngineWorkerEndpoint, p as EngineWorkerEvents, q as EngineWorkerHandle, r as EngineWorkerOptions, s as PAGE_ENGINE_REPLY_TYPES, t as PAGE_ENGINE_REQUEST_TYPES, u as PageEngineClient, v as PageEngineClientOptions, w as PageEngineError, x as PageEnginePort, y as PageEngineReply, z as PageEngineRequest, A as PageEngineServerIo, W as WorkerLike, D as createBfiWorkerEngine, F as createEngineWorker, G as createPageEngineClient, I as isPageEngineReply, J as isPageEngineRequest, K as isWasmTrap, M as serveEngineWorker, N as servePageEngines } from './bfiWorkerEngine-BTMv49rL.cjs';
 import { ChatErrorAction } from './chatError.cjs';
-export { BrainRequestError, ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, brainRequestError, chatErrorAction } from './chatError.cjs';
+export { BrainRequestError, ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, PlatformRefusedCapability, brainRequestError, chatErrorAction } from './chatError.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 export { EvermindRecallItem, EvermindRecallResult, countReconciledMemories, formatEvermindMemoryBlock } from '@seanhogg/builderforce-memory/evermind';
 import { DeltaLearnPayload, LocalSuccessOutcome } from '@seanhogg/builderforce-memory-engine';
 import { LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 export { LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 import { HandoffPack } from '@seanhogg/builderforce-memory/handoff';
+
+/**
+ * THE INFERENCE MODE — what a person chooses about where models run, on every host
+ * (the web app, Rovr, the VS Code extension). The eight platform capabilities stay as
+ * ADVANCED overrides; the mode is what people see, and it derives the capabilities.
+ *
+ *   - `local-only` — never reaches the gateway: inference, connected features, sync and
+ *     direct providers are off whatever an override says (the promise the mode makes).
+ *   - `hybrid`     — local first, then the gateway's Auto route (the gateway itself puts
+ *     the free tier first). A picked model runs FIRST, never hard-pinned: if it fails,
+ *     the turn falls back to the local engine and then Auto. Connected features on; sync
+ *     per its own setting.
+ *   - `specific`   — exactly the person's pick (a cloud model, the BYO pool, Kimi Code, or
+ *     one local model), hard-pinned: no local attempt, no fallback; no pick is an error
+ *     (`no_specific_model`), never a silent Hybrid. Gateway inference AND direct providers on.
+ *
+ * Picking a model never changes the mode by itself — Specific is chosen in the mode
+ * control. What each mode does with a pick is brain-embedded's `createHostModelStream`.
+ *
+ * Default: `hybrid` once signed in, `local-only` signed out. A host persists only the
+ * person's explicit choice; an unset mode is re-derived, so signing in moves an
+ * undecided person onto Hybrid and their heartbeat / assigned work / insights keep
+ * working.
+ *
+ * Pure — no storage, no host.
+ */
+
+type InferenceMode = 'local-only' | 'hybrid' | 'specific';
+/** Every mode, in the order a control lists them (the recommended one first). */
+declare const INFERENCE_MODES: readonly InferenceMode[];
+declare function isInferenceMode(value: unknown): value is InferenceMode;
+/** The mode a person who never chose runs in. */
+declare function defaultInferenceMode(context: {
+    signedIn: boolean;
+}): InferenceMode;
+
+type ClientEntityId = string;
+type LocalEntityType = 'project' | 'ticket' | 'chat' | 'message' | 'execution' | 'step' | 'approval' | 'audit-definition' | 'audit-run' | 'audit-finding' | 'change-set' | 'memory-fact' | 'attachment-manifest' | 'policy-snapshot' | 'remediation';
+interface DestinationBinding {
+    platformInstance?: string;
+    accountId?: string;
+    tenantId?: string;
+    projectId?: string;
+    repository?: string;
+}
+type EntityDestination = {
+    kind: 'unbound';
+} | ({
+    kind: 'bound';
+} & DestinationBinding);
+interface LocalRecord<T = unknown> {
+    id: ClientEntityId;
+    entityType: LocalEntityType;
+    schemaVersion: number;
+    version: number;
+    baseVersion?: number;
+    destination: EntityDestination;
+    occurredAt: string;
+    updatedAt: string;
+    deletedAt?: string;
+    payload: T;
+    provenance?: {
+        actorId?: string;
+        deviceId: string;
+        source: 'local' | 'imported';
+        /**
+         * Trust label. `client-reported` is what a client claimed; `server-observed`
+         * is what the platform saw. Optional because records written before the label
+         * existed carry none, and an absent label reads as "not client-reported" —
+         * it is never upgraded to one.
+         */
+        evidence?: 'client-reported' | 'server-observed';
+        policyVersion?: string;
+        auditVersion?: string;
+        modelVersion?: string;
+        sequence?: number;
+    };
+}
+type JournalOperation = 'create' | 'update' | 'delete' | 'import';
+interface JournalEvent<T = unknown> {
+    /** Wire id — a UUID minted by the store at append; the server's idempotency key. */
+    eventId: string;
+    /**
+     * The caller's name for this logical write (`ticket:<id>:v1`, `fact:<id>:<v>`).
+     * Dedupes a double-enqueue while the event is pending. Not a wire id.
+     */
+    idempotencyKey?: string;
+    clientEntityId: ClientEntityId;
+    entityType: LocalEntityType;
+    operation: JournalOperation;
+    schemaVersion: number;
+    localSequence: number;
+    occurredAt: string;
+    baseVersion?: number;
+    dependsOn: string[];
+    destination: EntityDestination;
+    payload: T;
+    payloadHash: string;
+    deadLetter?: {
+        reason: string;
+        at: string;
+    };
+}
+interface ServerMapping {
+    destination: EntityDestination;
+    entityType: LocalEntityType;
+    clientEntityId: ClientEntityId;
+    serverId: string;
+    serverVersion: number;
+}
+interface SyncReceipt {
+    eventId: string;
+    status: 'accepted' | 'duplicate' | 'conflict' | 'rejected' | 'dependency_pending';
+    receivedAt: string;
+    serverId?: string;
+    serverVersion?: number;
+    detail?: string;
+}
+interface SyncConflict {
+    id: string;
+    clientEntityId: ClientEntityId;
+    entityType: LocalEntityType;
+    local: LocalRecord;
+    remote: LocalRecord;
+    reason: string;
+    createdAt: string;
+    resolvedAt?: string;
+}
+
+interface LocalFirstTransaction {
+    get<T = unknown>(entityType: LocalEntityType, id: string): Promise<LocalRecord<T> | undefined>;
+    list<T = unknown>(entityType?: LocalEntityType): Promise<LocalRecord<T>[]>;
+    put<T>(record: LocalRecord<T>, expectedVersion?: number): Promise<void>;
+    /**
+     * Remove one local row. A pull tombstone calls this instead of `put`: writing
+     * the row back would resurrect the entity the server deleted. Returns whether
+     * a row was present. A missing row is not an error — the delete already won.
+     */
+    delete(entityType: LocalEntityType, id: string): Promise<boolean>;
+    /**
+     * Enqueue one journal event. The store MINTS the wire `eventId` (a UUID — the
+     * server's `(tenant, device, event)` key). Callers name the logical write with
+     * `idempotencyKey` (e.g. `ticket:<id>:v1`): a second append with a key that is
+     * still pending returns the first event instead of enqueueing twice, and a
+     * `dependsOn` entry naming a pending key is rewritten to that event's id.
+     */
+    append<T>(event: AppendJournalEvent<T>): Promise<JournalEvent<T>>;
+    pending(destination?: EntityDestination): Promise<JournalEvent[]>;
+    acknowledge(eventIds: readonly string[]): Promise<void>;
+    putMapping(mapping: ServerMapping): Promise<void>;
+    mapping(entityType: LocalEntityType, clientEntityId: string, destination: EntityDestination): Promise<ServerMapping | undefined>;
+    putReceipt(receipt: SyncReceipt): Promise<void>;
+    putConflict(conflict: SyncConflict): Promise<void>;
+    conflicts(): Promise<SyncConflict[]>;
+    setCursor(destination: EntityDestination, cursor: string | undefined): Promise<void>;
+    cursor(destination: EntityDestination): Promise<string | undefined>;
+}
+/**
+ * What `append` takes. `eventId` is optional and kept only when it is already a
+ * UUID (a replayed wire event); any other value is a legacy composite id and is
+ * treated as the `idempotencyKey`.
+ */
+type AppendJournalEvent<T = unknown> = Omit<JournalEvent<T>, 'localSequence' | 'payloadHash' | 'eventId' | 'idempotencyKey'> & {
+    eventId?: string;
+    idempotencyKey?: string;
+    payloadHash?: string;
+};
+interface LocalFirstSnapshot {
+    records: LocalRecord[];
+    events: JournalEvent[];
+    mappings: ServerMapping[];
+    receipts: SyncReceipt[];
+    conflicts: SyncConflict[];
+    cursors: Record<string, string>;
+    nextSequence: number;
+}
+interface LocalFirstStore {
+    read<R>(work: (transaction: LocalFirstTransaction) => Promise<R>): Promise<R>;
+    transact<R>(work: (transaction: LocalFirstTransaction) => Promise<R>): Promise<R>;
+    export(): Promise<LocalFirstSnapshot>;
+    subscribe(listener: () => void): () => void;
+}
 
 /**
  * The SPENT vs SAVED contract — the shape the api's `spendSavingsSummary` produces, on
@@ -2861,188 +3043,6 @@ declare function BrainProvider({ config, children, }: {
 /** Consume the resolved brain runtime. Throws if no BrainProvider is mounted. */
 declare function useBrainConfig(): BrainRuntime;
 
-/**
- * THE INFERENCE MODE — what a person chooses about where models run, on every host
- * (the web app, Rovr, the VS Code extension). The eight platform capabilities stay as
- * ADVANCED overrides; the mode is what people see, and it derives the capabilities.
- *
- *   - `local-only` — never reaches the gateway: inference, connected features, sync and
- *     direct providers are off whatever an override says (the promise the mode makes).
- *   - `hybrid`     — local first, then the gateway's Auto route (the gateway itself puts
- *     the free tier first). A picked model runs FIRST, never hard-pinned: if it fails,
- *     the turn falls back to the local engine and then Auto. Connected features on; sync
- *     per its own setting.
- *   - `specific`   — exactly the person's pick (a cloud model, the BYO pool, Kimi Code, or
- *     one local model), hard-pinned: no local attempt, no fallback; no pick is an error
- *     (`no_specific_model`), never a silent Hybrid. Gateway inference AND direct providers on.
- *
- * Picking a model never changes the mode by itself — Specific is chosen in the mode
- * control. What each mode does with a pick is brain-embedded's `createHostModelStream`.
- *
- * Default: `hybrid` once signed in, `local-only` signed out. A host persists only the
- * person's explicit choice; an unset mode is re-derived, so signing in moves an
- * undecided person onto Hybrid and their heartbeat / assigned work / insights keep
- * working.
- *
- * Pure — no storage, no host.
- */
-
-type InferenceMode = 'local-only' | 'hybrid' | 'specific';
-/** Every mode, in the order a control lists them (the recommended one first). */
-declare const INFERENCE_MODES: readonly InferenceMode[];
-declare function isInferenceMode(value: unknown): value is InferenceMode;
-/** The mode a person who never chose runs in. */
-declare function defaultInferenceMode(context: {
-    signedIn: boolean;
-}): InferenceMode;
-
-type ClientEntityId = string;
-type LocalEntityType = 'project' | 'ticket' | 'chat' | 'message' | 'execution' | 'step' | 'approval' | 'audit-definition' | 'audit-run' | 'audit-finding' | 'change-set' | 'memory-fact' | 'attachment-manifest' | 'policy-snapshot' | 'remediation';
-interface DestinationBinding {
-    platformInstance?: string;
-    accountId?: string;
-    tenantId?: string;
-    projectId?: string;
-    repository?: string;
-}
-type EntityDestination = {
-    kind: 'unbound';
-} | ({
-    kind: 'bound';
-} & DestinationBinding);
-interface LocalRecord<T = unknown> {
-    id: ClientEntityId;
-    entityType: LocalEntityType;
-    schemaVersion: number;
-    version: number;
-    baseVersion?: number;
-    destination: EntityDestination;
-    occurredAt: string;
-    updatedAt: string;
-    deletedAt?: string;
-    payload: T;
-    provenance?: {
-        actorId?: string;
-        deviceId: string;
-        source: 'local' | 'imported';
-        /**
-         * Trust label. `client-reported` is what a client claimed; `server-observed`
-         * is what the platform saw. Optional because records written before the label
-         * existed carry none, and an absent label reads as "not client-reported" —
-         * it is never upgraded to one.
-         */
-        evidence?: 'client-reported' | 'server-observed';
-        policyVersion?: string;
-        auditVersion?: string;
-        modelVersion?: string;
-        sequence?: number;
-    };
-}
-type JournalOperation = 'create' | 'update' | 'delete' | 'import';
-interface JournalEvent<T = unknown> {
-    /** Wire id — a UUID minted by the store at append; the server's idempotency key. */
-    eventId: string;
-    /**
-     * The caller's name for this logical write (`ticket:<id>:v1`, `fact:<id>:<v>`).
-     * Dedupes a double-enqueue while the event is pending. Not a wire id.
-     */
-    idempotencyKey?: string;
-    clientEntityId: ClientEntityId;
-    entityType: LocalEntityType;
-    operation: JournalOperation;
-    schemaVersion: number;
-    localSequence: number;
-    occurredAt: string;
-    baseVersion?: number;
-    dependsOn: string[];
-    destination: EntityDestination;
-    payload: T;
-    payloadHash: string;
-    deadLetter?: {
-        reason: string;
-        at: string;
-    };
-}
-interface ServerMapping {
-    destination: EntityDestination;
-    entityType: LocalEntityType;
-    clientEntityId: ClientEntityId;
-    serverId: string;
-    serverVersion: number;
-}
-interface SyncReceipt {
-    eventId: string;
-    status: 'accepted' | 'duplicate' | 'conflict' | 'rejected' | 'dependency_pending';
-    receivedAt: string;
-    serverId?: string;
-    serverVersion?: number;
-    detail?: string;
-}
-interface SyncConflict {
-    id: string;
-    clientEntityId: ClientEntityId;
-    entityType: LocalEntityType;
-    local: LocalRecord;
-    remote: LocalRecord;
-    reason: string;
-    createdAt: string;
-    resolvedAt?: string;
-}
-
-interface LocalFirstTransaction {
-    get<T = unknown>(entityType: LocalEntityType, id: string): Promise<LocalRecord<T> | undefined>;
-    list<T = unknown>(entityType?: LocalEntityType): Promise<LocalRecord<T>[]>;
-    put<T>(record: LocalRecord<T>, expectedVersion?: number): Promise<void>;
-    /**
-     * Remove one local row. A pull tombstone calls this instead of `put`: writing
-     * the row back would resurrect the entity the server deleted. Returns whether
-     * a row was present. A missing row is not an error — the delete already won.
-     */
-    delete(entityType: LocalEntityType, id: string): Promise<boolean>;
-    /**
-     * Enqueue one journal event. The store MINTS the wire `eventId` (a UUID — the
-     * server's `(tenant, device, event)` key). Callers name the logical write with
-     * `idempotencyKey` (e.g. `ticket:<id>:v1`): a second append with a key that is
-     * still pending returns the first event instead of enqueueing twice, and a
-     * `dependsOn` entry naming a pending key is rewritten to that event's id.
-     */
-    append<T>(event: AppendJournalEvent<T>): Promise<JournalEvent<T>>;
-    pending(destination?: EntityDestination): Promise<JournalEvent[]>;
-    acknowledge(eventIds: readonly string[]): Promise<void>;
-    putMapping(mapping: ServerMapping): Promise<void>;
-    mapping(entityType: LocalEntityType, clientEntityId: string, destination: EntityDestination): Promise<ServerMapping | undefined>;
-    putReceipt(receipt: SyncReceipt): Promise<void>;
-    putConflict(conflict: SyncConflict): Promise<void>;
-    conflicts(): Promise<SyncConflict[]>;
-    setCursor(destination: EntityDestination, cursor: string | undefined): Promise<void>;
-    cursor(destination: EntityDestination): Promise<string | undefined>;
-}
-/**
- * What `append` takes. `eventId` is optional and kept only when it is already a
- * UUID (a replayed wire event); any other value is a legacy composite id and is
- * treated as the `idempotencyKey`.
- */
-type AppendJournalEvent<T = unknown> = Omit<JournalEvent<T>, 'localSequence' | 'payloadHash' | 'eventId' | 'idempotencyKey'> & {
-    eventId?: string;
-    idempotencyKey?: string;
-    payloadHash?: string;
-};
-interface LocalFirstSnapshot {
-    records: LocalRecord[];
-    events: JournalEvent[];
-    mappings: ServerMapping[];
-    receipts: SyncReceipt[];
-    conflicts: SyncConflict[];
-    cursors: Record<string, string>;
-    nextSequence: number;
-}
-interface LocalFirstStore {
-    read<R>(work: (transaction: LocalFirstTransaction) => Promise<R>): Promise<R>;
-    transact<R>(work: (transaction: LocalFirstTransaction) => Promise<R>): Promise<R>;
-    export(): Promise<LocalFirstSnapshot>;
-    subscribe(listener: () => void): () => void;
-}
-
 interface LocalBrainPersistenceOptions {
     store: LocalFirstStore;
     deviceId: string;
@@ -5334,6 +5334,16 @@ interface UseBrainConversationOptions {
      * work-mode work — see `chatMode.ts`. Omit when the host has not resolved it.
      */
     chatRoster?: readonly ChatRosterAgent[];
+    /**
+     * What a host can only know at RUN time, for the chat the run is in — resolved at each
+     * run's start and merged OVER the request this hook builds from its render-time
+     * options. The seam for a host whose tools are bound to the chat they act for (Rovr's
+     * browser tools write that chat's action ledger and tasks — and a draft chat only gets
+     * its id inside `send`), whose run options live on the chat's record, or whose system
+     * prompt is built from live context (the working tab). A throw refuses the run with its
+     * message; the user turn is already on record, so `retryLastTurn` can run it again.
+     */
+    prepareRun?: (chatId: number) => Promise<Partial<BrainRunRequest>>;
 }
 interface UseBrainConversation {
     messages: BrainMessage[];
@@ -5372,6 +5382,14 @@ interface UseBrainConversation {
     send(text: string, opts?: {
         addressedTo?: DirectedRecipient | null;
     }): Promise<boolean>;
+    /**
+     * Answer the active chat's REFUSED turn again — the trailing user message nothing
+     * replied to (only step rows after it), e.g. a turn a `no_local_model` verdict stopped.
+     * The remedy's re-send ("Switch to Hybrid" → this): the message is already persisted,
+     * so it is NOT written again — the run starts on it exactly as the auto-reply does.
+     * Returns false (and does nothing) when a run is in flight or there is no such turn.
+     */
+    retryLastTurn(): boolean;
     /**
      * Stop the in-flight run for the active chat: aborts the streaming LLM request
      * and unwinds the agent loop (no error surfaced). No-op when nothing is

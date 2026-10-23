@@ -935,5 +935,8 @@
   "How should BuilderForce run models?": "BuilderForce 应如何运行模型？",
   "Run models": "运行模型",
   "Recommended": "推荐",
-  "You can change this any time in the / menu, under Model.": "你可以随时在 / 菜单的“模型”下更改此设置。"
+  "You can change this any time in the / menu, under Model.": "你可以随时在 / 菜单的“模型”下更改此设置。",
+  "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.": "“仅本地”会让此次运行留在本设备上，因此无法连接 BuilderForce。请在 / 菜单的“模型”下切换到“混合”以允许连接。",
+  "Account sync is off, so this could not be saved to your account. Turn on builderforce.platform.synchronize in Settings, or keep working locally.": "账户同步已关闭，因此无法保存到你的账户。请在设置中开启 builderforce.platform.synchronize，或继续在本地工作。",
+  "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "你的某个 builderforce.platform.* 设置关闭了此次运行所需的功能。请在设置中更改，或在 / 菜单中选择其他模型。"
 }

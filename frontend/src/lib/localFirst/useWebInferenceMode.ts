@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { defaultInferenceMode, isInferenceMode, type InferenceMode } from '@builderforce/local-first';
-import type { PromptOptionsInferenceMode } from '@seanhogg/builderforce-brain-ui';
+import { inferenceModeOption, useInferenceModeGate, type InferenceModeGate, type PromptOptionsInferenceMode } from '@seanhogg/builderforce-brain-ui';
 import {
   WEB_INFERENCE_MODE_STORAGE_KEY,
   notifyWebInferenceMode,
@@ -65,12 +65,25 @@ export function useWebInferenceMode(): PromptOptionsInferenceMode & { chosen: bo
     const [rawMode, rawSignedIn] = state.split('|');
     const stored = isInferenceMode(rawMode) ? rawMode : null;
     const signedIn = rawSignedIn === '1';
+    const chosen = stored !== null;
     return {
-      value: stored ?? defaultInferenceMode({ signedIn }),
-      chosen: stored !== null,
+      ...inferenceModeOption({ value: stored ?? defaultInferenceMode({ signedIn }), chosen, onChange }),
+      chosen,
       signedIn,
-      needsChoice: stored === null,
-      onChange,
     };
   }, [state, onChange]);
+}
+
+/**
+ * THE web's turn door: the mode (above) and THE first-run gate over it
+ * (`useInferenceModeGate`). Every web host that starts turns ITSELF — the canvas and
+ * Studio (the entry prompt, an object asking Brain, a queued turn), the signed-in Brain
+ * panel's seed prompt — sends through `gate.request` and hands `gate` to its composer as
+ * `modeGate`, so the question shows in that composer whichever way the turn started and
+ * no turn ever runs before the person chose where models run.
+ */
+export function useWebTurnGate(): { inference: ReturnType<typeof useWebInferenceMode>; gate: InferenceModeGate } {
+  const inference = useWebInferenceMode();
+  const gate = useInferenceModeGate(inference);
+  return { inference, gate };
 }

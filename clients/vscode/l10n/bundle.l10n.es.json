@@ -935,5 +935,8 @@
   "How should BuilderForce run models?": "¿Cómo debe ejecutar BuilderForce los modelos?",
   "Run models": "Ejecutar modelos",
   "Recommended": "Recomendado",
-  "You can change this any time in the / menu, under Model.": "Puede cambiarlo en cualquier momento en el menú /, en Modelo."
+  "You can change this any time in the / menu, under Model.": "Puede cambiarlo en cualquier momento en el menú /, en Modelo.",
+  "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.": "«Solo local» mantiene esta ejecución en este dispositivo, así que no pudo llegar a BuilderForce. Cambia a «Híbrido» en el menú / , en Modelo, para permitirlo.",
+  "Account sync is off, so this could not be saved to your account. Turn on builderforce.platform.synchronize in Settings, or keep working locally.": "La sincronización de la cuenta está desactivada, así que esto no se pudo guardar en tu cuenta. Activa builderforce.platform.synchronize en Configuración o sigue trabajando en local.",
+  "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "Uno de tus ajustes builderforce.platform.* desactivó lo que esta ejecución necesitaba. Cámbialo en Configuración o elige otro modelo en el menú /."
 }

@@ -19,6 +19,8 @@ export interface CanvasConversationInput {
   nodes: CreationFlowNode[];
   edges: Edge[];
   joinedCollaborator: BrainSurfaceBodyProps['joinedCollaborator'];
+  /** The last turn's no-model refusal, as THE banner beside the conversation. */
+  refusal: BrainSurfaceBodyProps['refusal'];
 }
 
 /**
@@ -27,7 +29,7 @@ export interface CanvasConversationInput {
  * the transcript learns something new. They are one memoized bundle now, spread into
  * both, so they cannot drift into two subtly different chats.
  */
-export function useCanvasConversationProps({ brain, showExecutionDetail, updateBrainDock, trace, nodes, edges, joinedCollaborator }: CanvasConversationInput): CanvasConversationProps {
+export function useCanvasConversationProps({ brain, showExecutionDetail, updateBrainDock, trace, nodes, edges, joinedCollaborator, refusal }: CanvasConversationInput): CanvasConversationProps {
   const { brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, brainSurface, guestSignupPrompt } = brain;
   return useMemo(() => ({
     showExecutionDetail,
@@ -48,5 +50,6 @@ export function useCanvasConversationProps({ brain, showExecutionDetail, updateB
     onRateMessage: brainSurface.onRateMessage,
     ratings: brainSurface.ratings,
     guestSignup: guestSignupPrompt,
-  }), [brainCollaborators, brainMessages, brainNode, brainReveal, brainRunShownStartedAt, brainRunning, brainSurface.onRateMessage, brainSurface.ratings, brainSurface.runKey, edges, guestSignupPrompt, joinedCollaborator, nodes, replayBrainMessage, answerBrainQuestion, showExecutionDetail, trace, updateBrainDock]);
+    refusal,
+  }), [refusal, brainCollaborators, brainMessages, brainNode, brainReveal, brainRunShownStartedAt, brainRunning, brainSurface.onRateMessage, brainSurface.ratings, brainSurface.runKey, edges, guestSignupPrompt, joinedCollaborator, nodes, replayBrainMessage, answerBrainQuestion, showExecutionDetail, trace, updateBrainDock]);
 }

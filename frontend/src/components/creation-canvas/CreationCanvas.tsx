@@ -153,7 +153,7 @@ import { CanvasBoardFlow, canvasMinimapColor } from './stage/CanvasBoardFlow';
 import { CanvasShell } from './stage/CanvasShell';
 import { CanvasBoardStage } from './stage/CanvasBoardStage';
 import { CanvasObjectPickerHost } from './stage/CanvasObjectPickerHost';
-import { useCanvasTurnErrors } from './hooks/useCanvasTurnErrors';
+import { useCanvasTurnGate } from './hooks/useCanvasTurnGate';
 import { useCanvasTourDefaults } from './hooks/useCanvasTourDefaults';
 import { useCanvasSocialCampaignSync } from './hooks/useCanvasSocialCampaignSync';
 import { useCanvasStandup } from './hooks/useCanvasStandup';
@@ -191,7 +191,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const { t, canvasText, canvasTextRef, canvasNotices, templateText, tMiro, tSocial, tStep, tPoll, importLabel } = useCanvasTranslators();
   const errorText = useErrorText();
   const router = useRouter();
-  const { guestLimit, setGuestLimit, describeTurnError } = useCanvasTurnErrors({ sessionId, t });
+  const { guestLimit, setGuestLimit, describeTurnError, modelRefusal, setModelRefusal, modeGate, composerId: canvasComposerId } = useCanvasTurnGate({ sessionId, t });
   const confirm = useConfirm();
   const toast = useToast();
   const storageKey = creationStorageKey(sessionId);
@@ -579,7 +579,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
 
   const { canvasActions } = useCanvasBrainVocabulary({ buildsRef: sessionApp.buildsRef, createApp: sessionApp.createApp, appWritten: sessionApp.appWritten, buildSocialFeedNode, canEdit, canvasText, convertObjectToDiagram, effectiveSelectedIds, fmt, inFlightUseCaseIdRef, layoutViewportRef, localizedTourDefaults, nodes, nodesRef, openAccountGate, persistence, promptRef, recentJournalEvidence, requireAccount, resolvedScopeMode, scopedNodeIds, sessionId, setDockPanel, socialAccountGate, stage, t, tSocial, turnToolCallsRef });
   const { addAgentKnowledge, runAgentTest } = useCanvasAgentTesting({ brainRuntimeRef, canEdit, canvasNotices, describeTurnError, disableBrainModel, edges, modelSelection, nodes, persistence, placeAppendedRef, recordBrainCompletion, setEdges, setNodes, setNotice, t });
-  const { evaluateCanvas } = useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, runShaping: runShapingControls.runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, stage, t, timeline, title, turnToolCallsRef, turnUnansweredRef });
+  const { evaluateCanvas } = useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modeGate, modelSelection, runShaping: runShapingControls.runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setModelRefusal, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, stage, t, timeline, title, turnToolCallsRef, turnUnansweredRef });
   const { rejectProposedChanges, applyAndEnableAutoApply, applyProposedChanges } = useCanvasProposalReview({ acceptedProposalIds, autoApplyPending, comparisonModelIds, describeTurnError, entryAppPending: entryApp.pending, evaluateCanvas, flowRef, hydratedRef, initialFocusId, initialPrompt, initialPromptSubmittedRef, layoutViewportRef, modelComparisonStartedRef, nodes, persistence, proposedChanges, selectedId, sessionId, setAcceptedProposalIds, setAutoApplyMode, setAutoApplyPending, setEdges, setNodes, setNotice, setPendingBrainActions, setProposedChanges, setSelectedId, setSelectedIds, setSurface, stage, t, thinking, timeline });
   const { resolveWorkflowNode, buildFlowFromFrame, buildFlow, openEvermindBuild, loadEvermindTemplate, evermindBuild, setEvermindBuild } = useCanvasFlowBuild({ connectionKind, edgesRef, errorText, framedBoardRef, nodes, nodesRef, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes, setNotice, t, updateNodeData });
   const { compileWorkflow, runWorkflow, unpackWorkflow, saveAgent } = useCanvasWorkflowRun({ buildFlowFromFrame, canRun, connectionKind, errorText, framedBoardRef, persistence, requireAccount, resolveWorkflowNode, selectedNode, sessionId, setEdges, setNodes, setNotice, setSelectedId, setSelectedIds, t });
@@ -731,12 +731,12 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
     [canvasNodeTypes],
   );
   const { openOutcomeMetrics, openDiagnostics, buildDiagnostics, buildProofJourneyDiagnostics } = useCanvasDiagnostics({ allMembers, autoApplyRef, brainRunStartedAt, brainRuntimeRef, brainTrace, canvasActions, currentGraphRef, edges, effectiveSelectedIds, journalRef, lastSavedGraphRef, memoryEnabled, modelSelection, nodes, pendingInvitations, persistence, proposedChanges, realtimeState, resolvedScopeMode, revisionRef, saveInFlightRef, scopedNodeIds, scopedNodes, sessionId, sessionMode, sessionRole, setDiagnosticsOpen, setHistoryOpen, setOutcomeMetrics, setOutcomeMetricsError, setOutcomeMetricsLoading, setOutcomeMetricsOpen, t, thinking, timeline, title, toast, undoStackRef });
-  const { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies } = useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStartedAt, brainTrace, cardActBoard, cardsEditable, currentUserId, deleteObjects, edges, evermindProjectId, guestLimit, inRoom, joinedCollaborator, liveMembers, livePresence, members, nodes, openBrainDock, persistence, presenceSelfId, presentMode, sendPresence, sessionId, boardPath: lensState.boardPath, setSelectedId, setSelectedIds, sharedRoom, startCanvasTurnRef, surfaceDef, t, thinking, timeline, title, updateBrainDock, updateNodeData });
+  const { brainSurfaceOpen, brainPlacement, rosterMembers, seatedAgents, boardBridge, spacePresence, brainDockReserved, brainSurface, brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, guestSignupPrompt, roomOccupants, roomSpeechBySeat, revealSpeechInChat, rosterSelfId, brainUnreadReplies, brainRefusal } = useCanvasBrainSurface({ activeAgentIds, brainDock, brainRunStartedAt, brainTrace, cardActBoard, cardsEditable, currentUserId, deleteObjects, edges, evermindProjectId, guestLimit, inRoom, joinedCollaborator, liveMembers, livePresence, members, nodes, openBrainDock, persistence, presenceSelfId, presentMode, sendPresence, sessionId, boardPath: lensState.boardPath, refusal: { modelRefusal, setModelRefusal, composerId: canvasComposerId }, setSelectedId, setSelectedIds, sharedRoom, startCanvasTurnRef, surfaceDef, t, thinking, timeline, title, updateBrainDock, updateNodeData });
 
   /* The prompt sits bottom-centre, where every chat product people already use puts it,
      and is deliberately NOT part of the Brain surface: it stays reachable whether Brain
      is inline in its Object, docked to either edge, or closed entirely. */
-  const { brainDockDrawn, placement: effectivePromptPlacement, inBrainPanel: promptInBrainPanel } = useCanvasPromptPlacement({ hostOwnsSurface: !!hostSurfaces?.[surface], brainIsSurface: surfaceDef.brainIsSurface, preference: promptPlacement, setPreference: setPromptPlacement, brainSurfaceOpen, brainPlacement, lensPlacement: lensDef.promptPlacement });
+  const { brainDockDrawn, placement: effectivePromptPlacement, inBrainPanel: promptInBrainPanel } = useCanvasPromptPlacement({ hostOwnsSurface: !!hostSurfaces?.[surface], brainIsSurface: surfaceDef.brainIsSurface, preference: promptPlacement, setPreference: setPromptPlacement, brainSurfaceOpen, brainPlacement, lensPlacement: lensDef.promptPlacement, askingMode: modeGate.asking });
   /** THE ONE COMPOSER — see `CanvasComposer`. One element, drawn in exactly one of
    *  its two homes below: the Brain panel's last row, or floating over the board. */
   const composer = !presentMode && effectivePromptPlacement !== 'closed' && <CanvasComposer
@@ -748,7 +748,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
     memoryProjectId={evermindProjectId} memoryLoading={memoryLoading} onTwilioJourney={setTwilioPromptSelected} applyTemplate={applyTemplate} conversationStarted={brainMessages.length > 0}
     input={{
       // NEVER disabled while Brain works: an empty composer offers Stop, typing queues the next turn.
-      value: prompt, onChange: setPrompt, running: thinking, onStop: stopCanvasRun, queued: queuedTurns,
+      value: prompt, onChange: setPrompt, running: thinking, onStop: stopCanvasRun, queued: queuedTurns, modeGate, composerId: canvasComposerId,
       onAttach: attachCanvasArtifact, onAddContext: openObjectPicker, autoMode: autoApply, onAutoModeChange: setAutoApplyMode,
       modelSelection, modelOptions: canvasModelOptions, onModelSelectionChange: setModelSelection, modelIdentity,
       chatMode: sessionMode, onChatModeChange: setSessionMode, memoryEnabled, onMemoryChange: setMemoryMode,
@@ -765,7 +765,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const sessionFacts = useMemo<CanvasSessionFacts>(() => ({ sessionId, persistence, role: sessionRole, canEdit, notify: setNotice, requireAccount, lens, boardPath: lensState.boardPath }), [canEdit, lens, lensState.boardPath, persistence, requireAccount, sessionId, sessionRole, setNotice]);
   const brainConversation = useCanvasConversationProps({
     brain: { brainMessages, brainReveal, brainRunning, brainRunShownStartedAt, brainNode, brainCollaborators, replayBrainMessage, answerBrainQuestion, brainSurface, guestSignupPrompt },
-    showExecutionDetail: brainDock.showExecutionDetail, updateBrainDock, trace: brainTrace, nodes, edges, joinedCollaborator,
+    showExecutionDetail: brainDock.showExecutionDetail, updateBrainDock, trace: brainTrace, nodes, edges, joinedCollaborator, refusal: brainRefusal,
   });
   const closeAccountGate = useCallback(() => setAccountGate(null), []);
 

@@ -176,7 +176,7 @@ export type { TurnInterruption } from './finishReason';
 // fetch boundary, and ONE classifier turns any failure into the fix a user can take
 // (reconnect / upgrade / add a card). Consumed by the run store AND the banner UI.
 export { BrainRequestError, brainRequestError, chatErrorAction, LOCAL_ENGINE_FAILURE_CODES, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, NOT_SIGNED_IN } from './chatError';
-export type { ChatErrorAction, ChatErrorActionKind, LocalEngineFailureCode } from './chatError';
+export type { ChatErrorAction, ChatErrorActionKind, LocalEngineFailureCode, PlatformRefusedCapability } from './chatError';
 
 // Composer Effort → real request params (max_tokens + vendor-neutral reasoning
 // intent) + the level's prose nudge. The ONE effort table: hosts render their

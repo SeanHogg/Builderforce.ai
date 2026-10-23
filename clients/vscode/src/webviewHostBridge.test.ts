@@ -11,6 +11,7 @@ vi.mock("./errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("./gateway", () => ({ getBaseUrl: () => "https://api.example", getWebBaseUrl: () => "https://web.example" }));
 vi.mock("./localFirstStore", () => ({ localBrainApplication: () => ({ persistence: {} }) }));
 vi.mock("./platformPolicy", () => ({
+  platformInferenceMode: () => "hybrid",
   platformPolicy: () => ({
     snapshot: () => policyState.snapshot,
     subscribe: (listener: () => void) => {
@@ -31,6 +32,7 @@ vi.mock("./platformCallGate", () => ({
 }));
 
 import { handleSharedHostMessage, watchedWebviewCount } from "./webviewHostBridge";
+import { UNKNOWN_PERSISTENCE_METHOD } from "./localPersistenceDispatch";
 
 type Ctx = Parameters<typeof handleSharedHostMessage>[0];
 type View = NonNullable<Parameters<typeof handleSharedHostMessage>[1]>;
@@ -86,4 +88,22 @@ describe("webview host bridge policy push", () => {
     changePolicy({ gatewayInference: true });
     expect(policyFrames(view.posted)).toHaveLength(1);
   });
+});
+
+describe("local.persistence dispatch", () => {
+  // The mocked host persistence is `{}` — the shape of the 2026.10.57 bug, where the
+  // allowed name existed on the list and not on the object.
+  const responses = (posted: Array<{ type?: string }>) =>
+    posted.filter((message) => message.type === "response") as Array<{ ok: boolean; error?: string }>;
+
+  it.each(["listChats", "toString", "constructor", "nope", 42, undefined])(
+    "answers a method the host object cannot run (%s) with a typed refusal, never a TypeError",
+    async (method) => {
+      const view = surface();
+      await handleSharedHostMessage(ctx, view.webview, { type: "local.persistence", id: "r1", method, args: [] } as never, view.owner);
+      expect(responses(view.posted)).toEqual([expect.objectContaining({ ok: false, error: UNKNOWN_PERSISTENCE_METHOD })]);
+      expect(responses(view.posted)[0]?.error).not.toMatch(/is not a function/);
+      view.dispose();
+    },
+  );
 });

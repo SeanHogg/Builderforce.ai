@@ -5,6 +5,7 @@ import { trackActivity } from '@/lib/activity/tracker';
 import { canvasSurface } from '@/lib/canvasHost';
 import { GuestAiUnavailableError } from '@/lib/canvasAiErrors';
 import { guestLimitRefusal, type GuestLimitRefusal } from '@/lib/guestLimit';
+import type { CanvasModelRefusal } from '../brainTurn/modelRefusal';
 
 export interface UseCanvasTurnErrorsDeps {
   sessionId: string;
@@ -20,6 +21,12 @@ export function useCanvasTurnErrors({ sessionId, t }: UseCanvasTurnErrorsDeps) {
    * tab and comes back to a working canvas is not still being sold an account.
    */
   const [guestLimit, setGuestLimit] = useState<GuestLimitRefusal | null>(null);
+  /**
+   * The no-model refusal that ended this board's last turn (`modelRefusal.ts`), or null.
+   * Rendered as THE banner with its remedies beside the conversation; cleared when the
+   * next turn starts, when a remedy is taken, or when the person dismisses it.
+   */
+  const [modelRefusal, setModelRefusal] = useState<CanvasModelRefusal | null>(null);
   const tBrain = useTranslations('brain');
   /**
    * The one place a failed AI turn becomes words. Known failures the visitor can
@@ -53,5 +60,5 @@ export function useCanvasTurnErrors({ sessionId, t }: UseCanvasTurnErrorsDeps) {
     }
     return error instanceof Error && error.message ? error.message : t(fallbackKey);
   }, [sessionId, t, tBrain]);
-  return { guestLimit, setGuestLimit, describeTurnError };
+  return { guestLimit, setGuestLimit, describeTurnError, modelRefusal, setModelRefusal };
 }

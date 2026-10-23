@@ -252,9 +252,15 @@ const STEP_PREFIX = "steps:";
 
 /**
  * Brain run step rows, durable the same way: one queue per chat in the workspace state,
- * scoped to the tenant, paused while the API is unreachable. Installed at activation
- * (`installStepDurability`), which drains every stored queue through `sendRows` right
- * away and again on reconnect — no run in the chat is needed.
+ * scoped to the tenant. Installed at activation (`installStepDurability`), which drains
+ * every stored queue through `sendRows` right away — no run in the chat is needed.
+ *
+ * NO platform send permission and no API-reachability pause: in the editor `sendRows`
+ * writes the HOST'S LOCAL store (`localBrainApplication().persistence.sendMessages`),
+ * which is not a platform send — account sync is the sync transport's own job, gated by
+ * `synchronize` there. Holding this queue on the platform send gate refused a signed-in
+ * Hybrid run's own closing write (`agent.run failed: platform_send_disabled`) whenever
+ * sync was off, and the web and Rovr install their step durability with no such gate.
  */
 export function durableStepHost(
   sendRows: (chatId: number, rows: StepOutgoingMessage[], asTenant: number | undefined) => Promise<unknown>,
@@ -272,13 +278,7 @@ export function durableStepHost(
         })
         .map((k) => k.slice(prefix.length));
     },
-    sendRows: (chatId, rows, scope) =>
-      guardSend(outboxSendPermission, () => sendRows(chatId, rows, scopeTenantId(scope))),
-    online: apiConnectivity,
+    sendRows: (chatId, rows, scope) => sendRows(chatId, rows, scopeTenantId(scope)),
     scope: () => scopes.workspace,
-    // G12: the queue itself must hear the permission, not only the sender. Without
-    // this, a revoke never reaches the step queue's subscription, so a flush that
-    // is already queued keeps sending after the permission is gone.
-    sendPermission: outboxSendPermission,
   };
 }

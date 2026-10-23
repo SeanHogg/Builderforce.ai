@@ -27,6 +27,9 @@ import { runCanvasGroupTurn } from '../brainTurn/runCanvasGroupTurn';
 import { type CanvasTurnSettleContext, settleCanvasTurnFailure, settleCanvasTurnSuccess } from '../brainTurn/settleCanvasTurn';
 import { previewPicksContext, takePreviewPicks } from '@/lib/workspace/previewPick';
 import { canvasRunKey } from '../brainTurn/canvasRunKey';
+import type { CanvasModelRefusal } from '../brainTurn/modelRefusal';
+import type { InferenceModeGate } from '@seanhogg/builderforce-brain-ui';
+import { useLatestRef } from './useLatestRef';
 
 export interface UseCanvasBrainTurnDeps {
   appendTimeline: (role: 'user' | 'assistant' | 'system', body: string, metadata?: CreationTimelineMessage['metadata'], clientMessageId?: string) => string;
@@ -48,6 +51,13 @@ export interface UseCanvasBrainTurnDeps {
   lastTurnProvenance: () => { model?: string; tools?: string[]; };
   members: { userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; }[];
   memoryEnabled: boolean;
+  /**
+   * THE first-run gate (`useWebTurnGate`) — the SAME instance the canvas composer shows its
+   * question through. Every canvas turn passes it: the entry prompt (landing / Studio),
+   * the composer, an object asking Brain, a queued turn. A turn sent before the person
+   * chose where models run is held behind the question and runs once they answer.
+   */
+  modeGate: Pick<InferenceModeGate, 'request'>;
   modelSelection: ChatModelSelection;
   /** The composer's Effort and Thinking for this session. */
   runShaping: CanvasRunShaping;
@@ -66,6 +76,8 @@ export interface UseCanvasBrainTurnDeps {
   setAutoApplyPending: Dispatch<SetStateAction<boolean>>;
   setEdges: Dispatch<SetStateAction<Edge[]>>;
   setGuestLimit: Dispatch<SetStateAction<GuestLimitRefusal | null>>;
+  /** The board's live no-model refusal (`modelRefusal.ts`) — set by a refused turn, cleared by the next. */
+  setModelRefusal: Dispatch<SetStateAction<CanvasModelRefusal | null>>;
   setModelSelection: Dispatch<SetStateAction<ChatModelSelection>>;
   setNodes: Dispatch<SetStateAction<CanvasObject[]>>;
   setNotice: (text: string) => void;
@@ -81,8 +93,8 @@ export interface UseCanvasBrainTurnDeps {
   turnUnansweredRef: RefObject<{ reason: string; detail?: string; } | null>;
 }
 
-export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modelSelection, runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, stage, t, timeline, title, turnToolCallsRef, turnUnansweredRef }: UseCanvasBrainTurnDeps) {
-  const evaluateCanvas = useCallback((promptOverride?: string) => {
+export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeRef, canvasActions, canvasNotices, currentUserId, describeTurnError, disableBrainModel, edges, effectiveSelectedIds, evermindProjectId, inFlightUseCaseIdRef, initialPromptSubmittedRef, journalRef, lastTurnProvenance, members, memoryEnabled, modeGate, modelSelection, runShaping, nodes, persistence, prompt, recordBrainCompletion, requireAccount, resolvedScopeMode, scopedNodeIds, scopedNodes, sessionId, sessionMode, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setModelRefusal, setModelSelection, setNodes, setNotice, setPrompt, setProposedChanges, setSelectedId, setSelectedIds, stage, t, timeline, title, turnToolCallsRef, turnUnansweredRef }: UseCanvasBrainTurnDeps) {
+  const runTurn = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
     // The run store is the truth about whether a turn is in flight (`thinking` trails it
     // by a render): a second start would be refused by the store anyway, but only after
@@ -122,6 +134,8 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeR
     // body below runs synchronously up to its first await, inside the store's claim.
     void startEngineRun(canvasRunKey(sessionId), async (run) => {
       setNotice(t('noticeBrainEvaluating'));
+      // A new turn answers the last refusal's banner, whichever way it was sent.
+      setModelRefusal(null);
       const initialMessage = initialPromptSubmittedRef.current ? adoptableInitialMessage(timeline, requestText) : undefined;
       const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
       const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'human', ref: currentUserId || 'local', name: promptAuthor?.displayName || 'You' } }, initialMessage?.clientMessageId);
@@ -176,7 +190,7 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeR
         'turn', 'brain.turn',
         `scope=${resolvedScopeMode} (${scopedNodes.length}/${nodes.length} objects) · ${request.slice(0, 80)}`,
       );
-      const settle: CanvasTurnSettleContext = { appendTimeline, autoApplyRef, brainId, describeTurnError, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, signal: run.signal, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, stage, t, turnDone, turnUnansweredRef };
+      const settle: CanvasTurnSettleContext = { appendTimeline, autoApplyRef, brainId, describeTurnError, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, signal: run.signal, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setModelRefusal, setNodes, setNotice, setProposedChanges, stage, t, turnDone, turnUnansweredRef };
       try {
         const answer = await runCanvasGroupTurn({ appendTimeline, autoApplyRef, brainId, brainRuntimeRef, canvasActions, canvasNotices, connectedAgentNodes, describeTurnError, disableBrainModel, evermindProjectId, journalRef, memoryEnabled, modelSelection, runShaping, nodes, persistence, recordBrainCompletion, request, requestMessageId, resolvedScopeMode, scopedNodeIds, sessionId, sessionMode, setActiveAgentIds, setModelSelection, setNodes, run, stage, t, timeline, title, turnSnapshot, turnToolCallsRef, turnUnansweredRef });
         settleCanvasTurnSuccess(settle, answer);
@@ -184,8 +198,27 @@ export function useCanvasBrainTurn({ appendTimeline, autoApplyRef, brainRuntimeR
         // The canvas narrates its own failure (transcript row, notice, outcome record), so
         // the run settles cleanly rather than repeating it as the cell's error.
         settleCanvasTurnFailure(settle, error);
+      } finally {
+        // EVERY `brain.turn` ends ok or failed. The settle paths close it themselves (and
+        // the span ignores a second close); this is the floor for a settle that threw
+        // part-way, so no turn is ever left reading "never completed".
+        turnDone({ ok: false, detail: 'ended without settling' });
       }
     });
-  }, [prompt, persistence, inFlightUseCaseIdRef, sessionId, resolvedScopeMode, scopedNodes, setNotice, t, initialPromptSubmittedRef, timeline, members, appendTimeline, scopedNodeIds, currentUserId, nodes, setSelectedId, setSelectedIds, stage, turnUnansweredRef, turnToolCallsRef, setNodes, setProposedChanges, edges, effectiveSelectedIds, setActiveAgentIds, journalRef, autoApplyRef, describeTurnError, lastTurnProvenance, setAcceptedProposalIds, setAutoApplyPending, setEdges, setGuestLimit, brainRuntimeRef, canvasActions, canvasNotices, disableBrainModel, evermindProjectId, memoryEnabled, modelSelection, runShaping, recordBrainCompletion, sessionMode, setModelSelection, title, requireAccount, setPrompt]);
+  }, [prompt, persistence, inFlightUseCaseIdRef, sessionId, resolvedScopeMode, scopedNodes, setNotice, t, initialPromptSubmittedRef, timeline, members, appendTimeline, scopedNodeIds, currentUserId, nodes, setSelectedId, setSelectedIds, stage, turnUnansweredRef, turnToolCallsRef, setNodes, setProposedChanges, edges, effectiveSelectedIds, setActiveAgentIds, journalRef, autoApplyRef, describeTurnError, lastTurnProvenance, setAcceptedProposalIds, setAutoApplyPending, setEdges, setGuestLimit, brainRuntimeRef, canvasActions, canvasNotices, disableBrainModel, evermindProjectId, memoryEnabled, modelSelection, runShaping, recordBrainCompletion, sessionMode, setModelSelection, title, requireAccount, setPrompt, setModelRefusal]);
+  /**
+   * THE canvas turn entry: through the first-run gate, then the turn. Let through at once,
+   * it is exactly the turn it always was (this render's `runTurn`). HELD, it runs the
+   * NEWEST `runTurn` when the person answers — the board as it is then, not as it was
+   * when the turn was asked for.
+   */
+  const runTurnRef = useLatestRef(runTurn);
+  const { request: requestTurn } = modeGate;
+  const evaluateCanvas = useCallback((promptOverride?: string) => {
+    if (!(promptOverride ?? prompt).trim()) return;
+    let held = false;
+    requestTurn(() => (held ? runTurnRef.current : runTurn)(promptOverride));
+    held = true;
+  }, [prompt, requestTurn, runTurn, runTurnRef]);
   return { evaluateCanvas };
 }

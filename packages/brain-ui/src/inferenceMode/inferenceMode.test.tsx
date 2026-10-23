@@ -8,6 +8,7 @@ import { DEFAULT_PROMPT_OPTIONS_LABELS, promptOptionsLabelsFrom } from '../promp
 import { DEFAULT_INFERENCE_MODE_LABELS, INFERENCE_MODE_LABEL_FIELDS } from './labels';
 import { requestComposerMenu, useComposerMenuRequest } from '../promptOptions/composerMenuRequest';
 import { useInferenceModeGate, type InferenceModeGate } from './useInferenceModeGate';
+import { inferenceModeOption, modelRemedies } from './modelRemedies';
 import type { PromptOptionsInferenceMode } from './InferenceModeControl';
 
 function mount(ui: ReactElement): { el: HTMLDivElement; rerender: (next: ReactElement) => void; unmount: () => void } {
@@ -156,6 +157,65 @@ describe("useInferenceModeGate — THE first-run gate, shared by Send and a host
     act(() => { gate.request(sent); });
     expect(sent).toHaveBeenCalledTimes(2);
     unmount();
+  });
+
+  it('keeps EVERY held send, in order, and the answer opens the gate before the host re-renders', async () => {
+    let gate!: InferenceModeGate;
+    const order: string[] = [];
+    // A host whose mode store has not re-rendered yet: needsChoice stays true after the pick.
+    const { el, unmount } = mount(<Host mode={{ value: 'local-only', onChange: () => {}, needsChoice: true }} onReady={(g) => { gate = g; }} onSubmit={() => {}} />);
+    act(() => { gate.request(() => order.push('landing')); });
+    act(() => { gate.request(() => order.push('typed')); });
+    expect(order).toEqual([]);
+    const hybrid = el.querySelector('.bf-imode-ask__choice.is-recommended') as HTMLButtonElement;
+    await act(async () => { hybrid.click(); });
+    expect(order).toEqual(['landing', 'typed']);
+    // A held send that passes the gate again (a door behind a composer) runs now — never held twice.
+    let ranNow = false;
+    act(() => { ranNow = gate.request(() => order.push('nested')); });
+    expect(ranNow).toBe(true);
+    expect(order).toEqual(['landing', 'typed', 'nested']);
+    expect(el.textContent).not.toContain(DEFAULT_INFERENCE_MODE_LABELS.inferenceModeAskTitle);
+    unmount();
+  });
+});
+
+describe('modelRemedies — THE no-model remedies every host renders', () => {
+  it('Switch to Hybrid applies the mode first, then re-sends the refused turn', async () => {
+    const calls: string[] = [];
+    const remedies = modelRemedies({
+      mode: 'local-only',
+      setMode: async (mode) => { calls.push(`mode:${mode}`); },
+      composerId: 'c-remedy',
+      onDismiss: () => calls.push('dismiss'),
+      retry: () => calls.push('retry'),
+    });
+    await act(async () => { remedies.onSwitchToHybrid!(); });
+    expect(calls).toEqual(['dismiss', 'mode:hybrid', 'retry']);
+  });
+
+  it("offers no Switch to Hybrid off Local only; Download and Pick open THIS composer's Model tab", () => {
+    const onDismiss = vi.fn();
+    const remedies = modelRemedies({ mode: 'hybrid', setMode: () => {}, composerId: 'c-remedy-2', onDismiss });
+    expect(remedies.onSwitchToHybrid).toBeUndefined();
+    function Probe({ onRequest }: { onRequest: (tab: string | undefined) => void }) {
+      onRequest(useComposerMenuRequest('c-remedy-2')?.tab);
+      return null;
+    }
+    const seen: Array<string | undefined> = [];
+    const { unmount } = mount(<Probe onRequest={(tab) => seen.push(tab)} />);
+    act(() => { remedies.onPickModel!(); });
+    expect(seen.at(-1)).toBe('model');
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    const download = vi.fn();
+    modelRemedies({ mode: 'local-only', setMode: () => {}, composerId: 'x', onDismiss, downloadLocalModel: download }).onDownloadLocalModel!();
+    expect(download).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('inferenceModeOption asks anyone who never chose — signed in or not', () => {
+    expect(inferenceModeOption({ value: 'local-only', chosen: false, onChange: () => {} }).needsChoice).toBe(true);
+    expect(inferenceModeOption({ value: 'hybrid', chosen: true, onChange: () => {} }).needsChoice).toBe(false);
   });
 });
 
@@ -345,6 +405,41 @@ describe('<ChatErrorBanner> local_engine_failed', () => {
     act(() => { buttonNamed(el, 'Manage on-device models').click(); });
     expect(onPickModel).toHaveBeenCalledTimes(1);
     expect(onDownloadLocalModel).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+});
+
+describe('<ChatErrorBanner> platform_refused', () => {
+  it('names the mode and offers "Switch to Hybrid" — never the raw platform_send_disabled code', () => {
+    const onSwitchToHybrid = vi.fn();
+    const { el, unmount } = mount(
+      <ChatErrorBanner
+        error="agent.run failed: platform_send_disabled"
+        action={{ kind: 'platform_refused', capability: 'send', setting: 'inferenceMode' }}
+        onDismiss={() => {}}
+        onSwitchToHybrid={onSwitchToHybrid}
+        labels={{ platformRefusedMode: 'Local only keeps this on the device.' }}
+      />,
+    );
+    expect(el.textContent).not.toContain('platform_send_disabled');
+    expect(el.textContent).toContain('Local only keeps this on the device.');
+    act(() => { buttonNamed(el, 'Switch to Hybrid').click(); });
+    expect(onSwitchToHybrid).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('names the sync switch for a sync refusal, and offers no mode switch', () => {
+    const { el, unmount } = mount(
+      <ChatErrorBanner
+        error="platform_synchronize_disabled"
+        action={{ kind: 'platform_refused', capability: 'synchronize', setting: 'synchronize' }}
+        onDismiss={() => {}}
+        onSwitchToHybrid={() => {}}
+      />,
+    );
+    expect(el.textContent).not.toContain('platform_synchronize_disabled');
+    expect(el.textContent).toContain('Account sync is off');
+    expect(buttonNamed(el, 'Switch to Hybrid')).toBeUndefined();
     unmount();
   });
 });

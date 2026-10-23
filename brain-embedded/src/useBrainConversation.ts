@@ -27,7 +27,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { isMidTurnMetadata } from '@builderforce/agent-loop';
 import { useBrainConfig } from './config';
 import { useRunSnapshot } from './useRunSnapshot';
-import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
+import { isStepMessage, type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
 import { transcriptSeedFrom } from './transcriptSeed';
 import { mergeTranscript } from './mergeTranscript';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
@@ -51,6 +51,7 @@ import {
   getRunTrace,
   resolveRunConfirm,
   clearRunError,
+  type BrainRunRequest,
 } from './brainRunStore';
 
 /** The list a chat reads before its own has loaded — one identity, so effects keyed on
@@ -153,6 +154,16 @@ export interface UseBrainConversationOptions {
    * work-mode work — see `chatMode.ts`. Omit when the host has not resolved it.
    */
   chatRoster?: readonly ChatRosterAgent[];
+  /**
+   * What a host can only know at RUN time, for the chat the run is in — resolved at each
+   * run's start and merged OVER the request this hook builds from its render-time
+   * options. The seam for a host whose tools are bound to the chat they act for (Rovr's
+   * browser tools write that chat's action ledger and tasks — and a draft chat only gets
+   * its id inside `send`), whose run options live on the chat's record, or whose system
+   * prompt is built from live context (the working tab). A throw refuses the run with its
+   * message; the user turn is already on record, so `retryLastTurn` can run it again.
+   */
+  prepareRun?: (chatId: number) => Promise<Partial<BrainRunRequest>>;
 }
 
 export interface UseBrainConversation {
@@ -190,6 +201,14 @@ export interface UseBrainConversation {
    * so a composer can restore the text the user typed instead of dropping it.
    */
   send(text: string, opts?: { addressedTo?: DirectedRecipient | null }): Promise<boolean>;
+  /**
+   * Answer the active chat's REFUSED turn again — the trailing user message nothing
+   * replied to (only step rows after it), e.g. a turn a `no_local_model` verdict stopped.
+   * The remedy's re-send ("Switch to Hybrid" → this): the message is already persisted,
+   * so it is NOT written again — the run starts on it exactly as the auto-reply does.
+   * Returns false (and does nothing) when a run is in flight or there is no such turn.
+   */
+  retryLastTurn(): boolean;
   /**
    * Stop the in-flight run for the active chat: aborts the streaming LLM request
    * and unwinds the agent loop (no error surfaced). No-op when nothing is
@@ -251,6 +270,20 @@ export interface UseBrainConversation {
   buildTriageReport(agentLabel?: string, surface?: string): string;
 }
 
+/**
+ * The index of the trailing user turn nothing answered — the last message that is not a
+ * step row is a USER message — or -1. Step rows (the durable LLM/tool/error diagnostics)
+ * after it are what a failed run leaves; any assistant reply means it was answered.
+ */
+export function unansweredTurnIndex(messages: readonly BrainMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i]!;
+    if (isStepMessage(message)) continue;
+    return message.role === 'user' && !isMidTurnMetadata(message.metadata) ? i : -1;
+  }
+  return -1;
+}
+
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {
   const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
   const {
@@ -276,6 +309,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     augmentSystemPrompt,
     chatMode,
     chatRoster,
+    prepareRun,
   } = options;
 
   // The transcript is held TOGETHER WITH the chat it was loaded for, and read only for
@@ -444,6 +478,24 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster],
   );
 
+  /**
+   * Start a run on `id`: the request this hook builds, with the host's run-time parts
+   * (`prepareRun`) laid over it. Resolves when the run settles, or at once when
+   * `prepareRun` refuses (its message becomes the conversation's error).
+   */
+  const launch = useCallback(async (id: number, request: BrainRunRequest): Promise<void> => {
+    let extra: Partial<BrainRunRequest> | null = null;
+    if (prepareRun) {
+      try {
+        extra = await prepareRun(id);
+      } catch (e) {
+        if (chatIdRef.current === id) setLocalError(e instanceof Error ? e.message : 'Could not start the run.');
+        return;
+      }
+    }
+    await startRun(id, extra ? { ...request, ...extra } : request);
+  }, [prepareRun]);
+
   const send = useCallback(
     async (text: string, opts?: { addressedTo?: DirectedRecipient | DirectedGroup | readonly DirectedRecipient[] | null }): Promise<boolean> => {
       const trimmed = text.trim();
@@ -553,7 +605,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           }
           return true;
         }
-        await startRun(id, buildRequest(transcriptSeedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
+        await launch(id, buildRequest(transcriptSeedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
         return true;
       } catch (e) {
         // Persisting the user turn failed (commonly an expired token) — the turn
@@ -568,7 +620,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         markSending(runChatId, false);
       }
     },
-    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn, updateMessages],
+    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages],
   );
 
   // Auto-reply when a chat loads with a trailing unanswered user message
@@ -590,8 +642,22 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');
-    void startRun(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
-  }, [chatId, loadingMessages, localSending, messages, buildRequest]);
+    void launch(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
+  }, [chatId, loadingMessages, localSending, messages, buildRequest, launch]);
+
+  const retryLastTurn = useCallback((): boolean => {
+    if (chatId == null || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
+    const index = unansweredTurnIndex(messages);
+    if (index < 0) return false;
+    const turn = messages[index];
+    // A turn for a participant is theirs to answer, never the Brain's.
+    if (isDirectedToParticipant(turn)) return false;
+    autoRepliedChatIdRef.current = chatId;
+    setLocalError('');
+    clearRunError(chatId);
+    void launch(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, index)), turn.content, priorResearchDigest(scopeToConsolidation(messages))));
+    return true;
+  }, [chatId, messages, buildRequest, launch]);
 
   const rateMessage = useCallback(async (msg: BrainMessage, rating: 1 | -1 | 0) => {
     // Optimistic: the thumb reacts immediately; a failed write only loses telemetry.
@@ -682,6 +748,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     pendingAttachments,
     uploading,
     send,
+    retryLastTurn,
     stop,
     rateMessage,
     attach,

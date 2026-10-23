@@ -22,10 +22,22 @@ const sharedPackageTsResolve = {
 
 export default defineConfig({
   plugins: [sharedPackageTsResolve],
-  resolve: { alias: sourcePackageAliases(repoRoot) },
+  resolve: {
+    alias: [
+      ...sourcePackageAliases(repoRoot),
+      // The transcript catalogs `build.mjs` serves from the web's `brain.timeline` — a
+      // component test reads the empty stand-in (every label falls back to its default).
+      { find: 'virtual:rovr-timeline-catalogs', replacement: path.resolve(here, 'src/test/timelineCatalogsStub.ts') },
+    ],
+    // The `link:`ed brain packages resolve React from here too, so a component test has
+    // ONE React (two copies break every hook).
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
+  },
   test: {
-    // Pure modules and fakes — no browser, no extension APIs.
+    // Pure modules and fakes — no browser, no extension APIs. A component test
+    // (`*.test.tsx`) opts into a DOM with its own `// @vitest-environment jsdom` line.
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 });
+

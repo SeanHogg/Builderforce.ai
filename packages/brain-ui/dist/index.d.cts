@@ -1,6 +1,6 @@
 import * as react from 'react';
 import react__default, { ReactNode, HTMLAttributes, KeyboardEvent } from 'react';
-import { BrainRunActivity, ChatActivityLabels, BrainMessage, BrainTraceEvent, ModelIdentityContext, AskUserPayload, ChatErrorAction, ModelFallbackChannel, ModelFallbackEvent, QueuedItem, LocalModelRow as LocalModelRow$1, InferenceMode, ModelChoiceLabels, ChatModelSelection, ChatModelOptions, LocalModelStore, Effort, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, SavingsSourceKey, SpendSavingsSummary, ChatTicket, ChatDiagnosticsSources, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment, ChatDiagnosticsPlanSnapshot, ChatMode } from '@seanhogg/builderforce-brain-embedded';
+import { BrainRunActivity, ChatErrorAction, ChatActivityLabels, BrainMessage, BrainTraceEvent, ModelIdentityContext, AskUserPayload, ModelFallbackChannel, ModelFallbackEvent, QueuedItem, LocalModelRow as LocalModelRow$1, InferenceMode, ModelChoiceLabels, ChatModelSelection, ChatModelOptions, LocalModelStore, Effort, DirectedRecipient, RecipientChoice, BrainPersonaChoice, BrainPersonaAgent, SavingsSourceKey, SpendSavingsSummary, ChatTicket, ChatDiagnosticsSources, ChatActivity, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment, ChatDiagnosticsPlanSnapshot, ChatMode } from '@seanhogg/builderforce-brain-embedded';
 export { AskUserMessageLike, AskUserOption, AskUserPayload, BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, PendingAskUser, QueuedItem, QueuedTurns, QueuedTurnsOptions, RoutedProduct, activeModelKey, askUserAnchorId, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, isManagerRole, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId, selectPendingAskUser, serializeAskUser, stripAskUser } from '@seanhogg/builderforce-brain-embedded';
 
 /**
@@ -186,6 +186,113 @@ declare function modelMoveOf(label: string, args: unknown): ModelMove | null;
 declare function modelMoveLine(move: ModelMove, labels: ModelMoveLabels): string;
 
 /**
+ * The chat's error banner — the message AND the fix.
+ *
+ * A turn that fails on an entitlement ("…require a validated card on file. Add
+ * and validate a card in Settings ▸ Billing to unlock.") is only actionable if
+ * the surface takes the user there. The verdict is decided ONCE, server-side,
+ * and carried through the run store as {@link ChatErrorAction} — so this
+ * component reads a verdict rather than pattern-matching error prose, and the
+ * button can never contradict the sentence above it.
+ *
+ * Shared because both chat surfaces hit the same wall: the VS Code webview and
+ * the web app's <BrainPanel> render the same failures from the same hook, and a
+ * user who upgrades from one and returns to the other should not find a
+ * different (or missing) remedy.
+ *
+ * Self-gating: renders nothing without an error, and decides its own actions from
+ * the verdict — the host passes handlers, never a `canX` flag.
+ */
+interface ChatErrorBannerLabels {
+    /** Re-exchange an expired session token. */
+    reconnect: string;
+    /** Upgrade CTA when the server named no specific plan. */
+    upgrade: string;
+    /** Upgrade CTA naming the plan — must contain the literal `{plan}` token. */
+    upgradeToPlan: string;
+    /** Billing CTA when the plan is fine but no validated card is on file. */
+    addCard: string;
+    /** Sign in — offered when no model can serve the turn (signed out, nothing local). */
+    signIn: string;
+    /** What the banner says for that case — replaces the raw `not_signed_in` code. */
+    noModel: string;
+    /** What the banner says when nothing on this device can serve and the gateway is not
+     *  an option (Local only, or signed in with no cloud route) — replaces `no_local_model`. */
+    noLocalModel: string;
+    /** Move this person onto Hybrid (local first, then the cloud). */
+    switchToHybrid: string;
+    /** Open where a model for this device is downloaded. */
+    downloadLocalModel: string;
+    /** What the banner says when the person runs Specific model with nothing picked —
+     *  replaces `no_specific_model`. */
+    noSpecificModel: string;
+    /** Open the composer's Model tab, where a model is picked. */
+    pickModel: string;
+    /** The on-device engine crashed (a wasm trap) — replaces `bfi_engine_crashed`. */
+    engineCrashed: string;
+    /** The engine serving the model went away mid-answer — replaces `page_engine_detached`. */
+    engineDetached: string;
+    /** The model trapped repeatedly and is refused this session — replaces `model_keeps_crashing`. */
+    modelKeepsCrashing: string;
+    /** Open where on-device models are managed (removed) — offered beside "Pick a model"
+     *  for a model that keeps crashing. */
+    manageLocalModels: string;
+    /** `platform_refused` where only the mode opens it (Local only holds the cloud, or the
+     *  queue that carries the run's writes) — replaces `platform_*_disabled`. */
+    platformRefusedMode: string;
+    /** `platform_refused` by the account-sync switch — replaces `platform_synchronize_disabled`. */
+    platformRefusedSync: string;
+    /** `platform_refused` by another advanced platform switch (model downloads, direct
+     *  providers, external MCP, git remotes). */
+    platformRefusedSetting: string;
+    dismiss: string;
+}
+declare const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels;
+interface ChatErrorBannerProps {
+    /** The message to show. Falsy ⇒ the banner renders nothing. */
+    error: string;
+    /** The server-decided remedy, from `useBrainConversation().errorAction`. */
+    action: ChatErrorAction | null;
+    onDismiss: () => void;
+    /**
+     * Re-authenticate. Omit on a surface with no in-place reconnect (the web app
+     * redirects to login instead) — the button then isn't offered.
+     */
+    onReconnect?: () => void;
+    /**
+     * Send the user somewhere they can raise their plan. Omit to suppress the
+     * button (e.g. a logged-out surface that owns its own sign-up upsell).
+     */
+    onUpgrade?: () => void;
+    /** Send the user somewhere they can put a validated card on file. */
+    onValidateCard?: () => void;
+    /** Sign in (or open where a local model is started) — for the `sign_in` verdict. */
+    onSignIn?: () => void;
+    /** For the `no_local_model` verdict: move onto Hybrid. Omit when the person already
+     *  runs Hybrid (the cloud route is out for another reason) — the button then isn't offered. */
+    onSwitchToHybrid?: () => void;
+    /** For the `no_local_model` verdict: open where a local model is downloaded. Also the
+     *  "Manage on-device models" remedy for a model that keeps crashing (it is removed there). */
+    onDownloadLocalModel?: () => void;
+    /** For the `no_specific_model` verdict: open the composer's Model tab (the one that
+     *  raised it), where a model is picked or the mode changed. Also "try another model"
+     *  for a model that keeps crashing. */
+    onPickModel?: () => void;
+    labels?: Partial<ChatErrorBannerLabels>;
+    /** Extra styles merged into the banner container, for host-specific chrome. */
+    style?: react__default.CSSProperties;
+    /** Class on the banner container — the VS Code webview styles via its own CSS. */
+    className?: string;
+    /**
+     * `alert` (default) for a failed turn. `status` for a passive notice the run still
+     * finished through — a connected account it could not use, a provider key at its cap —
+     * which a screen reader should announce politely rather than interrupt with.
+     */
+    role?: 'alert' | 'status';
+}
+declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, onSwitchToHybrid, onDownloadLocalModel, onPickModel, labels: labelOverrides, style, className, role, }: ChatErrorBannerProps): react__default.JSX.Element | null;
+
+/**
  * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than
  * restating those five: the tool step is its own component with its own narrow
  * contract, and a host that passes this bundle satisfies that contract by
@@ -287,6 +394,13 @@ interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
      * server has no idea who will read the chat. See `chatActivity.ts` for the contract.
      */
     activity: ChatActivityLabels;
+    /**
+     * The error step row's sentences — the SAME bundle (and the same `chatErrorMessage`)
+     * the chat's error banner reads, so a refused turn reads identically in the banner and
+     * in the transcript, never as its raw code (`platform_send_disabled`). Catalog keys
+     * `chatError.<field>`; omitted ⇒ the banner's English defaults.
+     */
+    chatError?: Partial<ChatErrorBannerLabels>;
 }
 declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
 
@@ -649,103 +763,15 @@ declare function PendingQuestionBanner({ payload, labels, onAnswer, onReveal, }:
 }): react.JSX.Element | null;
 
 /**
- * The chat's error banner — the message AND the fix.
- *
- * A turn that fails on an entitlement ("…require a validated card on file. Add
- * and validate a card in Settings ▸ Billing to unlock.") is only actionable if
- * the surface takes the user there. The verdict is decided ONCE, server-side,
- * and carried through the run store as {@link ChatErrorAction} — so this
- * component reads a verdict rather than pattern-matching error prose, and the
- * button can never contradict the sentence above it.
- *
- * Shared because both chat surfaces hit the same wall: the VS Code webview and
- * the web app's <BrainPanel> render the same failures from the same hook, and a
- * user who upgrades from one and returns to the other should not find a
- * different (or missing) remedy.
- *
- * Self-gating: renders nothing without an error, and decides its own actions from
- * the verdict — the host passes handlers, never a `canX` flag.
+ * THE sentence a failed turn is shown with — ONE derivation for every place a failure is
+ * read: the chat's error banner (`ChatErrorBanner`) and the transcript's error step row
+ * (`timeline/StepRows` `ErrorRow`), on every host that renders them (web, canvas, the VS
+ * Code webview, Rovr). The verdict (`chatErrorAction`) names the case; a verdict with a
+ * sentence of its own replaces the raw sentinel (`no_local_model`, `bfi_engine_crashed`,
+ * `platform_send_disabled`, …); anything else keeps the server's own words.
  */
-interface ChatErrorBannerLabels {
-    /** Re-exchange an expired session token. */
-    reconnect: string;
-    /** Upgrade CTA when the server named no specific plan. */
-    upgrade: string;
-    /** Upgrade CTA naming the plan — must contain the literal `{plan}` token. */
-    upgradeToPlan: string;
-    /** Billing CTA when the plan is fine but no validated card is on file. */
-    addCard: string;
-    /** Sign in — offered when no model can serve the turn (signed out, nothing local). */
-    signIn: string;
-    /** What the banner says for that case — replaces the raw `not_signed_in` code. */
-    noModel: string;
-    /** What the banner says when nothing on this device can serve and the gateway is not
-     *  an option (Local only, or signed in with no cloud route) — replaces `no_local_model`. */
-    noLocalModel: string;
-    /** Move this person onto Hybrid (local first, then the cloud). */
-    switchToHybrid: string;
-    /** Open where a model for this device is downloaded. */
-    downloadLocalModel: string;
-    /** What the banner says when the person runs Specific model with nothing picked —
-     *  replaces `no_specific_model`. */
-    noSpecificModel: string;
-    /** Open the composer's Model tab, where a model is picked. */
-    pickModel: string;
-    /** The on-device engine crashed (a wasm trap) — replaces `bfi_engine_crashed`. */
-    engineCrashed: string;
-    /** The engine serving the model went away mid-answer — replaces `page_engine_detached`. */
-    engineDetached: string;
-    /** The model trapped repeatedly and is refused this session — replaces `model_keeps_crashing`. */
-    modelKeepsCrashing: string;
-    /** Open where on-device models are managed (removed) — offered beside "Pick a model"
-     *  for a model that keeps crashing. */
-    manageLocalModels: string;
-    dismiss: string;
-}
-declare const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels;
-interface ChatErrorBannerProps {
-    /** The message to show. Falsy ⇒ the banner renders nothing. */
-    error: string;
-    /** The server-decided remedy, from `useBrainConversation().errorAction`. */
-    action: ChatErrorAction | null;
-    onDismiss: () => void;
-    /**
-     * Re-authenticate. Omit on a surface with no in-place reconnect (the web app
-     * redirects to login instead) — the button then isn't offered.
-     */
-    onReconnect?: () => void;
-    /**
-     * Send the user somewhere they can raise their plan. Omit to suppress the
-     * button (e.g. a logged-out surface that owns its own sign-up upsell).
-     */
-    onUpgrade?: () => void;
-    /** Send the user somewhere they can put a validated card on file. */
-    onValidateCard?: () => void;
-    /** Sign in (or open where a local model is started) — for the `sign_in` verdict. */
-    onSignIn?: () => void;
-    /** For the `no_local_model` verdict: move onto Hybrid. Omit when the person already
-     *  runs Hybrid (the cloud route is out for another reason) — the button then isn't offered. */
-    onSwitchToHybrid?: () => void;
-    /** For the `no_local_model` verdict: open where a local model is downloaded. Also the
-     *  "Manage on-device models" remedy for a model that keeps crashing (it is removed there). */
-    onDownloadLocalModel?: () => void;
-    /** For the `no_specific_model` verdict: open the composer's Model tab (the one that
-     *  raised it), where a model is picked or the mode changed. Also "try another model"
-     *  for a model that keeps crashing. */
-    onPickModel?: () => void;
-    labels?: Partial<ChatErrorBannerLabels>;
-    /** Extra styles merged into the banner container, for host-specific chrome. */
-    style?: react__default.CSSProperties;
-    /** Class on the banner container — the VS Code webview styles via its own CSS. */
-    className?: string;
-    /**
-     * `alert` (default) for a failed turn. `status` for a passive notice the run still
-     * finished through — a connected account it could not use, a provider key at its cap —
-     * which a screen reader should announce politely rather than interrupt with.
-     */
-    role?: 'alert' | 'status';
-}
-declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, onSignIn, onSwitchToHybrid, onDownloadLocalModel, onPickModel, labels: labelOverrides, style, className, role, }: ChatErrorBannerProps): react__default.JSX.Element | null;
+
+declare function chatErrorMessage(error: string, action: ChatErrorAction | null, labels: ChatErrorBannerLabels): string;
 
 interface ModelFallbackNoticeLabels {
     /** The line — must contain the literal `{model}` token. */
@@ -1790,6 +1816,56 @@ interface InferenceModeGate {
     choose: (mode: InferenceMode) => void;
 }
 declare function useInferenceModeGate(inferenceMode: PromptOptionsInferenceMode | undefined): InferenceModeGate;
+
+/**
+ * THE remedies for the shared banner's "nothing can take this turn, and signing in would
+ * not help" verdicts — `no_local_model`, `no_specific_model`, and an on-device model that
+ * keeps crashing — derived ONCE for every host (the web Brain, the guest panel, the
+ * canvas's Brain object, the VS Code webview, Rovr). Each host used to spell the same
+ * three rules out itself, and each spelled them slightly differently (one dismissed the
+ * banner, one did not; none re-sent the refused turn after moving onto Hybrid).
+ *
+ *   - "Switch to Hybrid" — offered only while Local only is what rules the cloud out. It
+ *     applies the mode FIRST, then re-sends the refused turn when the host can (`retry`),
+ *     so the person's request is answered rather than left for them to type again.
+ *   - "Download a local model" — the host's download place when it has one (the editor's
+ *     model picker, Rovr's settings), else this composer's `/` menu on its Model tab.
+ *   - "Pick a model" — this composer's `/` menu on its Model tab (Run models + the picker).
+ *
+ * Every remedy dismisses the banner: the menu or the new mode is now the answer to it.
+ * The menu opened is the one beside the banner (`composerId`), never every composer on
+ * the page. The host's own mode and where-to-download are its ports — nothing else here
+ * is per host.
+ */
+
+interface ModelRemedyPorts {
+    /** The mode in force, or undefined while the host has not read it yet. */
+    mode: InferenceMode | undefined;
+    /** Apply a mode — the same handler the `/` menu's Run models control calls. */
+    setMode: (mode: InferenceMode) => void | Promise<void>;
+    /** The composer beside the banner — its `/` menu is the one the remedies open. */
+    composerId: string;
+    /** Clear the banner (the run's error). */
+    onDismiss: () => void;
+    /** Where this host downloads an on-device model; omitted ⇒ the composer's Model tab. */
+    downloadLocalModel?: () => void;
+    /** Re-send the turn the verdict refused, once the mode has moved. Omitted ⇒ not re-sent. */
+    retry?: () => void;
+}
+type ModelRemedies = Pick<ChatErrorBannerProps, 'onSwitchToHybrid' | 'onDownloadLocalModel' | 'onPickModel'>;
+declare function modelRemedies({ mode, setMode, composerId, onDismiss, downloadLocalModel, retry }: ModelRemedyPorts): ModelRemedies;
+/**
+ * THE composer wiring for a host's mode — every host hands the shared composer the same
+ * shape from the same three facts. `needsChoice` is "never chosen", signed in OR
+ * anonymous (operator decision): the first-run question asks everyone once, and for an
+ * anonymous person it is the Hybrid opt-in. Who is signed in decides the DEFAULT `value`
+ * (the host's derivation), never whether the person is asked.
+ */
+declare function inferenceModeOption(state: {
+    value: InferenceMode;
+    chosen: boolean;
+    onChange: PromptOptionsInferenceMode['onChange'];
+}): PromptOptionsInferenceMode;
 
 /**
  * THE keyboard model for a `role="radiogroup"` of buttons — ONE tab stop (the checked
@@ -4493,4 +4569,4 @@ interface ComposerModelInput {
 /** `ComposerOptions.model` for one host. Pure — memoize on its inputs. */
 declare function composerModel(input: ComposerModelInput): PromptOptionsModel;
 
-export { type AgentOptionVM, AiSurface, type AiSurfaceProps, type AskUserLabels, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainMark, type BrainMarkProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatHistoryChat, type ChatHistoryLabels, ChatHistoryList, type ChatHistoryListProps, ChatHistoryRow, type ChatHistoryRowProps, type ChatOptionVM, type ChatRowActionProps, type ChatRowActions, type ChatRowRef, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerLabels, type ComposerModelCatalog, type ComposerModelInput, type ComposerOptions, type ComposerSuggestion, type ConsumptionSnapshot, ContextChip, type ContextChipOption, type ContextChipProps, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_HISTORY_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_INFERENCE_MODE_LABELS, DEFAULT_INLINE_CHAT_TITLE_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_MENTION_LABELS, DEFAULT_MODEL_FALLBACK_LABELS, DEFAULT_MODEL_MOVE_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_QUEUED_TURN_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_SURFACE_HEADER_LABELS, DEFAULT_TICKET_TAG_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_TOOL_CONFIRM_LABELS, DEFAULT_WORK_STATUS_LABELS, EXPAND_ICON_PATH, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, type FullBrainComposerLabels, HeaderIcon, HealthRing, type HealthRingProps, type HealthTier, INFERENCE_MODE_LABEL_FIELDS, InferenceModeControl, type InferenceModeControlProps, InferenceModeFirstRun, type InferenceModeFirstRunProps, type InferenceModeGate, type InferenceModeLabels, InlineChatTitle, type InlineChatTitleLabels, type InlineChatTitleProps, type JsonRequest, LOCAL_BACKEND_LABEL, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, type LabelLookup, type LabelValues, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabelLookup, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, ModelFallbackNotice, type ModelFallbackNoticeLabels, type ModelFallbackNoticeProps, type ModelMove, type ModelMoveLabels, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsInferenceMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsOpenRequest, type PromptOptionsSession, type PromptOptionsTab, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, QuestionCard, QueuedTurnChips, type QueuedTurnChipsLabels, type QueuedTurnChipsProps, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, type RovingRadioItemProps, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, StarterGroup, StarterTile, type StarterTileProps, SuggestionRow, Sunburst, type SunburstProps, SurfaceEmptyState, type SurfaceEmptyStateProps, SurfaceFooter, type SurfaceFooterProps, SurfaceHeader, type SurfaceHeaderHistory, type SurfaceHeaderLabels, type SurfaceHeaderProps, SurfaceLauncher, type SurfaceLauncherBadge, type SurfaceLauncherProps, type SurfaceTab, SurfaceTabs, type SurfaceTabsProps, TICKET_KINDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineImage, type TimelineNode, ToolConfirmBar, type ToolConfirmBarLabels, type ToolConfirmBarProps, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UpgradeTarget, type UseChatRowActionsOptions, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, WorkSpendPanel, type WorkSpendPanelProps, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentsOf, avatarColor, brainComposerLabelsFrom, buildSettledTimeline, buildTimeline, bundleLookup, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatHistoryLabelsFrom, chatSwitcherLabel, chatTicketsLabelsFrom, chatTicketsLabelsFromBundle, commandOf, composerCatalogLoaded, composerLabels, composerLabelsFrom, composerModel, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, inferenceModeCopy, initialsOf, invalidateConsumptionSnapshot, liveActivityLabelsFrom, loadEvermindBuilds, localModelLabelsFrom, modelMoveLine, modelMoveOf, modelSelectionFrom, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, promptOptionsLabelsFrom, promptTrailingAction, publishedEvermindModels, requestComposerMenu, resolvePendingChangesLabels, resolveTeacherOptions, rovingRadioNextIndex, shellOutcomeOf, spendLabels, spendLabelsFrom, strandedReplyKey, streamingNode, stringsFrom, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolConfirmLabelsFrom, toolConfirmPreview, toolPreview, toolStepView, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useChatRowActions, useComposerMenuRequest, useConsumptionSnapshot, useDismissibleNotice, useInferenceModeGate, useLocalModels, useMentionAutocomplete, useModelFallback, usePopover, useRecipientChoice, useRovingRadioGroup, useTicketAutocomplete, useVoiceDictation, withLocalModels, workStatusLabels, workStatusLabelsFrom };
+export { type AgentOptionVM, AiSurface, type AiSurfaceProps, type AskUserLabels, Avatar, type AvatarProps, BrainComposer, type BrainComposerLabels, type BrainComposerProps, BrainMark, type BrainMarkProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatDiagnosticsChatReads, type ChatDiagnosticsReadAdapter, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatHistoryChat, type ChatHistoryLabels, ChatHistoryList, type ChatHistoryListProps, ChatHistoryRow, type ChatHistoryRowProps, type ChatOptionVM, type ChatRowActionProps, type ChatRowActions, type ChatRowRef, type ChatRunHistoryVM, type ChatRunVM, type ChatSubagentVM, type ChatTicketsAdapter, type ChatTicketsExtension, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, type ChatTicketsRequest, type ChatTicketsRestOptions, type CommandRun, type ComposerAddMenuItem, type ComposerAttachment, type ComposerLabels, type ComposerModelCatalog, type ComposerModelInput, type ComposerOptions, type ComposerSuggestion, type ConsumptionSnapshot, ContextChip, type ContextChipOption, type ContextChipProps, CopyButton, type CopyLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_HISTORY_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_COMPOSER_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_INFERENCE_MODE_LABELS, DEFAULT_INLINE_CHAT_TITLE_LABELS, DEFAULT_LIVE_ACTIVITY_LABELS, DEFAULT_LOCAL_MODEL_LABELS, DEFAULT_MENTION_LABELS, DEFAULT_MODEL_FALLBACK_LABELS, DEFAULT_MODEL_MOVE_LABELS, DEFAULT_PENDING_CHANGES_LABELS, DEFAULT_PERSONA_PICKER_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_QUEUED_TURN_LABELS, DEFAULT_RECIPIENT_PICKER_LABELS, DEFAULT_SPEND_LABELS, DEFAULT_SURFACE_HEADER_LABELS, DEFAULT_TICKET_TAG_LABELS, DEFAULT_TIMELINE_LABELS, DEFAULT_TOOL_CONFIRM_LABELS, DEFAULT_WORK_STATUS_LABELS, EXPAND_ICON_PATH, type EvermindActionGuideInput, type EvermindActionId, type EvermindBuild, type EvermindCleanupResult, type EvermindCodingGateView, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindContributionState, type EvermindContributionStatus, type EvermindEvalPoint, type EvermindHost, type EvermindHostPowers, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindRequest, type EvermindRestOptions, type EvermindSeedModel, type EvermindTarget, type EvermindTeachResult, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, type FullBrainComposerLabels, HeaderIcon, HealthRing, type HealthRingProps, type HealthTier, INFERENCE_MODE_LABEL_FIELDS, InferenceModeControl, type InferenceModeControlProps, InferenceModeFirstRun, type InferenceModeFirstRunProps, type InferenceModeGate, type InferenceModeLabels, InlineChatTitle, type InlineChatTitleLabels, type InlineChatTitleProps, type JsonRequest, LOCAL_BACKEND_LABEL, LOCAL_MODEL_LABEL_FIELDS, LOCAL_UNSUPPORTED_LABEL, type LabelLookup, type LabelValues, type LearnedStatusInput, type LineageVM, type LinkType, LiveActivity, type LiveActivityLabels, type LiveActivityProps, type LocalModelLabelLookup, type LocalModelLabels, LocalModelList, type LocalModelListProps, LocalModelRow, type LocalModelRowProps, type LocalModelsState, Markdown, type MarkdownLabels, type MarkdownProps, type MemoryCompactRequest, type MentionAutocomplete, type MentionLabels, type MessageRating, ModelFallbackNotice, type ModelFallbackNoticeLabels, type ModelFallbackNoticeProps, type ModelMove, type ModelMoveLabels, type ModelRemedies, type ModelRemedyPorts, type PendingChangeKind, type PendingChangeVM, type PendingChangesLabels, PendingChangesList, type PendingChangesListProps, PendingQuestionBanner, type PersonaModalityOption, PersonaPicker, type PersonaPickerLabels, type PersonaPickerProps, type PickedMemory, type PlanTier, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsInferenceMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsOpenRequest, type PromptOptionsSession, type PromptOptionsTab, PromptPanel, type PromptPanelProps, type PromptTrailingAction, type PromptTrailingState, QuestionCard, QueuedTurnChips, type QueuedTurnChipsLabels, type QueuedTurnChipsProps, RUNNABLE_KINDS, RecipientPicker, type RecipientPickerLabels, type RecipientPickerProps, RecipientsBadge, type RovingRadioItemProps, SLOW_AFTER_MS, SpendBreakdown, type SpendLabels, SpendPill, StarterGroup, StarterTile, type StarterTileProps, SuggestionRow, Sunburst, type SunburstProps, SurfaceEmptyState, type SurfaceEmptyStateProps, SurfaceFooter, type SurfaceFooterProps, SurfaceHeader, type SurfaceHeaderHistory, type SurfaceHeaderLabels, type SurfaceHeaderProps, SurfaceLauncher, type SurfaceLauncherBadge, type SurfaceLauncherProps, type SurfaceTab, SurfaceTabs, type SurfaceTabsProps, TICKET_KINDS, type TeacherModelsPayload, type TenantModelRow, type TicketAutocomplete, type TicketAutocompleteLabels, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TicketParentVM, type TimelineCatalogLookup, type TimelineImage, type TimelineNode, ToolConfirmBar, type ToolConfirmBarLabels, type ToolConfirmBarProps, type ToolPreview, ToolStep, type ToolStepLabels, type ToolStepNode, type ToolStepView, type UpgradeTarget, type UseChatRowActionsOptions, type UseMentionAutocompleteOptions, type UseTicketAutocompleteOptions, WorkSpendPanel, type WorkSpendPanelProps, type WorkStatusLabels, WorkStatusPanel, type WorkStatusPanelProps, attachmentsOf, avatarColor, brainComposerLabelsFrom, buildSettledTimeline, buildTimeline, bundleLookup, cachedConsumptionSnapshot, chatActivityLabelsFrom, chatDiagnosticsReads, chatErrorMessage, chatHistoryLabelsFrom, chatSwitcherLabel, chatTicketsLabelsFrom, chatTicketsLabelsFromBundle, commandOf, composerCatalogLoaded, composerLabels, composerLabelsFrom, composerModel, createChatTicketsRestAdapter, createEvermindRestAdapter, evermindLabelsFromBundle, evermindLearnedStatus, evermindNextAction, fetchConsumptionSnapshot, formatContextTokens, formatDownloadSize, formatDuration, formatElapsed, formatParams, formatTokens, formatUsd, groupAbsorbed, healthRingColor, inferenceModeCopy, inferenceModeOption, initialsOf, invalidateConsumptionSnapshot, liveActivityLabelsFrom, loadEvermindBuilds, localModelLabelsFrom, modelMoveLine, modelMoveOf, modelRemedies, modelSelectionFrom, pendingChangesSummary, planIsPaid, preferredEvermindBuild, promptOptionsLabels, promptOptionsLabelsFrom, promptTrailingAction, publishedEvermindModels, requestComposerMenu, resolvePendingChangesLabels, resolveTeacherOptions, rovingRadioNextIndex, shellOutcomeOf, spendLabels, spendLabelsFrom, strandedReplyKey, streamingNode, stringsFrom, subscribeConsumptionSnapshot, timelineCatalogLookup, timelineLabelsFrom, toolConfirmLabelsFrom, toolConfirmPreview, toolPreview, toolStepView, useChatActivitySignal, useChatMemorySwitch, useChatParticipants, useChatRowActions, useComposerMenuRequest, useConsumptionSnapshot, useDismissibleNotice, useInferenceModeGate, useLocalModels, useMentionAutocomplete, useModelFallback, usePopover, useRecipientChoice, useRovingRadioGroup, useTicketAutocomplete, useVoiceDictation, withLocalModels, workStatusLabels, workStatusLabelsFrom };

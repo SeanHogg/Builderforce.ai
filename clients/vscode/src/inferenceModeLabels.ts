@@ -59,6 +59,11 @@ export function inferenceModeLabels(): Record<string, string> {
     "app.engineDetached": t("The on-device model stopped before it finished. Send again to retry."),
     "app.modelKeepsCrashing": t("This model keeps crashing on this device. Remove it, or try another model."),
     "app.manageLocalModels": t("Manage on-device models"),
+    // A refusal by the person's own platform policy (`platform_refused`): the mode, the
+    // sync switch, or another `builderforce.platform.*` switch — never the raw code.
+    "app.platformRefusedMode": t("Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it."),
+    "app.platformRefusedSync": t("Account sync is off, so this could not be saved to your account. Turn on builderforce.platform.synchronize in Settings, or keep working locally."),
+    "app.platformRefusedSetting": t("One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu."),
     // The webview's Hybrid fallback notice — the participant's catalog string, its `{0}`
     // handed back as brain-ui's `{model}` token so one translation serves both surfaces.
     "app.modelFallback": t("Your pick {0} failed; answered with Auto.", "{model}"),

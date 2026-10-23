@@ -194,7 +194,25 @@ describe('Rovr platform policy', () => {
       vi.unstubAllGlobals();
     });
 
-    it('never calls fetch for a denied capability', async () => {
+    it("signed-in Hybrid with sync off: a run's writes, transcript and stream go (the web's and the editor's answer)", async () => {
+      const policy = createRovrPlatformPolicy(createMemoryKeyValue({ 'session.key': 'bfk_live_example' }));
+      await policy.ready();
+      expect(policy.inferenceMode().mode).toBe('hybrid');
+      expect(policy.allows('synchronize')).toBe(false);
+      const native = vi.fn(async () => new Response('{}'));
+      vi.stubGlobal('fetch', native);
+      const guarded = createRovrGuardedFetch({ policy });
+      await guarded('https://builderforce.ai/gateway/api/projects/11/tickets', { method: 'POST' });
+      await guarded('https://builderforce.ai/gateway/api/brain/chats/3/messages', { method: 'POST' });
+      await guarded('https://builderforce.ai/gateway/api/brain/stream', { method: 'POST' });
+      expect(native).toHaveBeenCalledTimes(3);
+      await expect(
+        guarded('https://builderforce.ai/gateway/api/sync/v1/push', { method: 'POST' }),
+      ).rejects.toMatchObject({ capability: 'synchronize' });
+      expect(native).toHaveBeenCalledTimes(3);
+    });
+
+    it('signed out (Local only): never calls fetch for inference or content — the shared gate', async () => {
       const policy = createRovrPlatformPolicy(createMemoryKeyValue());
       await policy.ready();
       const native = vi.fn(async () => new Response('{}'));
@@ -202,13 +220,13 @@ describe('Rovr platform policy', () => {
       const guarded = createRovrGuardedFetch({ policy });
 
       await expect(
-        guarded('https://builderforce.ai/gateway/api/brain/chats', { method: 'POST' }),
+        guarded('https://builderforce.ai/gateway/api/brain/chats/3/messages', { method: 'POST' }),
       ).rejects.toBeInstanceOf(PlatformAccessDenied);
       await expect(
         guarded('https://api.builderforce.ai/llm/chat/completions', { method: 'POST' }),
       ).rejects.toBeInstanceOf(PlatformAccessDenied);
       await expect(
-        guarded('https://builderforce.ai/gateway/api/auth/tenant-api-key-token', { method: 'POST' }),
+        guarded('https://builderforce.ai/gateway/api/limbic/block', { method: 'POST' }),
       ).rejects.toBeInstanceOf(PlatformAccessDenied);
       expect(native).not.toHaveBeenCalled();
 

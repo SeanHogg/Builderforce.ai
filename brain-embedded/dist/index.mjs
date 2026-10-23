@@ -6,7 +6,7 @@ import {
   NO_SPECIFIC_MODEL,
   brainRequestError,
   chatErrorAction
-} from "./chunk-ZV73UMUH.mjs";
+} from "./chunk-O2ZJ2CSX.mjs";
 import {
   BROWSER_ENGINE_BASE_URL,
   ENGINE_WORKER_FATAL,
@@ -48,7 +48,7 @@ import {
   serveEngineWorker,
   servePageEngines,
   webGpuSupport
-} from "./chunk-WKSCDTN3.mjs";
+} from "./chunk-3ZKSWQDQ.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useMemo } from "react";
@@ -15358,6 +15358,14 @@ function withRating(ratings, messageId, rating) {
 
 // src/useBrainConversation.ts
 var NO_MESSAGES = [];
+function unansweredTurnIndex(messages) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (isStepMessage(message)) continue;
+    return message.role === "user" && !isMidTurnMetadata(message.metadata) ? i : -1;
+  }
+  return -1;
+}
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
   const {
@@ -15382,7 +15390,8 @@ function useBrainConversation(options) {
     evermind,
     augmentSystemPrompt,
     chatMode,
-    chatRoster
+    chatRoster,
+    prepareRun
   } = options;
   const [held, setHeld] = useState7({ chatId, list: [] });
   const messages = held.chatId === chatId ? held.list : NO_MESSAGES;
@@ -15494,6 +15503,18 @@ ${extraSystem}` : resolvedSystemPrompt;
     }),
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
+  const launch = useCallback7(async (id, request) => {
+    let extra = null;
+    if (prepareRun) {
+      try {
+        extra = await prepareRun(id);
+      } catch (e) {
+        if (chatIdRef.current === id) setLocalError(e instanceof Error ? e.message : "Could not start the run.");
+        return;
+      }
+    }
+    await startRun(id, extra ? { ...request, ...extra } : request);
+  }, [prepareRun]);
   const send = useCallback7(
     async (text, opts) => {
       const trimmed = text.trim();
@@ -15567,7 +15588,7 @@ ${refs}`;
           }
           return true;
         }
-        await startRun(id, buildRequest(transcriptSeedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
+        await launch(id, buildRequest(transcriptSeedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
         return true;
       } catch (e) {
         if (stillOpen()) {
@@ -15579,7 +15600,7 @@ ${refs}`;
         markSending(runChatId, false);
       }
     },
-    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn, updateMessages]
+    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages]
   );
   useEffect6(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
@@ -15591,8 +15612,20 @@ ${refs}`;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
-    void startRun(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
-  }, [chatId, loadingMessages, localSending, messages, buildRequest]);
+    void launch(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
+  }, [chatId, loadingMessages, localSending, messages, buildRequest, launch]);
+  const retryLastTurn = useCallback7(() => {
+    if (chatId == null || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
+    const index = unansweredTurnIndex(messages);
+    if (index < 0) return false;
+    const turn = messages[index];
+    if (isDirectedToParticipant(turn)) return false;
+    autoRepliedChatIdRef.current = chatId;
+    setLocalError("");
+    clearRunError(chatId);
+    void launch(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, index)), turn.content, priorResearchDigest(scopeToConsolidation(messages))));
+    return true;
+  }, [chatId, messages, buildRequest, launch]);
   const rateMessage = useCallback7(async (msg, rating) => {
     setRatings((prev) => withRating(prev, msg.id, rating));
     const context = ratedTurnContext(messages, msg.id);
@@ -15668,6 +15701,7 @@ ${refs}`;
     pendingAttachments,
     uploading,
     send,
+    retryLastTurn,
     stop,
     rateMessage,
     attach,

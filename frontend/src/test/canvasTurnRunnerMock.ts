@@ -17,6 +17,7 @@
  */
 import { vi } from 'vitest';
 import type * as CreationCanvasAi from '@/lib/creationCanvasAi';
+import { writeStoredInferenceMode } from '@/lib/localFirst/webInferenceMode';
 
 export type CanvasTurnOptions = Parameters<typeof CreationCanvasAi.runCreationCanvasAi>[0];
 
@@ -26,6 +27,16 @@ export const canvasTurnRunner = vi.fn<(options: CanvasTurnOptions) => Promise<st
 /** The real module with only the model call replaced. */
 export function canvasTurnRunnerModule(actual: typeof CreationCanvasAi): typeof CreationCanvasAi {
   return { ...actual, runCreationCanvasAi: canvasTurnRunner };
+}
+
+/**
+ * The person already chose where models run — Local only, the anonymous default, so
+ * nothing else about the board changes — and the first-run gate lets every canvas turn
+ * straight through. Call after clearing storage; a test of the first-run question itself
+ * leaves the choice unmade instead.
+ */
+export function chooseWhereModelsRun(mode: 'local-only' | 'hybrid' | 'specific' = 'local-only'): void {
+  writeStoredInferenceMode(mode);
 }
 
 /** Every turn stays in flight and nothing leaves the test — the default. */

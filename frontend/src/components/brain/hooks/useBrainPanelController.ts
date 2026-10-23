@@ -43,6 +43,7 @@ import { useBrainPanelModels } from './useBrainPanelModels';
 import { useBrainPanelParticipants } from './useBrainPanelParticipants';
 import { useBrainPanelTurns } from './useBrainPanelTurns';
 import { routingModeForSelection } from '@seanhogg/builderforce-brain-embedded';
+import { useWebTurnGate } from '@/lib/localFirst/useWebInferenceMode';
 
 /**
  * The ONE Brain panel's state machine: composes the focused hooks (preferences,
@@ -246,8 +247,12 @@ export function useBrainPanelController({
     attach: conv.attach,
   });
 
+  // THE first-run gate for every turn this panel starts — its seed prompt here, and its
+  // composer's Send (handed over as `modeGate`), so the question shows in one place.
+  const { gate: modeGate } = useWebTurnGate();
   useBrainPanelSeeds({
     chats, conv, isPage, initialChatId, initialPrompt, initialTicket, pinnedProjectId, viewingProjectId, showChatTab,
+    requestTurn: modeGate.request,
   });
   usePinnedProjectChat({
     chats,
@@ -324,6 +329,7 @@ export function useBrainPanelController({
     handleSend,
     composerFocusToken,
     composerId,
+    modeGate,
     queued,
     /** Stop the run AND drop the held turns — the composer's Stop. */
     stopTurn,

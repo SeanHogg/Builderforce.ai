@@ -17,7 +17,7 @@ import type { CreationFlowNode } from './CreationNode';
 import type { ProjectEvermindContributions, ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { createLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { buildBrowserCreativeArtifact } from '@/lib/creationDeliverables';
-import { AUTHORED_EVALUATION, answerCanvasTurns, canvasTurnRunner, holdCanvasTurns } from '@/test/canvasTurnRunnerMock';
+import { AUTHORED_EVALUATION, answerCanvasTurns, canvasTurnRunner, chooseWhereModelsRun, holdCanvasTurns } from '@/test/canvasTurnRunnerMock';
 import { canvasPhaseStorageKey } from '@/lib/canvasPhases';
 
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
@@ -468,6 +468,7 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
     capture.failWith = null;
     for (const spy of Object.values(toasts)) spy.mockClear();
     holdCanvasTurns();
+    chooseWhereModelsRun();
   });
 
   it('automatically executes the prompt carried from the homepage', async () => {
@@ -478,6 +479,55 @@ describe('CreationCanvas', { timeout: 120_000 }, () => {
 
     await waitFor(() => expect(canvasTurnRunner).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'Create a roadmap for the launch' })));
     await waitFor(() => expect(screen.getAllByText('Here is the launch roadmap outline.').length).toBeGreaterThan(0));
+  });
+
+  it('holds the homepage prompt behind the first-run question and runs it once the person chooses', async () => {
+    // Never chosen: the entry prompt (landing / Studio) is a turn like any other, and waits.
+    localStorage.removeItem('bf_inference_mode_v1');
+    answerCanvasTurns('Dear Ava, I am so proud of you.');
+    const sessionId = createLocalCreationSession('Help me write a letter to my daughter');
+
+    render(<CreationCanvas sessionId={sessionId} persistence="local" />);
+
+    const ask = await waitFor(() => {
+      const question = document.querySelector<HTMLElement>('.bf-imode-ask');
+      expect(question).not.toBeNull();
+      return question!;
+    });
+    expect(canvasTurnRunner).not.toHaveBeenCalled();
+    const localOnly = Array.from(ask.querySelectorAll<HTMLButtonElement>('.bf-imode-ask__choice'))
+      .find((choice) => !choice.classList.contains('is-recommended'))!;
+    await act(async () => { fireEvent.click(localOnly); });
+
+    await waitFor(() => expect(canvasTurnRunner).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'Help me write a letter to my daughter' })));
+    expect(canvasTurnRunner).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('bf_inference_mode_v1')).toBe('local-only');
+    await waitFor(() => expect(screen.getAllByText('Dear Ava, I am so proud of you.').length).toBeGreaterThan(0));
+    expect(document.querySelector('.bf-imode-ask')).toBeNull();
+  });
+
+  it('answers a no-model refusal with THE banner and its remedies; Switch to Hybrid re-sends the request', async () => {
+    // A live guest allowance, so moving onto Hybrid needs no mint in this test.
+    localStorage.setItem('bf_guest_token', 'guest-token');
+    localStorage.setItem('bf_guest_token_exp', String(Date.now() + 3_600_000));
+    canvasTurnRunner.mockReset();
+    canvasTurnRunner.mockImplementationOnce(async () => { throw new Error('no_local_model'); });
+    canvasTurnRunner.mockImplementation(async () => 'Dear Ava, I am so proud of you.');
+    const sessionId = createLocalCreationSession('Help me write a letter to my daughter');
+
+    render(<CreationCanvas sessionId={sessionId} persistence="local" />);
+
+    // Wherever the conversation is read (the Brain Object, the dock), the same banner.
+    const [switchToHybrid] = await screen.findAllByRole('button', { name: 'Switch to Hybrid' });
+    expect(screen.getAllByRole('button', { name: 'Download a local model' }).length).toBeGreaterThan(0);
+    expect(canvasTurnRunner).toHaveBeenCalledTimes(1);
+
+    await act(async () => { fireEvent.click(switchToHybrid!); });
+
+    await waitFor(() => expect(canvasTurnRunner).toHaveBeenCalledTimes(2));
+    expect(canvasTurnRunner.mock.calls[1]![0]).toMatchObject({ prompt: 'Help me write a letter to my daughter' });
+    expect(localStorage.getItem('bf_inference_mode_v1')).toBe('hybrid');
+    await waitFor(() => expect(screen.queryAllByRole('button', { name: 'Switch to Hybrid' })).toHaveLength(0));
   });
 
   it('files undo and redo under Make, with the composer that leads it', () => {

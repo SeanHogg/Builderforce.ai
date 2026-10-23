@@ -17,6 +17,7 @@ import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain
 import type { GuestSignupPrompt } from '@/components/GuestSignupCta';
 import type { CreationFlowNode } from './CreationNode';
 import type { BrainDockMode } from './brainDockPreferences';
+import type { BrainSurfaceBodyProps } from './BrainSurface';
 
 export interface BrainSurfaceCollaborator {
   userId: string;
@@ -67,6 +68,9 @@ export interface BrainSurfaceContextValue {
   /** The guest wall this conversation ran into, so BOTH placements offer the same
    *  way forward. Null on every signed-in board. */
   guestSignup: GuestSignupPrompt | null;
+  /** The last turn's no-model refusal (`brainTurn/modelRefusal.ts`) as THE banner with its
+   *  remedies, so every placement — the inline Brain Object included — offers them. */
+  refusal?: BrainSurfaceBodyProps['refusal'];
   /** Select the Brain Object and reveal the conversation, wherever it lives. */
   onOpen: (nodeId: string) => void;
   onModeChange: (mode: BrainDockMode) => void;

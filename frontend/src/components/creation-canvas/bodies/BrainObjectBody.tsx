@@ -6,7 +6,8 @@ import bodiesStyles from '../styles/bodies.module.css';
 import nodeStyles from '../styles/node.module.css';
 import { useLiveActivityLabels } from '@/i18n/useLiveActivityLabels';
 import { CanvasRunActivity } from '../CanvasRunActivity';
-import { BrainSurface } from '../BrainSurface';
+import { BrainSurface, type BrainSurfaceBodyProps } from '../BrainSurface';
+import { BrainErrorBanner } from '@/components/brain/BrainErrorBanner';
 import { BrainSurfaceActions } from '../BrainSurfaceActions';
 import { BrainSurfaceViewProvider } from '../brainSurfaceView';
 import { useBrainSurface } from '../brainSurfaceContext';
@@ -75,6 +76,7 @@ export function BrainObjectBody({ id: nodeId, data }: CreationBodyProps) {
       unread={surface?.unreadReplies ?? 0}
       runKey={surface?.runKey}
       onOpen={surface?.canOpen ? () => surface.onOpen(nodeId) : undefined}
+      refusal={surface?.refusal ?? null}
     />;
   }
 
@@ -115,6 +117,7 @@ export function BrainObjectBody({ id: nodeId, data }: CreationBodyProps) {
         onRateMessage={surface.onRateMessage}
         ratings={surface.ratings}
         guestSignup={surface.guestSignup}
+        refusal={surface.refusal ?? null}
       />
     </section>
     </BrainSurfaceViewProvider>
@@ -173,7 +176,7 @@ function BrainMarkerBody({ data, onOpen }: { data: CreationNodeData; onOpen: () 
  * newest exchange scrolled into view, since the anchor is short and the reply that
  * just landed is the only one worth reading.
  */
-function BrainAnchorBody({ data, runKey, unread = 0, onOpen }: { data: CreationNodeData; runKey?: string; unread?: number; onOpen?: () => void }) {
+function BrainAnchorBody({ data, runKey, unread = 0, onOpen, refusal = null }: { data: CreationNodeData; runKey?: string; unread?: number; onOpen?: () => void; refusal?: BrainSurfaceBodyProps['refusal'] }) {
   const t = useTranslations('creationCanvas.node');
   const tCanvas = useTranslations('creationCanvas');
   const messages = canvasChatMessages(data);
@@ -201,6 +204,11 @@ function BrainAnchorBody({ data, runKey, unread = 0, onOpen }: { data: CreationN
       <span><small>{t('brainAnchorYou')}</small><p>{lastUser?.content || data.subtitle || t('brainAnchorPromptFallback')}</p></span>
       <span ref={latestRef}><small>{t('brainAnchorBrain')}</small><p>{brainText}</p></span>
     </div>
+    {/* The refusal that ended the last turn, with its remedies — the same banner every
+        placement shows, because here the Object is the only reading of the conversation. */}
+    {refusal && <div className="nodrag nowheel" onClick={(event) => event.stopPropagation()}>
+      <BrainErrorBanner error={refusal.error} action={refusal.action} onDismiss={refusal.onDismiss} onRetry={refusal.onRetry} composerId={refusal.composerId} />
+    </div>}
     <CanvasRunActivity runKey={runKey} running={run.running} startedAt={run.startedAt} variant="inline" />
     {/* The way in NAMES what is waiting when something is. "Open Brain chat" beside a
         badge would be the control naming itself twice, so the count replaces the word —

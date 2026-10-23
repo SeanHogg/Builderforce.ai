@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 import { BrainErrorBanner } from './BrainErrorBanner';
 import * as cardValidation from '@/lib/useCardValidation';
 
@@ -103,6 +103,24 @@ describe('BrainErrorBanner', () => {
       <BrainErrorBanner composerId="test-composer" error="Invalid or expired token" action={{ kind: 'auth' }} onDismiss={vi.fn()} />,
     );
     expect(getByRole('alert').querySelectorAll('button')).toHaveLength(1);
+  });
+
+  it('on no_local_model offers Switch to Hybrid, which moves the mode and then re-sends the refused turn', async () => {
+    // A live guest allowance, so the Hybrid opt-in needs no mint here.
+    window.localStorage.setItem('bf_guest_token', 'guest-token');
+    window.localStorage.setItem('bf_guest_token_exp', String(Date.now() + 3_600_000));
+    const onDismiss = vi.fn();
+    const onRetry = vi.fn();
+    const { getByText } = render(
+      <BrainErrorBanner composerId="test-composer" error="no_local_model" action={{ kind: 'no_local_model' }} onDismiss={onDismiss} onRetry={onRetry} />,
+    );
+    expect(getByText('brain.noLocalModel')).toBeInTheDocument();
+    expect(getByText('brain.downloadLocalModel')).toBeInTheDocument();
+    fireEvent.click(getByText('brain.switchToHybrid'));
+    expect(onDismiss).toHaveBeenCalled();
+    await waitFor(() => expect(onRetry).toHaveBeenCalledTimes(1));
+    expect(window.localStorage.getItem('bf_inference_mode_v1')).toBe('hybrid');
+    window.localStorage.clear();
   });
 
   it('dismisses', () => {

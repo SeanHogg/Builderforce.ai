@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InlineChatTitle, SurfaceHeader, SurfaceTabs, useChatRowActions, type SurfaceHeaderHistory } from '@seanhogg/builderforce-brain-ui';
+import { BrainProvider } from '@seanhogg/builderforce-brain-embedded';
 import { createPanelServices, type PanelServices } from '../host/panelServices';
 import { t, type MessageKey } from '../i18n/t';
 import { liveChats, type LocalChat } from '../store/records';
@@ -39,7 +40,11 @@ export function App() {
   if (!services) return <p className="rovr-empty">{t('loading')}</p>;
   return (
     <ServicesContext.Provider value={services}>
-      <Shell />
+      {/* THE shared conversation's config — the chat view mounts `useBrainConversation`
+          under it, the same hook as the web Brain and the VS Code webview. */}
+      <BrainProvider config={services.brainConfig}>
+        <Shell />
+      </BrainProvider>
     </ServicesContext.Provider>
   );
 }

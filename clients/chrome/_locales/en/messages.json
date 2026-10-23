@@ -979,6 +979,18 @@
     "message": "Manage on-device models",
     "description": "Button: open Settings, where on-device models are managed and removed"
   },
+  "platformRefusedMode": {
+    "message": "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.",
+    "description": "Chat error: Local only refused a call this run needed to reach the platform"
+  },
+  "platformRefusedSync": {
+    "message": "Account sync is off, so this could not be saved to your account. Turn on sync in your platform settings, or keep working locally.",
+    "description": "Chat error: account sync is off, so the run could not save to the account"
+  },
+  "platformRefusedSetting": {
+    "message": "One of your platform settings turned off what this run needed. Change it in your platform settings, or pick another model in the / menu.",
+    "description": "Chat error: a platform setting turned off what this run needed"
+  },
   "modelFallback": {
     "message": "Your pick $1 failed; answered with Auto.",
     "description": "Notice: the picked model failed (Hybrid) and the turn was answered with Auto; $1 = the picked model"

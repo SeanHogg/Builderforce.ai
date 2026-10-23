@@ -21,6 +21,8 @@
  */
 
 import type { BfiModule } from './bfiEngine';
+import { withTimeout } from './settleWithin';
+import { webGpuSupport } from './webgpu';
 
 export { createBfiEngine, type BfiEngineOptions, type BfiModule, type BfiPageEngine } from './bfiEngine';
 export { bfiSupportWithoutWasm } from './bfiSupport';
@@ -95,15 +97,10 @@ function canUseBfiThreads(scope: object = globalThis): boolean {
   return g.crossOriginIsolated === true && typeof g.SharedArrayBuffer === 'function' && typeof g.Worker === 'function';
 }
 
-/** Whether a WebGPU adapter exists here — the default artifact then wins (GPU first). */
+/** Whether a WebGPU adapter exists here — the default artifact then wins (GPU first).
+ *  THE adapter read (`webGpuSupport`), time-bounded, so a hung request cannot hang a load. */
 async function hasWebGpuAdapter(): Promise<boolean> {
-  const gpu = (globalThis as { navigator?: { gpu?: { requestAdapter(): Promise<unknown> } } }).navigator?.gpu;
-  if (!gpu) return false;
-  try {
-    return (await gpu.requestAdapter()) != null;
-  } catch {
-    return false;
-  }
+  return (await webGpuSupport()).supported;
 }
 
 /** A host-served URL, never resolved by the bundler: imported at runtime as is. */
@@ -155,15 +152,6 @@ export function loadBfiWeb(
     }
   });
   return attempt;
-}
-
-/** `promise`, or a rejection after `ms` — the timer never outlives the race. */
-function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${what} did not settle within ${ms} ms`)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 /** The threaded artifact with its pool started, or null when it does not apply here.

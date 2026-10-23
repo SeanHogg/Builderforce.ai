@@ -5,12 +5,13 @@
  * The gate itself already works — `write-outbox` refuses a denied send, and
  * `outboxStorage.ts` holds one stable permission that every durable outbox reads at send
  * time. What was missing is the HOST binding: nothing called
- * `bindOutboxSendPermission`, so the gate had no administrative source and
- * `builderforce.platform.synchronize` going off stopped nothing. This module is the seam
- * that takes the permission the platform policy produces and installs it as the store's
- * gate, so the policy's transitions (including a revoke, mid-flush) reach every durable
- * outbox built at module load — activity signals, error reports, queued chat turns, run
- * outcomes and the Brain step rows.
+ * `bindOutboxSendPermission`, so the gate had no administrative source and switching to
+ * Local only stopped nothing. This module is the seam that takes the permission the
+ * platform policy produces (`platformSendPermission`: open while the mode reaches the
+ * platform — NOT the sync switch) and installs it as the store's gate, so the policy's
+ * transitions (including a revoke, mid-flush) reach every durable PLATFORM outbox built
+ * at module load — activity signals, error reports, queued chat turns, run outcomes. The
+ * Brain step rows are not among them: in the editor they are written to the local store.
  *
  * It is a module of its own (rather than a line inside `activate`) so it can be exercised
  * without the extension host: `activate` needs `vscode` and every surface it registers.

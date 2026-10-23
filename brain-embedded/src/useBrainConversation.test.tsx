@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { DEFAULT_TOOL_FAILURE_STREAK } from '@builderforce/agent-loop';
-import { useBrainConversation } from './useBrainConversation';
+import { unansweredTurnIndex, useBrainConversation } from './useBrainConversation';
 import { resetBrainRunStore } from './brainRunStore';
 import { streamChatCompletion, type StreamChatResult } from './streamChatCompletion';
 import { BrainProvider, type BrainConfig, type BrainPersistenceAdapter } from './config';
@@ -184,6 +184,75 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['hi', 'hello there']);
     });
+  });
+
+  it('retryLastTurn re-answers a REFUSED turn without writing the user message again', async () => {
+    // The first run is refused (nothing on this device, Local only); the remedy moves the
+    // mode and re-sends — the second run answers the SAME persisted turn.
+    mockStream
+      .mockRejectedValueOnce(new Error('no_local_model'))
+      .mockResolvedValueOnce(result({ text: 'hello there' }));
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 1, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('hi'); });
+    await waitFor(() => expect(hook.current.error).toBeTruthy());
+
+    let retried = false;
+    await act(async () => { retried = hook.current.retryLastTurn(); });
+    expect(retried).toBe(true);
+
+    await waitFor(() => expect(hook.current.messages.map((m) => m.content).filter((c) => c === 'hello there')).toHaveLength(1));
+    expect(mockStream).toHaveBeenCalledTimes(2);
+    // ONE user row, ever: the re-send answers the turn already on record.
+    expect(rowsOfRole('user')).toHaveLength(1);
+    expect(hook.current.messages.filter((m) => m.role === 'user').map((m) => m.content)).toEqual(['hi']);
+    expect(hook.current.error).toBeFalsy();
+    // Answered now: nothing left to retry.
+    let again = true;
+    act(() => { again = hook.current.retryLastTurn(); });
+    expect(again).toBe(false);
+  });
+
+  it("prepareRun lays the host's run-time parts (system prompt, tools bound to the chat) over the request", async () => {
+    mockStream.mockResolvedValueOnce(result({ text: 'hello there' }));
+    const prepared: number[] = [];
+    const prepareRun = vi.fn(async (id: number) => {
+      prepared.push(id);
+      return { resolvedSystemPrompt: `You are Rovr, acting for chat ${id}.`, tools: [TOOL] };
+    });
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 7, toolSpecs: [], runTool: vi.fn(), prepareRun }),
+      { wrapper },
+    );
+    await act(async () => { await hook.current.send('hi'); });
+    expect(prepared).toEqual([7]);
+    const opts = mockStream.mock.calls[0]![0] as { messages: Array<{ role: string; content: unknown }>; tools?: unknown[] };
+    expect(String(opts.messages[0]!.content)).toContain('You are Rovr, acting for chat 7.');
+    expect(opts.tools).toHaveLength(1);
+  });
+
+  it("a prepareRun refusal is the conversation's error — the turn is kept, and retryLastTurn runs it once fixed", async () => {
+    mockStream.mockResolvedValueOnce(result({ text: 'hello there' }));
+    let refuse = true;
+    const prepareRun = vi.fn(async () => {
+      if (refuse) throw new Error('The working tab is gone.');
+      return {};
+    });
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 8, toolSpecs: [], runTool: vi.fn(), prepareRun }),
+      { wrapper },
+    );
+    await act(async () => { await hook.current.send('hi'); });
+    expect(hook.current.error).toBe('The working tab is gone.');
+    expect(mockStream).not.toHaveBeenCalled();
+    expect(rowsOfRole('user')).toHaveLength(1);
+    refuse = false;
+    await act(async () => { hook.current.retryLastTurn(); });
+    await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toContain('hello there'));
+    expect(rowsOfRole('user')).toHaveLength(1);
   });
 
   it('tool call round-trips: runs the tool, feeds the result back, then finalizes', async () => {
@@ -672,5 +741,16 @@ describe('useBrainConversation directed agent reply', () => {
     await act(async () => { await hook.current.send('hello bob', { addressedTo: bob }); });
     expect(hook.current.error).toBe('LLM not configured');
     expect(mockStream).not.toHaveBeenCalled();
+  });
+});
+
+describe('unansweredTurnIndex', () => {
+  const row = (id: number, role: string, content = '') => ({ id, role, content, metadata: null, seq: id, createdAt: '' });
+  it('finds the trailing user turn past the step rows a failed run left', () => {
+    expect(unansweredTurnIndex([row(1, 'user', 'hi'), row(2, 'tool'), row(3, 'tool')])).toBe(0);
+  });
+  it('is -1 once anything answered it, or with no messages', () => {
+    expect(unansweredTurnIndex([row(1, 'user', 'hi'), row(2, 'assistant', 'yo'), row(3, 'tool')])).toBe(-1);
+    expect(unansweredTurnIndex([])).toBe(-1);
   });
 });

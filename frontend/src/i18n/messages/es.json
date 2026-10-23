@@ -11838,7 +11838,18 @@
       "learnTargetSkipped": "Omitido {name} (proyecto #{projectId}) — {reason}",
       "replay": "Enviar de nuevo",
       "rateUp": "Buena respuesta",
-      "rateDown": "Mala respuesta"
+      "rateDown": "Mala respuesta",
+      "chatError": {
+        "noModel": "No hay ningún modelo disponible. Inicia sesión o inicia un modelo en este dispositivo.",
+        "noLocalModel": "Ningún modelo de este dispositivo puede responder. Cambia a Híbrido o descarga un modelo local.",
+        "noSpecificModel": "«Modelo concreto» está activado, pero no hay ningún modelo elegido. Elige uno o cambia a Híbrido.",
+        "engineCrashed": "El modelo de este dispositivo se ha bloqueado. Vuelve a enviar para reiniciarlo.",
+        "engineDetached": "El modelo de este dispositivo se detuvo antes de terminar. Vuelve a enviar para reintentarlo.",
+        "modelKeepsCrashing": "Este modelo se bloquea una y otra vez en este dispositivo. Quítalo o prueba otro modelo.",
+        "platformRefusedMode": "Solo local mantiene esta ejecución en este dispositivo, así que no pudo llegar a BuilderForce. Cambia a Híbrido en el menú /, en Modelo, para permitirlo.",
+        "platformRefusedSync": "La sincronización de la cuenta está desactivada, así que esto no se pudo guardar en tu cuenta. Activa la sincronización en la configuración de la plataforma o sigue trabajando en local.",
+        "platformRefusedSetting": "Uno de tus ajustes de la plataforma desactivó lo que esta ejecución necesitaba. Cámbialo en la configuración de la plataforma o elige otro modelo en el menú /."
+      }
     },
     "tickets": {
       "none": "Aún no hay tickets vinculados.",
@@ -12158,7 +12169,10 @@
     "engineCrashed": "El modelo de este dispositivo se ha bloqueado. Vuelve a enviar para reiniciarlo.",
     "engineDetached": "El modelo de este dispositivo se detuvo antes de terminar. Vuelve a enviar para reintentarlo.",
     "modelKeepsCrashing": "Este modelo se bloquea una y otra vez en este dispositivo. Quítalo o prueba otro modelo.",
-    "manageLocalModels": "Gestionar modelos del dispositivo"
+    "manageLocalModels": "Gestionar modelos del dispositivo",
+    "platformRefusedMode": "Solo local mantiene esta ejecución en este dispositivo, así que no pudo llegar a BuilderForce. Cambia a Híbrido en el menú /, en Modelo, para permitirlo.",
+    "platformRefusedSync": "La sincronización de la cuenta está desactivada, así que esto no se pudo guardar en tu cuenta. Activa la sincronización en la configuración de la plataforma o sigue trabajando en local.",
+    "platformRefusedSetting": "Uno de tus ajustes de la plataforma desactivó lo que esta ejecución necesitaba. Cámbialo en la configuración de la plataforma o elige otro modelo en el menú /."
   },
   "chatMessage": {
     "copy": "Copiar",

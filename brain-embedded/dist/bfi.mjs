@@ -20,8 +20,10 @@ import {
   reportPageEngineFailure,
   restrictBackends,
   serveEngineWorker,
-  servePageEngines
-} from "./chunk-WKSCDTN3.mjs";
+  servePageEngines,
+  webGpuSupport,
+  withTimeout
+} from "./chunk-3ZKSWQDQ.mjs";
 
 // src/pageEngines/bfiChunks.ts
 function closingChunk(finalJson) {
@@ -430,13 +432,7 @@ function canUseBfiThreads(scope = globalThis) {
   return g.crossOriginIsolated === true && typeof g.SharedArrayBuffer === "function" && typeof g.Worker === "function";
 }
 async function hasWebGpuAdapter() {
-  const gpu = globalThis.navigator?.gpu;
-  if (!gpu) return false;
-  try {
-    return await gpu.requestAdapter() != null;
-  } catch {
-    return false;
-  }
+  return (await webGpuSupport()).supported;
 }
 var importByUrl = (moduleUrl) => import(
   /* webpackIgnore: true */
@@ -468,13 +464,6 @@ function loadBfiWeb(wasmUrl, importer = importBfiWeb, options = {}) {
     }
   });
   return attempt;
-}
-function withTimeout(promise, ms, what) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${what} did not settle within ${ms} ms`)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 async function loadThreaded(options) {
   const { threads } = options;

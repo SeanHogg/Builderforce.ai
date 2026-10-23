@@ -935,5 +935,8 @@
   "How should BuilderForce run models?": "How should BuilderForce run models?",
   "Run models": "Run models",
   "Recommended": "Recommended",
-  "You can change this any time in the / menu, under Model.": "You can change this any time in the / menu, under Model."
+  "You can change this any time in the / menu, under Model.": "You can change this any time in the / menu, under Model.",
+  "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.": "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.",
+  "Account sync is off, so this could not be saved to your account. Turn on builderforce.platform.synchronize in Settings, or keep working locally.": "Account sync is off, so this could not be saved to your account. Turn on builderforce.platform.synchronize in Settings, or keep working locally.",
+  "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu."
 }

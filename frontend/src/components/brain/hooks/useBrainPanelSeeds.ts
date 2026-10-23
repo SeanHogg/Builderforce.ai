@@ -19,6 +19,7 @@ export function useBrainPanelSeeds({
   pinnedProjectId,
   viewingProjectId,
   showChatTab,
+  requestTurn,
 }: {
   chats: ReturnType<typeof useBrainChats>;
   conv: ReturnType<typeof useBrainConversation>;
@@ -30,6 +31,9 @@ export function useBrainPanelSeeds({
   viewingProjectId: number | null;
   /** Docked: bring the conversation tab forward (the seed lands there). */
   showChatTab: () => void;
+  /** THE first-run gate (`useWebTurnGate`): the seed prompt is a turn like a typed one —
+   *  held behind the question until the person chose where models run. */
+  requestTurn: (send: () => void) => boolean;
 }) {
   // Apply ?chat= deep link once chats are available.
   useEffect(() => {
@@ -93,6 +97,8 @@ export function useBrainPanelSeeds({
     if (step !== 'send') return;
     initialPromptSentRef.current = true;
     if (!isPage) showChatTab();
-    void conv.send(text);
-  }, [initialPrompt, conv, ticketReady, initialChatId, initialTicket, isPage, chats, showChatTab]);
+    // Through THE first-run gate, the same one the composer's Send passes: never chosen ⇒
+    // the question shows in this panel's composer and the seed is sent once they answer.
+    requestTurn(() => { void conv.send(text); });
+  }, [initialPrompt, conv, ticketReady, initialChatId, initialTicket, isPage, chats, showChatTab, requestTurn]);
 }

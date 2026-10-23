@@ -4,9 +4,13 @@
  * live run — or, before the first message, the shared empty state with Rovr's fixed
  * starters — the error card as its notice, and a footer holding the confirmation card
  * the safety gate pauses on, the question the agent is blocked on (the shared pending-
- * question banner) and the shared composer. Every turn — typed, a starter sent, an
- * answered question — leaves through THE shared `useChatTurns` door, and the first one
- * creates the chat through THE shared `useChatCreation`. Which chat is open is chosen from
+ * question banner) and the shared composer. The conversation is THE shared
+ * `useBrainConversation` — the same hook as the web Brain and the VS Code webview, with
+ * Rovr's stream, device record and run-time parts (`prepareRun`) injected — so the turn,
+ * the run, its error and its remedies ("Switch to Hybrid" re-sends the refused turn) are
+ * one code path on every surface. Every turn — typed, a starter sent, an answered
+ * question — leaves through THE shared `useChatTurns` door, and the first one creates the
+ * chat through THE shared `useChatCreation`. Which chat is open is chosen from
  * the header's History lever (`RovrChatHistory`).
  */
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
@@ -19,7 +23,7 @@ import {
   DEFAULT_QUEUED_TURN_LABELS,
   PendingQuestionBanner,
   QueuedTurnChips,
-  requestComposerMenu,
+  modelRemedies,
   StarterGroup,
   StarterTile,
   SurfaceEmptyState,
@@ -32,7 +36,7 @@ import {
   useModelFallback,
 } from '@seanhogg/builderforce-brain-ui';
 import catalogs from 'virtual:rovr-timeline-catalogs';
-import { deriveChatTitle, useChatCreation, useChatTurns, type BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import { deriveChatTitle, useBrainConversation, useChatCreation, useChatTurns } from '@seanhogg/builderforce-brain-embedded';
 import { PRICING_URL } from '../config';
 import { t, uiCatalogLocale, type MessageKey } from '../i18n/t';
 import type { LocalChat } from '../store/records';
@@ -40,7 +44,7 @@ import { ChatInfoStrip } from './ChatInfoStrip';
 import { ConfirmCard } from './ConfirmCard';
 import { connectRequiredProvider } from '../inference/connectedAccount';
 import { KimiConnectCard } from './KimiConnect';
-import { useInferenceModeState, useLoaded, useRun, useServices } from './hooks';
+import { useInferenceModeState, useRun, useServices } from './hooks';
 import { rovrLookup } from './labels/rovrLookup';
 import { RovrComposer } from './RovrComposer';
 import { ROVR_STARTERS } from './rovrStarters';
@@ -84,14 +88,6 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
       { ...stringsFrom(DEFAULT_ASK_USER_LABELS, lookup), askDismiss: t('dismiss') },
     ] as const;
   }, []);
-  const [messages, reload] = useLoaded<BrainMessage[]>(
-    () => (chatId === null ? Promise.resolve([]) : services.records.listMessages(chatId)),
-    [],
-    [chatId],
-  );
-  // The loop persisted a turn (or the run settled) — re-read the device record.
-  useEffect(reload, [run.messagesEpoch, run.running, reload]);
-
   // The first message creates the chat — with the `/` choices made before it existed —
   // and names it by THE one first-message title rule (brain-embedded). A second send
   // before the device record's write lands JOINS that creation.
@@ -126,33 +122,36 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     },
   });
 
-  // One turn, start to finish.
-  const deliver = async (text: string) => {
-    try {
-      const id = await ensureChatId();
-      if (id === null) return;
-      await onFirstUserTurn(id, text);
-      const sending = services.host.send(id, text);
-      reload();
-      await sending;
-    } catch (error) {
-      services.reportError(error, 'chat.send');
-    } finally {
-      reload();
-      onChatsChanged();
-    }
-  };
+  // THE shared conversation over this chat: the transcript (the device record), the
+  // turn, the run and its live view, Stop, the error and the refused turn's re-send.
+  const conv = useBrainConversation({
+    chatId,
+    ensureChatId,
+    onFirstUserTurn: (id, text) => { void onFirstUserTurn(id, text); },
+    // What only Rovr knows at run time: the browser tools bound to THIS chat, the
+    // working tab's prompt, the chat's `/` choices (`host/rovrRunHost.ts`).
+    prepareRun: services.host.prepareRun,
+    onActivity: onChatsChanged,
+  });
+  const messages = conv.messages;
 
   // THE one door a turn leaves through: a turn typed while a run streams is HELD and
   // delivered on the run's falling edge (the composer's Send says "Queue message");
   // Stop drops what is held, then stops the run.
   const turns = useChatTurns<string>({
-    running: run.running,
+    running: conv.sending,
     runKey: chatId,
-    send: deliver,
-    stop: () => {
-      if (chatId !== null) services.host.stop(chatId);
+    send: async (text) => {
+      try {
+        return await conv.send(text);
+      } catch (error) {
+        services.reportError(error, 'chat.send');
+        return false;
+      } finally {
+        onChatsChanged();
+      }
     },
+    stop: conv.stop,
   });
   const send = () => {
     const text = draft.trim();
@@ -170,7 +169,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
     document.getElementById(askUserAnchorId(pendingQuestion.messageId))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [pendingQuestion]);
 
-  const empty = messages.length === 0 && !run.running && !run.streamingText;
+  const empty = messages.length === 0 && !conv.sending && !conv.streamingText;
 
   // THE shared AI surface body: rail · thread (or the empty state) · notices · footer.
   return (
@@ -189,10 +188,10 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
       thread={(
         <BrainTimeline
           messages={messages}
-          trace={run.trace}
-          streamingText={run.streamingText}
-          isRunning={run.running}
-          activity={run.activity}
+          trace={conv.trace}
+          streamingText={conv.streamingText}
+          isRunning={conv.sending}
+          activity={conv.activity}
           labels={labels}
           assistantName="Rovr"
           onAnswerQuestion={answer}
@@ -212,30 +211,33 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
           )}
         />
       ) : undefined}
-      notices={fallbackNotice || run.error ? (
+      notices={fallbackNotice || conv.error ? (
         <>
           {/* Hybrid's pick failed and the turn was answered with Auto — said in one line. */}
           {fallbackNotice}
-          {run.error && connectRequiredProvider(run.error) === 'kimi' ? (
+          {conv.error && connectRequiredProvider(conv.error) === 'kimi' ? (
             // A Kimi turn whose account is not connected (or not granted to Rovr yet): offer
             // the connect right here — clearing the failed turn once it lands.
-            <KimiConnectCard onConnected={() => chatId !== null && services.host.clearError(chatId)} />
-          ) : run.error ? (
+            <KimiConnectCard onConnected={conv.clearError} />
+          ) : conv.error ? (
             <ChatErrorBanner
               className="rovr-chat__error"
-              error={t('runFailed', run.error)}
-              action={run.errorAction}
-              onDismiss={() => chatId !== null && services.host.clearError(chatId)}
+              error={t('runFailed', conv.error)}
+              action={conv.errorAction}
+              onDismiss={conv.clearError}
               onSignIn={onOpenSettings}
-              // Nothing on this device could answer: on Local only, offer Hybrid; always offer
-              // Settings, where the on-device models are downloaded.
-              {...(inferenceMode.loaded && inferenceMode.mode === 'local-only' ? { onSwitchToHybrid: () => void services.policy.setInferenceMode('hybrid') } : {})}
-              onDownloadLocalModel={onOpenSettings}
-              // Specific model with nothing picked: this composer's Model tab.
-              onPickModel={() => {
-                requestComposerMenu(composerId, 'model');
-                if (chatId !== null) services.host.clearError(chatId);
-              }}
+              // Nothing can take the turn for a reason sign-in won't fix: brain-ui's ONE
+              // remedies — Hybrid (only on Local only), Settings (where on-device models are
+              // downloaded), and this composer's Model tab for "Pick a model".
+              {...modelRemedies({
+                mode: inferenceMode.loaded ? inferenceMode.mode : undefined,
+                setMode: (mode) => services.policy.setInferenceMode(mode),
+                composerId,
+                onDismiss: conv.clearError,
+                downloadLocalModel: onOpenSettings,
+                // "Switch to Hybrid" re-sends the refused turn — the one already on record.
+                retry: () => { conv.retryLastTurn(); },
+              })}
               onReconnect={onOpenSettings}
               onUpgrade={() => void chrome.tabs.create({ url: PRICING_URL })}
               onValidateCard={() => void chrome.tabs.create({ url: PRICING_URL })}
@@ -252,6 +254,9 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
             engineDetached: t('engineDetached'),
             modelKeepsCrashing: t('modelKeepsCrashing'),
             manageLocalModels: t('manageLocalModels'),
+                platformRefusedMode: t('platformRefusedMode'),
+                platformRefusedSync: t('platformRefusedSync'),
+                platformRefusedSetting: t('platformRefusedSetting'),
                 upgrade: t('upgrade'),
                 upgradeToPlan: t('upgradeToPlan'),
                 addCard: t('addCard'),
@@ -263,7 +268,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
       ) : null}
       footer={(
         <SurfaceFooter
-          confirm={run.pendingConfirm && chatId !== null ? <ConfirmCard chatId={chatId} call={run.pendingConfirm} /> : null}
+          confirm={conv.pendingConfirm && chatId !== null ? <ConfirmCard chatId={chatId} call={conv.pendingConfirm} /> : null}
           question={pendingQuestion && (
             <PendingQuestionBanner
               key={pendingQuestion.messageId}
@@ -279,7 +284,7 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
               value={draft}
               onChange={setDraft}
               onSubmit={send}
-              running={run.running}
+              running={conv.sending}
               onStop={turns.stop}
               above={(
                 <QueuedTurnChips

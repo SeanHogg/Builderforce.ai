@@ -1,3 +1,15 @@
+type PlatformCapability = 'synchronize' | 'gateway-inference' | 'connected-feature' | 'authenticate' | 'model-download' | 'direct-provider' | 'external-mcp' | 'git-remote';
+interface PlatformPolicySnapshot {
+    synchronize: boolean;
+    gatewayInference: boolean;
+    connectedFeatures: boolean;
+    authenticate: boolean;
+    modelDownloads: boolean;
+    directProviders: boolean;
+    externalMcp: boolean;
+    gitRemotes: boolean;
+}
+
 /**
  * Chat request errors, and the ONE classifier that decides what a user can DO
  * about one.
@@ -15,6 +27,7 @@
  * (which renders the button) read it, so the message and its call-to-action can
  * never disagree — and no consumer re-implements a regex over error prose.
  */
+
 /** What the user can do about a failed turn. `null` ⇒ nothing but dismiss. */
 type ChatErrorActionKind = 
 /** Session expired/invalid — re-exchange the token in place. */
@@ -43,7 +56,18 @@ type ChatErrorActionKind =
  * sign-in or upgrade prompt: the banner names the failure in the person's language and,
  * for a model that keeps crashing, offers "Pick a model" and "Manage on-device models".
  */
- | 'local_engine_failed';
+ | 'local_engine_failed'
+/**
+ * The person's own platform policy refused a request the turn needed — a
+ * `PlatformAccessDenied` (`platform_<capability>_disabled`) or a durable outbox's
+ * `platform_send_disabled`. {@link ChatErrorAction.capability} names what was refused
+ * and {@link ChatErrorAction.setting} the switch that governs it, so the banner names
+ * the mode / switch and how to change it — never the raw code.
+ */
+ | 'platform_refused';
+/** What a `platform_refused` verdict names: a policy capability, or `send` (an outbox's
+ *  administrative gate — the mode does not reach the platform). */
+type PlatformRefusedCapability = PlatformCapability | 'send';
 /**
  * The ONE sentinel a transport throws when no model can serve a turn: signed out and
  * nothing runs on this device. Hosts never match it themselves — {@link chatErrorAction}
@@ -75,6 +99,14 @@ interface ChatErrorAction {
     kind: ChatErrorActionKind;
     /** For `local_engine_failed`: which engine failure it was. */
     engineCode?: LocalEngineFailureCode;
+    /** For `platform_refused`: what the policy refused. */
+    capability?: PlatformRefusedCapability;
+    /**
+     * For `platform_refused`: the policy switch that governs it (`builderforce.platform.<setting>`
+     * in the editor, the same field on the web and in Rovr), or `inferenceMode` when only
+     * leaving Local only opens it (the gateway, connected features, or `send`).
+     */
+    setting?: keyof PlatformPolicySnapshot | 'inferenceMode';
     /** Plan that WOULD satisfy the request ('pro'), when the server named one. */
     requiredPlan?: string;
     /** Entitlement key that was refused ('premiumModels'), when the server named one. */
@@ -112,4 +144,4 @@ declare function brainRequestError(status: number, body: unknown, statusText?: s
  */
 declare function chatErrorAction(err: unknown): ChatErrorAction | null;
 
-export { BrainRequestError, type ChatErrorAction, type ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, type LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, brainRequestError, chatErrorAction };
+export { BrainRequestError, type ChatErrorAction, type ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, type LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, type PlatformRefusedCapability, brainRequestError, chatErrorAction };

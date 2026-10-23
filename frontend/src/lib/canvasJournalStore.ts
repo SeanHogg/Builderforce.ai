@@ -18,8 +18,8 @@
  * long session cannot fill the quota and start throwing on write.
  */
 
-import type { CanvasAction } from './canvasActionJournal';
-import { JOURNAL_LIMIT } from './canvasActionJournal';
+import type { CanvasAction, CanvasJournal } from './canvasActionJournal';
+import { JOURNAL_LIMIT, createCanvasJournal } from './canvasActionJournal';
 
 const KEY_PREFIX = 'builderforce:canvas-journal:';
 
@@ -80,4 +80,29 @@ export function writeStoredJournal(sessionId: string, actions: readonly CanvasAc
     // A full quota must not break the board. The journal is diagnostic, and the
     // in-memory copy is still complete for this tab.
   }
+}
+
+/** The live journal of every board this page has opened, by session id. */
+const liveJournals = new Map<string, CanvasJournal>();
+
+/**
+ * THE journal for one board in this page — the SAME object for every mount of that board.
+ *
+ * A turn outlives the component that started it (the run store holds it across a lens
+ * switch, a route change, a remount), and its `brain.turn` span is closed through the
+ * journal it was OPENED on. A journal per mount — hydrated from storage as COPIES of the
+ * stored entries — left the remounted board reading the open span from storage while the
+ * turn closed the old mount's object nobody reads any more: a turn that finished, reported
+ * as one that "never completed". One journal per board per page keeps the span the turn
+ * closes and the span the report reads the same object. Hydrated from this tab's storage
+ * once, on first use, so a reload still carries the evidence.
+ */
+export function sessionCanvasJournal(sessionId: string): CanvasJournal {
+  const existing = liveJournals.get(sessionId);
+  if (existing) return existing;
+  const journal = createCanvasJournal();
+  const stored = readStoredJournal(sessionId);
+  if (stored.length) journal.restore(stored);
+  liveJournals.set(sessionId, journal);
+  return journal;
 }

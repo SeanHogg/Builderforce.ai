@@ -72,6 +72,27 @@ function brainRequestError(status, body, statusText) {
     feature: str(b.feature)
   });
 }
+var PLATFORM_CODE_RE = /\bplatform_(synchronize|gateway_inference|connected_feature|authenticate|model_download|direct_provider|external_mcp|git_remote|send)_disabled\b/;
+var PLATFORM_SETTING = {
+  synchronize: "synchronize",
+  "gateway-inference": "inferenceMode",
+  "connected-feature": "inferenceMode",
+  authenticate: "inferenceMode",
+  "model-download": "modelDownloads",
+  "direct-provider": "directProviders",
+  "external-mcp": "externalMcp",
+  "git-remote": "gitRemotes",
+  send: "inferenceMode"
+};
+function platformRefusal(err, message) {
+  const fields = err && typeof err === "object" ? err : {};
+  if (typeof fields.capability === "string" && fields.capability in PLATFORM_SETTING && fields.code === "PLATFORM_ACCESS_DENIED") {
+    return fields.capability;
+  }
+  if (fields.code === "PLATFORM_SEND_DISABLED") return "send";
+  const match = PLATFORM_CODE_RE.exec(message)?.[1];
+  return match ? match.replaceAll("_", "-") : null;
+}
 var AUTH_PROSE = /invalid or expired token|unauthor/i;
 var CARD_PROSE = /validated card|add a card|card on file/i;
 var UPGRADE_PROSE = /requires? a paid plan|upgrade to (pro|teams)|plan (token )?limit|not included in your plan/i;
@@ -96,6 +117,8 @@ function chatErrorAction(err) {
   if (message === NO_SPECIFIC_MODEL) return { kind: "no_specific_model" };
   const engineCode = localEngineCode(err instanceof BrainRequestError ? err.code : void 0, message);
   if (engineCode) return { kind: "local_engine_failed", engineCode };
+  const refused = platformRefusal(err, message);
+  if (refused) return { kind: "platform_refused", capability: refused, setting: PLATFORM_SETTING[refused] };
   if (AUTH_PROSE.test(message)) return { kind: "auth" };
   if (CARD_PROSE.test(message)) return { kind: "validate_card" };
   if (UPGRADE_PROSE.test(message)) return { kind: "upgrade" };

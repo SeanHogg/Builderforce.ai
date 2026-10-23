@@ -11838,7 +11838,18 @@
       "learnTargetSkipped": "Skipped {name} (project #{projectId}) — {reason}",
       "replay": "Send again",
       "rateUp": "Good response",
-      "rateDown": "Bad response"
+      "rateDown": "Bad response",
+      "chatError": {
+        "noModel": "No model is available. Sign in, or start a model on this device.",
+        "noLocalModel": "No model on this device can answer. Switch to Hybrid, or download a local model.",
+        "noSpecificModel": "Specific model is on, but no model is picked. Pick one, or switch to Hybrid.",
+        "engineCrashed": "The on-device model crashed. Send again to restart it.",
+        "engineDetached": "The on-device model stopped before it finished. Send again to retry.",
+        "modelKeepsCrashing": "This model keeps crashing on this device. Remove it, or try another model.",
+        "platformRefusedMode": "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.",
+        "platformRefusedSync": "Account sync is off, so this could not be saved to your account. Turn on sync in your platform settings, or keep working locally.",
+        "platformRefusedSetting": "One of your platform settings turned off what this run needed. Change it in your platform settings, or pick another model in the / menu."
+      }
     },
     "tickets": {
       "none": "No tickets linked yet.",
@@ -12158,7 +12169,10 @@
     "engineCrashed": "The on-device model crashed. Send again to restart it.",
     "engineDetached": "The on-device model stopped before it finished. Send again to retry.",
     "modelKeepsCrashing": "This model keeps crashing on this device. Remove it, or try another model.",
-    "manageLocalModels": "Manage on-device models"
+    "manageLocalModels": "Manage on-device models",
+    "platformRefusedMode": "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.",
+    "platformRefusedSync": "Account sync is off, so this could not be saved to your account. Turn on sync in your platform settings, or keep working locally.",
+    "platformRefusedSetting": "One of your platform settings turned off what this run needed. Change it in your platform settings, or pick another model in the / menu."
   },
   "chatMessage": {
     "copy": "Copy",

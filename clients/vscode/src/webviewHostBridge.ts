@@ -3,11 +3,12 @@ import { getTenantJwt } from "./bfApi";
 import { logLine } from "./errorReporter";
 import { getBaseUrl, getWebBaseUrl } from "./gateway";
 import { localBrainApplication } from "./localFirstStore";
-import { platformPolicy } from "./platformPolicy";
+import { platformInferenceMode, platformPolicy } from "./platformPolicy";
 import { assertPlatformSocketAllowed, platformPolicyFrame, platformSocketUrl } from "./platformCallGate";
 import { isInferenceMode } from "@builderforce/local-first";
 import { setInferenceMode } from "./inferenceModeSetting";
 import { DOWNLOAD_LOCAL_MODEL_COMMAND } from "./noLocalModelPrompt";
+import { callLocalPersistence } from "./localPersistenceDispatch";
 
 /**
  * The host half of the webview bridge — the three things EVERY bundled-React
@@ -108,11 +109,13 @@ export function postToWebview(webview: vscode.Webview | undefined, msg: unknown,
   if (!webview) return;
   if (msg && typeof msg === "object" && (msg as { type?: unknown }).type === "init") {
     watchPlatformPolicy(webview, owner);
-    const frame = msg as { platformPolicy?: unknown; baseUrl?: string };
+    const frame = msg as { platformPolicy?: unknown; inferenceMode?: unknown; baseUrl?: string };
     if (!frame.platformPolicy) {
       void webview.postMessage({
         ...frame,
         platformPolicy: platformPolicy().snapshot(),
+        // The realm decides with the shared gate, which needs the mode as well.
+        inferenceMode: frame.inferenceMode ?? platformInferenceMode(),
         baseUrl: frame.baseUrl ?? getBaseUrl(),
       });
       return;
@@ -186,31 +189,10 @@ export async function handleSharedHostMessage(
       return true;
     }
     case "local.persistence": {
-      const request = msg as WebviewInbound & { method?: string; args?: unknown[] };
-      const persistence = localBrainApplication(ctx).persistence as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
-      const allowed = new Set([
-        "listChats",
-        "getChat",
-        "createChat",
-        "updateChat",
-        "deleteChat",
-        "archiveChat",
-        "summarizeChat",
-        "getMessages",
-        "sendMessages",
-        "setMessageFeedback",
-        "upload",
-      ]);
-      if (!request.method || !allowed.has(request.method)) {
-        respondToWebview(webview, msg.id, false, undefined, "Unsupported local persistence operation");
-        return true;
-      }
-      try {
-        const result = await persistence[request.method](...(request.args ?? []));
-        respondToWebview(webview, msg.id, true, result);
-      } catch (error) {
-        respondToWebview(webview, msg.id, false, undefined, error instanceof Error ? error.message : String(error));
-      }
+      const request = msg as WebviewInbound & { method?: unknown; args?: unknown[] };
+      const answer = await callLocalPersistence(localBrainApplication(ctx).persistence, request.method, request.args, logLine);
+      if (answer.ok) respondToWebview(webview, msg.id, true, answer.result);
+      else respondToWebview(webview, msg.id, false, undefined, answer.error);
       return true;
     }
     case "signin":

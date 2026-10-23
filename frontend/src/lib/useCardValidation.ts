@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { useAuth } from '@/lib/AuthContext';
+import { useOptionalAuth } from '@/lib/AuthContext';
 import { invalidateLlmModels } from '@/lib/useLlmModels';
 import { invalidateConsumption } from '@/lib/useConsumption';
 import { cardValidationApi } from '@/lib/builderforceApi';
@@ -25,7 +25,10 @@ export function useStartCardValidation(): {
    *  translation scope of its own. */
   error: string | null;
 } {
-  const { tenant } = useAuth();
+  // The optional read: THE chat error banner renders on every web surface, the canvas
+  // included — and the canvas also renders in the VS Code panel, which has no
+  // AuthProvider. No session there means no tenant, and `start` is then a no-op.
+  const tenant = useOptionalAuth()?.tenant ?? null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

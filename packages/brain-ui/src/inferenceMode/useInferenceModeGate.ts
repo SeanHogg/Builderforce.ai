@@ -7,8 +7,15 @@
  * the question shows in the composer either way.
  *
  * `request(send)` runs `send` at once when no choice is needed, else holds it and asks.
- * `choose(mode)` applies the mode, then runs the held send. A send still held when the
+ * `choose(mode)` applies the mode, then runs the held sends. A send still held when the
  * question stops being needed (the person chose in the `/` menu instead) is sent then.
+ *
+ * Every held send is KEPT, in order: the landing prompt held behind the question and a
+ * second Send pressed while it shows are both the person's — replacing the first with the
+ * second silently dropped a turn. And once the person has answered, the gate is open for
+ * the rest of this mount at once, not from the host's next render: a held send that
+ * itself passes the gate again (a host door that gates, behind a composer that gates)
+ * must run, never be held a second time behind a question that was already answered.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { InferenceMode } from '@seanhogg/builderforce-brain-embedded';
@@ -25,36 +32,46 @@ export interface InferenceModeGate {
 
 export function useInferenceModeGate(inferenceMode: PromptOptionsInferenceMode | undefined): InferenceModeGate {
   const needsChoice = !!inferenceMode?.needsChoice;
-  const held = useRef<(() => void) | null>(null);
+  const held = useRef<Array<() => void>>([]);
   const [holding, setHolding] = useState(false);
   const onChange = inferenceMode?.onChange;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  /** Answered on this mount — the gate stays open even before the host re-renders. */
+  const answered = useRef(false);
   const needsRef = useRef(needsChoice);
-  needsRef.current = needsChoice;
+  needsRef.current = needsChoice && !answered.current;
+
+  /** Take every held send, in the order it was requested, and clear the hold. */
+  const release = useCallback((): Array<() => void> => {
+    const sends = held.current;
+    held.current = [];
+    setHolding(false);
+    return sends;
+  }, []);
 
   const request = useCallback((send: () => void): boolean => {
     if (!needsRef.current) { send(); return true; }
-    held.current = send;
+    held.current = [...held.current, send];
     setHolding(true);
     return false;
   }, []);
 
   const choose = useCallback((mode: InferenceMode) => {
-    const send = held.current;
-    held.current = null;
-    setHolding(false);
-    void Promise.resolve(onChangeRef.current?.(mode)).finally(() => send?.());
-  }, []);
+    answered.current = true;
+    needsRef.current = false;
+    const sends = release();
+    // Sent whether or not the mode's side effects settled cleanly — the choice is stored
+    // first, and a held turn that then cannot run reports its own failure (never a hang).
+    const run = () => { for (const send of sends) send(); };
+    void Promise.resolve(onChangeRef.current?.(mode)).then(run, run);
+  }, [release]);
 
   // Chosen elsewhere (the `/` menu, another tab) while a send was held: send it now.
   useEffect(() => {
-    if (needsChoice || !held.current) return;
-    const send = held.current;
-    held.current = null;
-    setHolding(false);
-    send();
-  }, [needsChoice]);
+    if (needsChoice || held.current.length === 0) return;
+    for (const send of release()) send();
+  }, [needsChoice, release]);
 
-  return { asking: holding && needsChoice, request, choose };
+  return { asking: holding && needsChoice && !answered.current, request, choose };
 }

@@ -1,7 +1,10 @@
 import type { BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
+import type { LocalPersistenceMethod } from '../../src/bridgeProtocol';
 import { request } from './bridgeTransport';
 
-const call = <T>(method: string, args: unknown[] = []): Promise<T> =>
+/** `method` is the shared list the host dispatches on, so a name the host cannot
+ *  serve does not compile here. */
+const call = <T>(method: LocalPersistenceMethod, args: unknown[] = []): Promise<T> =>
   request<T>('local.persistence', { method, args });
 
 export function createHostPersistence(): BrainPersistenceAdapter {

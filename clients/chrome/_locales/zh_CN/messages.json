@@ -861,6 +861,18 @@
     "message": "管理设备上的模型",
     "description": "Button: open Settings, where on-device models are managed and removed"
   },
+  "platformRefusedMode": {
+    "message": "“仅本地”会让此次运行留在本设备上，因此无法连接 BuilderForce。请在 / 菜单的“模型”中切换到混合模式以允许连接。",
+    "description": "Chat error: Local only refused a call this run needed to reach the platform"
+  },
+  "platformRefusedSync": {
+    "message": "账户同步已关闭，因此无法保存到你的账户。请在平台设置中开启同步，或继续在本地工作。",
+    "description": "Chat error: account sync is off, so the run could not save to the account"
+  },
+  "platformRefusedSetting": {
+    "message": "你的某项平台设置关闭了此次运行所需的功能。请在平台设置中更改，或在 / 菜单中选择其他模型。",
+    "description": "Chat error: a platform setting turned off what this run needed"
+  },
   "modelFallback": {
     "message": "您选择的 $1 失败；已改用自动模式回答。",
     "description": "Notice: the picked model failed (Hybrid) and the turn was answered with Auto; $1 = the picked model"

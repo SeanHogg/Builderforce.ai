@@ -27,6 +27,8 @@
  * that will never handle it.
  */
 
+import type { BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
+
 /** Answered by every surface — see `webviewHostBridge.handleSharedHostMessage`. */
 export const SHARED_HOST_MESSAGES = [
   /** Re-mint the tenant JWT (the webview cannot reach secret storage). */
@@ -44,6 +46,35 @@ export const SHARED_HOST_MESSAGES = [
   /** Open the model picker's on-device list (the `no_local_model` banner's remedy). */
   'downloadLocalModel',
 ] as const;
+
+/**
+ * The Brain persistence methods a `local.persistence` request may name — ONE list for
+ * the webview proxy (`webview/src/hostPersistence.ts`) and the host dispatcher
+ * (`webviewHostBridge.ts`). Every name here is a member of `BrainPersistenceAdapter`
+ * (the compile check below), and the host serves it from the SAME adapter the web runs
+ * on (`createLocalBrainPersistence`). The 2026.10.57 panel opened on
+ * `s[i.method] is not a function`: this list named `listChats` while the host's
+ * object was a write-only twin that had no such method.
+ */
+export const LOCAL_PERSISTENCE_METHODS = [
+  'listChats',
+  'getChat',
+  'createChat',
+  'updateChat',
+  'deleteChat',
+  'archiveChat',
+  'summarizeChat',
+  'getMessages',
+  'sendMessages',
+  'setMessageFeedback',
+  'upload',
+] as const satisfies readonly (keyof BrainPersistenceAdapter)[];
+
+export type LocalPersistenceMethod = (typeof LOCAL_PERSISTENCE_METHODS)[number];
+
+export function isLocalPersistenceMethod(method: unknown): method is LocalPersistenceMethod {
+  return typeof method === 'string' && (LOCAL_PERSISTENCE_METHODS as readonly string[]).includes(method);
+}
 
 /** The Brain panel: the run loop, the tool bridge and the editor's own state. */
 export const BRAIN_HOST_MESSAGES = [

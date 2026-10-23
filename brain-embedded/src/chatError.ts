@@ -16,6 +16,8 @@
  * never disagree — and no consumer re-implements a regex over error prose.
  */
 
+import type { PlatformCapability, PlatformPolicySnapshot } from '@builderforce/local-first';
+
 /** What the user can do about a failed turn. `null` ⇒ nothing but dismiss. */
 export type ChatErrorActionKind =
   /** Session expired/invalid — re-exchange the token in place. */
@@ -44,7 +46,19 @@ export type ChatErrorActionKind =
    * sign-in or upgrade prompt: the banner names the failure in the person's language and,
    * for a model that keeps crashing, offers "Pick a model" and "Manage on-device models".
    */
-  | 'local_engine_failed';
+  | 'local_engine_failed'
+  /**
+   * The person's own platform policy refused a request the turn needed — a
+   * `PlatformAccessDenied` (`platform_<capability>_disabled`) or a durable outbox's
+   * `platform_send_disabled`. {@link ChatErrorAction.capability} names what was refused
+   * and {@link ChatErrorAction.setting} the switch that governs it, so the banner names
+   * the mode / switch and how to change it — never the raw code.
+   */
+  | 'platform_refused';
+
+/** What a `platform_refused` verdict names: a policy capability, or `send` (an outbox's
+ *  administrative gate — the mode does not reach the platform). */
+export type PlatformRefusedCapability = PlatformCapability | 'send';
 
 /**
  * The ONE sentinel a transport throws when no model can serve a turn: signed out and
@@ -89,6 +103,14 @@ export interface ChatErrorAction {
   kind: ChatErrorActionKind;
   /** For `local_engine_failed`: which engine failure it was. */
   engineCode?: LocalEngineFailureCode;
+  /** For `platform_refused`: what the policy refused. */
+  capability?: PlatformRefusedCapability;
+  /**
+   * For `platform_refused`: the policy switch that governs it (`builderforce.platform.<setting>`
+   * in the editor, the same field on the web and in Rovr), or `inferenceMode` when only
+   * leaving Local only opens it (the gateway, connected features, or `send`).
+   */
+  setting?: keyof PlatformPolicySnapshot | 'inferenceMode';
   /** Plan that WOULD satisfy the request ('pro'), when the server named one. */
   requiredPlan?: string;
   /** Entitlement key that was refused ('premiumModels'), when the server named one. */
@@ -156,6 +178,32 @@ export function brainRequestError(status: number, body: unknown, statusText?: st
   });
 }
 
+const PLATFORM_CODE_RE = /\bplatform_(synchronize|gateway_inference|connected_feature|authenticate|model_download|direct_provider|external_mcp|git_remote|send)_disabled\b/;
+
+/** The snapshot field each capability's switch is — `inferenceMode` where the mode decides. */
+const PLATFORM_SETTING: Readonly<Record<PlatformRefusedCapability, keyof PlatformPolicySnapshot | 'inferenceMode'>> = {
+  synchronize: 'synchronize',
+  'gateway-inference': 'inferenceMode',
+  'connected-feature': 'inferenceMode',
+  authenticate: 'inferenceMode',
+  'model-download': 'modelDownloads',
+  'direct-provider': 'directProviders',
+  'external-mcp': 'externalMcp',
+  'git-remote': 'gitRemotes',
+  send: 'inferenceMode',
+};
+
+/** The refused capability a policy refusal carries (its `capability` field, else its code). */
+function platformRefusal(err: unknown, message: string): PlatformRefusedCapability | null {
+  const fields = err && typeof err === 'object' ? (err as { capability?: unknown; code?: unknown }) : {};
+  if (typeof fields.capability === 'string' && fields.capability in PLATFORM_SETTING && fields.code === 'PLATFORM_ACCESS_DENIED') {
+    return fields.capability as PlatformRefusedCapability;
+  }
+  if (fields.code === 'PLATFORM_SEND_DISABLED') return 'send';
+  const match = PLATFORM_CODE_RE.exec(message)?.[1];
+  return match ? (match.replaceAll('_', '-') as PlatformRefusedCapability) : null;
+}
+
 /**
  * Prose fallbacks, for an older gateway (or a non-JSON edge/proxy error) that
  * carries no structured fields. Deliberately narrow: a wrong guess here would
@@ -193,6 +241,8 @@ export function chatErrorAction(err: unknown): ChatErrorAction | null {
   if (message === NO_SPECIFIC_MODEL) return { kind: 'no_specific_model' };
   const engineCode = localEngineCode(err instanceof BrainRequestError ? err.code : undefined, message);
   if (engineCode) return { kind: 'local_engine_failed', engineCode };
+  const refused = platformRefusal(err, message);
+  if (refused) return { kind: 'platform_refused', capability: refused, setting: PLATFORM_SETTING[refused] };
   if (AUTH_PROSE.test(message)) return { kind: 'auth' };
   if (CARD_PROSE.test(message)) return { kind: 'validate_card' };
   if (UPGRADE_PROSE.test(message)) return { kind: 'upgrade' };

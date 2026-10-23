@@ -5,6 +5,7 @@ import {
   bindOutboxStorage,
   boundOutboxSendPermission,
   createDurableOutbox,
+  durableStepHost,
   outboxSendPermission,
   setOutboxScope,
 } from "./outboxStorage";
@@ -205,5 +206,22 @@ describe("durable host outbox — unbound send permission", () => {
     bindOutboxSendPermission(null);
     expect(boundOutboxSendPermission()).toBeNull();
     expect(outboxSendPermission.isAllowed()).toBe(false);
+  });
+});
+describe("the Brain step queue writes the LOCAL store", () => {
+  it("is not held on the platform send gate: a denied gate never refuses a run's step rows", async () => {
+    // 2026.10.57: a signed-in Hybrid run (sync off) ended `agent.run failed:
+    // platform_send_disabled` — its closing write drained this queue through the gate.
+    bindOutboxSendPermission(null);
+    expect(outboxSendPermission.isAllowed()).toBe(false);
+    const sent: Array<{ chatId: number; rows: number }> = [];
+    const host = durableStepHost(async (chatId, rows) => {
+      sent.push({ chatId, rows: rows.length });
+      return [];
+    });
+    expect(host.sendPermission).toBeUndefined();
+    expect(host.online).toBeUndefined();
+    await host.sendRows!(7, [{ role: "tool", content: "step" }], "tenant:1");
+    expect(sent).toEqual([{ chatId: 7, rows: 1 }]);
   });
 });

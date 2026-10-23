@@ -22,6 +22,7 @@
 import * as path from 'node:path';
 import {
   computeBrainDiagnostics,
+  createBrainRestPersistence,
   fetchApiVersionVia,
   fetchMcpToolEntries,
   gatherChatDiagnostics,
@@ -39,7 +40,6 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { TOOL_DEFS } from '../src/fileTools';
 import { authedFetch } from '../webview/src/authedFetch';
-import { createPersistence } from '../webview/src/persistence';
 import { fetchPlanSnapshot } from '../webview/src/planSnapshot';
 import { buildIdeSystemPrompt } from '../webview/src/systemPrompt';
 import { buildTranscript } from '../webview/src/transcript';
@@ -143,7 +143,9 @@ export async function probe(opts: ProbeOptions): Promise<ProbeResult> {
   const token = await exchangeTenantToken(baseUrl, editorKey);
   const getToken = () => token;
   const apiReq = authedFetch(baseUrl, getToken, () => {});
-  const persistence = createPersistence(baseUrl, getToken, () => {});
+  // The server's own chat rows, through the shared REST adapter (the probe reports on a
+  // real server-side conversation; the panel itself writes the host's local store).
+  const persistence = createBrainRestPersistence({ baseUrl, request: apiReq, getToken });
 
   // The gateway itself still authenticates with the EDITOR KEY, not the tenant JWT —
   // `/llm/*` is the key's scope. Mirrors `gateway.ts` in the extension host.

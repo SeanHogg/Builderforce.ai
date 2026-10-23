@@ -3,6 +3,7 @@ import { DEFAULT_ASK_USER_LABELS } from '../askUser';
 import type { ToolStepLabels } from '../ToolStep';
 import { DEFAULT_LIVE_ACTIVITY_LABELS, type LiveActivityLabels } from '../LiveActivity';
 import { DEFAULT_MODEL_MOVE_LABELS, type ModelMoveLabels } from '../timelineModelMoves';
+import type { ChatErrorBannerLabels } from '../ChatErrorBanner';
 
 /**
  * Every string the transcript renders. It EXTENDS {@link ToolStepLabels} rather than
@@ -102,6 +103,13 @@ export interface BrainTimelineLabels extends ToolStepLabels, ModelMoveLabels {
    * server has no idea who will read the chat. See `chatActivity.ts` for the contract.
    */
   activity: ChatActivityLabels;
+  /**
+   * The error step row's sentences — the SAME bundle (and the same `chatErrorMessage`)
+   * the chat's error banner reads, so a refused turn reads identically in the banner and
+   * in the transcript, never as its raw code (`platform_send_disabled`). Catalog keys
+   * `chatError.<field>`; omitted ⇒ the banner's English defaults.
+   */
+  chatError?: Partial<ChatErrorBannerLabels>;
 }
 
 export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {

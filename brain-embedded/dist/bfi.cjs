@@ -45,6 +45,101 @@ __export(bfiLoader_exports, {
 });
 module.exports = __toCommonJS(bfiLoader_exports);
 
+// src/pageEngines/settleWithin.ts
+var SettleTimeoutError = class extends Error {
+  constructor(what, ms) {
+    super(`${what} did not settle within ${ms} ms`);
+    this.name = "SettleTimeoutError";
+  }
+};
+function withTimeout(promise, ms, what) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new SettleTimeoutError(what, ms)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+// src/pageEngines/types.ts
+var PageEngineError = class extends Error {
+  status;
+  code;
+  constructor(status, code, message2 = code) {
+    super(message2);
+    this.name = "PageEngineError";
+    this.status = status;
+    this.code = code;
+  }
+};
+var abortReason = (signal) => signal.reason ?? new DOMException("Aborted", "AbortError");
+var errorMessage = (e) => e instanceof Error ? e.message : String(e);
+function memoizedProbe(runtime, run, config = {}) {
+  const ttlMs = config.ttlMs ?? PAGE_ENGINE_PROBE_TTL_MS;
+  const now = config.now ?? (() => Date.now());
+  let memo;
+  return {
+    probe(options = {}) {
+      const at = now();
+      if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
+      const value = run().catch((e) => {
+        reportPageEngineFailure(runtime, "probe", e);
+        return null;
+      });
+      memo = { at, value };
+      return value;
+    },
+    invalidate() {
+      memo = void 0;
+    }
+  };
+}
+var PAGE_ENGINE_PROBE_TTL_MS = 3e4;
+
+// src/pageEngines/engineFailure.ts
+function reportPageEngineFailure(runtime, stage, error) {
+  console.warn(`BuilderForce page engine: ${runtime} ${stage} failed (${errorMessage(error)})`);
+}
+
+// src/pageEngines/webgpu.ts
+var WEBGPU_ADAPTER_TIMEOUT_MS = 5e3;
+var UNSUPPORTED = (reason) => ({
+  contractVersion: 2,
+  supported: false,
+  reason,
+  f16: false,
+  maxBufferBytes: 0,
+  maxBufferSizeBytes: 0,
+  maxStorageBufferBindingSizeBytes: 0,
+  requestedPowerPreference: "high-performance"
+});
+var pageGpu = () => globalThis.navigator?.gpu;
+async function webGpuSupport(gpu = pageGpu(), timeoutMs = WEBGPU_ADAPTER_TIMEOUT_MS) {
+  if (!gpu) return UNSUPPORTED("webgpu_missing");
+  let adapter;
+  try {
+    adapter = await withTimeout(gpu.requestAdapter({ powerPreference: "high-performance" }), timeoutMs, "WebGPU requestAdapter");
+  } catch (e) {
+    reportPageEngineFailure("webllm", "support", e);
+    return UNSUPPORTED(e instanceof SettleTimeoutError ? "adapter_timeout" : e instanceof Error ? e.message : String(e));
+  }
+  try {
+    if (!adapter) return UNSUPPORTED("no_adapter");
+    const maxBufferSizeBytes = adapter.limits?.maxBufferSize ?? 0;
+    const maxStorageBufferBindingSizeBytes = adapter.limits?.maxStorageBufferBindingSize ?? 0;
+    return {
+      contractVersion: 2,
+      supported: true,
+      f16: adapter.features?.has("shader-f16") ?? false,
+      maxBufferBytes: maxBufferSizeBytes,
+      maxBufferSizeBytes,
+      maxStorageBufferBindingSizeBytes,
+      requestedPowerPreference: "high-performance"
+    };
+  } catch (e) {
+    return UNSUPPORTED(e instanceof Error ? e.message : String(e));
+  }
+}
+
 // ../packages/local-inference/src/runtimes.ts
 var BROWSER_ENGINE_BASE_URL = "http://browser.local";
 var BFI_ENGINE_BASE_URL = "http://bfi.local";
@@ -319,46 +414,6 @@ function localModelFit(model, support) {
   return { fits: false, reason: "memory_insufficient" };
 }
 
-// src/pageEngines/types.ts
-var PageEngineError = class extends Error {
-  status;
-  code;
-  constructor(status, code, message2 = code) {
-    super(message2);
-    this.name = "PageEngineError";
-    this.status = status;
-    this.code = code;
-  }
-};
-var abortReason = (signal) => signal.reason ?? new DOMException("Aborted", "AbortError");
-var errorMessage = (e) => e instanceof Error ? e.message : String(e);
-function memoizedProbe(runtime, run, config = {}) {
-  const ttlMs = config.ttlMs ?? PAGE_ENGINE_PROBE_TTL_MS;
-  const now = config.now ?? (() => Date.now());
-  let memo;
-  return {
-    probe(options = {}) {
-      const at = now();
-      if (!options.fresh && memo && at - memo.at < ttlMs) return memo.value;
-      const value = run().catch((e) => {
-        reportPageEngineFailure(runtime, "probe", e);
-        return null;
-      });
-      memo = { at, value };
-      return value;
-    },
-    invalidate() {
-      memo = void 0;
-    }
-  };
-}
-var PAGE_ENGINE_PROBE_TTL_MS = 3e4;
-
-// src/pageEngines/engineFailure.ts
-function reportPageEngineFailure(runtime, stage, error) {
-  console.warn(`BuilderForce page engine: ${runtime} ${stage} failed (${errorMessage(error)})`);
-}
-
 // src/pageEngines/bfiChunks.ts
 function closingChunk(finalJson) {
   try {
@@ -430,39 +485,6 @@ async function* bfiChunks(engine, requestJson, signal, mapError, crashes) {
     crashes.delete(onCrash);
     signal?.removeEventListener("abort", onAbort);
     if (!state.outcome) controller.abort();
-  }
-}
-
-// src/pageEngines/webgpu.ts
-var UNSUPPORTED = (reason) => ({
-  contractVersion: 2,
-  supported: false,
-  reason,
-  f16: false,
-  maxBufferBytes: 0,
-  maxBufferSizeBytes: 0,
-  maxStorageBufferBindingSizeBytes: 0,
-  requestedPowerPreference: "high-performance"
-});
-var pageGpu = () => globalThis.navigator?.gpu;
-async function webGpuSupport(gpu = pageGpu()) {
-  if (!gpu) return UNSUPPORTED("webgpu_missing");
-  try {
-    const adapter = await gpu.requestAdapter({ powerPreference: "high-performance" });
-    if (!adapter) return UNSUPPORTED("no_adapter");
-    const maxBufferSizeBytes = adapter.limits.maxBufferSize ?? 0;
-    const maxStorageBufferBindingSizeBytes = adapter.limits.maxStorageBufferBindingSize ?? 0;
-    return {
-      contractVersion: 2,
-      supported: true,
-      f16: adapter.features.has("shader-f16"),
-      maxBufferBytes: maxBufferSizeBytes,
-      maxBufferSizeBytes,
-      maxStorageBufferBindingSizeBytes,
-      requestedPowerPreference: "high-performance"
-    };
-  } catch (e) {
-    return UNSUPPORTED(e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -1077,13 +1099,7 @@ function canUseBfiThreads(scope = globalThis) {
   return g.crossOriginIsolated === true && typeof g.SharedArrayBuffer === "function" && typeof g.Worker === "function";
 }
 async function hasWebGpuAdapter() {
-  const gpu = globalThis.navigator?.gpu;
-  if (!gpu) return false;
-  try {
-    return await gpu.requestAdapter() != null;
-  } catch {
-    return false;
-  }
+  return (await webGpuSupport()).supported;
 }
 var importByUrl = (moduleUrl) => import(
   /* webpackIgnore: true */
@@ -1115,13 +1131,6 @@ function loadBfiWeb(wasmUrl, importer = importBfiWeb, options = {}) {
     }
   });
   return attempt;
-}
-function withTimeout(promise, ms, what) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${what} did not settle within ${ms} ms`)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 async function loadThreaded(options) {
   const { threads } = options;

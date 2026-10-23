@@ -9,13 +9,14 @@ import type { CanvasJournal } from '@/lib/canvasActionJournal';
 import type { ExecutiveCanvasWorkflow, PromptUseCase } from '@/lib/templates/promptUseCases';
 import type { CreationObjectKind } from '../types';
 import type { UseCanvasBrainTurnDeps } from '../hooks/useCanvasBrainTurn';
+import { modelRefusalAction } from './modelRefusal';
 
 /** What settling a turn reads: the board's live deps plus the facts this turn fixed when it began. */
 export interface CanvasTurnSettleContext extends Pick<UseCanvasBrainTurnDeps,
   | 'appendTimeline' | 'autoApplyRef' | 'describeTurnError' | 'effectiveSelectedIds'
   | 'lastTurnProvenance' | 'nodes' | 'persistence' | 'resolvedScopeMode' | 'scopedNodeIds' | 'sessionId'
   | 'setAcceptedProposalIds' | 'setActiveAgentIds' | 'setAutoApplyPending' | 'setEdges' | 'setGuestLimit'
-  | 'setNodes' | 'setNotice' | 'setProposedChanges' | 'stage' | 't' | 'turnUnansweredRef'> {
+  | 'setModelRefusal' | 'setNodes' | 'setNotice' | 'setProposedChanges' | 'stage' | 't' | 'turnUnansweredRef'> {
   /** The user's request, trimmed. */
   request: string;
   /** The transcript id of the request — every line this turn writes is keyed off it. */
@@ -38,8 +39,13 @@ export function settleCanvasTurnSuccess(ctx: CanvasTurnSettleContext, answer: st
   const { appendTimeline, autoApplyRef, brainId, effectiveSelectedIds, executiveUseCase, executiveWorkflow, lastTurnProvenance, nodes, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, signal, scopedNodeIds, sessionId, setAcceptedProposalIds, setActiveAgentIds, setAutoApplyPending, setEdges, setGuestLimit, setNodes, setNotice, setProposedChanges, stage, t, turnDone, turnUnansweredRef } = ctx;
   // A run the user stopped has no result to record. `stopCanvasRun` already
   // unwound the UI and wrote the "you stopped this" line; a late answer from a
-  // request that was already in flight must not overwrite it.
-  if (signal.aborted) return;
+  // request that was already in flight must not overwrite it. The journal still
+  // closes the turn: returning with the span open is a `brain.turn` that "never
+  // completed" in the next diagnostics report, for a turn that did.
+  if (signal.aborted) {
+    turnDone({ ok: false, detail: 'stopped by user' });
+    return;
+  }
   // A runtime notice ("I couldn't prepare any canvas changes…") is NOT something
   // Brain said, and writing it into the transcript as an assistant reply is what
   // let one failed turn become the template for the next: the following request
@@ -94,7 +100,7 @@ export function settleCanvasTurnSuccess(ctx: CanvasTurnSettleContext, answer: st
 
 /** The turn threw: close it as stopped, or record the failure where the user and diagnostics see it. */
 export function settleCanvasTurnFailure(ctx: CanvasTurnSettleContext, error: unknown): void {
-  const { appendTimeline, describeTurnError, executiveUseCase, persistence, promptStartedAt, requestMessageId, resolvedScopeMode, signal, scopedNodeIds, sessionId, setActiveAgentIds, setNotice, turnDone } = ctx;
+  const { appendTimeline, describeTurnError, executiveUseCase, persistence, promptStartedAt, request, requestMessageId, resolvedScopeMode, signal, scopedNodeIds, sessionId, setActiveAgentIds, setModelRefusal, setNotice, turnDone } = ctx;
   if (isCanvasRunAborted(error) || signal.aborted) {
     // Stop is not a failure. The journal still closes the turn (an open span
     // would make the next diagnostics report unreadable), and the transcript
@@ -104,7 +110,13 @@ export function settleCanvasTurnFailure(ctx: CanvasTurnSettleContext, error: unk
   }
   const detail = describeTurnError(error, 'noticeBrainFailed');
   turnDone({ ok: false, detail });
-  appendTimeline('system', detail, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
+  // NO MODEL COULD TAKE IT: a verdict with remedies (Switch to Hybrid, Download a local
+  // model, Pick a model). It is THE banner beside the conversation, holding the request so
+  // "Switch to Hybrid" re-sends it — not a plain system line that names the fix and offers
+  // no way to take it (`modelRefusal.ts`). Anything else is narrated in the transcript.
+  const refusal = modelRefusalAction(error);
+  if (refusal) setModelRefusal({ request, message: detail, action: refusal });
+  else appendTimeline('system', detail, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
   setActiveAgentIds(new Set());
   setNotice(detail);
   if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metadata: executiveUseCase ? { useCaseId: executiveUseCase.id, contractSatisfied: false } : undefined }).catch(() => undefined);

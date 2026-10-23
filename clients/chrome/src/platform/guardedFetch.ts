@@ -9,11 +9,13 @@
  *      exchange is `authenticate`, a gateway completion is `gateway-inference`, a read —
  *      including the read-style POSTs (personality block, recall, search, the model
  *      catalog) — is `connected-feature`, and any other write is `synchronize`.
- *   2. REFUSE. The decision is the mode-derived snapshot (see `./policy.ts`), so a
- *      fresh, signed-out install answers none of it: the denied capability throws
- *      `PlatformAccessDenied` WITHOUT calling `fetch`. An allowed request goes out with
- *      `redirect: 'error'`, so a BuilderForce URL can never be chased to somewhere the
- *      classifier never looked.
+ *   2. REFUSE. The decision is THE shared request gate (`platformRequestRefusal`) over the
+ *      mode and its snapshot (see `./policy.ts`) — the same answer the web app and the VS
+ *      Code host give for the same URL in the same mode: Local only refuses inference and
+ *      every content-carrying request, Hybrid lets a signed-in run's ordinary writes go. A
+ *      refused request throws `PlatformAccessDenied` WITHOUT calling `fetch`. An allowed
+ *      request goes out with `redirect: 'error'`, so a BuilderForce URL can never be
+ *      chased to somewhere the classifier never looked.
  *
  * A request to any OTHER origin is PASS-THROUGH and never classified: on-device loopback
  * inference (Ollama, WebGPU `bfi`) and a provider Rovr calls directly from this browser are
@@ -23,11 +25,12 @@ import {
   classifyPlatformRequest,
   createGuardedPlatformFetch,
   platformRequestMethod,
+  platformRequestRefusal,
   platformRequestUrl,
   type PlatformCapability,
-  type PlatformPolicy,
   type PlatformRequestRecord,
 } from '@builderforce/local-first';
+import type { RovrPlatformPolicy } from './policy';
 import { DEFAULT_BASE_URL, PLATFORM_ORIGINS } from '../config';
 
 const PLATFORM_ORIGIN_SET: ReadonlySet<string> = new Set<string>(PLATFORM_ORIGINS);
@@ -51,14 +54,31 @@ export function platformCapabilityFor(
   input: string | URL | Request,
   init?: RequestInit,
 ): PlatformCapability | null {
+  const url = platformUrl(input);
+  return url ? classifyPlatformRequest(apiPath(url), platformRequestMethod(input, init)) : null;
+}
+
+function platformUrl(input: string | URL | Request): URL | null {
   let url: URL;
   try {
     url = new URL(platformRequestUrl(input));
   } catch {
     return null;
   }
-  if (!PLATFORM_ORIGIN_SET.has(url.origin)) return null;
-  return classifyPlatformRequest(apiPath(url), platformRequestMethod(input, init));
+  return PLATFORM_ORIGIN_SET.has(url.origin) ? url : null;
+}
+
+/** What the gate needs of Rovr's policy: its snapshot and the mode in force. */
+type GatePolicy = Pick<RovrPlatformPolicy, 'snapshot' | 'allows' | 'assert' | 'subscribe' | 'inferenceMode'>;
+
+/** The capability refusing this platform request, or null — THE shared gate. */
+export function rovrRequestRefusal(policy: GatePolicy, input: string | URL | Request, init?: RequestInit): PlatformCapability | null {
+  const url = platformUrl(input);
+  if (!url) return null;
+  return platformRequestRefusal(
+    { pathname: apiPath(url), method: platformRequestMethod(input, init) },
+    { mode: policy.inferenceMode().mode, snapshot: policy.snapshot() },
+  );
 }
 
 /**
@@ -66,12 +86,13 @@ export function platformCapabilityFor(
  * becomes visible — the log line is what makes "API denied" legible instead of silent.
  */
 export function createRovrGuardedFetch(options: {
-  policy: PlatformPolicy;
+  policy: GatePolicy;
   onRequest?(record: PlatformRequestRecord): void;
 }): (input: string, init?: RequestInit) => Promise<Response> {
   const guarded = createGuardedPlatformFetch({
     policy: options.policy,
     fetch: (input, init) => fetch(input, init),
+    decide: (_capability, input, init) => rovrRequestRefusal(options.policy, input, init),
     ...(options.onRequest ? { onRequest: options.onRequest } : {}),
   });
   return (input, init) => {

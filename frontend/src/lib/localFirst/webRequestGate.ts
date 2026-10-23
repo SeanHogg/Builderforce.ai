@@ -9,8 +9,7 @@
  */
 import {
   classifyPlatformRequest,
-  createPlatformPolicy,
-  isContentRequest,
+  platformRequestRefusal,
   resolveInferencePolicy,
   type PlatformCapability,
   type PlatformPolicySnapshot,
@@ -106,19 +105,9 @@ export function webInferencePolicyFor(isSignedIn: boolean): ResolvedInferencePol
  * the SAME route table and the person's resolved policy (live: the stored mode, the
  * overrides and {@link webSignedIn}). Null = it may go.
  *
- *   - Not the platform, or `authenticate` (signing in / up, the session): never
- *     refused here — signing in is the explicit, scoped act that leaves Local only.
- *   - LOCAL ONLY: nothing that carries the person's CONTENT leaves — a prompt (gateway
- *     inference, the Brain stream), a memory, the personality block, a transcript, an
- *     upload, an error report (the shared table's `content` tag, `isContentRequest`) —
- *     whether a credential rides on it or not: an anonymous visitor's prompt is theirs
- *     too. The page's ORDINARY data (its lists, settings, a guest token, a page write)
- *     goes through, so the app keeps loading and working; the stricter per-capability
- *     rule is the editor's and Rovr's, over the same table.
- *   - HYBRID / SPECIFIC: inference and connected features as the policy allows them
- *     (an advanced override can still refuse one). The page IS the account's own UI,
- *     so its ordinary writes are not the local-first `synchronize` capability — that
- *     governs the sync transport (`webPlatformFetch`, the outbox), not this one.
+ * The rules (authenticate never refused; Local only refuses inference and content;
+ * Hybrid / Specific let ordinary writes go and hold the named sync transport to its
+ * switch) are `platformRequestRefusal` in `@builderforce/local-first` — not restated here.
  *
  * `_credentialed` is kept on the signature for the transport that passes it; Local only
  * no longer reads it (content is refused anonymous or not).
@@ -126,20 +115,11 @@ export function webInferencePolicyFor(isSignedIn: boolean): ResolvedInferencePol
 export function webApiRequestRefusal(input: string, method: string, _credentialed: boolean): PlatformCapability | null {
   // The policy is a browser's; a server render has no person to hold it for.
   if (typeof window === 'undefined') return null;
-  const capability = webPlatformCapabilityFor(input, { method });
-  if (!capability || capability === 'authenticate') return null;
-  const resolved = webInferencePolicyFor(webSignedIn());
-  if (resolved.mode === 'local-only') {
-    return capability === 'gateway-inference' || webContentRequest(input, method) ? capability : null;
-  }
-  if (capability === 'synchronize') return null;
-  return createPlatformPolicy(resolved.snapshot).allows(capability) ? null : capability;
-}
-
-/** Whether a platform URL carries the person's content (the shared table's tag). */
-function webContentRequest(input: string, method: string): boolean {
   const url = platformUrl(input);
-  return !!url && isContentRequest(url.pathname, method);
+  if (!url) return null;
+  // THE shared decision (`platformRequestRefusal`) — the VS Code host, its webview and
+  // Rovr call the same function, so one URL in one mode has one answer everywhere.
+  return platformRequestRefusal({ pathname: url.pathname, method }, webInferencePolicyFor(webSignedIn()));
 }
 
 /**

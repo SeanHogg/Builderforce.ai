@@ -1,3 +1,28 @@
+## ✅ RESOLVED 2026-10-22 — One turn path on every surface: VSIX `s[i.method]` and `platform_send_disabled`, Studio/canvas no-model flow (frontend 2026.10.82 · VSIX 2026.10.60 · Rovr 2026.10.20 · brain-embedded 2026.10.39 · brain-ui 2026.10.20 · local-first 2026.10.23)
+
+- **VSIX `s[i.method] is not a function`:**
+  - The host's `local.persistence` relay dispatched into `localChatPersistence.ts`, a 4-method partial copy of the Brain adapter, so the panel's first `listChats` hit a missing method.
+  - The host now uses the shared `createLocalBrainPersistence`. The copy is deleted.
+  - `LOCAL_PERSISTENCE_METHODS` (bridgeProtocol) types the webview proxy, and `callLocalPersistence` refuses unknown methods instead of throwing a TypeError. It covers the editor tab and the secondary-sidebar chat.
+- **VSIX `platform_send_disabled`:**
+  - The VSIX alone gated its step outbox (which writes the LOCAL store) on `allows('synchronize')`, which is off in Hybrid, so the run's closing write failed.
+  - The VSIX and Rovr also refused ordinary writes the web allowed.
+  - One decision now serves the web gate, VSIX host and webview, VSIX socket check and Rovr guarded fetch: `platformRequestRefusal` (`@builderforce/local-first`).
+  - A real refusal is the `platform_refused` chatError verdict, rendered as a localized sentence with a remedy. The banner and the transcript error row share one `chatErrorMessage`.
+- **Studio/canvas:**
+  - Every turn entry point now goes through the one `useInferenceModeGate`: the landing prompt, object Ask, inspector, queue and the signed-in panel seed. It keeps every held send in order.
+  - The canvas journal is per board, so a `brain.turn` always closes.
+  - `no_local_model` / `no_specific_model` / `local_engine_failed` render the shared `BrainErrorBanner` with `modelRemedies` (Switch to Hybrid re-sends, Download, Pick a model), on canvas, Studio, the panels, the VSIX and Rovr.
+  - One `inferenceModeOption` rule decides who is asked to choose.
+- **Rovr on the shared conversation hook:**
+  - ChatView uses `useBrainConversation` (new `prepareRun` port, `retryLastTurn`).
+  - `rovrBrainPersistence` is the device record with live `subscribeMessages`.
+  - Its parallel send/run plumbing is deleted, and a jsdom ChatView mount test was added.
+- **Also:**
+  - The WebGPU adapter probe is bounded at 5 s (`settleWithin`).
+  - `upgradeAction` gates on its PATHS table.
+  - The dead webview `localPersistence.ts` / `persistence.ts` are removed.
+
 ## ✅ RESOLVED 2026-10-22 — BuilderForce in the VS Code agent chat area (VSIX 2026.10.59)
 
 - **Where it shows:** a `viewsContainers.secondarySidebar` container (`builderforce-chat`) holds the webview view `builderforce.chatView`, so BuilderForce gets its own tab in the secondary sidebar next to Chat, Claude Code and Codex.

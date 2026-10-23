@@ -42,7 +42,7 @@ vi.mock("vscode", () => ({
   ConfigurationTarget: { Global: 1 },
 }));
 
-import { bindPlatformPolicy, platformCapabilityFor, platformPolicy } from "./platformPolicy";
+import { bindPlatformPolicy, platformCapabilityFor, platformInferenceMode, platformPolicy, platformRequestRefusalFor } from "./platformPolicy";
 import { inferenceModeState, setInferenceMode } from "./inferenceModeSetting";
 
 const SECRET = "builderforce.apiKey";
@@ -96,6 +96,18 @@ describe("mode-derived platform policy", () => {
     expect(policy.allows("synchronize")).toBe(false);
   });
 
+  it("signed in Hybrid with sync off: a run's ordinary writes and stream are NOT refused (the web's answer)", () => {
+    // 2026.10.57 refused these in the editor (strict `allows('synchronize')` on a write).
+    const api = "https://api.builderforce.ai";
+    expect(platformInferenceMode()).toBe("hybrid");
+    expect(platformRequestRefusalFor(`${api}/api/projects/11/tickets`, { method: "POST" })).toBeNull();
+    expect(platformRequestRefusalFor(`${api}/api/brain/chats/3/messages`, { method: "POST" })).toBeNull();
+    expect(platformRequestRefusalFor(`${api}/api/brain/stream`, { method: "POST" })).toBeNull();
+    expect(platformRequestRefusalFor(`${api}/llm/v1/chat/completions`, { method: "POST" })).toBeNull();
+    // The named sync transport still answers to the sync switch.
+    expect(platformRequestRefusalFor(`${api}/api/sync/v1/push`, { method: "POST" })).toBe("synchronize");
+  });
+
   it("an explicitly set platform setting overrides the mode; an unset one follows it", () => {
     host.explicit["platform.synchronize"] = true;
     configChanged();
@@ -115,6 +127,9 @@ describe("mode-derived platform policy", () => {
     configChanged();
     expect(host.config.inferenceMode).toBe("local-only");
     expect(platformPolicy().allows("gateway-inference")).toBe(false);
+    // Local only still refuses what carries content.
+    expect(platformRequestRefusalFor("https://api.builderforce.ai/api/brain/stream", { method: "POST" })).toBe("gateway-inference");
+    expect(platformRequestRefusalFor("https://api.builderforce.ai/api/brain/chats/3/messages", { method: "POST" })).toBe("synchronize");
     delete host.explicit["platform.gatewayInference"];
     await setInferenceMode("specific");
     expect(platformPolicy().allows("direct-provider")).toBe(true);

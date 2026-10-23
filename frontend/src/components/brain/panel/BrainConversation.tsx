@@ -186,7 +186,7 @@ export function BrainConversation() {
         // banner self-gates on the shared consumption snapshot.
         notices={(
           <>
-            <BrainErrorBanner error={error} action={conv.error ? conv.errorAction : null} onDismiss={dismissError} composerId={composerId} />
+            <BrainErrorBanner error={error} action={conv.error ? conv.errorAction : null} onDismiss={dismissError} composerId={composerId} onRetry={conv.retryLastTurn} />
             <AllowanceBanner />
             {showProviderCapBanner && <BrainProviderCapBanner providers={conv.providerCap} onDismiss={dismissProviderCap} />}
           </>

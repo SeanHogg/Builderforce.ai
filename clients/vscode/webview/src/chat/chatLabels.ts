@@ -51,11 +51,13 @@ export function makeT(labels: LabelBundle) {
  * The host bundle's `tl.*` keys, addressed by the CANONICAL transcript key paths that
  * brain-ui's one catalog → label table (`timelineLabelsFrom`) reads — `live.starting` is
  * `tl.liveStarting`, the live `thinking` line shares `tl.thinking`, `live.ariaLabel` is
- * `tl.liveAria`; every other path is `tl.<path>`. A key the bundle lacks falls back to the
- * package's English default.
+ * `tl.liveAria`; the error step row's `chatError.<field>` is the banner's own `app.<field>`
+ * (one string for both); every other path is `tl.<path>`. A key the bundle lacks falls
+ * back to the package's English default.
  */
 function timelineCatalogFromBundle(labels: LabelBundle): TimelineCatalogLookup {
   const bundleKey = (path: string): string => {
+    if (path.startsWith('chatError.')) return `app.${path.slice('chatError.'.length)}`;
     if (!path.startsWith('live.')) return `tl.${path}`;
     const field = path.slice('live.'.length);
     if (field === 'thinking') return 'tl.thinking';

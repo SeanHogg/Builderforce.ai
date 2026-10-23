@@ -1515,6 +1515,27 @@ function brainRequestError(status2, body, statusText) {
     feature: str(b.feature)
   });
 }
+var PLATFORM_CODE_RE = /\bplatform_(synchronize|gateway_inference|connected_feature|authenticate|model_download|direct_provider|external_mcp|git_remote|send)_disabled\b/;
+var PLATFORM_SETTING = {
+  synchronize: "synchronize",
+  "gateway-inference": "inferenceMode",
+  "connected-feature": "inferenceMode",
+  authenticate: "inferenceMode",
+  "model-download": "modelDownloads",
+  "direct-provider": "directProviders",
+  "external-mcp": "externalMcp",
+  "git-remote": "gitRemotes",
+  send: "inferenceMode"
+};
+function platformRefusal(err, message2) {
+  const fields = err && typeof err === "object" ? err : {};
+  if (typeof fields.capability === "string" && fields.capability in PLATFORM_SETTING && fields.code === "PLATFORM_ACCESS_DENIED") {
+    return fields.capability;
+  }
+  if (fields.code === "PLATFORM_SEND_DISABLED") return "send";
+  const match = PLATFORM_CODE_RE.exec(message2)?.[1];
+  return match ? match.replaceAll("_", "-") : null;
+}
 var AUTH_PROSE = /invalid or expired token|unauthor/i;
 var CARD_PROSE = /validated card|add a card|card on file/i;
 var UPGRADE_PROSE = /requires? a paid plan|upgrade to (pro|teams)|plan (token )?limit|not included in your plan/i;
@@ -1539,6 +1560,8 @@ function chatErrorAction(err) {
   if (message2 === NO_SPECIFIC_MODEL) return { kind: "no_specific_model" };
   const engineCode = localEngineCode(err instanceof BrainRequestError ? err.code : void 0, message2);
   if (engineCode) return { kind: "local_engine_failed", engineCode };
+  const refused = platformRefusal(err, message2);
+  if (refused) return { kind: "platform_refused", capability: refused, setting: PLATFORM_SETTING[refused] };
   if (AUTH_PROSE.test(message2)) return { kind: "auth" };
   if (CARD_PROSE.test(message2)) return { kind: "validate_card" };
   if (UPGRADE_PROSE.test(message2)) return { kind: "upgrade" };
@@ -7417,7 +7440,23 @@ function isWasmTrap(e) {
   return RuntimeError !== void 0 && e instanceof RuntimeError || e instanceof Error && e.name === "RuntimeError";
 }
 
+// src/pageEngines/settleWithin.ts
+var SettleTimeoutError = class extends Error {
+  constructor(what, ms) {
+    super(`${what} did not settle within ${ms} ms`);
+    this.name = "SettleTimeoutError";
+  }
+};
+function withTimeout(promise, ms, what) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new SettleTimeoutError(what, ms)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 // src/pageEngines/webgpu.ts
+var WEBGPU_ADAPTER_TIMEOUT_MS = 5e3;
 var UNSUPPORTED = (reason) => ({
   contractVersion: 2,
   supported: false,
@@ -7432,17 +7471,23 @@ var pageGpu = () => globalThis.navigator?.gpu;
 function hasWebGPU() {
   return pageGpu() != null;
 }
-async function webGpuSupport(gpu = pageGpu()) {
+async function webGpuSupport(gpu = pageGpu(), timeoutMs = WEBGPU_ADAPTER_TIMEOUT_MS) {
   if (!gpu) return UNSUPPORTED("webgpu_missing");
+  let adapter;
   try {
-    const adapter = await gpu.requestAdapter({ powerPreference: "high-performance" });
+    adapter = await withTimeout(gpu.requestAdapter({ powerPreference: "high-performance" }), timeoutMs, "WebGPU requestAdapter");
+  } catch (e) {
+    reportPageEngineFailure("webllm", "support", e);
+    return UNSUPPORTED(e instanceof SettleTimeoutError ? "adapter_timeout" : e instanceof Error ? e.message : String(e));
+  }
+  try {
     if (!adapter) return UNSUPPORTED("no_adapter");
-    const maxBufferSizeBytes = adapter.limits.maxBufferSize ?? 0;
-    const maxStorageBufferBindingSizeBytes = adapter.limits.maxStorageBufferBindingSize ?? 0;
+    const maxBufferSizeBytes = adapter.limits?.maxBufferSize ?? 0;
+    const maxStorageBufferBindingSizeBytes = adapter.limits?.maxStorageBufferBindingSize ?? 0;
     return {
       contractVersion: 2,
       supported: true,
-      f16: adapter.features.has("shader-f16"),
+      f16: adapter.features?.has("shader-f16") ?? false,
       maxBufferBytes: maxBufferSizeBytes,
       maxBufferSizeBytes,
       maxStorageBufferBindingSizeBytes,
@@ -17072,6 +17117,14 @@ function withRating(ratings, messageId, rating) {
 
 // src/useBrainConversation.ts
 var NO_MESSAGES = [];
+function unansweredTurnIndex(messages) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message2 = messages[i];
+    if (isStepMessage(message2)) continue;
+    return message2.role === "user" && !isMidTurnMetadata(message2.metadata) ? i : -1;
+  }
+  return -1;
+}
 function useBrainConversation(options) {
   const { persistence, resolveSystemPrompt, stream } = useBrainConfig();
   const {
@@ -17096,7 +17149,8 @@ function useBrainConversation(options) {
     evermind,
     augmentSystemPrompt,
     chatMode,
-    chatRoster
+    chatRoster,
+    prepareRun
   } = options;
   const [held, setHeld] = (0, import_react9.useState)({ chatId, list: [] });
   const messages = held.chatId === chatId ? held.list : NO_MESSAGES;
@@ -17208,6 +17262,18 @@ ${extraSystem}` : resolvedSystemPrompt;
     }),
     [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, windowSources, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId, chatMode, chatRoster]
   );
+  const launch = (0, import_react9.useCallback)(async (id, request) => {
+    let extra = null;
+    if (prepareRun) {
+      try {
+        extra = await prepareRun(id);
+      } catch (e) {
+        if (chatIdRef.current === id) setLocalError(e instanceof Error ? e.message : "Could not start the run.");
+        return;
+      }
+    }
+    await startRun(id, extra ? { ...request, ...extra } : request);
+  }, [prepareRun]);
   const send = (0, import_react9.useCallback)(
     async (text, opts) => {
       const trimmed = text.trim();
@@ -17281,7 +17347,7 @@ ${refs}`;
           }
           return true;
         }
-        await startRun(id, buildRequest(transcriptSeedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
+        await launch(id, buildRequest(transcriptSeedFrom(messages), modelContent, priorResearchDigest(scopeToConsolidation(messages))));
         return true;
       } catch (e) {
         if (stillOpen()) {
@@ -17293,7 +17359,7 @@ ${refs}`;
         markSending(runChatId, false);
       }
     },
-    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn, updateMessages]
+    [persistence, chatId, markSending, pendingAttachments, messages, ensureChatId, buildRequest, launch, onActivity, onFirstUserTurn, updateMessages]
   );
   (0, import_react9.useEffect)(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
@@ -17305,8 +17371,20 @@ ${refs}`;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
-    void startRun(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
-  }, [chatId, loadingMessages, localSending, messages, buildRequest]);
+    void launch(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, -1)), last.content, priorResearchDigest(scopeToConsolidation(messages))));
+  }, [chatId, loadingMessages, localSending, messages, buildRequest, launch]);
+  const retryLastTurn = (0, import_react9.useCallback)(() => {
+    if (chatId == null || sendingRef.current.has(chatId) || isRunning(chatId)) return false;
+    const index = unansweredTurnIndex(messages);
+    if (index < 0) return false;
+    const turn = messages[index];
+    if (isDirectedToParticipant(turn)) return false;
+    autoRepliedChatIdRef.current = chatId;
+    setLocalError("");
+    clearRunError(chatId);
+    void launch(chatId, buildRequest(transcriptSeedFrom(messages.slice(0, index)), turn.content, priorResearchDigest(scopeToConsolidation(messages))));
+    return true;
+  }, [chatId, messages, buildRequest, launch]);
   const rateMessage = (0, import_react9.useCallback)(async (msg, rating) => {
     setRatings((prev) => withRating(prev, msg.id, rating));
     const context = ratedTurnContext(messages, msg.id);
@@ -17382,6 +17460,7 @@ ${refs}`;
     pendingAttachments,
     uploading,
     send,
+    retryLastTurn,
     stop,
     rateMessage,
     attach,

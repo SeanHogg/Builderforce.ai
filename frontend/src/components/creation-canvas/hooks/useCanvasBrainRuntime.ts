@@ -1,7 +1,7 @@
 /** The session's action journal and the Brain's runtime facts — completions, disabled models, provenance. */
-import { useCallback, useEffect, useRef } from 'react';
-import { createCanvasJournal } from '@/lib/canvasActionJournal';
-import { readStoredJournal, writeStoredJournal } from '@/lib/canvasJournalStore';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { sessionCanvasJournal, writeStoredJournal } from '@/lib/canvasJournalStore';
+import { useLatestRef } from './useLatestRef';
 import type { CanvasAiCompletion } from '@/lib/canvasAiRun';
 
 export interface UseCanvasBrainRuntimeDeps {
@@ -22,9 +22,12 @@ export function useCanvasBrainRuntime({ sessionId }: UseCanvasBrainRuntimeDeps) 
   /**
    * The action journal for THIS board — see `canvasActionJournal`. A ref rather
    * than state: recording an action must never re-render the canvas, or the act
-   * of observing the board would change what is being observed.
+   * of observing the board would change what is being observed. The journal itself is
+   * the BOARD's, not this mount's (`sessionCanvasJournal`): a turn that outlives a
+   * remount closes its span on the same object the next report reads.
    */
-  const journalRef = useRef(createCanvasJournal());
+  const journal = useMemo(() => sessionCanvasJournal(sessionId), [sessionId]);
+  const journalRef = useLatestRef(journal);
   /**
    * The tail of the journal, in the shape a defect carries it.
    *
@@ -49,9 +52,8 @@ export function useCanvasBrainRuntime({ sessionId }: UseCanvasBrainRuntimeDeps) 
    * does not change it.
    */
   useEffect(() => {
-    const stored = readStoredJournal(sessionId);
-    if (stored.length) journalRef.current.restore(stored);
-    const flush = () => writeStoredJournal(sessionId, journalRef.current.entries());
+    // Hydrated once per page by `sessionCanvasJournal`; this mount only keeps it flushed.
+    const flush = () => writeStoredJournal(sessionId, journal.entries());
     const timer = window.setInterval(flush, 15_000);
     window.addEventListener('pagehide', flush);
     return () => {
@@ -59,10 +61,10 @@ export function useCanvasBrainRuntime({ sessionId }: UseCanvasBrainRuntimeDeps) 
       window.removeEventListener('pagehide', flush);
       flush();
     };
-  }, [sessionId]);
+  }, [sessionId, journal]);
 
   const recentJournalEvidence = useCallback((limit = 12) => {
-    const entries = journalRef.current.entries();
+    const entries = journal.entries();
     const notable = entries.filter((entry) => entry.ok === false || entry.durationMs == null);
     const recent = entries.slice(-limit);
     return [...notable, ...recent.filter((entry) => !notable.includes(entry))]
@@ -73,7 +75,7 @@ export function useCanvasBrainRuntime({ sessionId }: UseCanvasBrainRuntimeDeps) 
         ...(entry.ok != null ? { ok: entry.ok } : {}),
         ...(entry.durationMs != null ? { durationMs: entry.durationMs } : {}),
       }));
-  }, []);
+  }, [journal]);
   /** Effective inference facts accumulated by this mounted Creation Session.
    * Kept out of render state: observing completions must not remount the board. */
   const brainRuntimeRef = useRef<{ completions: CanvasAiCompletion[]; disabledModels: string[] }>({

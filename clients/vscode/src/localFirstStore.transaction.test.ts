@@ -9,6 +9,8 @@ import { createVsCodeLocalFirstStore, localBrainApplication } from "./localFirst
 import { createLocalWorkRepository } from "./localWorkRepository";
 import { changeSetLifecycleId, readChangeSetLifecycle, recordChangeSetBaseline } from "./changeSetLifecycle";
 import { recordRunStarted } from "./runRecovery";
+import { LOCAL_PERSISTENCE_METHODS } from "./bridgeProtocol";
+import { callLocalPersistence } from "./localPersistenceDispatch";
 
 vi.mock("vscode", () => ({
   l10n: { t: (message: string) => message },
@@ -100,6 +102,22 @@ describe("local-first journal transaction", () => {
     expect((await restarted.persistence.getChat(chat.id))?.title).toBe("Offline chat");
     expect((await restarted.persistence.getMessages(chat.id)).map((message) => message.content)).toEqual(["saved offline"]);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("serves every method the webview proxies through local.persistence, so the panel's first listChats is answered", async () => {
+    const root = await directory();
+    const app = localBrainApplication(host(root, new Map()));
+    // 2026.10.57 opened on `s[i.method] is not a function`: the host object was a
+    // write-only twin with no listChats. Every proxied name must be a real method.
+    for (const method of LOCAL_PERSISTENCE_METHODS) {
+      expect(typeof (app.persistence as unknown as Record<string, unknown>)[method], method).toBe("function");
+    }
+    const chat = await app.persistence.createChat({ title: "listed", projectId: 11 });
+    const answer = await callLocalPersistence(app.persistence, "listChats", [{ projectId: "11" }]);
+    expect(answer).toEqual({ ok: true, result: [expect.objectContaining({ id: chat.id, title: "listed" })] });
+    const summarized = await callLocalPersistence(app.persistence, "summarizeChat", [chat.id]);
+    expect(summarized).toEqual({ ok: true, result: { error: expect.stringContaining("only on this machine") } });
+    await expect(app.persistence.getChat(chat.id + 999)).rejects.toThrow();
   });
 
   it("acks a project and a ticket in journal frames, then reads them back without the snapshot or the network", async () => {

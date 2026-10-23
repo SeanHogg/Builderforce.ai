@@ -1,21 +1,23 @@
-import type { PlatformPolicySnapshot } from "@builderforce/local-first";
-import { assertPlatformCapability, platformCapabilityFor, platformPolicy } from "./platformPolicy";
+import { PlatformAccessDenied, type InferenceMode, type PlatformPolicySnapshot } from "@builderforce/local-first";
+import { platformInferenceMode, platformPolicy, platformRequestRefusalFor } from "./platformPolicy";
 
 /**
  * Host-side wrapper for a platform call that is not a `fetch`. There is no second policy:
- * the capability is the one `platformCapabilityFor` already returns, and the decision is
- * `platformPolicy()`.
+ * the decision is the shared request gate (`platformRequestRefusalFor`), over
+ * `platformPolicy()` and the mode in force.
  */
 export interface PlatformPolicyFrame {
   type: "platform.policy";
   platformPolicy: Readonly<PlatformPolicySnapshot>;
+  /** The mode in force — the webview realm decides with the SAME gate, so it needs both. */
+  inferenceMode: InferenceMode;
   baseUrl: string;
   webUrl: string;
 }
 
 /** The snapshot a webview must apply so its realm matches the host's allow/deny. */
 export function platformPolicyFrame(baseUrl: string, webUrl: string): PlatformPolicyFrame {
-  return { type: "platform.policy", platformPolicy: platformPolicy().snapshot(), baseUrl, webUrl };
+  return { type: "platform.policy", platformPolicy: platformPolicy().snapshot(), inferenceMode: platformInferenceMode(), baseUrl, webUrl };
 }
 
 /** A websocket URL a webview asked the host to open, or null when the message is not one. */
@@ -46,7 +48,6 @@ export function assertPlatformSocketAllowed(url: string): void {
   }
   if (parsed.protocol !== "ws:" && parsed.protocol !== "wss:") return;
   parsed.protocol = parsed.protocol === "wss:" ? "https:" : "http:";
-  const capability = platformCapabilityFor(parsed.toString(), { method: "GET" });
-  if (!capability) return;
-  assertPlatformCapability(capability);
+  const refused = platformRequestRefusalFor(parsed.toString(), { method: "GET" });
+  if (refused) throw new PlatformAccessDenied(refused);
 }

@@ -1,5 +1,7 @@
 import type React from 'react';
-import { activityIcon, activityTone, chatActivityText } from '@seanhogg/builderforce-brain-embedded';
+import { activityIcon, activityTone, chatActivityText, chatErrorAction } from '@seanhogg/builderforce-brain-embedded';
+import { DEFAULT_CHAT_ERROR_LABELS } from '../ChatErrorBanner';
+import { chatErrorMessage } from '../chatErrorMessage';
 import { Markdown } from '../Markdown';
 import { formatDuration, type TimelineNode } from '../timelineModel';
 import { ToolStep } from '../ToolStep';
@@ -46,7 +48,10 @@ export function ErrorRow({ node, labels }: { node: Extract<TimelineNode, { kind:
       </span>
       <div className="bf-tl__body">
         <div className="bf-tl__role bf-tl__role--error">{labels.error}</div>
-        <div className="bf-tl__bubble bf-tl__bubble--error">{node.message}</div>
+        {/* The banner's verdict + sentence — never the raw code (`platform_send_disabled`). */}
+        <div className="bf-tl__bubble bf-tl__bubble--error">
+          {chatErrorMessage(node.message, chatErrorAction(node.message), { ...DEFAULT_CHAT_ERROR_LABELS, ...labels.chatError })}
+        </div>
       </div>
     </li>
   );

@@ -7,7 +7,7 @@
  */
 import { createLocalRuntimeProber, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import { createOnlineSignal } from '@builderforce/write-outbox';
-import { createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
+import { createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, type BrainConfig, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 import { createApiClient, type ApiClient } from '../api/apiClient';
 import { portRequest } from '../api/requestPorts';
 import { createSession, type Session } from '../auth/session';
@@ -16,6 +16,7 @@ import { KIMI_API_ORIGINS, createConnectedAccount, type ConnectedAccount } from 
 import { loopbackEndpoints, resolveLoopbackProbes } from '../inference/localRuntimes';
 import { createRovrStream } from '../inference/route';
 import { createLocalFirstPersistence } from '../persistence/localFirstPersistence';
+import { broadcastMessageChanges, createRovrBrainPersistence } from '../persistence/rovrBrainPersistence';
 import { chromeKeyValue } from '../platform/keyValue';
 import { createRovrGuardedFetch } from '../platform/guardedFetch';
 import { createRovrPlatformPolicy, type RovrPlatformPolicy } from '../platform/policy';
@@ -40,7 +41,14 @@ import { createRunOptions } from './runOptions';
 const LOCAL_SUCCESS_KEY = 'ml.run.local-success';
 
 export interface PanelServices {
+  /** Rovr's run-time parts of a run (`prepareRun`) and the safety gate's answer. */
   host: RovrRunHost;
+  /**
+   * THE shared conversation's config (`BrainProvider` → `useBrainConversation`): Rovr's
+   * local-first stream and device-record persistence. The side panel's chat runs the
+   * same hook as the web Brain and the VS Code webview, with these injected.
+   */
+  brainConfig: BrainConfig;
   session: Session;
   /** The mode-derived platform policy — the `/` menu's Run models control reads and sets it. */
   policy: RovrPlatformPolicy;
@@ -89,6 +97,9 @@ export async function createPanelServices(): Promise<PanelServices> {
   const sendRuntime = (message: RovrRuntimeMessage) => chrome.runtime.sendMessage(message);
   const sink: SyncSink = runtimeSyncSink(sendRuntime);
   const persistence = createLocalFirstPersistence(records, sink);
+  // THE conversation's port over the same device record — and the one every row is
+  // written through, so each write is announced live (this panel and any other window's).
+  const brainPersistence = createRovrBrainPersistence(records, persistence, broadcastMessageChanges());
   const ledger = createActionLedger(records);
   const playbooks = createPlaybookStore(chromeKeyValue('sync'));
   const tabs = createChromeTabPort();
@@ -108,7 +119,7 @@ export async function createPanelServices(): Promise<PanelServices> {
     dbName: STEP_OUTBOX_DB,
     online: createOnlineSignal(true),
     scope: () => 'device',
-    sendRows: (chatId, rows) => persistence.sendMessages(chatId, rows),
+    sendRows: (chatId, rows) => brainPersistence.sendMessages(chatId, rows),
   });
 
   // ── The allow list, mirrored for the synchronous gate ─────────────────────────
@@ -214,10 +225,18 @@ export async function createPanelServices(): Promise<PanelServices> {
     onError: (error) => reportError(error, 'platform.catalog'),
   });
 
-  const host = createRovrRunHost({
+  const brainConfig: BrainConfig = {
+    // The stream is Rovr's own (local first, then the gateway with the session's key,
+    // which it reads per call); the transport is only the shared streamer's fallback,
+    // which a config with its own `stream` never reaches.
+    transport: { baseUrl, getToken: () => null },
+    persistence: brainPersistence,
     stream,
-    persistence,
-    history: (chatId) => records.listMessages(chatId),
+    // Rovr's prompt is built per run from the working tab and playbooks (`prepareRun`).
+    resolveSystemPrompt: () => '',
+  };
+
+  const host = createRovrRunHost({
     async catalog(chatId) {
       const tools = createBrowserTools({
         chatId,
@@ -262,6 +281,7 @@ export async function createPanelServices(): Promise<PanelServices> {
 
   return {
     host,
+    brainConfig,
     session,
     policy: rovrPolicy,
     api,

@@ -1,6 +1,7 @@
 export * from './policy.js';
 export * from './inferenceMode.js';
 export * from './platformRoutes.js';
+export * from './platformRequestGate.js';
 export * from './store.js';
 export { TERMINAL_EXECUTION_STATUSES, UNBOUND_DESTINATION, destinationKey, isTerminalExecutionStatus } from './records.js';
 export type {

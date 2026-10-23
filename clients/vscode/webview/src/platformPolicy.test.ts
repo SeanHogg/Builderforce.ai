@@ -60,49 +60,57 @@ async function install(): Promise<void> {
 }
 
 describe('webview platform gate', () => {
-  it('denies a platform fetch and websocket until the host grants that capability', async () => {
+  const HYBRID = { gatewayInference: true, connectedFeatures: true, synchronize: false };
+
+  it('before the host names a mode (Local only): refuses inference and content, lets ordinary data through', async () => {
     await install();
 
-    await expectDenied(fetch('https://api.builderforce.ai/api/brain/chats'), 'connected-feature');
-    expect(nativeFetch).not.toHaveBeenCalled();
+    await expectDenied(fetch('https://api.builderforce.ai/llm/chat/completions', { method: 'POST' }), 'gateway-inference');
+    await expectDenied(fetch('https://api.builderforce.ai/api/brain/chats/3/messages'), 'connected-feature');
     expect(() => new WebSocket('wss://api.builderforce.ai/api/meetings/rooms/room/ws')).toThrow(/platform_connected_feature_disabled/);
     expect(NativeSocket.instances).toHaveLength(0);
+    expect(nativeFetch).not.toHaveBeenCalled();
 
+    const ordinary = await fetch('https://api.builderforce.ai/api/brain/chats');
+    expect(ordinary.status).toBe(200);
+    expect(nativeFetch).toHaveBeenCalledTimes(1);
+    expect(nativeFetch.mock.calls[0]?.[1]).toMatchObject({ redirect: 'error' });
+  });
+
+  it("signed-in Hybrid with sync off: a run's writes, transcript and stream go — the web's answer for the same URL", async () => {
+    await install();
     fromHost({
       type: 'platform.policy',
-      platformPolicy: { connectedFeatures: true },
+      platformPolicy: HYBRID,
+      inferenceMode: 'hybrid',
       baseUrl: 'https://corp.example/gateway',
       webUrl: 'https://web.corp.example',
     });
 
-    const allowed = await fetch('https://api.builderforce.ai/api/brain/chats');
-    expect(allowed.status).toBe(200);
-    expect(nativeFetch).toHaveBeenCalledTimes(1);
-    expect(nativeFetch.mock.calls[0]?.[1]).toMatchObject({ redirect: 'error' });
+    // 2026.10.57 refused this write as `synchronize` (a strict per-capability check).
+    await fetch('https://corp.example/api/brain/chats', { method: 'POST' });
+    await fetch('https://api.builderforce.ai/api/projects/11/tickets', { method: 'POST' });
+    await fetch('https://api.builderforce.ai/api/brain/chats/3/messages', { method: 'POST' });
+    await fetch('https://api.builderforce.ai/api/brain/stream', { method: 'POST' });
+    expect(nativeFetch).toHaveBeenCalledTimes(4);
     expect(() => new WebSocket('wss://api.builderforce.ai/api/meetings/rooms/room/ws')).not.toThrow();
     expect(NativeSocket.instances).toHaveLength(1);
 
-    // A write is synchronize, not the read that was just granted. A custom origin is
-    // classified only after the host names it — the same rule as the host gate.
-    await expectDenied(fetch('https://corp.example/api/brain/chats', { method: 'POST' }), 'synchronize');
-    fromHost({
-      type: 'platform.policy',
-      platformPolicy: { connectedFeatures: true, synchronize: true },
-      baseUrl: 'https://corp.example/gateway',
-    });
-    await fetch('https://corp.example/api/brain/chats', { method: 'POST' });
-    expect(nativeFetch).toHaveBeenCalledTimes(2);
+    // The named sync transport still answers to the sync switch.
+    await expectDenied(fetch('https://api.builderforce.ai/api/sync/v1/push', { method: 'POST' }), 'synchronize');
+    expect(nativeFetch).toHaveBeenCalledTimes(4);
   });
 
-  it('applies the snapshot carried on init', async () => {
+  it('applies the snapshot and mode carried on init', async () => {
     await install();
     fromHost({
       type: 'init',
-      platformPolicy: { connectedFeatures: true },
+      platformPolicy: HYBRID,
+      inferenceMode: 'hybrid',
       baseUrl: 'https://builderforce.ai/gateway',
       token: null,
     });
-    await fetch('https://builderforce.ai/api/brain/chats');
+    await fetch('https://builderforce.ai/api/brain/chats/3/messages', { method: 'POST' });
     expect(nativeFetch).toHaveBeenCalledTimes(1);
   });
 
@@ -110,7 +118,8 @@ describe('webview platform gate', () => {
     await install();
     fromHost({
       type: 'platform.policy',
-      platformPolicy: { connectedFeatures: true },
+      platformPolicy: { connectedFeatures: true, gatewayInference: false },
+      inferenceMode: 'hybrid',
       baseUrl: 'https://builderforce.ai',
     });
     await expectDenied(fetch('https://api.builderforce.ai/llm/chat/completions', { method: 'POST' }), 'gateway-inference');

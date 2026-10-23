@@ -100,7 +100,7 @@ export function VsCodeChatNotices({ conv, chatsError, onDismissChatsError, bundl
         onSignIn={() => post('signin')}
         // Nothing can take the turn for a reason sign-in won't fix: Hybrid (only while on
         // Local only), a local model, or — Specific with nothing picked — the Model tab.
-        {...modelRemedies(init, composerId, conv.clearError)}
+        {...modelRemedies(init, composerId, conv.clearError, () => { conv.retryLastTurn(); })}
         onDismiss={conv.clearError}
         labels={errorLabels}
       />
