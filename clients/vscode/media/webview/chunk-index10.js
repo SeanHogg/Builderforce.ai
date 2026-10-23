@@ -1,4 +1,4 @@
-import{go as O,gp as R,gq as N,gr as F,gs as U,gt as M,gu as Ve,gv as ne,gw as en,gx as ke,gy as mr,gz as pr,gA as Ne,gB as xe,gC as tn,gD as fr,gE as hs,gF as us,gG as ms,gH as ps,gI as fs,gJ as He,gK as gr,gL as Re,gM as nn,gN as gs,gO as Ze,gP as rn,gQ as _r,gR as yr,gS as $t,gT as pt,gU as vt,gV as _s,gW as ys,gX as ws,gY as bs,gZ as sn,g_ as on,g$ as an,h0 as vs,h1 as ks,h2 as xs}from"./index.js";import{h3 as td,h4 as nd,h5 as rd,h6 as sd,h7 as od,h8 as id,h9 as ad}from"./index.js";const cn=`
+import{gs as O,gt as R,gu as N,gv as F,gw as U,gx as M,gy as Ve,gz as ne,gA as en,gB as ke,gC as mr,gD as pr,gE as Ne,gF as xe,gG as tn,gH as fr,gI as hs,gJ as us,gK as ms,gL as ps,gM as fs,gN as He,gO as gr,gP as Re,gQ as nn,gR as gs,gS as Ze,gT as rn,gU as _r,gV as yr,gW as $t,gX as pt,gY as vt,gZ as _s,g_ as ys,g$ as ws,h0 as bs,h1 as sn,h2 as on,h3 as an,h4 as vs,h5 as ks,h6 as xs}from"./index.js";import{h7 as td,h8 as nd,h9 as rd,ha as sd,hb as od,hc as id,hd as ad}from"./index.js";const cn=`
 
 // ---- Binding layout ----
 // group 0: sequence data

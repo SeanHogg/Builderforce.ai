@@ -5,7 +5,9 @@ import { resolve, dirname } from 'node:path';
 import ts from 'typescript';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const files = ['tool.ts', 'codeAnalysis.ts', 'codeAnalysisTool.ts'];
-const source = await Promise.all(files.map((file) => readFile(resolve(root, 'packages/agent-tools/src', file), 'utf8')));
+// Normalised to LF: a Windows checkout (core.autocrlf) reads CRLF, CI reads LF, and the
+// bundle + its hash must come out byte-identical on both or the drift check fails.
+const source = await Promise.all(files.map(async (file) => (await readFile(resolve(root, 'packages/agent-tools/src', file), 'utf8')).replace(/\r\n/g, '\n')));
 const hash = createHash('sha256').update(source.join('\n')).digest('hex');
 const body = source.map((text) => ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
   .replace(/^import .*?;\r?\n/gm, '').replace(/^export /gm, '')).join('\n');
