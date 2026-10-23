@@ -285,8 +285,6 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 Waves 1–3 shipped (see DONE.md 2026-10-22 and 2026-10-23). Still open:
 
-- **The 100 already-stubbed local memory facts have no full copy.** `memory_restore` can import text, but no backup exists; the only remnant is the Evermind coordinator `mem:` records (≤2,000 chars, unkeyed). *Blocker: an operator export of those records.* Stubs are now flagged `contentLost` and injected labelled at half weight.
-- **The installed Claude Code memory hook predates the labels.** Re-run `builderforce-memory-install` after the publish. *Blocker: operator approval — it rewrites the user's Claude Code hooks.*
 - **Container image with `bf-context` has not been built or smoke-tested.** The multi-stage Dockerfile (api/container) builds bf-context from builderforce-inference @ 174566a; the local Docker daemon was not running, so the first build is CI's / the next deploy's. *Blocker: a running Docker daemon or the deploy pipeline.* Unblocks C5 on container runs.
 - **Cloud runs have no C8 token compression.** The container builds bf-context with `--no-default-features` (no ONNX runtime, no LLMLingua model), and the Worker has no compressor, so `c8_token_compression` acts only on Desktop, VSIX and on-prem. *Blocker: the container image's first build, to measure what adding ONNX and the model costs in image size and cold start.* Unblocks C8 on container runs.
 - **Provider batch APIs (D6) have never run live.** Anthropic Message Batches and OpenAI Batch adapters are unit-tested only. *Blocker: a live `CLAUDE_API_KEY` / `OPENAI_API_KEY` batch round-trip.*

@@ -3,6 +3,8 @@
 Operator decisions (2026-10-23): pick the best approach for durable dense search, always take the cheaper option, keep free embeddings always on.
 
 - **builderforce-memory 2026.10.22 published** (tag `v2026.10.22`, release run green). The api and VSIX now depend on `^2026.10.22`; the api's local `ensurePinned` stopgap is deleted because `packHandoff` honours `pinned` itself.
+- **Claude Code memory hook reinstalled** from the published 2026.10.22 installer (operator-approved). The installer wrote the Claude Code, Cursor, Windsurf, VS Code, Gemini CLI and Codex CLI configs; it also added the `Stop` capture hook, and stubs are now injected with their `contentLost` label.
+- **The 100 already-stubbed local memory facts are accepted as lost** (operator, 2026-10-23: no Evermind coordinator export). They stay flagged `contentLost` and are injected labelled at half weight; `memory_restore` remains available if a copy ever turns up.
 - **VS Code lossless compaction landed** (the held patch): memorySnapshot / markdownMemory / memoryImport / evermindView. A fact is stubbed only after an Evermind recall probe passes.
 - **The recall probe no longer records a saving per question.** `/api/projects/:id/answer?probe=1` answers as usual but skips `recordMemoryAnswerSavings`. The option is the shared `MemoryAnswerOptions.probe` in brain-embedded.
 - **E3 free embeddings always on** (`e3_free_embeddings` rollout 100). This is safe before the backfill finishes, because recall dual-reads the 1536 column for rows without a 1024 vector. The paid 1536 backfill now runs only while some tenant is in the lever's off arm. Before this, it would have paid to re-embed every new write for a column no recall reads.
