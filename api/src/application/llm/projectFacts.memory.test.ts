@@ -37,7 +37,9 @@ const doubles = vi.hoisted(() => ({
   ann: vi.fn(async () => [] as unknown[]),
 }));
 
-const env = {} as Env;
+// The 1536-d space: these tests drive the legacy embed double. The free-embeddings
+// (E3) policy, on by default, is covered in memoryEmbeddingPolicy.test.ts.
+const env = { COST_LEVER_E3_FREE_EMBEDDINGS: 'off' } as unknown as Env;
 
 /** A vector `toVectorLiteral` will accept. A short stub is rejected before ANN runs. */
 function embedding(): number[] {
