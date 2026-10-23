@@ -14,11 +14,20 @@
  * still ends in exactly one rewrite of exactly that file.
  *
  * Compaction plans EVERY target before writing ANY of them, so an unreadable file aborts
- * the whole pass instead of leaving half the import stubbed and half not.
+ * the whole pass instead of leaving half the import stubbed and half not — and it is
+ * LOSSLESS: each fact is probed against the project Evermind before it is stubbed, and
+ * every original is archived before any stub is written.
  */
 
 import * as fs from "fs/promises";
-import { isStub } from "@seanhogg/builderforce-memory-mcp/compaction";
+import {
+  defaultArchiveFile,
+  isStub,
+  mergeArchive,
+  type ArchivedFact,
+  type CompactionSkip,
+  type RecallProbe,
+} from "@seanhogg/builderforce-memory-mcp/compaction";
 import {
   compactSnapshotText,
   parseSnapshotArray,
@@ -28,6 +37,7 @@ import {
 import {
   compactMarkdownMemory,
   isMarkdownMemoryPath,
+  markdownArchiveFile,
   readMarkdownMemorySource,
   type LearnableEntry,
 } from "./markdownMemory";
@@ -49,9 +59,13 @@ export interface CompactRequest {
   files?: Array<{ path?: string; absorbedKeys?: string[] }>;
 }
 
-/** Compaction outcome: either what was recovered, or which files could not be read. */
+/** How many absorbed facts were left whole, per reason. */
+export type SkipTally = Record<CompactionSkip["reason"], number>;
+
+/** Compaction outcome: either what was recovered (and what was kept whole, and why),
+ *  or which files could not be read. */
 export type CompactOutcome =
-  | { ok: true; compacted: number; bytesSaved: number }
+  | { ok: true; compacted: number; bytesSaved: number; skipped: SkipTally }
   | { ok: false; unreadable: string[] };
 
 /**
@@ -95,15 +109,35 @@ export async function readMemorySource(target: string): Promise<LearnableEntry[]
     .filter((e) => e.key && e.text.trim() && !isStub(e.text));
 }
 
+/** An empty per-reason tally — a `Record` over the reason union, so a new reason fails the build here. */
+function emptySkipTally(): SkipTally {
+  return { not_found: 0, already_compacted: 0, not_smaller: 0, no_probe: 0, probe_failed: 0, no_archive: 0 };
+}
+
 /**
- * Rewrite the absorbed entries in every target to stubs. Plans all files first; a file
- * that cannot be parsed aborts the pass with `ok: false` and nothing written.
+ * Rewrite the absorbed entries in every target to stubs, LOSSLESSLY: a fact is stubbed
+ * only once `probe` (the project Evermind) answers the question generated from it, and
+ * every stubbed original is merged into its archive sidecar (`defaultArchiveFile` beside
+ * a snapshot, `markdownArchiveFile` for a memory directory) BEFORE any stub is written.
+ * No probe ⇒ nothing is stubbed and every fact is reported `no_probe`.
+ *
+ * Plans all files first; a file that cannot be parsed aborts the pass with `ok: false`
+ * and nothing written. An archive that cannot be written aborts before any stub is.
  */
-export async function compactMemoryFiles(targets: CompactTarget[], version: number): Promise<CompactOutcome> {
+export async function compactMemoryFiles(
+  targets: CompactTarget[],
+  version: number,
+  probe: RecallProbe | null,
+): Promise<CompactOutcome> {
   const writes: Array<{ path: string; next: string }> = [];
+  const archives = new Map<string, ArchivedFact[]>();
   const unreadable: string[] = [];
+  const skipped = emptySkipTally();
   let compacted = 0;
   let bytesSaved = 0;
+  const archiveInto = (file: string, facts: ArchivedFact[]): void => {
+    if (facts.length > 0) archives.set(file, [...(archives.get(file) ?? []), ...facts]);
+  };
 
   for (const target of targets) {
     let text: string;
@@ -115,24 +149,41 @@ export async function compactMemoryFiles(targets: CompactTarget[], version: numb
     }
     if (isMarkdownMemoryPath(target.path)) {
       // One file IS one entry here, so the key set only confirms it was absorbed.
-      const result = compactMarkdownMemory(text, version);
-      if (!result) continue;
+      const result = await compactMarkdownMemory(text, target.path, version, probe);
+      if (result.next === undefined) {
+        skipped[result.skipped.reason] += 1;
+        continue;
+      }
       writes.push({ path: target.path, next: result.next });
+      archiveInto(markdownArchiveFile(target.path), [result.archive]);
       compacted += 1;
       bytesSaved += result.bytesSaved;
     } else {
-      const result = compactSnapshotText(text, target.keys, version);
+      const result = await compactSnapshotText(text, target.keys, version, probe);
       if (!result) {
         unreadable.push(target.path);
         continue;
       }
+      for (const s of result.skipped) skipped[s.reason] += 1;
       if (result.compacted > 0) writes.push({ path: target.path, next: result.next });
+      archiveInto(defaultArchiveFile(target.path), result.archive);
       compacted += result.compacted;
       bytesSaved += result.bytesSaved;
     }
   }
 
   if (unreadable.length > 0) return { ok: false, unreadable };
+  // ARCHIVE FIRST. A stub written without its original on disk is a fact destroyed —
+  // which is exactly how the earlier in-place compactor lost a user's memories.
+  for (const [file, facts] of archives) {
+    let existing: string | null = null;
+    try {
+      existing = await fs.readFile(file, "utf8");
+    } catch {
+      existing = null; // first compaction: no archive yet
+    }
+    await fs.writeFile(file, mergeArchive(existing, facts));
+  }
   for (const w of writes) await fs.writeFile(w.path, w.next);
-  return { ok: true, compacted, bytesSaved };
+  return { ok: true, compacted, bytesSaved, skipped };
 }

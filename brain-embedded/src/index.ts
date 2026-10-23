@@ -210,7 +210,7 @@ export type { PreparedImage } from './imagePrep';
 
 // Project-Evermind memory hooks for the run loop (recall → learn → reconcile).
 export { projectMemoryHooks } from './evermindMemory';
-export type { AnswerOriginCost, EvermindRunHooks, MemoryFirstAnswer, MemorySurface, ProjectMemoryRequest } from './evermindMemory';
+export type { AnswerOriginCost, EvermindRunHooks, MemoryAnswerOptions, MemoryFirstAnswer, MemorySurface, ProjectMemoryRequest } from './evermindMemory';
 // The recall contract + memory block + reconcile rule are the Evermind module's; the
 // Brain re-exports them so every host reaches the chat's memory surface in one place.
 export { formatEvermindMemoryBlock, countReconciledMemories } from '@seanhogg/builderforce-memory/evermind';

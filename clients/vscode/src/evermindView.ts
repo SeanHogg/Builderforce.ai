@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { canManageActiveWorkspace, getTenantJwt, invalidateProjectEvermind } from "./bfApi";
+import type { RecallProbe } from "@seanhogg/builderforce-memory-mcp/compaction";
+import { canManageActiveWorkspace, getTenantJwt, invalidateProjectEvermind, projectEvermindHooks } from "./bfApi";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { authLabels } from "./authLabels";
 import { getSelectedProject } from "./projectState";
@@ -153,18 +154,32 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
   }
 
   /** Rewrite each absorbed entry's body to a `[absorbed→Evermind vN] …` stub, in place,
-   *  preserving all other fields — across EVERY source file the import touched.
-   *  Returns `{ compacted, bytesSaved }`. */
+   *  preserving all other fields — across EVERY source file the import touched — but only
+   *  the entries the project Evermind PROVES it learned, each archived before it is
+   *  stubbed (`compactMemoryFiles`). Returns `{ compacted, bytesSaved, skipped }`. */
   private async compactMemory(id: string | undefined, req: CompactRequest, version?: number): Promise<void> {
     try {
       // No targets is not an error — the gateway absorbed nothing, so there is nothing
       // to stub. The import reports "compacted 0" exactly as it did before.
-      const outcome = await compactMemoryFiles(compactionTargets(req), typeof version === "number" ? version : 0);
+      const outcome = await compactMemoryFiles(compactionTargets(req), typeof version === "number" ? version : 0, this.evermindProbe());
       if (!outcome.ok) { this.respond(id, false, undefined, vscode.l10n.t("Could not re-read the memory file to compact it.")); return; }
-      this.respond(id, true, { compacted: outcome.compacted, bytesSaved: outcome.bytesSaved });
+      this.respond(id, true, { compacted: outcome.compacted, bytesSaved: outcome.bytesSaved, skipped: outcome.skipped });
     } catch (e) {
       this.respond(id, false, undefined, e instanceof Error ? e.message : String(e));
     }
+  }
+
+  /**
+   * The recall probe compaction proves absorption with: the generated question put to the
+   * active project's Evermind through the same memory-first answer route every chat turn
+   * uses (`projectEvermindHooks`), with `toolsAvailable: false` so the SSM leg may answer.
+   * No project ⇒ no probe ⇒ nothing is stubbed (a fact is never compacted on faith).
+   */
+  private evermindProbe(): RecallProbe | null {
+    const project = getSelectedProject();
+    const answer = project ? projectEvermindHooks(this.ctx.secrets, project.id).answer : undefined;
+    if (!answer) return null;
+    return { answer: async (question) => (await answer(question, { toolsAvailable: false, probe: true }))?.text ?? null };
   }
 
   private respond(id: string | undefined, ok: boolean, result?: unknown, error?: string): void {

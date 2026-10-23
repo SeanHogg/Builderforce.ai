@@ -37,16 +37,22 @@
  * (same `response_cache_hit` outcome, never metered as spend) and buckets stay small.
  * Both writes carry the 7-day TTL.
  *
- * Index: KV, LSH-bucketed and bounded per bucket (`semanticCache.ts`). There is no
- * Vectorize binding in `api/wrangler.toml`; moving the index there needs that binding
- * plus a deploy.
+ * Embedding: bge-m3 on Workers AI (free) first, the paid 1536 model only when Workers AI
+ * is unconfigured or failed. The space id is part of the namespace, so the two models'
+ * vectors never share a bucket.
+ *
+ * Index: KV, LSH-bucketed and bounded per bucket (`semanticCache.ts`). Kept over
+ * Vectorize on cost (operator, 2026-10-23: always the cheaper option): a lookup is four
+ * KV reads (~$2 per million) against a Vectorize query billed per queried dimension
+ * (~$10 per million at 1024-d), and KV already carries the TTL and purge this cache
+ * needs. Vectorize's gain is the ~10% recall LSH gives up at the 0.92 bar.
  */
 
 import type { Env } from '../../env';
 import { stableStringify } from '@builderforce/agent-tools';
 import { sha256Hex } from '../../infrastructure/crypto/digest';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { embedMemoryText } from '../memory/memoryEmbedding';
+import { MEMORY_VECTOR_SPACES, embedInFirstSpace } from '../memory/memoryEmbedding';
 import { cacheScopeKey, principalScope, type CachePrincipal } from './cacheScope';
 import { cacheEligibilityOf, isCacheableRequest, storeCachedResponse } from './responseCache';
 import { readResponseCacheHit } from './proxyResponseCache';
@@ -89,7 +95,8 @@ export interface ResponseCacheGrant {
 
 /** Injected collaborators — real ones by default, fakes in tests. */
 export interface SemanticChatDeps {
-  embed?: (env: Env, text: string) => Promise<number[] | null>;
+  /** The query vector and the id of the space (model) it is in. */
+  embed?: (env: Env, text: string) => Promise<{ space: string; vector: number[] } | null>;
   factsRevision?: (env: Env, tenantId: number, projectId: number) => Promise<string>;
   log?: (line: Record<string, unknown>) => void;
 }
@@ -107,6 +114,14 @@ export interface SemanticChatPlan {
 }
 
 const asEnv = (env: ProxyEnv): Env => env as unknown as Env;
+
+/** Free bge-m3 first; the paid 1536 space only when Workers AI cannot answer. */
+const CACHE_EMBEDDING_SPACES = [MEMORY_VECTOR_SPACES.bge_m3, MEMORY_VECTOR_SPACES.legacy];
+
+async function embedCacheQuery(env: Env, text: string): Promise<{ space: string; vector: number[] } | null> {
+  const embedded = await embedInFirstSpace(env, text, CACHE_EMBEDDING_SPACES);
+  return embedded ? { space: embedded.space.id, vector: embedded.vector } : null;
+}
 
 const defaultLog = (line: Record<string, unknown>): void => {
   // Structured single line — greppable in Workers logs as `semantic_cache.*`.
@@ -196,11 +211,11 @@ export async function planSemanticChat(
     principal: principalScope(grant.principal),
     modelClass: modelClassOf(b.model),
   });
-  const namespace = `chat:${useCase}:${contextHash}:${scope}`;
-
-  const embed = deps.embed ?? embedMemoryText;
-  const embedding = await orMiss('embed', embed(asEnv(env), split.query), null);
-  if (!embedding || embedding.length === 0) return null;
+  const embed = deps.embed ?? embedCacheQuery;
+  const embedded = await orMiss('embed', embed(asEnv(env), split.query), null);
+  if (!embedded || embedded.vector.length === 0) return null;
+  const embedding = embedded.vector;
+  const namespace = `chat:${useCase}:${embedded.space}:${contextHash}:${scope}`;
 
   const factsRevision = deps.factsRevision ?? projectFactsVersion;
   const fr = projectId != null

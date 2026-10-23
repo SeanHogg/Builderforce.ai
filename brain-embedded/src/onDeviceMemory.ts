@@ -31,7 +31,7 @@
  * projects from sharing an answer.
  */
 
-import type { AnswerFileAnchor, AnswerOriginCost, EvermindRunHooks, MemoryFirstAnswer } from './evermindMemory';
+import type { AnswerFileAnchor, AnswerOriginCost, EvermindRunHooks, MemoryAnswerOptions, MemoryFirstAnswer } from './evermindMemory';
 
 /**
  * The on-device answer store, as a port. Structurally satisfied by the
@@ -127,7 +127,7 @@ export function composeEvermindHooks(
     recall: recall ?? (async () => null),
     ...(answering.length
       ? {
-          answer: async (query: string, opts: { toolsAvailable: boolean; model?: string }) => {
+          answer: async (query: string, opts: MemoryAnswerOptions) => {
             for (const layer of answering) {
               const hit = await layer.answer?.(query, opts);
               if (hit) return hit;

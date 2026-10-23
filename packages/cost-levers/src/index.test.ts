@@ -8,7 +8,7 @@ describe('cost levers', () => {
 
   it('uses the manifest default when env is silent', () => {
     expect(costLeverRollout({}, 'b1_stable_prefix')).toBe(100);
-    expect(costLeverRollout({}, 'c8_token_compression')).toBe(0);
+    expect(costLeverRollout({}, 'c1_deferred_tools')).toBe(10);
   });
 
   it('env on/off/percent overrides the default', () => {

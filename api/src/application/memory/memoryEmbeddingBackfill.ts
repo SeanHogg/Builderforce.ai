@@ -13,10 +13,13 @@
  *
  * Two spaces (1256): the legacy 1536 column (paid, one batch per run) and the bge-m3
  * 1024 column (free Workers AI, several batches per run behind a resumable keyset
- * cursor) — the latter must cover the store before `e3_free_embeddings` is switched on.
+ * cursor). `e3_free_embeddings` is on for every tenant; recall dual-reads the 1536 column
+ * for rows the 1024 sweep has not reached, and the paid 1536 sweep runs only while some
+ * tenant is still in the lever's off arm (a new write there stores the 1536 vector).
  */
 
 import { eq } from 'drizzle-orm';
+import { isCostLeverOn } from '@builderforce/cost-levers';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentMemory, projectFacts } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
@@ -37,8 +40,8 @@ import { unembeddedInSpace, unembeddedMemories, unembeddedProjectFacts } from '.
 export const BACKFILL_BATCH = 64;
 /**
  * Batches per store per run for the FREE bge-m3 space. The legacy space is a paid call
- * and stays at one batch; bge-m3 runs on the account's Workers AI quota, and the whole
- * store must carry a 1024 vector before `e3_free_embeddings` is switched on.
+ * and stays at one batch; bge-m3 runs on the account's Workers AI quota, so it drains the
+ * store quickly and the dual-read's paid query embed stops (`allDrained`).
  */
 export const BACKFILL_1024_BATCHES = 8;
 
@@ -153,8 +156,11 @@ async function backfill1024Store(env: Env, db: Db, store: Store, batch: number):
 /** Vectorise the next slice of unembedded memories across both stores and both spaces. */
 export async function runMemoryEmbeddingBackfill(env: Env, db: Db, batch = BACKFILL_BATCH): Promise<BackfillResult> {
   const legacy = MEMORY_VECTOR_SPACES.legacy;
-  const legacyOn = legacy.available(env);
   const bgeOn = MEMORY_VECTOR_SPACES.bge_m3.available(env);
+  // With the lever on for EVERY tenant (no tenant id = on only at 100) a write clears the
+  // 1536 vector, so the paid sweep would re-embed every new row for a column no recall
+  // needs. It runs only while bge-m3 is unavailable or some tenant is in the off arm.
+  const legacyOn = legacy.available(env) && !(bgeOn && isCostLeverOn(env, 'e3_free_embeddings', null));
   if (!legacyOn && !bgeOn) return { memories: 0, projectFacts: 0, skipped: 'no_embedding_key' };
 
   const legacyCounts: StoreCounts = { memories: 0, projectFacts: 0 };

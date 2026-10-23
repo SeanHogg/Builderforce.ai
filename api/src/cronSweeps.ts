@@ -1183,9 +1183,10 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
-    // E3: the whole store must carry a bge-m3 vector before `e3_free_embeddings` serves
-    // from it, so while EITHER store still has rows with `embedding_1024 IS NULL` the
-    // backfill runs hourly instead of waiting a day per slice. Coverage is the marker the
+    // E3: `e3_free_embeddings` is on for every tenant, and recall pays one 1536 query embed
+    // (the dual-read arm) until EVERY store carries a bge-m3 vector — so while EITHER store
+    // still has rows with `embedding_1024 IS NULL` the backfill runs hourly instead of
+    // waiting a day per slice. Coverage is the marker the
     // backfill itself keeps (a full lap that found nothing — KV only, no Postgres); once
     // both stores are drained this is a no-op and the daily `memory-embedding-backfill`
     // carries on alone. Hourly by a per-UTC-hour cache slot (no cron expression is hourly).

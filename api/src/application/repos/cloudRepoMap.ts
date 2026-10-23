@@ -14,21 +14,26 @@
  * across runs. The run's own edits are what it already knows; the map is orientation.
  *
  * Exposed as the shared `repo.semantic` capability, so the SAME `repo_map` and
- * `semantic_search` tool definitions run here as on Desktop. Search is keyword mode
- * over the map's definitions (there is no chunk index or embedder in a Worker).
+ * `semantic_search` tool definitions run here as on Desktop. Search is hybrid over the
+ * map's definitions: the keyword ranking fused (RRF) with a dense one from free bge-m3
+ * vectors embedded lazily and reused across commits (`repoSymbolVectors.ts`); without a
+ * Workers AI credential it is keyword-only.
  */
 
-import type { RepoMapResult, RepoSemanticCapability, SemanticSearchResult } from '@builderforce/agent-tools';
+import type { RepoMapResult, RepoSemanticCapability, SemanticSearchHit, SemanticSearchResult } from '@builderforce/agent-tools';
 import {
   DEFAULT_REPO_MAP_LIMITS, RepoGraph, RepoGraphBuilder, isMapCandidate, renderRepoMap, searchRepoSymbols,
   type RepoMapLimits, type SerializedRepoGraph,
 } from '@builderforce/repo-map';
+import { reciprocalRankFusion } from '@seanhogg/builderforce-memory/retrieval';
 import type { Env } from '../../env';
+import type { EmbeddingEnv } from '../memory/memoryEmbedding';
 import { TENANT_PRINCIPAL, cacheScopeKey } from '../llm/cacheScope';
 import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { fetchRepoTarball, resolveRepoCommitSha, type RepoReadContext } from './readRepoContents';
 import { getOrBuildRepoGraph, repoMapObjectKey } from './repoMapStore';
+import { loadRepoSymbolIndex, type RepoSymbolIndex } from './repoSymbolVectors';
 import { readTarEntries } from './tarStream';
 
 const SOURCE = 'application/repos/cloudRepoMap.ts';
@@ -40,7 +45,10 @@ const BUILD_DEADLINE_MS = 20_000;
 /** A file with a NUL byte in its first this-many bytes is binary. */
 const BINARY_SNIFF_BYTES = 8_192;
 
-export type CloudRepoMapEnv = Pick<Env, 'UPLOADS' | 'AUTH_CACHE_KV' | 'CACHE_L2_KV'>;
+export type CloudRepoMapEnv = Pick<Env, 'UPLOADS' | 'AUTH_CACHE_KV' | 'CACHE_L2_KV'> & EmbeddingEnv;
+
+/** Candidates each arm contributes before fusion. */
+const SEARCH_POOL = 30;
 
 export interface CloudRepoMapDeps {
   env: CloudRepoMapEnv;
@@ -152,6 +160,9 @@ function coverageNote(graph: RepoGraph, sha: string): string {
 export function createCloudRepoSemantic(deps: CloudRepoMapDeps): RepoSemanticCapability {
   let loaded: Promise<LoadedRepoGraph> | null = null;
   const load = (): Promise<LoadedRepoGraph> => (loaded ??= loadCloudRepoGraph(deps));
+  let indexed: Promise<RepoSymbolIndex | null> | null = null;
+  const dense = (graph: RepoGraph, sha: string): Promise<RepoSymbolIndex | null> =>
+    (indexed ??= loadRepoSymbolIndex({ env: deps.env, repo: { ...deps.repo, sha }, graph }));
   return {
     async repoMap(opts?: { focus?: string[]; maxTokens?: number; query?: string }): Promise<RepoMapResult> {
       const r = await load();
@@ -162,15 +173,47 @@ export function createCloudRepoSemantic(deps: CloudRepoMapDeps): RepoSemanticCap
     async search(query: string, opts?: { scope?: string; limit?: number }): Promise<SemanticSearchResult> {
       const r = await load();
       if (!r.ok) return { ok: false, error: `semantic search unavailable: ${r.reason}. ${FALLBACK}` };
-      const hits = searchRepoSymbols(r.graph, query, { limit: opts?.limit ?? 8, scope: opts?.scope ?? null });
-      return {
-        ok: true,
-        query,
-        total: hits.length,
-        results: hits.map((h) => ({
-          path: h.path, startLine: h.line, endLine: h.line, symbol: h.symbol, kind: 'definition', snippet: h.signature, source: 'keyword',
-        })),
-      };
+      const limit = Math.max(1, opts?.limit ?? 8);
+      const scope = opts?.scope ?? null;
+      const keyword = searchRepoSymbols(r.graph, query, { limit: SEARCH_POOL, scope });
+      const index = await dense(r.graph, r.sha);
+      const embedded = index ? await index.search(query, { limit: SEARCH_POOL, scope }) : [];
+      const results = fuseDefinitionHits(keyword, embedded).slice(0, limit);
+      // Still embedding (a pass ran out of budget): the next search covers more.
+      const indexing = index ? index.embedded < index.covered : false;
+      return { ok: true, query, total: results.length, results, ...(indexing ? { indexing } : {}) };
     },
   };
+}
+
+/**
+ * Keyword and dense definition rankings fused by RRF. A definition both arms found is
+ * `hybrid`; with no dense arm the keyword order is returned unchanged.
+ */
+export function fuseDefinitionHits(
+  keyword: ReadonlyArray<{ path: string; line: number; symbol: string; signature: string }>,
+  embedded: ReadonlyArray<{ symbol: { path: string; line: number; name: string; signature: string }; score: number }>,
+): SemanticSearchHit[] {
+  const idOf = (path: string, line: number, name: string): string => `${path}:${line}:${name}`;
+  const rows = new Map<string, { path: string; line: number; symbol: string; signature: string; arms: Set<'keyword' | 'embedding'> }>();
+  const add = (path: string, line: number, symbol: string, signature: string, arm: 'keyword' | 'embedding'): string => {
+    const id = idOf(path, line, symbol);
+    const row = rows.get(id) ?? { path, line, symbol, signature, arms: new Set() };
+    row.arms.add(arm);
+    rows.set(id, row);
+    return id;
+  };
+  const keywordIds = keyword.map((h) => add(h.path, h.line, h.symbol, h.signature, 'keyword'));
+  const denseIds = embedded.map((h) => add(h.symbol.path, h.symbol.line, h.symbol.name, h.symbol.signature, 'embedding'));
+  const order = denseIds.length
+    ? reciprocalRankFusion([{ ids: keywordIds }, { ids: denseIds }])
+    : keywordIds.map((id) => ({ id, score: undefined as number | undefined }));
+  return order.map(({ id, score }) => {
+    const row = rows.get(id)!;
+    const source = row.arms.size === 2 ? 'hybrid' : row.arms.has('embedding') ? 'embedding' : 'keyword';
+    return {
+      path: row.path, startLine: row.line, endLine: row.line, symbol: row.symbol, kind: 'definition', snippet: row.signature, source,
+      ...(score === undefined ? {} : { score }),
+    };
+  });
 }

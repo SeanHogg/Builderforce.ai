@@ -151,6 +151,9 @@ async function forgetCore(env: Env, db: Db, tenantId: number, projectId: number,
  * `?tools=0` declares a caller with NO tools available — the only case where the Evermind
  * leg may pre-empt the model (it cannot call a tool, so it must never short-circuit a run
  * that could fetch the real answer). Absent/anything else = tools available = cache only.
+ *
+ * `?probe=1` is a verification read (the compaction recall probe): answered as usual, but
+ * no saving is recorded — no model call was ever going to happen.
  */
 async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context, userId: string | null): Promise<Response> {
   if (!(await projectInTenantCached(env, db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
@@ -185,7 +188,7 @@ async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: 
   // response path: the person is waiting for the answer, not for the bookkeeping. The
   // model an ESTIMATED saving is priced at is the chat's own served model when the chat
   // is known; the caller's hint only stands in for a chat-less call (capped either way).
-  const saving = (async () => {
+  const recordSaving = async (): Promise<void> => {
     const served = chatId != null ? await chatAnswerOrigin(db, { tenantId, chatId, userId }) : null;
     await recordMemoryAnswerSavings(env, db, {
       tenantId,
@@ -197,10 +200,12 @@ async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: 
       question,
       answer,
     });
-  })().catch((err: unknown) => {
-    reportCaughtError(err, { source: 'project-facts-routes', operation: 'record-memory-answer-savings', level: 'warning', context: { tenantId, projectId } });
-  });
-  c.executionCtx.waitUntil(saving);
+  };
+  if (c.req.query('probe') !== '1') {
+    c.executionCtx.waitUntil(recordSaving().catch((err: unknown) => {
+      reportCaughtError(err, { source: 'project-facts-routes', operation: 'record-memory-answer-savings', level: 'warning', context: { tenantId, projectId } });
+    }));
+  }
   // `costBasis` is the ledger's input, not the client's business.
   const { costBasis: _costBasis, ...publicAnswer } = answer;
   return json({ answer: publicAnswer });

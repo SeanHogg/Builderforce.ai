@@ -199,18 +199,6 @@ export function maskOldObservations(messages: readonly Msg[], turns = OBSERVATIO
   return masked > 0 ? { messages: out, masked } : { messages: messages as Msg[], masked: 0 };
 }
 
-/**
- * Re-insert a pinned message the packer dropped, right after the leading system
- * prefix. A no-op once the installed `packHandoff` honours `pinned` itself; it guards
- * a host still on a memory package that predates the option.
- */
-function ensurePinned(packed: Msg[], pinned: Msg | undefined): Msg[] {
-  if (!pinned || packed.includes(pinned)) return packed;
-  let at = 0;
-  while (at < packed.length && packed[at]?.role === 'system') at += 1;
-  return [...packed.slice(0, at), pinned, ...packed.slice(at)];
-}
-
 /** Render a slice of the conversation as role-tagged text for the summarizer, with
  *  per-message + total caps so the summarization call itself stays bounded. */
 function renderForSummary(middle: readonly Msg[]): string {
@@ -298,7 +286,7 @@ export async function compactMessages(
   });
   // Packing dropped nothing (or could not fit even the pinned anchors): start from the
   // original transcript and truncate bulky tool results instead of shipping it over cap.
-  const packed = pack.dropped > 0 ? ensurePinned(pack.messages as unknown as Msg[], brief) : [...source];
+  const packed = pack.dropped > 0 ? (pack.messages as unknown as Msg[]) : [...source];
   const messageBudget = Math.max(0, budget - toolsTokens);
   const out = !pack.fits || messagesTokens(packed) > messageBudget ? elideToFit(packed, messageBudget) : packed;
   const elided = out.some((m, i) => m !== packed[i]);

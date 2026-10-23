@@ -53,7 +53,7 @@ function harness(over: Partial<SemanticChatDeps> = {}) {
   const env = { SEMANTIC_CACHE_KV: semKv, AUTH_CACHE_KV: authKv } as unknown as ProxyEnv;
   const log = vi.fn();
   const deps: SemanticChatDeps = {
-    embed: async (_env, text) => vectors[text] ?? null,
+    embed: async (_env, text) => (vectors[text] ? { space: 'test', vector: vectors[text]! } : null),
     factsRevision: async () => 'rev-1',
     log,
     ...over,
@@ -100,6 +100,16 @@ describe('eligibility', () => {
     expect(await planSemanticChat(h.env, req('Is this a refund request?', { tools: [{ type: 'function' }] }), g, h.deps)).toBeNull();
     expect(await planSemanticChat(h.env, req('Is this a refund request?', { stream: true }), g, h.deps)).toBeNull();
     expect(await planSemanticChat(h.env, req('Is this a refund request?', { useCase: 'chat' }), g, h.deps)).toBeNull();
+  });
+
+  it('keeps each embedding model in its own namespace', async () => {
+    const g = { tenantId: nextTenant() };
+    const free = harness({ embed: async () => ({ space: 'bge_m3', vector: [1, 0, 0] }) });
+    const paid = harness({ embed: async () => ({ space: 'legacy', vector: [1, 0, 0] }) });
+    const a = await planSemanticChat(free.env, req('Is this a refund request?'), g, free.deps);
+    const b = await planSemanticChat(paid.env, req('Is this a refund request?'), g, paid.deps);
+    expect(a?.namespace).toContain(':bge_m3:');
+    expect(b?.namespace).toContain(':legacy:');
   });
 
   it('no embedding → no plan (the request just dispatches)', async () => {

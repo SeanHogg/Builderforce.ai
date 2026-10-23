@@ -32,6 +32,15 @@ export function repoMapObjectKey(p: RepoMapKeyParts): string {
   return `repo-map/v${REPO_GRAPH_VERSION}/${keySegment(p.provider)}/${keySegment(p.host ?? '-')}/${keySegment(p.owner)}/${keySegment(p.repo)}/${p.sha}.json`;
 }
 
+/**
+ * The R2 object key for one repository's definition vectors in one embedding space
+ * (`repoSymbolVectors.ts`). Per REPOSITORY, not per commit: vectors are keyed by their
+ * definition's text inside the object, so every commit reuses the ones that did not change.
+ */
+export function repoVectorsObjectKey(p: Omit<RepoMapKeyParts, 'sha'>, space: string, version: number): string {
+  return `repo-vectors/v${version}/${keySegment(p.provider)}/${keySegment(p.host ?? '-')}/${keySegment(p.owner)}/${keySegment(p.repo)}/${space}.json`;
+}
+
 const l1 = new Map<string, SerializedRepoGraph>();
 const inFlight = new Map<string, Promise<SerializedRepoGraph | null>>();
 

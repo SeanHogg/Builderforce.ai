@@ -19,6 +19,7 @@ import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { toLlmUsage } from '../proxyTypes';
+import { logTrace } from '../traceLogger';
 import { normalizeByoProvider, recordUsageRow } from '../usageLedger';
 import { anthropicBatchAdapter } from '../vendors/anthropicBatch';
 import { openaiBatchAdapter } from '../vendors/openaiBatch';
@@ -95,10 +96,12 @@ export function defaultBatchTickDeps(env: Env, db: Db): BatchTickDeps {
 }
 
 /**
- * Meter one served job through THE ledger write. A batch answer is priced at the batch
- * rate (`pricingTier: 'batch'`); a synchronous fallback at the standard one, with why.
+ * Meter one served job through THE ledger write, and write its `llm_traces` row like any
+ * synchronous call. A batch answer is priced at the batch rate (`pricingTier: 'batch'`);
+ * a synchronous fallback at the standard one, with why.
  */
 export async function recordBatchUsage(env: Env, db: Db, job: BatchJob, result: VendorCallResult, how: BatchUsageHow): Promise<void> {
+  await traceBatchCall(env, job, result, how);
   if (!result.usage) {
     console.warn(`[llm-batch] job=${job.id} ${job.vendor}/${job.model} returned no usage; nothing metered`);
     return;
@@ -120,6 +123,33 @@ export async function recordBatchUsage(env: Env, db: Db, job: BatchJob, result: 
       ...(how.fallbackReason ? { batchFallbackReason: how.fallbackReason } : {}),
     },
   });
+}
+
+/**
+ * The served job's diagnostic trace. Awaited through a local `waitUntil` so the cron
+ * tick does not end before the insert lands; `logTrace` never throws.
+ */
+async function traceBatchCall(env: Env, job: BatchJob, result: VendorCallResult, how: BatchUsageHow): Promise<void> {
+  const pending: Promise<unknown>[] = [];
+  const usage = result.usage ? toLlmUsage(result.usage) : null;
+  logTrace(env, { waitUntil: (p) => pending.push(p) }, {
+    traceId: crypto.randomUUID(),
+    surface: 'batch',
+    tenantId: job.tenantId,
+    llmProduct: 'builderforceLLM',
+    useCase: job.useCase,
+    result: { response: { status: 200 }, resolvedModel: answeredModel(result, job.model), resolvedVendor: job.vendor, outcome: 'success' },
+    usage: usage ? { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens, totalTokens: usage.totalTokens } : null,
+    requestBody: { messages: job.request.messages, model: job.model, max_tokens: job.request.maxTokens, useCase: job.useCase },
+    responseBody: result.raw,
+    callerMetadata: {
+      batchJobId: job.id,
+      batched: how.batched,
+      ...(how.providerBatchId ? { providerBatchId: how.providerBatchId } : {}),
+      ...(how.fallbackReason ? { batchFallbackReason: how.fallbackReason } : {}),
+    },
+  });
+  await Promise.all(pending);
 }
 
 /** The model that answered, read off the OpenAI-shape body; the job's own otherwise. */

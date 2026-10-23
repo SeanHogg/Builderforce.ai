@@ -53,6 +53,17 @@ export interface MemoryFirstAnswer {
 /** Where a run is driven from — the usage ledger's `surface` vocabulary, declared once. */
 export type MemorySurface = UsageSurface;
 
+/** How a memory-first answer is asked for. */
+export interface MemoryAnswerOptions {
+  /** Whether THIS run can call tools — see {@link EvermindRunHooks.answer}. */
+  toolsAvailable: boolean;
+  /** The model the run would otherwise call, for pricing a saving. */
+  model?: string;
+  /** A verification read (the compaction recall probe): answered, but no saving is
+   *  recorded, because no model call was ever going to happen. */
+  probe?: boolean;
+}
+
 /** What producing a cached answer cost — recorded with it (`project_facts.origin_*`). */
 export interface AnswerOriginCost {
   model: string;
@@ -106,7 +117,7 @@ export interface EvermindRunHooks {
    * call ("which tickets are in the backlog?") gets answered from stale weights while
    * the tools that could answer it are never called.
    */
-  answer?(query: string, opts: { toolsAvailable: boolean; model?: string }): Promise<MemoryFirstAnswer | null>;
+  answer?(query: string, opts: MemoryAnswerOptions): Promise<MemoryFirstAnswer | null>;
   /**
    * Remember a (question → answer) pair so an exact repeat short-circuits next time.
    * `origin` is what producing the answer cost (the run's served model + summed tokens):
@@ -169,10 +180,10 @@ export function projectMemoryHooks(
         headers: json,
         body: JSON.stringify({ query, ...(chatId != null ? { chatId } : {}) }),
       }).catch(() => null),
-    answer: (query: string, opts: { toolsAvailable: boolean; model?: string }) =>
+    answer: (query: string, opts: MemoryAnswerOptions) =>
       request<{ answer: MemoryFirstAnswer | null }>(
         `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? '1' : '0'}`
-          + `${chatParam}&surface=${surface}${opts.model ? `&model=${encodeURIComponent(opts.model)}` : ''}`,
+          + `${chatParam}&surface=${surface}${opts.model ? `&model=${encodeURIComponent(opts.model)}` : ''}${opts.probe ? '&probe=1' : ''}`,
       ).then((r) => r?.answer ?? null).catch(() => null),
     cacheAnswer: (query: string, answer: string, origin?: AnswerOriginCost, fileAnchors?: AnswerFileAnchor[]) => {
       // The files the answer is about — what makes it stale server-side. The run's own

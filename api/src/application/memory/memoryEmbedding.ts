@@ -31,6 +31,9 @@ import { dispatchEmbeddingVendor } from '../llm/embeddingVendors/registry';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Env } from '../../env';
 
+/** The credentials an embedding call reads — every space's vendor, nothing else. */
+export type EmbeddingEnv = Pick<Env, 'OPENROUTER_API_KEY' | 'VOYAGE_API_KEY' | 'CLOUDFLARE_AI_API_TOKEN' | 'CLOUDFLARE_ACCOUNT_ID'>;
+
 /**
  * The pinned memory embedding model. The `openrouter/` prefix pins the VENDOR too
  * (the cascade does not fail over across vendors for a prefixed id), which is what
@@ -42,7 +45,7 @@ export const MEMORY_EMBEDDING_MODEL = 'openrouter/openai/text-embedding-3-small'
 export const MEMORY_EMBEDDING_DIMS = 1536;
 
 /** True when this deployment can embed at all (no key ⇒ lexical recall only). */
-export function memoryEmbeddingAvailable(env: Env): boolean {
+export function memoryEmbeddingAvailable(env: EmbeddingEnv): boolean {
   return Boolean(env.OPENROUTER_API_KEY);
 }
 
@@ -54,8 +57,8 @@ export function memoryEmbeddingAvailable(env: Env): boolean {
 // column and model stamp, so nothing compares vectors across spaces:
 //   legacy → `embedding`      vector(1536), text-embedding-3-small (paid, OpenRouter)
 //   bge_m3 → `embedding_1024` vector(1024), Workers AI bge-m3 (free, account quota)
-// Both are kept (dual-read) until every row carries a bge-m3 vector; the backfill sweep
-// fills `embedding_1024` for free, then the lever moves new writes and queries onto it.
+// The lever is on for every tenant: writes and queries use bge-m3, and recall dual-reads
+// the 1536 column only for rows the free backfill sweep has not given a 1024 vector yet.
 // ---------------------------------------------------------------------------
 
 export type MemoryVectorSpaceId = 'legacy' | 'bge_m3';
@@ -66,7 +69,7 @@ export interface MemoryVectorSpace {
   model: string;
   dims: number;
   /** Whether this deployment holds the credential the space's vendor needs. */
-  available: (env: Env) => boolean;
+  available: (env: EmbeddingEnv) => boolean;
 }
 
 /** Workers AI bge-m3 — width must match `vector(1024)` in migration 1256. */
@@ -106,7 +109,7 @@ export function toVectorLiteral(vector: readonly number[], space: MemoryVectorSp
  * when embedding is unavailable or the vendor failed, so every caller can treat
  * "no vector" as an ordinary outcome and fall back to lexical retrieval.
  */
-export async function embedMemoryTexts(env: Env, input: readonly string[], space: MemoryVectorSpace = LEGACY): Promise<number[][] | null> {
+export async function embedMemoryTexts(env: EmbeddingEnv, input: readonly string[], space: MemoryVectorSpace = LEGACY): Promise<number[][] | null> {
   const texts = input.filter((t) => t.trim().length > 0);
   if (texts.length === 0 || !space.available(env)) return null;
   try {
@@ -138,7 +141,24 @@ export async function embedMemoryTexts(env: Env, input: readonly string[], space
 }
 
 /** Embed a single text. `null` on any failure, same contract as the batch form. */
-export async function embedMemoryText(env: Env, text: string, space: MemoryVectorSpace = LEGACY): Promise<number[] | null> {
+export async function embedMemoryText(env: EmbeddingEnv, text: string, space: MemoryVectorSpace = LEGACY): Promise<number[] | null> {
   const vectors = await embedMemoryTexts(env, [text], space);
   return vectors?.[0] ?? null;
+}
+
+/**
+ * Embed `text` in the first of `spaces` that answers, cheapest first — the ONE fallback
+ * walk (a memory write, the semantic chat cache). The vector comes back with its space,
+ * so a caller never compares it against another model's vectors.
+ */
+export async function embedInFirstSpace(
+  env: EmbeddingEnv,
+  text: string,
+  spaces: readonly MemoryVectorSpace[],
+): Promise<{ space: MemoryVectorSpace; vector: number[] } | null> {
+  for (const space of spaces) {
+    const vector = await embedMemoryText(env, text, space);
+    if (vector) return { space, vector };
+  }
+  return null;
 }

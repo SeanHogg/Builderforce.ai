@@ -24,13 +24,21 @@
  * into the per-fact files, so absorbing it teaches nothing new and stubbing it would
  * destroy the index the rest of the directory is navigated by.
  *
- * Stub text/idempotency come from `memorySnapshot.ts` — ONE marker across both formats,
- * so re-importing a mixed set never double-stubs anything.
+ * Stub text, idempotency, the recall probe and the archive come from the memory server's
+ * `compaction` rules — ONE marker across both formats, so re-importing a mixed set never
+ * double-stubs anything, and a fact is never stubbed without its original archived.
  */
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import { isStub, memoryStub } from "@seanhogg/builderforce-memory-mcp/compaction";
+import {
+  defaultArchiveFile,
+  isStub,
+  planLosslessCompaction,
+  type ArchivedFact,
+  type CompactionSkip,
+  type RecallProbe,
+} from "@seanhogg/builderforce-memory-mcp/compaction";
 
 /** The index file at the root of a Claude Code memory directory. */
 export const MEMORY_INDEX_FILE = "MEMORY.md";
@@ -105,6 +113,11 @@ export function isMemoryIndexPath(filePath: string): boolean {
   return path.basename(filePath).toLowerCase() === MEMORY_INDEX_FILE.toLowerCase();
 }
 
+/** A per-fact file's memory key: its frontmatter `name`, else the filename stem. */
+function markdownKey(attrs: Record<string, string>, filePath: string): string {
+  return attrs.name?.trim() || path.basename(filePath).replace(/\.(md|markdown)$/i, "");
+}
+
 /**
  * Turn one markdown memory file's text into a learnable entry, or `null` when there is
  * nothing to learn — an empty body, or a body that is already a compaction stub (so
@@ -112,24 +125,47 @@ export function isMemoryIndexPath(filePath: string): boolean {
  */
 export function markdownEntry(text: string, filePath: string): LearnableEntry | null {
   const { attrs, body } = parseFrontmatter(text);
-  const key = attrs.name?.trim() || path.basename(filePath).replace(/\.(md|markdown)$/i, "");
+  const key = markdownKey(attrs, filePath);
   if (!key || !body.trim() || isStub(body)) return null;
   const prompt = attrs.description?.trim();
   return { key, text: body, path: filePath, ...(prompt ? { prompt } : {}) };
 }
 
 /**
- * Rewrite a markdown memory file's BODY to a terse stub, keeping its frontmatter intact
- * (the `name` is the entry's key and the index links to the file by name — losing either
- * would orphan the pointer). Returns `null` when there is nothing worth rewriting.
+ * The archive a memory DIRECTORY's compacted facts are kept in: one sidecar beside the
+ * `MEMORY.md` index (`MEMORY.archive.json`, the snapshot's `defaultArchiveFile`
+ * convention), never a `*.md` — so it is not itself read back as a fact.
  */
-export function compactMarkdownMemory(text: string, version: number): { next: string; bytesSaved: number } | null {
-  const { frontmatter, body } = parseFrontmatter(text);
-  if (!body.trim() || isStub(body)) return null;
-  const stub = memoryStub(body, version);
-  if (stub.length >= body.length) return null; // never grow an entry
-  const next = frontmatter ? `${frontmatter}\n\n${stub}\n` : `${stub}\n`;
-  return { next, bytesSaved: body.length - stub.length };
+export function markdownArchiveFile(filePath: string): string {
+  return defaultArchiveFile(path.join(path.dirname(filePath), MEMORY_INDEX_FILE.replace(/\.md$/i, ".json")));
+}
+
+/** A planned markdown compaction: the rewrite, and the original to archive FIRST. */
+export type MarkdownCompaction =
+  | { next: string; bytesSaved: number; archive: ArchivedFact; skipped?: undefined }
+  | { next?: undefined; skipped: CompactionSkip };
+
+/**
+ * Plan the LOSSLESS rewrite of a markdown memory file's BODY to a terse stub, keeping its
+ * frontmatter intact (the `name` is the entry's key and the index links to the file by
+ * name — losing either would orphan the pointer). The memory server's rules apply
+ * (`planLosslessCompaction`): the body is stubbed only once `probe` answers the question
+ * generated from it, and the caller writes `archive` to {@link markdownArchiveFile}
+ * BEFORE `next`. A fact left whole — no body, already a stub, a stub no smaller, or an
+ * absorption the probe did not prove — comes back as `skipped`, with the reason.
+ */
+export async function compactMarkdownMemory(
+  text: string,
+  filePath: string,
+  version: number,
+  probe: RecallProbe | null,
+): Promise<MarkdownCompaction> {
+  const { frontmatter, attrs, body } = parseFrontmatter(text);
+  const plan = await planLosslessCompaction([{ key: markdownKey(attrs, filePath), content: body }], { version, probe });
+  const write = plan.writes[0];
+  if (!write) return { skipped: plan.skipped[0] ?? { key: markdownKey(attrs, filePath), reason: "not_found" } };
+  const next = frontmatter ? `${frontmatter}\n\n${write.content}\n` : `${write.content}\n`;
+  return { next, bytesSaved: write.bytesSaved, archive: write.archive };
 }
 
 /** Read every learnable per-fact entry in a memory directory, sorted by file name. */

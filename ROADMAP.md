@@ -271,7 +271,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 - **Cost caps:** confirm paid-overflow cap + cooldown; no cap on premium fallback for FREE (`useCase` is caller-supplied); Pro fixed at 2 attempts; no per-user sub-ledger; gateway and on-prem runs unattributed.
 - **Image generation has no BYO path** (`imageProxyForPlan` gets no tenant keys).
 - **Orphaned usage rows:** `llm_usage_log.tenant_id ON DELETE SET NULL` drops a deleted tenant from tenant views but not the admin rollup (0 rows today).
-- **Caching:** `CachingBridge` unused (the exact `ResponseCache` now serves `completeChat`, `completeForTenant` and `/v1/chat/completions`); TTL and the semantic index are tracked under *LLM cost optimization — open items*.
+- **Caching:** `CachingBridge` unused (the exact `ResponseCache` now serves `completeChat`, `completeForTenant` and `/v1/chat/completions`); the semantic index stays on KV LSH by cost decision (DONE.md 2026-10-23, wave 3).
 - **Reliability:** `applyCooldowns` 2N KV writes; no cooldown re-check per attempt; streams don't surface `failovers[]` or detect empty-200; strict schema capability not advertised; hired.video tailor has its own cascade.
 - **Gateway hardening:** no message-shape sanitizer for strict vendors (Gemini `INVALID_ARGUMENT`); `llm` workflow nodes use the host key.
 - **Sampling `params` apply at the gateway only,** not in the V2 loop; no persona picker in My-LLMs. *Decision:* retire `tenant_model` presets or rename.
@@ -283,19 +283,15 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### LLM cost optimization — open items (PRD: LLM Cost Optimization Layer) `[agents]`
 
-Waves 1–2 shipped (see DONE.md 2026-10-22 and 2026-10-23). Still open:
+Waves 1–3 shipped (see DONE.md 2026-10-22 and 2026-10-23). Still open:
 
-- **builderforce-memory 2026.10.22 is committed but not published to npm.** *Blocker: operator approval to push the `v2026.10.22` release tag (the publish was refused as a public action).* It unblocks: the VS Code "Import from builderforce-memory" lossless compaction (`clients/vscode` memorySnapshot/markdownMemory/memoryImport/evermindView changes held uncommitted until the version resolves), the api's native `pinned` handoff option (a local `ensurePinned` fallback covers it meanwhile) and reasoning tokens reaching the ledger through `readUsageFields`.
 - **The 100 already-stubbed local memory facts have no full copy.** `memory_restore` can import text, but no backup exists; the only remnant is the Evermind coordinator `mem:` records (≤2,000 chars, unkeyed). *Blocker: an operator export of those records.* Stubs are now flagged `contentLost` and injected labelled at half weight.
 - **The installed Claude Code memory hook predates the labels.** Re-run `builderforce-memory-install` after the publish. *Blocker: operator approval — it rewrites the user's Claude Code hooks.*
-- **Semantic cache index stays in KV (LSH, ≤64 entries per bucket).** Moving it to Vectorize needs a `vectorize` binding in `api/wrangler.toml` and a deploy. *Blocker: binding + deploy.*
-- **VS Code Evermind recall probe goes through `/answer`,** which may record a memory "saving" per probe question. It ships with the held VS Code lossless-compaction change (patch kept in the session scratchpad: `vscode-lossless-compaction.patch`). *Blocker: the builderforce-memory 2026.10.22 publish above.*
 - **Container image with `bf-context` has not been built or smoke-tested.** The multi-stage Dockerfile (api/container) builds bf-context from builderforce-inference @ 174566a; the local Docker daemon was not running, so the first build is CI's / the next deploy's. *Blocker: a running Docker daemon or the deploy pipeline.* Unblocks C5 on container runs.
-- **Provider batch APIs (D6) have never run live.** Anthropic Message Batches and OpenAI Batch adapters are unit-tested only. *Blocker: a live `CLAUDE_API_KEY` / `OPENAI_API_KEY` batch round-trip.* Batch calls write usage rows but no `llm_traces` rows yet — not blocked.
+- **Cloud runs have no C8 token compression.** The container builds bf-context with `--no-default-features` (no ONNX runtime, no LLMLingua model), and the Worker has no compressor, so `c8_token_compression` acts only on Desktop, VSIX and on-prem. *Blocker: the container image's first build, to measure what adding ONNX and the model costs in image size and cold start.* Unblocks C8 on container runs.
+- **Provider batch APIs (D6) have never run live.** Anthropic Message Batches and OpenAI Batch adapters are unit-tested only. *Blocker: a live `CLAUDE_API_KEY` / `OPENAI_API_KEY` batch round-trip.*
 - **Specialists (E2) admit nothing until eval cases accumulate:** the weekly sweep needs captured samples per job before any model can be admitted. *Blocker: production traffic.*
 - **D2 difficulty router and E5 verified local label train on live outcomes;** both stay inert until `cascade_outcomes` / the local-success heads have ≥ 50 samples. *Blocker: production traffic.*
-- **E3 free embeddings stay at 0% until the 1024-d backfill covers both stores;** `memory-embedding-catchup` runs hourly until drained, then flip `COST_LEVER_E3_FREE_EMBEDDINGS`. *Blocker: the backfill finishing in production.*
-- **Durable `semantic_search` is keyword-over-definitions only** (container runs get bf-context search). Dense search on durable runs means embedding repo chunks per commit (Workers AI + an R2/Vectorize vector store) — a recurring per-commit embedding cost. *Decision needed: operator — worth that cost, or keyword-only on durable runs?*
 
 ### Workload-aware routing and model hand-off `[agents]`
 

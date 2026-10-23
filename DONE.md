@@ -1,3 +1,22 @@
+## ✅ RESOLVED 2026-10-23 — LLM cost optimization, wave 3: operator decisions applied, builderforce-memory 2026.10.22 published, lossless compaction in VS Code (api 2026.10.68 · brain-embedded 2026.10.42 · cost-levers 2026.10.1 · VSIX 2026.10.62 · builderforce-memory 2026.10.22)
+
+Operator decisions (2026-10-23): pick the best approach for durable dense search, always take the cheaper option, keep free embeddings always on.
+
+- **builderforce-memory 2026.10.22 published** (tag `v2026.10.22`, release run green). The api and VSIX now depend on `^2026.10.22`; the api's local `ensurePinned` stopgap is deleted because `packHandoff` honours `pinned` itself.
+- **VS Code lossless compaction landed** (the held patch): memorySnapshot / markdownMemory / memoryImport / evermindView. A fact is stubbed only after an Evermind recall probe passes.
+- **The recall probe no longer records a saving per question.** `/api/projects/:id/answer?probe=1` answers as usual but skips `recordMemoryAnswerSavings`. The option is the shared `MemoryAnswerOptions.probe` in brain-embedded.
+- **E3 free embeddings always on** (`e3_free_embeddings` rollout 100). This is safe before the backfill finishes, because recall dual-reads the 1536 column for rows without a 1024 vector. The paid 1536 backfill now runs only while some tenant is in the lever's off arm. Before this, it would have paid to re-embed every new write for a column no recall reads.
+- **The semantic chat cache embeds with free bge-m3.** The paid 1536 model is used only when Workers AI can't answer. The space id is folded into the namespace, so the two models never share a bucket. Before this, every B2 lookup paid for an OpenRouter embed.
+- **The semantic cache index stays on KV LSH; no Vectorize** (cost decision). A lookup is four KV reads, about $2 per million. A Vectorize query is billed per queried dimension, about $10 per million at 1024-d. KV also already provides the TTL and purge. What we give up is about 10% recall at the 0.92 bar.
+- **C8 compression starts its A/B at 10%** like every lever that changes what the model sees (it was the one lever at 0%). It runs only where the local engine already reports a loaded compressor.
+- **Batch calls write `llm_traces` rows** (`surface: 'batch'`, the job id and the provider batch id in the metadata), so a served batch job is traceable like a synchronous call.
+- **Durable `semantic_search` is hybrid** (`repos/repoSymbolVectors.ts`):
+  - definition vectors come from free bge-m3, embedded lazily on the first search and not on each commit;
+  - vectors are keyed by definition text and stored per repository in R2 as int8, so a new commit re-embeds only the definitions it changed;
+  - coverage is capped at the 6,000 definitions with the highest PageRank;
+  - each embedding pass gets an 8 s budget (`indexing: true` while partial);
+  - the dense ranking is fused with the keyword ranking by RRF. Without a Workers AI credential, search is keyword-only, as before.
+
 ## ✅ RESOLVED 2026-10-23 — LLM cost optimization, wave 2: verifier cascade, progress guards, cloud repo map, batch API, retrieval, specialists, cost dashboard (api 2026.10.67 · frontend 2026.10.83 · brain-embedded 2026.10.41 · agent-runtime 2026.10.15 · VSIX 2026.10.61 · Rovr 2026.10.21)
 
 All behind `@builderforce/cost-levers`; lever off = previous behaviour.

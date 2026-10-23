@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/cost-levers",
-  "version": "2026.10.0",
+  "version": "2026.10.1",
   "private": true,
   "type": "module",
   "description": "The LLM cost-optimization lever manifest (PRD: LLM Cost Optimization Layer) and the ONE gate every lever reads: an env override (COST_LEVER_<ID>=on|off|<0-100>) over a manifest default, bucketed by a stable tenant hash so a lever rolls out to a fixed share of tenants. Dependency-free and I/O-free.",

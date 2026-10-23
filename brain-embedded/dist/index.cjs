@@ -6246,7 +6246,9 @@ var COST_LEVERS = [
   { id: "c5_cloud_repo_map", requirement: "C5", rollout: 10, summary: "Graph-ranked repo map on cloud runs" },
   { id: "c6_rerank", requirement: "C6", rollout: 10, summary: "Cross-encoder rerank after hybrid retrieval" },
   { id: "c7_tool_output_policy", requirement: "C7", rollout: 100, summary: "One shared tool-output budget + failure summaries" },
-  { id: "c8_token_compression", requirement: "C8", rollout: 0, summary: "LLMLingua-2 token compression of large context" },
+  // 10 like every lever that changes what the model sees; it runs only where the local
+  // engine's health probe reports a loaded compressor, so it never triggers a download.
+  { id: "c8_token_compression", requirement: "C8", rollout: 10, summary: "LLMLingua-2 token compression of large context" },
   { id: "c9_price_tier_budget", requirement: "C9", rollout: 100, summary: "Compaction budget under long-context price tiers" },
   { id: "d1_verifier_cascade", requirement: "D1", rollout: 10, summary: "Weak model first, verifier, escalate one tier" },
   { id: "d2_difficulty_router", requirement: "D2", rollout: 10, summary: "Predict weak-model failure, skip the wasted attempt" },
@@ -6258,7 +6260,9 @@ var COST_LEVERS = [
   { id: "d8_parallel_tool_calls", requirement: "D8", rollout: 100, summary: "Batch independent tool calls in one turn" },
   { id: "e1_skill_ranking", requirement: "E1", rollout: 100, summary: "Inject only the most relevant approved skills" },
   { id: "e2_specialists", requirement: "E2", rollout: 10, summary: "Admitted small specialist models for narrow jobs" },
-  { id: "e3_free_embeddings", requirement: "E3", rollout: 0, summary: "Free Workers AI embeddings for memory" },
+  // Always on (operator, 2026-10-23): recall dual-reads the paid 1536 column for rows the
+  // 1024 backfill has not reached yet, so it never had to wait for the backfill.
+  { id: "e3_free_embeddings", requirement: "E3", rollout: 100, summary: "Free Workers AI embeddings for memory" },
   { id: "e5_verified_local_label", requirement: "E5", rollout: 100, summary: "Hybrid local label = passed the verifier" }
 ];
 var BY_ID = new Map(COST_LEVERS.map((l) => [l.id, l]));
@@ -9061,7 +9065,7 @@ function projectMemoryHooks(projectId, request, chatId, surface = "web") {
       body: JSON.stringify({ query, ...chatId != null ? { chatId } : {} })
     }).catch(() => null),
     answer: (query, opts) => request(
-      `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? "1" : "0"}${chatParam}&surface=${surface}${opts.model ? `&model=${encodeURIComponent(opts.model)}` : ""}`
+      `/api/projects/${projectId}/answer?query=${encodeURIComponent(query)}&tools=${opts.toolsAvailable ? "1" : "0"}${chatParam}&surface=${surface}${opts.model ? `&model=${encodeURIComponent(opts.model)}` : ""}${opts.probe ? "&probe=1" : ""}`
     ).then((r) => r?.answer ?? null).catch(() => null),
     cacheAnswer: (query, answer2, origin, fileAnchors) => {
       const anchors = fileAnchors?.length ? fileAnchors : citedPathAnchors(answer2);

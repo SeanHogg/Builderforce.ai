@@ -22,6 +22,7 @@ import type { Env } from '../../env';
 import { peekCached } from '../../infrastructure/cache/readThroughCache';
 import {
   MEMORY_VECTOR_SPACES,
+  embedInFirstSpace,
   embedMemoryText,
   toVectorLiteral,
   type MemoryVectorSpace,
@@ -77,11 +78,9 @@ function writeSpaces(env: Env, tenantId: number): MemoryVectorSpace[] {
  * lexical arm still recalls the row and the backfill vectorises it later.
  */
 export async function memoryEmbeddingFieldsFor(env: Env, tenantId: number, text: string, now: Date = new Date()): Promise<MemoryEmbeddingFields> {
-  for (const space of writeSpaces(env, tenantId)) {
-    const literal = toVectorLiteral((await embedMemoryText(env, text, space)) ?? [], space);
-    if (literal) return { ...NO_MEMORY_EMBEDDING, ...spaceWriteFields(space, literal, now) };
-  }
-  return { ...NO_MEMORY_EMBEDDING };
+  const embedded = await embedInFirstSpace(env, text, writeSpaces(env, tenantId));
+  const literal = embedded ? toVectorLiteral(embedded.vector, embedded.space) : null;
+  return embedded && literal ? { ...NO_MEMORY_EMBEDDING, ...spaceWriteFields(embedded.space, literal, now) } : { ...NO_MEMORY_EMBEDDING };
 }
 
 /** One query vector and the column it may be compared against. */

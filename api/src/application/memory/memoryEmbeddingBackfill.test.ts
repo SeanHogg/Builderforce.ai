@@ -28,6 +28,8 @@ vi.mock('./memorySemanticRecall', async () => {
 afterEach(() => {
   doubles.dispatch.mockReset();
   doubles.inSpace.mockReset();
+  doubles.legacyMemories.mockClear();
+  doubles.legacyFacts.mockClear();
   __clearL1CacheForTests();
 });
 
@@ -64,6 +66,23 @@ describe('runMemoryEmbeddingBackfill — bge-m3 space (1256)', () => {
     expect(Object.keys(sets[0]!).sort()).toEqual(['embedded1024At', 'embedding1024', 'embedding1024Model']);
     expect(sets[0]!.embedding1024Model).toBe(MEMORY_EMBEDDING_1024_MODEL);
     expect(doubles.legacyMemories).not.toHaveBeenCalled();
+  });
+
+  it('skips the paid 1536 sweep while the free-embeddings lever is on for every tenant', async () => {
+    answerByModel();
+    doubles.inSpace.mockResolvedValue([]);
+    const { db } = updatesDb();
+    await runMemoryEmbeddingBackfill({ ...cfOnly, OPENROUTER_API_KEY: 'k' } as Env, db, 4);
+    expect(doubles.legacyMemories).not.toHaveBeenCalled();
+    expect(doubles.legacyFacts).not.toHaveBeenCalled();
+  });
+
+  it("runs the paid 1536 sweep while some tenant is in the lever's off arm", async () => {
+    answerByModel();
+    doubles.inSpace.mockResolvedValue([]);
+    const { db } = updatesDb();
+    await runMemoryEmbeddingBackfill({ ...cfOnly, OPENROUTER_API_KEY: 'k', COST_LEVER_E3_FREE_EMBEDDINGS: '50' } as unknown as Env, db, 4);
+    expect(doubles.legacyMemories).toHaveBeenCalled();
   });
 
   it('walks keyset batches from the persisted cursor and resumes where it stopped', async () => {
