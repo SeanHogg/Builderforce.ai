@@ -42,8 +42,10 @@ const mapPath = resolve(here, '..', '..', 'docs', 'specs', 'data-model', 'source
  *  dropped (1131) — its map row reads `merged`, and PRD 20 §3 says so. 360 since
  *  1160 folded `kanban_columns` into `swimlanes` and `release_plans` into
  *  `product_releases` (the spec PM spine unified onto the platform's owners).
- *  359 since 1239 dropped `answer_cache` (live Q&A is `project_facts`). */
-const EXPECTED = { rows: 1130, keeps: 359, kernel: 25, total: 384 };
+ *  359 since 1239 dropped `answer_cache` (live Q&A is `project_facts`). 358 since
+ *  1267 dropped `kanban_template_lane_requirements` (1263 folded it into
+ *  `catalog_items` body.lanes[].requirements). */
+const EXPECTED = { rows: 1130, keeps: 358, kernel: 25, total: 383 };
 const MOVES = new Set(['keep', 'merged', 'primitive', 'flatten', 'session']);
 
 if (!existsSync(mapPath)) {

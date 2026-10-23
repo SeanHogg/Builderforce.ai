@@ -1134,24 +1134,6 @@ export const catalogItems = pgTable('catalog_items', {
   index('idx_catalog_items_segment').on(t.tenantId, t.segmentId, t.kind).where(sql`${t.segmentId} IS NOT NULL`),
 ]);
 
-/**
- * @deprecated — dropped by 1267 (held until the catalog_items Worker is live).
- * Migration 1263's fold ledger: which `catalog_items` row each legacy kanban /
- * canvas template became, so 1267 can carry the old Worker's deletes during the
- * deploy window and never resurrect a copy the new Worker deleted. Written and read
- * ONLY by the migrations (`backfill_legacy_templates()`, 1267); app code MUST NOT
- * touch it. Declared only so the schema-drift guard's reverse check holds during the
- * expand/contract window. Delete with 1267 (see held-migrations/1267_drizzle.patch.md).
- * No FK to `catalog_items` on purpose: a ledger row must outlive its copy.
- */
-export const templatesFoldLedger = pgTable('templates_fold_ledger', {
-  catalogId:   uuid('catalog_id').primaryKey(),
-  legacyTable: text('legacy_table').notNull(),
-  legacyId:    text('legacy_id').notNull(),
-}, (t) => [
-  uniqueIndex('uq_templates_fold_ledger_legacy').on(t.legacyTable, t.legacyId),
-]);
-
 // ---------------------------------------------------------------------------
 // 7 — Conversation, questions, outbound
 // ---------------------------------------------------------------------------

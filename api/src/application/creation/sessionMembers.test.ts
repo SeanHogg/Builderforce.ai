@@ -68,7 +68,7 @@ describe('insertSessionMemberStatement', () => {
     expect(q.sql).toContain("- 'invitedBy') || excluded.metadata");
   });
 
-  it('returns the effective role, so a caller can mirror and report what was actually seated', () => {
+  it('returns the effective role, so a caller can report what was actually seated', () => {
     const q = toSQL(insertSessionMemberStatement(db, 9, OBJECT, input, 'keep-higher'));
     expect(q.sql).toMatch(/returning "role"$/);
   });
@@ -85,9 +85,9 @@ describe('a new board is born with its registry row and its owner', () => {
     authorUserId: 'u1', eventType: 'session.created',
   });
 
-  it('writes the registry object, the owner membership and the owner presence row right after the session', () => {
+  it('writes the registry object and the owner membership right after the session (no camera, no presence row)', () => {
     expect(writes.slice(0, 4).map((write) => write.table))
-      .toEqual(['creation_sessions', 'objects', 'memberships', 'creation_session_members']);
+      .toEqual(['creation_sessions', 'objects', 'memberships', 'creation_session_events']);
   });
 
   it('points the owner membership at the very object row it inserts in the same batch', () => {
@@ -98,11 +98,6 @@ describe('a new board is born with its registry row and its owner', () => {
     expect(member.params).toContain(objectId);
     expect(member.params).toEqual(expect.arrayContaining(['owner', 'u1']));
     expect(object.params).toEqual(expect.arrayContaining(['creation_session', SESSION, 'canvas']));
-  });
-
-  it('keeps the previous Worker able to open it during the 1264 → 1270 window (legacy role = owner)', () => {
-    const presence = toSQL(writes[3]!.statement);
-    expect(presence.params).toEqual(expect.arrayContaining([SESSION, 'u1', 'owner']));
   });
 
   it('carries the owner\'s camera onto the presence row when a claim brought one', () => {

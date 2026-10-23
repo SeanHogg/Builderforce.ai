@@ -1,6 +1,6 @@
 ## ✅ RESOLVED 2026-10-23 — Route consolidation: the four data-migration duplicates folded into one store each (api 2026.10.71 · frontend 2026.10.86)
 
-Operator decisions (2026-10-23): templates go into `catalog_items`, canvas relations go onto the kernel, `agent_assignments` is canonical, and releases carry plan vs actual dates. Each move ships expand/contract. Migrations 1263–1266 only add and backfill, so the old Worker keeps running through the deploy window. The drops (1267–1270) ship in the next release and reconcile what the old Worker wrote in the meantime.
+Operator decisions (2026-10-23): templates go into `catalog_items`, canvas relations go onto the kernel, `agent_assignments` is canonical, and releases carry plan vs actual dates. Each move ships expand/contract. Migrations 1263–1266 only add and backfill, so the old Worker keeps running through the deploy window. The contract followed in two more releases, each safe against the Worker still live during its deploy window. The second release (api 2026.10.73 · frontend 2026.10.88) re-ran each fold and dropped the legacy template tables (1267) and `project_agents` (1269), and 1270 carried the canvas window writes, including removals, into kernel memberships. The third drops `release_date`, the legacy member columns and `skill_assignments`. The second release made `skill_assignments` a restricted entity, because the previous Worker still counted it.
 
 - **Templates → `catalog_items` (1263):** kanban and canvas templates are catalog rows, read and written by one `catalogTemplateStore` (split into `templateKinds` / `templateCache`).
   - The generic entity surface is read-only for the catalog and hides private canvas templates.
@@ -8,7 +8,7 @@ Operator decisions (2026-10-23): templates go into `catalog_items`, canvas relat
   - The copy is recorded in a fold ledger, so window edits are refreshed (newest write wins) and window deletes are removed by 1267.
 - **Canvas members → kernel `memberships` (1264):** board access is a kernel membership on the board's object, cached per grant and bumped on every write.
   - Fixed: board share links could be minted and revoked by non-members; the gate now sits in `ObjectRegistry`. Accepting an invitation can no longer demote the last owner. Three board creators now seat an owner. The roster listing is gated.
-  - 1270 renames the remaining table to `creation_session_presence`.
+  - `creation_session_members` keeps only presence (viewport, cursor, replay cursor). Its legacy name stays, because renaming it would break the Worker live during a deploy. Its access columns are undeclared and dropped by the third release.
 - **`project_agents` → `agent_assignments` (1265):** one assignment store with integer handles.
   - Removal must name its target scope, so a chat member can't delete other assignments.
   - The MCP tools moved out of `builtinMcpService` and are MANAGER-gated through the same policy as REST.

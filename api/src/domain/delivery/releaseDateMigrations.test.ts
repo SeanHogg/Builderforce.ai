@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { RELEASE_STATUSES } from './releaseSchedule';
 
@@ -10,15 +10,15 @@ const read = (file: string) =>
     .replace(/--[^\n]*/g, ''); // assert on SQL, not on the prose describing it
 
 const EXPAND = '1266_release_dates_plan_vs_actual.sql';
-const CONTRACT = '1268_drop_release_date.sql';
 const expand = read(EXPAND);
-/** 1268 (the contract step) ships in a second push, after the 1266 Worker is live;
- *  until then it is held out of the tree and its assertions skip. */
-const contractPresent = existsSync(migrationPath(CONTRACT));
-const contract = contractPresent ? read(CONTRACT) : '';
+/** The contract step ships in a later push, after the 1266 Worker is live; its number is
+ *  assigned then (`<n>_drop_release_date.sql`). Until it is in api/migrations its
+ *  assertions skip. */
+const CONTRACT = readdirSync(resolve(repo, 'api/migrations')).find((file) => /^\d+_drop_release_date\.sql$/.test(file));
+const contract = CONTRACT ? read(CONTRACT) : '';
 
 /**
- * The release-date fold (1266 expand, 1268 contract) is SQL, so its data-safety rules
+ * The release-date fold (1266 expand, the held contract) is SQL, so its data-safety rules
  * are asserted against the migrations themselves: a later edit that loosens one of
  * them fails here rather than on a production backfill.
  */
@@ -51,19 +51,16 @@ describe('1266 — release_date folds onto plan vs actual without losing data', 
   });
 });
 
-describe.skipIf(!contractPresent)(
-  `1268 — contract step (skipped while ${CONTRACT} is held out of api/migrations until the 1266 Worker is deployed)`,
-  () => {
-    it('drops release_date only after re-running the fold, then drops the fold function', () => {
-      expect(contract).toMatch(/PERFORM\s+fold_product_release_date\(\)[\s\S]*DROP\s+COLUMN\s+release_date/i);
-      expect(contract).toMatch(/DROP\s+FUNCTION\s+IF\s+EXISTS\s+fold_product_release_date\(\)/i);
-    });
+describe.skipIf(!CONTRACT)('contract step (<n>_drop_release_date.sql; skipped while it is held out of api/migrations)', () => {
+  it('drops release_date only after re-running the fold, then drops the fold function', () => {
+    expect(contract).toMatch(/PERFORM\s+fold_product_release_date\(\)[\s\S]*DROP\s+COLUMN\s+release_date/i);
+    expect(contract).toMatch(/DROP\s+FUNCTION\s+IF\s+EXISTS\s+fold_product_release_date\(\)/i);
+  });
 
-    it('adds the released_at ⇒ released|cancelled CHECK only after the fold has cleared planned rows', () => {
-      expect(contract.indexOf('PERFORM fold_product_release_date()')).toBeGreaterThanOrEqual(0);
-      expect(contract.indexOf('PERFORM fold_product_release_date()'))
-        .toBeLessThan(contract.indexOf('product_releases_released_at_status_chk'));
-      expect(contract).toMatch(/CHECK\s*\(\s*released_at\s+IS\s+NULL\s+OR\s+status\s+IN\s*\('released',\s*'cancelled'\)\s*\)/i);
-    });
-  },
-);
+  it('adds the released_at ⇒ released|cancelled CHECK only after the fold has cleared planned rows', () => {
+    expect(contract.indexOf('PERFORM fold_product_release_date()')).toBeGreaterThanOrEqual(0);
+    expect(contract.indexOf('PERFORM fold_product_release_date()'))
+      .toBeLessThan(contract.indexOf('product_releases_released_at_status_chk'));
+    expect(contract).toMatch(/CHECK\s*\(\s*released_at\s+IS\s+NULL\s+OR\s+status\s+IN\s*\('released',\s*'cancelled'\)\s*\)/i);
+  });
+});

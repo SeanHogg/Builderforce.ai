@@ -94,3 +94,12 @@ Column 'soc_controls.objective' exists in migrations but is missing from schema.
 Column 'soc_controls.owner' exists in migrations but is missing from schema.ts.
 Column 'soc_controls.note' exists in migrations but is missing from schema.ts.
 Column 'soc_controls.last_reviewed' exists in migrations but is missing from schema.ts.
+# Expand/contract deploy window (1264 canvas members, 1266 release dates): columns still
+# in the database, deliberately undeclared in Drizzle. Dropped by the next release
+# (1271+ canvas contract, and the held release_date contract); delete these lines then.
+Column 'creation_session_members.role' exists in migrations but is missing from schema.ts.
+Column 'creation_session_members.invited_by' exists in migrations but is missing from schema.ts.
+Column 'creation_session_members.joined_at' exists in migrations but is missing from schema.ts.
+Column 'creation_session_members.pinned' exists in migrations but is missing from schema.ts.
+Column 'creation_session_members.watch_state' exists in migrations but is missing from schema.ts.
+Column 'product_releases.release_date' exists in migrations but is missing from schema.ts.

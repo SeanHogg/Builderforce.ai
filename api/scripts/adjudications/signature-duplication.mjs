@@ -50,9 +50,6 @@ export default {
   'board_type_mappings = import_type_mappings':
     'two different PARENTS, and the mapping outlives one of them. `import_type_mappings.run_id` hangs off a migration run and dies with it; `board_type_mappings.connection_id` hangs off a live board connection and is consulted by SyncEngine on every inbound ticket, for as long as the board is connected. The board mapping is SEEDED from the import mapping and then diverges -- an operator retunes an ongoing sync without editing a finished import\'s record of what it did. Folding them together means one parent column pointing at two tables, which is a polymorphic foreign key (forbidden by `check-polymorphic-fk`) or a pair of nullable ones guarded by a CHECK: an enforced parent traded for one the database cannot enforce. Same argument as the collector-integrations cluster.',
 
-  'kanban_template_lane_requirements = swimlane_requirements':
-    'TEMPLATE versus INSTANCE, which the docstrings already state: the swimlane row is \'materialised onto a board\'s swimlanes when a template is applied (and directly editable)\'. That editability is the whole difference -- a live board\'s requirements are tuned per board and must keep working when the template they came from is changed or deleted, which is why the copy exists rather than a pointer. The parents differ accordingly (`lane_id` into a shared template, `swimlane_id` into one board\'s lane), so this is the same two-parents objection as the type-mappings cluster, plus a tenancy one: the template table has no tenant column and inherits through the template, while the swimlane table carries `tenant_id` NOT NULL because a live board\'s gating rules are read by the audit engine on the ticket path.',
-
   'agent_memory = project_facts':
     'the same governed-recall CONTRACT deliberately kept over two different PARENTS, which is why '
       + 'the payload columns match: `content`, `importance`, `expires_at`, `origin_execution_id` and '

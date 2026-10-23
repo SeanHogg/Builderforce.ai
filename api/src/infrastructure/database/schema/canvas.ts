@@ -1512,24 +1512,22 @@ export const creationSessionConnections = pgTable('creation_session_connections'
 }, (t) => ({ bySession: index('idx_creation_connections_session').on(t.sessionId, t.createdAt) }));
 
 /**
- * Realtime PRESENCE on a board (migrations 1264 → 1270).
+ * Realtime PRESENCE on a board (migration 1264; window caught up by 1270).
  *
  * WHO is on a board, and with what role, is not read from here: a board's members are
  * kernel `memberships` rows on the board's registry object, read and written only
- * through `application/creation/sessionMembers.ts` (backfilled by 1264). What this
- * Worker uses this table for is the half that is genuinely canvas-only: `viewport`,
- * `cursor`, `selection`, `typing` and `followingUserId` are rewritten on every presence
- * tick and are meaningless once the socket drops — putting them on the kernel
- * membership row would make every permission read a write target — and
- * `lastSeenRevision` is the replay cursor behind the board's unread flag.
+ * through `application/creation/sessionMembers.ts` (backfilled by 1264). This table is
+ * the half that is genuinely canvas-only: `viewport`, `cursor`, `selection`, `typing`
+ * and `followingUserId` are rewritten on every presence tick and are meaningless once
+ * the socket drops — putting them on the kernel membership row would make every
+ * permission read a write target — and `lastSeenRevision` is the replay cursor behind
+ * the board's unread flag.
  *
- * EXPAND / CONTRACT. The table keeps its old name and its old access columns until
- * the held contract migration 1270 renames it to `creation_session_presence` and drops
- * them, so a previous-Worker isolate still serving during a deploy keeps working.
- * The columns marked WINDOW-ONLY are never read by this Worker; `role` is kept truthful
- * by `mirrorLegacyRoleStatement` (`sessionPresenceStore.ts`). Every one of them has a
- * default, so a presence insert satisfies the old NOT NULLs. The edits to make when
- * 1270 lands are in `held-migrations/1270_drizzle.patch.md`.
+ * The table keeps its legacy name, and its legacy access columns (`role`, `invited_by`,
+ * `pinned`, `watch_state`, `joined_at`) are still in the database but deliberately NOT
+ * declared here: nothing reads or writes them, and their database defaults satisfy the
+ * NOT NULLs on insert. Their drift lines are grandfathered in .schema-drift-allowlist.txt
+ * until the next canvas contract release drops them.
  *
  * A member who has never ticked may have no row; readers LEFT JOIN it and default
  * every column. Removing a member deletes their row.
@@ -1544,20 +1542,9 @@ export const creationSessionPresence = pgTable('creation_session_members', {
   selection:        jsonb('selection').notNull().default(sql`'[]'::jsonb`),
   typing:           boolean('typing').notNull().default(false),
   followingUserId:  varchar('following_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  /** WINDOW-ONLY (dropped by 1270). Mirrored from the kernel membership; never read. */
-  role:             varchar('role', { length: 16 }).notNull().default('viewer'),
-  /** WINDOW-ONLY (dropped by 1270). The inviter now lives in `memberships.metadata`. */
-  invitedBy:        varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  /** WINDOW-ONLY (dropped by 1270). Now `memberships.metadata.pinned`. */
-  pinned:           boolean('pinned').notNull().default(false),
-  /** WINDOW-ONLY (dropped by 1270). Now `memberships.metadata.watchState`. */
-  watchState:       varchar('watch_state', { length: 24 }).notNull().default('mentions'),
-  /** WINDOW-ONLY (dropped by 1270). Now `memberships.joined_at`. */
-  joinedAt:         timestamp('joined_at').notNull().defaultNow(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.sessionId, t.userId] }),
-  byUser: index('idx_creation_members_user').on(t.userId, t.joinedAt),
-  byPresence: index('idx_creation_members_presence').on(t.sessionId, t.lastSeenAt),
+  bySeen: index('idx_creation_members_presence').on(t.sessionId, t.lastSeenAt),
 }));
 
 /** One-time, expiring invitation to a Creation Session. Only a SHA-256 token
@@ -1678,32 +1665,6 @@ export const creationSessionProjectLinks = pgTable('creation_session_project_lin
  *  path, the branch/copy filter and the readers cannot drift on the spelling. */
 export const SESSION_PROJECT_LINK_REFERENCE = 'reference';
 export const SESSION_PROJECT_LINK_APP = 'app';
-
-/**
- * @deprecated — dropped by 1267 (held until the catalog_items Worker is live).
- * Migration 1263 copied every row into `catalog_items` (kind 'canvas_template'); app code
- * MUST NOT read or write this table — use `application/templates/catalogTemplateStore.ts`.
- * Declared only so the schema-drift guard's reverse check holds during the
- * expand/contract window. Delete with 1267 (see held-migrations/1267_drizzle.patch.md).
- */
-export const creationSessionTemplates = pgTable('creation_session_templates', {
-  id:                   uuid('id').primaryKey().defaultRandom(),
-  tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:            uuid('segment_id').notNull().references(() => segments.id, { onDelete: 'cascade' }),
-  name:                 varchar('name', { length: 160 }).notNull(),
-  description:          text('description'),
-  category:             varchar('category', { length: 80 }).notNull().default('Custom'),
-  graph:                jsonb('graph').notNull(),
-  visibility:           varchar('visibility', { length: 16 }).notNull().default('private'),
-  marketplaceListingId: varchar('marketplace_listing_id', { length: 128 }),
-  createdBy:            varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  updatedBy:            varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  createdAt:            timestamp('created_at').notNull().defaultNow(),
-  updatedAt:            timestamp('updated_at').notNull().defaultNow(),
-}, (t) => ({
-  byTenant: index('idx_creation_templates_tenant_updated').on(t.tenantId, t.segmentId, t.updatedAt),
-  byMarketplace: index('idx_creation_templates_marketplace').on(t.marketplaceListingId).where(sql`${t.marketplaceListingId} IS NOT NULL`),
-}));
 
 export const creationSessionClaims = pgTable('creation_session_claims', {
   userId:          varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),

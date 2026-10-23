@@ -16,8 +16,8 @@
  * extra read.
  *
  * ── WHERE PRESENCE LIVES ──────────────────────────────────────────────────────
- * The presence table (`creationSessionPresence`; `creation_session_members` until
- * migration 1270 renames it) — canvas-only realtime state, deliberately NOT on the
+ * The presence table (`creationSessionPresence`, legacy name `creation_session_members`)
+ * — canvas-only realtime state, deliberately NOT on the
  * kernel membership row (migration 1264): every tick writes it, and the row every
  * permission check reads must not be a write target. A member who has never ticked
  * has no row; every reader LEFT JOINs it and defaults.

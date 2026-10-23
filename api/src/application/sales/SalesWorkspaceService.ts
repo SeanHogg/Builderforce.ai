@@ -16,7 +16,6 @@ import { invalidateSalesReferrals } from './salesReferralFacts';
 import {
   addSessionMember, insertSessionMemberStatement, sessionMemberRole, sessionMembersChanged, sessionObjectIdFor,
 } from '../creation/sessionMembers';
-import { mirrorLegacyRoleStatement } from '../creation/sessionPresenceStore';
 
 export type SalesWorkspaceDb = Db;
 
@@ -171,13 +170,9 @@ export class SalesWorkspaceService {
     if (objectId) {
       // Superadmins are seated on the associate's board in ITS tenant — the explicit
       // membership the cross-tenant branch of the board gate requires.
-      await this.db.batch(admins.flatMap((admin) => [
-        insertSessionMemberStatement(
-          this.db, session.tenantId, objectId, { userId: admin.id, role: 'editor', invitedBy: viewerId }, 'set-role',
-        ),
-        // WINDOW-ONLY (1264 → 1270): keep the previous Worker's access column in step.
-        mirrorLegacyRoleStatement(this.db, session.id, admin.id, 'editor'),
-      ]) as unknown as Parameters<typeof this.db.batch>[0]);
+      await this.db.batch(admins.map((admin) => insertSessionMemberStatement(
+        this.db, session.tenantId, objectId, { userId: admin.id, role: 'editor', invitedBy: viewerId }, 'set-role',
+      )) as unknown as Parameters<typeof this.db.batch>[0]);
       await sessionMembersChanged(env, board, objectId);
     }
     return session.id;

@@ -745,10 +745,11 @@ export const executionMessages = pgTable('execution_messages', {
 
 
 /**
- * @deprecated — dropped by the held contract migration (1271). Migration 1261 folded
- * every row into `artifact_assignments` (scope 'tenant' / 'host'); no code reads or
- * writes this table, and the declaration stays only until the drop lands so the
- * schema-drift reverse check holds through the deploy window.
+ * @deprecated — dropped by the held contract migration in the next release (numbered at
+ * ship time, 1272 or higher). Migration 1261 folded every row into `artifact_assignments`
+ * (scope 'tenant' / 'host'). No code reads or writes this table: its entity registration
+ * is `restricted`, so the generic layer never queries it. The declaration stays only until
+ * the drop lands, so the schema-drift reverse check holds through the deploy window.
  *
  * Skill assignment, at either scope (migration 1108).
  *
@@ -879,7 +880,7 @@ export const artifactAssignments = pgTable('artifact_assignments', {
  * `application/swimlane/laneAgentAssignments.ts`).
  *
  * ── PROJECT STAFFING + THE WORKSPACE IDENTITY (migration 1265) ───────────────
- * `project_agents` is folded in (expand); 1269 drops it (contract). A project attachment is `scope = 'project'`
+ * `project_agents` was folded in (1265) and dropped (1269). A project attachment is `scope = 'project'`
  * with the real `projectId` FK beside `scopeId`; an agent's tenant-wide identity (what a
  * bridged/hired workforce agent is configured through) is `scope = 'workspace'`.
  * `agentHandle` is the INTEGER id per-agent capability assignments
@@ -1333,10 +1334,8 @@ export const cronJobs = pgTable('cron_jobs', {
   projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   /** Scopes the schedule to one assigned agent (`agent_assignments.agent_handle`, migration
    *  1265); NULL = project-wide. The column keeps its name — deployed hosts read
-   *  `projectAgentId` off the cron payload. Declared in the post-1269 shape: between 1265
-   *  and 1269 the database carries NO FK here (the old one targeted `project_agents`;
-   *  1269 adds this one), and `AgentAssignmentService` deletes a removed agent's
-   *  schedules itself, so nothing relies on the missing cascade. */
+   *  `projectAgentId` off the cron payload. The FK to the handle (ON DELETE CASCADE) was
+   *  added by 1269, replacing the one 1265 dropped from `project_agents`. */
   projectAgentId: integer('project_agent_id').references((): AnyPgColumn => agentAssignments.agentHandle, { onDelete: 'cascade' }),
   name:        varchar('name', { length: 255 }).notNull(),
   schedule:    varchar('schedule', { length: 255 }).notNull(),
