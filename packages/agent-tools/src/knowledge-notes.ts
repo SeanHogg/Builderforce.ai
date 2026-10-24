@@ -48,6 +48,12 @@ export interface RunActivity {
   created?: readonly string[];
   /** Paths the run modified. Duplicates are collapsed. */
   edited?: readonly string[];
+  /**
+   * Paths the run READ. The note lists the most-read few, so the next run in this
+   * workspace sees where the last one had to look; duplicates are kept here because
+   * how often a file was re-read is how much the run depended on it.
+   */
+  read?: readonly string[];
   /** Tool names the run invoked. Duplicates are collapsed. */
   tools?: readonly string[];
   /**
@@ -177,6 +183,19 @@ export function deriveActivitySummary(activity: RunActivity): string {
   return "";
 }
 
+/** How many read paths a note names — enough to point the way, not a transcript. */
+const NOTE_READ_LIMIT = 8;
+
+/** The files read most, excluding ones already listed as created/edited. */
+function mostRead(read: readonly string[], changed: ReadonlySet<string>): string[] {
+  const counts = new Map<string, number>();
+  for (const p of read) if (!changed.has(p)) counts.set(p, (counts.get(p) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, NOTE_READ_LIMIT)
+    .map(([p]) => p);
+}
+
 /**
  * Render one appendable note, or `null` when the run did nothing worth recording.
  *
@@ -208,6 +227,11 @@ export function buildKnowledgeMemoryEntry(params: {
     }
     if (edited.length > 0) {
       lines.push(`**Edited**: ${edited.join(", ")}`);
+      meaningful = true;
+    }
+    const read = mostRead(params.activity.read ?? [], new Set([...created, ...edited]));
+    if (read.length > 0) {
+      lines.push(`**Read**: ${read.join(", ")}`);
       meaningful = true;
     }
     if (tools.length > 0) {

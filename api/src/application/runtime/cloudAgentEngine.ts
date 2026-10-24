@@ -103,7 +103,7 @@ import {
   CLOUD_RUN_TENANT_ROLE, cloudAgentToolsFor, cloudToolRegistry, policyGateCallKey,
 } from './cloudAgentTools';
 import {
-  CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, applyStringEdit, editFacts,
+  CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, applyStringEdit, editFacts, RunKnowledgeRecorder, codeMapFromActivity,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type PolicyGate, type AgentExecParams, type Capability,
   type PrdWriteCapability, type PrdUpdateResult,
 } from '@builderforce/agent-tools';
@@ -785,6 +785,11 @@ async function runCloudToolLoop(
     repoMiss = repoResolved.ok ? '' : repoResolved.reason;
   }
   const writtenPaths = new Set<string>(opts?.resume?.writtenPaths ?? []);
+  // What this run read and changed — the SAME recorder the editor and on-prem keep — so
+  // its code map lands in project memory for the next run on that area. Not carried in
+  // resume state: a resumed run maps what it touched after resuming, which is still true.
+  const runKnowledge = new RunKnowledgeRecorder();
+  runKnowledge.setPrompt(taskRow.title);
   if (repoCtx && !opts?.resume) await stampExecutionSourceRef(db, tenantId, executionId, repoCtx);
 
   // Tenant "LLM" (migration 0211): if `model` is a `tenant_model:<slug>` ref, expand
@@ -1271,6 +1276,7 @@ async function runCloudToolLoop(
       const name = call.name;
       const parsed = call.args;
       const succeeded = dataOk(result.data);
+      if (succeeded) runKnowledge.record(name, parsed);
       if (matchesRequiredReviewSignoff(requiredSignoff, name, parsed, succeeded)) {
         gates.reviewVerdictRecorded = true;
       }
@@ -1518,7 +1524,7 @@ async function runCloudToolLoop(
   // already ran in `onFinish`), then commits what the run learned. Both steps are
   // best-effort — neither may delay or undo the finalize below, which IS this run's
   // result.
-  await runVerifyThenRemember({ env, db, tenantId, projectId, executionId, taskRow, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths, finalOutput, ciVerified: gates.ciVerified, modelState });
+  await runVerifyThenRemember({ env, db, tenantId, projectId, executionId, taskRow, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths, runKnowledge, finalOutput, ciVerified: gates.ciVerified, modelState });
 
   const fin = await finalizeCloudRun(env, db, {
     tenantId, cloudAgentRef, executionId, taskRow, agentLabel,
@@ -1554,6 +1560,7 @@ async function runVerifyThenRemember(args: {
   agentLabel: string;
   cloudAgentRef?: string;
   writtenPaths: Set<string>;
+  runKnowledge: RunKnowledgeRecorder;
   finalOutput: string;
   ciVerified: boolean;
   modelState: CloudRunModelState;
@@ -1589,6 +1596,7 @@ async function runVerifyThenRemember(args: {
       summary: finalOutput?.trim() || `${agentLabel} finished ${taskRow.title}`,
       verifyNote: describeVerifyOutcome(outcome),
       writtenPaths: [...writtenPaths],
+      codeMap: codeMapFromActivity(args.runKnowledge.activity),
     });
   } catch (error) {
     // Belt-and-braces: `commitRunMemory` swallows its own failures, but a defect in

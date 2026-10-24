@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { appendSessionNote, readRecentSessionNotes, SessionNotes } from "./sessionNotes";
+import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
+import { appendSessionNote, readRecentSessionNotes } from "./sessionNotes";
 
 async function workspace(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "bf-notes-"));
@@ -10,56 +11,10 @@ async function workspace(): Promise<string> {
 
 const memoryDir = (root: string) => path.join(root, ".builderforce", "memory");
 
-describe("SessionNotes accumulator", () => {
-  it("classifies by the TOOL the model chose, not by probing the disk", () => {
-    // By the time a run ends, a created file and an edited file both exist, so a
-    // stat-based guess would call every write an edit.
-    const notes = new SessionNotes();
-    notes.record("write_file", { path: "src/a.ts" });
-    notes.record("edit_file", { path: "src/b.ts" });
-    expect(notes.activity.created).toEqual(["src/a.ts"]);
-    expect(notes.activity.edited).toEqual(["src/b.ts"]);
-  });
-
-  it("accepts both the shared and native tool names for the same operation", () => {
-    // On-prem exposes the shared `write_file`/`edit_file` under the native names
-    // `write`/`edit`; the notes must not miss half the run because of the alias.
-    const notes = new SessionNotes();
-    notes.record("write", { path: "a.ts" });
-    notes.record("edit", { path: "b.ts" });
-    notes.record("apply_patch", { path: "c.ts" });
-    expect(notes.activity.created).toEqual(["a.ts"]);
-    expect(notes.activity.edited).toEqual(["b.ts", "c.ts"]);
-  });
-
-  it("counts an unknown tool toward Tools without inventing a file", () => {
-    const notes = new SessionNotes();
-    notes.record("search_code", { query: "x" });
-    expect(notes.activity.tools).toEqual(["search_code"]);
-    expect(notes.activity.created).toEqual([]);
-    expect(notes.activity.edited).toEqual([]);
-  });
-
-  it("ignores a call with no usable path rather than recording an empty one", () => {
-    const notes = new SessionNotes();
-    notes.record("write_file", { path: "   " });
-    notes.record("write_file", {});
-    expect(notes.activity.created).toEqual([]);
-    expect(notes.activity.tools).toHaveLength(2);
-  });
-
-  it("reports empty before anything is recorded", () => {
-    expect(new SessionNotes().isEmpty).toBe(true);
-    const notes = new SessionNotes();
-    notes.record("read_file", { path: "a" });
-    expect(notes.isEmpty).toBe(false);
-  });
-});
-
 describe("appendSessionNote", () => {
   it("summarises the ask instead of a fixed label when the run recorded one", async () => {
     const root = await workspace();
-    const notes = new SessionNotes();
+    const notes = new RunKnowledgeRecorder();
     notes.setPrompt("fix the map cache so an edit refreshes it");
     notes.record("edit_file", { path: "src/a.ts" });
     const wrote = await appendSessionNote(root, {

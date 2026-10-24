@@ -245,6 +245,7 @@ Public copy describes today's evidence. **Available** = shipped + repeatably ver
 
 ### Production ops (2026-10-10 log review)
 
+- **[runtime] Container and brain-reply runs do not commit a code map yet.** The shared `RunKnowledgeRecorder` / `codeMapFromActivity` (`packages/agent-tools/src/run-knowledge.ts`) is wired on the editor run host, on-prem `knowledge-loop.ts` and the durable cloud engine (`cloudAgentEngine.ts` → `commitRunMemory`). The container surface executes its tools inside `api/container/server.mjs`, so `containerOps.ts` only sees `writtenPaths`, never the reads. The brain-reply loop (`agentReplyLoop.ts`) has no project to key a map on. Fixing it means every runtime's next run on an area opens the right files first. *Blocker: `server.mjs` is plain Node with no build step and needs a live container build to change and prove (same blocker as the agent-loop residual).*
 - **Disconnect Moonshot on tenant 1** (empty pay-as-you-go balance; use the Kimi Code subscription). *Blocker: operator clicks Disconnect in Settings.*
 - **Together, FluxAPI and Hugging Face are out of credit** (fail over cleanly). *Blocker: top up, or remove `TOGETHER_API_KEY` / `FLUX_API_KEY` / `HF_API_TOKEN`.*
 - **Plain `http://` still served for prerendered paths;** the www rule targets `http://`. *Blocker: a zone-edit Cloudflare credential* → "Always Use HTTPS" + an `https://` www rule.

@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.67] — Every run starts from what the last one found
+
+- **Runs remember where the code is.** When a run finishes, the files it read and changed are saved to the project's memory as a map of that area. The next run on the same area, in the editor, on your own machine or in the cloud, opens those files first instead of searching the repo again. Investigations that change nothing are mapped too.
+- **The next run in an open panel sees the run that just finished.** The panel used to build its starting context once, when it opened. Each run now starts from the workspace as it is right now, including the notes of the run before it.
+- **Run notes say where the run looked.** The notes in `.builderforce/memory/` now list the files a run read most, not just the ones it edited.
+- **The Memory switch is respected at run end.** With Memory off, a run no longer writes learned facts to the project when it finishes.
+
 ## [2026.10.64] — Your workspace's skills, in the editor's chat
 
 - **The chat follows your team's skills.** Every Agent Skill in your workspace (written in BuilderForce, imported from Claude Code or a repo's `.agents/skills`, or proposed by an agent and approved) is listed to the chat. When a request matches one, the chat loads the instructions and any bundled script or reference before it acts.

@@ -51,7 +51,9 @@ import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeTool
 import type { PolicyGate } from "./policy";
 import { withRunPreamble } from "./runPreamble";
 import type { RunDirectives } from "./hooks/runHooks";
-import { SessionNotes, type RunActivity } from "./sessionNotes";
+import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
+import type { RunActivity } from "./sessionNotes";
+import { replaceWorkspaceMap } from "./idePersona";
 import { createChildRuns } from "./childRuns";
 import { syncMessageFor, type RunHostMessage, type RunSink, type SinkEntry, type WebviewRunStart } from "./brainRunHostProtocol";
 import { childControls, directionText, type ChildControls, type ChildOwner } from "./childRunSpawner";
@@ -142,8 +144,19 @@ export interface BrainRunHostPorts {
   onToolRun?(info: ToolRunInfo): void;
   /** The set of live runs changed — feed the Sessions tree's status overlay. */
   onRunsChanged?(state: { running: number[]; awaiting: number[] }): void;
-  /** A run finished with local activity — write its `.builderforce/` note. */
-  sessionNote?(chatId: number, activity: RunActivity): Promise<void> | void;
+  /**
+   * A run finished with local activity — write its `.builderforce/` note and, when the
+   * chat's Memory switch is on (`memory`), what it learned and the code map of what it
+   * found into the project's facts.
+   */
+  sessionNote?(chatId: number, activity: RunActivity, opts: { memory: boolean }): Promise<void> | void;
+  /**
+   * The workspace grounding as it is NOW — map, recent run notes, symbol index. The
+   * panel builds its system prompt once, when it opens; without this every later run in
+   * that panel started from the notes of the runs before the panel opened, never from
+   * the run that just finished. Omitted ⇒ the prompt's own copy is used as sent.
+   */
+  grounding?(): Promise<string | undefined>;
   /** Report a settled code-changing run's outcome to learned routing. Best-effort. */
   reportOutcome?(outcome: BrainRunOutcome): Promise<unknown>;
 }
@@ -196,7 +209,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   /** Chats this host has run — the ones a newly attached panel is brought up to date on. */
   const known = new Set<number>();
   const watched = new Set<number>();
-  const notes = new Map<number, SessionNotes>();
+  const notes = new Map<number, RunKnowledgeRecorder>();
   /** Live per-run gate flags; `needsConfirm` reads them so a switch flipped mid-run
    *  takes effect on the NEXT call instead of after the run (the shared gate's rule). */
   const flags = new Map<number, { autoApprove: boolean }>();
@@ -227,21 +240,21 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   };
   const offStore = subscribeRunStore(() => ports.onRunsChanged?.(getGlobalRunState()));
 
-  const notesFor = (chatId: number): SessionNotes => {
+  const notesFor = (chatId: number): RunKnowledgeRecorder => {
     let n = notes.get(chatId);
     if (!n) {
-      n = new SessionNotes();
+      n = new RunKnowledgeRecorder();
       notes.set(chatId, n);
     }
     return n;
   };
 
-  const flushNote = async (runKey: number, chatId: number): Promise<void> => {
+  const flushNote = async (runKey: number, chatId: number, memory: boolean): Promise<void> => {
     const n = notes.get(runKey);
     if (!n || n.isEmpty) return;
     notes.delete(runKey);
     try {
-      await ports.sessionNote?.(chatId, n.activity);
+      await ports.sessionNote?.(chatId, n.activity, { memory });
     } catch {
       /* a note is best-effort — never a run failure */
     }
@@ -288,6 +301,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // Governance FIRST: an unreadable policy throws here and the run never starts.
     const gates = (await ports.policyGates?.(projectId)) ?? [];
     const directives = await ports.directives?.(p.child ? "subagent" : "run");
+    const systemPrompt = ports.grounding ? replaceWorkspaceMap(p.systemPrompt, await ports.grounding()) : p.systemPrompt;
 
     // What a finished tool call means to this host — the knowledge loop, the Changes
     // view and the panel's feed. A sub-agent's calls are its own run's, read the same way.
@@ -340,7 +354,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       // Gates render as binding directives ahead of the host prompt, then the workspace's
       // rules — the one preamble the native participant shares.
       await startRun(key, {
-        resolvedSystemPrompt: withRunPreamble(p.systemPrompt, { gates, rules: directives?.rules }),
+        resolvedSystemPrompt: withRunPreamble(systemPrompt, { gates, rules: directives?.rules }),
         tools: nativeToolSpecs(defs),
         ...(p.model ? { model: p.model } : {}),
         ...(p.modelStrict != null ? { modelStrict: p.modelStrict } : {}),
@@ -378,7 +392,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     } finally {
       flags.delete(key);
       approvals.forget(key);
-      await flushNote(key, chatId);
+      await flushNote(key, chatId, p.evermind);
       // The workspace's runEnd hooks — after the run, never holding its settle.
       void directives?.hooks.onRunEnd();
     }

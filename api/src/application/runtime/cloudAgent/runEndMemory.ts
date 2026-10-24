@@ -20,6 +20,7 @@
  * finished run: neither call throws, and neither may lose the run's result.
  */
 
+import type { CodeMapFact } from '@builderforce/agent-tools';
 import { buildMemoryCapability } from '../../memory/memoryService';
 import { reduceRunPolicy, type RunPolicyState } from '@builderforce/run-policy';
 import type { Db } from '../../../infrastructure/database/connection';
@@ -183,6 +184,12 @@ export interface RunMemoryCommitInput {
   writtenPaths?: readonly string[] | null;
   /** An extra fact worth keeping (e.g. an in-run verify failure worth not repeating). */
   learning?: string;
+  /**
+   * Where the run found the code it worked on (`codeMapFromActivity`, the shared
+   * `run-knowledge` fact). Keyed per AREA, so it replaces the last map of that area
+   * instead of stacking per run — the fact the NEXT run on that area opens first.
+   */
+  codeMap?: CodeMapFact | null;
   tags?: string[];
 }
 
@@ -223,6 +230,9 @@ export async function commitRunMemory(input: RunMemoryCommitInput): Promise<bool
       tags: ['run-outcome', ...(input.tags ?? [])],
       importance: 0.6,
     });
+    if (input.codeMap) {
+      await memory.remember(input.codeMap.key, input.codeMap.content, { tags: ['codemap'], importance: 0.6 });
+    }
     return true;
   } catch (error) {
     // Best-effort by contract: the run already finished; a memory write that fails is

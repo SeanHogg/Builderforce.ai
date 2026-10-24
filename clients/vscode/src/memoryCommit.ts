@@ -10,15 +10,16 @@
  * The completion and the fact write are injected. Tests never hit a gateway,
  * and a failed commit must not fail the run that already finished.
  *
- * Wired by the editor run host (`brainRunHostPorts.ts` `sessionNote`) for runs that
- * changed files. The on-prem loop (`agent-runtime/src/infra/knowledge-loop.ts`) and the
- * cloud engine each already have their own `commitRunOutcomeMemory` / `commitRunMemory`
- * call at finish; neither this module nor those call sites is shared with them.
+ * Wired by the editor run host (`brainRunHostPorts.ts` `sessionNote`) through
+ * {@link commitRunKnowledge}. The CODE MAP half is the shared `run-knowledge` fact every
+ * runtime (on-prem `knowledge-loop.ts`, cloud `runEndMemory.ts`) commits the same way;
+ * the model-extracted decisions below are the editor's addition on top of it.
  */
 
 import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { codeMapFromActivity, type RunActivity } from "@builderforce/agent-tools";
 
 export type LearnedFactKind = "decision" | "root_cause" | "convention";
 
@@ -225,4 +226,38 @@ export async function readChangedExcerpt(root: string, paths: readonly string[])
   } catch {
     return "";
   }
+}
+
+/**
+ * Everything a finished editor run leaves in project memory: the code map of what it
+ * read and changed (deterministic, every run that touched enough files — a read-only
+ * investigation teaches the next run where things live as much as an edit does), then
+ * the model-extracted decisions for a run that changed files. Never throws.
+ */
+export async function commitRunKnowledge(
+  root: string,
+  activity: RunActivity,
+  deps: MemoryCommitDeps,
+): Promise<void> {
+  const map = codeMapFromActivity(activity);
+  if (map) {
+    try {
+      await deps.remember(map.key, map.content);
+    } catch {
+      /* the map is an accelerant; the learned facts below still get their chance */
+    }
+  }
+  const changed = [...(activity.created ?? []), ...(activity.edited ?? [])];
+  if (changed.length === 0) return;
+  const excerpt = await readChangedExcerpt(root, changed);
+  await commitLearnedFacts(
+    {
+      changed,
+      ...(activity.tools ? { tools: activity.tools } : {}),
+      excerpt,
+      // The same ask the session note summarises — a fact with no task is a guess.
+      ...(activity.prompt ? { prompt: activity.prompt } : {}),
+    },
+    deps,
+  );
 }

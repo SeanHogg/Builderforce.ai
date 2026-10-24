@@ -1,9 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  codeMapFromActivity,
   buildKnowledgeMemoryEntry as buildSharedKnowledgeMemoryEntry,
   deriveActivitySummary,
   KNOWLEDGE_DIRS,
+  RunKnowledgeRecorder,
 } from "@builderforce/agent-tools";
 
 const DEFAULT_BUILDERFORCE_URL = "https://api.builderforce.ai";
@@ -86,9 +88,8 @@ export type KnowledgeLoopOptions = {
 
 type RunAccumulator = {
   sessionKey: string;
-  filesCreated: string[];
-  filesEdited: string[];
-  toolNames: string[];
+  /** What the run did and read — the SAME recorder the editor and the cloud engine keep. */
+  knowledge: RunKnowledgeRecorder;
   /** Check results the tool loop already finished. Never a shell we started. */
   checkResults?: RecordedCheckResult[];
   /** Args from the start phase, so a result event can recover `command`. */
@@ -115,16 +116,9 @@ export function buildKnowledgeMemoryEntry(params: {
   return buildSharedKnowledgeMemoryEntry({
     sessionKey: params.sessionKey,
     ts: params.ts,
-    activity: params.acc
-      ? {
-          created: params.acc.filesCreated,
-          edited: params.acc.filesEdited,
-          tools: params.acc.toolNames,
-          // The run's own prompt is what makes the note describe THIS run
-          // instead of a fixed template.
-          prompt: params.acc.prompt,
-        }
-      : undefined,
+    // The recorder carries the run's own prompt, which is what makes the note describe
+    // THIS run instead of a fixed template.
+    activity: params.acc?.knowledge.activity,
   });
 }
 
@@ -216,11 +210,11 @@ export class KnowledgeLoopService {
       // Capture the initiating prompt NOW (during the run) — the run context is still
       // registered here; by onRunComplete it may already be cleared.
       const prompt = getAgentRunContext(runId)?.prompt;
+      const knowledge = new RunKnowledgeRecorder();
+      if (prompt) knowledge.setPrompt(prompt);
       this.runs.set(runId, {
         sessionKey,
-        filesCreated: [],
-        filesEdited: [],
-        toolNames: [],
+        knowledge,
         checkResults: [],
         pendingArgs: new Map(),
         ...(prompt ? { prompt } : {}),
@@ -233,9 +227,6 @@ export class KnowledgeLoopService {
     // payloads). Read both, or a real check never reaches the verify record.
     const rawName = data["name"] ?? data["toolName"];
     const toolName = typeof rawName === "string" && rawName.trim() ? rawName.trim() : null;
-    if (toolName) {
-      acc.toolNames.push(toolName);
-    }
     const toolCallId = typeof data["toolCallId"] === "string" ? data["toolCallId"] : null;
     if (data["phase"] === "start" && toolCallId) {
       const args = data["args"];
@@ -251,13 +242,12 @@ export class KnowledgeLoopService {
         acc.pendingArgs.delete(toolCallId);
       }
     }
-    const filePath = pathFromToolEvent(data, pending ?? null);
-    if (filePath && toolName) {
-      if (toolName === "create" || toolName === "write" || toolName === "write_file") {
-        acc.filesCreated.push(filePath);
-      } else if (toolName === "edit" || toolName === "edit_file") {
-        acc.filesEdited.push(filePath);
-      }
+    // Recorded ONCE per call, on its result, and only when it succeeded: a note (or
+    // code map) claiming a file was written when the write threw grounds every later
+    // run on a lie, and counting the start event too would double every read.
+    if (toolName && data["phase"] === "result" && data["isError"] !== true) {
+      const filePath = pathFromToolEvent(data, pending ?? null);
+      acc.knowledge.record(toolName, filePath ? { path: filePath } : undefined);
     }
   }
 
@@ -266,9 +256,10 @@ export class KnowledgeLoopService {
     this.runs.delete(runId);
 
     // Compute once; reused for both the memory file (via buildKnowledgeMemoryEntry) and the SSM layer.
-    const created = acc ? [...new Set(acc.filesCreated)] : [];
-    const edited = acc ? [...new Set(acc.filesEdited)] : [];
-    const tools = acc ? [...new Set(acc.toolNames)] : [];
+    const activity = acc?.knowledge.activity;
+    const created = [...new Set(activity?.created ?? [])];
+    const edited = [...new Set(activity?.edited ?? [])];
+    const tools = [...new Set(activity?.tools ?? [])];
     const results = acc?.checkResults ?? [];
     const writtenPaths = [...created, ...edited];
     const summary = deriveActivitySummary({ created, edited, tools, prompt: acc?.prompt });
@@ -324,6 +315,13 @@ export class KnowledgeLoopService {
       results,
       runId,
     });
+
+    // The code map of what this run read and changed, into the SAME shared facts store
+    // the editor and the cloud engine write theirs to, so the next run on this area —
+    // on any surface — opens those files first instead of searching for them.
+    const codeMap = activity ? codeMapFromActivity(activity) : null;
+    const factsCfg = this.projectEvermindConfig();
+    if (codeMap && factsCfg) void pushProjectFact(factsCfg, codeMap.key, codeMap.content);
 
     if (!entry) {
       return;

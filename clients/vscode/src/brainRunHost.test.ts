@@ -254,6 +254,8 @@ describe("tools", () => {
         prompt: "what does this project do?",
         created: ["new.ts"],
       }),
+      // The chat's Memory switch rides to the port, which owns the facts write.
+      { memory: expect.any(Boolean) },
     );
   });
 });

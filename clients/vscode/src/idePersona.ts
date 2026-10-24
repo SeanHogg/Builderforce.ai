@@ -177,9 +177,32 @@ export function ideSystemPromptBase(hasWorkspace: boolean): string {
   return parts.join("\n\n");
 }
 
+/**
+ * Closes the grounding block. Text the surface appends AFTER the map (the per-turn
+ * project / editor / limbic directives) must survive {@link replaceWorkspaceMap}, so the
+ * block needs an end the swap can find, not just a start.
+ */
+const WORKSPACE_MAP_END = "(End of workspace map.)";
+
 /** Append the scanned workspace grounding map (when present) under the standard intro. */
 export function withWorkspaceMap(base: string, grounding?: string): string {
-  return grounding ? `${base}\n\n${WORKSPACE_MAP_INTRO}\n\n${grounding}` : base;
+  return grounding ? `${base}\n\n${WORKSPACE_MAP_INTRO}\n\n${grounding}\n\n${WORKSPACE_MAP_END}` : base;
+}
+
+/**
+ * The same prompt with its grounding block swapped for `grounding` — the run host's way
+ * of giving a run the workspace as it is NOW rather than as it was when the panel built
+ * the prompt. A prompt with no block gains one; an empty `grounding` keeps what is there
+ * (a failed refresh must not strip the map the run already had).
+ */
+export function replaceWorkspaceMap(prompt: string, grounding: string | undefined): string {
+  if (!grounding) return prompt;
+  const start = prompt.indexOf(WORKSPACE_MAP_INTRO);
+  if (start < 0) return withWorkspaceMap(prompt, grounding);
+  const endAt = prompt.indexOf(WORKSPACE_MAP_END, start);
+  const head = prompt.slice(0, start).replace(/\s+$/, "");
+  const tail = endAt < 0 ? "" : prompt.slice(endAt + WORKSPACE_MAP_END.length);
+  return `${withWorkspaceMap(head, grounding)}${tail}`;
 }
 
 /** The selected BuilderForce project (the sidebar's active project), if any. */

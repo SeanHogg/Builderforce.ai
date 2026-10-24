@@ -1,7 +1,8 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
 import { emitAgentEvent } from "./agent-events.js";
 import {
   buildKnowledgeMemoryEntry,
@@ -122,9 +123,11 @@ describe("buildKnowledgeMemoryEntry", () => {
       ts: "2026-03-14T00:04:29.680Z",
       acc: {
         sessionKey: "agent:main:main",
-        filesCreated: [],
-        filesEdited: ["src/app.ts"],
-        toolNames: ["edit"],
+        knowledge: (() => {
+          const r = new RunKnowledgeRecorder();
+          r.record("edit", { path: "src/app.ts" });
+          return r;
+        })(),
       },
     });
 
@@ -191,6 +194,30 @@ describe("on-prem finish path records verify without a shell", () => {
       result: expect.stringContaining("verify passed: npm test (exit 0)"),
     });
     expect(JSON.stringify(events)).not.toContain("verify_completed");
+  });
+
+  it("records each call once, on its result, and never a call that failed", async () => {
+    await started(() => undefined);
+    const dir = dirs[dirs.length - 1]!;
+    const call = (id: string, name: string, path: string, isError: boolean) => {
+      emitAgentEvent({ runId: "rec", stream: "tool", data: { phase: "start", name, toolCallId: id, args: { path } } });
+      emitAgentEvent({ runId: "rec", stream: "tool", data: { phase: "result", name, toolCallId: id, isError } });
+    };
+    call("w1", "edit", "src/ok.ts", false);
+    call("w2", "edit", "src/bad.ts", true);
+    call("r1", "read_file", "src/seen.ts", false);
+    emitAgentEvent({ runId: "rec", stream: "lifecycle", data: { phase: "end" } });
+
+    const memDir = join(dir, ".builderforce", "memory");
+    let text = "";
+    for (let i = 0; i < 50 && !text; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+      const files = await readdir(memDir).catch(() => [] as string[]);
+      if (files[0]) text = await readFile(join(memDir, files[0]), "utf-8");
+    }
+    expect(text).toContain("**Edited**: src/ok.ts");
+    expect(text).toContain("**Read**: src/seen.ts");
+    expect(text).not.toContain("src/bad.ts");
   });
 
   it("a thrown recorder does not fail the finished run", async () => {

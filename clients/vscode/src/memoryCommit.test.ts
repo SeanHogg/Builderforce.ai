@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   commitLearnedFacts,
+  commitRunKnowledge,
   memoryCommitPrompt,
   MIN_FACT_CHARS,
   parseLearnedFacts,
@@ -109,5 +110,39 @@ describe("readChangedExcerpt", () => {
     expect(excerpt).toContain("## a.ts");
     expect(excerpt).toContain("export const token = 1;");
     expect(excerpt).not.toContain("outside.ts");
+  });
+});
+
+describe("commitRunKnowledge", () => {
+  it("maps a read-only investigation without spending a completion", async () => {
+    const complete = vi.fn(async () => "[]");
+    const remember = vi.fn(async () => true);
+    await commitRunKnowledge(
+      os.tmpdir(),
+      { prompt: "where is the canvas drawn?", read: ["web/src/a.tsx", "web/src/b.tsx", "web/src/c.tsx"], tools: ["read_file"] },
+      { complete, remember },
+    );
+    expect(complete).not.toHaveBeenCalled();
+    expect(remember).toHaveBeenCalledTimes(1);
+    expect(remember).toHaveBeenCalledWith("codemap:web/src", expect.stringContaining("- web/src/a.tsx"));
+  });
+
+  it("writes the map and still extracts learned facts for a run that changed files", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "bf-rk-"));
+    await fs.writeFile(path.join(root, "a.ts"), "export const a = 1;\n");
+    const complete = vi.fn(async () => JSON.stringify([{ key: "map-token", kind: "decision", content: DECISION }]));
+    const remember = vi.fn(async () => true);
+    await commitRunKnowledge(root, { edited: ["a.ts"], tools: ["edit_file"] }, { complete, remember });
+    expect(remember.mock.calls.map((c) => c[0])).toEqual(["codemap:(root)", "learned:map-token"]);
+  });
+
+  it("does not let a failed map write cost the learned facts", async () => {
+    const remember = vi.fn(async (key: string) => {
+      if (key.startsWith("codemap:")) throw new Error("down");
+      return true;
+    });
+    const complete = vi.fn(async () => JSON.stringify([{ key: "k", kind: "convention", content: DECISION }]));
+    await commitRunKnowledge(os.tmpdir(), { edited: ["missing.ts"] }, { complete, remember });
+    expect(remember).toHaveBeenCalledWith("learned:k", DECISION);
   });
 });

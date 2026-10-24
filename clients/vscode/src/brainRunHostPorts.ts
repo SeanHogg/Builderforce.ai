@@ -16,7 +16,8 @@ import { brainToolCatalog } from "./brainToolCatalog";
 import { localWindowProbes, resolveModelRoute, routeComplete, routeStream } from "./modelRouting";
 import { refreshPendingChanges } from "./gitChanges";
 import { appendSessionNote } from "./sessionNotes";
-import { commitLearnedFacts, MEMORY_COMMIT_SYSTEM, readChangedExcerpt } from "./memoryCommit";
+import { commitRunKnowledge, MEMORY_COMMIT_SYSTEM } from "./memoryCommit";
+import { getGroundingWithHistory } from "./grounding";
 import { setLocalChatRuns } from "./attention";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
 import { changeSetIdentityForHostRun, recordChangeSetAroundRun } from "./runChangeSets";
@@ -304,15 +305,16 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       refreshPendingChanges();
     },
     onRunsChanged: (state) => setLocalChatRuns(RUNS_SOURCE, state),
-    sessionNote: async (chatId, activity) => {
+    sessionNote: async (chatId, activity, { memory }) => {
       const root = workspaceRoot();
       if (!root) return;
       await appendSessionNote(root, { sessionKey: `chat-${chatId}`, activity });
-      // A run that changed files leaves with what it learned written down, instead of
-      // depending on the model having chosen to call `remember_fact`. Best-effort like
-      // the note above it: a gateway or facts failure costs the commit, not the run.
-      const changed = [...(activity.created ?? []), ...(activity.edited ?? [])];
-      if (changed.length === 0) return;
+      // What the run learned and the map of what it found, written down instead of
+      // depending on the model having chosen to call `remember_fact` — unless the chat's
+      // Memory switch is off, which must mean the run writes no project memory at all.
+      // Best-effort like the note above it: a gateway or facts failure costs the commit,
+      // not the run.
+      if (!memory) return;
       try {
         // Imported here, not at the top: `projectState` builds a `vscode.EventEmitter`
         // on load, which pulls `vscode` into this module's graph for every suite that
@@ -320,28 +322,20 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
         const { getSelectedProject } = await import("./projectState");
         const project = getSelectedProject();
         if (!project) return;
-        const excerpt = await readChangedExcerpt(root, changed);
-        await commitLearnedFacts(
-          {
-            changed,
-            tools: activity.tools,
-            excerpt,
-            // The same ask the session note summarises — a fact with no task is a guess.
-            ...(activity.prompt ? { prompt: activity.prompt } : {}),
-          },
-          {
-            complete: async (user) =>
-              routeComplete(await resolveModelRoute(secrets), secrets, [
-                { role: "system", content: MEMORY_COMMIT_SYSTEM },
-                { role: "user", content: user },
-              ]),
-            remember: (key, content) => rememberProjectFact(secrets, project.id, key, content),
-          },
-        );
+        await commitRunKnowledge(root, activity, {
+          complete: async (user) =>
+            routeComplete(await resolveModelRoute(secrets), secrets, [
+              { role: "system", content: MEMORY_COMMIT_SYSTEM },
+              { role: "user", content: user },
+            ]),
+          remember: (key, content) => rememberProjectFact(secrets, project.id, key, content),
+        });
       } catch {
         /* best-effort, like the note above it */
       }
     },
+    // Fresh per run: the notes of the run that just finished, not the panel's copy.
+    grounding: () => getGroundingWithHistory(workspaceRoot() || undefined),
   });
   // G22: the run journal. Start, step checkpoints and the TERMINAL status come from the
   // host's own run events (a sink on the host), so a finished run is never rewritten to

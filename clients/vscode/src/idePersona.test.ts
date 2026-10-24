@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ideSystemPromptBase, AUTONOMY_DIRECTIVE, FOLLOW_THROUGH_DIRECTIVE, DISCOVERY_DIRECTIVE, DISPATCH_STRATEGY_DIRECTIVE, NO_HANDOFF_DIRECTIVE } from "./idePersona";
+import { ideSystemPromptBase, AUTONOMY_DIRECTIVE, FOLLOW_THROUGH_DIRECTIVE, DISCOVERY_DIRECTIVE, DISPATCH_STRATEGY_DIRECTIVE, NO_HANDOFF_DIRECTIVE, replaceWorkspaceMap, withWorkspaceMap } from "./idePersona";
 
 /**
  * The persona is assembled from named directives, and the failure mode is silent: a
@@ -120,5 +120,22 @@ describe("AUTONOMY_DIRECTIVE", () => {
 
   it("says a big job is a work order, not a reason to check back", () => {
     expect(AUTONOMY_DIRECTIVE).toMatch(/not a reason to ask permission/i);
+  });
+});
+
+describe("replaceWorkspaceMap", () => {
+  it("swaps the grounding block and keeps what the surface appended after it", () => {
+    const sent = `${withWorkspaceMap("BASE", "old map")}\n\nPROJECT DIRECTIVE`;
+    const out = replaceWorkspaceMap(sent, "new map");
+    expect(out).toContain("new map");
+    expect(out).not.toContain("old map");
+    expect(out.startsWith("BASE")).toBe(true);
+    expect(out.endsWith("PROJECT DIRECTIVE")).toBe(true);
+  });
+
+  it("adds a block to a prompt that had none, and keeps the old one when the refresh is empty", () => {
+    expect(replaceWorkspaceMap("BASE", "map")).toBe(withWorkspaceMap("BASE", "map"));
+    const sent = withWorkspaceMap("BASE", "old map");
+    expect(replaceWorkspaceMap(sent, undefined)).toBe(sent);
   });
 });

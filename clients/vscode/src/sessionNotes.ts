@@ -35,80 +35,12 @@ import {
   type RunActivity,
 } from "@builderforce/agent-tools";
 
-/** Tool names that CREATE a file, mapped to the argument carrying its path. */
-const CREATE_TOOLS: ReadonlyMap<string, string> = new Map([
-  ["write_file", "path"],
-  ["write", "path"],
-]);
-
-/** Tool names that MODIFY an existing file, mapped to the argument carrying its path. */
-const EDIT_TOOLS: ReadonlyMap<string, string> = new Map([
-  ["edit_file", "path"],
-  ["edit", "path"],
-  ["apply_patch", "path"],
-]);
-
-function argPath(args: unknown, key: string): string | undefined {
-  if (!args || typeof args !== "object") return undefined;
-  const value = (args as Record<string, unknown>)[key];
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
 /**
- * Accumulates one run's activity from the tool calls it makes, then renders a note.
- *
- * Created vs edited is decided by the TOOL, not by probing the disk: by the time a run
- * ends, a file a `write` created and a file an `edit` changed both exist, so a stat-based
- * guess would call every write an edit. `write` on an existing path is counted as a create
- * because that is the tool the model chose — the note describes the run's actions, not a
- * filesystem diff.
+ * The run accumulator is the SHARED `RunKnowledgeRecorder` (`@builderforce/agent-tools`
+ * `run-knowledge`) — the same record on-prem and the cloud engine keep, so every runtime
+ * writes the same note and the same code map from a run.
  */
 export type { RunActivity };
-
-export class SessionNotes {
-  private readonly created: string[] = [];
-  private readonly edited: string[] = [];
-  private readonly tools: string[] = [];
-  /** What this run was asked — the note's summary describes THAT, not a template. */
-  private prompt: string | undefined;
-
-  /** Record the user's ask so the written summary names this run, not a fixed label. */
-  setPrompt(prompt: string): void {
-    const asked = prompt.replace(/\s+/g, " ").trim();
-    if (asked) this.prompt = asked;
-  }
-
-  /** Record one tool call. Unknown tools still count toward `**Tools**`. */
-  record(name: string, args?: unknown): void {
-    this.tools.push(name);
-    const createArg = CREATE_TOOLS.get(name);
-    if (createArg) {
-      const p = argPath(args, createArg);
-      if (p) this.created.push(p);
-      return;
-    }
-    const editArg = EDIT_TOOLS.get(name);
-    if (editArg) {
-      const p = argPath(args, editArg);
-      if (p) this.edited.push(p);
-    }
-  }
-
-  /** True when nothing has been recorded — the caller can skip the write entirely. */
-  get isEmpty(): boolean {
-    return this.tools.length === 0;
-  }
-
-  /** This run's activity, in the shared note format's shape. */
-  get activity(): RunActivity {
-    return {
-      created: this.created,
-      edited: this.edited,
-      tools: this.tools,
-      ...(this.prompt ? { prompt: this.prompt } : {}),
-    };
-  }
-}
 
 /**
  * Append a run's note to `<root>/.builderforce/memory/<YYYY-MM-DD>.md`.
