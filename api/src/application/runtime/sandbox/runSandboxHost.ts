@@ -18,6 +18,7 @@ import { recordCloudToolEvent } from '../cloudToolEvents';
 import { createContainerSandbox, openRunSandbox, type RunSandbox, type SandboxTarget } from './runSandbox';
 import { buildSandboxOpenSpec } from './sandboxOpenSpec';
 import { createMailboxSandbox, SandboxMailbox, type SandboxMailPoll } from './sandboxMailbox';
+import { reportedFallback } from '../../observability/caughtErrorReporter';
 
 export type RunSandboxKind = 'container' | 'actions';
 
@@ -70,7 +71,7 @@ export class RunSandboxHost {
       result: opened.ok
         ? 'Run sandbox ready: a shell and a clone of the ticket branch.'
         : `The run sandbox could not open (${opened.error}) — this run edits through the git API and has no shell.`,
-    }).catch(() => undefined);
+    }).catch(reportedFallback(undefined, { source: 'application/runtime/sandbox/runSandboxHost.ts', operation: 'recordSandboxOpened', context: { executionId: run.executionId } }));
     return opened.ok ? 'container' : undefined;
   }
 

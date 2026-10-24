@@ -16,6 +16,7 @@
  */
 import type { ShellResult } from '@builderforce/agent-tools';
 import type { SandboxOpenSpec } from './sandboxOpenSpec';
+import { reportedFallback } from '../../observability/caughtErrorReporter';
 
 /** A list / read / write / delete in the sandbox's clone. */
 export type SandboxFsRequest =
@@ -129,7 +130,7 @@ export function createContainerSandbox(args: {
     // A recycled instance has drained nothing: a fresh clone has no edits to judge.
     checks: async () => toCheckVerdict(await call<unknown>('/sandbox/checks', {}, undefined, false).catch(failed)),
     close: async () => {
-      await post('/sandbox/close', {}).catch(() => undefined);
+      await post('/sandbox/close', {}).catch(reportedFallback(undefined, { source: 'application/runtime/sandbox/runSandbox.ts', operation: 'closeSandbox' }));
     },
   };
 }

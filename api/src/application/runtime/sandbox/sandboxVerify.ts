@@ -18,6 +18,7 @@ import {
 } from '../cloudAgent/inRunVerify';
 import type { ShellResult } from '@builderforce/agent-tools';
 import type { RunSandbox } from './runSandbox';
+import { reportedFallback } from '../../observability/caughtErrorReporter';
 
 /** At most this many planned commands run — a verify must not become a second run. */
 const MAX_VERIFY_COMMANDS = 3;
@@ -56,7 +57,8 @@ async function readPackageScripts(sandbox: RunSandbox): Promise<Record<string, s
 /** The package manager the repo's lockfile names (npm when none does). */
 async function detectRunner(sandbox: RunSandbox): Promise<PackageScriptRunner> {
   const atRoot = async (name: string): Promise<boolean> => {
-    const listed = await sandbox.fs({ op: 'list', glob: name }).catch(() => null);
+    const listed = await sandbox.fs({ op: 'list', glob: name })
+      .catch(reportedFallback(null, { source: 'application/runtime/sandbox/sandboxVerify.ts', operation: 'detectRunner', context: { name } }));
     return (listed?.paths ?? []).includes(name);
   };
   if (await atRoot('pnpm-lock.yaml')) return 'pnpm';
@@ -64,7 +66,13 @@ async function detectRunner(sandbox: RunSandbox): Promise<PackageScriptRunner> {
   return 'npm';
 }
 
-export async function runSandboxVerify(sandbox: RunSandbox, shell: VerifyShell, now: () => number = Date.now): Promise<SandboxVerifyResult> {
+/** The sandbox's own command channel — what a caller with no heartbeat-bearing shell
+ *  (the run's `sandboxShell`) verifies through. */
+function directShell(sandbox: RunSandbox): VerifyShell {
+  return { runFor: (command, timeoutMs) => sandbox.run(command, undefined, timeoutMs) };
+}
+
+export async function runSandboxVerify(sandbox: RunSandbox, shell: VerifyShell = directShell(sandbox), now: () => number = Date.now): Promise<SandboxVerifyResult> {
   const [packageScripts, runner] = await Promise.all([readPackageScripts(sandbox), detectRunner(sandbox)]);
   const plan = planInRunVerify({ surface: 'sandbox', packageScripts, runner });
   const results: InRunVerifyCommandResult[] = [];

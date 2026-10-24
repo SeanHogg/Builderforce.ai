@@ -14,7 +14,7 @@ import { createDurableErrorReporter, type DurableErrorReporter } from '../../app
  * actively-ticking run as alive (heartbeat) and only reaps one that has gone
  * silent. Kickoff: the route POSTs `/start`; no long work happens in `fetch()`.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
 import { runInDurableObjectScope } from '../../application/shared/requestScope';
 import { executions } from '../database/schema';
@@ -38,6 +38,7 @@ import { ExecutionStatus } from '../../domain/shared/types';
 import { TERMINAL_EXECUTION_STATUSES } from '../../domain/execution/Execution';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
+import { reportedFallback } from '../../application/observability/caughtErrorReporter';
 
 interface StartBody {
   executionId: number;
@@ -183,7 +184,7 @@ export class CloudRunnerDO implements DurableObject {
     // life must not stop it: the start always reads the row itself.
     await this.state.storage.delete(CONCLUDED_KEY);
     this.notConcludedCheckedAt = 0;
-    if (await this.isAlreadyConcluded(body.executionId, { fresh: true })) return;
+    if (await this.isAlreadyConcluded(body, { fresh: true })) return;
 
     const cursor: Cursor = { ...body, stage: 'prep', model };
     await this.state.storage.put(CURSOR_KEY, cursor);
@@ -202,7 +203,7 @@ export class CloudRunnerDO implements DurableObject {
     // Cross-tick conclusion: the /cancel endpoint flipped the row to CANCELLED, or
     // staleExecutionReaper failed it, from another isolate. Already terminal — just
     // stop and clean up.
-    if (await this.isAlreadyConcluded(cursor.executionId)) {
+    if (await this.isAlreadyConcluded(cursor)) {
       await this.cleanup(cursor.executionId);
       return;
     }
@@ -220,7 +221,7 @@ export class CloudRunnerDO implements DurableObject {
         // Stamped on the row too, so run history and diagnostics can say whether this run
         // could build and test what it wrote.
         cursor.payload = withRunSandbox(cursor.payload, cursor.sandbox ?? 'none');
-        await this.db.update(executions).set({ payload: cursor.payload }).where(eq(executions.id, cursor.executionId))
+        await this.db.update(executions).set({ payload: cursor.payload }).where(and(eq(executions.id, cursor.executionId), eq(executions.tenantId, cursor.tenantId)))
           .catch((error) => this.reportError(error, { operation: 'alarm', context: { logMessage: '[cloud-runner] sandbox stamp failed', details: { executionId: cursor.executionId } } }));
         const { systemPrompt, userContent, execParams, agentPsychometric } = await prepareCloudRun(
           this.env, this.db, cursor.executionId,
@@ -289,7 +290,7 @@ export class CloudRunnerDO implements DurableObject {
         env: this.env, db: this.db, executionId: cursor.executionId, tenantId: cursor.tenantId,
         taskRow: { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
         projectId: cursor.projectId, agentLabel: cursor.agentLabel, cloudAgentRef: cursor.cloudAgentRef,
-        isCancelled: () => this.isAlreadyConcluded(cursor.executionId),
+        isCancelled: () => this.isAlreadyConcluded(cursor),
         ...(routingBias ? { routingBias } : {}),
         ...(arcStage ? { arcStage } : {}),
         ...(originatingChatId != null ? { originatingChatId } : {}),
@@ -352,7 +353,7 @@ export class CloudRunnerDO implements DurableObject {
       // In Review, records metrics/audit, and fires the next-lane agent) and stop.
       // Skip when the run already concluded (retried alarm, reaper, cancellation)
       // — that transition can only be rejected, and would clobber a cancellation.
-      if (!(await this.isAlreadyConcluded(cursor.executionId, { fresh: true }))) {
+      if (!(await this.isAlreadyConcluded(cursor, { fresh: true }))) {
         await this.runtimeService.update(
           cursor.executionId,
           result.ok
@@ -392,7 +393,7 @@ export class CloudRunnerDO implements DurableObject {
       }
 
       // Don't clobber a run that already concluded; otherwise fail it so it isn't stuck.
-      if (!(await this.isAlreadyConcluded(cursor.executionId, { fresh: true }))) {
+      if (!(await this.isAlreadyConcluded(cursor, { fresh: true }))) {
         await this.runtimeService.update(cursor.executionId, {
           status: ExecutionStatus.FAILED,
           errorMessage: message,
@@ -425,14 +426,14 @@ export class CloudRunnerDO implements DurableObject {
    * reads the row — the start and the terminal transitions, where a stale "no" could
    * clobber a cancellation, use it.
    */
-  private async isAlreadyConcluded(executionId: number, opts?: { fresh?: boolean }): Promise<boolean> {
+  private async isAlreadyConcluded(run: { executionId: number; tenantId: number }, opts?: { fresh?: boolean }): Promise<boolean> {
     if (await this.state.storage.get<boolean>(CONCLUDED_KEY)) return true;
     if (!opts?.fresh && Date.now() - this.notConcludedCheckedAt < CONCLUDED_RECHECK_MS) return false;
     try {
       const [row] = await this.db
         .select({ status: executions.status })
         .from(executions)
-        .where(eq(executions.id, executionId))
+        .where(and(eq(executions.id, run.executionId), eq(executions.tenantId, run.tenantId)))
         .limit(1);
       const concluded = TERMINAL_EXECUTION_STATUSES.includes(row?.status as ExecutionStatus);
       if (concluded) await this.state.storage.put(CONCLUDED_KEY, true);
@@ -442,7 +443,7 @@ export class CloudRunnerDO implements DurableObject {
       this.reportError(error, {
         operation: 'isAlreadyConcluded',
         level: 'warning',
-        context: { executionId },
+        context: { executionId: run.executionId },
       });
       return false;
     }
@@ -456,7 +457,8 @@ export class CloudRunnerDO implements DurableObject {
   private async cleanup(executionId?: number): Promise<void> {
     // The run is over: release its sandbox (the container's clone, the Actions runner).
     const ending = await this.state.storage.get<Cursor>(CURSOR_KEY);
-    if (ending?.sandbox) await this.sandboxHost.close(sandboxRunOf(ending), ending.sandbox).catch(() => undefined);
+    if (ending?.sandbox) await this.sandboxHost.close(sandboxRunOf(ending), ending.sandbox)
+      .catch(reportedFallback(undefined, { source: 'infrastructure/relay/CloudRunnerDO.ts', operation: 'closeSandbox', context: { executionId: ending.executionId } }));
     // Terminal — a steer that arrived after the loop's last tick is LATE: it starts a
     // follow-up run under the person who sent it (a cancelled run's is released,
     // visibly) — lateSteerFollowUp.ts. Every DO terminal path (finish, cancel, error)

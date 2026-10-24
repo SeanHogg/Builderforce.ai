@@ -146,6 +146,18 @@ export function reportCaughtError(
   if (!deferPastResponse(delivery, runtime)) void delivery;
 }
 
+/**
+ * A `.catch` handler for a BEST-EFFORT step: the failure is reported through the durable
+ * sink at warning level, and the step's stated fallback stands in for its result. The
+ * alternative to `.catch(() => null)`, which drops the failure without a trace.
+ */
+export function reportedFallback<T>(fallback: T, details: Omit<CaughtErrorDetails, 'level'>): (error: unknown) => T {
+  return (error) => {
+    reportCaughtError(error, { ...details, level: 'warning' });
+    return fallback;
+  };
+}
+
 /** Use the same durable sinks for an exception that will become an HTTP 500. */
 export async function reportUnhandledError(
   error: unknown,

@@ -10,7 +10,7 @@ import type { Env } from '../../env';
 import type { DbHandle } from '../shared/dbHandle';
 import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../activity/activityLog';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
-import { isVolatileTail } from '@seanhogg/builderforce-memory/handoff';
+import { isVolatileContent } from '@seanhogg/builderforce-memory/handoff';
 import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from './tenantModelService';
 import { resolveProjectEvermindModelPin, PROJECT_EVERMIND_MODEL_PREFIX } from './projectEvermind';
 import { classifyReplyAccount } from './replyProvenance';
@@ -87,7 +87,7 @@ export async function expandGatewayModelRefs(
     // stock OpenAI-SDK call to a workforce model id gets the agent's own docs too.
     const msgsForRecall = body.messages as ChatMessage[];
     // The request, never a loop's per-turn volatile tail (`<run-state>`) that rides after it.
-    const latestUser = [...msgsForRecall].reverse().find((m) => m.role === 'user' && !isVolatileTail(m));
+    const latestUser = [...msgsForRecall].reverse().find((m) => m.role === 'user' && !isVolatileContent(m.content));
     const recallQuery = typeof latestUser?.content === 'string' ? latestUser.content : undefined;
     const wf = await resolveWorkforceModel(env, tenantId, body.model, recallQuery);
     body.model = wf?.baseModel ?? undefined;

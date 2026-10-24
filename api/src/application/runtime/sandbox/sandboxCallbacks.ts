@@ -11,8 +11,9 @@
  * vertical before this module (`runtimeRoutes`).
  */
 import { ExecutionStatus } from '../../../domain/shared/types';
+import { TERMINAL_EXECUTION_STATUSES } from '../../../domain/execution/Execution';
 import { executions } from '../../../infrastructure/database/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import { integrationCredentialSecret } from '../../integrations/integrationCredentialSecret';
@@ -41,9 +42,13 @@ async function recordSandboxEvent(db: Db, ctx: SandboxRunContext, executionId: n
 
 /** The Actions runner's spec: what its sandbox obeys and which branch it serves. */
 async function runnerSpec(env: Env, db: Db, ctx: SandboxRunContext, executionId: number): Promise<SandboxCallbackResult> {
-  const [row] = await db.select({ status: executions.status }).from(executions).where(eq(executions.id, executionId)).limit(1);
-  // A queued job may start after the run was cancelled: refuse, and the runner exits.
-  if (!row || row.status === ExecutionStatus.CANCELLED) return { status: 409, body: { error: 'Execution was cancelled before the runner started.' } };
+  const [row] = await db.select({ status: executions.status }).from(executions)
+    .where(and(eq(executions.id, executionId), eq(executions.tenantId, ctx.tenantId))).limit(1);
+  // A queued job may start after the run ended (cancelled, failed, reaped): refuse any
+  // terminal status, and the runner exits instead of working on a concluded run.
+  if (!row || TERMINAL_EXECUTION_STATUSES.includes(row.status as ExecutionStatus)) {
+    return { status: 409, body: { error: 'Execution had already ended before the runner started.' } };
+  }
   const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), ctx.tenantId, ctx.taskId);
   return {
     status: 200,

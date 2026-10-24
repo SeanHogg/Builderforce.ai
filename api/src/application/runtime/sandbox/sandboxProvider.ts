@@ -24,6 +24,7 @@
 import { applyStringEdit, editFacts, type Capability, type CapabilityProvider, type RepoEditResult, type ShellCapability } from '@builderforce/agent-tools';
 import type { RunSandbox } from './runSandbox';
 import { SANDBOX_COMMAND_HEARTBEAT_MS } from '../cloudAgent/runContext';
+import { reportedFallback } from '../../observability/caughtErrorReporter';
 
 export interface SandboxProviderOptions {
   /** The run's cancel signal — aborting it kills the running command. */
@@ -41,7 +42,7 @@ export interface SandboxProviderOptions {
  */
 export function sandboxShell(sandbox: RunSandbox, opts: SandboxProviderOptions): ShellCapability & { runFor(command: string, timeoutMs: number): ReturnType<ShellCapability['run']> } {
   const runFor = async (command: string, timeoutMs?: number) => {
-    const beat = setInterval(() => { void opts.heartbeat().catch(() => undefined); }, SANDBOX_COMMAND_HEARTBEAT_MS);
+    const beat = setInterval(() => { void opts.heartbeat().catch(reportedFallback(undefined, { source: 'application/runtime/sandbox/sandboxProvider.ts', operation: 'commandHeartbeat' })); }, SANDBOX_COMMAND_HEARTBEAT_MS);
     try {
       return await sandbox.run(command, opts.signal, timeoutMs);
     } finally {
@@ -59,13 +60,13 @@ export function sandboxShell(sandbox: RunSandbox, opts: SandboxProviderOptions):
 export const SANDBOX_CAPABILITIES: readonly Capability[] = ['shell'];
 
 export function withSandbox(base: CapabilityProvider, sandbox: RunSandbox, opts: SandboxProviderOptions): CapabilityProvider {
-  const mirror = (req: Parameters<RunSandbox['fs']>[0]) => sandbox.fs(req).catch(() => undefined);
+  const mirror = (req: Parameters<RunSandbox['fs']>[0]) => sandbox.fs(req).catch(reportedFallback(undefined, { source: 'application/runtime/sandbox/sandboxProvider.ts', operation: 'mirrorToWorkingTree', context: { op: req.op } }));
   const repoRead = base.repoRead;
   const repoWrite = base.repoWrite;
   /** What an edit applies to: the branch the commit lands on, else the working tree (a
    *  file only a command produced is not on the branch yet). */
   const currentContent = async (path: string): Promise<{ ok: true; content: string } | { ok: false; error: string }> => {
-    const onBranch = repoRead ? await repoRead.readFile(path).catch(() => null) : null;
+    const onBranch = repoRead ? await repoRead.readFile(path).catch(reportedFallback(null, { source: 'application/runtime/sandbox/sandboxProvider.ts', operation: 'readBranchForEdit', context: { path } })) : null;
     if (onBranch?.ok && typeof onBranch.content === 'string') return { ok: true, content: onBranch.content };
     const inTree = await sandbox.fs({ op: 'read', path });
     return inTree.ok && typeof inTree.content === 'string' ? { ok: true, content: inTree.content } : { ok: false, error: inTree.error ?? 'read failed' };
