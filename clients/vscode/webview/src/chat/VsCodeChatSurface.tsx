@@ -232,6 +232,9 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
           history={{ open: historyOpen, onToggle: toggleHistory, controls: HISTORY_ID }}
           onNewChat={() => openChat(null)}
           bundle={init.labels}
+          version={init.extensionVersion}
+          // Only where the board is not drawn above the chat (the sidebar view).
+          onVisualize={init.boardBeside ? () => post('visualization.open') : undefined}
         />
       )}
       rail={chatId != null && !historyOpen && (

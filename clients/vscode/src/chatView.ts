@@ -53,6 +53,9 @@ class BuilderForceChatViewProvider implements vscode.WebviewViewProvider {
       {
         webview: view.webview,
         owner: view,
+        // A sidebar has no room for a board above the conversation: the board and the
+        // run's changes open in the visualization panel, in the editor area beside it.
+        boardBeside: true,
         // The view's title is the product; the conversation it holds goes beside it.
         onSessionMeta: (_chatId, title) => {
           if (title !== undefined) view.description = title.trim() || undefined;
@@ -70,6 +73,12 @@ class BuilderForceChatViewProvider implements vscode.WebviewViewProvider {
       await (await surface).handle(m);
     });
     view.webview.html = renderWebviewHtml(view.webview, this.ctx, { title: "BuilderForce" });
+    // The visualization is the other half of this view, so it opens with it — once per
+    // window; closing it is respected until the header's Visualize lever reopens it.
+    if (!visualizationOpened) {
+      visualizationOpened = true;
+      void vscode.commands.executeCommand("builderforce.openVisualization");
+    }
     // A token may have refreshed while the view was hidden.
     const visibility = view.onDidChangeVisibility(() => { if (view.visible) void surface.then((s) => s.refresh()); });
     view.onDidDispose(() => {
@@ -88,6 +97,8 @@ class BuilderForceChatViewProvider implements vscode.WebviewViewProvider {
 }
 
 let provider: BuilderForceChatViewProvider | undefined;
+/** The visualization panel was opened alongside the chat view in this window. */
+let visualizationOpened = false;
 /** Which of the two view ids this editor shows. */
 let activeViewId = CHAT_VIEW_ID;
 

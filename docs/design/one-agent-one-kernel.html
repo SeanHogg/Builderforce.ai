@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>One Agent, One Kernel — Design (PRD 35)</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; the policy matrix and register scroll inside their own frames; diagrams in framed panels. */
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --fg: #1b2230; --muted: #5a6577; --line: #d9dee6;
+  --accent: #1f5fa8; --code-bg: #eef1f5;
+  --done: #1e7a4c; --done-bg: #e3f3ea; --now: #1f5fa8; --now-bg: #e4edf8; --left: #a5520c; --left-bg: #fbeedd;
+  --miss: #9b2c2c; --miss-bg: #f8e4e4;
+  --f-display: "IBM Plex Serif", Georgia, serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161d; --surface: #1a202a; --fg: #e3e8ef; --muted: #9aa5b5; --line: #2c3442;
+  --accent: #7fb0ec; --code-bg: #232b37;
+  --done: #6fd09c; --done-bg: #173225; --now: #8dbaf0; --now-bg: #1a2a40; --left: #f0a85e; --left-bg: #3a2814;
+  --miss: #f08f8f; --miss-bg: #3a1a1a;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a202a; --fg: #e3e8ef; --muted: #9aa5b5; --line: #2c3442;
+  --accent: #7fb0ec; --code-bg: #232b37;
+  --done: #6fd09c; --done-bg: #173225; --now: #8dbaf0; --now-bg: #1a2a40; --left: #f0a85e; --left-bg: #3a2814;
+  --miss: #f08f8f; --miss-bg: #3a1a1a;
+  color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+main { max-width: 1080px; margin: 0 auto; padding-block: 40px 72px; display: grid; gap: 44px; }
+h1, h2 { font-family: var(--f-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(26px, 4vw, 36px); }
+h2 { font-size: 22px; }
+h3 { font-size: 15px; margin: 0; font-weight: 600; }
+p { margin: 0; max-width: 70ch; }
+section { display: grid; gap: 14px; min-width: 0; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+code { font-family: var(--f-mono); font-size: .86em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.lede { font-size: 17px; }
+.muted { color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 13px; color: var(--muted); }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.chip.done { color: var(--done); background: var(--done-bg); }
+.chip.now { color: var(--now); background: var(--now-bg); }
+.chip.left { color: var(--left); background: var(--left-bg); }
+.chip.miss { color: var(--miss); background: var(--miss-bg); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 2px; }
+.stat b { font-size: 26px; font-variant-numeric: tabular-nums; font-family: var(--f-display); }
+.stat span { font-size: 13px; color: var(--muted); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; overflow-x: auto; }
+.panel pre.mermaid { margin: 0; min-width: 640px; background: transparent; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 860px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; letter-spacing: .04em; color: var(--muted); font-weight: 600; background: var(--bg); }
+th small { display: block; font-weight: 400; letter-spacing: 0; text-transform: none; }
+tr:last-child td { border-bottom: 0; }
+td.dim { font-weight: 600; white-space: nowrap; }
+tbody tr.group td { background: var(--bg); font-family: var(--f-display); font-size: 15px; padding-top: 13px; }
+.matrix td { font-size: 13px; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+pre.code { margin: 0; font-family: var(--f-mono); font-size: 13px; line-height: 1.55; white-space: pre; color: var(--fg); }
+ol.phases { margin: 0; padding-left: 20px; display: grid; gap: 10px; max-width: 78ch; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.cols > div { min-width: 0; display: grid; gap: 8px; align-content: start; }
+</style>
+</head>
+<body>
+
+
+<main>
+
+  <p class="muted" style="margin:0">Live copy: https://claude.ai/artifact/Ggc3G5y2ZLkJsVe1jDHag8</p>
+  <header style="display:grid;gap:12px">
+    <div class="eyebrow">Builderforce.ai · agent runtime audit · 2026-10-24</div>
+    <p class="muted" style="margin:0">The executable plan is <b>PRD 35: One agent, one kernel</b> (<a href="../specs/35-prd-one-agent-one-kernel.md"><code>docs/specs/35-prd-one-agent-one-kernel.md</code></a>). It covers workstreams WS0–WS7, file ownership, the contract and the telemetry gates. This page is its design reference (<code>docs/design/one-agent-one-kernel.html</code>).</p>
+    <h1>Agent Execution Duplication Map</h1>
+    <p class="lede">Builderforce has four entry points: VS Code, Rovr, the on-prem agent, and Cloud/container. They are meant to be ways in, not separate engines. A turn should run the same way whichever door it came through. Today it doesn't. Underneath the four entry points there are six executions, and each one rebuilds the run policy for itself. This page sets out the end state first: one execution, with entry points that only supply ports. After that it shows today's duplication and the plan from here to there.</p>
+    <div class="legend">
+      <span><span class="chip done">shared</span> one implementation</span>
+      <span><span class="chip left">own copy</span> built again in this execution</span>
+      <span><span class="chip miss">missing</span> this execution doesn't do it at all</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="stats">
+      <div class="stat"><b>4</b><span>entry points: VS Code, Rovr, on-prem agent, Cloud/container</span></div>
+      <div class="stat"><b>6</b><span>executions underneath them today. The target is 1.</span></div>
+      <div class="stat"><b>1</b><span>shared piece: the loop kernel <code>runAgentLoop</code>, which handles budget, cancel, argument parsing and finish. Five executions use it; one bypasses it.</span></div>
+      <div class="stat"><b>3 → 0</b><span>separate loops for the container and Actions, removed in the current change</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">End state · 1</div>
+    <h2>The rule</h2>
+    <p>There is one execution. An entry point decides <b>where</b> a run gets its model, files, shell, storage and people. It never decides <b>how</b> the run behaves. If two entry points behave differently on the same task with the same model and the same files, that is a bug in the core, never a feature of an entry point.</p>
+    <p>Above the entry points, the cloud/web <b>board and governance</b> layer stays exactly as it is: autonomous execution from the board, and approvals by approver type. It is one owner. It decides <b>whether and by whom</b> a run starts and finishes, then dispatches into the one agent. What it requires of a run, such as a sign-off role or approval gates, reaches the agent as <code>RunPolicy</code> data. The agent then enforces it the same way on every entry point.</p>
+    <div class="tablewrap">
+      <table style="min-width:720px">
+        <thead><tr><th>Entry point</th><th>Who uses it</th><th>What only it supplies</th></tr></thead>
+        <tbody>
+          <tr><td class="dim">VS Code</td><td>A developer in the editor</td><td>The open workspace and terminal, local-first inference, the webview and native chat</td></tr>
+          <tr><td class="dim">Rovr / Web</td><td>Browser, Rovr extension, the Brain, the canvas</td><td>Platform tools, the canvas board, in-browser inference, the browser run store</td></tr>
+          <tr><td class="dim">On-prem agent</td><td>A tenant's own machine: tickets, channels, cron</td><td>The machine's disk and shell, its clone of the ticket repo, the relay</td></tr>
+          <tr><td class="dim">Cloud / container</td><td>Ticket runs and @-replies with no machine attached</td><td>The git API plus the run sandbox (container or Actions), the Durable Object cursor, the run timeline</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">End state · 2</div>
+    <h2>Codemap</h2>
+    <p class="muted">The core is one package. It depends on the kernel, the tool definitions and memory. Nothing depends on an adapter. Each adapter depends on the core and builds its ports from the providers it owns.</p>
+    <div class="panel">
+<pre class="mermaid">
+flowchart TB
+  subgraph GOV["Board + governance (cloud/web, ONE owner, retained): dispatches runs, never runs a loop"]
+    G1["Autonomous board execution: lane-entry trigger, autonomous sweep, evaluateAutoRun, circuit breaker, skip ledger"]
+    G2["Approvals: approval gate (task.execution), auto-approval rules, approval chains, lane approvers by approver type, sign-off gate"]
+  end
+  subgraph AD["Entry points: each builds ports only, never runs a loop"]
+    A1["clients/vscode: run/vscodeAdapter.ts"]
+    A2["brain-embedded: run/webAdapter.ts (Web, Rovr, canvas)"]
+    A3["agent-runtime: run/onPremAdapter.ts (tickets, channels, cron)"]
+    A4["api: runtime/cloudAdapter.ts (CloudRunnerDO tick, tickets, @-replies)"]
+  end
+  subgraph CORE["ONE agent: packages/agent-run"]
+    RUN["runAgent(task, policy, ports, resume)"]
+    POL["policy/: compaction, stall, steering, finish gate, guards, verify, brief + memory, tool selection, model policy, ask, sub-agents"]
+    RUN --> POL
+  end
+  subgraph LIB["Shared libraries the core uses"]
+    K(("ONE kernel: packages/agent-loop"))
+    T["packages/agent-tools: tool definitions, capabilities, registry"]
+    M["builderforce-memory: /working, /handoff"]
+    RP["run-policy, model-router, cost-levers"]
+  end
+  subgraph PROV["Capability providers (owned by adapters)"]
+    P1["Editor workspace fs + terminal"]
+    P2["Platform MCP catalog (every adapter)"]
+    P3["Canvas board"]
+    P4["Node fs + shell"]
+    P5["Git API + sandbox: sandboxCore over container HTTP or Actions pull"]
+  end
+  A1 --> RUN
+  A2 --> RUN
+  A3 --> RUN
+  A4 --> RUN
+  G1 -->|"dispatch"| A4
+  G1 -->|"dispatch to host"| A3
+  G1 -->|"@-addressed"| A1
+  G2 -.->|"gates + RunPolicy.signoff"| G1
+  POL --> K
+  POL --> T
+  POL --> M
+  POL --> RP
+  A1 -.-> P1
+  A1 -.-> P2
+  A2 -.-> P2
+  A2 -.-> P3
+  A3 -.-> P4
+  A3 -.-> P2
+  A4 -.-> P5
+  A4 -.-> P2
+  classDef core fill:#e4edf8,stroke:#1f5fa8,color:#0e2f57
+  class RUN,POL core
+</pre>
+    </div>
+    <p class="muted">The adapter paths are proposed names. The dependency direction is the design: adapters point at the core; the core never points at an adapter.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">End state · 3</div>
+    <h2>The contract</h2>
+    <p class="muted">This is the whole surface an adapter sees. Everything that varies by entry point is a port or a policy value. A new entry point is one more adapter that fills these in.</p>
+    <div class="panel">
+<pre class="code">// packages/agent-run
+export function runAgent(input: {
+  task: RunTask;          // prompt, ticket / chat ids, persona, attachments,
+                          // dispatch: { source: "board-sweep" | "lane-entry" | "chat" | "manual" | "ceremony", approvalId? }
+  policy: RunPolicy;      // DATA: what this run may do
+  ports: RunPorts;        // WHERE it gets things
+  resume?: RunState;      // a saved step, for step-at-a-time hosts
+  maxSteps?: number;      // 1 on the cloud tick; unbounded elsewhere
+}): Promise&lt;RunOutcome&gt;;  // finished | paused (question) | yielded (RunState) | failed
+
+export interface RunPolicy {
+  toolScope: ToolScope;   // e.g. "ticket" | "chat-reply" | "canvas" (replaces CHAT_SCOPED_AGENT_TOOLS)
+  levers: CostLevers;     // A3, C5, C7, D1, D7, D8 ... on or off
+  budgets: { steps?: number; tokens?: number };
+  role: string;           // policy role: tier ladder, verify phase
+  pinnedModel?: string;
+  verify: "declared-checks" | "branch-ci" | "none";
+  signoff?: { roleKey: string; laneKey?: string }; // finish blocked until this role signs off
+  approvalGates: PolicyGate[];  // in-run acts that need an approver (block / ask)
+}
+
+export interface RunPorts {
+  model: ModelTransport;          // complete(request): gateway, BYO, local inference
+  capabilities: CapabilityProvider; // agent-tools contract: files, shell, git, platform, human
+  store: RunStore;                // load / save RunState; commit long-term memory
+  events: EventSink;              // turn, tool, steer, escalation, verify, finish
+  human: HumanChannel;            // ask + approval; returns an answer or "paused"
+  steering?: SteeringSource;      // drains user messages between steps
+}</pre>
+    </div>
+    <div class="tablewrap">
+      <table style="min-width:720px">
+        <thead><tr><th>Port</th><th>VS Code</th><th>Rovr / Web</th><th>On-prem</th><th>Cloud / container</th></tr></thead>
+        <tbody>
+          <tr><td class="dim">model</td><td>local-first, then gateway</td><td>in-browser, then gateway</td><td>gateway (BYO keys honoured)</td><td>gateway</td></tr>
+          <tr><td class="dim">capabilities</td><td>workspace fs, terminal, platform MCP</td><td>platform MCP, canvas board</td><td>node fs, shell, platform MCP</td><td>git API, sandbox shell + clone, platform MCP</td></tr>
+          <tr><td class="dim">store</td><td>run store + extension storage</td><td>run store (browser)</td><td>session file</td><td>Durable Object cursor</td></tr>
+          <tr><td class="dim">events</td><td>webview / native chat</td><td>run snapshot (UI)</td><td>relay frames</td><td>run timeline</td></tr>
+          <tr><td class="dim">human</td><td>approval bar</td><td>approval bar</td><td>relay ask</td><td>pause + resume</td></tr>
+          <tr><td class="dim">steering</td><td>composer queue</td><td>composer queue</td><td>relay messages</td><td>steer relay</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">End state · 4</div>
+    <h2>One run, any entry point</h2>
+    <p class="muted">Every step is the same sequence. A Node, browser or editor host runs steps back to back. The cloud host runs one step per Durable Object tick and saves state in between. Both produce the same result, because <code>RunState</code> carries everything the policy needs: guard tallies, the cascade, the check note, the run brief, finish-gate counters and the model hand-off.</p>
+    <div class="panel">
+<pre class="mermaid">
+sequenceDiagram
+  participant EP as Adapter (any entry point)
+  participant C as runAgent (core)
+  participant ST as store
+  participant M as model
+  participant P as capabilities
+  participant H as human / steering
+  participant EV as events
+  EP->>C: runAgent(task, policy, ports, resume)
+  C->>ST: load RunState
+  loop each step (one per tick on cloud)
+    C->>H: drain steering
+    C->>C: brief, compaction, tool selection, model policy
+    C->>M: complete
+    C->>P: tool calls
+    C->>C: guards, post-edit check, stall recovery
+    C->>EV: turn + tool events
+    C->>ST: save RunState
+  end
+  C->>C: finish gate
+  C->>P: verify (declared checks, or branch CI)
+  C->>ST: consolidate memory
+  C->>EV: finished
+  C-->>EP: RunOutcome
+</pre>
+    </div>
+    <div class="panel">
+<pre class="mermaid">
+sequenceDiagram
+  participant DO as CloudRunnerDO (cloud adapter)
+  participant C as runAgent
+  participant SB as Sandbox (container or Actions)
+  DO->>SB: open clone (first tick)
+  loop alarm tick
+    DO->>C: runAgent(resume, maxSteps 1)
+    C->>SB: shell / fs through the provider
+    C-->>DO: yielded(RunState)
+    DO->>DO: save cursor, re-arm alarm
+  end
+  C-->>DO: finished
+  DO->>SB: close
+</pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">End state · 5</div>
+    <h2>What exists, and what doesn't</h2>
+    <div class="cols">
+      <div>
+        <h3>Exists</h3>
+        <ul class="phases" style="list-style:disc">
+          <li><code>packages/agent-run</code>, the only execution</li>
+          <li>Four adapters, each under about 300 lines</li>
+          <li>One tool registry and one selector, scoped by <code>RunPolicy.toolScope</code></li>
+          <li>One model policy; transports only carry the call</li>
+          <li>One memory model: the brief during the run, consolidation at the end</li>
+          <li>One sandbox implementation (<code>sandboxCore</code>) behind the cloud provider</li>
+          <li>One conformance suite and one import guard</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Doesn't exist</h3>
+        <ul class="phases" style="list-style:disc">
+          <li>The Claude Agent SDK runner, <code>SDK_TOOLS</code>, <code>sdk-memory-server</code>, the SDK <code>Task</code></li>
+          <li>Run policy inside <code>cloudAgentEngine</code>, <code>agentReplyLoop</code>, brain-embedded <code>runLoop</code>, <code>creationCanvasAi</code> or <code>agent-loop.ts</code></li>
+          <li>Any per-entry-point stall hook, steering queue, compaction wiring, ask tool or finish gate</li>
+          <li><code>CHAT_SCOPED_AGENT_TOOLS</code> and other tool lists as code</li>
+          <li>A model decider per entry point</li>
+          <li>Container or Actions loops (removed in the current change)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">End state · matrix</div>
+    <h2>Run policy, by entry point: final</h2>
+    <p class="muted">These are the same rows as today's matrix, below. In the end state there is one execution, so the columns become the four entry points. Every row is decided in the core. A cell names what the entry point plugs in, where anything differs. "Kept from" lists every implementation that is folded into the core. Each one's behaviour carries over, so no entry point loses what it has today.</p>
+    <div class="tablewrap">
+      <table class="matrix" style="min-width:1060px">
+        <thead><tr>
+          <th>Concern</th>
+          <th>Core module<small>packages/agent-run</small></th>
+          <th>VS Code</th>
+          <th>Rovr / Web</th>
+          <th>On-prem</th>
+          <th>Cloud / container</th>
+          <th>Kept from (merged in, nothing dropped)</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="dim">Loop skeleton</td><td><code>runAgent</code> over the kernel</td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span> one step per tick</td><td>Kernel; Claude SDK loop (its tool loop, streaming and cancel)</td></tr>
+          <tr><td class="dim">Context compaction</td><td><code>policy/compaction</code></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td>Cloud <code>compactMessages</code>; @-reply wiring; on-prem SessionManager compaction and reserve tokens; SDK auto-compact</td></tr>
+          <tr><td class="dim">Stall / narration recovery</td><td><code>policy/stall</code> over <code>agent-stall</code></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td>Cloud stall budget; @-reply forced no-tools synthesis and <code>trimRepetitionLoop</code>; <code>finalAnswerHook</code> and prose ask-lift; <code>canvasNoToolCalls</code>; on-prem <code>stall-recovery.ts</code> and its exhausted notice</td></tr>
+          <tr><td class="dim">Mid-run steering</td><td><code>policy/steering</code></td><td><span class="chip done">core</span> port: composer queue</td><td><span class="chip done">core</span> port: composer queue</td><td><span class="chip done">core</span> port: relay messages</td><td><span class="chip done">core</span> port: steer relay</td><td>Cloud steer drain and <code>steer.applied</code>; composer stop + queue; on-prem <code>steeringQueue</code>; SDK <code>SteeringChannel</code></td></tr>
+          <tr><td class="dim">Finish gate</td><td><code>policy/finish</code></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td>Cloud gates: placeholder / no-deliverable / CI-pending / review verdict / sign-off; @-reply verify pin</td></tr>
+          <tr><td class="dim">Guards: progress, cascade, post-edit check</td><td><code>policy/guards</code></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span> checks via sandbox</td><td>Cloud <code>LoopGuards</code> (A3, D1, D7, D8); @-reply cascade</td></tr>
+          <tr><td class="dim">Failure-streak breaker</td><td>kernel</td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td>Kernel (on-prem tickets gain it; the SDK path had none)</td></tr>
+          <tr><td class="dim">Run-end verify</td><td><code>policy/verify</code></td><td><span class="chip done">core</span> terminal</td><td><span class="chip done">core</span> branch CI</td><td><span class="chip done">core</span> node shell</td><td><span class="chip done">core</span> sandbox or branch CI</td><td>Cloud <code>inRunVerify</code> + <code>sandboxVerify</code>; mode from <code>RunPolicy.verify</code></td></tr>
+          <tr><td class="dim">Per-turn run brief</td><td><code>policy/memory</code> (/working)</td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span></td><td><span class="chip done">core</span> in <code>RunState</code></td><td>Cloud, brain-embedded and on-prem wiring of <code>volatileTail</code> + <code>RunKnowledgeRecorder</code></td></tr>
+          <tr><td class="dim">Run-end memory</td><td><code>policy/memory</code> (consolidate)</td><td><span class="chip done">core</span> port: store</td><td><span class="chip done">core</span> port: store</td><td><span class="chip done">core</span> port: store</td><td><span class="chip done">core</span> port: store</td><td>Cloud <code>runEndMemory</code>; Brain memory; <code>memoryCommit</code> / <code>editorRunEnd</code>; <code>knowledge-loop</code>; <code>sdk-memory-server</code> recall/remember (as memory tools)</td></tr>
+          <tr><td class="dim">Tool selection</td><td><code>policy/tools</code>: one selector</td><td><span class="chip done">core</span> workspace + platform tools</td><td><span class="chip done">core</span> platform + canvas tools</td><td><span class="chip done">core</span> node + native tools</td><td><span class="chip done">core</span> git API + sandbox tools</td><td>Capability gate; lexical ranker <code>selectToolsForTurn</code> with pinning; <code>CHAT_SCOPED_AGENT_TOOLS</code> as <code>toolScope</code> data; canvas tool port; native <code>AgentTool</code>s; <code>SDK_TOOLS</code> with gate filtering</td></tr>
+          <tr><td class="dim">Model policy</td><td><code>policy/model</code></td><td><span class="chip done">core</span> port: local-first</td><td><span class="chip done">core</span> port: in-browser first</td><td><span class="chip done">core</span> port: gateway</td><td><span class="chip done">core</span> port: gateway</td><td><code>cloudRunModelPolicy</code>, cascade, learned routing, limbic state; @-reply cascade; <code>modelRouting</code> (Local only / Hybrid / Specific); <code>canvasModelPort</code>; on-prem gateway config</td></tr>
+          <tr><td class="dim">Ask a human</td><td><code>policy/ask</code></td><td><span class="chip done">core</span> port: approval bar</td><td><span class="chip done">core</span> port: approval bar</td><td><span class="chip done">core</span> port: relay ask</td><td><span class="chip done">core</span> port: pause + resume</td><td>Kernel <code>ask_human</code>; <code>ASK_USER_TOOL</code> (options, pending bar); <code>askHumanTool</code></td></tr>
+          <tr><td class="dim">Sub-agents</td><td><code>policy/subagents</code></td><td><span class="chip done">core</span> port: run lineage</td><td><span class="chip done">core</span> port: run lineage</td><td><span class="chip done">core</span> port: child session</td><td><span class="chip done">core</span> port: child run</td><td>Cloud child runs (<code>parent_execution_id</code>); <code>spawn_agent</code>; on-prem sessions; SDK <code>Task</code></td></tr>
+          <tr><td class="dim">Approvals by approver type, sign-off</td><td><code>policy/finish</code> + <code>policy/ask</code>, from <code>RunPolicy.signoff</code> / <code>approvalGates</code></td><td><span class="chip done">core</span> port: approval bar</td><td><span class="chip done">core</span> port: approval bar</td><td><span class="chip done">core</span> port: relay ask</td><td><span class="chip done">core</span> port: approvals queue</td><td>Governance stays ONE owner above the agent (<code>approvalGate</code>, <code>approvalChain</code>, <code>autoApprovalRules</code>, <code>laneApprover</code>, <code>signoffGate</code>); the agent enforces what it is handed (cloud <code>requiredSignoff</code> finish gate, <code>policyGates</code>) on every entry point</td></tr>
+          <tr><td class="dim">Autonomous board execution</td><td>Not in the agent: the board dispatches INTO it</td><td><span class="chip done">core</span> @-addressed runs</td><td>n/a</td><td><span class="chip done">core</span> host dispatch</td><td><span class="chip done">core</span> cloud dispatch</td><td><code>laneEntryTrigger</code>, <code>autonomousExecutionSweep</code>, <code>evaluateAutoRun</code>, circuit breaker, <code>autoRunSkipLedger</code>, <code>executionApprovalGate</code>, <code>managedExecutionGuard</code>, <code>coordinateTicket</code>: unchanged owners, retargeted at <code>runAgent</code> through the adapters</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">End state · retention ledger</div>
+    <h2>Every capability, and where it lives at the end</h2>
+    <p class="muted">At the end there is one agent (<code>packages/agent-run</code>) on one kernel. Every capability any runner has today lands in one of the agent's parts, or in a port an entry point plugs in. The right-hand column only records where each capability is found <b>today</b>, so it can be ported and then deleted there. Phase 0's parity oracle proves nothing is lost: the old tests run unchanged against the capability's new home.</p>
+    <div class="panel">
+<pre class="mermaid">
+flowchart LR
+  subgraph EPS["Entry points"]
+    E1["VS Code"]
+    E2["Rovr / Web / canvas"]
+    E3["On-prem agent"]
+    E4["Cloud / container"]
+  end
+  AG["ONE agent: packages/agent-run"]
+  KR(("ONE kernel: runAgentLoop"))
+  E1 --> AG
+  E2 --> AG
+  E3 --> AG
+  E4 --> AG
+  AG --> KR
+  classDef core fill:#e4edf8,stroke:#1f5fa8,color:#0e2f57
+  class AG,KR core
+</pre>
+    </div>
+    <div class="tablewrap">
+      <table style="min-width:900px">
+        <thead><tr><th>Capability</th><th>Lives in, at the end</th><th>Found today in (ported, then deleted there)</th></tr></thead>
+        <tbody>
+          <tr class="group"><td colspan="3">The agent's loop (on the one kernel)</td></tr>
+          <tr><td>Tool loop, streaming, cancel, budgets</td><td>Agent <code>runAgent</code> on the kernel</td><td>Kernel; Claude SDK loop</td></tr>
+          <tr><td>Step-at-a-time runs (resume between Durable Object ticks)</td><td>Agent, via <code>RunState</code> + <code>maxSteps</code></td><td><code>cloudAgentEngine</code> durable ticks</td></tr>
+          <tr><td>Prompt assembly: persona, skills, governance, heartbeat prompt, psychometrics</td><td>Agent prompt assembly</td><td>SDK runner (persona/skills append); on-prem embedded runner; cloud engine</td></tr>
+          <tr class="group"><td colspan="3">The agent's run policy</td></tr>
+          <tr><td>Context compaction with reserve tokens</td><td>Agent <code>policy/compaction</code></td><td>Cloud <code>compactMessages</code>; @-reply wiring; on-prem SessionManager; SDK auto-compact</td></tr>
+          <tr><td>Stall / narration recovery, forced final synthesis, repetition trim, prose ask-lift</td><td>Agent <code>policy/stall</code></td><td>Cloud; @-reply loop; <code>finalAnswerHook</code>; <code>canvasNoToolCalls</code>; on-prem <code>stall-recovery.ts</code></td></tr>
+          <tr><td>Steering between steps</td><td>Agent <code>policy/steering</code> (source is a port)</td><td>Cloud steer drain; composer queue; on-prem <code>steeringQueue</code>; SDK <code>SteeringChannel</code></td></tr>
+          <tr><td>Finish gates: placeholder, no-deliverable, CI-pending, review verdict, sign-off, verify pin</td><td>Agent <code>policy/finish</code></td><td>Cloud <code>finishGates</code>; @-reply verify pin</td></tr>
+          <tr><td>Guards: progress (A3), cascade (D1), post-edit check (D7), parallel reads (D8)</td><td>Agent <code>policy/guards</code></td><td>Cloud <code>LoopGuards</code>; @-reply cascade</td></tr>
+          <tr><td>Run-end verify (declared checks or branch CI)</td><td>Agent <code>policy/verify</code></td><td>Cloud <code>inRunVerify</code> + <code>sandboxVerify</code></td></tr>
+          <tr><td>Policy gates, cost levers, stable-prefix caching</td><td>Agent policy, switched by <code>RunPolicy</code> data</td><td>Cloud engine; SDK allowed-tool filtering</td></tr>
+          <tr class="group"><td colspan="3">The agent's tools</td></tr>
+          <tr><td>Read, write, edit, shell, glob, search</td><td>Agent tool registry (<code>agent-tools</code>): <code>read_file</code>, <code>write_file</code>, <code>edit_file</code>, <code>run_command</code>, <code>list_files</code>, <code>search_code</code></td><td>SDK built-ins (Read, Write, Edit, Bash, Glob, Grep); cloud; editor</td></tr>
+          <tr><td>Tool selection: capability gate, lexical ranking with synonyms, pinning touched tools, scope</td><td>Agent <code>policy/tools</code>: one selector; scope is <code>RunPolicy.toolScope</code></td><td>Cloud capability gate; <code>selectToolsForTurn</code>; <code>CHAT_SCOPED_AGENT_TOOLS</code>; canvas tool port; <code>SDK_TOOLS</code></td></tr>
+          <tr><td>Platform tools (the MCP catalog)</td><td>Agent tool registry, from every entry point</td><td><code>builtinMcpService</code> (already one)</td></tr>
+          <tr><td>Machine tools: process, browser, orchestrate, fleet, MCP and plugins, channel actions (reactions, buttons, TTS)</td><td>Agent tool registry. Shared definitions move into <code>agent-tools</code>. The on-prem capability provider backs them.</td><td>On-prem native <code>AgentTool</code>s</td></tr>
+          <tr><td>Canvas board tools</td><td>Agent tool registry, backed by the canvas capability provider</td><td><code>creationCanvasAi</code> tool port, board writers</td></tr>
+          <tr><td>Shell and clone in the cloud; repo-less IDE workspace</td><td>Cloud capability provider: git API + sandbox (<code>sandboxCore</code>) + IDE workspace</td><td>Cloud engine; container ops (already removed)</td></tr>
+          <tr><td>Rehearsal shadow (dry run)</td><td>A provider decorator around the agent's capabilities</td><td>Cloud <code>decorateProvider</code>, frozen read ref</td></tr>
+          <tr class="group"><td colspan="3">The agent's memory</td></tr>
+          <tr><td>Per-turn run brief (working memory)</td><td>Agent <code>policy/memory</code> over builderforce-memory <code>/working</code></td><td>Cloud, brain-embedded and on-prem wiring</td></tr>
+          <tr><td>Run-end consolidation and code map; session notes</td><td>Agent <code>policy/memory</code>; the write goes to the store port</td><td>Cloud <code>runEndMemory</code>; <code>memoryCommit</code> / <code>editorRunEnd</code>; on-prem <code>knowledge-loop</code></td></tr>
+          <tr><td>Recall / remember during a run</td><td>Agent memory tools on the <code>memory</code> capability</td><td><code>sdk-memory-server</code>; <code>memory_recall</code> tool</td></tr>
+          <tr class="group"><td colspan="3">The agent's model policy</td></tr>
+          <tr><td>Model choice: role ladder, cascade, learned routing, limbic state, pins, Local only / Hybrid / Specific</td><td>Agent <code>policy/model</code></td><td><code>cloudRunModelPolicy</code>; @-reply cascade; <code>modelRouting</code>; <code>canvasModelPort</code>; on-prem gateway config</td></tr>
+          <tr class="group"><td colspan="3">The agent's people and children</td></tr>
+          <tr><td>Ask a human, with options and a pending bar</td><td>Agent <code>policy/ask</code></td><td>Kernel <code>ask_human</code>; <code>ASK_USER_TOOL</code>; <code>askHumanTool</code></td></tr>
+          <tr><td>Sub-agents: read-only or writable, background, steerable, lineage</td><td>Agent <code>policy/subagents</code> (a child is the same agent)</td><td>Cloud child runs; editor <code>spawn_agent</code>; on-prem sessions; SDK <code>Task</code></td></tr>
+          <tr class="group"><td colspan="3">Above the agent: board and governance (cloud/web, one owner, retained as is)</td></tr>
+          <tr><td>Autonomous execution from the board: a ticket entering a staffed lane runs; the sweep picks up runnable tickets; skips are recorded with their reason; failures trip a circuit breaker</td><td>Unchanged owner. It dispatches into the one agent through the cloud adapter, an on-prem host, or the @-addressed agent's own runtime.</td><td><code>swimlane/laneEntryTrigger</code>, <code>runtime/autonomousExecutionSweep</code>, <code>swimlane/evaluateAutoRun</code>, <code>runtime/autoRunSkipLedger</code>, <code>runtime/dispatchCloudRun</code></td></tr>
+          <tr><td>Approval before a run (<code>task.execution</code>), reusing an outstanding request; auto-approval rules by action, cost and file count</td><td>Unchanged owner, checked at dispatch. The approval id travels on <code>RunTask.dispatch</code>.</td><td><code>approval/approvalGate</code>, <code>runtime/executionApprovalGate</code>, <code>approval/autoApprovalRules</code>, <code>approval/requestApproval</code></td></tr>
+          <tr><td>Approvers by approver type: lane requirements, then the staffed lane agents capable of the role, then fail-closed; sequential multi-approver chains; a rejection ends the chain</td><td>Unchanged owner. The resolved role reaches the agent as <code>RunPolicy.signoff</code>.</td><td><code>swimlane/laneApprover</code>, <code>approval/approvalChain</code>, <code>kanban/managedLaneRoles</code>, <code>manager/staffUnfilledLanes</code></td></tr>
+          <tr><td>Sign-off required to finish: a reviewer run cannot end until its role verdict is recorded</td><td>Agent <code>policy/finish</code> enforces <code>RunPolicy.signoff</code> on every entry point (today only the cloud engine does)</td><td><code>kanban/signoffGate</code>; cloud <code>requiredSignoff</code> + <code>builtin_kanban_signoff</code> finish gate</td></tr>
+          <tr><td>In-run approvals: governance policy gates (block, or ask an approver) on tool calls; pause and resume on a decision</td><td>Agent <code>policy/ask</code> + <code>policy/tools</code> from <code>RunPolicy.approvalGates</code>; HumanChannel port routes the request to the approvals queue</td><td>Cloud <code>policyGates</code> / <code>policyAskedGates</code>; <code>approval/decideApproval</code>; <code>executionResume</code>; SDK allowed-tool gates</td></tr>
+          <tr><td>Managed-board authority and manager coordination: audited override, never a refusal</td><td>Unchanged owner, at dispatch</td><td><code>kanban/managedExecutionGuard</code>, <code>manager/coordinateTicket</code></td></tr>
+          <tr class="group"><td colspan="3">Ports: the only thing an entry point supplies</td></tr>
+          <tr><td>Where the model runs: local-first, in-browser, gateway, BYO; XML tool-call lifting; served-window detection</td><td>ModelTransport port</td><td><code>localFirstTransport</code>; <code>xmlToolCalls</code>; gateway clients</td></tr>
+          <tr><td>Where state lives: single-flight per chat, Stop, session files, Durable Object cursor</td><td>RunStore port</td><td>brain-embedded run store; on-prem sessions; CloudRunnerDO</td></tr>
+          <tr><td>Where events go: live trace, timeline, relay frames, webview</td><td>EventSink port</td><td>Run store trace; cloud timeline; relay</td></tr>
+          <tr><td>How people are reached: tool-confirm gate, approval bar, relay ask, pause + resume</td><td>HumanChannel port</td><td>Run store confirm gate; cloud pause; relay</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">End state · 6</div>
+    <h2>How we know it's finished</h2>
+    <div class="tablewrap">
+      <table style="min-width:720px">
+        <thead><tr><th>Check</th><th>Passes when</th></tr></thead>
+        <tbody>
+          <tr><td class="dim">Conformance suite</td><td>One scripted task, with a fake model and an in-memory provider, runs through all four adapters and produces the same event trace and the same <code>RunOutcome</code>. The cloud adapter runs it one step per tick and still matches.</td></tr>
+          <tr><td class="dim"><code>check:one-execution</code></td><td>No file outside <code>packages/agent-run</code> imports <code>runAgentLoop</code> or any policy module.</td></tr>
+          <tr><td class="dim">Adapter size</td><td>Each adapter is under about 300 lines and only builds ports.</td></tr>
+          <tr><td class="dim">Parity</td><td>Every existing behaviour test passes, with its expected output untouched.</td></tr>
+          <tr><td class="dim">Matrix</td><td>Today's matrix matches the final matrix: one core module per row, with entry points differing only by port.</td></tr>
+          <tr><td class="dim">No lost capability</td><td>Every retention-ledger row has its old tests running unchanged against its end-state home before the old home is deleted.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Today · codemap (not the design)</div>
+    <h2>Four entry points, six executions: the problem being removed</h2>
+    <p class="muted">Sharing the loop kernel doesn't make these one execution. Everything a run actually decides sits around the kernel, in each execution's own code: when to compact, how to recover a stall, what steering does, whether a finish is allowed, which tools and model to use, and what to remember. Each execution owns its own copy of those decisions.</p>
+    <div class="panel">
+<pre class="mermaid">
+flowchart LR
+  subgraph EP["Entry points (modalities)"]
+    VSX["VS Code"]
+    ROV["Rovr + Web Brain + canvas"]
+    ONP["On-prem agent"]
+    CLD["Cloud / container"]
+  end
+  subgraph EX["Executions today, each with its own run policy"]
+    RL["brain-embedded runLoop"]
+    CV["creationCanvasAi"]
+    OP["agent-loop.ts (channels, cron)"]
+    SDK["Claude Agent SDK runner (tickets)"]
+    CE["cloudAgentEngine (tickets)"]
+    AR["agentReplyLoop (@-replies, manager)"]
+  end
+  K(("runAgentLoop kernel"))
+  VSX --> RL
+  ROV --> RL
+  ROV --> CV
+  ONP --> OP
+  ONP --> SDK
+  CLD --> CE
+  CLD --> AR
+  RL --> K
+  CV --> K
+  OP --> K
+  CE --> K
+  AR --> K
+  SDK -. "own loop" .-> SDK
+  classDef dup fill:#fbeedd,stroke:#a5520c,color:#5a2c05
+  classDef worst fill:#f8e4e4,stroke:#9b2c2c,color:#5a1414
+  class RL,CV,OP,CE,AR dup
+  class SDK worst
+</pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Today · matrix</div>
+    <h2>Run policy, by execution: today</h2>
+    <p class="muted">Each row is one decision a run makes. Each column is one execution. A fix to any row reaches only the columns that share it. This matrix comes from a code scan; phase 0 below confirms every cell against tests.</p>
+    <div class="tablewrap">
+      <table class="matrix">
+        <thead><tr>
+          <th>Concern</th>
+          <th>cloudAgentEngine<small>Cloud tickets</small></th>
+          <th>agentReplyLoop<small>Cloud @-replies</small></th>
+          <th>runLoop<small>VS Code, Rovr, Web</small></th>
+          <th>creationCanvasAi<small>Canvas</small></th>
+          <th>agent-loop.ts<small>On-prem channels</small></th>
+          <th>Claude SDK<small>On-prem tickets</small></th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="dim">Loop skeleton</td><td><span class="chip done">kernel</span></td><td><span class="chip done">kernel</span></td><td><span class="chip done">kernel</span></td><td><span class="chip done">kernel</span></td><td><span class="chip done">kernel</span></td><td><span class="chip left">SDK's own</span></td></tr>
+          <tr><td class="dim">Context compaction</td><td><span class="chip left">own</span> <code>compactMessages</code></td><td><span class="chip left">own</span> same fn, own wiring</td><td><span class="chip miss">missing</span></td><td><span class="chip miss">missing</span></td><td><span class="chip left">own</span> SessionManager</td><td><span class="chip left">SDK's own</span></td></tr>
+          <tr><td class="dim">Stall / narration recovery</td><td><span class="chip left">own</span></td><td><span class="chip left">own</span></td><td><span class="chip left">own</span> <code>finalAnswerHook</code></td><td><span class="chip left">own</span> <code>canvasNoToolCalls</code></td><td><span class="chip left">own</span> <code>stall-recovery.ts</code></td><td><span class="chip miss">missing</span></td></tr>
+          <tr><td class="dim">Mid-run steering</td><td><span class="chip left">own</span></td><td><span class="chip miss">missing</span></td><td><span class="chip left">own</span> composer queue</td><td><span class="chip miss">missing</span></td><td><span class="chip left">own</span> <code>steeringQueue</code></td><td><span class="chip left">own</span> <code>SteeringChannel</code></td></tr>
+          <tr><td class="dim">Finish gate</td><td><span class="chip left">own</span> <code>finishGates</code></td><td><span class="chip left">own</span> verify pin</td><td><span class="chip miss">missing</span></td><td><span class="chip miss">missing</span></td><td><span class="chip miss">missing</span></td><td><span class="chip miss">missing</span></td></tr>
+          <tr><td class="dim">Guards: progress, cascade, post-edit check</td><td><span class="chip left">own</span> <code>LoopGuards</code></td><td><span class="chip left">own</span> cascade</td><td><span class="chip miss">missing</span></td><td><span class="chip miss">missing</span></td><td><span class="chip miss">missing</span></td><td><span class="chip miss">missing</span></td></tr>
+          <tr><td class="dim">Failure-streak breaker</td><td><span class="chip done">kernel</span></td><td><span class="chip done">kernel</span></td><td><span class="chip done">kernel</span></td><td><span class="chip done">kernel</span></td><td><span class="chip done">kernel</span></td><td><span class="chip miss">missing</span></td></tr>
+          <tr><td class="dim">Run-end verify</td><td><span class="chip left">own</span> <code>inRunVerify</code></td><td><span class="chip miss">missing</span></td><td><span class="chip miss">missing</span></td><td><span class="chip miss">missing</span></td><td><span class="chip miss">missing</span></td><td><span class="chip miss">missing</span></td></tr>
+          <tr><td class="dim">Per-turn run brief</td><td><span class="chip done">shared</span> primitive, own wiring</td><td><span class="chip miss">missing</span></td><td><span class="chip done">shared</span> primitive, own wiring</td><td><span class="chip miss">missing</span></td><td><span class="chip done">shared</span> primitive, own wiring</td><td><span class="chip miss">missing</span></td></tr>
+          <tr><td class="dim">Run-end memory</td><td><span class="chip left">own</span> <code>runEndMemory</code></td><td><span class="chip left">own</span> Brain memory</td><td><span class="chip left">own</span> <code>memoryCommit</code></td><td><span class="chip miss">missing</span></td><td><span class="chip left">own</span> <code>knowledge-loop</code></td><td><span class="chip left">own</span> <code>sdk-memory-server</code></td></tr>
+          <tr><td class="dim">Tool selection</td><td><span class="chip left">own</span> capability gate</td><td><span class="chip left">own</span> <code>CHAT_SCOPED_AGENT_TOOLS</code></td><td><span class="chip left">own</span> <code>selectToolsForTurn</code></td><td><span class="chip left">own</span> canvas tool port</td><td><span class="chip left">own</span> native <code>AgentTool</code>s</td><td><span class="chip left">own</span> <code>SDK_TOOLS</code></td></tr>
+          <tr><td class="dim">Model policy</td><td><span class="chip left">own</span> <code>cloudRunModelPolicy</code></td><td><span class="chip left">own</span> cascade</td><td><span class="chip left">own</span> <code>modelRouting</code> / local-first</td><td><span class="chip left">own</span> <code>canvasModelPort</code></td><td><span class="chip left">own</span> gateway config</td><td><span class="chip left">own</span> gateway</td></tr>
+          <tr><td class="dim">Ask a human</td><td><span class="chip done">kernel</span> <code>ask_human</code></td><td><span class="chip left">own</span> <code>ASK_USER_TOOL</code></td><td><span class="chip left">own</span> <code>ASK_USER_TOOL</code></td><td><span class="chip miss">missing</span></td><td><span class="chip left">own</span> <code>askHumanTool</code></td><td><span class="chip miss">missing</span></td></tr>
+          <tr><td class="dim">Sub-agents</td><td><span class="chip left">own</span> child runs</td><td><span class="chip miss">missing</span></td><td><span class="chip left">own</span> <code>spawn_agent</code></td><td><span class="chip miss">missing</span></td><td><span class="chip left">own</span> sessions</td><td><span class="chip left">own</span> <code>Task</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Today · telemetry</div>
+    <h2>What each implementation actually runs</h2>
+    <p class="muted">These figures come from the live telemetry database for the 30 days to 2026-10-25: the operational Neon database's <code>llm_usage_log</code>, <code>run_model_outcomes</code> and <code>tool_audit_events</code>, plus the core <code>executions</code> table, which was read for 90 days. Queries were read-only. VS Code traffic is identified by its gateway key, whose kind is <code>vscode</code>. The gateway records that traffic under the <code>web</code> surface, because a key-authenticated call can't claim an own-machine surface.</p>
+    <div class="tablewrap">
+      <table style="min-width:960px">
+        <thead><tr>
+          <th>Execution</th><th>Entry point</th><th>Runs (30d)</th><th>Model calls (30d)</th><th>Tokens</th><th>Failed</th><th>Steps / run</th><th>What it tells us</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="dim">brain-embedded <code>runLoop</code></td><td>VS Code</td><td class="num">452</td><td class="num">33,553</td><td class="num">≈1.9 B</td><td class="num">4.4% (20)</td><td class="num">43 (failed: 62)</td><td>Almost all real execution. Growing weekly: 66 → 153 → 233 runs. Mostly BYO Grok 4.6/4.7 and MiniMax; 23% prompt-cache hit. One tenant.</td></tr>
+          <tr><td class="dim">brain-embedded <code>runLoop</code></td><td>Web Brain</td><td class="num">n/a</td><td class="num">≈230</td><td class="num">≈6 M</td><td class="num">n/a</td><td class="num">n/a</td><td>Light use: three work-mode chats. 0% cache hit on chat turns.</td></tr>
+          <tr><td class="dim">brain-embedded <code>runLoop</code></td><td>Rovr</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">n/a</td><td class="num">n/a</td><td>No traffic identifiable as Rovr. No <code>rovr</code> surface hint reached the gateway.</td></tr>
+          <tr><td class="dim"><code>creationCanvasAi</code></td><td>Canvas</td><td class="num">?</td><td class="num">?</td><td class="num">?</td><td class="num">?</td><td class="num">?</td><td>Not attributable. Canvas turns carry no label of their own (telemetry gap).</td></tr>
+          <tr><td class="dim"><code>cloudAgentEngine</code></td><td>Cloud tickets</td><td class="num">4</td><td class="num">21</td><td class="num">small</td><td class="num">25% (1, rate-limited)</td><td class="num">5</td><td>Most complete policy, almost unexercised. Last run 2026-10-05; two tool errors per run on average.</td></tr>
+          <tr><td class="dim">Container loop</td><td>Cloud (paid)</td><td class="num">0 (90d)</td><td class="num">0</td><td class="num">0</td><td class="num">n/a</td><td class="num">n/a</td><td>No <code>container</code> executor runs in 90 days. Deleting it risks no live traffic.</td></tr>
+          <tr><td class="dim">Actions loop</td><td>Cloud (Actions)</td><td class="num">0 (90d)</td><td class="num">0</td><td class="num">0</td><td class="num">n/a</td><td class="num">n/a</td><td>No runs.</td></tr>
+          <tr><td class="dim"><code>agentReplyLoop</code></td><td>@-replies</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">n/a</td><td class="num">n/a</td><td>No <code>brain_agent_reply</code> calls in 30 days.</td></tr>
+          <tr><td class="dim">Claude SDK runner</td><td>On-prem tickets</td><td class="num">0 (90d)</td><td class="num">0</td><td class="num">0</td><td class="num">n/a</td><td class="num">n/a</td><td>No executions on an agent host. The two registered hosts have never been seen.</td></tr>
+          <tr><td class="dim"><code>agent-loop.ts</code></td><td>On-prem channels</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">n/a</td><td class="num">n/a</td><td>No on-prem surface rows.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="cols">
+      <div>
+        <h3>What this changes in the plan</h3>
+        <ul class="phases" style="list-style:disc">
+          <li><b>VS Code is the reference behaviour.</b> It carries about 99% of real execution, so its runs set the baseline the core must match: 4.4% failure, about 43 steps a run, 23% cache hit. The cloud engine has the most complete policy, but only 4 runs back it.</li>
+          <li><b>Policy comes from the cloud; behaviour is proven against VS Code.</b> The core is assembled from the cloud engine's policy modules. Its conformance traces and its telemetry gates use VS Code runs.</li>
+          <li><b>Deleting the unused paths carries little traffic risk</b> (container, Actions, @-reply, on-prem: zero runs). Their capabilities are still retained, per the ledger above, because no loss of function is allowed.</li>
+          <li><b>VS Code migrates behind a comparison.</b> Moving it onto the core is the highest-risk phase, so it ships only when its telemetry stays at or better than the baseline.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Telemetry gaps the core closes</h3>
+        <ul class="phases" style="list-style:disc">
+          <li><code>run_model_outcomes</code> for VS Code has no <code>tool_calls</code> or <code>tool_errors</code>. Only cloud rows carry them.</li>
+          <li><code>turn_index</code> and <code>tool_schema_tokens</code> are null on every row, so turn depth and tool-catalog cost can't be measured.</li>
+          <li><code>usage_snapshots</code> has no rows in 30 days, so compaction is unrecorded everywhere except the <code>memory.trimmedTokens</code> metadata.</li>
+          <li>No row names its entry point: canvas, Rovr and @-reply are indistinguishable from web.</li>
+          <li>The core's EventSink writes one outcome row per run on every entry point, with the entry point, steps, tool calls, tool errors, compactions and verify result. That uniform row is what the comparison gates read.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="muted">Two other findings, not specific to one execution. First, 19,608 <code>auto_run_skipped</code> and 282 <code>auto_run_error</code> events from the autonomous trigger. Second, model failovers of 2,093 for 401, 288 for 403 and 329 for 429, which is the noise the one model policy has to absorb.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Plan</div>
+    <h2>Getting from six to one</h2>
+    <ol class="phases">
+      <li><b>Parity oracle.</b> Collect each execution's existing behaviour tests. They run unchanged against the core at every step; a failure means the core is missing something, and the fix goes into the core.</li>
+      <li><b>Build <code>packages/agent-run</code> from <code>cloudAgentEngine</code>.</b> It has the most complete policy. The extraction is a Worker-safe package with the five ports. <code>cloudAgentEngine</code> becomes the cloud adapter: DO cursor, git API, sandbox and timeline.</li>
+      <li><b>@-replies.</b> <code>agentReplyLoop</code> moves onto the core in the same process. Its chat scope becomes data passed to tool selection.</li>
+      <li><b>VS Code, Rovr and Web.</b> brain-embedded <code>runLoop</code> moves onto the core. Its local-first routing becomes the model transport. The canvas becomes a capability provider on the same run, not a separate composition.</li>
+      <li><b>On-prem.</b> Channels and tickets both run on the core, with node fs and shell as the capability provider. The Claude Agent SDK runner and its tool list, memory server and <code>Task</code> sub-agent are deleted.</li>
+    </ol>
+    <p class="muted">Each phase follows the same rule: port what's missing into the core, run the unchanged tests, then delete the old execution. Nothing runs in parallel with it.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Current change</div>
+    <h2>Container and Actions loops: removed</h2>
+    <p class="muted">This is the first step, and it is uncommitted. Before it, a cloud run took one of three paths, chosen by plan. After it, every plan runs <code>cloudAgentEngine</code>, and the container and the Actions runner only provide a shell and a clone.</p>
+    <div class="cols">
+      <div class="panel">
+<pre class="mermaid">
+sequenceDiagram
+  participant D as Dispatch
+  participant E as Engine (free)
+  participant IL as Container loop (paid)
+  participant GH as Actions loop
+  alt free
+    D->>E: durable run, no shell
+  else paid
+    D->>IL: own loop, own tools, own cascade
+  else actions
+    D->>GH: inlined third loop
+  end
+</pre>
+      </div>
+      <div class="panel">
+<pre class="mermaid">
+sequenceDiagram
+  participant D as Dispatch
+  participant E as cloudAgentEngine
+  participant S as sandboxCore
+  D->>E: every plan
+  loop each tick
+    E->>S: shell / fs (container HTTP or Actions pull)
+    S-->>E: result, post-edit verdict
+  end
+  E->>S: verify, then close
+</pre>
+      </div>
+    </div>
+    <div class="tablewrap">
+      <table style="min-width:700px">
+        <thead><tr><th>Removed copy</th><th>Now served by</th></tr></thead>
+        <tbody>
+          <tr><td><code>runImageLoop</code> and the compiled kernel copy <code>agentLoop.mjs</code>; the Actions runner's inlined loop</td><td><code>cloudAgentEngine</code> on CloudRunnerDO</td></tr>
+          <tr><td>Relayed tool table, tool handshake, and the image's own fs, edit, semantic and repo-index helpers</td><td>Shared <code>agent-tools</code> definitions via <code>withSandbox</code></td></tr>
+          <tr><td>Container ops: <code>llm</code>, <code>write</code>, <code>verify</code>, <code>finalize</code>, <code>fail</code>, <code>heartbeat</code>, <code>ask_human</code>, <code>skill</code></td><td>The engine's own turn, commit, verify, finish, heartbeat and human-in-loop; <code>skills.read</code></td></tr>
+          <tr><td>Container cascade and routing cache</td><td>The engine's model policy</td></tr>
+          <tr><td>Container-only post-edit checks, verify op and analyzer bundle</td><td><code>loopGuards</code> D1/D7, <code>sandboxVerify</code>, <code>auditAnalysis</code></td></tr>
+          <tr><td>Separate shell and fs primitives in <code>server.mjs</code> and the Actions runner</td><td>One <code>sandboxCore.mjs</code>, served over HTTP or pulled</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Proof of parity</div>
+    <h2>How each merge is verified</h2>
+    <p>The existing behaviour tests are the parity check. They run unchanged against the merged code. A test's import may move from a deleted module to its replacement, but its inputs and expected outputs stay the same. When one fails, the behaviour drifted and the source gets fixed. Every capability moves under the same five steps (PRD 35 §5.1):</p>
+    <ol>
+      <li><b>Baseline on the old home.</b> Run the capability's tests against today's code and record that they pass. A test that isn't green there is no oracle.</li>
+      <li><b>No test? Write one first, against the old home.</b> A characterization test pins today's behaviour (inputs, tool calls, events, outcome). It lands before any porting commit and is then frozen like every other test.</li>
+      <li><b>Port, then run the same tests on the new home.</b> Same files, same assertions. The only allowed edit is an import path.</li>
+      <li><b>Run them through every entry point that has the capability.</b> One conformance case per shared capability gives the same event trace and outcome on each adapter, and on the cloud at one step per tick.</li>
+      <li><b>Delete the old home only after 3 and 4 are green</b>, in the same workstream.</li>
+    </ol>
+    <p>Not allowed in a test file: changing an input, fixture or expected value; deleting or merging tests; <code>.skip</code>, <code>.only</code>, <code>.todo</code>; loosening a matcher (<code>toEqual</code> → <code>toMatchObject</code>, exact → <code>stringContaining</code>); mocking out the behaviour under test. A test that reached into a deleted module's internals moves to the public seam that carries the same behaviour, with the same inputs and expected values. Enforced three ways: the reviewer rejects any non-import hunk in a test diff, the verify agent reports per-file test counts before and after, and <code>check:tests-unchanged</code> fails CI on any changed non-import line or new skip marker.</p>
+    <p>In the current change, about fifteen test files had their expectations rewritten. Those rewrites are being reverted so the original assertions run against the engine.</p>
+  </section>
+</main>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "neutral", securityLevel: "strict" });
+</script>
+</body>
+</html>

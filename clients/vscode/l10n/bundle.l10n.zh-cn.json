@@ -941,5 +941,7 @@
   "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "你的某个 builderforce.platform.* 设置关闭了此次运行所需的功能。请在设置中更改，或在 / 菜单中选择其他模型。",
   "Setting up {0} to run turns on this machine…": "正在设置 {0}，以便在本机上运行对话轮次…",
   "{0} is ready. Hybrid now runs turns on this machine first.": "{0} 已就绪。混合模式现在会优先在本机上运行对话轮次。",
-  "Could not download {0} for on-device turns: {1}": "无法下载用于设备端对话轮次的 {0}：{1}"
+  "Could not download {0} for on-device turns: {1}": "无法下载用于设备端对话轮次的 {0}：{1}",
+  "Open the visualization beside the chat": "在聊天旁打开可视化视图",
+  "BuilderForce extension version {version}": "BuilderForce 扩展版本 {version}"
 }

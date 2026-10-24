@@ -28,18 +28,19 @@ export async function recordEditorRunEnd(
 ): Promise<void> {
   if (!root) return;
   await appendSessionNote(root, { sessionKey, activity: run.activity });
-  void commitRunKnowledgeIfAllowed(root, run, opts, async () => {
-    // Imported here, not at the top: `projectState` builds a `vscode.EventEmitter` on
-    // load, which pulls `vscode` into the module graph of every suite that mocks it away.
-    const projectId = opts.projectId ?? (await import("./projectState")).getSelectedProject()?.id;
-    if (projectId == null) return undefined;
-    return {
-      complete: async (user) =>
-        routeComplete(await resolveModelRoute(secrets), secrets, [
-          { role: "system", content: MEMORY_COMMIT_SYSTEM },
-          { role: "user", content: user },
-        ]),
-      remember: (key, content) => rememberProjectFact(secrets, projectId, key, content),
-    };
-  });
+  // The project the run STARTED in, never the one selected when it settles: a run with
+  // none had no project memory to recall from, so it writes none either.
+  const projectId = opts.projectId;
+  void commitRunKnowledgeIfAllowed(root, run, opts, async () =>
+    projectId == null
+      ? undefined
+      : {
+          complete: async (user) =>
+            routeComplete(await resolveModelRoute(secrets), secrets, [
+              { role: "system", content: MEMORY_COMMIT_SYSTEM },
+              { role: "user", content: user },
+            ]),
+          remember: (key, content) => rememberProjectFact(secrets, projectId, key, content),
+        },
+  );
 }

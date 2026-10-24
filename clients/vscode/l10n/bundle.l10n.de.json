@@ -941,5 +941,7 @@
   "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "Eine deiner builderforce.platform.*-Einstellungen hat ausgeschaltet, was dieser Lauf brauchte. Ändere sie in den Einstellungen oder wähle im /-Menü ein anderes Modell.",
   "Setting up {0} to run turns on this machine…": "{0} wird eingerichtet, damit Anfragen auf diesem Rechner laufen…",
   "{0} is ready. Hybrid now runs turns on this machine first.": "{0} ist bereit. Hybrid führt Anfragen jetzt zuerst auf diesem Rechner aus.",
-  "Could not download {0} for on-device turns: {1}": "{0} konnte für Anfragen auf dem Gerät nicht heruntergeladen werden: {1}"
+  "Could not download {0} for on-device turns: {1}": "{0} konnte für Anfragen auf dem Gerät nicht heruntergeladen werden: {1}",
+  "Open the visualization beside the chat": "Visualisierung neben dem Chat öffnen",
+  "BuilderForce extension version {version}": "BuilderForce-Erweiterung, Version {version}"
 }

@@ -32,9 +32,13 @@ export interface VsCodeChatHeaderProps {
   onNewChat: () => void;
   /** The host's label bundle. */
   bundle: LabelBundle;
+  /** The installed extension's version, shown so "do I have the fix?" is answered at a glance. */
+  version?: string;
+  /** Opens the visualization beside the chat — given only where the board is not drawn here. */
+  onVisualize?: () => void;
 }
 
-export function VsCodeChatHeader({ projectName, chatTitle, chatId, onRename, running, copy, history, onNewChat, bundle }: VsCodeChatHeaderProps) {
+export function VsCodeChatHeader({ projectName, chatTitle, chatId, onRename, running, copy, history, onNewChat, bundle, version, onVisualize }: VsCodeChatHeaderProps) {
   const t = makeT(bundle);
   const headerLabels = useMemo(() => surfaceHeaderLabels(bundle), [bundle]);
   const title = projectName ?? 'BuilderForce';
@@ -42,6 +46,8 @@ export function VsCodeChatHeader({ projectName, chatTitle, chatId, onRename, run
     ? t('app.copyFailed', 'Could not build the chat diagnostics report.')
     : t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)');
   const diagnoseLabel = t('app.diagnostics', 'Run connection diagnostics');
+  const visualizeLabel = t('app.visualize', 'Open the visualization beside the chat');
+  const versionLabel = version ? t('app.version', 'BuilderForce extension version {version}').replace('{version}', version) : '';
   return (
     <SurfaceHeader
       title={<span title={title}>{title}</span>}
@@ -63,6 +69,20 @@ export function VsCodeChatHeader({ projectName, chatTitle, chatId, onRename, run
       )}
       actions={(
         <>
+          {version && (
+            <span className="bf-shead__version" title={versionLabel} aria-label={versionLabel}>v{version}</span>
+          )}
+          {onVisualize && (
+            <button
+              type="button"
+              className="bf-shead__btn"
+              title={visualizeLabel}
+              aria-label={visualizeLabel}
+              onClick={onVisualize}
+            >
+              <HeaderIcon d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" />
+            </button>
+          )}
           <button
             type="button"
             className="bf-shead__btn"

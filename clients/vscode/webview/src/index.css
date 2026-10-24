@@ -377,3 +377,17 @@ select option {
 .bf-subagents__confirm {
   margin: 0;
 }
+
+/* The installed extension version in the chat header (VsCodeChatHeader). Muted and
+   never wrapping; it folds away on a very narrow sidebar so the actions keep their room. */
+.bf-shead__version {
+  flex-shrink: 0;
+  padding: 0 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--bf-text-muted);
+  white-space: nowrap;
+}
+@media (max-width: 300px) {
+  .bf-shead__version { display: none; }
+}

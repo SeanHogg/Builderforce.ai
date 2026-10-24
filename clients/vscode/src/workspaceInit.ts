@@ -34,7 +34,7 @@ import type { WorkspaceCanvasSession } from "./workspaceSession";
  */
 export async function buildWorkspaceInit(
   ctx: vscode.ExtensionContext,
-  opts: { session: WorkspaceCanvasSession; surface: "chat" | "graph" },
+  opts: { session: WorkspaceCanvasSession; surface: "chat" | "graph"; boardBeside?: boolean },
 ): Promise<Record<string, unknown>> {
   const signedIn = !!(await ctx.secrets.get(SECRET_KEY));
   const token = signedIn ? ((await getTenantJwt(ctx.secrets)) ?? null) : null;
@@ -147,6 +147,8 @@ export async function buildWorkspaceInit(
     // for. Together these are what used to be the difference between two panels.
     session: { id: opts.session.id, title: opts.session.title, webOrigin: getWebBaseUrl(), durable: opts.session.durable },
     surface: opts.surface,
+    // The sidebar chat view draws the conversation only; its board opens beside it.
+    ...(opts.boardBeside ? { boardBeside: true } : {}),
     colorTheme: isLightTheme() ? "light" : "dark",
   };
 }

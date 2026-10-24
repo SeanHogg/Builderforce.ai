@@ -166,7 +166,6 @@ function WorkspaceScreen({ init }: { init: InitData }) {
   const session = init.session;
   const locale = pickLocale(init.labels['canvas.locale']);
   const messages = catalogs[locale] ?? catalogs.en;
-  const board = useBoardAuth(session, init.signedIn);
 
   useEffect(() => {
     installCanvasHost(
@@ -186,19 +185,6 @@ function WorkspaceScreen({ init }: { init: InitData }) {
     if (session?.title) document.title = session.title;
   }, [session?.title]);
 
-  /**
-   * THE CHAT IS THE FLOOR — everything below decides whether a BOARD can also be
-   * drawn, and none of it may take the conversation down.
-   *
-   * The board needs a resolved creation session and a tenant token; the conversation
-   * needs neither (it runs against the extension host, and on a local route against a
-   * model on this machine). These used to be early returns that replaced the whole
-   * screen with a one-line message, which meant a gateway blip or an unresolved
-   * session left someone staring at "No Creation Session is open." with a working
-   * agent sitting behind it, unreachable.
-   */
-  const chat = <VsCodeChatSurface init={init} />;
-
   return (
     <IntlProvider
       locale={locale}
@@ -212,41 +198,64 @@ function WorkspaceScreen({ init }: { init: InitData }) {
       <ChatRuntimeProvider init={init}>
         <ToastProvider>
           <ConfirmProvider>
-            {board.state === 'ready' ? (
-              <CanvasBoundary
-                fallback={chat}
-                notice={init.labels['canvas.degraded'] ?? 'The board could not be drawn. The conversation is still here.'}
-                retryLabel={init.labels['canvas.retry'] ?? 'Try again'}
-                resetKey={session!.id}
-              >
-                {/* Inside the boundary and the token gate: the scope providers read the
-                    workspace token on mount, and a failure in one still leaves the chat. */}
-                <HostScopeProviders projectId={init.project?.id ?? null}>
-                  <CreationCanvas
-                    sessionId={session!.id}
-                    // A board with no account behind it cannot be written to the
-                    // gateway — every read would 401 — so it persists in this panel,
-                    // exactly as the signed-out chat transcript already did.
-                    persistence={session!.durable === false ? 'local' : 'server'}
-                    initialSurface={sanitizeCanvasSurface(init.surface)}
-                    // WRAPPED, because where the conversation sits is the canvas's
-                    // business and not the chat's: the same component also renders
-                    // standalone when no board could be drawn, and it must not carry a
-                    // box positioned against a board that is not there.
-                    hostSurfaces={{ chat: <div className="bf-canvas-chat-surface">{chat}</div> }}
-                  />
-                </HostScopeProviders>
-              </CanvasBoundary>
-            ) : board.state === 'none' ? chat : (
-              <div className="bf-degraded-shell">
-                <BoardAuthNotice auth={board} labels={init.labels} />
-                {chat}
-              </div>
-            )}
+            {/* The sidebar chat view holds the conversation only — its board opens in the
+                visualization panel beside it, so nothing is drawn above the chat. */}
+            {init.boardBeside ? <VsCodeChatSurface init={init} /> : <BoardWithChat init={init} />}
           </ConfirmProvider>
         </ToastProvider>
       </ChatRuntimeProvider>
     </IntlProvider>
+  );
+}
+
+/** The editor tab: the board, with the conversation as one of its surfaces. */
+function BoardWithChat({ init }: { init: InitData }) {
+  const session = init.session;
+  const board = useBoardAuth(session, init.signedIn);
+
+  /**
+   * THE CHAT IS THE FLOOR — everything below decides whether a BOARD can also be
+   * drawn, and none of it may take the conversation down.
+   *
+   * The board needs a resolved creation session and a tenant token; the conversation
+   * needs neither (it runs against the extension host, and on a local route against a
+   * model on this machine). These used to be early returns that replaced the whole
+   * screen with a one-line message, which meant a gateway blip or an unresolved
+   * session left someone staring at "No Creation Session is open." with a working
+   * agent sitting behind it, unreachable.
+   */
+  const chat = <VsCodeChatSurface init={init} />;
+
+  return board.state === 'ready' ? (
+    <CanvasBoundary
+      fallback={chat}
+      notice={init.labels['canvas.degraded'] ?? 'The board could not be drawn. The conversation is still here.'}
+      retryLabel={init.labels['canvas.retry'] ?? 'Try again'}
+      resetKey={session!.id}
+    >
+      {/* Inside the boundary and the token gate: the scope providers read the
+          workspace token on mount, and a failure in one still leaves the chat. */}
+      <HostScopeProviders projectId={init.project?.id ?? null}>
+        <CreationCanvas
+          sessionId={session!.id}
+          // A board with no account behind it cannot be written to the
+          // gateway — every read would 401 — so it persists in this panel,
+          // exactly as the signed-out chat transcript already did.
+          persistence={session!.durable === false ? 'local' : 'server'}
+          initialSurface={sanitizeCanvasSurface(init.surface)}
+          // WRAPPED, because where the conversation sits is the canvas's
+          // business and not the chat's: the same component also renders
+          // standalone when no board could be drawn, and it must not carry a
+          // box positioned against a board that is not there.
+          hostSurfaces={{ chat: <div className="bf-canvas-chat-surface">{chat}</div> }}
+        />
+      </HostScopeProviders>
+    </CanvasBoundary>
+  ) : board.state === 'none' ? chat : (
+    <div className="bf-degraded-shell">
+      <BoardAuthNotice auth={board} labels={init.labels} />
+      {chat}
+    </div>
   );
 }
 

@@ -124,6 +124,9 @@ export interface WorkspaceSurfaceHost {
   readonly webview: vscode.Webview;
   /** The panel or view — the object that knows when the webview is disposed. */
   readonly owner: WebviewOwner;
+  /** This host holds only the conversation; the board and the run's changes open in the
+   *  visualization panel beside it (the sidebar chat view, which has no room for both). */
+  readonly boardBeside?: boolean;
   /** The webview reported the chat it is showing (a tab names itself after it). */
   onSessionMeta?(chatId: number | undefined, title: string | undefined): void;
 }
@@ -377,6 +380,10 @@ export class WorkspaceSurface implements vscode.Disposable {
       case "diagnose":
         void vscode.commands.executeCommand("builderforce.diagnose");
         break;
+      // The chat header's Visualize lever: the board lives in its own editor panel.
+      case "visualization.open":
+        void vscode.commands.executeCommand("builderforce.openVisualization");
+        break;
       // Composer `/` menu → account settings.
       case "settings":
         void vscode.commands.executeCommand("builderforce.openSettings");
@@ -475,7 +482,7 @@ export class WorkspaceSurface implements vscode.Disposable {
   }
 
   private async sendInit(): Promise<void> {
-    this.post(await buildWorkspaceInit(this.ctx, { session: this.session, surface: this.surfaceRequest }));
+    this.post(await buildWorkspaceInit(this.ctx, { session: this.session, surface: this.surfaceRequest, boardBeside: !!this.host.boardBeside }));
   }
 
   dispose(): void {

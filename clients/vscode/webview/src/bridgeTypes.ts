@@ -94,6 +94,9 @@ export interface InitData {
    * preference, because that is what reopening a panel you never closed should do.
    */
   surface?: string;
+  /** This webview holds only the conversation (the sidebar chat view): the board and the
+   *  run's changes open in the visualization panel beside it, never above the chat. */
+  boardBeside?: boolean;
   /** The durable Creation Session this panel is editing.
    *  `webOrigin` builds shareable links: a webview's own origin is
    *  `vscode-webview://…`, which is useless to whoever receives an invitation. */

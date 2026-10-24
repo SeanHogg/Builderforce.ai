@@ -94,6 +94,8 @@ export const BRAIN_HOST_MESSAGES = [
   'context.pick',
   'copy',
   'diagnose',
+  /** Open (or reveal) the visualization panel — the board and the run's changes — beside the chat. */
+  'visualization.open',
   'chats.changed',
   /** Ask the host's modal to confirm deleting a chat from the history list (request → boolean;
    *  refused while its run is live). The webview then deletes through its own store. */

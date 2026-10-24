@@ -941,5 +941,7 @@
   "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "L’un de vos paramètres builderforce.platform.* a désactivé ce dont cette exécution avait besoin. Modifiez-le dans les paramètres, ou choisissez un autre modèle dans le menu /.",
   "Setting up {0} to run turns on this machine…": "Configuration de {0} pour exécuter les tours sur cette machine…",
   "{0} is ready. Hybrid now runs turns on this machine first.": "{0} est prêt. Le mode hybride exécute désormais les tours d’abord sur cette machine.",
-  "Could not download {0} for on-device turns: {1}": "Impossible de télécharger {0} pour les tours sur l’appareil : {1}"
+  "Could not download {0} for on-device turns: {1}": "Impossible de télécharger {0} pour les tours sur l’appareil : {1}",
+  "Open the visualization beside the chat": "Ouvrir la visualisation à côté du chat",
+  "BuilderForce extension version {version}": "Version de l’extension BuilderForce : {version}"
 }

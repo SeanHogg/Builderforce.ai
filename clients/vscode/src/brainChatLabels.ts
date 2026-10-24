@@ -131,6 +131,8 @@ export function brainChatLabels(): Record<string, string> {
     "app.memoryOffHint": t("Memory off — this chat is a scratch space (no recall, no learning)"),
     "app.memoryUnavailable": t("This chat has no project memory to recall from — link it to a project first"),
     "app.diagnostics": t("Run connection diagnostics"),
+    "app.visualize": t("Open the visualization beside the chat"),
+    "app.version": t("BuilderForce extension version {version}"),
     "app.remove": t("Remove"),
     // Composer toolbar (Claude-style + / menus, auto mode, dictation)
     "app.add": t("Add"),
