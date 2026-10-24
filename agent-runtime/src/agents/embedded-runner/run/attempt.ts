@@ -14,6 +14,7 @@ import { globalPersonaRegistry } from "../../../builderforce/personas.js";
 import { raiseThinkLevel } from "../../../builderforce/psychometrics.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import { emitAgentEvent } from "../../../infra/agent-events.js";
+import { claimRunKnowledge } from "../../../infra/run-knowledge-registry.js";
 import { resolveHiredAgentRef } from "../../../infra/hired-agents-sync.js";
 import { getLimbicSystemService } from "../../../infra/limbic-system-service.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
@@ -782,6 +783,10 @@ export async function runEmbeddedAttempt(
         throw new Error("Embedded agent session missing");
       }
       const activeSession = session;
+      // THE run's record (`run-knowledge-registry.ts`): this loop feeds it and restates
+      // it before every turn, and the knowledge loop writes the run's note and code map
+      // from the same recorder. Keyed by run, so a retry attempt continues one record.
+      activeSession.agent.knowledge = claimRunKnowledge(params.runId, params.prompt);
       removeToolResultContextGuard = installToolResultContextGuard({
         agent: activeSession.agent,
         contextWindowTokens: Math.max(

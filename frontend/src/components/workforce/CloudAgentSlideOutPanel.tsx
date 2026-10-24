@@ -29,7 +29,7 @@ import {
   labelStyle,
   type CloudAgentFormState,
 } from './CloudAgentFormFields';
-import { useRuntimeSurfaceRefusal } from './RuntimeSurfaceSelect';
+import { runtimeSurfaceChoice, useRuntimeSurfaceRefusal } from './RuntimeSurfaceSelect';
 import { faultText } from '@/lib/apiClient';
 /**
  * Manage an existing cloud agent in a right-side drawer (matches the remote
@@ -83,7 +83,8 @@ function formFromAgent(a: PublishedAgent): CloudAgentFormState {
     preferredRuntime: (a.preferred_runtime as 'cloud' | 'host') ?? 'cloud',
     // NULL is 'Automatic', not 'durable': an existing agent that never chose a surface
     // must keep meaning "let the server pick", or opening the panel would silently pin it.
-    runtimeSurface: a.runtime_surface ?? '',
+    // A legacy 'container' reads as the one cloud runtime it now runs on.
+    runtimeSurface: runtimeSurfaceChoice(a.runtime_surface),
     psychometric: a.psychometric ?? undefined,
   };
 }

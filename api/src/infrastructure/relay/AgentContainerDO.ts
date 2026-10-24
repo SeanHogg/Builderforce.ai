@@ -1,28 +1,19 @@
 import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
 /**
- * AgentContainerDO — the **long-lived Cloudflare Container** runtime for a
- * "Cloud Agent (Node/Container)". Unlike {@link CloudRunnerDO} (the durable
- * surface, one LLM step per alarm tick, no shell), this runs the agent loop in a
- * persistent Node process inside a real container, so the agent gets a **real
- * shell** (`run_command`) to clone the repo, install deps, and run actual
- * builds/tests/lint — and can run continuously for very long tasks without the
- * per-tick overhead.
+ * AgentContainerDO — the control plane of the **run sandbox**: the Cloudflare Container
+ * a cloud run's shell and working tree live in (`api/container/server.mjs`).
  *
- * The container image (api/container) boots a small HTTP server; this DO is the
- * Cloudflare-Containers control plane that starts/stops that container and proxies
- * the run request to it. The container drives the loop and calls back into the
- * Worker's internal container-op endpoint for every LLM step, repo telemetry, and
- * the final PR — so the Worker stays the single source of truth for the gateway,
- * usage metering, and PR finalize (no duplicated loop logic, no leaked DB creds).
+ * Every cloud run, on every plan, runs ONE engine (`cloudAgentEngine.ts`, ticked by
+ * {@link CloudRunnerDO}). This DO starts/stops the container and proxies the engine's
+ * `/sandbox/*` calls to it (`application/runtime/sandbox/runSandbox.ts`); the container
+ * executes what a Worker cannot — a real shell, a clone, a dev server — and decides
+ * nothing. It also serves the web-scan stages and the live-preview passthrough.
  *
- * Bound in wrangler.toml as `AGENT_CONTAINER` (a `[[containers]]` block backed by
- * this class). One instance per execution (`idFromName('exec:<id>')`).
+ * Bound in wrangler.toml as `AGENT_CONTAINER` (a `[[containers]]` block backed by this
+ * class). One instance per execution (`idFromName('exec:<id>')`); web scans and managed
+ * hosts use their own names.
  */
 import { Container } from '@cloudflare/containers';
-import { buildDatabase } from '../database/connection';
-import { handleCloudRunCrash } from '../../application/runtime/cloudSelfHeal';
-import { wireExecutionEventSinks } from '../../application/runtime/wireExecutionEventSinks';
-import { cloudCrashReason } from '../../application/runtime/orphanReasons';
 import { PREVIEW_CONTROL_STOP_PATH } from '../../application/runtime/previewSessions';
 import type { Env } from '../../env';
 
@@ -50,14 +41,13 @@ export class AgentContainerDO extends Container<Env> {
    */
   sleepAfter = '20m';
 
-  /** The agent loop reaches the gateway + GitHub from inside the container. */
+  /** The sandbox clones from GitHub, installs packages and runs builds from inside the container. */
   enableInternet = true;
 
   /**
-   * Capture the executionId off the `/run` proxy so {@link onError} can attribute a
-   * hard container death (OOM / evicted / unbootable image) to the right run — the
-   * DO id name (`exec:<id>`) is one-way, so we stash it in DO storage. Best-effort;
-   * never blocks the proxied request.
+   * Capture the executionId off `/sandbox/open` so {@link onError} can attribute a hard
+   * container death (OOM / evicted / unbootable image) to the run it served — the DO id
+   * name (`exec:<id>`) is one-way. Best-effort; never blocks the proxied request.
    */
   override async fetch(request: Request): Promise<Response> {
     try {
@@ -69,7 +59,7 @@ export class AgentContainerDO extends Container<Env> {
         await this.stop();
         return new Response(null, { status: 204 });
       }
-      if (request.method === 'POST' && url.pathname.endsWith('/run')) {
+      if (request.method === 'POST' && url.pathname === '/sandbox/open') {
         const body = (await request.clone().json().catch(() => null)) as
           { executionId?: number; preview?: { port?: number } } | null;
         if (body && typeof body.executionId === 'number') {
@@ -83,36 +73,21 @@ export class AgentContainerDO extends Container<Env> {
           this.envVars = { ...(this.envVars ?? {}), PREVIEW_PORT: String(body.preview.port) };
         }
       }
-    } catch (error) { /* attribution is best-effort */ 
+    } catch (error) { /* attribution is best-effort */
       this.reportError(error, { operation: "fetch" });
     }
     return super.fetch(request);
   }
 
   /**
-   * The container boot/runtime crashed. Previously this only logged — so a run died
-   * silently and the reaper had to GUESS ~90s later. Now we report the REAL reason
-   * and recover: self-heal once on the durable executor, else fail the run carrying
-   * the actual error. Falls back to a log when the executionId wasn't captured.
+   * The container crashed. The RUN is not lost: the engine owns it, and its next sandbox
+   * call reopens a fresh clone of the ticket branch (which carries every committed
+   * write) — so this reports, and never fails or re-dispatches the run. Re-dispatching
+   * here would start a second engine beside the one still ticking.
    */
   override async onError(error: unknown): Promise<unknown> {
-    const detail = error instanceof Error ? error.message : String(error);
-    console.error('[AgentContainerDO] container error', error);
-    try {
-      const executionId = await this.ctx.storage.get<number>(EXEC_KEY);
-      if (typeof executionId === 'number') {
-        // A DO runs in its own isolate and this handler never builds a RuntimeService,
-        // so nothing has registered the live-event sinks here. Without this the crash
-        // recovery below records telemetry and transitions the run while every open
-        // drawer sits on "running" until it polls — the hard-death case that had no
-        // live push at all.
-        const crashDb = buildDatabase(this.env);
-        wireExecutionEventSinks(this.env, crashDb);
-        await handleCloudRunCrash(this.env, crashDb, executionId, cloudCrashReason(detail));
-      }
-    } catch (e) {
-      this.reportError(e, { operation: "onError", context: { logMessage: '[AgentContainerDO] crash report failed', details: e } });
-    }
+    const executionId = await this.ctx.storage.get<number>(EXEC_KEY).catch(() => undefined);
+    this.reportError(error, { operation: "onError", context: { logMessage: '[AgentContainerDO] sandbox container error', details: { executionId } } });
     return error;
   }
 }

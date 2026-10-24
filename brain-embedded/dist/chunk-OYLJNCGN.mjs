@@ -6,7 +6,7 @@ var LOCAL_RUNTIMES = [
   { id: "synapse", automaticRank: 30, label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
   {
     id: "ollama",
-    automaticRank: 40,
+    automaticRank: 50,
     label: "Ollama",
     onDevice: true,
     defaultBaseUrl: "http://127.0.0.1:11434",
@@ -16,7 +16,7 @@ var LOCAL_RUNTIMES = [
   },
   {
     id: "freetoken",
-    automaticRank: 50,
+    automaticRank: 60,
     label: "FreeToken",
     onDevice: true,
     defaultBaseUrl: "http://127.0.0.1:1919",
@@ -47,7 +47,7 @@ var LOCAL_RUNTIMES = [
   },
   {
     id: "browser",
-    automaticRank: 60,
+    automaticRank: 40,
     label: "Gemini Nano",
     onDevice: true,
     defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
@@ -1319,4 +1319,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-DX6W7SR7.mjs.map
+//# sourceMappingURL=chunk-OYLJNCGN.mjs.map

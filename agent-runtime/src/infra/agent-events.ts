@@ -1,4 +1,5 @@
 import type { VerboseLevel } from "../auto-reply/thinking.js";
+import { releaseRunKnowledge } from "./run-knowledge-registry.js";
 
 export type AgentEventStream = "lifecycle" | "tool" | "assistant" | "error" | (string & {});
 
@@ -55,6 +56,8 @@ export function getAgentRunContext(runId: string) {
 
 export function clearAgentRunContext(runId: string) {
   runContextById.delete(runId);
+  // The run is over: its shared record leaves the lookup (whoever reads it holds it).
+  releaseRunKnowledge(runId);
   // Drop the per-run sequence counter too, else it leaks one entry per runId for
   // the whole process lifetime (emitAgentEvent seeds seqByRun but never evicts).
   seqByRun.delete(runId);

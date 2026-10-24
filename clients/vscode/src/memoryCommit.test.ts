@@ -2,9 +2,11 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
 import {
   commitLearnedFacts,
   commitRunKnowledge,
+  commitRunKnowledgeIfAllowed,
   memoryCommitPrompt,
   MIN_FACT_CHARS,
   parseLearnedFacts,
@@ -12,6 +14,15 @@ import {
 } from "./memoryCommit";
 
 const DECISION = "Refresh the map token from file mtime, not from names alone.";
+
+/** A finished run's record, from the tool calls it made. */
+function ran(calls: Array<[string, Record<string, unknown>]>, prompt?: string): RunKnowledgeRecorder {
+  const r = new RunKnowledgeRecorder();
+  if (prompt) r.setPrompt(prompt);
+  for (const [name, args] of calls) r.record(name, args);
+  return r;
+}
+const reads = (...paths: string[]): Array<[string, Record<string, unknown>]> => paths.map((p) => ["read_file", { path: p }]);
 
 describe("parseLearnedFacts", () => {
   it("reads a fenced JSON array and prefixes a stable learned: key", () => {
@@ -119,7 +130,7 @@ describe("commitRunKnowledge", () => {
     const remember = vi.fn(async () => true);
     await commitRunKnowledge(
       os.tmpdir(),
-      { prompt: "where is the canvas drawn?", read: ["web/src/a.tsx", "web/src/b.tsx", "web/src/c.tsx"], tools: ["read_file"] },
+      ran(reads("web/src/a.tsx", "web/src/b.tsx", "web/src/c.tsx"), "where is the canvas drawn?"),
       { complete, remember },
     );
     expect(complete).not.toHaveBeenCalled();
@@ -131,8 +142,8 @@ describe("commitRunKnowledge", () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "bf-rk-"));
     await fs.writeFile(path.join(root, "a.ts"), "export const a = 1;\n");
     const complete = vi.fn(async () => JSON.stringify([{ key: "map-token", kind: "decision", content: DECISION }]));
-    const remember = vi.fn(async () => true);
-    await commitRunKnowledge(root, { edited: ["a.ts"], tools: ["edit_file"] }, { complete, remember });
+    const remember = vi.fn(async (_key: string, _content: string) => true);
+    await commitRunKnowledge(root, ran([["edit_file", { path: "a.ts" }]]), { complete, remember });
     expect(remember.mock.calls.map((c) => c[0])).toEqual(["codemap:(root)", "learned:map-token"]);
   });
 
@@ -142,7 +153,43 @@ describe("commitRunKnowledge", () => {
       return true;
     });
     const complete = vi.fn(async () => JSON.stringify([{ key: "k", kind: "convention", content: DECISION }]));
-    await commitRunKnowledge(os.tmpdir(), { edited: ["missing.ts"] }, { complete, remember });
+    await commitRunKnowledge(os.tmpdir(), ran([["edit_file", { path: "missing.ts" }]]), { complete, remember });
     expect(remember).toHaveBeenCalledWith("learned:k", DECISION);
+  });
+});
+
+describe("commitRunKnowledgeIfAllowed", () => {
+  const activity = ran(reads("web/src/a.tsx", "web/src/b.tsx", "web/src/c.tsx"));
+
+  it("with the chat's Memory switch off, never even resolves the facts port", async () => {
+    const resolveDeps = vi.fn(async () => ({ complete: async () => "[]", remember: async () => true }));
+    await commitRunKnowledgeIfAllowed(os.tmpdir(), activity, { memory: false }, resolveDeps);
+    expect(resolveDeps).not.toHaveBeenCalled();
+  });
+
+  it("with Memory on, commits through the resolved port", async () => {
+    const remember = vi.fn(async (_key: string, _content: string) => true);
+    await commitRunKnowledgeIfAllowed(os.tmpdir(), activity, { memory: true }, async () => ({ complete: async () => "[]", remember }));
+    expect(remember).toHaveBeenCalledWith("codemap:web/src", expect.any(String));
+  });
+
+  it("swallows a port that cannot be resolved — a finished run never fails over memory", async () => {
+    await expect(
+      commitRunKnowledgeIfAllowed(os.tmpdir(), activity, { memory: true }, async () => {
+        throw new Error("no project");
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("maps absolute paths under the workspace root as repo files", async () => {
+    const root = path.join(os.tmpdir(), "bf-abs-root");
+    const remember = vi.fn(async (_key: string, _content: string) => true);
+    const abs = (rel: string) => path.join(root, rel);
+    await commitRunKnowledge(
+      root,
+      ran(reads(abs("web/src/a.tsx"), abs("web/src/b.tsx"), abs("web/src/c.tsx"))),
+      { complete: async () => "[]", remember },
+    );
+    expect(remember).toHaveBeenCalledWith("codemap:web/src", expect.stringContaining("- web/src/a.tsx"));
   });
 });

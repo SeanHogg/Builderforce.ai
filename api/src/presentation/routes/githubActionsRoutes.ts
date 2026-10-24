@@ -1,6 +1,4 @@
 import { statusResponse } from '../middleware/errorResponse';
-import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
  * githubActionsRoutes — the GitHub Actions agent execution surface.
  *
@@ -39,35 +37,22 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * repo X is bound to. Without that second check, any repo linked to Builderforce
  * could drive ANY execution id in the system.
  *
- * ── Why the op protocol is shared verbatim ───────────────────────────────────
- * Once authenticated, this delegates to the SAME `handleContainerOp` the
- * container surface uses. The ops (status / heartbeat / event / platform_tool /
- * memory / prd / coordinate / llm / ask_human / write / finalize / fail) are the
- * surface-agnostic contract; only the transport and the auth differ. Forking that
- * handler per surface would guarantee the two drift — steering, compaction,
- * metering, pause/resume and PR-finalize semantics all live inside it.
- *
- * The ONE op that is not surface-agnostic in its EFFECT is `ask_human`: parking a
- * run records which transport must be re-dispatched to resume it, so this route
- * tells the handler it is the Actions surface. Everything else is identical.
+ * ── What the runner may say ──────────────────────────────────────────────────
+ * The runner is the run's SANDBOX, not its engine: the one engine (`cloudAgentEngine.ts`,
+ * ticked by the run's CloudRunnerDO) drives every cloud run, and the runner serves its
+ * shell and working tree with the same `sandboxCore.mjs` the Cloudflare Container does.
+ * Once authenticated, every op goes to `handleSandboxCallback` — the spec, the engine's
+ * next request and its result, a cancel poll, and timeline events. There is no model
+ * turn, commit or finalize to ask for, because the runner decides none of them.
  */
 import { Hono } from 'hono';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { verifyGitHubOidcToken } from '../../application/ide/githubOidc';
-import {
-  handleContainerOp,
-  loadContainerRunContext,
-  markCloudExecutionRunning,
-  prepareCloudRun,
-  } from '../../application/runtime/cloudAgentEngine';
-import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
-import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
-import { clearPauseState, loadPauseState } from '../../application/runtime/executionPause';
-import { executions, projectRepositories } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { loadSandboxRunContext } from '../../application/runtime/cloudAgent/runContext';
+import { handleSandboxCallback } from '../../application/runtime/sandbox/sandboxCallbacks';
+import { projectRepositories } from '../../infrastructure/database/schema';
 import { BUILDERFORCE_AGENT_OIDC_AUDIENCE } from '../../application/runtime/githubActionsWorkflow';
 import { renderAgentRunnerScript } from '../../application/runtime/githubActionsRunner';
-import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { parseOptionalBody, z, zJsonObject } from './requestBody';
@@ -76,7 +61,7 @@ import { parseOptionalBody, z, zJsonObject } from './requestBody';
  * The runner's op envelope (`renderAgentRunnerScript` posts `{ executionId, op, args }`).
  * Both identity fields stay optional so an absent/empty body keeps answering the
  * route's own "must include executionId and op" 400. `args` is handed to
- * `handleContainerOp` whole, so every key it carries is kept.
+ * `handleSandboxCallback` whole, so every key it carries is kept.
  */
 const OpBody = z.object({
   executionId: z.number().optional(),
@@ -84,7 +69,7 @@ const OpBody = z.object({
   args: zJsonObject.nullish(),
 });
 
-export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
+export function createGitHubActionsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   /**
@@ -155,7 +140,7 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
       );
     }
 
-    const ctx = await loadContainerRunContext(env, db, body.executionId);
+    const ctx = await loadSandboxRunContext(env, db, body.executionId);
     if (!ctx) return c.json({ error: 'Execution not found.' }, 404);
 
     // The second half of the authorization, and the one that matters most: a
@@ -170,89 +155,8 @@ export function createGitHubActionsRoutes(db: Db, runtimeService: RuntimeService
       return c.json({ error: 'This repository may not drive that execution.' }, 403);
     }
 
-    /**
-     * `spec` — the one op this surface needs that the container does not.
-     *
-     * The container is PUSH-driven: runtimeRoutes builds the prompts and POSTs
-     * them into the container's /run. A `workflow_dispatch` payload carries only
-     * the execution id, so a pull-driven runner has to ASK for the same spec as
-     * its first call. Hence this lives here rather than in handleContainerOp —
-     * it is a property of the transport, not of the agent protocol.
-     *
-     * This is also where the run is marked RUNNING. Dispatch only proved GitHub
-     * queued the job; a runner asking for its spec is the first evidence one
-     * actually started, which is the true parity point with the container's
-     * post-/run markCloudExecutionRunning.
-     */
-    if (body.op === 'spec') {
-      const [execRow] = await db
-        .select({ payload: executions.payload, status: executions.status })
-        .from(executions)
-        .where(eq(executions.id, body.executionId))
-        .limit(1);
-      // A queued Actions job may start after the workspace kill switch cancelled
-      // its execution. Refuse the spec before it receives prompts or performs any
-      // work; the external runner then exits immediately instead of reviving it.
-      if (!execRow || execRow.status === 'cancelled') {
-        return c.json({ error: 'Execution was cancelled before the runner started.' }, 409);
-      }
-
-      const artifacts = await resolveArtifacts(db, {
-        tenantId: ctx.tenantId,
-        taskId: ctx.taskId,
-        cloudAgentRef: ctx.cloudAgentRef,
-      }).catch(() => undefined);
-
-      const { systemPrompt, userContent } = await prepareCloudRun(
-        env, db, body.executionId,
-        { id: ctx.taskId, title: ctx.taskTitle, description: ctx.taskDescription },
-        ctx.tenantId, ctx.projectId, ctx.agentLabel, ctx.model, artifacts,
-        ctx.cloudAgentRef, execRow?.payload ?? undefined,
-        // The runner has a real shell, exactly like the container.
-        { shell: true },
-      );
-
-      // Which branch to work on. Unlike the container there is no clone URL:
-      // actions/checkout has already cloned, and the workflow's GITHUB_TOKEN
-      // (contents: write) is what authorises the push — so no credential of
-      // ours ever reaches the runner.
-      const repo = await resolveTicketRepoContext(db, integrationCredentialSecret(env), ctx.tenantId, ctx.taskId);
-
-      await markCloudExecutionRunning(runtimeService, body.executionId).catch((error) => {
-        reportCaughtError(error, { source: "presentation/routes/githubActionsRoutes.ts", operation: "createGitHubActionsRoutes" });
-      });
-
-      // RESUMING a run parked on `ask_human`. Unlike the container — which is handed
-      // its resume state in the /run body it is pushed — a pull-driven runner can only
-      // receive it here, on the first call it makes. Consume-and-clear: the record has
-      // now been delivered, and leaving it would make a LATER re-dispatch of the same
-      // execution replay a stale conversation.
-      const paused = await loadPauseState(db, { tenantId: ctx.tenantId, executionId: body.executionId });
-      const resume = paused?.loopState ?? null;
-      if (paused) await clearPauseState(db, { tenantId: ctx.tenantId, executionId: body.executionId });
-
-      return c.json({
-        systemPrompt,
-        userContent,
-        // No step budget: the runner drives the shared agent-loop kernel, whose
-        // failure-streak breaker is the only limit (served with this Worker, so the
-        // runner and this spec always ship together).
-        repo: repo.ok ? { baseBranch: repo.ctx.base, headBranch: repo.ctx.branch } : null,
-        ...(resume ? { resume: { messages: resume.messages, writtenPaths: resume.writtenPaths } } : {}),
-      });
-    }
-
-    const result = await handleContainerOp(
-      env,
-      db,
-      runtimeService,
-      ctx,
-      body.executionId,
-      body.op,
-      body.args ?? {},
-      { surface: 'github_actions' },
-    );
-    return statusResponse(c, result.body as Record<string, unknown>, result.status, { source: 'presentation/routes/githubActionsRoutes.ts', operation: 'containerOp' });
+    const result = await handleSandboxCallback(env, db, ctx, body.executionId, body.op, body.args ?? {});
+    return statusResponse(c, result.body as Record<string, unknown>, result.status, { source: 'presentation/routes/githubActionsRoutes.ts', operation: 'sandboxCallback' });
   });
 
   return router;

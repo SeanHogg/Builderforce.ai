@@ -248,15 +248,11 @@ describe("tools", () => {
     );
     await start(chatId, host);
     expect(sessionNote).toHaveBeenCalledTimes(1);
-    expect(sessionNote).toHaveBeenCalledWith(
-      chatId,
-      expect.objectContaining({
-        prompt: "what does this project do?",
-        created: ["new.ts"],
-      }),
-      // The chat's Memory switch rides to the port, which owns the facts write.
-      { memory: expect.any(Boolean) },
-    );
+    const [noteChat, run, opts] = (sessionNote.mock.calls as unknown as Array<[number, { activity: unknown }, unknown]>)[0]!;
+    expect(noteChat).toBe(chatId);
+    expect(run.activity).toEqual(expect.objectContaining({ prompt: "what does this project do?", created: ["new.ts"] }));
+    // The chat's Memory switch rides to the port, which owns the facts write.
+    expect(opts).toEqual(expect.objectContaining({ memory: expect.any(Boolean) }));
   });
 });
 

@@ -209,6 +209,15 @@ export interface WebCapability {
  *  cloud Container, on-prem Node) — never on the bare Worker/DO. */
 export interface ShellCapability {
   run(command: string): Promise<ShellResult>;
+  /**
+   * The remote ticket branch this shell's clone mirrors, when the SURFACE owns that
+   * branch rather than the clone (a cloud run commits through its git provider; the
+   * sandbox clone only follows). Set ⇒ the history-moving git verbs (`sync_latest`,
+   * `undo`, `redo`) first absorb the branch (fast-forward) and then publish to it, so
+   * a rewind or merge reaches the pull request. Unset (the editor, on-prem) ⇒ the clone
+   * IS the source of truth and the commands are unchanged.
+   */
+  trackedBranch?: string;
 }
 
 /** Static, shell-free validation of written config files. */

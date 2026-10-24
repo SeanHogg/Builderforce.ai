@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  resolveCloudSurface, defaultCloudSurface, PAID_DEFAULT_CLOUD_SURFACE, FREE_DEFAULT_CLOUD_SURFACE,
-  chooseCloudExecutor, probeContainerHealth, isTerminalExecutionStatus,
+  resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, isTerminalExecutionStatus,
   parseFollowUp, buildFollowUpPayload,
   parseModel, parseCloudAgentRef, parseRepoId, parseRemediation,
   markReaperRequeued, wasReaperRequeued, withDefaultModel,
@@ -25,24 +24,17 @@ describe('parseArcStage', () => {
 });
 
 describe('chooseCloudExecutor', () => {
-  it('uses the container ONLY when wanted, bound, AND proven healthy', () => {
-    expect(chooseCloudExecutor({ wantsContainer: true, hasContainerBinding: true, containerHealthy: true, hasCloudRunner: true })).toBe('container');
+  it('every cloud run is the durable runner — there is no container executor', () => {
+    expect(chooseCloudExecutor({ hasCloudRunner: true })).toBe('durable');
   });
-  it('REGRESSION: a bound-but-unhealthy container falls back to durable, not container', () => {
-    // The exact bug the user hit: the container DO acked /run 202 while the image
-    // was dead, and the run was orphan-reaped instead of running on durable.
-    expect(chooseCloudExecutor({ wantsContainer: true, hasContainerBinding: true, containerHealthy: false, hasCloudRunner: true })).toBe('durable');
+  it('queues the Actions runner only when it is wanted AND the workflow can be dispatched', () => {
+    expect(chooseCloudExecutor({ hasCloudRunner: true, wantsGithubActions: true, githubActionsAvailable: true })).toBe('github_actions');
+    expect(chooseCloudExecutor({ hasCloudRunner: true, wantsGithubActions: true, githubActionsAvailable: false })).toBe('durable');
+    expect(chooseCloudExecutor({ hasCloudRunner: true, wantsGithubActions: false, githubActionsAvailable: true })).toBe('durable');
   });
-  it('falls back to durable when the container is wanted but not bound', () => {
-    expect(chooseCloudExecutor({ wantsContainer: true, hasContainerBinding: false, containerHealthy: false, hasCloudRunner: true })).toBe('durable');
-  });
-  it('uses durable for non-container runs (V1 / V2 durable)', () => {
-    expect(chooseCloudExecutor({ wantsContainer: false, hasContainerBinding: false, containerHealthy: false, hasCloudRunner: true })).toBe('durable');
-  });
-  it('fails closed when no durable runner is bound', () => {
-    // Never return the old in-request Worker executor: that multi-step loop times out.
-    expect(chooseCloudExecutor({ wantsContainer: false, hasContainerBinding: false, containerHealthy: false, hasCloudRunner: false })).toBe('unavailable');
-    expect(chooseCloudExecutor({ wantsContainer: true, hasContainerBinding: true, containerHealthy: false, hasCloudRunner: false })).toBe('unavailable');
+  it('fails fast with no durable runner — not even Actions, whose engine IS that runner', () => {
+    expect(chooseCloudExecutor({ hasCloudRunner: false })).toBe('unavailable');
+    expect(chooseCloudExecutor({ hasCloudRunner: false, wantsGithubActions: true, githubActionsAvailable: true })).toBe('unavailable');
   });
 });
 
@@ -51,7 +43,7 @@ describe('probeContainerHealth', () => {
     const stub = { fetch: async () => new Response('{"ok":true}', { status: 200 }) };
     expect(await probeContainerHealth(stub)).toBe(true);
   });
-  it('returns false on a non-200 (container up but unhealthy)', async () => {
+  it('returns false on a non-200 (instance up but unhealthy)', async () => {
     const stub = { fetch: async () => new Response('nope', { status: 503 }) };
     expect(await probeContainerHealth(stub)).toBe(false);
   });
@@ -135,84 +127,25 @@ describe('buildFollowUpPayload', () => {
   });
 });
 
-const PAID = { containerAllowed: true };
-const FREE = { containerAllowed: false };
-
-describe('defaultCloudSurface', () => {
-  /**
-   * The cost decision, on its own. A container holds a Linux process open for the length
-   * of a run against a fixed `max_instances` budget — billable Cloudflare compute, per
-   * run. The Durable Object is on-demand serverless and effectively free. So a workspace
-   * that is not paying runs on the free infrastructure; it still runs, it just edits over
-   * the git API instead of through a shell.
-   */
-  it('gives a paying workspace the shell, and a free one the free infrastructure', () => {
-    expect(defaultCloudSurface(true)).toBe('container');
-    expect(defaultCloudSurface(false)).toBe('durable');
-    expect(PAID_DEFAULT_CLOUD_SURFACE).toBe('container');
-    expect(FREE_DEFAULT_CLOUD_SURFACE).toBe('durable');
-  });
-});
-
 describe('resolveCloudSurface', () => {
-  it('an explicitly-pinned host is a long-lived (container/relay) runtime on EVERY plan', () => {
-    // A pinned host is the CUSTOMER's machine, reached via the relay. It costs us
-    // nothing, so the entitlement — which is about our compute — does not apply.
-    expect(resolveCloudSurface('durable', true, PAID)).toBe('container');
-    expect(resolveCloudSurface(undefined, true, PAID)).toBe('container');
-    expect(resolveCloudSurface(undefined, true, FREE)).toBe('container');
+  it('the plan never decides where a run executes — one cloud runtime on every plan', () => {
+    expect(resolveCloudSurface(undefined, false)).toBe('durable');
+    expect(resolveCloudSurface(null, false)).toBe('durable');
+    expect(resolveCloudSurface('durable', false)).toBe('durable');
   });
 
-  it("honors the agent's chosen surface when no host is pinned", () => {
-    expect(resolveCloudSurface('container', false, PAID)).toBe('container');
-    expect(resolveCloudSurface('durable', false, PAID)).toBe('durable');
-    expect(resolveCloudSurface('github_actions', false, FREE)).toBe('github_actions');
+  it('a legacy `container` choice is the one cloud runtime (the container is its sandbox)', () => {
+    expect(resolveCloudSurface('container', false)).toBe('durable');
   });
 
-  /**
-   * An agent that never chose a surface gets the one a cloud agent is supposed to have —
-   * a clone and a real shell — IF the workspace pays for it. The old default was `durable`
-   * on every plan, and because `runtime_surface` is nullable with no DB default that is
-   * what almost every agent silently got: the capability to run builds in a clone existed
-   * and nothing reached it.
-   */
-  it('defaults an unset/unknown surface per plan', () => {
-    expect(resolveCloudSurface(undefined, false, PAID)).toBe('container');
-    expect(resolveCloudSurface(null, false, PAID)).toBe('container');
-    expect(resolveCloudSurface(undefined, false, FREE)).toBe('durable');
-    // A value written by a client ahead of the server degrades to the default rather
-    // than failing the dispatch.
-    expect(resolveCloudSurface('something-else', false, PAID)).toBe('container');
-    expect(resolveCloudSurface('something-else', false, FREE)).toBe('durable');
+  it("honours the agent's Actions choice when no host is pinned", () => {
+    expect(resolveCloudSurface('github_actions', false)).toBe('github_actions');
+    // A pinned host means "that machine", which an ephemeral GitHub runner cannot be.
+    expect(resolveCloudSurface('github_actions', true)).toBe('durable');
   });
 
-  it('DEMOTES an explicit container when the workspace is not entitled', () => {
-    // Otherwise the paid gate is bypassable by writing one varchar column — and
-    // `runtime_surface` is writable from the workforce API and the MCP tool. Demotion
-    // never fails the run: the work still executes, on the surface the plan covers.
-    expect(resolveCloudSurface('container', false, FREE)).toBe('durable');
-  });
-
-  it('keeps an EXPLICIT durable choice on every plan — opting out is a real answer', () => {
-    // Before the default became plan-aware, an explicit 'durable' and an unset column
-    // fell through the same branch, so "serverless on purpose" could not be expressed.
-    expect(resolveCloudSurface('durable', false, PAID)).toBe('durable');
-    expect(resolveCloudSurface('durable', false, FREE)).toBe('durable');
-  });
-
-  it('never strands a run when no container is live — the executor demotes', () => {
-    // The second half of what keeps this cheap: preferring the container is only a
-    // preference. `chooseCloudExecutor` requires the binding AND a passing health probe,
-    // so on an account with no Containers every run lands exactly where it did before.
-    expect(chooseCloudExecutor({
-      wantsContainer: true, hasContainerBinding: false, containerHealthy: false, hasCloudRunner: true,
-    })).toBe('durable');
-    expect(chooseCloudExecutor({
-      wantsContainer: true, hasContainerBinding: true, containerHealthy: false, hasCloudRunner: true,
-    })).toBe('durable');
-    expect(chooseCloudExecutor({
-      wantsContainer: true, hasContainerBinding: true, containerHealthy: true, hasCloudRunner: true,
-    })).toBe('container');
+  it('degrades an unknown value (a client ahead of the server) to the default', () => {
+    expect(resolveCloudSurface('something-else', false)).toBe('durable');
   });
 });
 
@@ -221,10 +154,10 @@ describe('executor stamping (per-surface orphan ceiling)', () => {
     const stamped = withExecutor('{"model":"x","cloudAgentRef":"a1"}', 'durable');
     expect(JSON.parse(stamped)).toEqual({ model: 'x', cloudAgentRef: 'a1', executor: 'durable' });
     // Absent/garbage payload → a fresh object carrying just the executor.
-    expect(JSON.parse(withExecutor(null, 'container'))).toEqual({ executor: 'container' });
-    expect(JSON.parse(withExecutor('not json', 'container'))).toEqual({ executor: 'container' });
+    expect(JSON.parse(withExecutor(null, 'github_actions'))).toEqual({ executor: 'github_actions' });
+    expect(JSON.parse(withExecutor('not json', 'github_actions'))).toEqual({ executor: 'github_actions' });
     // Re-stamping overwrites (idempotent).
-    expect(parseExecutor(withExecutor(stamped, 'container'))).toBe('container');
+    expect(parseExecutor(withExecutor(stamped, 'github_actions'))).toBe('github_actions');
   });
 
   it('parseExecutor round-trips EVERY stamped executor and rejects unknown/garbage', () => {
@@ -235,9 +168,12 @@ describe('executor stamping (per-surface orphan ceiling)', () => {
     // 'github_actions' branch (20 min, because a queued runner sits silent for minutes)
     // never fired, so healthy queued Actions runs were measured against 5 minutes.
     // Whatever `withExecutor` can stamp, this must read back.
-    for (const e of ['durable', 'container', 'github_actions'] as const) {
+    for (const e of ['durable', 'github_actions'] as const) {
       expect(parseExecutor(withExecutor(undefined, e))).toBe(e);
     }
+    // A run stamped while a container ran its own loop reads as the one cloud runtime
+    // (its ceiling and its resume are the durable runner's).
+    expect(parseExecutor('{"executor":"container"}')).toBe('durable');
     expect(parseExecutor('{"executor":"bogus"}')).toBeUndefined();
     // The in-request Worker executor was removed; a payload stamped before that must
     // parse as unknown, which the ceiling helper treats as long-lived (never a tight

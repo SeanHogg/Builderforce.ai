@@ -182,6 +182,8 @@ export function toolCallPaths(args: Record<string, unknown> | undefined): string
   };
   add(args.path);
   add(args.filePath);
+  // The on-prem native tools' spelling — a path-scoped gate must match it too.
+  add(args.file_path);
   add(args.oldPath);
   add(args.newPath);
   if (Array.isArray(args.paths)) {

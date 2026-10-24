@@ -21,6 +21,8 @@
  * from the Worker-safe package root.
  */
 
+import { rankByCount } from "@seanhogg/builderforce-memory/working";
+
 /** Directory names of the on-disk knowledge tree, so no surface spells them itself. */
 export const KNOWLEDGE_DIRS = {
   /** Root of the per-workspace knowledge tree. */
@@ -54,6 +56,8 @@ export interface RunActivity {
    * how often a file was re-read is how much the run depended on it.
    */
   read?: readonly string[];
+  /** Paths the run deleted. Duplicates are collapsed. */
+  deleted?: readonly string[];
   /** Tool names the run invoked. Duplicates are collapsed. */
   tools?: readonly string[];
   /**
@@ -186,12 +190,9 @@ export function deriveActivitySummary(activity: RunActivity): string {
 /** How many read paths a note names — enough to point the way, not a transcript. */
 const NOTE_READ_LIMIT = 8;
 
-/** The files read most, excluding ones already listed as created/edited. */
+/** The files read most, excluding ones already listed as created/edited — ranked as the run's memory ranks them. */
 function mostRead(read: readonly string[], changed: ReadonlySet<string>): string[] {
-  const counts = new Map<string, number>();
-  for (const p of read) if (!changed.has(p)) counts.set(p, (counts.get(p) ?? 0) + 1);
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  return rankByCount(read.filter((p) => !changed.has(p)))
     .slice(0, NOTE_READ_LIMIT)
     .map(([p]) => p);
 }
@@ -227,6 +228,11 @@ export function buildKnowledgeMemoryEntry(params: {
     }
     if (edited.length > 0) {
       lines.push(`**Edited**: ${edited.join(", ")}`);
+      meaningful = true;
+    }
+    const deleted = [...new Set(params.activity.deleted ?? [])];
+    if (deleted.length > 0) {
+      lines.push(`**Deleted**: ${deleted.join(", ")}`);
       meaningful = true;
     }
     const read = mostRead(params.activity.read ?? [], new Set([...created, ...edited]));

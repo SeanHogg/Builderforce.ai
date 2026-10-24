@@ -13,11 +13,11 @@ import { liveExecution } from '../../application/rehearsal/executionMode';
 import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
-  chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
-  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, withDefaultModel, withExecutor,
+  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, withDefaultModel,
 } from '../../application/runtime/cloudDispatch';
 import { verifyContainerRunToken } from '../../application/runtime/containerRunToken';
-import { launchContainerRun, type ContainerRunTarget } from '../../application/runtime/containerRunLauncher';
+import { loadSandboxRunContext } from '../../application/runtime/cloudAgent/runContext';
+import { handleSandboxCallback } from '../../application/runtime/sandbox/sandboxCallbacks';
 import { resumePausedExecution } from '../../application/runtime/executionResume';
 import { answerOpenExecutionQuestions, DEFAULT_RESUME_ANSWER } from '../../application/runtime/executionPause';
 import { readToolAuditEvents } from '../../application/runtime/toolAuditRead';
@@ -43,7 +43,7 @@ import { readJsonBody } from '../../infrastructure/http/gzipBody';
 import { relayToRoom } from './realtimeRelay';
 import {
   markCloudExecutionRunning, recordCloudToolEvent, recordPrdDirective,
-  handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
+  resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
 } from '../../application/runtime/cloudAgentEngine';
 import { resolveDefaultCloudAgentRef, UNATTRIBUTED_RUN_MESSAGE } from '../../application/runtime/defaultCloudAgent';
 import {
@@ -186,10 +186,11 @@ function parseOptionalNumber(value: string | undefined | null): number | null {
 
 // ── Request bodies ───────────────────────────────────────────────────────────
 
-/** The container executor's delegated op; `args` is forwarded wholesale to the op handler. */
-/** Ceiling on an inflated container-op body: far above a real transcript, low enough
- *  that a gzip bomb cannot exhaust the isolate's memory. */
-const CONTAINER_OP_MAX_INFLATED_BYTES = 32 * 1024 * 1024;
+/** A run sandbox's callback (`sandbox/sandboxCallbacks.ts`); `args` is forwarded wholesale. */
+/** Ceiling on an inflated callback body: callbacks are timeline events and preview
+ *  reports, so this is far above a real one and low enough that a gzip bomb cannot
+ *  exhaust the isolate's memory. */
+const CONTAINER_OP_MAX_INFLATED_BYTES = 1024 * 1024;
 const ContainerOpBody = z.object({
   executionId: zPositiveInt,
   token: zNonEmptyString,
@@ -331,18 +332,16 @@ async function cancelTenantExecutions(
 export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hono<RuntimeHonoEnv> {
   const router = new Hono<RuntimeHonoEnv>();
 
-  // Internal container-op endpoint — called by the long-lived Container executor
-  // (AgentContainerDO), NOT by a browser/tenant. Registered BEFORE authMiddleware so
-  // it bypasses tenant JWT auth and instead authenticates with the per-run token
-  // (HMAC of the execution id). The container delegates each LLM step / commit /
-  // finalize here so metering, commit, and PR logic stay server-side (one impl).
+  // Internal callback endpoint for the run SANDBOX (the Cloudflare Container behind
+  // AgentContainerDO), NOT a browser/tenant. Registered BEFORE authMiddleware so it
+  // bypasses tenant JWT auth and instead authenticates with the per-run token (HMAC of
+  // the execution id). The sandbox runs no loop: it reports its local services'
+  // events and its live preview here, nothing else. Gzipped bodies are read too.
   router.post('/internal/container-op', async (c) => {
-    // Newer images gzip large bodies (the `llm` op re-posts the whole transcript each
-    // turn); older images post plain JSON. Detected by magic bytes, so both are read.
     const body = await parseBody({ req: { json: () => readJsonBody(c.req.raw, CONTAINER_OP_MAX_INFLATED_BYTES) } }, ContainerOpBody);
     const ok = await verifyContainerRunToken(c.env.JWT_SECRET, body.executionId, body.token);
     if (!ok) return c.json({ error: 'invalid run token' }, 403);
-    const ctx = await loadContainerRunContext(c.env as Env, db, body.executionId);
+    const ctx = await loadSandboxRunContext(c.env as Env, db, body.executionId);
     if (!ctx) return c.json({ error: 'execution not found' }, 404);
     if (!(await authorizeExecutionPrincipal(db, ctx.tenantId, body.executionId))) return c.json({ error: 'run credential expired or revoked' }, 403);
     // The dev-server step reports through its own op. Handled before the shared engine
@@ -354,8 +353,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       );
       return statusResponse(c, preview.body as Record<string, unknown>, preview.status, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'previewOp' });
     }
-    const res = await handleContainerOp(c.env as Env, db, runtimeService, ctx, body.executionId, body.op, body.args ?? {});
-    return statusResponse(c, res.body as Record<string, unknown>, res.status, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'containerOp' });
+    const res = await handleSandboxCallback(c.env as Env, db, ctx, body.executionId, body.op, body.args ?? {});
+    return statusResponse(c, res.body as Record<string, unknown>, res.status, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'sandboxCallback' });
   });
 
   const containerGitProxy = async (c: Context<RuntimeHonoEnv>, subPath: string, method: 'GET' | 'POST'): Promise<Response> => {
@@ -366,7 +365,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       try { token = atob(auth.slice(6)).split(':').slice(1).join(':'); } catch { token = ''; }
     }
     if (!Number.isFinite(executionId) || !token || !(await verifyContainerRunToken(c.env.JWT_SECRET, executionId, token))) return c.json({ error: 'invalid run credential' }, 403);
-    const run = await loadContainerRunContext(c.env as Env, db, executionId);
+    const run = await loadSandboxRunContext(c.env as Env, db, executionId);
     if (!run) return c.json({ error: 'execution not found' }, 404);
     if (!(await authorizeExecutionPrincipal(db, run.tenantId, executionId))) return c.json({ error: 'run credential expired or revoked' }, 403);
     const resolved = await resolveTicketRepoContext(db, integrationCredentialSecret(c.env as Env), run.tenantId, run.taskId);
@@ -1019,7 +1018,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // human-requests queue does not keep asking for something already handled.
     await answerOpenExecutionQuestions(c.env as Env, db, { tenantId, executionId: id, answer, userId: c.get('userId') });
 
-    await resumePausedExecution(c.env as Env, db, { executionId: id, tenantId, answer, runtimeService });
+    await resumePausedExecution(c.env as Env, db, { executionId: id, tenantId, answer });
     const updated = await runtimeService.getExecution(id).catch(() => null);
     return c.json({ ok: true, resumed: true, execution: updated?.toPlain() ?? null });
   });
@@ -1114,7 +1113,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       // whichever surface parked it. `resumePausedExecution` owns the enqueue, the
       // stream echo, the lane restore and the wake, so nothing here duplicates it.
       await answerOpenExecutionQuestions(c.env as Env, db, { tenantId, executionId: id, answer: text, userId: c.get('userId') });
-      await resumePausedExecution(c.env as Env, db, { executionId: id, tenantId, answer: text, runtimeService });
+      await resumePausedExecution(c.env as Env, db, { executionId: id, tenantId, answer: text });
 
       if (taskRow) {
         c.executionCtx.waitUntil(recordPrdDirective(c.env as Env, db, {

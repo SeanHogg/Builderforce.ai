@@ -258,11 +258,11 @@ importers:
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.0)(@vitest/browser-playwright@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
     optionalDependencies:
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.23
-        version: 2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)
+        specifier: ^2026.10.24
+        version: 2026.10.24(@seanhogg/builderforce-memory-engine@2026.10.23)
       '@seanhogg/builderforce-memory-mcp':
         specifier: ^2026.10.23
-        version: 2026.10.23(@anthropic-ai/claude-agent-sdk@0.3.168(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6))(@seanhogg/builderforce-memory-engine@2026.10.23)(@seanhogg/builderforce-memory@2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23))(fake-indexeddb@6.2.5)
+        version: 2026.10.23(@anthropic-ai/claude-agent-sdk@0.3.168(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6))(@seanhogg/builderforce-memory-engine@2026.10.23)(@seanhogg/builderforce-memory@2026.10.24(@seanhogg/builderforce-memory-engine@2026.10.23))(fake-indexeddb@6.2.5)
 
   extensions/bluebubbles:
     devDependencies:
@@ -2548,6 +2548,12 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@seanhogg/builderforce-memory-engine': ^2026.10.23
+
+  '@seanhogg/builderforce-memory@2026.10.24':
+    resolution: {integrity: sha512-4Czs3VdzmUN0zt9wq+bqOlFLlEQK9ta7Wa9xCRwbhNdpL+kSilKJ7Xmspef0glafTvGvN06aIycSXOZFLPdQKw==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@seanhogg/builderforce-memory-engine': ^2026.10.24
 
   '@selderee/plugin-htmlparser2@0.11.0':
     resolution: {integrity: sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ==}
@@ -7703,13 +7709,13 @@ snapshots:
 
   '@seanhogg/builderforce-memory-engine@2026.10.23': {}
 
-  '@seanhogg/builderforce-memory-mcp@2026.10.23(@anthropic-ai/claude-agent-sdk@0.3.168(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6))(@seanhogg/builderforce-memory-engine@2026.10.23)(@seanhogg/builderforce-memory@2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23))(fake-indexeddb@6.2.5)':
+  '@seanhogg/builderforce-memory-mcp@2026.10.23(@anthropic-ai/claude-agent-sdk@0.3.168(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6))(@seanhogg/builderforce-memory-engine@2026.10.23)(@seanhogg/builderforce-memory@2026.10.24(@seanhogg/builderforce-memory-engine@2026.10.23))(fake-indexeddb@6.2.5)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.29.0(zod@3.25.76)
       zod: 3.25.76
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk': 0.3.168(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
-      '@seanhogg/builderforce-memory': 2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)
+      '@seanhogg/builderforce-memory': 2026.10.24(@seanhogg/builderforce-memory-engine@2026.10.23)
       '@seanhogg/builderforce-memory-engine': 2026.10.23
       fake-indexeddb: 6.2.5
     transitivePeerDependencies:
@@ -7720,6 +7726,11 @@ snapshots:
   '@seanhogg/builderforce-memory@2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.10.23
+
+  '@seanhogg/builderforce-memory@2026.10.24(@seanhogg/builderforce-memory-engine@2026.10.23)':
+    dependencies:
+      '@seanhogg/builderforce-memory-engine': 2026.10.23
+    optional: true
 
   '@selderee/plugin-htmlparser2@0.11.0':
     dependencies:

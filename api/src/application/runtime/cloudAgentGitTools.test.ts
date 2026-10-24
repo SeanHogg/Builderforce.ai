@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { buildGitCommand, buildCoreToolRegistry, type CapabilityProvider, type ShellResult } from '@builderforce/agent-tools';
-import { CONTAINER_AGENT_TOOLS, CLOUD_AGENT_TOOLS } from './cloudAgentTools';
+import { CLOUD_AGENT_TOOLS, cloudAgentToolsFor } from './cloudAgentTools';
+import { prepSurfaceCaps } from './cloudAgent/runSurfaceCaps';
 
 // ---------------------------------------------------------------------------
-// Git / VCS tools — added to the shared registry so the shell-capable surfaces
-// (Container + on-prem Node) get first-class "get latest / undo / redo" verbs.
+// Git / VCS tools — added to the shared registry so a run with a shell (a cloud run
+// with its sandbox, on-prem Node) gets first-class "get latest / undo / redo" verbs.
 // The on-prem agent previously had only a read-only `git_history` (pi-only, never
 // migrated); the mutating verbs lived nowhere. These tests pin the surface gating,
 // the (injection-safe) command text, and the result decoding.
@@ -15,14 +16,14 @@ const names = (tools: Array<{ function?: { name?: string }; name?: string }>): s
   tools.map((t) => t.function?.name ?? t.name ?? '');
 
 describe('git tools — surface gating', () => {
-  it('the Container surface (real shell) advertises every git tool', () => {
-    const have = names(CONTAINER_AGENT_TOOLS);
-    for (const t of GIT_TOOLS) expect(have, `container should expose ${t}`).toContain(t);
+  it('a sandboxed cloud run (real shell) advertises every git tool', () => {
+    const have = names(cloudAgentToolsFor(prepSurfaceCaps({}, 1, true)));
+    for (const t of GIT_TOOLS) expect(have, `a sandboxed run should expose ${t}`).toContain(t);
   });
 
-  it('the shell-less durable Worker surface advertises NONE of them', () => {
+  it('a cloud run without a sandbox advertises NONE of them', () => {
     const have = names(CLOUD_AGENT_TOOLS);
-    for (const t of GIT_TOOLS) expect(have, `durable Worker must NOT expose ${t}`).not.toContain(t);
+    for (const t of GIT_TOOLS) expect(have, `a shell-less run must NOT expose ${t}`).not.toContain(t);
   });
 });
 

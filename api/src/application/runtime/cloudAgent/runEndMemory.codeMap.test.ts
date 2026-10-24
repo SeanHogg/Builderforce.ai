@@ -10,14 +10,16 @@ vi.mock('../../memory/memoryService', () => ({ buildMemoryCapability: () => ({ r
 
 import { commitRunMemory } from './runEndMemory';
 
-const base = { db: {} as never, env: {} as never, tenantId: 1, projectId: 2, executionId: 3, summary: 'Moved the canvas into its own panel.' };
+const base = { db: {} as never, env: {} as never, tenantId: 1, projectId: 2, ticketId: 9, executionId: 3, summary: 'Moved the canvas into its own panel.' };
 
 describe('commitRunMemory code map', () => {
   it('writes the code map under its own key after the run outcome', async () => {
     remember.mockClear();
     const ok = await commitRunMemory({ ...base, codeMap: { key: 'codemap:web/src', content: 'Code map for `web/src`' } });
     expect(ok).toBe(true);
-    expect(remember.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['run-outcome:project-2:3', 'codemap:web/src']);
+    expect(remember.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['run-outcome:ticket-9:3', 'codemap:web/src']);
+    // Project scope, not the run's ticket — or no other run would ever recall it.
+    expect((remember.mock.calls[1] as unknown[])[2]).toMatchObject({ scope: 'project' });
   });
 
   it('writes only the outcome when the run mapped nothing', async () => {

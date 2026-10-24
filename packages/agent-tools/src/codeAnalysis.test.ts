@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { compareAnalysis, normalizeAnalysis, type CodeAnalysisSnapshot } from './codeAnalysis.js';
-import { analyzeCodebaseTool, ANALYZERS, parseAnalyzerJson, runCodeAnalysis } from './codeAnalysisTool.js';
+import { analyzeCodebaseTool, ANALYZERS, parseAnalyzerJson, savedCodeAnalysisSummary } from './codeAnalysisTool.js';
 
 const dependency = { modules: [{ source: 'src/a.ts', dependencies: [{ resolved: 'src/b.ts', circular: true }, { resolved: 'node:fs', coreModule: true }] }, { source: 'src/b.ts', dependencies: [] }] };
 const duplicates = { duplicates: [{ fragment: 'return input + 1;', firstFile: { name: 'src/a.ts', start: 2, end: 7 }, secondFile: { name: 'src/b.ts', start: 5, end: 10 } }] };
@@ -48,13 +48,15 @@ describe('measured code analysis', () => {
     }
     expect(run).not.toHaveBeenCalled();
   });
-  it('uploads the complete cloud artifact before returning a bounded model summary', async () => {
-    const persist = vi.fn(async (_snapshot: CodeAnalysisSnapshot) => undefined);
-    const summary = await runCodeAnalysis({}, {
-      run: async (command) => ({ ok: true, exitCode: 0, stdout: command.includes('depcruise') ? JSON.stringify(dependency) : command.includes('knip') ? JSON.stringify(unused) : '' }),
-      read: async () => ({ ok: true, content: JSON.stringify(duplicates) }), persist,
-    });
-    expect(persist).toHaveBeenCalledWith(expect.objectContaining({ nodes: ['src/a.ts', 'src/b.ts'], issues: expect.arrayContaining([expect.objectContaining({ kind: 'duplicate' })]) }));
+  it('summarises a saved snapshot for the model instead of handing it the whole graph', async () => {
+    const caps = {
+      shell: { run: async (command: string) => ({ ok: true, exitCode: 0, stdout: command.includes('depcruise') ? JSON.stringify(dependency) : command.includes('knip') ? JSON.stringify(unused) : '' }) },
+      repoRead: { readFile: async () => ({ ok: true, content: JSON.stringify(duplicates) }) },
+    };
+    const result = await analyzeCodebaseTool.execute({}, { caps } as never);
+    const snapshot = result.data.snapshot as CodeAnalysisSnapshot;
+    expect(snapshot).toEqual(expect.objectContaining({ nodes: ['src/a.ts', 'src/b.ts'], issues: expect.arrayContaining([expect.objectContaining({ kind: 'duplicate' })]) }));
+    const summary = savedCodeAnalysisSummary(snapshot);
     expect(summary).toMatchObject({ artifactSaved: true, files: 2, findings: 4 });
     expect(summary).not.toHaveProperty('snapshot');
   });

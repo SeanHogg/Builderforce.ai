@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { anthropicModule, VOLATILE_TAIL_TAG } from '../../llm/vendors/anthropic';
+import { VOLATILE_TAIL_TAG } from '@seanhogg/builderforce-memory/handoff';
+import { anthropicModule } from '../../llm/vendors/anthropic';
 import { turnRequestMessages } from './volatileTail';
 
 // ---------------------------------------------------------------------------

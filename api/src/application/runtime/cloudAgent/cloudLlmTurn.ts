@@ -1,49 +1,26 @@
 /**
  * ONE metered cloud LLM turn — the half of a cloud run that talks to the gateway and
- * accounts for it, shared by the durable loop (`runCloudToolLoop`) and the image
- * surfaces' `llm` op.
+ * accounts for it, used by the engine's loop (`runCloudToolLoop`).
  *
  * Split out of `cloudAgentEngine.ts` (see `agent.ts` for why that file is being broken
  * up) together with the model hand-off policy it now drives (`cloudRunModelPolicy.ts`):
  * metering (`recordCloudUsage`), parsing (`parseLlmChoice`), the post-complete
- * telemetry (`recordCloudLlmTurn`) and the image surfaces' whole turn (`imageRunTurn`).
+ * telemetry (`recordCloudLlmTurn`).
  * The engine re-exports the public names so every existing importer keeps working.
  */
 import { splitVendorReasoning, type ChoiceMessageLike } from '@builderforce/agent-loop';
-import type { ModelFallbackSurface } from '@builderforce/agent-stall';
-import type { AgentExecParams, ModelRole, ToolSchema } from '@builderforce/agent-tools';
+import type { ModelRole } from '@builderforce/agent-tools';
 import type { Env } from '../../../env';
 import type { Db } from '../../../infrastructure/database/connection';
-import { pricesForCall } from '../../llm/catalogView';
-import { codingFallbackSurface } from '../../llm/codingFallbackSurface';
-import { resolveEvermindCodingRoute } from '../../llm/evermindCodingEvalStore';
-import {
-  CODING_BACKSTOP_MODELS, estimateRequestTokens, isPremiumModelSelection, llmProxyForPlan, pickCloudModel,
-  type ChatMessage,
-} from '../../llm/LlmProxyService';
-import { reasoningParamsForModel } from '../../llm/reasoningCapability';
-import { byoRoutingOptions } from '../../llm/tenantProxy';
-import { byoVendorIdsFromCredentials, resolveTenantLlmCredentials } from '../../llm/tenantProviderKeyService';
+import { isPremiumModelSelection, llmProxyForPlan } from '../../llm/LlmProxyService';
 import { logTrace } from '../../llm/traceLogger';
 import { clampTokenCount, normalizeByoProvider, recordUsageRow } from '../../llm/usageLedger';
 import type { RawToolCall } from '../cloudAgentTools';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { notifyExecutionSubscribers } from '../executionEvents';
-import {
-  cloudRunRole, completeUnderRunPolicy, initialCloudRunModelState, recordModelCascade, turnRequestFields,
-  type CloudRunModelState,
-} from './cloudRunModelPolicy';
-import { emitCodingModelDegraded, hasVendorKeys, refuseCloudRunWithoutByo, requestedModelForRole } from './routing';
-import type { ContainerRunContext } from './runContext';
-import { cloudOutputCap, cloudReasoningExecParams, cloudRoutingExploration } from '../costLoop/runLevers';
-import { cloudTierLadder } from '../costLoop/verifierCascade';
-import type { CascadeVerdict } from '@builderforce/run-policy';
-import { ImageCascade, imageTurnFeatures } from './imageCascade';
-import { strictWhenConnected } from '../../llm/fundingOrder';
+import { emitCodingModelDegraded } from './routing';
 import type { LlmUsage } from '../../llm/proxyTypes';
-import {
-  CONTEXT_CATEGORIES_KEY, contextCategoryTokens, type ContextCategoryTokens, type TurnInput,
-} from '../../costMetrics/contextCategories';
+import { CONTEXT_CATEGORIES_KEY, contextCategoryTokens, type ContextCategoryTokens, type TurnInput } from '../../costMetrics/contextCategories';
 
 export async function recordCloudUsage(
   env: Env,
@@ -287,173 +264,4 @@ export async function recordCloudLlmTurn(
     if (opts.notify) notifyExecutionSubscribers(rc.executionId, { type: 'message', executionId: rc.executionId, role: 'assistant', text: content, ts: new Date().toISOString() });
   }
   return { ok: true, content, toolCalls, resolvedModel };
-}
-
-/**
- * ONE metered model turn on behalf of an IMAGE-run surface (the Cloudflare Container
- * or the GitHub Actions runner).
- *
- * The `llm` op that advances an image's loop goes through here, on the same metering
- * and the same model hand-off policy as the durable loop: the first turn seeds the
- * run's policy from the run-start pick, every later turn asks for what the policy says
- * (the caller carries the state between ops — `containerRunModelStore`). A delegated
- * child is its own durable run, so it never reaches this function.
- *
- * Everything genuinely per-caller stays outside: the steering drain, history
- * compaction and the stall step belong to the `llm` op.
- */
-export async function imageRunTurn(
-  run: {
-    env: Env;
-    db: Db;
-    ctx: ContainerRunContext;
-    executionId: number;
-    tenantId: number;
-    projectId: number;
-    taskId: number;
-    cloudAgentRef: string | undefined;
-    /** The run's explicit model pin, if it has one. */
-    model: string | undefined;
-    /** What kind of call this turn is — 'code' for the parent's own turn, or a
-     *  delegation role. Absent `model` + a non-code role lets the BYO soft seed
-     *  re-resolve tier-ranked toward that role's objective. */
-    role?: ModelRole;
-    /** The run's model hand-off state from its previous turn; absent on the first
-     *  turn, when it is seeded from the run-start pick. */
-    modelState?: CloudRunModelState;
-    /** D1: the image's post-edit verdict on the previous turn (`readImageCheckVerdict`).
-     *  Absent ⇒ the image runs no verifier and the cascade stays off for it. */
-    checks?: CascadeVerdict | null;
-  },
-  args: {
-    messages: Array<Record<string, unknown>>;
-    tools: ToolSchema[];
-    /** Surface the assistant message to subscribers. TRUE for the parent's own turn
-     *  (an image has no separate output stream); FALSE for a child's, whose turns are
-     *  an implementation detail of one parent tool call. */
-    notify: boolean;
-    tGen0?: number;
-    signal?: AbortSignal;
-  },
-): Promise<
-  | { ok: true; content: string; toolCalls: unknown[]; resolvedModel: string; modelState: CloudRunModelState; fallbackSurface: ModelFallbackSurface }
-  | { ok: false; error: string; code?: string; modelState?: CloudRunModelState }
-> {
-  const { env, db, ctx, executionId, tenantId, projectId, taskId, cloudAgentRef, model, role } = run;
-  const tGen0 = args.tGen0 ?? Date.now();
-  // A connected Claude subscription powers a direct-Claude turn; BYO OpenAI/Google/
-  // Anthropic api-keys override the operator keys for their vendors (tenant-funded →
-  // byo). One round-trip (parallel reads); empty (operator-key floor) when the tenant
-  // has connected nothing. Resolved BEFORE the model pick so a free tenant may pin a
-  // BYO model (byoVendors lifts the free-plan choice gate).
-  const creds = await resolveTenantLlmCredentials(env, tenantId);
-  // Same fail-closed BYO rule as the in-Worker loop (GAP-B4) — an image is a cloud
-  // execution surface too, so it must not degrade onto the platform key.
-  const byoBlocked = await refuseCloudRunWithoutByo(db, { tenantId, cloudAgentRef, executionId }, creds);
-  if (byoBlocked) return { ok: false, error: byoBlocked.message, code: byoBlocked.code };
-  const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = creds;
-  const byoVendors = byoVendorIdsFromCredentials(creds);
-  // D1: the weak-first cascade, when the lever is on and the image has a verifier. A
-  // later turn first folds the image's verdict on the previous one (one tier up on a fail).
-  const turnRole = cloudRunRole(role);
-  const cascade = await ImageCascade.open({
-    env, db, tenantId, executionId, cloudAgentRef, role: turnRole,
-    ladder: cloudTierLadder(byoVendors, ctx.effectivePlan, ctx.premiumOverride, creds.configuredProviders.length > 0),
-    features: imageTurnFeatures(ctx, args.messages, args.tools, turnRole),
-  }, run.checks);
-  let modelState = run.modelState;
-  if (modelState && cascade) modelState = await cascade.fold(modelState);
-  // The run-start pick seeds the run's model policy on its FIRST turn only; every later
-  // turn asks for what the policy says (the locked model, or the cascade after a
-  // release) — the same rules as the durable loop, instead of a fresh soft seed per op.
-  if (!modelState) {
-    // Evermind coding gate — undefined unless the pin is an `evermind/<ref>` route.
-    const evermindCoding = await resolveEvermindCodingRoute(env, db, tenantId, model);
-    // Operator ROLE_MODELS pin is the requested model when this turn has no explicit
-    // user/agent pin. Undefined pin = existing plan seed / learned ranker.
-    const requested = requestedModelForRole(env, role, model);
-    const pick = pickCloudModel(requested, ctx.effectivePlan, ctx.premiumOverride, {
-      ...(evermindCoding ? { evermindCoding } : {}),
-      role: turnRole,
-      // A cost-first role (explore / utility / verify) orders by expected cost.
-      prices: await pricesForCall(env, turnRole, undefined),
-      // D3: Thompson exploration on the soft seed while the lever is on for this tenant.
-      explore: cloudRoutingExploration(env, tenantId),
-      // Context-aware seed: a small-window model isn't picked for a big turn.
-      estimatedTokens: estimateRequestTokens(args.messages, args.tools),
-      byoVendors,
-      // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
-      byoVendorPriority: creds.vendorPriority,
-      byoAlertedVendors: creds.alertedVendors ?? [],
-      isSuperadmin: ctx.isSuperadmin,
-      registeredModels: creds.registeredModels,
-      preferredRegisteredModel: creds.preferredOpenRouterModel,
-      byoSelectedModels: creds.byoSelectedModels,
-      // Parity with the durable loop: a PREMIUM pin needs a validated billing card.
-      premiumEntitled: ctx.premiumEntitled,
-    });
-    modelState = initialCloudRunModelState(pick, role, { verify: requestedModelForRole(env, 'verify') ?? undefined });
-    if (cascade) modelState = await cascade.seed(modelState, pick.strict === true);
-  }
-  // The cascade's steer (why the run moved tier) rides THIS request only.
-  const cascadeSteer = cascade?.steerNote();
-  const turnMessages = cascadeSteer ? [...args.messages, { role: 'user', content: cascadeSteer }] : args.messages;
-  const requestedModel = modelState.policy.model ?? model;
-  const proxy = llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, {
-    backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true,
-    ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}),
-    ...(openaiCodexAuth ? { openaiCodexAuth } : {}),
-    ...(xaiOAuthToken ? { xaiOAuthToken } : {}),
-    ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}),
-    ...byoRoutingOptions(creds),
-    ...strictWhenConnected(creds.configuredProviders.length > 0),
-  });
-  const turnRun = await completeUnderRunPolicy(modelState, (req) => {
-    // D5: the per-role reply cap — parity with the durable loop's session cap.
-    const maxTokens = cloudOutputCap(env, tenantId, req.role, undefined);
-    return proxy.complete({
-      messages: turnMessages as unknown as ChatMessage[], tools: args.tools,
-      ...turnRequestFields(req),
-      ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
-      // Personality temperature — parity with the Worker/DO loop.
-      ...(ctx.execParams.temperature != null ? { temperature: ctx.execParams.temperature } : {}),
-      // Personality reasoning levers (thinkLevel/reasoningLevel) → the CORRECT vendor
-      // param for THIS model family (Anthropic `thinking` / OpenAI `reasoning_effort`),
-      // or nothing for a model that doesn't support one (reasoningCapability drops it).
-      // Only on a STRICT pin: an unpinned model may cascade to a different vendor that
-      // would reject the param, so we attach it solely when the resolved model is fixed.
-      // First-turn detection: no assistant turn yet in this slice.
-      // D4: with no persona level, the turn role's default effort while the lever is on.
-      ...(req.strict
-        ? reasoningParamsForModel(req.model, withCascadeReasoning(cascade, cloudReasoningExecParams(env, tenantId, ctx.execParams, req.role), req.role), {
-            isFirstTurn: !args.messages.some((m) => (m as { role?: string }).role === 'assistant'),
-          }) ?? {}
-        : {}),
-      useCase: 'task_execution',
-      prompt_cache_key: `cloud:${executionId}`,
-    }, undefined, undefined, args.signal);
-  }, (outcome) => recordModelCascade(db, { tenantId, cloudAgentRef, executionId }, outcome));
-  // Shared post-`complete` processing (metering + telemetry) — identical to the
-  // in-Worker loop, so a child's tokens are the tenant's tokens and a delegation that
-  // quietly billed to nobody cannot happen.
-  const turn = await recordCloudLlmTurn(turnRun.result, {
-    env, db, tenantId, cloudAgentRef, executionId, taskId, projectId,
-    requestedModel, fallbackModel: turnRun.state.policy.model,
-    effectivePlan: ctx.effectivePlan, premiumOverride: ctx.premiumOverride,
-    role: turnRole,
-    phase: turnRun.state.policy.phase,
-    turnInput: { messages: turnMessages, tools: args.tools },
-  }, { tGen0, notify: args.notify });
-  await cascade?.end(turn.ok ? turn.resolvedModel : undefined);
-  if (!turn.ok) return { ok: false, error: turn.error, modelState: turnRun.state };
-  return {
-    ok: true, content: turn.content, toolCalls: turn.toolCalls, resolvedModel: turn.resolvedModel,
-    modelState: turnRun.state,
-    fallbackSurface: codingFallbackSurface(byoVendors, ctx.effectivePlan, ctx.premiumOverride),
-  };
-}
-
-/** D1: the persona/role reasoning levers, raised while the cascade has a unit escalated. */
-function withCascadeReasoning(cascade: ImageCascade | null, base: AgentExecParams | undefined, role: unknown): AgentExecParams | undefined {
-  return cascade ? cascade.reasoning(base, role) : base;
 }

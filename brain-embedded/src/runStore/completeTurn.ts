@@ -5,6 +5,7 @@
  * analysis → code re-ask, and the `llm.complete` step every diagnostics reader keys on.
  */
 
+import { volatileTail } from '@seanhogg/builderforce-memory/handoff';
 import { replayTextOf, type LoopPorts } from '@builderforce/agent-loop';
 import { coderHandoffBrief, nextTurn, offersHandOff } from '@builderforce/run-policy';
 import { toolNamesMentionedIn } from '@builderforce/agent-stall';
@@ -171,10 +172,17 @@ export function completeTurnPort(run: RunLoopContext): LoopPorts<ChatCompletionM
     const turnToolChoice = run.forceToolChoice;
     run.forceToolChoice = undefined;
     // `extra` rides THIS request only (the hand-off brief); it never enters the transcript.
+    // What the run has already established, in front of THIS turn only — so the model
+    // reasons from its own record instead of re-deriving the codebase every turn (its
+    // reasoning is stripped from the transcript, and old tool results compact away).
+    // A tagged volatile tail: the cache breakpoint lands before it and the packer keeps
+    // it last without mistaking it for the user's request.
+    const ledger = tools ? volatileTail([run.knowledge.brief()]) : null;
     const request = async (extra: ChatCompletionMessage[] = []): Promise<StreamChatResult> => {
       const ask = nextTurn(run.policy, { hasTools: !!tools });
       const callMetadata = nextCallMetadata();
-      const messages = await run.windowFit.prepare({ messages: extra.length > 0 ? [...working, ...extra] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
+      const perTurn: ChatCompletionMessage[] = ledger ? [...extra, ledger] : extra;
+      const messages = await run.windowFit.prepare({ messages: perTurn.length > 0 ? [...working, ...perTurn] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
       return asLiveTurn(c, () => stream(
         {
           messages, tools, tool_choice: tools ? (turnToolChoice ?? 'auto') : undefined, model: ask.model, modelStrict: ask.strict,

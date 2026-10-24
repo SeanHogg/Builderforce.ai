@@ -30,6 +30,7 @@ import {
   type LocalRuntimeId,
   type LocalRuntimeProbe,
 } from '@builderforce/local-inference';
+import { isVolatileTail } from '@seanhogg/builderforce-memory/handoff';
 import { estimateTokensFromChars, profileWorkload } from '@builderforce/workload';
 import {
   streamChatCompletion,
@@ -264,10 +265,11 @@ export interface LocalFirstStreamInput {
   gate?: (plan: LocalFirstAttempt[], call: Omit<StreamChatOptions, 'transport'>) => Promise<LocalFirstAttempt[]>;
 }
 
-/** What no fit can drop: the system message(s) and the latest user turn. */
+/** What no fit can drop: the system message(s) and the latest user turn — the request,
+ *  never the per-turn volatile tail that rides after it. */
 function coreMessages(messages: readonly ChatCompletionMessage[]): ChatCompletionMessage[] {
   const system = messages.filter((m) => m.role === 'system');
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user' && !isVolatileTail(m));
   return lastUser ? [...system, lastUser] : system;
 }
 

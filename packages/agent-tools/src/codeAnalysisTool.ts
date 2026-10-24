@@ -1,6 +1,5 @@
 import { defineTool } from './tool.js';
 import { normalizeAnalysis, type CodeAnalysisSnapshot } from './codeAnalysis.js';
-import type { RepoReadResult, ShellResult } from './capabilities.js';
 
 export const ANALYZERS = [
   { name: 'dependency-cruiser', version: '16.10.4', command: 'npm exec --yes --package=dependency-cruiser@16.10.4 --package=typescript@5.6.3 --call="depcruise --config=.builderforce/code-analysis/dependencies.json --output-type=json ."' },
@@ -80,16 +79,10 @@ export const analyzeCodebaseTool = defineTool({
   },
 });
 
-/** Image adapter: upload the full artifact before returning a bounded summary to the model. */
-export async function runCodeAnalysis(args: Record<string, unknown>, ports: {
-  run(command: string): Promise<ShellResult>;
-  read(path: string): Promise<RepoReadResult>;
-  persist(snapshot: CodeAnalysisSnapshot): Promise<void>;
-}) {
-  const result = await analyzeCodebaseTool.execute(args, { caps: { shell: { run: ports.run }, repoRead: { readFile: ports.read } } } as never);
-  const snapshot = result.data.snapshot as CodeAnalysisSnapshot | undefined;
-  if (!snapshot) return result.data;
-  await ports.persist(snapshot);
+/** What the model reads once the full snapshot is saved for the visualizer — a bounded
+ *  summary, never the whole graph. */
+export function savedCodeAnalysisSummary(snapshot: CodeAnalysisSnapshot) {
   return { ok: true, artifactSaved: true, snapshotId: snapshot.id, tools: snapshot.tools,
     files: snapshot.nodes.length, dependencies: snapshot.edges.length, findings: snapshot.issues.length };
 }
+

@@ -835,7 +835,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // OIDC-authenticated op callback it drives the agent loop through. Deliberately
   // NOT under authMiddleware — an Actions runner has no tenant JWT; it proves
   // identity with a short-lived GitHub OIDC token instead (see the route file).
-  app.route('/api/runtime/github-actions', createGitHubActionsRoutes(db, runtimeService));
+  app.route('/api/runtime/github-actions', createGitHubActionsRoutes(db));
 
   // GitHub Actions deploy ingress — no JWT: a CI runner has no tenant token.
   // Authenticated by a GitHub OIDC token (which repo is calling) and authorized

@@ -152,3 +152,47 @@ describe('LoopGuards — A3 progress detector', () => {
     expect(resumed.tailSections().join('\n')).toContain('n.md');
   });
 });
+
+describe('LoopGuards — the sandbox\'s own checks (D1 verifier, D7 steer)', () => {
+  const failing = { passed: false, verifier: 'post_edit_checks', reason: 'tsc: 2 errors', steer: 'Post-edit checks FAILED: src/a.ts(3,1) error TS2304' };
+
+  it('a failing sandbox check overrules a passing static read and escalates the turn', async () => {
+    const { guards, wrapped, deps, model } = harness(ON);
+    deps.model.set(await guards.seedModel(model(), { strict: false, ladder, features: deps.features(0) }));
+    deps.sandbox = { checks: vi.fn(async () => failing) };
+    await wrapped.ports.dispatch(call('a', 'write_file', { path: 'cfg.json', content: '{}' }), ctx());
+    await wrapped.hooks.afterToolCalls!(ctx(2), false);
+    expect(model().policy.model).toBe('mid');
+    expect(h.outcome).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ passed: false, verifier: 'post_edit_checks' }));
+  });
+
+  it('shows the model the failures on the next turn under D7, and only that turn', async () => {
+    const { guards, wrapped, deps } = harness(ON);
+    deps.sandbox = { checks: vi.fn(async () => failing) };
+    await wrapped.ports.dispatch(call('a', 'write_file', { path: 'cfg.json', content: '{}' }), ctx());
+    await wrapped.hooks.afterToolCalls!(ctx(1), false);
+    expect(guards.tailSections().join('\n')).toContain('TS2304');
+    // A turn with no edits drains nothing and clears the note.
+    await wrapped.hooks.afterToolCalls!(ctx(2), false);
+    expect(guards.tailSections().join('\n')).not.toContain('TS2304');
+  });
+
+  it('runs the checks for D1 alone without showing the model their failures', async () => {
+    const { guards, wrapped, deps } = harness({ COST_LEVERS_ALL: 'off', COST_LEVER_D1_VERIFIER_CASCADE: 'on' });
+    const checks = vi.fn(async () => failing);
+    deps.sandbox = { checks };
+    await wrapped.ports.dispatch(call('a', 'write_file', { path: 'cfg.json', content: '{}' }), ctx());
+    await wrapped.hooks.afterToolCalls!(ctx(1), false);
+    expect(checks).toHaveBeenCalledTimes(1);
+    expect(guards.tailSections().join('\n')).not.toContain('TS2304');
+  });
+
+  it('never asks the sandbox on a turn with no edit', async () => {
+    const { wrapped, deps } = harness(ON);
+    const checks = vi.fn(async () => failing);
+    deps.sandbox = { checks };
+    await wrapped.ports.dispatch(call('r', 'read_file', { path: 'cfg.json' }), ctx());
+    await wrapped.hooks.afterToolCalls!(ctx(1), false);
+    expect(checks).not.toHaveBeenCalled();
+  });
+});

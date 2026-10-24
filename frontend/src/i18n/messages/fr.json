@@ -4005,12 +4005,11 @@
     "bestHost": "Distant (agentHost)",
     "surface": "Surface d'exécution",
     "surfaceLabel": {
-      "auto": "Automatique (recommandé) — choisi selon votre forfait",
-      "durable": "Durable (cloud, sans serveur à la demande)",
-      "container": "Conteneur Cloudflare longue durée (pour les exécutions très longues)",
+      "auto": "Automatique (recommandé)",
+      "durable": "Cloud Builderforce",
       "github_actions": "GitHub Actions (s'exécute sur les runners de votre dépôt)"
     },
-    "surfaceHelp": "Toutes exécutent la tâche complète à distance. Durable s'exécute à la demande sur un Durable Object (par étape) — l'option par défaut. Le conteneur Cloudflare longue durée maintient un processus actif pour des tâches très longues et continues (revient à Durable tant que l'infrastructure de conteneurs n'est pas activée). GitHub Actions exécute l'agent sur les runners du dépôt lié, avec un système de fichiers et une chaîne d'outils réels et une limite de 60 minutes — cela nécessite que le workflow de l'agent Builderforce (.github/workflows/builderforce-agent.yml) soit présent dans le dépôt, sinon l'exécution revient à Durable.",
+    "surfaceHelp": "Builderforce Cloud exécute chaque tâche à distance avec le même moteur, sur toutes les offres, avec un vrai shell et un clone de votre dépôt dès que possible. GitHub Actions exécute plutôt l'agent sur les runners de votre dépôt lié, avec une limite de 60 minutes ; il faut que le workflow d'agent Builderforce (.github/workflows/builderforce-agent.yml) soit commité dans le dépôt, sinon l'exécution utilise Builderforce Cloud.",
     "baseModel": "Modèle de base (facultatif)",
     "baseModelDefault": "Par défaut builderforce.ai (meilleur modèle de codage)",
     "baseModelHelp": "Le modèle d'appel d'outils et de codage sur lequel cet agent s'exécute — choisissez l'un de vos LLM ou un modèle du pool. Une exécution fixe un modèle pour toute la tâche ; laissez par défaut pour utiliser le meilleur modèle de codage de votre forfait.",
@@ -4060,9 +4059,7 @@
     "errSaveFailed": "Échec de l'enregistrement",
     "errDeleteFailed": "Échec de la suppression",
     "surfaceUnavailableOption": "{surface} — indisponible pour ce projet",
-    "errSurfaceBlocked": "{surface} n’est pas disponible pour ce projet : choisissez une autre surface d’exécution.",
-    "errSurfaceBlockedPlan": "{surface} nécessite un forfait payant — choisissez une autre surface d’exécution.",
-    "surfaceContainerLocked": "Un Container de longue durée est du calcul facturé et nécessite un forfait payant. Votre espace de travail s’exécute sur la surface Durable (sans serveur) : les agents fonctionnent toujours, ils modifient simplement via l’API git plutôt que par un shell."
+    "errSurfaceBlocked": "{surface} n’est pas disponible pour ce projet : choisissez une autre surface d’exécution."
   },
   "personalitySummary": {
     "title": "Personnalité",

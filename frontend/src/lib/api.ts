@@ -808,12 +808,12 @@ export type AgentPricingModel = 'flat_fee' | 'consumption';
  */
 export type AgentEngine = 'builderforce-v3';
 /**
- * Execution surface for a V2 cloud agent — the types the user picks at creation.
- * All run the full task remotely (no local/hybrid agent): `durable` on a Durable
- * Object (on-demand serverless, per step); `container` on a long-lived Cloudflare
- * Container for very long, continuous tasks; `github_actions` on the linked repo's
- * own GitHub Actions runners (real filesystem + toolchain, 60-minute cap), which
- * requires the Builderforce agent workflow committed to the repo.
+ * Execution surface for a cloud agent. `durable` is Builderforce Cloud — the ONE cloud
+ * runtime every plan runs on, with a real shell and a clone of the repo whenever the
+ * platform can provide one; `github_actions` runs on the linked repo's own GitHub Actions
+ * runners (60-minute cap), which requires the Builderforce agent workflow committed to
+ * the repo. `container` is LEGACY — a row written when the container was a separate paid
+ * surface; the server runs it on Builderforce Cloud and the picker reads it as `durable`.
  */
 export type AgentRuntimeSurface = 'durable' | 'container' | 'github_actions';
 

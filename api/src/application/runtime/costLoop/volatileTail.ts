@@ -12,15 +12,9 @@
  * and the Anthropic shape (Anthropic merges it into the tool_result user turn), so
  * tool-call/result pairing is untouched. It is built per request and never persisted.
  */
-import { VOLATILE_TAIL_TAG } from '../../llm/vendors/anthropic';
+import { volatileTail } from '@seanhogg/builderforce-memory/handoff';
 
 type Msg = Record<string, unknown>;
-
-/** The tail message for these sections, or null when every section is empty. */
-export function volatileTailMessage(sections: readonly string[]): Msg | null {
-  const body = sections.map((s) => s.trim()).filter(Boolean).join('\n\n');
-  return body ? { role: 'user', content: `${VOLATILE_TAIL_TAG}\n${body}\n</run-state>` } : null;
-}
 
 /**
  * The request messages for one turn.
@@ -30,11 +24,11 @@ export function volatileTailMessage(sections: readonly string[]): Msg | null {
  */
 export function turnRequestMessages(
   messages: readonly Msg[],
-  opts: { stablePrefix: boolean; dynamicSystem?: string; sections: readonly string[] },
+  opts: { stablePrefix: boolean; dynamicSystem?: string; sections: readonly (string | null | undefined)[] },
 ): Msg[] {
   const head = !opts.stablePrefix && opts.dynamicSystem
     ? [{ role: 'system', content: opts.dynamicSystem }, ...messages]
     : [...messages];
-  const tail = volatileTailMessage(opts.stablePrefix ? [opts.dynamicSystem ?? '', ...opts.sections] : opts.sections);
+  const tail = volatileTail(opts.stablePrefix ? [opts.dynamicSystem, ...opts.sections] : opts.sections);
   return tail ? [...head, tail] : head;
 }

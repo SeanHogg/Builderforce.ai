@@ -19,7 +19,10 @@
 import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { codeMapFromActivity, type RunActivity } from "@builderforce/agent-tools";
+import type { RunKnowledgeLog } from "@builderforce/agent-tools";
+
+/** What a finished run hands its memory commit: the run record's note view and its code map. */
+export type FinishedRun = Pick<RunKnowledgeLog, "activity" | "consolidate">;
 
 export type LearnedFactKind = "decision" | "root_cause" | "convention";
 
@@ -229,6 +232,27 @@ export async function readChangedExcerpt(root: string, paths: readonly string[])
 }
 
 /**
+ * The chat's Memory switch, applied in ONE place: off means the run writes no project
+ * facts at all — `deps` (the selected project's facts port, resolved lazily because it
+ * needs the editor state) is never even resolved. The workspace's own
+ * `.builderforce/memory` note is not project memory and is written regardless.
+ */
+export async function commitRunKnowledgeIfAllowed(
+  root: string,
+  run: FinishedRun,
+  opts: { memory: boolean },
+  resolveDeps: () => Promise<MemoryCommitDeps | undefined>,
+): Promise<void> {
+  if (!opts.memory) return;
+  try {
+    const deps = await resolveDeps();
+    if (deps) await commitRunKnowledge(root, run, deps);
+  } catch {
+    /* best-effort: a finished run never fails over its memory */
+  }
+}
+
+/**
  * Everything a finished editor run leaves in project memory: the code map of what it
  * read and changed (deterministic, every run that touched enough files — a read-only
  * investigation teaches the next run where things live as much as an edit does), then
@@ -236,10 +260,12 @@ export async function readChangedExcerpt(root: string, paths: readonly string[])
  */
 export async function commitRunKnowledge(
   root: string,
-  activity: RunActivity,
+  run: FinishedRun,
   deps: MemoryCommitDeps,
 ): Promise<void> {
-  const map = codeMapFromActivity(activity);
+  const activity = run.activity;
+  // The root, so a tool call given an absolute path still maps as a repo file.
+  const map = run.consolidate({ root });
   if (map) {
     try {
       await deps.remember(map.key, map.content);

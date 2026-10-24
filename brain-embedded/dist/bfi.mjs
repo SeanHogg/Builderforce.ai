@@ -23,7 +23,7 @@ import {
   servePageEngines,
   webGpuSupport,
   withTimeout
-} from "./chunk-DX6W7SR7.mjs";
+} from "./chunk-OYLJNCGN.mjs";
 
 // src/pageEngines/bfiChunks.ts
 function closingChunk(finalJson) {
@@ -221,6 +221,13 @@ function createBfiEngine(options) {
     if (poisoned) return true;
     poisoned = true;
     module = void 0;
+    for (const engine of engines.values()) {
+      try {
+        engine.dispose?.();
+      } catch (e) {
+        reportPageEngineFailure("bfi", "unload", e);
+      }
+    }
     engines.clear();
     resident = void 0;
     prober.invalidate();
@@ -229,6 +236,18 @@ function createBfiEngine(options) {
     for (const end of [...crashes]) end(failure);
     options.onTrap?.(error);
     return true;
+  };
+  const gpuGone = (error) => {
+    if (!errorMessage(error).startsWith("webgpu_unavailable")) return;
+    const gpu = engines.get("webgpu");
+    engines.delete("webgpu");
+    if (resident?.backend === "webgpu") resident = void 0;
+    try {
+      gpu?.dispose?.();
+    } catch (e) {
+      reportPageEngineFailure("bfi", "unload", e);
+    }
+    prober.invalidate();
   };
   const withDeviceMemory = (s) => {
     const cpu = s.backends?.cpu;
@@ -248,7 +267,7 @@ function createBfiEngine(options) {
   };
   const support = async () => {
     try {
-      return await anyBfiModelDownloaded(options.store) ? withDeviceMemory(await (await bfi()).BfiEngine.support()) : await bfiSupportWithoutWasm(options.deviceMemoryBytes);
+      return options.supportFromEngine || await anyBfiModelDownloaded(options.store) ? withDeviceMemory(await (await bfi()).BfiEngine.support()) : await bfiSupportWithoutWasm(options.deviceMemoryBytes);
     } catch (e) {
       reportPageEngineFailure("bfi", "support", e);
       return BFI_UNSUPPORTED;
@@ -316,10 +335,15 @@ function createBfiEngine(options) {
     } catch (e) {
       release();
       if (trapped(e)) throw crashError(e);
+      gpuGone(e);
       const mapped = bfiError(e);
       throw mapped instanceof PageEngineError ? mapped : new PageEngineError(503, "bfi_engine_unavailable", errorMessage(e));
     }
-    const mapError = (e) => trapped(e) ? crashError(e) : bfiError(e);
+    const mapError = (e) => {
+      if (trapped(e)) return crashError(e);
+      gpuGone(e);
+      return bfiError(e);
+    };
     return releasing(bfiChunks(live, JSON.stringify({ ...body, stream: true }), signal, mapError, crashes), release);
   }
   return { runtime: "bfi", baseUrl: BFI_ENGINE_BASE_URL, ...prober, support, chatCompletions };

@@ -50,9 +50,6 @@ vi.mock('./defaultCloudAgent', () => ({
 vi.mock('./cloudRunLedger', () => ({
   enforceCloudRunCap: async () => ({ allowed: true }),
 }));
-vi.mock('./containerRunLauncher', () => ({
-  launchContainerRun: vi.fn(),
-}));
 vi.mock('./githubActionsDispatch', () => ({
   dispatchGithubActionsRun: vi.fn(),
 }));

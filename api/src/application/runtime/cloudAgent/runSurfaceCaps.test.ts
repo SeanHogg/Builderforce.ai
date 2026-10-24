@@ -11,6 +11,11 @@ const repo: TicketRepoContext = {
 const owner = { parent: {}, runtime: {} } as never;
 
 describe('durableRunCaps', () => {
+  it('holds `shell` only when the run has a sandbox', () => {
+    expect(durableRunCaps(C5, 1, owner, repo, true).has('shell')).toBe(true);
+    expect(durableRunCaps(C5, 1, owner, repo).has('shell')).toBe(false);
+  });
+
   it('adds repo.semantic only while C5 is on AND a repository backs it', () => {
     expect(durableRunCaps(C5, 1, owner, repo).has('repo.semantic')).toBe(true);
     expect(durableRunCaps(C5, 1, owner, null).has('repo.semantic')).toBe(false);
@@ -24,10 +29,14 @@ describe('durableRunCaps', () => {
 });
 
 describe('prepSurfaceCaps', () => {
-  it('is the container set for a shell run and the durable set otherwise, levers applied', () => {
+  it("is the one cloud set, plus the sandbox's `shell` for a sandboxed run, levers applied", () => {
     expect(prepSurfaceCaps(C5, 1, true).has('shell')).toBe(true);
     expect(prepSurfaceCaps(C5, 1, false).has('shell')).toBe(false);
     expect(prepSurfaceCaps(C5, 1, false).has('repo.semantic')).toBe(true);
+    // A sandbox ADDS — the provider-backed tools a container image once lacked remain.
+    for (const cap of ['repo.search', 'repo.delete', 'static-check', 'web'] as const) {
+      expect(prepSurfaceCaps(C5, 1, true).has(cap)).toBe(true);
+    }
   });
 });
 

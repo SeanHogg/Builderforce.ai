@@ -33,13 +33,15 @@ export interface ChatDiagnosticsRun {
   /** `user:<id>` | `system:lane-auto` | `system:coordinator` | … — WHICH pathway started it. */
   submittedBy: string;
   source?: string;
-  /**
-   * WHERE it executed: 'container' (real shell + local clone) | 'durable' (shell-LESS,
-   * git-API edits) | 'github_actions'. Reported because the two cloud executors differ in
-   * what the run was CAPABLE of — only one of them can compile what it wrote — and from
-   * inside the transcript they are indistinguishable.
-   */
+  /** WHERE it executed: 'durable' (the one cloud runtime) | 'github_actions'. */
   executor?: string | null;
+  /**
+   * What served its shell and working tree: 'container' | 'actions' | 'none'. Reported
+   * because it decides what the run was CAPABLE of — a run with no sandbox edited over
+   * the git API and could not compile what it wrote — and from inside the transcript the
+   * two are indistinguishable.
+   */
+  sandbox?: string | null;
   /** The on-prem machine this run was delivered to, when it was one. */
   hostId?: number | null;
   hostName?: string | null;
@@ -119,17 +121,6 @@ export interface ChatDiagnosticsAccount {
   modelFunding?: string | null;
   /** Whether the plan entitles the tenant to premium/frontier models. */
   canUsePremiumModels?: boolean;
-  /**
-   * Whether the plan covers the CONTAINER execution surface — a real shell and a local
-   * clone. Free workspaces run on the durable (serverless) surface, which is free
-   * Cloudflare infrastructure and provably cannot run a build, and a cloud agent
-   * explicitly set to `container` is DEMOTED at dispatch rather than refused.
-   *
-   * Stated explicitly because that demotion is correct, cheap and completely invisible:
-   * a free workspace whose agent "ran fine" and produced a diff nothing compiled reads
-   * exactly like a paid one that ran the full toolchain.
-   */
-  containerRuntime?: boolean;
   /** How many models the plan pool currently offers. */
   planModelCount?: number;
   /** Connected bring-your-own provider keys (empty ⇒ every turn is plan-funded). */
@@ -457,25 +448,21 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
       `ℹ️ Every run on this chat's tickets was started by ${runs.dispatchers.join(', ')} — none by a person pressing Run. This conversation has not dispatched anything itself.`,
     );
   }
-  // WHERE the runs could not build. 'durable' is not a smaller container — it has no
-  // shell at all, so a run on it edits over the git API and provably never compiled,
-  // type-checked or tested what it wrote. From the transcript that is invisible: the run
-  // is green, the diff looks plausible, and the first person to find out is whoever pulls
-  // the branch. On a free workspace this is not a fault, it is the plan; the report says
-  // which of the two it is so the reader does not go looking for a broken container.
+  // WHERE the runs could not build. A run with no sandbox has no shell at all, so it
+  // edits over the git API and provably never compiled, type-checked or tested what it
+  // wrote. From the transcript that is invisible: the run is green, the diff looks
+  // plausible, and the first person to find out is whoever pulls the branch. Every plan
+  // gets a sandbox, so the cause is on the run's own timeline (`runtime.sandbox`).
   const ran = runs?.runs ?? [];
   if (ran.length > 0) {
-    const shellless = ran.filter((r) => executorHasShell(r.executor) === false);
+    const shellless = ran.filter((r) => runHasShell(r) === false);
     if (shellless.length === ran.length) {
-      const why = d.account?.containerRuntime === false
-        ? " This workspace's plan does not include the container surface, so every cloud run is routed there by design — upgrade, or run the work in the editor/on-prem where there IS a shell."
-        : " The container surface was not used — either no agent here is set to it, or no container was live and the run was demoted. Check the agent's runtime surface.";
       out.push(
-        `⚠️ All ${ran.length} run(s) on this chat executed on the DURABLE surface, which has no shell: none of them could build, type-check or test the code they wrote.${why}`,
+        `⚠️ All ${ran.length} run(s) on this chat ran WITHOUT a sandbox shell: none of them could build, type-check or test the code they wrote. The run timeline's runtime.sandbox event says why (no container bound, the ticket's repository could not be cloned, or the sandbox failed to open).`,
       );
     } else if (shellless.length > 0) {
       out.push(
-        `ℹ️ ${shellless.length} of ${ran.length} run(s) executed on the shell-less durable surface and could not build or test their own output (runs ${shellless.slice(0, 5).map((r) => `#${r.executionId}`).join(', ')}).`,
+        `ℹ️ ${shellless.length} of ${ran.length} run(s) ran without a sandbox shell and could not build or test their own output (runs ${shellless.slice(0, 5).map((r) => `#${r.executionId}`).join(', ')}).`,
       );
     }
     const unknown = ran.filter((r) => r.executor == null && r.hostId == null);
@@ -612,18 +599,23 @@ function autoExecGloss(submittedBy: string): string {
  * gloss exists for is capability, not hosting: 'durable' is not a smaller container, it
  * is a surface with no shell at all.
  */
-function executorGloss(executor: string | null | undefined): string {
+function executorGloss(executor: string | null | undefined, sandbox?: string | null): string {
   if (executor === 'on-prem') return "on-prem machine (real shell, the machine's own clone)";
+  if (sandbox === 'container') return 'cloud, container sandbox (real shell + clone — can build, type-check and test)';
+  if (sandbox === 'actions' || executor === 'github_actions') return "cloud, GitHub Actions sandbox (the repo's own runner)";
+  if (sandbox === 'none') return 'cloud, NO sandbox (edits over the git API; cannot build or test)';
+  // A run from before the sandbox stamp: a `container` ran its own loop with a shell, a
+  // `durable` one had none.
   if (executor === 'container') return 'container (real shell + local clone — can build, type-check and test)';
   if (executor === 'durable') return 'durable (serverless, NO shell — edits over the git API; cannot build or test)';
-  if (executor === 'github_actions') return "GitHub Actions (the repo's own runners)";
   return 'executor not recorded';
 }
 
-/** Could a run on this executor compile what it wrote? `false` only when we KNOW it could not. */
-function executorHasShell(executor: string | null | undefined): boolean | null {
-  if (executor === 'durable') return false;
-  if (executor === 'container' || executor === 'on-prem' || executor === 'github_actions') return true;
+/** Could this run compile what it wrote? `false` only when we KNOW it could not. */
+function runHasShell(run: { executor?: string | null; sandbox?: string | null }): boolean | null {
+  if (run.sandbox) return run.sandbox !== 'none';
+  if (run.executor === 'durable') return false;
+  if (run.executor === 'container' || run.executor === 'on-prem' || run.executor === 'github_actions') return true;
   return null;
 }
 
@@ -665,7 +657,7 @@ function runHistoryLines(runs: ChatDiagnosticsRuns | null | undefined): string[]
   );
   const executors = runs.executors ?? [];
   if (executors.length > 0) {
-    out.push(`  - ran on: ${executors.map(executorGloss).join('; ')}`);
+    out.push(`  - ran on: ${executors.map((e) => executorGloss(e)).join('; ')}`);
   }
   for (const run of runs.runs.slice(0, MAX_RUNS_LISTED)) {
     const who = run.agentName?.trim() || run.agentRef || 'no agent recorded';
@@ -679,7 +671,7 @@ function runHistoryLines(runs: ChatDiagnosticsRuns | null | undefined): string[]
     const failed = run.errorMessage ? ` · ${run.errorMessage}` : '';
     const where = run.hostName
       ? ` · on on-prem "${run.hostName}"`
-      : run.executor ? ` · on ${run.executor}` : ' · on ? (executor not recorded)';
+      : run.executor ? ` · on ${run.executor}${run.sandbox ? ` (sandbox: ${run.sandbox})` : ''}` : ' · on ? (executor not recorded)';
     out.push(
       `  - run #${run.executionId} · ${who} · ${ticket} · ${run.status}${produced}${where}`
         + ` · by ${run.submittedBy}${run.source ? ` via ${run.source}` : ''}`
@@ -811,10 +803,7 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
     lines.push(
       `- Plan: ${acct.plan ?? 'unknown'}`
         + ` · billing ${acct.billingStatus ?? 'none'}${acct.billingStatus === 'none' || acct.billingStatus == null ? ' (no payment method on file)' : ''}`
-        + `${acct.canUsePremiumModels != null ? ` · premium models ${acct.canUsePremiumModels ? 'entitled' : 'NOT entitled'}` : ''}`
-        // The surface a cloud run gets is a plan decision, so it belongs on the plan line
-        // rather than being left for the reader to infer from the executors below.
-        + `${acct.containerRuntime != null ? ` · container runtime ${acct.containerRuntime ? 'entitled (cloud runs get a real shell + clone)' : 'NOT entitled (cloud runs are routed to the shell-less durable surface)'}` : ''}`,
+        + `${acct.canUsePremiumModels != null ? ` · premium models ${acct.canUsePremiumModels ? 'entitled' : 'NOT entitled'}` : ''}`,
     );
     lines.push(
       `- Model: ${acct.model ?? 'auto (gateway routes per turn)'}`

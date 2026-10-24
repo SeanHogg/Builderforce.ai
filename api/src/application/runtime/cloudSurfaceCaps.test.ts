@@ -1,20 +1,17 @@
 /**
- * The two cloud surfaces' DERIVED toolsets. Both capability sets feed a registry that
- * derives the schema array actually advertised to the model, so a one-word edit to a
- * capability set silently changes which tools exist — and the container's set must
- * additionally match what `api/container/server.mjs` really implements, because that
- * image runs its own loop and a tool it doesn't handle 400s mid-run.
+ * A cloud run's DERIVED toolset. The capability set feeds a registry that derives the
+ * schema array actually advertised to the model, so a one-word edit to the set silently
+ * changes which tools exist. There is ONE set for every cloud run; a run with a SANDBOX
+ * (the Cloudflare Container or its Actions runner) adds exactly what the sandbox backs —
+ * `shell` — and every tool stays the shared definition the one engine dispatches.
  *
  * These lists are therefore pinned deliberately: a diff here should be a conscious
- * decision, checked against the image (and the doc block in `cloudAgentTools.ts`),
- * not an accident. Two real defects this guards:
- *   • the container advertising `shell` while its doc block listed six fewer tools
- *     than `shell` actually unlocks (all six `git_*`, which the image DOES implement);
- *   • `memory` missing from the container set with no explanation, so a fact stored by
- *     a durable run was unreachable from a container run.
+ * decision, checked against the doc block in `cloudAgentTools.ts`, not an accident.
  */
 import { describe, expect, it } from 'vitest';
-import { CLOUD_AGENT_TOOLS, CONTAINER_AGENT_TOOLS, CLOUD_SURFACE_CAPS, CONTAINER_SURFACE_CAPS } from './cloudAgentTools';
+import { CLOUD_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudAgentToolsFor } from './cloudAgentTools';
+import { SANDBOX_CAPABILITIES } from './sandbox/sandboxProvider';
+import { prepSurfaceCaps } from './cloudAgent/runSurfaceCaps';
 
 const names = (tools: ReadonlyArray<{ function?: { name?: string } }>): string[] =>
   tools.map((t) => t.function?.name ?? '').sort();
@@ -29,17 +26,12 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     ]);
   });
 
-  it('delegates the SAME way on both cloud surfaces — one sub-agent path, no image-only variant', () => {
-    // Every child is its own durable execution with an owner pointer, whichever surface
-    // its owner runs on: the images send all five tools through the one `subagent`
-    // container-op, so the two surfaces advertise the same delegation set.
+  it('delegates one way — every child is its own durable run with an owner pointer', () => {
     for (const cap of ['orchestrate', 'orchestrate.fanout', 'orchestrate.live'] as const) {
       expect(CLOUD_SURFACE_CAPS.has(cap)).toBe(true);
-      expect(CONTAINER_SURFACE_CAPS.has(cap)).toBe(true);
     }
     for (const t of ['spawn_agent', 'spawn_agents', 'wait_agents', 'message_agent', 'stop_agent']) {
       expect(names(CLOUD_AGENT_TOOLS)).toContain(t);
-      expect(names(CONTAINER_AGENT_TOOLS)).toContain(t);
     }
   });
 
@@ -80,86 +72,30 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     expect(names(CLOUD_AGENT_TOOLS)).toContain('update_prd');
   });
 
-  it('has no shell tool — this surface cannot run a build/test and must not claim to', () => {
+  it('has no shell tool without a sandbox — it cannot run a build/test and must not claim to', () => {
     expect(names(CLOUD_AGENT_TOOLS)).not.toContain('run_command');
   });
 });
 
-describe('CONTAINER_SURFACE_CAPS → container toolset (must match server.mjs)', () => {
-  it('advertises exactly what the image implements', () => {
-    expect(names(CONTAINER_AGENT_TOOLS)).toEqual([
-      'analyze_codebase', 'ask_human', 'claim_resource', 'edit_file', 'finish', 'git_diff', 'git_history', 'git_redo', 'git_status',
-      'git_sync_latest', 'git_undo', 'list_files', 'memory_forget', 'memory_recall', 'memory_remember',
-      'message_agent', 'read_file', 'release_resource', 'run_command', 'skill_list', 'skill_propose',
-      'spawn_agent', 'spawn_agents', 'stop_agent', 'update_prd', 'wait_agents', 'web_search',
-      'workspace_note', 'workspace_read', 'write_file',
-    ]);
+describe('a sandboxed cloud run → the cloud toolset plus what the shell backs', () => {
+  const sandboxed = cloudAgentToolsFor(prepSurfaceCaps({}, 1, true));
+
+  it('adds exactly the shell tools, and drops nothing', () => {
+    const shellTools = ['analyze_codebase', 'git_diff', 'git_history', 'git_redo', 'git_status', 'git_sync_latest', 'git_undo', 'run_command'];
+    expect(names(sandboxed)).toEqual([...names(CLOUD_AGENT_TOOLS), ...shellTools].sort());
   });
 
-  it('backs `skill.author` — parity with the durable surface, on the shared `skill` op', () => {
-    // Withheld until there was a `skill` container-op and a relay arm to answer the two
-    // tools. Both exist now (cloudAgent/skillOp.ts + container/agentRelay.mjs), so a
-    // container or Actions run can propose a procedure it proved, as a durable run can.
-    expect(CONTAINER_SURFACE_CAPS.has('skill.author')).toBe(true);
-    expect(names(CONTAINER_AGENT_TOOLS)).toContain('skill_propose');
-    expect(names(CONTAINER_AGENT_TOOLS)).toContain('skill_list');
+  it("the sandbox backs only `shell` — everything else is the engine's own provider", () => {
+    expect([...SANDBOX_CAPABILITIES]).toEqual(['shell']);
   });
 
-  it('backs `coordinate` through the Worker-owned lease and blackboard stores', () => {
-    expect(CONTAINER_SURFACE_CAPS.has('coordinate')).toBe(true);
-    for (const t of ['claim_resource', 'release_resource', 'workspace_note', 'workspace_read']) {
-      expect(names(CONTAINER_AGENT_TOOLS)).toContain(t);
-    }
+  it('keeps the provider-backed tools a container image used to lack', () => {
+    // The container's own loop could not search, delete, statically check or fetch; the
+    // one engine can, so a sandboxed run keeps all four.
+    for (const t of ['search_code', 'delete_file', 'run_checks', 'web_fetch']) expect(names(sandboxed)).toContain(t);
   });
 
-  it('`shell` unlocks all six git tools, which the image handles in gitTool()', () => {
-    const got = names(CONTAINER_AGENT_TOOLS);
-    for (const t of ['git_status', 'git_diff', 'git_history', 'git_sync_latest', 'git_undo', 'git_redo']) {
-      expect(got).toContain(t);
-    }
-  });
-
-  it('backs memory, so a fact stored on either cloud surface is recallable on both', () => {
-    expect(CONTAINER_SURFACE_CAPS.has('memory')).toBe(true);
-    expect(names(CONTAINER_AGENT_TOOLS)).toContain('memory_recall');
-    expect(names(CONTAINER_AGENT_TOOLS)).toContain('memory_remember');
-  });
-
-  it('omits the tools the image has no handler for (they would 400 mid-run)', () => {
-    const got = names(CONTAINER_AGENT_TOOLS);
-    // `repo.search` — it greps via the shell; `static-check` — shell-free validator.
-    // (`human` and `repo.edit` USED to be on this list; the image now implements the
-    // pause and the in-clone `edit_file`, so both are advertised — handshake-gated.)
-    for (const t of ['delete_file', 'search_code', 'run_checks']) {
-      expect(got).not.toContain(t);
-    }
-  });
-
-  it('backs `human` — the image parks the run and is redispatched with the answer', () => {
-    expect(CONTAINER_SURFACE_CAPS.has('human')).toBe(true);
-    expect(names(CONTAINER_AGENT_TOOLS)).toContain('ask_human');
-  });
-
-  it('backs `web.search` — parity with the durable surface, on the shared `search` op', () => {
-    // This was the last capability the two cloud surfaces disagreed on, and the
-    // disagreement was structural rather than intentional: the container's tools come
-    // from its image's own loop, and there was no op behind search, so advertising it
-    // would have surfaced a tool that 400s mid-run. The `search` container-op is that
-    // backing, and BOTH images that share this capability set dispatch `web_search` to
-    // it (api/container/server.mjs and githubActionsRunner.ts).
-    expect(CONTAINER_SURFACE_CAPS.has('web.search')).toBe(true);
-    expect(names(CONTAINER_AGENT_TOOLS)).toContain('web_search');
-    // Still NOT `web` (fetch): there is no `fetch` op, and a shell can curl.
-    expect(CONTAINER_SURFACE_CAPS.has('web')).toBe(false);
-    expect(names(CONTAINER_AGENT_TOOLS)).not.toContain('web_fetch');
-  });
-
-  it('backs `prd.write` — both images relay `update_prd` through the shared `prd` op', () => {
-    // The container image (api/container/server.mjs) and the GitHub Actions runner
-    // (githubActionsRunner.ts) share this capability set and BOTH dispatch `update_prd`
-    // to the Worker's `prd` op. Advertising it to only one of them is the dead seam
-    // this set exists to prevent.
-    expect(CONTAINER_SURFACE_CAPS.has('prd.write')).toBe(true);
-    expect(names(CONTAINER_AGENT_TOOLS)).toContain('update_prd');
+  it('never unlocks the publishing verbs — those need `git.write`, not a shell', () => {
+    for (const t of ['git_commit', 'git_push', 'open_pull_request']) expect(names(sandboxed)).not.toContain(t);
   });
 });

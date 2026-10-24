@@ -1,9 +1,10 @@
 import { createDurableErrorReporter, type DurableErrorReporter } from '../../application/observability/durableErrorReporter';
 /**
- * CloudRunnerDO — the **durable** cloud surface for V2 agents. Runs the cloud
- * agent loop fully in the cloud across Durable Object `alarm()` ticks: ONE LLM
- * step per tick, with the conversation state persisted in DO storage between
- * ticks. Each tick is a fresh Worker invocation with a fresh CPU/subrequest
+ * CloudRunnerDO — the ONE cloud runtime. Every cloud run, on every plan, runs the one
+ * engine here across Durable Object `alarm()` ticks: ONE LLM step per tick, with the
+ * conversation state persisted in DO storage between ticks. Its shell and working tree
+ * come from the run's SANDBOX — the Cloudflare Container, or the repo's GitHub Actions
+ * runner, which polls this DO for the engine's requests (`sandbox/runSandboxHost.ts`). Each tick is a fresh Worker invocation with a fresh CPU/subrequest
  * budget, so a multi-step run never hits the ~30s `waitUntil` wall that kills the
  * interim Worker path — it just keeps ticking until the agent calls `finish`.
  *
@@ -23,7 +24,9 @@ import { loadPersonaSetpoints } from '../../application/artifact/capabilityConte
 import { heartbeatExecution } from '../../application/runtime/cloudAgent/runContext';
 import type { AgentExecParams } from '@builderforce/agent-tools';
 import type { LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
-import { parseRoutingBias, parseArcStage, parsePolicyGates, parseModel, parseReviewRole, parseLaneKey, parseOriginatingChatId } from '../../application/runtime/cloudDispatch';
+import { parseRoutingBias, parseArcStage, parsePolicyGates, parseModel, parseReviewRole, parseLaneKey, parseOriginatingChatId, parseExecutor, withRunSandbox } from '../../application/runtime/cloudDispatch';
+import { ACTIONS_RUNNER_WAIT_MS, RunSandboxHost, type RunSandboxKind } from '../../application/runtime/sandbox/runSandboxHost';
+import { dispatchGithubActionsRun } from '../../application/runtime/githubActionsDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { isInfrastructureEviction } from '../../application/runtime/orphanReasons';
 import { settleLateSteersSafely } from '../../application/runtime/lateSteerFollowUp';
@@ -67,6 +70,10 @@ interface Cursor extends StartBody {
   /** Execution levers compiled from the agent's/personas' personality (resolved on
    *  the prep tick, reused every loop tick so personality applies across DO ticks). */
   execParams?: AgentExecParams;
+  /** The run's sandbox (decided on the prep tick): the shell and working tree. */
+  sandbox?: RunSandboxKind;
+  /** When the loop started waiting for its Actions runner to poll. */
+  sandboxWaitSince?: number;
 }
 
 const CURSOR_KEY = 'cursor';
@@ -92,6 +99,8 @@ export class CloudRunnerDO implements DurableObject {
   private readonly reportError: DurableErrorReporter;
   /** When the row last said "not concluded" (in memory: an evicted DO just re-reads). */
   private notConcludedCheckedAt = 0;
+  /** The run's sandbox: which one, the tick's handle, and the Actions runner's mailbox. */
+  private readonly sandboxHost: RunSandboxHost;
 
   constructor(private readonly state: DurableObjectState, private readonly env: Env) {
     this.reportError = createDurableErrorReporter('infrastructure/relay/CloudRunnerDO.ts', env, state);
@@ -100,6 +109,7 @@ export class CloudRunnerDO implements DurableObject {
     // run's status transitions move the ticket, record metrics, write audit events,
     // and trigger the next-lane agent identically — no raw open-coded db.update.
     this.runtimeService = buildRuntimeService(env, this.db);
+    this.sandboxHost = new RunSandboxHost(env, this.db, state.storage);
   }
 
   fetch(request: Request): Promise<Response> {
@@ -121,6 +131,14 @@ export class CloudRunnerDO implements DurableObject {
       const cursor = (await this.state.storage.get<Cursor>(CURSOR_KEY)) ?? null;
       if (!cursor) return new Response(JSON.stringify({ ok: false, reason: 'no paused run' }), { status: 409, headers: { 'Content-Type': 'application/json' } });
       await markCloudExecutionRunning(this.runtimeService, cursor.executionId);
+      // An Actions run released its runner while it waited: queue a fresh one.
+      if (cursor.sandbox === 'actions') {
+        this.sandboxHost.reopen(cursor.sandbox);
+        cursor.sandboxWaitSince = undefined;
+        await this.state.storage.put(CURSOR_KEY, cursor);
+        await dispatchGithubActionsRun(this.env, this.db, { tenantId: cursor.tenantId, taskId: cursor.taskId, executionId: cursor.executionId })
+          .catch((error) => this.reportError(error, { operation: 'resume', context: { logMessage: '[cloud-runner] Actions runner re-dispatch failed', details: { executionId: cursor.executionId } } }));
+      }
       await this.state.storage.setAlarm(Date.now());
       // Narrate the resume into the ticket's linked Brain chats — this is the ONLY
       // authoritative "actually resumed" point (a wake with no cursor 409s above).
@@ -131,6 +149,16 @@ export class CloudRunnerDO implements DurableObject {
         eventNonce: typeof body?.approvalId === 'string' ? body.approvalId : null,
       });
       return new Response(JSON.stringify({ ok: true }), { status: 202, headers: { 'Content-Type': 'application/json' } });
+    }
+    // The run's GitHub Actions runner: it cannot be called, so it polls here for the
+    // engine's next sandbox request and posts each result back (`sandbox/sandboxMailbox.ts`).
+    if (request.method === 'POST' && url.pathname.endsWith('/sandbox/next')) {
+      return Response.json(await this.sandboxHost.handleRunnerPoll());
+    }
+    if (request.method === 'POST' && url.pathname.endsWith('/sandbox/result')) {
+      const body = (await request.json().catch(() => null)) as { id?: unknown; result?: unknown } | null;
+      const taken = typeof body?.id === 'string' && this.sandboxHost.handleRunnerResult(body.id, body.result);
+      return Response.json({ ok: taken }, { status: taken ? 200 : 409 });
     }
     // The run was concluded elsewhere (RuntimeService.cancel). Remember it so the next
     // tick — and the in-flight step's cancel poll — stop without reading the row. A DO
@@ -187,10 +215,18 @@ export class CloudRunnerDO implements DurableObject {
 
     try {
       if (cursor.stage === 'prep') {
+        // The sandbox first: whether the run has a shell decides its tools and its prompt.
+        cursor.sandbox = await this.sandboxHost.prepare(sandboxRunOf(cursor), parseExecutor(cursor.payload) === 'github_actions' ? 'github_actions' : 'durable');
+        // Stamped on the row too, so run history and diagnostics can say whether this run
+        // could build and test what it wrote.
+        cursor.payload = withRunSandbox(cursor.payload, cursor.sandbox ?? 'none');
+        await this.db.update(executions).set({ payload: cursor.payload }).where(eq(executions.id, cursor.executionId))
+          .catch((error) => this.reportError(error, { operation: 'alarm', context: { logMessage: '[cloud-runner] sandbox stamp failed', details: { executionId: cursor.executionId } } }));
         const { systemPrompt, userContent, execParams, agentPsychometric } = await prepareCloudRun(
           this.env, this.db, cursor.executionId,
           { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
           cursor.tenantId, cursor.projectId, cursor.agentLabel, cursor.model, cursor.artifacts, cursor.cloudAgentRef, cursor.payload,
+          { shell: !!cursor.sandbox },
         );
         cursor.systemPrompt = systemPrompt;
         cursor.userContent = userContent;
@@ -221,6 +257,18 @@ export class CloudRunnerDO implements DurableObject {
         return;
       }
 
+      // An Actions run holds until GitHub has scheduled its runner and it has polled: the
+      // engine's first shell call would otherwise wait out a queued job inside one tick.
+      if (await this.sandboxHost.awaitingRunner(cursor.sandbox)) {
+        cursor.sandboxWaitSince ??= Date.now();
+        if (Date.now() - cursor.sandboxWaitSince > ACTIONS_RUNNER_WAIT_MS) {
+          throw new Error(`GitHub Actions did not start the agent runner within ${Math.round(ACTIONS_RUNNER_WAIT_MS / 60_000)} minutes. Check the workflow run in the repository's Actions tab.`);
+        }
+        await this.state.storage.put(CURSOR_KEY, cursor);
+        await this.state.storage.setAlarm(Date.now() + 10_000);
+        return;
+      }
+
       // One LLM step per tick; resume from the saved conversation state. The engine
       // is resolved through the ONE seam (resolveAgentEngine) — this surface only says
       // it is durable and hands over THIS tick's evolving affect; the engine owns the
@@ -247,7 +295,11 @@ export class CloudRunnerDO implements DurableObject {
         ...(originatingChatId != null ? { originatingChatId } : {}),
         ...(requiredSignoff ? { requiredSignoff } : {}),
         ...(cursor.execParams ? { execParams: cursor.execParams } : {}),
-        surface: { kind: 'durable', maxSteps: 1, ...(cursor.limbic && cursor.limbicState ? { limbicState: cursor.limbicState } : {}) },
+        surface: {
+          kind: 'durable', maxSteps: 1,
+          ...(cursor.limbic && cursor.limbicState ? { limbicState: cursor.limbicState } : {}),
+          ...(cursor.sandbox ? { sandbox: this.sandboxHost.forTick(sandboxRunOf(cursor), cursor.sandbox) } : {}),
+        },
         delegation,
       });
       const result = await engine.run({
@@ -270,6 +322,7 @@ export class CloudRunnerDO implements DurableObject {
       if (result.awaitingInput) {
         cursor.loop = result.state as CloudLoopState | undefined;
         await this.state.storage.put(CURSOR_KEY, cursor);
+        await this.sandboxHost.park(cursor.sandbox);
         await this.db.update(executions)
           .set({ status: 'paused', updatedAt: new Date() })
           .where(eq(executions.id, cursor.executionId))
@@ -401,6 +454,9 @@ export class CloudRunnerDO implements DurableObject {
   }
 
   private async cleanup(executionId?: number): Promise<void> {
+    // The run is over: release its sandbox (the container's clone, the Actions runner).
+    const ending = await this.state.storage.get<Cursor>(CURSOR_KEY);
+    if (ending?.sandbox) await this.sandboxHost.close(sandboxRunOf(ending), ending.sandbox).catch(() => undefined);
     // Terminal — a steer that arrived after the loop's last tick is LATE: it starts a
     // follow-up run under the person who sent it (a cancelled run's is released,
     // visibly) — lateSteerFollowUp.ts. Every DO terminal path (finish, cancel, error)
@@ -423,4 +479,12 @@ export class CloudRunnerDO implements DurableObject {
     this.notConcludedCheckedAt = 0;
     await this.state.storage.deleteAlarm();
   }
+}
+
+/** What the run's sandbox host needs to know about the run. */
+function sandboxRunOf(cursor: Cursor) {
+  return {
+    executionId: cursor.executionId, tenantId: cursor.tenantId, projectId: cursor.projectId, taskId: cursor.taskId,
+    ...(cursor.cloudAgentRef ? { cloudAgentRef: cursor.cloudAgentRef } : {}),
+  };
 }

@@ -1,64 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { buildCodeMapFact, CODE_MAP_FACT_PREFIX, codeMapFactKey, codeMapFromActivity, RunKnowledgeRecorder } from "./run-knowledge.js";
+import { fileToolKind, recordingOnly, RunKnowledgeRecorder } from "./run-knowledge.js";
 import { buildKnowledgeMemoryEntry } from "./knowledge-notes.js";
 
-const AT = new Date("2026-10-24T12:00:00Z");
+// The memory concepts themselves (the brief, consolidation, the merge) are tested in
+// `@seanhogg/builderforce-memory/working`. This suite covers the ADAPTER: tool names in,
+// observations out.
 
-describe("buildCodeMapFact", () => {
-  it("keys the map by the directory the top files share and ranks changed, then most-read", () => {
-    const fact = buildCodeMapFact(
-      {
-        prompt: "Move the visualization canvas to a side panel",
-        read: [
-          "clients/vscode/webview/src/WorkspaceApp.tsx",
-          "clients/vscode/webview/src/WorkspaceApp.tsx",
-          "clients/vscode/webview/src/visualization/VisualizationPanel.tsx",
-          "clients/vscode/webview/src/WorkspaceApp.tsx",
-        ],
-        changed: ["clients/vscode/webview/src/chat/VsCodeChatSurface.tsx"],
-      },
-      AT,
-    );
-    expect(fact?.key).toBe(`${CODE_MAP_FACT_PREFIX}clients/vscode/webview/src`);
-    const lines = fact!.content.split("\n");
-    expect(lines[0]).toContain("2026-10-24");
-    expect(lines[0]).toContain("Move the visualization canvas");
-    expect(lines.slice(2)).toEqual([
-      "- clients/vscode/webview/src/chat/VsCodeChatSurface.tsx (changed)",
-      "- clients/vscode/webview/src/WorkspaceApp.tsx (read 3×)",
-      "- clients/vscode/webview/src/visualization/VisualizationPanel.tsx",
-    ]);
-  });
-
-  it("skips a short lookup that changed nothing", () => {
-    expect(buildCodeMapFact({ read: ["a/b/c.ts", "a/b/d.ts"], changed: [] }, AT)).toBeNull();
-    expect(buildCodeMapFact({ read: [], changed: [] }, AT)).toBeNull();
-  });
-
-  it("keeps a single changed file — an edit is always worth mapping", () => {
-    expect(buildCodeMapFact({ read: [], changed: ["api/src/routes/x.ts"] }, AT)?.key).toBe("codemap:api/src/routes");
-  });
-
-  it("falls back to the most-used file's folder when the files share too little", () => {
-    const fact = buildCodeMapFact(
-      { read: ["api/src/a/x.ts", "api/src/a/x.ts", "frontend/src/y.tsx", "docs/z.md"], changed: [] },
-      AT,
-    );
-    expect(fact?.key).toBe("codemap:api/src/a");
-  });
-
-  it("normalises separators and drops paths outside the repo", () => {
-    const fact = buildCodeMapFact(
-      { read: [".\\pkg\\src\\a.ts", "pkg/src/b.ts", "../secret.ts", "C:/abs/c.ts", "/etc/passwd", "pkg/src/c.ts"], changed: [] },
-      AT,
-    );
-    expect(fact?.content).not.toMatch(/secret|abs|passwd/);
-    expect(fact?.content).toContain("- pkg/src/a.ts");
-    expect(fact?.key).toBe("codemap:pkg/src");
-  });
-
-  it("bounds the key", () => {
-    expect(codeMapFactKey("x".repeat(400)).length).toBe(255);
+describe("fileToolKind", () => {
+  it("classifies every runtime's spelling, deletes included", () => {
+    expect(["write_file", "write", "create"].map(fileToolKind)).toEqual(["create", "create", "create"]);
+    expect(["edit_file", "edit", "apply_patch"].map(fileToolKind)).toEqual(["edit", "edit", "edit"]);
+    expect(["delete_file", "delete"].map(fileToolKind)).toEqual(["delete", "delete"]);
+    expect(["read_file", "read", "view", "file_outline"].map(fileToolKind)).toEqual(["read", "read", "read", "read"]);
+    expect(fileToolKind("search_code")).toBeUndefined();
   });
 });
 
@@ -67,8 +21,10 @@ describe("RunKnowledgeRecorder", () => {
     const r = new RunKnowledgeRecorder();
     r.record("write_file", { path: "src/a.ts" });
     r.record("edit_file", { path: "src/b.ts" });
+    r.record("delete_file", { path: "src/c.ts" });
     expect(r.activity.created).toEqual(["src/a.ts"]);
     expect(r.activity.edited).toEqual(["src/b.ts"]);
+    expect(r.activity.deleted).toEqual(["src/c.ts"]);
   });
 
   it("accepts every runtime's spelling of the same operation", () => {
@@ -85,9 +41,9 @@ describe("RunKnowledgeRecorder", () => {
     const r = new RunKnowledgeRecorder();
     r.record("read_file", { path: "x.ts" });
     r.record("file_outline", { path: "x.ts" });
-    r.record("search_code", { query: "x" });
+    r.record("git_status", {});
     expect(r.activity.read).toEqual(["x.ts", "x.ts"]);
-    expect(r.activity.tools).toEqual(["read_file", "file_outline", "search_code"]);
+    expect(r.activity.tools).toEqual(["read_file", "file_outline", "git_status"]);
     expect(r.activity.created).toEqual([]);
   });
 
@@ -106,14 +62,46 @@ describe("RunKnowledgeRecorder", () => {
     expect(r.isEmpty).toBe(false);
   });
 
+  it("records a search by what it looked for and where", () => {
+    const r = new RunKnowledgeRecorder();
+    for (let i = 0; i < 12; i++) r.record("search_code", { query: "canvas", path: "web/src" });
+    expect(r.brief()).toContain('search_code "canvas" in web/src (12×)');
+  });
+
+  it("counts every tool call toward the brief's threshold, not only file events", () => {
+    const r = new RunKnowledgeRecorder();
+    r.record("read_file", { path: "a.ts" });
+    expect(r.brief()).toBeNull();
+    for (let i = 0; i < 12; i++) r.record("git_status", {});
+    expect(r.brief()).toContain("- a.ts");
+  });
+
   it("feeds the code map and the note from the same record", () => {
     const r = new RunKnowledgeRecorder();
     r.setPrompt("  where is   the canvas ");
     for (const p of ["web/src/a.ts", "web/src/b.ts", "web/src/a.ts", "web/src/c.ts"]) r.record("read_file", { path: p });
-    const fact = codeMapFromActivity(r.activity, AT);
-    expect(fact?.key).toBe("codemap:web/src");
-    expect(fact?.content).toContain('asked: "where is the canvas"');
-    const note = buildKnowledgeMemoryEntry({ sessionKey: "s", ts: AT.toISOString(), activity: r.activity });
+    const map = r.consolidate({ at: new Date("2026-10-24T12:00:00Z") });
+    expect(map?.key).toBe("codemap:web/src");
+    expect(map?.content).toContain('asked: "where is the canvas"');
+    const note = buildKnowledgeMemoryEntry({ sessionKey: "s", ts: "2026-10-24T12:00:00Z", activity: r.activity });
     expect(note).toContain("**Read**: web/src/a.ts, web/src/b.ts, web/src/c.ts");
+  });
+
+  it("maps absolute paths under the root as repo files", () => {
+    const r = new RunKnowledgeRecorder();
+    for (const p of ["a.ts", "b.ts", "c.ts"]) r.record("read_file", { path: `/work/repo/api/src/${p}` });
+    expect(r.consolidate({ root: "/work/repo" })?.key).toBe("codemap:api/src");
+  });
+});
+
+describe("recordingOnly", () => {
+  it("records only the calls the host admits, over the same record", () => {
+    const r = new RunKnowledgeRecorder();
+    const local = recordingOnly(r, (name) => name !== "remote_search");
+    local.record("remote_search", { query: "x" });
+    local.record("read_file", { path: "a.ts" });
+    expect(r.activity.tools).toEqual(["read_file"]);
+    expect(local.activity.read).toEqual(["a.ts"]);
+    expect(local.isEmpty).toBe(false);
   });
 });

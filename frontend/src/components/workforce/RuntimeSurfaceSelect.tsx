@@ -4,7 +4,6 @@ import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { GithubActionsUnavailableReason } from '@/components/repos/githubActionsSurface';
 import { useGithubActionsSupported } from '@/lib/useGithubActionsReadiness';
-import { usePlanFeature } from '@/lib/useConsumption';
 import type { AgentRuntimeSurface } from '@/lib/api';
 
 /**
@@ -38,28 +37,33 @@ import type { AgentRuntimeSurface } from '@/lib/api';
  * disables anything — disabling on an unknown would make a perfectly good
  * configuration unreachable whenever an unrelated endpoint has a bad minute.
  *
- * TWO CONDITIONAL SURFACES, ONE RULE. `container` is conditional for a different
- * reason than `github_actions`: not "this project cannot run it" but "this plan does
- * not cover it". A container is billable Cloudflare compute held open for the length
- * of a run, so a free workspace runs on the durable (serverless) surface, and the
- * server DEMOTES an explicit `container` it is not entitled to. Offering the option
- * anyway would be the same after-the-fact degrade this component was written to stop.
- * Entitlement comes from the server's resolved feature set, never from the plan name.
+ * ONE CLOUD RUNTIME. There is no separate "container" surface to choose any more:
+ * every cloud run, on every plan, runs the same engine, and it gets a real shell and a
+ * clone of the repo whenever the platform can provide one. The plan decides only what
+ * the run is charged against (the monthly cloud-run allowance), never where it runs —
+ * so nothing here is plan-gated. The one conditional choice left is `github_actions`.
  */
 
 /**
  * What the picker offers. `''` is AUTOMATIC — it leaves `ide_agents.runtime_surface`
- * unset, and the server resolves the surface per plan at dispatch time (container on a
- * paid workspace, durable on a free one). It is first and it is the default for a new
- * agent, because the form used to hard-code `'durable'`: every agent created in the UI
- * pinned itself to the shell-less surface forever, which is a large part of why the
- * container surface was never reached. Choosing a concrete surface here still means
- * "this one, always" — including after an upgrade.
+ * unset, and the server runs the agent on the cloud runtime (or the repo's GitHub Actions
+ * runners when it was set up for them). `'durable'` pins the cloud runtime explicitly.
  */
-export type RuntimeSurfaceChoice = AgentRuntimeSurface | '';
+export type RuntimeSurfaceChoice = Exclude<AgentRuntimeSurface, 'container'> | '';
 
 /** Every choice, in the order the picker offers them. */
-export const RUNTIME_SURFACE_KEYS: RuntimeSurfaceChoice[] = ['', 'durable', 'container', 'github_actions'];
+export const RUNTIME_SURFACE_KEYS: RuntimeSurfaceChoice[] = ['', 'durable', 'github_actions'];
+
+/**
+ * A stored surface as a picker choice. `'container'` is a LEGACY value from when the
+ * container was a separate, paid surface; the server runs it on the one cloud runtime,
+ * so it reads (and re-saves) as that choice.
+ */
+export function runtimeSurfaceChoice(stored: string | null | undefined): RuntimeSurfaceChoice {
+  if (stored === 'container' || stored === 'durable') return 'durable';
+  if (stored === 'github_actions') return 'github_actions';
+  return '';
+}
 
 /**
  * Why this surface selection is refused, localized — or null when it is fine.
@@ -70,22 +74,16 @@ export const RUNTIME_SURFACE_KEYS: RuntimeSurfaceChoice[] = ['', 'durable', 'con
  * picker rendered — which is exactly what a `canX` boolean passed down from a parent
  * could not promise.
  *
- * It returns the MESSAGE, not a boolean, because the two refusals are different facts
- * and read differently ("this project cannot run it" vs "your plan does not cover it").
- * Both submit paths were each rebuilding that sentence from the surface key, which meant
- * one generic wording for both — and a new reason would have had to be added twice.
+ * It returns the MESSAGE, not a boolean, so both submit paths show the one wording
+ * instead of each rebuilding it from the surface key.
  *
  * Only ever non-null on a hard `false`; unknown never blocks a save.
  */
 export function useRuntimeSurfaceRefusal(surface: RuntimeSurfaceChoice | string): string | null {
   const t = useTranslations('cloudAgentForm');
   const supported = useGithubActionsSupported();
-  const containerEntitled = usePlanFeature('containerRuntime');
   if (surface === 'github_actions' && supported === false) {
     return t('errSurfaceBlocked', { surface: t('surfaceLabel.github_actions') });
-  }
-  if (surface === 'container' && containerEntitled === false) {
-    return t('errSurfaceBlockedPlan', { surface: t('surfaceLabel.container') });
   }
   return null;
 }
@@ -107,18 +105,11 @@ export interface RuntimeSurfaceSelectProps {
 export function RuntimeSurfaceSelect({ value, onChange, style, labelStyle }: RuntimeSurfaceSelectProps) {
   const t = useTranslations('cloudAgentForm');
   const actionsSupported = useGithubActionsSupported();
-  const containerEntitled = usePlanFeature('containerRuntime');
   const reasonId = useId();
-  const containerReasonId = `${reasonId}-container`;
 
-  /** A surface this project or plan provably cannot run. `null` (unknown) never disables. */
-  const unavailable = (surface: RuntimeSurfaceChoice): boolean => {
-    if (surface === 'github_actions') return actionsSupported === false;
-    if (surface === 'container') return containerEntitled === false;
-    return false;
-  };
-
-  const containerLocked = unavailable('container');
+  /** A surface this project provably cannot run. `null` (unknown) never disables. */
+  const unavailable = (surface: RuntimeSurfaceChoice): boolean =>
+    surface === 'github_actions' && actionsSupported === false;
 
   return (
     <div>
@@ -129,11 +120,8 @@ export function RuntimeSurfaceSelect({ value, onChange, style, labelStyle }: Run
         value={value}
         // `aria-describedby` only when the description is actually rendered —
         // pointing at a missing id is a worse experience than pointing at nothing.
-        aria-describedby={[
-          actionsSupported === false ? reasonId : null,
-          containerLocked ? containerReasonId : null,
-        ].filter(Boolean).join(' ') || undefined}
-        onChange={(e) => onChange(e.target.value as AgentRuntimeSurface)}
+        aria-describedby={actionsSupported === false ? reasonId : undefined}
+        onChange={(e) => onChange(runtimeSurfaceChoice(e.target.value))}
       >
         {RUNTIME_SURFACE_KEYS.map((rs) => (
           <option key={rs || 'auto'} value={rs} disabled={unavailable(rs)}>
@@ -149,11 +137,6 @@ export function RuntimeSurfaceSelect({ value, onChange, style, labelStyle }: Run
       {/* Self-gating: renders only on a positive "not enabled", and says which of
           the two fixes applies (connect a GitHub repo vs commit the workflow). */}
       <GithubActionsUnavailableReason id={reasonId} />
-      {containerLocked ? (
-        <p id={containerReasonId} role="status" style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)', margin: '6px 0 0' }}>
-          {t('surfaceContainerLocked')}
-        </p>
-      ) : null}
     </div>
   );
 }

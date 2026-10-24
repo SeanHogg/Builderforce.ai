@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  CONTAINER_IN_RUN_VERIFY_NOTE,
+  SANDBOX_IN_RUN_VERIFY_NOTE,
   DURABLE_IN_RUN_VERIFY_NOTE,
   IN_RUN_VERIFY_SCRIPT_NAMES,
   inRunVerifyOutcome,
@@ -62,13 +62,13 @@ describe('planInRunVerify', () => {
   });
 
   it('container / github_actions / on-prem plan the package scripts (no SSH)', () => {
-    for (const surface of ['container', 'github_actions', 'on-prem'] as const) {
+    for (const surface of ['sandbox', 'on-prem'] as const) {
       const plan = planInRunVerify({ surface, packageScripts: SCRIPTS });
       expect(plan.kind).toBe('run');
       expect(plan.surface).toBe(surface);
       expect(plan.reason).toBeNull();
       expect(plan.commands).toEqual(['npm run typecheck', 'npm run test']);
-      expect(plan.note).toBe(CONTAINER_IN_RUN_VERIFY_NOTE);
+      expect(plan.note).toBe(SANDBOX_IN_RUN_VERIFY_NOTE);
     }
   });
 });
@@ -88,7 +88,7 @@ describe('inRunVerifyOutcome', () => {
   });
 
   it('container with no writes may finish without running tests', () => {
-    const o = inRunVerifyOutcome({ surface: 'container', writtenPaths: [], packageScripts: SCRIPTS });
+    const o = inRunVerifyOutcome({ surface: 'sandbox', writtenPaths: [], packageScripts: SCRIPTS });
     expect(o.kind).toBe('skipped');
     expect(o.reason).toBe('nothing_written');
     expect(o.mayFinish).toBe(true);
@@ -96,7 +96,7 @@ describe('inRunVerifyOutcome', () => {
 
   it('container that wrote code and has not run the commands must not finish', () => {
     const o = inRunVerifyOutcome({
-      surface: 'container',
+      surface: 'sandbox',
       writtenPaths: ['src/a.ts'],
       packageScripts: SCRIPTS,
     });
@@ -108,7 +108,7 @@ describe('inRunVerifyOutcome', () => {
 
   it('container that ran the planned commands green may finish', () => {
     const o = inRunVerifyOutcome({
-      surface: 'container',
+      surface: 'sandbox',
       writtenPaths: ['src/a.ts'],
       packageScripts: SCRIPTS,
       results: [
@@ -124,7 +124,7 @@ describe('inRunVerifyOutcome', () => {
 
   it('container that failed typecheck must not finish', () => {
     const o = inRunVerifyOutcome({
-      surface: 'github_actions',
+      surface: 'sandbox',
       writtenPaths: ['src/a.ts'],
       packageScripts: SCRIPTS,
       results: [

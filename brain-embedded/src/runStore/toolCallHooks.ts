@@ -116,6 +116,8 @@ export function afterDispatchHook(run: RunLoopContext): NonNullable<Hooks['after
     // Pin this tool into every later turn's selection — a multi-step task must
     // never lose a tool it is mid-way through using.
     usedTools.add(call.name);
+    // The run's own record — successes only, so the ledger never claims a read that failed.
+    if (!isFailedToolResult(ran.out)) run.knowledge.record(call.name, args);
     return undefined;
   };
 }

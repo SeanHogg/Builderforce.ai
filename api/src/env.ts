@@ -375,17 +375,18 @@ export interface Env {
   EVERMIND_MAX_FITS_PER_ALARM?: string;
 
   /** Cloudflare Container runtime for a "Cloud Agent (Node/Container)" — a
-   *  long-lived Node process with a real shell (the `container` runtime surface).
-   *  One instance per execution (`idFromName('exec:<id>')`). Optional: when unset
-   *  (or the container can't start), a `container`-surface run degrades to the
-   *  durable executor so it still runs in the cloud. Backed by AgentContainerDO via
-   *  a `[[containers]]` block in wrangler.toml; binding name `AGENT_CONTAINER`. */
+   *  long-lived Node process with a real shell — the run SANDBOX every cloud run's
+   *  engine calls for its shell and working tree (`sandbox/runSandbox.ts`), on every
+   *  plan. One instance per execution (`idFromName('exec:<id>')`). Optional: when unset
+   *  (or the sandbox can't open), a run still runs, editing over the git API without a
+   *  shell. Backed by AgentContainerDO via a `[[containers]]` block in wrangler.toml;
+   *  binding name `AGENT_CONTAINER`. */
   AGENT_CONTAINER?: DurableObjectNamespace;
 
   /** Live container-preview ingress (Replit-parity phase 2). When set to `'true'`
    *  the Worker proxies `preview.builderforce.ai/<token>/*` HTTP + WebSocket traffic
-   *  through {@link AGENT_CONTAINER} to a dev server the run started inside its
-   *  container (the `/__preview__` passthrough in `container/server.mjs`). Default
+   *  through {@link AGENT_CONTAINER} to a dev server the run's sandbox started (the
+   *  `/__preview__` passthrough in `container/server.mjs`). Default
    *  unset ⇒ the ingress is inert (404), so the feature is fully off until an operator
    *  enables it on a Containers-Paid account. Requires a proxied `preview` DNS record.
    *  Toggle via `wrangler secret put PREVIEW_INGRESS_ENABLED`. */

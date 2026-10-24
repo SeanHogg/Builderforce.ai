@@ -163,7 +163,6 @@ export async function decideApproval(db: Db, env: ApprovalEnv, input: DecideAppr
       tenantId,
       answer: responseText,
       approvalId: id,
-      runtimeService: input.runtimeService,
     });
   }
 

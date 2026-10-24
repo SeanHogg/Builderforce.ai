@@ -418,49 +418,52 @@ describe('formatChatDiagnostics — WHERE the work ran', () => {
     }).join('\n');
     expect(out).toContain('on on-prem "studio-mac-mini"');
     // A host run has a shell, so it must NOT trip the shell-less warning.
-    expect(out).not.toMatch(/executed on the DURABLE surface/);
+    expect(out).not.toMatch(/WITHOUT a sandbox shell/);
   });
 
-  it('WARNS when every run was shell-less, and blames the PLAN when that is the cause', () => {
+  it('WARNS when every run had no sandbox shell, and points at the run timeline', () => {
     const out = formatChatDiagnostics({
       ...base(),
-      account: { plan: 'free', billingStatus: 'none', containerRuntime: false },
+      account: { plan: 'free', billingStatus: 'none' },
       runs: {
         linkedRunnableTickets: 2,
-        runs: [aRun({ executionId: 94 }), aRun({ executionId: 95 })],
+        runs: [aRun({ executionId: 94, sandbox: 'none' }), aRun({ executionId: 95, sandbox: 'none' })],
         dispatchers: ['user:1'],
         executors: ['durable'],
       },
     }).join('\n');
-    expect(out).toMatch(/All 2 run\(s\) on this chat executed on the DURABLE surface, which has no shell/);
-    expect(out).toMatch(/plan does not include the container surface/);
-    // And the plan line states the entitlement directly, so the reader does not have to
-    // infer it from the executors.
-    expect(out).toContain('container runtime NOT entitled');
+    expect(out).toMatch(/All 2 run\(s\) on this chat ran WITHOUT a sandbox shell/);
+    expect(out).toMatch(/runtime\.sandbox event says why/);
+    expect(out).toContain('run #94');
+    expect(out).toContain('(sandbox: none)');
   });
 
-  it('points at the AGENT, not the plan, when the workspace IS entitled', () => {
-    // Same symptom, opposite fix: an entitled workspace landing on durable means either
-    // no agent here asks for a container or none was live and the run was demoted.
+  it('does not warn when the run had a sandbox, on any plan', () => {
     const out = formatChatDiagnostics({
       ...base(),
-      account: { plan: 'pro', billingStatus: 'active', containerRuntime: true },
+      account: { plan: 'free', billingStatus: 'none' },
       runs: {
         linkedRunnableTickets: 1,
-        runs: [aRun({ executionId: 96 })],
+        runs: [aRun({ executionId: 96, sandbox: 'container' })],
         dispatchers: ['user:1'],
         executors: ['durable'],
       },
     }).join('\n');
-    expect(out).toMatch(/no container was live and the run was demoted/);
-    expect(out).toContain('container runtime entitled');
+    expect(out).not.toMatch(/WITHOUT a sandbox shell/);
+    expect(out).toContain('(sandbox: container)');
   });
 
-  it('says nothing about the entitlement when the API did not report one', () => {
-    // Absent is not "no". An older gateway sends no feature set, and a report that
-    // rendered that as NOT entitled would send the reader to the billing page.
-    const out = formatChatDiagnostics({ ...base(), account: { plan: 'pro', billingStatus: 'active' } }).join('\n');
-    expect(out).not.toMatch(/container runtime/);
+  it('still reads a run from before the sandbox stamp by its executor', () => {
+    const out = formatChatDiagnostics({
+      ...base(),
+      runs: {
+        linkedRunnableTickets: 1,
+        runs: [aRun({ executionId: 98, executor: 'durable' })],
+        dispatchers: ['user:1'],
+        executors: ['durable'],
+      },
+    }).join('\n');
+    expect(out).toMatch(/ran WITHOUT a sandbox shell/);
   });
 
   it('is honest when no run recorded where it ran', () => {
@@ -475,7 +478,7 @@ describe('formatChatDiagnostics — WHERE the work ran', () => {
     }).join('\n');
     expect(out).toMatch(/No run on this chat recorded WHERE it executed/);
     // ...and it must NOT claim they were shell-less, which is a different, stronger claim.
-    expect(out).not.toMatch(/executed on the DURABLE surface/);
+    expect(out).not.toMatch(/WITHOUT a sandbox shell/);
   });
 
   it('prints this chat dollar rollup when the host passed one, and says so when it did not', () => {

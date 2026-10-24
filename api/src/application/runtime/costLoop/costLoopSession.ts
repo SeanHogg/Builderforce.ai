@@ -168,12 +168,13 @@ export class CostLoopSession {
     return `Run contained: ${reason}.${progress ? `\n\nProgress so far — a follow-up run can resume from here:\n${progress}` : ''}`;
   }
 
-  /** The request messages for this turn (B1 volatile tail; the budget line + task state ride it). */
-  turnMessages(messages: readonly Msg[], dynamicSystem?: string): Msg[] {
+  /** The request messages for this turn (B1 volatile tail; the budget line, task state and
+   *  the caller's per-turn sections — the run's working-memory brief — ride it). */
+  turnMessages(messages: readonly Msg[], dynamicSystem?: string, extra: readonly (string | null)[] = []): Msg[] {
     return turnRequestMessages(messages, {
       stablePrefix: this.stablePrefix,
       ...(dynamicSystem ? { dynamicSystem } : {}),
-      sections: [this.budgetLine, this.taskStateOn ? renderTaskState(this.taskState) : '', ...this.guards.tailSections()],
+      sections: [this.budgetLine, this.taskStateOn ? renderTaskState(this.taskState) : '', ...this.guards.tailSections(), ...extra],
     });
   }
 

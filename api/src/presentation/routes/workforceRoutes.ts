@@ -444,11 +444,9 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ? body.runtimeSupport! : 'cloud';
     const pricingModel = (PRICING_MODELS as readonly string[]).includes(body.pricingModel ?? '')
       ? body.pricingModel! : 'flat_fee';
-    // Which execution surface the agent runs on (durable DO vs long-lived node).
-    // UNSET when the caller did not choose, never a hard-coded 'durable': the default
-    // surface is a plan decision resolved at dispatch time (`resolveCloudSurface`), so an
-    // agent created on Free moves to the container the moment the workspace upgrades,
-    // without anyone editing it. Writing a concrete value here froze that choice forever.
+    // Which surface serves the agent's sandbox (the cloud runtime, or the repo's own
+    // GitHub Actions runners). UNSET when the caller did not choose: the default is
+    // resolved at dispatch time (`resolveCloudSurface`), so it is never frozen here.
     const runtimeSurface = (RUNTIME_SURFACES as readonly string[]).includes(body.runtimeSurface ?? '')
       ? body.runtimeSurface! : null;
     // preferred_runtime only meaningful when both are supported

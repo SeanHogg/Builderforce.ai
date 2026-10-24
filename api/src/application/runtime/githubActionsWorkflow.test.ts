@@ -73,12 +73,14 @@ describe('renderAgentWorkflow', () => {
 describe('renderAgentRunnerScript', () => {
   const script = renderAgentRunnerScript();
 
-  it('mirrors the shared glob: **/ matches zero directories, and a truncated miss is not absence', () => {
+  it('serves THE sandbox core — the same primitives the container serves — inlined', () => {
+    expect(script).toContain('function createSandboxBox(');
+    expect(script).toContain('async function serveSandbox(');
+    expect(script).toContain('async function absorbCommit(');
+    // The shared glob: **/ matches zero directories, and a truncated miss is not absence.
     expect(script).toContain("re += '(?:.*/)?'");
     expect(script).toContain('function dirMayContainGlob');
-    expect(script).toContain('function emptyGlobNote');
     expect(script).toContain('NOT proof the file does not exist');
-    expect(script).not.toContain('0 matches means no such file exists in the paths scanned — do not claim one is missing without trying a broader glob first.\n  }\n  if (truncated)');
   });
 
   it('is syntactically valid JavaScript', () => {
@@ -94,20 +96,18 @@ describe('renderAgentRunnerScript', () => {
     expect(script).toContain('executionId: EXECUTION_ID');
   });
 
-  it('drives every op the surface defines', () => {
-    for (const name of ['spec', 'heartbeat', 'llm', 'event', 'write', 'platform_tool', 'memory']) {
+  it("pulls the engine's requests and answers them — the sandbox ops, nothing else", () => {
+    for (const name of ['spec', 'sandbox_next', 'sandbox_result', 'sandbox_status', 'event']) {
       expect(script).toContain(`op('${name}'`);
     }
   });
 
-  it('has exactly one terminal op on each path, in a finally', () => {
-    expect(script).toContain("op('fail'");
-    expect(script).toContain("op('finalize'");
-    // One occurrence each: two finalizes (or a finalize reachable after a fail)
-    // would double-complete the run.
-    expect(script.split("op('fail'").length - 1).toBe(1);
-    expect(script.split("op('finalize'").length - 1).toBe(1);
-    expect(script).toContain('} finally {');
+  it('runs no agent loop and decides nothing: no model turn, commit or finalize', () => {
+    for (const name of ['llm', 'write', 'finalize', 'fail', 'heartbeat', 'ask_human', 'platform_tool', 'memory']) {
+      expect(script).not.toContain(`op('${name}'`);
+    }
+    expect(script).not.toContain('runAgentLoop');
+    expect(script).not.toContain('runImageLoop');
   });
 
   it('works in the existing checkout instead of cloning', () => {
@@ -121,17 +121,8 @@ describe('renderAgentRunnerScript', () => {
     for (const spec of imports) expect(spec.startsWith('node:')).toBe(true);
   });
 
-  it('drives the shared agent-loop kernel — no step cap — and adopts compacted history', () => {
-    // The kernel and the image semantics are inlined from the same two files the
-    // container imports; the failure-streak breaker is the only limit.
-    expect(script).toContain('function runAgentLoop(');
-    expect(script).toContain('function runImageLoop(');
-    expect(script).toContain('await runImageLoop({');
-    expect(script).not.toContain('spec.maxSteps');
-    expect(script).toContain('Array.isArray(turn.compactedMessages)');
-  });
-
-  it('kills an in-flight command when a heartbeat reports a cancel', () => {
+  it('kills a running command when the run is cancelled', () => {
+    expect(script).toContain('function cancelWatch(kill)');
     expect(script).toContain("proc.current.kill('SIGKILL')");
   });
 });

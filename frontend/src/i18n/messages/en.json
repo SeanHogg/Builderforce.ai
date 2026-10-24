@@ -4005,12 +4005,11 @@
     "bestHost": "Remote (agentHost)",
     "surface": "Runtime surface",
     "surfaceLabel": {
-      "auto": "Automatic (recommended) — chosen for your plan",
-      "durable": "Durable (cloud, on-demand serverless)",
-      "container": "Long-lived Cloudflare Container (for very long runs)",
+      "auto": "Automatic (recommended)",
+      "durable": "Builderforce Cloud",
       "github_actions": "GitHub Actions (runs on your repo's runners)"
     },
-    "surfaceHelp": "All run the full task remotely. Durable executes on-demand on a Durable Object (per step) — the default. Long-lived Cloudflare Container keeps a process running for very long, continuous tasks (falls back to Durable until Container infra is enabled). GitHub Actions runs the agent on your linked repo's own runners with a real filesystem and toolchain and a 60-minute limit — it requires the Builderforce agent workflow (.github/workflows/builderforce-agent.yml) committed to the repo, otherwise the run falls back to Durable.",
+    "surfaceHelp": "Builderforce Cloud runs every task remotely on the same engine, on every plan, with a real shell and a clone of your repo whenever one can be provided. GitHub Actions runs the agent on your linked repo's own runners instead, with a 60-minute limit — it requires the Builderforce agent workflow (.github/workflows/builderforce-agent.yml) committed to the repo, otherwise the run uses Builderforce Cloud.",
     "baseModel": "Base model (optional)",
     "baseModelDefault": "builderforce.ai default (best coding model)",
     "baseModelHelp": "The tool-calling + coding model this agent runs on — pick one of your LLMs or a model from the pool. A run pins one model for the whole task; leave default to use the plan's best coding model.",
@@ -4060,9 +4059,7 @@
     "errSaveFailed": "Save failed",
     "errDeleteFailed": "Delete failed",
     "surfaceUnavailableOption": "{surface} — not available for this project",
-    "errSurfaceBlocked": "{surface} is not available for this project — pick another runtime surface.",
-    "errSurfaceBlockedPlan": "{surface} needs a paid plan — pick another runtime surface.",
-    "surfaceContainerLocked": "A long-lived Container is billable compute and needs a paid plan. Your workspace runs on the Durable (serverless) surface — agents still run, they just edit over the git API instead of through a shell."
+    "errSurfaceBlocked": "{surface} is not available for this project — pick another runtime surface."
   },
   "personalitySummary": {
     "title": "Personality",

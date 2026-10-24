@@ -30,14 +30,36 @@ export function setGroundingSummary(summary: string | undefined): void {
  * symbol index degrades to what remains, never to a failed turn.
  */
 export async function getGroundingWithHistory(root: string | undefined): Promise<string | undefined> {
+  const [stable, history] = await Promise.all([getStableGrounding(root), recentActivitySection(root)]);
+  const sections = [stable, history].filter((s): s is string => !!s);
+  return sections.length ? sections.join("\n\n") : undefined;
+}
+
+/**
+ * The workspace's SHAPE — map, live repo map, definition index — without the run notes.
+ * What the panel builds its system prompt from: it changes only on a rescan, so the
+ * prompt stays a stable, cacheable prefix across a chat's runs. The notes, which change
+ * after every run, reach each run fresh through {@link recentActivitySection} instead.
+ */
+export async function getStableGrounding(root: string | undefined): Promise<string | undefined> {
   const map = groundingSummary;
   if (!root) return map;
-  const [notes, repoMap, symbols] = await Promise.all([
-    readRecentSessionNotes(root),
+  const [repoMap, symbols] = await Promise.all([
     desktopRepoMapSection(root, { adaptive: hostCostLeverOn("c4_adaptive_context") }),
     symbolIndexGrounding(root),
   ]);
-  const history = notes ? `## Recent activity in this workspace\n${notes}` : "";
-  const sections = [map, repoMap, symbols, history].filter((s): s is string => !!s);
+  const sections = [map, repoMap, symbols].filter((s): s is string => !!s);
   return sections.length ? sections.join("\n\n") : undefined;
+}
+
+/**
+ * What recent runs in this workspace DID (`.builderforce/memory/<date>.md`), read NOW —
+ * so a run started in a panel opened an hour ago still sees the run that just finished.
+ * Volatile by construction: the run host sends it through the per-run context seam,
+ * never the cached system prefix. '' when there is nothing (or nothing readable).
+ */
+export async function recentActivitySection(root: string | undefined): Promise<string> {
+  if (!root) return "";
+  const notes = await readRecentSessionNotes(root);
+  return notes ? `## Recent activity in this workspace\n${notes}` : "";
 }

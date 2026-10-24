@@ -11,6 +11,7 @@
 
 import type { LocalTurnFeatures } from '@seanhogg/builderforce-memory-engine';
 import { estimateTokensFromChars } from '@builderforce/workload';
+import { isVolatileTail } from '@seanhogg/builderforce-memory/handoff';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 
 /** A turn's features minus the history-derived prior, which the router owns. */
@@ -37,7 +38,8 @@ export function localTurnFeatures(
   call: { messages: readonly ChatCompletionMessage[]; tools?: readonly unknown[] },
   servedContextTokens: number | undefined,
 ): TurnFeaturesBase {
-  const users = call.messages.filter((m) => m.role === 'user');
+  // The submit, never the per-turn volatile tail (the run's working-memory brief).
+  const users = call.messages.filter((m) => m.role === 'user' && !isVolatileTail(m));
   const last = users[users.length - 1];
   const promptChars = last ? contentChars(last.content) : 0;
   const totalChars = call.messages.reduce((n, m) => n + contentChars(m.content), 0)

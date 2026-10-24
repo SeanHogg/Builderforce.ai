@@ -2,8 +2,17 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.68] — Long runs stay cheap, and memory lands where you started
+
+- **Long runs no longer re-pay for their whole history on every step.** The agent's running record of the run is now sent where prompt caching ignores it. In 2026.10.67 it sat where it changed the cached part of every request.
+- **A long run keeps your actual request in view.** On smaller models, the run's record could be mistaken for your latest message, and your real request summarised away. It no longer can.
+- **Memory goes to the project the run started in.** Switching projects mid-run no longer sends that run's map and learned facts to the new project.
+- **A stopped or failed chat turn still leaves its note.** Turns in the native chat view now record their note and map even when they end early.
+- **Run maps include what was searched, and drop deleted files.** A file a run deleted leaves the area's map, and a map that memory retired stays retired.
+
 ## [2026.10.67] — Every run starts from what the last one found
 
+- **Long runs stop re-analysing what they already read.** Before each step, the agent is handed its own record of the run so far: the files it has read (and how many times), the searches it has run and the files it has changed. Older results drop out of its working memory as a run goes on, and its earlier reasoning is never shown back to it. Before this, it re-derived the codebase from scratch on every step.
 - **Runs remember where the code is.** When a run finishes, the files it read and changed are saved to the project's memory as a map of that area. The next run on the same area, in the editor, on your own machine or in the cloud, opens those files first instead of searching the repo again. Investigations that change nothing are mapped too.
 - **The next run in an open panel sees the run that just finished.** The panel used to build its starting context once, when it opened. Each run now starts from the workspace as it is right now, including the notes of the run before it.
 - **Run notes say where the run looked.** The notes in `.builderforce/memory/` now list the files a run read most, not just the ones it edited.

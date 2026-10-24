@@ -20,7 +20,7 @@
  * finished run: neither call throws, and neither may lose the run's result.
  */
 
-import type { CodeMapFact } from '@builderforce/agent-tools';
+import type { ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 import { buildMemoryCapability } from '../../memory/memoryService';
 import { reduceRunPolicy, type RunPolicyState } from '@builderforce/run-policy';
 import type { Db } from '../../../infrastructure/database/connection';
@@ -33,12 +33,12 @@ import { inRunVerifyOutcome, type InRunVerifyOutcome } from './inRunVerify';
  *  `durable`, so it shares that surface's "run nothing, record what actually ran"
  *  semantics; it is kept as its own name so the recorded verdict still says which
  *  loop ran it. */
-export type RunVerifySurface = 'durable' | 'container' | 'github_actions' | 'on-prem' | 'brain-reply';
+export type RunVerifySurface = 'durable' | 'sandbox' | 'on-prem' | 'brain-reply';
 
 /** Surfaces with a real shell — the ones that may RUN a check rather than only
  *  record one. A chat reply and a DO worker have none, and must never fake one. */
 type ShellSurface = Exclude<RunVerifySurface, 'durable' | 'brain-reply'>;
-const SHELL_SURFACES: ReadonlySet<RunVerifySurface> = new Set<ShellSurface>(['container', 'github_actions', 'on-prem']);
+const SHELL_SURFACES: ReadonlySet<RunVerifySurface> = new Set<ShellSurface>(['sandbox', 'on-prem']);
 const hasShell = (surface: RunVerifySurface): surface is ShellSurface => SHELL_SURFACES.has(surface);
 
 export interface RunVerifyInput {
@@ -185,11 +185,11 @@ export interface RunMemoryCommitInput {
   /** An extra fact worth keeping (e.g. an in-run verify failure worth not repeating). */
   learning?: string;
   /**
-   * Where the run found the code it worked on (`codeMapFromActivity`, the shared
+   * Where the run found the code it worked on (`RunKnowledgeRecorder.consolidate`, the shared
    * `run-knowledge` fact). Keyed per AREA, so it replaces the last map of that area
    * instead of stacking per run — the fact the NEXT run on that area opens first.
    */
-  codeMap?: CodeMapFact | null;
+  codeMap?: ConsolidatedMemory | null;
   tags?: string[];
 }
 
@@ -231,7 +231,10 @@ export async function commitRunMemory(input: RunMemoryCommitInput): Promise<bool
       importance: 0.6,
     });
     if (input.codeMap) {
-      await memory.remember(input.codeMap.key, input.codeMap.content, { tags: ['codemap'], importance: 0.6 });
+      // PROJECT scope, explicitly: the default is the run's narrowest scope (its ticket),
+      // and a ticket-scoped map is recalled only by runs on that ticket — the editor and
+      // on-prem write theirs to the project's facts, and this one must meet them there.
+      await memory.remember(input.codeMap.key, input.codeMap.content, { tags: ['codemap'], importance: 0.6, scope: 'project' });
     }
     return true;
   } catch (error) {

@@ -25,6 +25,7 @@ import { selfReviewShipDirective } from '../selfReviewShip';
 import { previewReviewDirective } from '../previewReview';
 import { previousReplyText } from '../restatedReply';
 import { ReadCoverage } from '../readCoverage';
+import { RunKnowledgeRecorder, type RunKnowledgeLog } from '@builderforce/agent-tools';
 import { FailureTally, WriteLedger } from '@builderforce/run-guards';
 import { PlaceholderLedger } from '../completionGuard';
 import { HISTORY_TOKEN_BUDGET } from '../workingTranscript';
@@ -45,6 +46,13 @@ import { attachTurnContext, restoreTurnContext, turnContextBlock } from './turnC
 function stablePrefixOn(): boolean {
   const env = (globalThis as { process?: { env?: unknown } }).process?.env;
   return isCostLeverOn(env, 'b1_stable_prefix', null);
+}
+
+/** The run's record — the host's when it lends one — named for the request it serves. */
+function recorderFor(userRequest: string, lent?: RunKnowledgeLog): RunKnowledgeLog {
+  const r = lent ?? new RunKnowledgeRecorder();
+  if (!r.activity.prompt) r.setPrompt(userRequest);
+  return r;
 }
 
 export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRequest, runKey: number): Promise<RunLoopContext | null> {
@@ -277,6 +285,9 @@ export async function prepareRunLoop(chatId: number, c: RunCell, req: BrainRunRe
     // starts circling. Both are invalidated together, and only for what a later
     // mutation actually touched — never wiped wholesale by an unrelated call.
     readCoverage: new ReadCoverage(),
+    // What the run did and read, restated in front of every turn (its `brief()`) —
+    // the host's recorder when it keeps one, so the ledger and its code map agree.
+    knowledge: recorderFor(userRequest, req.knowledge),
     // What this run has already FAILED at (see `FailureTally` in `@builderforce/run-guards`). The read guards
     // above deliberately record only SUCCESSES, so an identical failing call — the same
     // `git_status` answered with the same remedy three times, the same platform read

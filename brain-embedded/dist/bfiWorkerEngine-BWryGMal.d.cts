@@ -470,6 +470,10 @@ interface BfiEngineInstance {
     load(chunks: ReadableStream<Uint8Array>, totalBytes: number, onProgress?: (loaded: number, total: number) => void): Promise<BfiModelInfo>;
     chat(requestJson: string, onChunk: (chunkJson: string) => void, signal?: AbortSignal): Promise<string>;
     unload(): void;
+    /** Native (`@seanhogg/bfi-node`) only: stop the engine's thread and free its model. A
+     *  wasm engine dies with its worker; a native one lives in the process, so a trap must
+     *  end it explicitly. */
+    dispose?(): void;
 }
 /** The `BfiEngine` class's statics (§3.1). */
 interface BfiEngineStatic {
@@ -497,13 +501,19 @@ interface BfiEngineOptions {
      *  `os.totalmem()`; a page leaves it to `navigator.deviceMemory`. */
     deviceMemoryBytes?: number;
     /** The backends this host SERVES `bfi` on (default both): the probe and the chat. The
-     *  editor's webview worker serves `['webgpu']` and the extension host's worker
-     *  `['cpu']`, so CPU decoding never runs beside the chat UI. `support()` — the
-     *  picker's record — is never restricted. */
+     *  editor's webview worker serves `['webgpu']`, so CPU decoding never runs beside the
+     *  chat UI; the extension host's worker serves both on the native addon (its GPU is
+     *  native wgpu) and `['cpu']` on the wasm fallback. `support()` — the picker's record
+     *  — is never restricted. */
     backends?: readonly LocalBackend[];
     /** A wasm trap poisoned the instance: the host terminates this worker and starts a
-     *  fresh one (`serveEngineWorker`'s `fatal`). */
+     *  fresh one (`serveEngineWorker`'s `fatal`). A native engine's panic arrives the same
+     *  way (`@seanhogg/bfi-node` raises it as a `RuntimeError`). */
     onTrap?: (error: unknown) => void;
+    /** The engine's own `support()` is cheap here — a native addon (`@seanhogg/bfi-node`)
+     *  has no wasm to compile — so it answers the picker and the probe even before any
+     *  model is downloaded, and the record is the real device's (its GPU, its RAM). */
+    supportFromEngine?: boolean;
     ttlMs?: number;
     now?: () => number;
 }

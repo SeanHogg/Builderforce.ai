@@ -14,6 +14,7 @@ import type { BrainToolSpec, ChatCompletionMessage, CompletionMetadata, StreamCh
 import { isRepoStateReadTool } from '../localWorkspaceTools';
 import { isReadOnlyPlatformTool } from '../chatWorkLinking';
 import type { ReadCoverage } from '../readCoverage';
+import type { RunKnowledgeLog } from '@builderforce/agent-tools';
 import { failureReason, repeatedFailureAdvisory, type FailureTally, type WriteLedger } from '@builderforce/run-guards';
 import type { PlaceholderLedger } from '../completionGuard';
 import type { turnInterruption } from '../finishReason.js';
@@ -80,6 +81,8 @@ export interface RunLoopContext {
   /** The window-fit gate every request passes through. */
   windowFit: RunWindowFit;
   readCoverage: ReadCoverage;
+  /** The run's ONE record of what it did and read — the source of each turn's ledger. */
+  knowledge: RunKnowledgeLog;
   failures: FailureTally;
   writeLedger: WriteLedger;
   placeholderLedger: PlaceholderLedger;

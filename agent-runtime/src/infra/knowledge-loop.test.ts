@@ -122,7 +122,6 @@ describe("buildKnowledgeMemoryEntry", () => {
       sessionKey: "agent:main:main",
       ts: "2026-03-14T00:04:29.680Z",
       acc: {
-        sessionKey: "agent:main:main",
         knowledge: (() => {
           const r = new RunKnowledgeRecorder();
           r.record("edit", { path: "src/app.ts" });

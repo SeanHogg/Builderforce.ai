@@ -15,6 +15,7 @@ import type { BrainRunActivity } from '../runActivity';
 import type { ChatMode, ChatRosterAgent } from '../chatMode';
 import type { EvermindRunHooks } from '../evermindMemory';
 import type { RunWindowSources } from '../windowFit/modelWindow';
+import type { RunKnowledgeLog } from '@builderforce/agent-tools';
 
 /**
  * What a run cell is keyed by. A CHAT's run is keyed by its chat id (a number — the
@@ -43,6 +44,12 @@ export interface BrainRunPersistence {
 /** Everything a single run needs, captured at start time (survives navigation). */
 export interface BrainRunRequest {
   resolvedSystemPrompt: string;
+  /**
+   * The run's record of what it did and read (`@builderforce/agent-tools`
+   * `run-knowledge`). A host that commits the run's code map at the end passes its own
+   * so there is ONE record per run; omitted, the loop keeps one for the per-turn ledger.
+   */
+  knowledge?: RunKnowledgeLog;
   tools?: BrainToolSpec[];
   model?: string;
   /** Hard-pin a deliberate user-selected model. */

@@ -49,7 +49,8 @@ import {
 } from './types';
 import { currentAnthropicModelId, supersededAnthropicModelIds } from '@builderforce/model-catalog';
 import { ANTHROPIC_OAUTH_BETA, CLAUDE_CODE_SYSTEM_PROMPT } from '../anthropicOAuth';
-import { markAnthropicHistoryBreakpoint, VOLATILE_TAIL_TAG } from '../promptCaching';
+import { isVolatileContent } from '@seanhogg/builderforce-memory/handoff';
+import { markAnthropicHistoryBreakpoint } from '../promptCaching';
 import { applySchemaDialect } from '../jsonSchemaSanitize';
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
@@ -206,12 +207,9 @@ function anthropicRequestProfile(modelId: string): AnthropicRequestProfile {
 interface AnthropicBlock { type: string; [k: string]: unknown }
 interface AnthropicMessage { role: 'user' | 'assistant'; content: AnthropicBlock[] }
 
-// The volatile-tail tag (cost lever B1) lives with the cache-breakpoint placer that
-// both this vendor and the OpenRouter path share; re-exported at its existing address.
-export { VOLATILE_TAIL_TAG };
-
+/** A translated block that is a loop's per-turn volatile tail (`@seanhogg/builderforce-memory/handoff`). */
 function isVolatileTail(block: AnthropicBlock | undefined): block is AnthropicBlock {
-  return block?.type === 'text' && typeof block.text === 'string' && block.text.startsWith(VOLATILE_TAIL_TAG);
+  return block?.type === 'text' && isVolatileContent([block]);
 }
 
 /** {@link markAnthropicHistoryBreakpoint}, but placed BEFORE a trailing volatile block. */

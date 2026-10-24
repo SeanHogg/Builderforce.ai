@@ -46,7 +46,6 @@ export const PLAN_FEATURE_LABEL: Record<PlanFeature, string> = {
   advancedInsights: 'advanced insights (forecasting & exec lenses)',
   evermindTraining: 'training your own model',
   livePreview: 'live preview on a real device',
-  containerRuntime: 'cloud agents with a real shell and a repo clone',
   removeBranding: 'removing the Builderforce badge from your published sites',
   serverVideoRender: 'rendering movies on the server',
   sessionReplay: 'Insights (session replay, heatmaps and live visitors)',

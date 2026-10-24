@@ -26,7 +26,6 @@ import { recordReferralConversion } from '../../application/sales/recordReferral
 import { addonRecorderFor, oneOffSettlerFor } from '../../application/billing/purchaseRegistry';
 import { setSubscriptionState } from '../../application/developer/extensionBilling';
 import { fireEventTriggers } from '../../application/workflow/eventTriggers';
-import { invalidateContainerRunContexts } from '../../application/runtime/cloudAgentEngine';
 
 /**
  * SETTLE A ONE-OFF PURCHASE THAT ARRIVED BY WEBHOOK.
@@ -175,16 +174,6 @@ export function createWebhookRoutes(
             billingEmail: event.billingEmail ?? null,
           });
           known = outcome.known;
-
-          // The card is live NOW — but the container surface caches `premiumEntitled`
-          // inside its run context for ten minutes, so without this a tenant who has
-          // just paid still can't run premium on that surface until the window
-          // expires. A paywall that stays closed after the customer pays is the worst
-          // shape a paywall can have. Best-effort: a missed bump costs the remainder
-          // of that window, whereas failing here would retry a validation that landed.
-          if (outcome.tenantId != null) {
-            await invalidateContainerRunContexts(c.env as Env, outcome.tenantId);
-          }
 
           // A REPLACE completes here: the new card is confirmed and already on the
           // row, so the displaced one can be detached with no gap in premium access

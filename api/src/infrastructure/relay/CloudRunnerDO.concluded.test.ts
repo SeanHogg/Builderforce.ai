@@ -54,7 +54,23 @@ vi.mock('../../application/runtime/cloudDispatch', () => ({
   parseReviewRole: () => null,
   parseLaneKey: () => null,
   parseOriginatingChatId: () => null,
+  parseExecutor: () => undefined,
 }));
+// The run's sandbox: none here (no container binding), so ticks run shell-less.
+vi.mock('../../application/runtime/sandbox/runSandboxHost', () => ({
+  ACTIONS_RUNNER_WAIT_MS: 20 * 60_000,
+  RunSandboxHost: class {
+    async prepare() { return undefined; }
+    forTick() { return undefined; }
+    async awaitingRunner() { return false; }
+    async handleRunnerPoll() { return { idle: true }; }
+    handleRunnerResult() { return false; }
+    async park() {}
+    reopen() {}
+    async close() {}
+  },
+}));
+vi.mock('../../application/runtime/githubActionsDispatch', () => ({ dispatchGithubActionsRun: vi.fn(async () => ({ ok: true })) }));
 vi.mock('@seanhogg/builderforce-memory-engine/limbic', () => ({ buildLimbicBlock: () => '' }));
 
 import { CloudRunnerDO } from './CloudRunnerDO';

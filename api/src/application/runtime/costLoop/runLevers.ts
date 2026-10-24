@@ -50,21 +50,16 @@ export function toolRowCodecOptions(env: unknown, tenantId: TenantId): OpenAiCha
 }
 
 /**
- * The cost-lever flags the image reads off its `/run` body (`container/server.mjs`). The
- * Worker owns the tenant and the env, so it decides; the image only obeys, and an absent
- * flag is off there — an older Worker never turns on a behaviour it did not choose.
+ * The cost-lever flags the run sandbox reads off its open spec (`container/server.mjs`).
+ * The Worker owns the tenant and the env, so it decides; the sandbox only obeys, and an
+ * absent flag is off there — an older Worker never turns on a behaviour it did not choose.
+ * The project's fast checks run after a turn's edits when either consumer is on: D7 (the
+ * model reads the failures) or D1 (the cascade folds the verdict) — `loopGuards.ts`.
  */
-export function containerRunLevers(env: unknown, tenantId: TenantId): {
-  repoMap: boolean; postEditChecks: boolean; postEditSteer: boolean; parallelReads: boolean;
-} {
+export function sandboxLevers(env: unknown, tenantId: TenantId): { toolOutputPolicy: boolean; postEditChecks: boolean } {
   const on = (id: Parameters<typeof isCostLeverOn>[1]) => isCostLeverOn(env, id, tenantId);
-  const steer = on('d7_deterministic_handlers');
   return {
-    repoMap: on('c5_cloud_repo_map'),
-    // The checks run when either consumer is on: D7 (the model reads the failures) or
-    // D1 (the cascade reads the verdict, which the image reports on its next `llm` op).
-    postEditChecks: steer || on('d1_verifier_cascade'),
-    postEditSteer: steer,
-    parallelReads: on('d8_parallel_tool_calls'),
+    toolOutputPolicy: on('c7_tool_output_policy'),
+    postEditChecks: on('d7_deterministic_handlers') || on('d1_verifier_cascade'),
   };
 }

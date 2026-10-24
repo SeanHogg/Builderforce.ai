@@ -12,7 +12,8 @@
  * in. The Worker never execs these commands (it cannot).
  */
 
-export type InRunVerifySurface = 'durable' | 'container' | 'github_actions' | 'on-prem';
+/** `sandbox` = a cloud run with a sandbox shell (the container or an Actions runner). */
+export type InRunVerifySurface = 'durable' | 'sandbox' | 'on-prem';
 
 /** Script names we will run, in order, when present on the nearest package.json. */
 export const IN_RUN_VERIFY_SCRIPT_NAMES = ['typecheck', 'type-check', 'test'] as const;
@@ -20,8 +21,8 @@ export const IN_RUN_VERIFY_SCRIPT_NAMES = ['typecheck', 'type-check', 'test'] as
 export const DURABLE_IN_RUN_VERIFY_NOTE =
   'Durable/Worker has no shell. Typecheck/test are skipped in-run; CI on the pull request is the source of truth. Never claim those checks passed.';
 
-export const CONTAINER_IN_RUN_VERIFY_NOTE =
-  'After code changes, run these via the image shell (`run_command`) before finish. Do not invent SSH.';
+export const SANDBOX_IN_RUN_VERIFY_NOTE =
+  'After code changes, run these via the sandbox shell (`run_command`) before finish. Do not invent SSH.';
 
 export type PackageScriptRunner = 'npm' | 'pnpm' | 'yarn';
 
@@ -38,7 +39,7 @@ export type InRunVerifyPlan =
     }
   | {
       kind: 'run';
-      surface: 'container' | 'github_actions' | 'on-prem';
+      surface: 'sandbox' | 'on-prem';
       reason: null;
       commands: string[];
       scriptNames: typeof IN_RUN_VERIFY_SCRIPT_NAMES;
@@ -51,7 +52,7 @@ export type InRunVerifyOutcome = {
   reason: 'no_shell' | 'nothing_written' | 'no_scripts' | 'verify_failed' | 'verify_passed' | 'not_yet_run' | null;
   commands: string[];
   failedCommands: string[];
-  /** Finish may proceed. Durable skip is allowed; a container that wrote code and has not verified is not. */
+  /** Finish may proceed. Durable skip is allowed; a sandboxed run that wrote code and has not verified is not. */
   mayFinish: boolean;
   note: string;
 };
@@ -108,7 +109,7 @@ export function planInRunVerify(input: {
     commands,
     scriptNames: IN_RUN_VERIFY_SCRIPT_NAMES,
     note: commands.length > 0
-      ? CONTAINER_IN_RUN_VERIFY_NOTE
+      ? SANDBOX_IN_RUN_VERIFY_NOTE
       : 'No typecheck/test scripts in package.json; skip package verify (CI on the PR still applies).',
   };
 }
@@ -173,7 +174,7 @@ export function inRunVerifyOutcome(input: {
       commands: plan.commands,
       failedCommands: [],
       mayFinish: false,
-      note: `${CONTAINER_IN_RUN_VERIFY_NOTE} Planned: ${plan.commands.join(' && ')}.`,
+      note: `${SANDBOX_IN_RUN_VERIFY_NOTE} Planned: ${plan.commands.join(' && ')}.`,
     };
   }
   const byCommand = new Map(input.results.map((r) => [r.command, r.exitCode]));

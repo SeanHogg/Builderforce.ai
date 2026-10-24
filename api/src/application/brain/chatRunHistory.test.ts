@@ -149,10 +149,9 @@ describe('toChatRunRecords', () => {
 
 describe('toChatRunRecords — WHERE the run executed', () => {
   /**
-   * The two cloud executors are not two sizes of the same thing. `container` is a Linux
-   * process with a shell and a local clone, so it can build, type-check and test before
-   * finishing; `durable` is shell-LESS and edits over the git API, so it provably cannot.
-   * A green run on each produces an identical-looking transcript.
+   * Every cloud run is the one engine on the durable runner; `github_actions` means its
+   * sandbox was the repo's own runner. A payload stamped while a container ran its own
+   * loop (`container`) reads as the one cloud runtime it now is.
    */
   it('reads the executor the dispatcher stamped on the payload', () => {
     const recs = toChatRunRecords(
@@ -164,7 +163,22 @@ describe('toChatRunRecords — WHERE the run executed', () => {
       titles,
       names,
     );
-    expect(recs.map((r) => r.executor)).toEqual(['container', 'durable', 'github_actions']);
+    expect(recs.map((r) => r.executor)).toEqual(['durable', 'durable', 'github_actions']);
+  });
+
+  it('reads which sandbox served the run, and null for one with no stamp', () => {
+    const recs = toChatRunRecords(
+      [
+        row({ id: 210, payload: JSON.stringify({ executor: 'durable', sandbox: 'container' }) }),
+        row({ id: 211, payload: JSON.stringify({ executor: 'github_actions', sandbox: 'actions' }) }),
+        row({ id: 212, payload: JSON.stringify({ executor: 'durable', sandbox: 'none' }) }),
+        row({ id: 213, payload: JSON.stringify({ executor: 'durable' }) }),
+        row({ id: 214, payload: JSON.stringify({ sandbox: 'bogus' }) }),
+      ],
+      titles,
+      names,
+    );
+    expect(recs.map((r) => r.sandbox)).toEqual(['container', 'actions', 'none', null, null]);
   });
 
   it('is null — not a guess — for a run with no stamp or an executor that no longer exists', () => {

@@ -1,50 +1,16 @@
 /**
- * Where a V2 cloud agent executes — its "runtime surface". All of them run the full
- * task in the cloud (everything is Cloudflare — no local/hybrid agent):
- *   • 'container' — a long-lived Cloudflare Container: a real Linux process with a
- *     SHELL and a local clone. It greps through the shell, edits files in the clone,
- *     and runs real build / type-check / lint / tests before finishing. **The default.**
- *   • 'durable'   — a Durable Object (CloudRunnerDO), one LLM step per alarm tick.
- *     On-demand serverless and shell-LESS: it edits surgically over the git API and
- *     provably cannot run a build. Still the fallback whenever no container is live,
- *     and still selectable explicitly for work that does not need a toolchain.
- *   • 'github_actions' — the tenant's own runners, opted into per agent.
+ * Where a cloud run executes. There is ONE cloud runtime: every run, on every plan, runs
+ * the one engine (`cloudAgentEngine.ts`) on the durable runner (CloudRunnerDO), and gets
+ * a SANDBOX — a real shell and a working tree — from:
+ *   • the Cloudflare Container (`sandbox/runSandbox.ts`), whenever one is bound and the
+ *     ticket's repository can be cloned — the default; or
+ *   • the repo's own GitHub Actions runner (`github_actions`), opted into per agent.
+ * A run with neither still runs, editing over the git API without a shell, and its
+ * timeline says why.
  *
- * ── WHICH SURFACE AN UNCONFIGURED AGENT GETS ──────────────────────────────
- * It depends on whether the tenant pays, and the two halves of that are deliberate.
- *
- * PAID → 'container'. The product statement is that a cloud agent should "clone the repo
- * and interact with it just like the VSIX agent is opened into the directory where the
- * code is cloned". That is exactly the container surface, and it had been built for some
- * time — but every default in the system said 'durable', so an agent whose
- * `runtime_surface` was never set (most of them: the column is nullable with no DB
- * default) landed on the shell-less surface. The capability existed and nothing reached
- * it, which is why a dispatched cloud agent behaved nothing like the editor one.
- *
- * FREE → 'durable'. A container holds a Linux process open for the length of a run
- * against a fixed `max_instances` budget: real Cloudflare spend, per run. The Durable
- * Object is on-demand serverless and effectively free to us. A workspace that is not
- * paying runs on the free infrastructure — it still runs, and it still finishes; it just
- * edits over the git API instead of through a shell. That is the whole cost difference
- * between the two surfaces, so it is the one place the plan belongs.
- *
- * The entitlement is `planFeatures.containerRuntime`, resolved OUTSIDE this module (see
- * `cloudSurfaceEntitlement.ts`) and passed in, so this stays pure and exhaustively
- * testable. Superadmin and comped tenants clear it like any other feature.
- *
- * An explicit 'container' is DEMOTED when the tenant is not entitled. A gate that only
- * moved the default would be bypassable by writing one column — and `runtime_surface` is
- * writable from the workforce API and the MCP tool. Demotion never fails the run: the
- * work still executes, on the surface the plan covers.
- *
- * An agent that explicitly chose 'durable' KEEPS it on every plan. That distinction did
- * not exist before — an explicit 'durable' and an unset column both fell through the same
- * `else`, so there was no way to say "serverless on purpose", and flipping the default
- * without separating them would have silently overridden a real choice.
- *
- * Preferring the container also costs nothing when there isn't one: {@link chooseCloudExecutor}
- * only picks it when the binding exists AND a `/health` probe proves the image is live,
- * and falls through to 'durable' otherwise.
+ * The plan decides what a run is CHARGED (the monthly cloud-run allowance) — never where
+ * it runs or what it can do. The `container` surface value (and the `containerRuntime`
+ * plan feature that gated it) is legacy from when a container ran its own loop.
  *
  * Single source of truth for the routing decision so dispatch (runtime) and the
  * test agree on which surface a run targets.
@@ -54,133 +20,72 @@ import { ExecutionStatus } from '../../domain/shared/types';
 import { canonicalModelId } from '../llm/modelPool';
 import { isArcStage, type ArcStage } from '@builderforce/workload';
 
-export type CloudSurface = 'durable' | 'container' | 'github_actions';
+/**
+ * Where a cloud run's SANDBOX comes from. There is ONE cloud runtime: every run, on every
+ * plan, runs the one engine on the durable runner (CloudRunnerDO). The surface says only
+ * what serves its shell and working tree — the Cloudflare Container (`durable`, the
+ * default) or the repo's own GitHub Actions runner (`github_actions`). The plan decides
+ * what a run is charged (the monthly cloud-run allowance), never where it runs.
+ */
+export type CloudSurface = 'durable' | 'github_actions';
 
 /**
  * Every surface value the platform accepts. `ide_agents.runtime_surface` is
- * varchar(16), so a value MUST stay within 16 characters — 'github_actions' is
- * 14. Exported so the API's validation whitelist and this union can never drift
- * (they were previously two hand-maintained lists).
+ * varchar(16), so a value MUST stay within 16 characters — 'github_actions' is 14.
+ * `container` is LEGACY: rows written while a container ran its own loop still hold it,
+ * and it resolves to the one cloud runtime. Exported so the API's validation whitelist
+ * and this union can never drift.
  */
 export const CLOUD_SURFACES = ['durable', 'container', 'github_actions'] as const;
 
 /**
- * The surface an agent that never chose one runs on, per entitlement. Named rather than
- * inlined so each default is ONE fact: {@link defaultCloudSurface} applies them, the
- * tests assert them, and a future change cannot land in only one of those places.
- *
- * These were previously spread across four files — the agent resolver, both workforce
- * write paths and the MCP create tool each hard-coded `'durable'`, which is why flipping
- * the default here alone changed nothing. Those sites now leave the column UNSET, so an
- * agent created on Free and later upgraded moves to the container without being edited.
+ * Resolve the surface a run targets: the repo's Actions runners when the agent chose
+ * them, else the one cloud runtime. An explicitly-pinned host is the customer's own
+ * machine and is dispatched before this matters, so it reads as the cloud runtime here.
+ * Unknown values (a row written by a client ahead of the server) degrade to the default
+ * rather than failing a dispatch.
  */
-export const PAID_DEFAULT_CLOUD_SURFACE: CloudSurface = 'container';
-export const FREE_DEFAULT_CLOUD_SURFACE: CloudSurface = 'durable';
-
-/** The default surface for a tenant, given its container entitlement. */
-export function defaultCloudSurface(containerAllowed: boolean): CloudSurface {
-  return containerAllowed ? PAID_DEFAULT_CLOUD_SURFACE : FREE_DEFAULT_CLOUD_SURFACE;
-}
-
-/** What {@link resolveCloudSurface} needs to know about the tenant. */
-export interface CloudSurfaceEntitlement {
-  /**
-   * The tenant may run on billable container compute (`planFeatures.containerRuntime`,
-   * or a superadmin / comped override). False → free Cloudflare infrastructure only.
-   */
-  containerAllowed: boolean;
+export function resolveCloudSurface(agentSurface: string | undefined | null, hasExplicitHost: boolean): CloudSurface {
+  return !hasExplicitHost && agentSurface === 'github_actions' ? 'github_actions' : 'durable';
 }
 
 /**
- * Resolve the surface a run targets.
- *
- * An explicitly-pinned host is a long-lived runtime reached via the relay, so it maps to
- * 'container' on EVERY plan: that is the customer's own machine, and it costs us nothing
- * to run there — the entitlement is about our compute, not theirs. An explicit host also
- * wins over a 'github_actions' preference, because pinning a host means "run on THAT
- * machine", which an ephemeral GitHub runner cannot satisfy.
- *
- * Otherwise the agent's own choice is honored, except that 'container' is demoted for an
- * unentitled tenant; an unset/unrecognised value takes {@link defaultCloudSurface}.
- *
- * An UNRECOGNISED value resolves to the default rather than being rejected: the column is
- * a plain varchar, and a row written by a client ahead of the server must degrade to the
- * ordinary surface rather than failing a dispatch.
- */
-export function resolveCloudSurface(
-  agentSurface: string | undefined | null,
-  hasExplicitHost: boolean,
-  entitlement: CloudSurfaceEntitlement,
-): CloudSurface {
-  if (hasExplicitHost) return 'container';
-  const fallback = defaultCloudSurface(entitlement.containerAllowed);
-  // Explicit choices, including the deliberate opt-OUT to serverless.
-  if (agentSurface === 'container') return entitlement.containerAllowed ? 'container' : FREE_DEFAULT_CLOUD_SURFACE;
-  if (agentSurface === 'github_actions') return 'github_actions';
-  if (agentSurface === 'durable') return 'durable';
-  return fallback;
-}
-
-/**
- * The executors a cloud run can actually land on: the alarm-ticked `durable`
- * CloudRunnerDO, the `container` runtime, and the repo's own `github_actions` runners.
- * The first two are long-lived and heartbeat per alarm tick; Actions is dispatched and
- * then polled, which is why it carries its own (longer) silence ceiling.
- * There is no in-request Worker executor — a `waitUntil` background loop cannot
+ * The executors a cloud run can land on — both are the durable runner driving the one
+ * engine; `github_actions` additionally queues the repo's runner as its sandbox. Actions
+ * is dispatched and then polled, which is why it carries its own (longer) silence
+ * ceiling. There is no in-request Worker executor — a `waitUntil` background loop cannot
  * outlast the ~30s serverless wall, so {@link chooseCloudExecutor} fails fast to
  * `unavailable` rather than starting a run that provably cannot finish.
  */
-export type CloudExecutor = 'container' | 'durable' | 'github_actions';
+export type CloudExecutor = 'durable' | 'github_actions';
 export type CloudDispatchTarget = CloudExecutor | 'unavailable';
 
 /**
- * Decide which cloud executor a run lands on, given the resolved capabilities.
- * Pure + exhaustively testable — this is the decision that was previously inlined
- * and BUGGY: a container was chosen on a bare binding without proving liveness, so
- * a dead container (the DO `/run` acks 202 even when the image can't boot) was
- * never downgraded and the run got orphan-reaped. Preference order:
- *   1. `container` — only when the run wants it, the binding exists, AND a health
- *      probe proved the container is actually live;
- *   2. `durable` (CloudRunnerDO) — the surviving serverless executor, whenever bound;
- *   3. `unavailable` — no long-lived executor exists. Dispatch fails fast. There is
- *      deliberately no third, in-request fallback: a Worker loop running under
- *      `waitUntil` cannot survive a multi-step run's ~30s background-execution wall,
- *      so offering it would only convert a clear "no executor bound" error into a run
- *      that silently dies mid-task and gets orphan-reaped.
+ * Decide which cloud executor a run lands on. Pure + exhaustively testable:
+ *   1. `github_actions` — the agent chose it, the repo carries the agent workflow, and a
+ *      durable runner exists to drive the engine its runner serves;
+ *   2. `durable` — whenever the durable runner is bound;
+ *   3. `unavailable` — no durable runner. Dispatch fails fast.
  */
 export function chooseCloudExecutor(caps: {
-  wantsContainer: boolean;
-  hasContainerBinding: boolean;
-  containerHealthy: boolean;
   hasCloudRunner: boolean;
   /** The agent asked to run on the repo's GitHub Actions runners. */
   wantsGithubActions?: boolean;
   /**
-   * The agent workflow is present in the linked repo AND the credential can
-   * dispatch it. Unlike the container there is no liveness probe to run — an
-   * Actions runner does not exist until GitHub schedules one — so this is a
-   * "can we queue work" signal, not a "is a process alive" signal.
+   * The agent workflow is present in the linked repo AND the credential can dispatch
+   * it — a "can we queue work" signal: an Actions runner does not exist until GitHub
+   * schedules one, so there is no liveness to probe.
    */
   githubActionsAvailable?: boolean;
 }): CloudDispatchTarget {
-  // Checked first: when a tenant has deliberately chosen Actions, running on it
-  // is the point (their runners, their minutes, a real toolchain). Falling back
-  // to durable would silently give them the constrained surface they opted out
-  // of, so the fallback only happens when Actions genuinely cannot be queued.
-  if (caps.wantsGithubActions && caps.githubActionsAvailable) return 'github_actions';
-  if (caps.wantsContainer && caps.hasContainerBinding && caps.containerHealthy) return 'container';
-  if (caps.hasCloudRunner) return 'durable';
-  return 'unavailable';
+  if (!caps.hasCloudRunner) return 'unavailable';
+  return caps.wantsGithubActions && caps.githubActionsAvailable ? 'github_actions' : 'durable';
 }
 
 /**
- * Probe a Cloudflare Container's `/health` before committing a run to it. The
- * container DO's `/run` handler acks `202` *immediately* and drives the agent loop
- * asynchronously, so a 202 does NOT prove the container actually booted and will
- * execute — an undeployed/unbootable image accepts the request and then silently
- * dies, leaving the run to be orphan-reaped (~30s) with no fallback. Probing
- * `/health` (bounded, never throws) gives a real liveness signal so the caller can
- * fall back to the durable executor instead. Returns false on any error/timeout/non-200.
+ * Probe a Cloudflare Container's `/health` (bounded, never throws): the web-scan stages
+ * and managed hosts check an instance is live before handing it work. Returns false on
+ * any error/timeout/non-200.
  */
 export async function probeContainerHealth(stub: { fetch: (input: string, init?: RequestInit) => Promise<Response> }): Promise<boolean> {
   try {
@@ -196,7 +101,6 @@ export async function probeContainerHealth(stub: { fetch: (input: string, init?:
  *  There is ONE engine, so only the surface varies — the label is just "Cloud Agent"
  *  plus the surface (no engine-version prefix). */
 export function cloudAgentTypeLabel(surface: string): string {
-  if (surface === 'container') return 'Cloud Agent (Node/Container)';
   if (surface === 'github_actions') return 'Cloud Agent (GitHub Actions)';
   return 'Cloud Agent (Durable Object)';
 }
@@ -522,7 +426,7 @@ export function parseRemediation(payload: string | undefined): RemediationContex
 /**
  * The cloud executor a run actually landed on, parsed off its execution payload
  * (stamped by dispatch once {@link chooseCloudExecutor} decides). It must round-trip
- * every value {@link withExecutor} can stamp — all THREE of them.
+ * every value {@link withExecutor} can stamp.
  *
  * It recognised only two for a long time, and both of the things that read the third
  * were silently dead as a result:
@@ -543,7 +447,10 @@ export function parseExecutor(payload: string | null | undefined): CloudExecutor
   if (!payload) return undefined;
   try {
     const e = (JSON.parse(payload) as { executor?: unknown }).executor;
-    return e === 'durable' || e === 'container' || e === 'github_actions' ? e : undefined;
+    // `container` is legacy (a container once ran its own loop); it ran — and resumes —
+    // as the one cloud runtime.
+    if (e === 'container') return 'durable';
+    return e === 'durable' || e === 'github_actions' ? e : undefined;
   } catch {
     return undefined;
   }
@@ -559,6 +466,35 @@ export function withExecutor(payload: string | null | undefined, executor: Cloud
   }
   obj.executor = executor;
   return JSON.stringify(obj);
+}
+
+/**
+ * What served a cloud run's shell and working tree, stamped on its payload by the
+ * durable runner once its prep tick decides (`sandbox/runSandboxHost.ts`): `container`,
+ * `actions`, or `none` (no container bound, no clonable repo, or it could not open — the
+ * run then edited over the git API and could not build or test). The executor alone no
+ * longer says, because every cloud run is the same durable executor.
+ */
+export type RunSandboxStamp = 'container' | 'actions' | 'none';
+
+export function withRunSandbox(payload: string | null | undefined, sandbox: RunSandboxStamp): string {
+  let obj: Record<string, unknown> = {};
+  if (payload) {
+    try { obj = JSON.parse(payload) as Record<string, unknown>; } catch { obj = {}; }
+  }
+  obj.sandbox = sandbox;
+  return JSON.stringify(obj);
+}
+
+/** The stamp off a payload, or undefined for a run that predates it. */
+export function parseRunSandbox(payload: string | null | undefined): RunSandboxStamp | undefined {
+  if (!payload) return undefined;
+  try {
+    const v = (JSON.parse(payload) as { sandbox?: unknown }).sandbox;
+    return v === 'container' || v === 'actions' || v === 'none' ? v : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

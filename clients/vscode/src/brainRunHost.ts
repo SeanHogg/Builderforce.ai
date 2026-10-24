@@ -50,10 +50,9 @@ import type { ToolDef } from "./fileTools";
 import { approvalRequestFor, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, type NativeRunLabels } from "./nativeBrainRun";
 import type { PolicyGate } from "./policy";
 import { withRunPreamble } from "./runPreamble";
-import type { RunDirectives } from "./hooks/runHooks";
-import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
-import type { RunActivity } from "./sessionNotes";
 import { replaceWorkspaceMap } from "./idePersona";
+import type { RunDirectives } from "./hooks/runHooks";
+import { RunKnowledgeRecorder, recordingOnly, type RunKnowledgeLog } from "@builderforce/agent-tools";
 import { createChildRuns } from "./childRuns";
 import { syncMessageFor, type RunHostMessage, type RunSink, type SinkEntry, type WebviewRunStart } from "./brainRunHostProtocol";
 import { childControls, directionText, type ChildControls, type ChildOwner } from "./childRunSpawner";
@@ -82,6 +81,13 @@ export type { RunHostMessage, RunSink, RunSyncMessage, RunToolMessage, SinkEntry
 
 /** The top-level owner's name, as the chat shows it (a brand, not translated). */
 export const OWNER_NAME = "BuilderForce";
+
+/** How a settled run's note is committed: the chat's Memory switch, and the project the
+ *  run STARTED in — so switching projects mid-run does not move its memory. */
+export interface RunNoteOptions {
+  memory: boolean;
+  projectId?: number;
+}
 
 export interface ToolRunInfo {
   chatId: number;
@@ -149,12 +155,21 @@ export interface BrainRunHostPorts {
    * chat's Memory switch is on (`memory`), what it learned and the code map of what it
    * found into the project's facts.
    */
-  sessionNote?(chatId: number, activity: RunActivity, opts: { memory: boolean }): Promise<void> | void;
+  sessionNote?(chatId: number, run: RunKnowledgeLog, opts: RunNoteOptions): Promise<void> | void;
   /**
-   * The workspace grounding as it is NOW — map, recent run notes, symbol index. The
-   * panel builds its system prompt once, when it opens; without this every later run in
-   * that panel started from the notes of the runs before the panel opened, never from
-   * the run that just finished. Omitted ⇒ the prompt's own copy is used as sent.
+   * What recent runs in this workspace did, read NOW. The panel builds its system
+   * prompt once, when it opens; without this every later run in that panel started
+   * from the notes of the runs before the panel opened, never from the run that just
+   * finished. Joined to the run-context block — the volatile per-run seam — so the
+   * system prompt itself stays a stable, cacheable prefix. Omitted ⇒ none.
+   */
+  recentActivity?(): Promise<string>;
+  /**
+   * The workspace's SHAPE as it is NOW — scan map, repo map, symbol index; never the run
+   * notes (those ride {@link recentActivity}). The panel builds its prompt once, when it
+   * opens, often before indexing finished; swapping the block per run gives each run the
+   * current map, and the prompt's bytes change only when the workspace was rescanned, so
+   * it stays a cacheable prefix. Omitted ⇒ the prompt's own copy is used as sent.
    */
   grounding?(): Promise<string | undefined>;
   /** Report a settled code-changing run's outcome to learned routing. Best-effort. */
@@ -249,12 +264,12 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     return n;
   };
 
-  const flushNote = async (runKey: number, chatId: number, memory: boolean): Promise<void> => {
+  const flushNote = async (runKey: number, chatId: number, opts: RunNoteOptions): Promise<void> => {
     const n = notes.get(runKey);
     if (!n || n.isEmpty) return;
     notes.delete(runKey);
     try {
-      await ports.sessionNote?.(chatId, n.activity, { memory });
+      await ports.sessionNote?.(chatId, n, opts);
     } catch {
       /* a note is best-effort — never a run failure */
     }
@@ -308,9 +323,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     const recordToolRun = (def: ToolDef, record: Record<string, unknown>, out: unknown): void => {
       const ok = !isFailedToolResult(out);
       const name = def.name;
-      // Feed the knowledge loop on SUCCESS only — a note claiming a file was written
-      // when the write threw would ground every later run on a lie.
-      if (ok && !def.remote) notesFor(key).record(name, record);
+      // The knowledge record itself is kept by the loop (`knowledge` below, successes
+      // only), so the per-turn ledger and this run's note + code map are ONE record.
       const info: ToolRunInfo = { chatId, name, args: record, mutating: def.mutating, remote: !!def.remote, ok };
       ports.onToolRun?.(info);
       broadcast({ type: "run.tool", chatId, name, mutating: def.mutating, remote: !!def.remote, ok });
@@ -355,6 +369,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
       // rules — the one preamble the native participant shares.
       await startRun(key, {
         resolvedSystemPrompt: withRunPreamble(systemPrompt, { gates, rules: directives?.rules }),
+        // Only this workspace's tools feed the run's record: a remote platform call acted
+        // elsewhere, and must not land in the workspace's note or code map.
+        knowledge: recordingOnly(notesFor(key), (name) => !defs.find((d) => d.name === name)?.remote),
         tools: nativeToolSpecs(defs),
         ...(p.model ? { model: p.model } : {}),
         ...(p.modelStrict != null ? { modelStrict: p.modelStrict } : {}),
@@ -377,9 +394,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         // Project memory + platform context, appended to the system prompt by the loop
         // (the same seam the limbic block uses) so the webview run starts from what the
         // project already knows instead of rediscovering it with tool calls.
-        ...(projectId != null && ports.runContext
-          ? { augmentSystemPrompt: (text: string) => ports.runContext!(projectId, chatId, text) }
-          : {}),
+        ...runContextFor(projectId, chatId),
         ...(p.seed ? { seed: p.seed } : {}),
         ...(p.priorResearch ? { priorResearch: p.priorResearch } : {}),
         ...(p.userTurn != null ? { userTurn: p.userTurn } : {}),
@@ -392,10 +407,30 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     } finally {
       flags.delete(key);
       approvals.forget(key);
-      await flushNote(key, chatId, p.evermind);
+      await flushNote(key, chatId, { memory: p.evermind, ...(projectId != null ? { projectId } : {}) });
       // The workspace's runEnd hooks — after the run, never holding its settle.
       void directives?.hooks.onRunEnd();
     }
+  };
+
+  /**
+   * The per-run context the loop appends (the same seam the limbic block uses): the
+   * project's platform context + memory, and the workspace's run notes as they are now.
+   * Either half failing costs that half, never the run.
+   */
+  const runContextFor = (projectId: number | undefined, chatId: number): { augmentSystemPrompt?: (text: string) => Promise<string | undefined> } => {
+    const platform = projectId != null && ports.runContext ? ports.runContext : undefined;
+    const recent = ports.recentActivity;
+    if (!platform && !recent) return {};
+    return {
+      augmentSystemPrompt: async (text: string) => {
+        const parts = await Promise.all([
+          platform ? platform(projectId!, chatId, text).catch(() => "") : "",
+          recent ? recent().catch(() => "") : "",
+        ]);
+        return parts.filter((part) => part.trim()).join("\n\n") || undefined;
+      },
+    };
   };
 
   const start = async (payload: RunSpec): Promise<void> => {

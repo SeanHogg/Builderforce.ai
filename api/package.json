@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.10.75",
+  "version": "2026.10.76",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -57,17 +57,15 @@
     "models:check": "node scripts/refresh-model-snapshot.mjs --check",
     "backfill:byo-usage": "node scripts/backfill-byo-usage.mjs",
     "check:burnrate-parity": "node scripts/check-burnrate-parity.mjs",
-    "gen:agent-relay": "node scripts/gen-agent-relay-source.mjs",
-    "check:agent-relay": "node scripts/gen-agent-relay-source.mjs --check",
-    "gen:agent-loop": "node scripts/gen-agent-loop-bundle.mjs",
-    "check:agent-loop": "node scripts/gen-agent-loop-bundle.mjs --check",
     "gen:container-shared": "node scripts/gen-container-shared.mjs",
-    "check:container-shared": "node scripts/gen-container-shared.mjs --check"
+    "check:container-shared": "node scripts/gen-container-shared.mjs --check",
+    "gen:sandbox-core": "node scripts/gen-sandbox-core-source.mjs",
+    "check:sandbox-core": "node scripts/gen-sandbox-core-source.mjs --check"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",
     "@neondatabase/serverless": "^0.10.4",
-    "@seanhogg/builderforce-memory": "^2026.10.23",
+    "@seanhogg/builderforce-memory": "^2026.10.24",
     "@seanhogg/builderforce-memory-engine": "^2026.10.23",
     "@seanhogg/builderforce-quality": "^2026.7.5",
     "@seanhogg/builderforce-webcontainers": "^2026.10.12",

@@ -28,6 +28,7 @@
 import { MALFORMED_CALL_RESULT, TRUNCATED_CALL_RESULT } from '@builderforce/agent-loop';
 import { isCostLeverOn } from '@builderforce/cost-levers';
 import type { LocalSuccessOutcome } from '@seanhogg/builderforce-memory-engine';
+import { isVolatileTail } from '@seanhogg/builderforce-memory/handoff';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { reportLocalSuccessFailure } from './localSuccessFailure';
 import { contentText } from './turnFeatures';
@@ -65,6 +66,12 @@ export function labelWithVerdict(outcome: VerifiedLocalSuccessOutcome, leverOn: 
 
 type CallMessages = { messages: readonly ChatCompletionMessage[] };
 
+/** The request without its per-turn volatile tail (the run's working-memory brief): that
+ *  tail is not the submit, and it changes between calls the label must compare. */
+function requestOf(call: CallMessages): readonly ChatCompletionMessage[] {
+  return call.messages.filter((m) => !isVolatileTail(m));
+}
+
 function lastUserIndex(messages: readonly ChatCompletionMessage[]): number {
   for (let i = messages.length - 1; i >= 0; i--) if (messages[i]!.role === 'user') return i;
   return -1;
@@ -72,8 +79,9 @@ function lastUserIndex(messages: readonly ChatCompletionMessage[]): number {
 
 /** The text of the call's latest user message — the submit a turn belongs to. */
 export function submitPrompt(call: CallMessages): string {
-  const i = lastUserIndex(call.messages);
-  return i < 0 ? '' : contentText(call.messages[i]!.content);
+  const messages = requestOf(call);
+  const i = lastUserIndex(messages);
+  return i < 0 ? '' : contentText(messages[i]!.content);
 }
 
 const REFUSALS = [MALFORMED_CALL_RESULT, TRUNCATED_CALL_RESULT];
@@ -83,10 +91,11 @@ const REFUSALS = [MALFORMED_CALL_RESULT, TRUNCATED_CALL_RESULT];
  * `pendingPrompt` — see the module comment for the rows.
  */
 export function inferVerdict(pendingPrompt: string, next: CallMessages): LocalTurnVerdict {
-  const i = lastUserIndex(next.messages);
-  const prompt = i < 0 ? '' : contentText(next.messages[i]!.content);
+  const messages = requestOf(next);
+  const i = lastUserIndex(messages);
+  const prompt = i < 0 ? '' : contentText(messages[i]!.content);
   if (prompt !== pendingPrompt) return { passed: true, source: 'continued' };
-  const tail = next.messages.slice(i + 1);
+  const tail = messages.slice(i + 1);
   if (tail.length === 0) return { passed: false, source: 'retry' };
   // The pending turn's tool calls are the LAST assistant message of the tail; the tool
   // rows after it are their results.

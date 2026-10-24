@@ -6,7 +6,7 @@ import { posixShellReport } from "./posixShell";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { getBaseUrl, getWebBaseUrl, getLocalModelsConfig, SECRET_KEY } from "./gateway";
 import { fetchPersonalityBlock } from "./personalityLimbic";
-import { getGroundingWithHistory } from "./grounding";
+import { getStableGrounding } from "./grounding";
 import { getEditorContextLive } from "./editorContext";
 import { detectPendingChanges } from "./gitChanges";
 import { resolveModelRoute } from "./modelRouting";
@@ -111,7 +111,9 @@ export async function buildWorkspaceInit(
     // know about them — so without this the panel offered no way to pick one and the
     // feature existed only in the command palette.
     localModels: localModelOptions(await listLocalModels(getLocalModelsConfig())),
-    grounding: await getGroundingWithHistory(root),
+    // The workspace SHAPE only: run notes change after every run and reach each run
+    // fresh through the host (`recentActivitySection`), so this prompt stays cacheable.
+    grounding: await getStableGrounding(root),
     // Live editor context (active file / selection / open tabs). Seeds the React
     // app's ambient system channel; refreshed via `editorContext` messages.
     editorContext,

@@ -26,6 +26,8 @@
  * non-Anthropic candidate must still see clean, unmarked messages.
  */
 
+import { isVolatileContent } from '@seanhogg/builderforce-memory/handoff';
+
 /**
  * Cache-tier marker. Anthropic's default `ephemeral` breakpoint has a ~5-minute
  * TTL; the opt-in `ttl: '1h'` extends it to one hour (~2x write cost) so a stable
@@ -49,24 +51,15 @@ function markerForTtl(ttl: CacheTtl | undefined): Record<string, unknown> {
 type Msg = Record<string, unknown>;
 
 /**
- * Opening tag of a loop's per-turn VOLATILE block (cost lever B1): the affect block,
- * budget line and task state a cloud run sends AFTER its history, outside the cached
- * prefix. A message or block that starts with it is never given the history
- * breakpoint — the breakpoint goes on the one before it, so the next turn reads the
- * whole stable prefix from the cache instead of missing on bytes that change every
- * turn. Shared by the OpenRouter placer below and the direct Anthropic vendor.
+ * Does this OpenAI-format message carry a loop's per-turn VOLATILE tail
+ * (`@seanhogg/builderforce-memory/handoff`, cost lever B1) — the affect block, budget
+ * line, task state and working-memory brief sent AFTER the history? Such a message is
+ * never given the history breakpoint: the breakpoint goes on the one before it, so the
+ * next turn reads the whole stable prefix from the cache instead of missing on bytes
+ * that change every turn. Shared by the OpenRouter placer below and the Anthropic vendor.
  */
-export const VOLATILE_TAIL_TAG = '<run-state>';
-
-/** Does this OpenAI-format message carry the volatile tail (string or first text part)? */
 function isVolatileTailMessage(msg: Msg): boolean {
-  const content = (msg as { content?: unknown }).content;
-  if (typeof content === 'string') return content.startsWith(VOLATILE_TAIL_TAG);
-  if (Array.isArray(content)) {
-    const first = (content as Array<Record<string, unknown>>).find((p) => p?.type === 'text');
-    return typeof first?.text === 'string' && first.text.startsWith(VOLATILE_TAIL_TAG);
-  }
-  return false;
+  return isVolatileContent((msg as { content?: unknown }).content);
 }
 
 /**

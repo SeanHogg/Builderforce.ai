@@ -20,18 +20,14 @@
  * reader see it rather than collapsing every start into "started".
  *
  * ── WHERE IT RAN IS THE OTHER HALF ─────────────────────────────────────
- * "A run happened" does not say what the run could DO. The two cloud executors are not
- * interchangeable: `container` is a Linux process with a shell and a local clone, so it
- * can grep, build, type-check and test before finishing; `durable` is shell-LESS and
- * edits surgically over the git API, so it provably cannot run a build. A chat whose
- * every run landed on `durable` and produced a plausible-looking diff that was never
- * compiled reads, from the transcript alone, exactly like one that ran the full
- * toolchain. So the history reports `executor` (stamped on the payload at dispatch) and
- * the on-prem `agent_host_id` — the three places a run can execute, named.
- *
- * This matters more since the surface became a PLAN decision: a workspace without the
- * `containerRuntime` entitlement is DEMOTED to `durable` at dispatch, which is correct
- * and cheap and completely invisible from inside the conversation.
+ * "A run happened" does not say what the run could DO. Every cloud run is the one engine
+ * on the durable runner, and what it could do depends on its SANDBOX: with one (the
+ * Cloudflare Container, or the repo's Actions runner) it has a shell and a working tree,
+ * so it can grep, build, type-check and test before finishing; with none it edits over
+ * the git API and provably cannot run a build. A chat whose every run had no sandbox and
+ * produced a plausible-looking diff that was never compiled reads, from the transcript
+ * alone, exactly like one that ran the full toolchain. So the history reports `executor`
+ * and `sandbox` (both stamped on the payload) and the on-prem `agent_host_id`.
  *
  * Live cloud SUB-AGENTS of this chat ride the same read: rows with `parent_execution_id`
  * whose payload `chatId` is the chat, mapped to the existing `ChatSubagentVM` shape
@@ -56,7 +52,7 @@ import { resolveChatAccess } from './chatAccess';
 import { cachedChatRead } from './chatCacheVersions';
 import { executionStateVersion } from '../runtime/executionStateVersion';
 import { parseCloudChild } from '../runtime/cloudChildRuns';
-import { parseCloudAgentRef, parseExecutor, parseOriginatingChatId } from '../runtime/cloudDispatch';
+import { parseCloudAgentRef, parseExecutor, parseOriginatingChatId, parseRunSandbox } from '../runtime/cloudDispatch';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -103,14 +99,17 @@ export interface ChatRunRecord {
   /** The initiating surface ('agent' | 'vscode' | …), governed by the tenant kill switch. */
   source: string;
   /**
-   * WHERE it executed: 'container' (real shell + local clone) | 'durable' (shell-less,
-   * git-API edits) | 'github_actions'. Null for a run dispatched before the executor was
-   * stamped, or one delivered to an on-prem host — see {@link ChatRunRecord.hostName}.
-   *
-   * Reported because `durable` and `container` differ in what the run was CAPABLE of, not
-   * merely in where it sat: only one of them can compile what it wrote.
+   * WHERE it executed: 'durable' (the one cloud runtime) | 'github_actions'. Null for a
+   * run dispatched before the executor was stamped, or one delivered to an on-prem host —
+   * see {@link ChatRunRecord.hostName}.
    */
   executor: string | null;
+  /**
+   * What served its shell and working tree: 'container' | 'actions' | 'none'. Null for a
+   * run that predates the stamp. Reported because it decides what the run was CAPABLE
+   * of: a run with `none` edited over the git API and could not build or test.
+   */
+  sandbox: string | null;
   /** The on-prem machine this run was delivered to, when it was one. */
   hostId: number | null;
   /** That machine's name — the id alone is as unreadable as a raw agent uuid was. */
@@ -233,6 +232,7 @@ export function toChatRunRecords(
       // older build (the in-request Worker executor, now removed) reads as "unknown"
       // rather than asserting a surface that no longer exists.
       executor: parseExecutor(row.payload ?? undefined) ?? null,
+      sandbox: parseRunSandbox(row.payload) ?? null,
       hostId: row.agentHostId ?? null,
       hostName: row.agentHostId != null ? hostNames.get(row.agentHostId) ?? null : null,
       produced: row.produced ?? null,

@@ -1,3 +1,5 @@
+import { RunKnowledgeRecorder } from "@builderforce/agent-tools";
+import { recordEditorRunEnd } from "./editorRunEnd";
 import * as vscode from "vscode";
 import { runAbortSignal, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
 import { ChatMessage, SECRET_KEY } from "./gateway";
@@ -232,67 +234,85 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // panel's run host uses.
     const directives = await editorRunDirectives(ctx.workspaceState, root ?? "", "run");
 
-    await runNativeBrain({
-      // With no server chat (the platform was unreachable) the run still needs a cell
-      // key; a unique negative id keeps it isolated and unmistakable for a real chat.
-      chatId: runChatId,
-      systemPrompt,
-      seed,
-      userTurn: request.prompt,
-      tools,
-      root: root ?? "",
-      // The chat-scoped backstops (mint a ticket for an unrecorded code change, advance
-      // a linked ticket off backlog) write a link against a REAL conversation, so they
-      // are gated on one existing — minting a ticket against a chat id that does not
-      // exist would be worse than not minting it.
-      ...(activeProject && brainChatId != null ? { projectId: activeProject.id } : {}),
-      // Memory, by contrast, is scoped to the PROJECT and needs no chat: a turn that
-      // could not create a conversation can still be answered from memory for free.
-      ...(activeProject ? { evermind: withWorkspaceStaleness(projectEvermindHooks(ctx.secrets, activeProject.id), root) } : {}),
-      ...(brainChatId == null ? { chatMode: "chat" as const } : {}),
-      ...(modelChoice.model ? { model: modelChoice.model } : {}),
-      modelStrict: modelChoice.modelStrict,
-      ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
-      permissionMode,
-      ...(policyGates.length ? { policyGates } : {}),
-      ...(directives ? { directives } : {}),
-      // The transport for this route — gateway or on-device — decided in `modelRouting`,
-      // never here. The sign-in gate above guarantees a key on the gateway branch.
-      // A Hybrid pick that failed (transport-class) and was answered with Auto says so in
-      // the response — the same one line the panel shows; never a silent swap.
-      stream: routeStream(modelChoice, key, (event) => {
-        stream.markdown(`_${vscode.l10n.t("Your pick {0} failed; answered with Auto.", event.from)}_\n\n`);
-      }),
-      signal: abort.signal,
-      approve: (req: NativeApprovalRequest) => confirmToolCall(req),
-      labels: {
-        dispatchHint: vscode.l10n.t(
-          "_This turn was stopped because its last few tool calls all failed. Read what they answered and reply with what they ask for, or hand the work to a cloud agent from the board so it continues in its own runtime._",
-        ),
-        blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
-      },
-      events: {
-        onText: (delta) => {
-          assistantText += delta;
-          stream.markdown(delta);
+    // What this turn did and read: restated to the model each step by the shared loop,
+    // then the note + code map at the end — the same record the panel's runs keep.
+    const knowledge = new RunKnowledgeRecorder();
+    knowledge.setPrompt(request.prompt);
+    try {
+      await runNativeBrain({
+        knowledge,
+        // With no server chat (the platform was unreachable) the run still needs a cell
+        // key; a unique negative id keeps it isolated and unmistakable for a real chat.
+        chatId: runChatId,
+        systemPrompt,
+        seed,
+        userTurn: request.prompt,
+        tools,
+        root: root ?? "",
+        // The chat-scoped backstops (mint a ticket for an unrecorded code change, advance
+        // a linked ticket off backlog) write a link against a REAL conversation, so they
+        // are gated on one existing — minting a ticket against a chat id that does not
+        // exist would be worse than not minting it.
+        ...(activeProject && brainChatId != null ? { projectId: activeProject.id } : {}),
+        // Memory, by contrast, is scoped to the PROJECT and needs no chat: a turn that
+        // could not create a conversation can still be answered from memory for free.
+        ...(activeProject ? { evermind: withWorkspaceStaleness(projectEvermindHooks(ctx.secrets, activeProject.id), root) } : {}),
+        ...(brainChatId == null ? { chatMode: "chat" as const } : {}),
+        ...(modelChoice.model ? { model: modelChoice.model } : {}),
+        modelStrict: modelChoice.modelStrict,
+        ...(modelChoice.routingMode ? { routingMode: modelChoice.routingMode } : {}),
+        permissionMode,
+        ...(policyGates.length ? { policyGates } : {}),
+        ...(directives ? { directives } : {}),
+        // The transport for this route — gateway or on-device — decided in `modelRouting`,
+        // never here. The sign-in gate above guarantees a key on the gateway branch.
+        // A Hybrid pick that failed (transport-class) and was answered with Auto says so in
+        // the response — the same one line the panel shows; never a silent swap.
+        stream: routeStream(modelChoice, key, (event) => {
+          stream.markdown(`_${vscode.l10n.t("Your pick {0} failed; answered with Auto.", event.from)}_\n\n`);
+        }),
+        signal: abort.signal,
+        approve: (req: NativeApprovalRequest) => confirmToolCall(req),
+        labels: {
+          dispatchHint: vscode.l10n.t(
+            "_This turn was stopped because its last few tool calls all failed. Read what they answered and reply with what they ask for, or hand the work to a cloud agent from the board so it continues in its own runtime._",
+          ),
+          blockedByPolicy: (reason: string) => vscode.l10n.t("Blocked by a governance gate: {0}", reason),
         },
-        onToolStart: (label) => stream.progress(label),
-        onToolResult: (label, ok) => stream.markdown(`\n\n${ok ? "✓" : "✗"} ${label}\n\n`),
-        // An entitlement failure gets the fix appended as a link (Upgrade / Add a
-        // card) — same verdict the webview banner renders as a button, so the two
-        // chat surfaces never disagree about what a block means.
-        onError: (message, action) => {
-          // A turn nothing could take for a reason sign-in won't fix (`no_local_model`,
-          // `no_specific_model`) gets its remedies as buttons, not just the sentence.
-          if (action?.kind === "no_local_model" || action?.kind === "no_specific_model") {
-            stream.markdown("\n\n");
-            streamNoLocalModel(stream, action.kind);
-            return;
-          }
-          stream.markdown(`\n\n**${vscode.l10n.t("Error:")}** ${formatChatErrorVerdict(message, action)}\n`);
+        events: {
+          onText: (delta) => {
+            assistantText += delta;
+            stream.markdown(delta);
+          },
+          onToolStart: (label) => stream.progress(label),
+          onToolResult: (label, ok) => stream.markdown(`\n\n${ok ? "✓" : "✗"} ${label}\n\n`),
+          // An entitlement failure gets the fix appended as a link (Upgrade / Add a
+          // card) — same verdict the webview banner renders as a button, so the two
+          // chat surfaces never disagree about what a block means.
+          onError: (message, action) => {
+            // A turn nothing could take for a reason sign-in won't fix (`no_local_model`,
+            // `no_specific_model`) gets its remedies as buttons, not just the sentence.
+            if (action?.kind === "no_local_model" || action?.kind === "no_specific_model") {
+              stream.markdown("\n\n");
+              streamNoLocalModel(stream, action.kind);
+              return;
+            }
+            stream.markdown(`\n\n**${vscode.l10n.t("Error:")}** ${formatChatErrorVerdict(message, action)}\n`);
+          },
         },
-      },
-    });
+      });
+    } finally {
+      // The same run-end step as the panel, even for a turn that threw or was stopped:
+      // the workspace note, then — with a project to hold them (the participant's memory
+      // is on exactly when it has one) — the code map and the learned facts, into the
+      // project this turn STARTED in. Best-effort, like every memory step.
+      if (root && !knowledge.isEmpty) {
+        await recordEditorRunEnd(ctx.secrets, root, `chat-${brainChatId ?? runChatId}`, knowledge, {
+          memory: !!activeProject,
+          ...(activeProject ? { projectId: activeProject.id } : {}),
+        }).catch(() => undefined);
+      }
+    }
 
     // Persist into the host's local store first; optional account sync imports the
     // completed history later without replaying its actions or learning side effects.

@@ -1,15 +1,13 @@
 /**
- * The cloud agent toolset, now just the cloud-SURFACE wiring over the shared,
- * runtime-agnostic registry (`@builderforce/agent-tools`). The tool DEFINITIONS live
- * in the shared package (`core-tools`) so the SAME definitions run on cloud Worker,
- * cloud Container, and on-prem Node — "any cloud tool is usable on-prem" is now
- * literally the same object, not a re-implementation.
+ * The cloud agent toolset, now just the cloud wiring over the shared, runtime-agnostic
+ * registry (`@builderforce/agent-tools`). The tool DEFINITIONS live in the shared package
+ * (`core-tools`) so the SAME definitions run in the cloud engine and on-prem Node — "any
+ * cloud tool is usable on-prem" is literally the same object, not a re-implementation.
  *
  * This module contributes only what is cloud-specific:
- *   • the two cloud surfaces' capability SETS (which derive their tool lists), and
- *   • the derived schema arrays their consumers expect (the in-Worker loop sends
- *     `schemasFor(provider)`; the container `llm` op advertises `CONTAINER_AGENT_TOOLS`,
- *     then runs the loop in its own image), plus
+ *   • the cloud run's capability SET (which derives its tool list — a run with a sandbox
+ *     adds the sandbox's capabilities, `cloudAgent/runSurfaceCaps.ts`), and the derived
+ *     schema array, plus
  *   • the step budgets and the finish-honesty matcher (loop policy).
  */
 
@@ -18,8 +16,8 @@ import { isCostLeverOn, type CostLeverId } from '@builderforce/cost-levers';
 import { classifyDeliverablePaths } from '../delivery/deliverableEvidence';
 import { TenantRole } from '../../domain/shared/types';
 
-/** The permission role every cloud run acts under — its platform-tool dispatch (durable
- *  and container) and the principal its B4 answer replay is scoped to. One value, so a
+/** The permission role every cloud run acts under — its platform-tool dispatch and the
+ *  principal its B4 answer replay is scoped to. One value, so a
  *  replayed answer is always one produced under the role the run reads with. */
 export const CLOUD_RUN_TENANT_ROLE = TenantRole.MANAGER;
 
@@ -147,103 +145,13 @@ export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
 ]);
 
 /**
- * The long-lived Container surface: a real Linux process with a shell + a local
- * clone. It greps via the shell (NOT the indexed searcher), commits via the
- * container-op, runs real build/test, and recalls/remembers durable facts by relaying
- * the `memory` container-op back to the Worker (the container holds no DB creds, so
- * the SAME `agent_memory`/`project_facts` backing serves both cloud surfaces) — so it
- * advertises repo.read + repo.write + shell + memory, and NOT repo.search /
- * static-check (shell-free).
- * → list_files, read_file, write_file, edit_file, run_command, memory_recall, memory_remember,
- * memory_forget, ask_human, finish — plus the six git tools `shell` also unlocks (git_status,
- * git_diff, git_history, git_sync_latest, git_undo, git_redo), which the image
- * genuinely implements in its `gitTool` handler. `memory_forget` relays through the
- * SAME `memory` container-op as recall/remember (action:'forget'), so it needs no new
- * op in the image.
- *
- * `coordinate` relays through the Worker just like memory. The image can therefore
- * reserve work before its first write and read the shared blackboard while the Worker
- * remains the sole owner of the lease/note stores.
- *
- * `prd.write` relays the same way, through the `prd` op — BOTH images that run this
- * toolset (the Cloudflare Container and the GitHub Actions runner) dispatch `update_prd`
- * to it, so the capability is backed on every surface it is advertised to.
- *
- * `skill.author` relays the same way, through the `skill` op (`cloudAgent/skillOp.ts`),
- * which runs the durable surface's own `skill_propose` / `skill_list` definitions
- * against the same `buildSkillAuthoringCapability` — so a container or Actions run that
- * produced a working procedure can propose it as a DRAFT, exactly as a durable run can.
- * Both images dispatch the two tools through the shared relay module.
- *
- * Adding it did not have to wait for a redeploy. Each image is a separately shipped
- * artifact, so a capability used to have to follow the DEPLOYED image rather than the
- * source, or a run would be offered a tool its image answered with `unknown tool`. Every
- * image now sends the tool names it can actually dispatch on each `llm` op and the Worker
- * advertises the intersection (`imageToolHandshake.ts`), so a capability can be added
- * the moment its op exists: an older image simply does not name the tool and is never
- * offered it (and an image too old to send a manifest is covered by
- * `HANDSHAKE_ONLY_TOOLS`).
- *
- * `repo.edit` IS in the set now (cost lever D5 — defects 4/5). It used to be omitted
- * because the image had no edit handler, so the container could only re-send whole files
- * through the `write` op — the most expensive output a coding turn produces. The image
- * now handles `edit_file` (search/replace with the SAME semantics as `edit_file` in
- * `@builderforce/agent-tools` core-tools: {path, old_string, new_string, replace_all?})
- * against its local clone (there is no `repo.edit` container op — the edit is applied
- * in the image, then committed through the Worker's `write` op with `isNew: false`,
- * which accepts the empty body an edit that clears a file produces). Only the Container
- * implements it (`CONTAINER_LOCAL_TOOL_NAMES` in `container/server.mjs`); the Actions
- * runner does not. The handshake (`imageToolHandshake.ts`) keeps both safe: an image
- * whose manifest omits `edit_file` is never offered it, and `edit_file` is in
- * `HANDSHAKE_ONLY_TOOLS`, so an image too old to send a manifest is not offered it either.
- *
- * `human` IS wired now (it was the last documented residual). Both images that run
- * this toolset — the Cloudflare Container and the GitHub Actions runner — handle
- * `ask_human` by posting the `ask_human` container-op with their conversation and
- * then exiting WITHOUT a terminal op, and `resumePausedExecution` restarts them
- * seeded with that conversation plus the human's answer (exit-and-redispatch; see
- * the op's own comment for why blocking-and-polling was rejected for a runtime
- * whose process is billed by the second and can be recycled).
- *
- * The container runs its OWN loop in its image; this set is only the schema it
- * advertises to the gateway, so it MUST match what that image implements.
- */
-export const CONTAINER_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  'repo.read', 'repo.write', 'repo.edit', 'shell', 'memory', 'memory.forget', 'coordinate', 'prd.write', 'human',
-  // Delegation — the SAME backing as the durable runner. Every delegation verb relays
-  // to the `subagent` container-op, which runs the shared tool definitions against
-  // `cloudLiveOrchestration.ts` with this image run as the owner: each child is its own
-  // durable run, and its report reaches the image as a steer on the `llm` op.
-  'orchestrate', 'orchestrate.fanout', 'orchestrate.live',
-  // `web.search` — PARITY with the durable surface, and only now safe to advertise.
-  // It was absent because the container's capabilities come from the image's own tool
-  // loop and there was no op behind them, so the tool would have 400'd mid-run. The
-  // `search` container-op is that backing (see `handleContainerOp`), and the image
-  // dispatches `web_search` to it, so the rule that kept this out — never advertise a
-  // tool that is certain to fail — is satisfied rather than waived.
-  //
-  // Deliberately NOT `web` (fetch): there is no `fetch` op, and a container with a
-  // shell can already curl. Search is the one that genuinely needs the Worker, because
-  // the vendor credential, the read-through cache and the meter all live there.
-  'web.search',
-  // Skill authoring — PARITY with the durable surface. Backed by the `skill` container-op,
-  // which runs the same tool definitions against the same authoring service, so a
-  // proposal from an image lands as a draft for review and can never be binding.
-  'skill.author',
-]);
-
-/**
  * Capabilities a cost lever ADDS to a cloud surface — data, one row per lever. Lever
  * off ⇒ the surface's constant set, exactly as before.
  *
  * C5 (`c5_cloud_repo_map`) adds `repo.semantic`, which unlocks the SHARED `repo_map` and
- * `semantic_search` definitions (`@builderforce/agent-tools` semantic-tools):
- *   • durable — backed by `createCloudRepoSemantic` (`repos/cloudRepoMap.ts`): one
- *     tarball read per base commit, the TS twin of bf-index's ranker, graph cached in R2;
- *   • container — backed by the image's own `bf-context` binary over its clone
- *     (`container/repoIndex.mjs`). The image names the two tools in its handshake only
- *     when the run spec turned the lever on AND its binary is present, so an older image
- *     is never offered them.
+ * `semantic_search` definitions (`@builderforce/agent-tools` semantic-tools), backed by
+ * `createCloudRepoSemantic` (`repos/cloudRepoMap.ts`): one tarball read per base commit,
+ * the TS twin of bf-index's ranker, graph cached in R2.
  */
 const COST_LEVER_CAPS: ReadonlyArray<{ lever: CostLeverId; caps: readonly Capability[] }> = [
   { lever: 'c5_cloud_repo_map', caps: ['repo.semantic'] },
@@ -255,27 +163,18 @@ export function withCostLeverCaps(base: ReadonlySet<Capability>, env: unknown, t
   return added.length === 0 ? base : new Set<Capability>([...base, ...added]);
 }
 
-/** The durable surface's capability set for a tenant's run (levers applied). */
+/** A cloud run's capability set for a tenant (levers applied). */
 export function cloudSurfaceCapsFor(env: unknown, tenantId: number | string | null | undefined): ReadonlySet<Capability> {
   return withCostLeverCaps(CLOUD_SURFACE_CAPS, env, tenantId);
 }
 
-/** The container surface's capability set for a tenant's run (levers applied). */
-export function containerSurfaceCapsFor(env: unknown, tenantId: number | string | null | undefined): ReadonlySet<Capability> {
-  return withCostLeverCaps(CONTAINER_SURFACE_CAPS, env, tenantId);
-}
-
-/** The schema array for a capability set — the ONE derivation both constants below use. */
+/** The schema array for a capability set — the ONE derivation. */
 export function cloudAgentToolsFor(caps: ReadonlySet<Capability>) {
   return cloudToolRegistry.schemasForCapabilities(caps);
 }
 
-/** Durable/Worker schema array — derived from {@link CLOUD_SURFACE_CAPS}, not
- *  hand-maintained. */
+/** The cloud schema array — derived from {@link CLOUD_SURFACE_CAPS}, not hand-maintained. */
 export const CLOUD_AGENT_TOOLS = cloudAgentToolsFor(CLOUD_SURFACE_CAPS);
-
-/** Container schema array — derived. Kept stable for the container image's loop. */
-export const CONTAINER_AGENT_TOOLS = cloudAgentToolsFor(CONTAINER_SURFACE_CAPS);
 
 // There is NO step cap on a cloud run (the durable and Worker surfaces). It used to be
 // 30: a real run burned all of an earlier 10 just exploring and shipped a PRD-only PR,
@@ -285,7 +184,7 @@ export const CONTAINER_AGENT_TOOLS = cloudAgentToolsFor(CONTAINER_SURFACE_CAPS);
 // trips nothing. What ends a run that is NOT healthy is the loop kernel's
 // consecutive-tool-failure breaker (`@builderforce/agent-loop`), the same one every
 // other surface stops on — the Container image and the Actions runner included: both
-// drive the same kernel (`api/container/agentImageLoop.mjs`).
+// drive the same kernel (`api/runners/github-actions/agentImageLoop.mjs`).
 
 // Anti-stub finish gate: how many finish attempts THIS RUN will have blocked for
 // still shipping placeholder/stub code before letting the PR open anyway (human-
@@ -295,10 +194,3 @@ export const CONTAINER_AGENT_TOOLS = cloudAgentToolsFor(CONTAINER_SURFACE_CAPS);
 // block-forever.
 export const MAX_PLACEHOLDER_FINISH_BLOCKS = 2;
 
-// LEGACY — the step ceiling a Container image built BEFORE the shared kernel
-// (`agentImageLoop.mjs`) still reads from its /run body (`spec.maxSteps || 20`).
-// A current image ignores it: no step cap, the failure-streak breaker is the limit.
-// Sent only so an image still deployed from before the kernel keeps its 40 rather
-// than falling back to 20; delete it (and the launcher's `maxSteps`) once every
-// deployed image runs `agentImageLoop.mjs`.
-export const CONTAINER_MAX_STEPS = 40;

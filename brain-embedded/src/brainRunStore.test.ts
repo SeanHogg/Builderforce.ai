@@ -644,12 +644,15 @@ describe('a bare "Fix" after an unfinished proposal', () => {
   const persistence = { sendMessages: async () => [] };
   const PROPOSAL = "I found the exact issue but hit the tool-call budget before applying the edit — so nothing has been changed on disk yet. Re-run me and I'll apply the edit.";
 
-  /** Capture the system prompt the model was actually handed. */
+  /**
+   * Capture the directives the model was actually handed: the system prompt AND the
+   * per-turn context block. With the B1 stable-prefix lever on (the default), a volatile
+   * directive like this one rides the turn context, not the cached system prefix.
+   */
   function captureSystem() {
     const seen: string[] = [];
     const stream: BrainStreamFn = async (opts) => {
-      const sys = opts.messages.find((m) => m.role === 'system');
-      if (sys && typeof sys.content === 'string') seen.push(sys.content);
+      seen.push(opts.messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n\n'));
       return { text: 'ok', toolCalls: [], finishReason: 'stop' };
     };
     return { stream, seen };

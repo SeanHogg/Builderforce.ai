@@ -3,6 +3,7 @@
  * accumulate) and the by-key delete. Every write bumps the project's fact version so no
  * cached read serves a stale set. Primitives live in `projectFactsStore`.
  */
+import { mergeConsolidated } from '@seanhogg/builderforce-memory/working';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import { memoryEmbeddingText } from '../memory/memoryEmbedding';
 import { NO_MEMORY_EMBEDDING, memoryEmbeddingFieldsFor } from '../memory/memoryEmbeddingPolicy';
@@ -57,8 +58,8 @@ export async function upsertProjectFact(
   },
 ): Promise<boolean> {
   const k = (key ?? '').trim().slice(0, 255);
-  const c = (content ?? '').trim();
-  if (!k || !c || !Number.isInteger(projectId) || projectId <= 0) return false;
+  const incoming = (content ?? '').trim();
+  if (!k || !incoming || !Number.isInteger(projectId) || projectId <= 0) return false;
   const expiresAt = opts?.expiresAt ?? null;
   const originExecutionId = opts?.originExecutionId ?? null;
   // Provenance is the execution id the caller already has, plus the model of that
@@ -67,10 +68,11 @@ export async function upsertProjectFact(
   const originCost = originCostColumns(origin);
   // Content score, then a small lift from how often recall has already returned
   // this key. A brand-new key has no prior count, so it keeps the content score.
-  let prior: Array<{ recallCount: number }> = [];
+  type PriorFact = { recallCount: number; content: string | null; expiresAt: Date | null; supersededBy: number | null };
+  let prior: PriorFact[] = [];
   try {
     const result = await db
-      .select({ recallCount: projectFacts.recallCount })
+      .select({ recallCount: projectFacts.recallCount, content: projectFacts.content, expiresAt: projectFacts.expiresAt, supersededBy: projectFacts.supersededBy })
       .from(projectFacts)
       .where(and(eq(projectFacts.tenantId, tenantId), eq(projectFacts.projectId, projectId), eq(projectFacts.key, k)))
       .limit(1);
@@ -81,9 +83,16 @@ export async function upsertProjectFact(
     // recall-frequency lift. Report it rather than writing a belief whose
     // importance was computed from a stand-in zero.
     reportCaughtError(err, { source: 'project-facts', operation: 'prior-recall-count', level: 'warning', context: { tenantId, projectId } });
-    prior = [] as Array<{ recallCount: number }>;
+    prior = [];
   }
   const recallCount = prior[0]?.recallCount ?? 0;
+  // A code map ADDS to the area's map instead of replacing it (`mergeConsolidated`): the
+  // one place every runtime's write lands, so a one-file run cannot erase the twelve
+  // files an earlier investigation mapped. Every other key replaces, as before. Only a
+  // LIVE prior is merged — a map the decay sweep expired or a newer belief superseded
+  // was retired on purpose, and folding it back in would resurrect it.
+  const live = prior[0] && prior[0].supersededBy == null && !(prior[0].expiresAt && prior[0].expiresAt.getTime() <= Date.now());
+  const c = mergeConsolidated(k, live ? prior[0]!.content : null, incoming);
   const baseImportance = opts?.importance ?? factImportance(c, opts?.kind);
   const importance = clamp01(baseImportance + Math.min(0.1, recallCount * 0.01));
   // Stamped on every write, on BOTH branches below. This digest is what tells a

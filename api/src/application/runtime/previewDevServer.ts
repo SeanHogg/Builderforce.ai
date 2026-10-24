@@ -339,11 +339,11 @@ export async function resolvePreviewRunState(
 }
 
 /**
- * The container-op the dev-server step reports through: `start` opens the lease and
- * hands back everything the runner needs, `ready` / `failed` close the loop, and
+ * The sandbox callback the dev-server step reports through: `start` opens the lease and
+ * hands back everything the sandbox needs, `ready` / `failed` close the loop, and
  * `probe` re-runs the health check on demand.
  *
- * Lives here rather than in `handleContainerOp` so the preview vertical stays one
+ * Lives here rather than in the sandbox callbacks so the preview vertical stays one
  * module and the route delegates instead of growing a branch (the route is presentation;
  * this is the application decision).
  */

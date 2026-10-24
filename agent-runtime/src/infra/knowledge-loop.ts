@@ -1,11 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
-  codeMapFromActivity,
   buildKnowledgeMemoryEntry as buildSharedKnowledgeMemoryEntry,
   deriveActivitySummary,
   KNOWLEDGE_DIRS,
-  RunKnowledgeRecorder,
+  type RunKnowledgeRecorder,
+  toolCallPaths,
 } from "@builderforce/agent-tools";
 
 const DEFAULT_BUILDERFORCE_URL = "https://api.builderforce.ai";
@@ -27,6 +27,7 @@ import { appendKnowledgeMemory } from "../builderforce/project-context.js";
 import { contributeProjectEvermindFromText, type ProjectEvermindSyncConfig } from "./project-evermind-sync.js";
 import { contributeProjectEvermindFromDelta } from "./project-evermind-delta.js";
 import { pushProjectFact, recallSharedProjectFacts } from "./project-facts-sync.js";
+import { isRunKnowledgeFedByLoop, releaseRunKnowledge, runKnowledgeFor } from "./run-knowledge-registry.js";
 import {
   checkResultFromToolEvent,
   commitRunOutcomeMemory,
@@ -65,11 +66,8 @@ function pathFromToolEvent(
     data["args"] && typeof data["args"] === "object" && !Array.isArray(data["args"])
       ? (data["args"] as Record<string, unknown>)
       : pendingArgs ?? null;
-  if (!args) {
-    return null;
-  }
-  const raw = args["path"] ?? args["file_path"];
-  return typeof raw === "string" && raw.trim() ? raw : null;
+  // The shared extraction (`path` / `file_path` / `filePath` …) the policy gates use.
+  return args ? (toolCallPaths(args)[0] ?? null) : null;
 }
 
 export type KnowledgeLoopOptions = {
@@ -88,15 +86,22 @@ export type KnowledgeLoopOptions = {
 
 type RunAccumulator = {
   sessionKey: string;
-  /** What the run did and read — the SAME recorder the editor and the cloud engine keep. */
+  /** What the run did and read — THE run's record, the one the native agent loop's
+   *  per-turn brief reads too (`run-knowledge-registry.ts`). */
   knowledge: RunKnowledgeRecorder;
+  /** The native agent loop feeds {@link knowledge} itself, so events must not. Read once,
+   *  when the run is first seen: the loop claims the record before its first call. */
+  fedByLoop: boolean;
   /** Check results the tool loop already finished. Never a shell we started. */
   checkResults?: RecordedCheckResult[];
   /** Args from the start phase, so a result event can recover `command`. */
   pendingArgs?: Map<string, Record<string, unknown>>;
-  /** The run's initiating user prompt (the "ticket"), captured at accumulate time
-   *  from the run context so the project-Evermind teacher distils (task → answer). */
-  prompt?: string;
+  /**
+   * Every tool call that returned, FAILED ones included. The recorder keeps successes
+   * only (a note must not claim a failed write); the verify record needs the failures
+   * too — a check that ran and errored still ran.
+   */
+  invokedTools: string[];
 };
 
 /**
@@ -111,7 +116,8 @@ type RunAccumulator = {
 export function buildKnowledgeMemoryEntry(params: {
   sessionKey: string;
   ts: string;
-  acc?: RunAccumulator;
+  /** Only the run's record is rendered; the verify state is not part of the note. */
+  acc?: Pick<RunAccumulator, "knowledge">;
 }): string | null {
   return buildSharedKnowledgeMemoryEntry({
     sessionKey: params.sessionKey,
@@ -209,15 +215,17 @@ export class KnowledgeLoopService {
     if (!this.runs.has(runId)) {
       // Capture the initiating prompt NOW (during the run) — the run context is still
       // registered here; by onRunComplete it may already be cleared.
-      const prompt = getAgentRunContext(runId)?.prompt;
-      const knowledge = new RunKnowledgeRecorder();
-      if (prompt) knowledge.setPrompt(prompt);
+      // The recorder holds it, so the note, the code map and the project-Evermind
+      // teacher (task → answer) all read the one copy. It is THE run's record
+      // (`run-knowledge-registry.ts`): the same one the native agent loop's brief reads.
+      const knowledge = runKnowledgeFor(runId, getAgentRunContext(runId)?.prompt);
       this.runs.set(runId, {
         sessionKey,
         knowledge,
+        fedByLoop: isRunKnowledgeFedByLoop(runId),
         checkResults: [],
         pendingArgs: new Map(),
-        ...(prompt ? { prompt } : {}),
+        invokedTools: [],
       });
     }
     const acc = this.runs.get(runId)!;
@@ -244,31 +252,40 @@ export class KnowledgeLoopService {
     }
     // Recorded ONCE per call, on its result, and only when it succeeded: a note (or
     // code map) claiming a file was written when the write threw grounds every later
-    // run on a lie, and counting the start event too would double every read.
-    if (toolName && data["phase"] === "result" && data["isError"] !== true) {
-      const filePath = pathFromToolEvent(data, pending ?? null);
-      acc.knowledge.record(toolName, filePath ? { path: filePath } : undefined);
+    // run on a lie, and counting the start event too would double every read. A run on
+    // the native agent loop is recorded by that loop, with the kernel's own arguments —
+    // recording its events here too would count every call twice.
+    if (toolName && data["phase"] === "result") {
+      acc.invokedTools.push(toolName);
+      if (data["isError"] !== true && !acc.fedByLoop) {
+        // The call's own arguments, so a search is recorded by what it looked for.
+        const filePath = pathFromToolEvent(data, pending ?? null);
+        acc.knowledge.record(toolName, filePath ? { ...pending, path: filePath } : pending);
+      }
+      if (toolCallId) acc.pendingArgs.delete(toolCallId);
     }
   }
 
   private async onRunComplete(runId: string, sessionKey: string): Promise<void> {
     const acc = this.runs.get(runId);
     this.runs.delete(runId);
+    releaseRunKnowledge(runId);
 
     // Compute once; reused for both the memory file (via buildKnowledgeMemoryEntry) and the SSM layer.
     const activity = acc?.knowledge.activity;
     const created = [...new Set(activity?.created ?? [])];
     const edited = [...new Set(activity?.edited ?? [])];
     const tools = [...new Set(activity?.tools ?? [])];
+    const invoked = [...new Set(acc?.invokedTools ?? [])];
     const results = acc?.checkResults ?? [];
     const writtenPaths = [...created, ...edited];
-    const summary = deriveActivitySummary({ created, edited, tools, prompt: acc?.prompt });
+    const summary = deriveActivitySummary({ created, edited, tools, prompt: activity?.prompt });
 
     // Record-only verify, before any await. A thrown recorder is swallowed
     // inside recordOnPremVerify; the outer catch is the run boundary so a
     // bug in the selection cannot reject this finished run either.
     try {
-      recordOnPremVerify({ writtenPaths, toolNames: tools, results }, (event) => {
+      recordOnPremVerify({ writtenPaths, toolNames: invoked, results }, (event) => {
         try {
           this.opts.verifyRecorder?.(event);
         } catch (err) {
@@ -311,7 +328,7 @@ export class KnowledgeLoopService {
       // is started. verify_started is emitted only when one of those results
       // is in hand (see recordOnPremVerify). A check that did not run is not
       // invented.
-      toolNames: tools,
+      toolNames: invoked,
       results,
       runId,
     });
@@ -319,7 +336,8 @@ export class KnowledgeLoopService {
     // The code map of what this run read and changed, into the SAME shared facts store
     // the editor and the cloud engine write theirs to, so the next run on this area —
     // on any surface — opens those files first instead of searching for them.
-    const codeMap = activity ? codeMapFromActivity(activity) : null;
+    // The workspace root: the native file tools take absolute paths as readily as relative.
+    const codeMap = acc?.knowledge.consolidate({ root: this.opts.workspaceDir }) ?? null;
     const factsCfg = this.projectEvermindConfig();
     if (codeMap && factsCfg) void pushProjectFact(factsCfg, codeMap.key, codeMap.content);
 
@@ -386,7 +404,7 @@ export class KnowledgeLoopService {
     // learning): adapt the project model on this run's activity and push the diff
     // to the coordinator. Fire-and-forget + fully guarded — a no-op unless the
     // runtime is configured to reach a seeded, connected project model.
-    void this.contributeToProjectEvermind((entry ?? summary ?? "").trim(), acc?.prompt, created.length + edited.length > 0);
+    void this.contributeToProjectEvermind((entry ?? summary ?? "").trim(), activity?.prompt, created.length + edited.length > 0);
 
     await this.syncIfConfigured();
   }

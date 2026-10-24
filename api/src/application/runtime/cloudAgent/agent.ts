@@ -26,10 +26,8 @@ export interface ResolvedCloudAgent {
   label?: string;
   ref?: string;
   /**
-   * The agent's CHOSEN surface, or null when it never chose one. Deliberately NOT
-   * defaulted here: the default depends on the tenant's plan (a container is billable
-   * compute), which this resolver does not know. Collapsing null to 'durable' here is
-   * what made `resolveCloudSurface`'s default unreachable — it never saw an unset value.
+   * The agent's CHOSEN surface, or null when it never chose one — the default is
+   * `resolveCloudSurface`'s to apply, so it is not collapsed here.
    */
   runtimeSurface: string | null;
   /** The agent's own gateway model, or undefined to use the default. A V2 cloud

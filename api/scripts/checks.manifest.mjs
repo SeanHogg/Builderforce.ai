@@ -65,19 +65,14 @@ export default [
   ['check:pinned-defects', 'check-pinned-defects.mjs'],
   ['check:prompt-tools', 'check-prompt-tool-names.mjs'],
   ['check:canvas-tools', 'check-canvas-tool-contract.mjs'],
-  // The Actions runner inlines a COPY of container/agentRelay.mjs (a Worker has no
-  // filesystem to read it from at request time). This fails the build the moment that
-  // copy drifts, so the "one dispatch table, every image" rule is enforced, not hoped for.
-  ['check:agent-relay', 'gen-agent-relay-source.mjs', '--check'],
-  ['check:code-analysis', 'gen-code-analysis.mjs', '--check'],
-  // Both images run the agent-loop KERNEL from a compiled copy (container/agentLoop.mjs,
-  // inlined into the Actions runner with agentImageLoop.mjs). This fails the build when
-  // the kernel source changes without the copy being regenerated, or the inline drifts.
-  ['check:agent-loop', 'gen-agent-loop-bundle.mjs', '--check'],
-  // The Container also imports compiled copies of the tool-output policy, the edit_file
-  // core and the read_file line window (container/toolOutputPolicy.mjs, stringEdit.mjs,
-  // fileWindow.mjs). This fails the build when a source changes without regenerating them.
+  // The Actions runner inlines a COPY of THE run sandbox (container/sandboxCore.mjs, a Worker
+  // has no filesystem to read it from at request time). This fails the build the moment that
+  // copy drifts, so "one sandbox, two transports" is enforced, not hoped for. Ordered after
+  // check:container-shared, whose output it inlines.
+  // The sandbox imports a compiled copy of the tool-output policy (container/toolOutputPolicy.mjs).
+  // This fails the build when its source changes without regenerating it.
   ['check:container-shared', 'gen-container-shared.mjs', '--check'],
+  ['check:sandbox-core', 'gen-sandbox-core-source.mjs', '--check'],
   ['check:trigger-palette', 'check-trigger-palette-parity.mjs'],
   ['check:no-burnrate-runtime', 'check-no-burnrate-runtime.mjs'],
   ['check:burnrate-policy', 'check-burnrate-cutover-policy.mjs'],

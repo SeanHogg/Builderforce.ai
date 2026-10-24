@@ -31,7 +31,7 @@ import {
   type CloudRunModelState,
 } from './cloudAgent/cloudRunModelPolicy';
 import {
-  applyVerifyPhase, commitRunMemory, describeVerifyOutcome, recordRunVerifyEvents, runVerifyPhase,
+  applyVerifyPhase,
 } from './cloudAgent/runEndMemory';
 import { codingFallbackSurface } from '../llm/codingFallbackSurface';
 import { pricesForCall } from '../llm/catalogView';
@@ -82,6 +82,10 @@ import { resolveTenantLlmCredentials, byoVendorIdsFromCredentials, type TenantVe
 import { assertCloudRunByo, type CloudByoFailure } from '../llm/cloudByoPolicy';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
 import { durableRepoSemantic, durableRunCaps, prepSurfaceCaps } from './cloudAgent/runSurfaceCaps';
+import { composeRunProvider } from './cloudAgent/runProvider';
+import { runVerifyThenRemember } from './cloudAgent/runVerifyThenRemember';
+import { ANALYZE_CODEBASE_TOOL, withSavedAnalysis } from './cloudAgent/auditAnalysis';
+import type { RunSandbox } from './sandbox/runSandbox';
 import { resolveTenantPlan } from '../tenant/tenantPlanSnapshot';
 import { openCostLoopSession, type CostLoopState } from './costLoop/costLoopSession';
 import { workModeToolingPrompt } from './costLoop/workModePrompt';
@@ -103,7 +107,7 @@ import {
   CLOUD_RUN_TENANT_ROLE, cloudAgentToolsFor, cloudToolRegistry, policyGateCallKey,
 } from './cloudAgentTools';
 import {
-  CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, applyStringEdit, editFacts, RunKnowledgeRecorder, codeMapFromActivity,
+  CURRENT_ENGINE_ID, evaluatePolicyGate, toolCallPaths, applyStringEdit, editFacts, RunKnowledgeRecorder, type RunKnowledgeState,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type PolicyGate, type AgentExecParams, type Capability,
   type PrdWriteCapability, type PrdUpdateResult,
 } from '@builderforce/agent-tools';
@@ -117,7 +121,6 @@ import { buildLiveOrchestration } from './cloudLiveOrchestration';
 import { isChildDelegation, meterExecutionIdOf, type CloudRunDelegation } from './cloudRunDelegation';
 import { liveChildrenFinishBlock } from './cloudChildRuns';
 import { resolveAgentPersonaBrief } from '../agent/agentPersonaBrief';
-import { imageAdvertisedTools, readToolManifest } from './imageToolHandshake';
 import { renderRunContext, summarizeBlocks, type RunContextBlock } from '@builderforce/run-context';
 import { RUN_CONTEXT_ORDER } from './runContextSource';
 import { buildRunContext } from './runContextService';
@@ -166,14 +169,7 @@ import {
   type WorkspaceContext,
 } from './cloudAgent/prd';
 export { ensureTaskPrd, recordPrdDirective } from './cloudAgent/prd';
-import {
-  containerContextVersionKey, heartbeatExecution, invalidateContainerRunContexts,
-  isExecutionCancelled, loadContainerRunContext, type ContainerRunContext,
-} from './cloudAgent/runContext';
-export {
-  containerContextVersionKey, invalidateContainerRunContexts, loadContainerRunContext,
-} from './cloudAgent/runContext';
-import { OP_HANDLERS } from './cloudAgent/containerOps';
+import { heartbeatExecution } from './cloudAgent/runContext';
 
 /**
  * The cloud tool-audit emitter now lives in `./cloudToolEvents` (so modules this
@@ -185,48 +181,8 @@ export { recordCloudToolEvent };
 
 
 export { parseLlmChoice, recordCloudUsage } from './cloudAgent/cloudLlmTurn';
-import { imageRunTurn, recordCloudLlmTurn } from './cloudAgent/cloudLlmTurn';
+import { recordCloudLlmTurn } from './cloudAgent/cloudLlmTurn';
 import { strictWhenConnected } from '../llm/fundingOrder';
-
-/**
- * Handle one container-op call from the long-lived Container executor. The container
- * runs the agent loop in its own process and delegates to the Worker for everything
- * that must stay server-side: the gateway LLM step (`llm`), per-file commit to the
- * ticket branch (`write`), arbitrary telemetry (`event`), the curated platform tools
- * (`platform_tool`), durable cross-run memory (`memory`), the PR finalize
- * (`finalize`), a cheap cancel poll (`status`), and a liveness `heartbeat`. Reuses the
- * exact same helpers as the in-Worker loop, so there is ONE implementation of
- * metering, commit, and finalize. Authenticated by the per-run token (already verified
- * by the caller).
- */
-export async function handleContainerOp(
-  env: Env,
-  db: Db,
-  runtimeService: RuntimeService,
-  ctx: ContainerRunContext,
-  executionId: number,
-  op: string,
-  args: Record<string, unknown>,
-  opts?: {
-    /** WHICH image is calling. The op protocol is shared verbatim between the
-     *  Cloudflare Container and the GitHub Actions runner, and every op is
-     *  surface-agnostic — except `ask_human`, whose resume has to redispatch to the
-     *  transport the run actually came from. The caller knows; nothing in the
-     *  execution row reliably does. Defaults to 'container' (the original caller). */
-    surface?: 'container' | 'github_actions';
-  },
-): Promise<{ status: number; body: unknown }> {
-  const { tenantId, taskId, projectId, cloudAgentRef, agentLabel, model } = ctx;
-  const handler = OP_HANDLERS[op];
-  if (!handler) return { status: 400, body: { error: `unknown op '${op}'` } };
-  return handler({
-    env, db, ctx, executionId, args, runtimeService,
-    surface: opts?.surface ?? 'container',
-    engine: { imageRunTurn, finalizeCloudRun },
-    tenantId, taskId, projectId, cloudAgentRef, agentLabel, model,
-    taskRow: { id: taskId, title: ctx.taskTitle, description: ctx.taskDescription },
-  });
-}
 
 /**
  * The cloud agent's tool-executing loop. Drives the gateway with the toolset
@@ -243,6 +199,9 @@ export interface CloudLoopState extends CostLoopState {
   writtenPaths: string[];
   /** Next absolute step index to run. */
   step: number;
+  /** What the run has read, searched and changed so far — its per-turn brief and the
+   *  run-end code map span every tick, not just the last one. */
+  runKnowledge?: RunKnowledgeState;
   /** The run's model hand-off state (`cloudAgent/cloudRunModelPolicy`): the locked
    *  model, released pins, broken/tried models and the stall budget. Persisted so
    *  every DO tick stays on the SAME model and the hand-off rules span the run. */
@@ -372,6 +331,10 @@ export interface CloudLoopOpts {
   suppressFinalize?: boolean;
   /** Its place in a delegation tree (durable surface only) — see {@link CloudRunDelegation}. */
   delegation?: CloudRunDelegation;
+  /** The run's sandbox (`sandbox/runSandbox.ts`): a shell and a working tree. Absent ⇒ the
+   *  git-API tools only, and no `shell` capability. A function holder, so like
+   *  `decorateProvider` it is handed in per tick and never persisted. */
+  sandbox?: RunSandbox;
 }
 export interface CloudLoopResult {
   ok: boolean;
@@ -786,10 +749,11 @@ async function runCloudToolLoop(
   }
   const writtenPaths = new Set<string>(opts?.resume?.writtenPaths ?? []);
   // What this run read and changed — the SAME recorder the editor and on-prem keep — so
-  // its code map lands in project memory for the next run on that area. Not carried in
-  // resume state: a resumed run maps what it touched after resuming, which is still true.
-  const runKnowledge = new RunKnowledgeRecorder();
-  runKnowledge.setPrompt(taskRow.title);
+  // its code map lands in project memory for the next run on that area. Carried in the
+  // resume state: a durable tick runs one step, so a fresh recorder per tick would never
+  // reach a brief and would map only the final tick.
+  const runKnowledge = RunKnowledgeRecorder.restore(opts?.resume?.runKnowledge);
+  if (!opts?.resume?.runKnowledge) runKnowledge.setPrompt(taskRow.title);
   if (repoCtx && !opts?.resume) await stampExecutionSourceRef(db, tenantId, executionId, repoCtx);
 
   // Tenant "LLM" (migration 0211): if `model` is a `tenant_model:<slug>` ref, expand
@@ -821,7 +785,7 @@ async function runCloudToolLoop(
   // which is why it is part of CLOUD_SURFACE_CAPS rather than a per-run addition: the
   // advertised schemas and the wired backing come from the same constant and cannot
   // drift.
-  const surfaceCaps = durableRunCaps(env, tenantId, opts?.delegation, repoCtx);
+  const surfaceCaps = durableRunCaps(env, tenantId, opts?.delegation, repoCtx, !!opts?.sandbox);
   /** Where this run's tokens bill — a child's are its parent's. */
   const meterExecutionId = meterExecutionIdOf(executionId, opts?.delegation);
   const runIdentity = await ensureAgentRunIdentity(db, {
@@ -1070,9 +1034,17 @@ async function runCloudToolLoop(
     ...(opts?.frozenReadRef ? { frozenReadRef: opts.frozenReadRef } : {}),
     blueprint,
   });
-  // Rehearsal wraps the provider here (see CloudLoopOpts.decorateProvider). A live run
-  // passes nothing and uses the provider as built.
-  const decoratedProvider = opts?.decorateProvider ? opts.decorateProvider(builtProvider) : builtProvider;
+  // IDE workspace (repo-less project) → sandbox (shell + clone) → rehearsal decoration
+  // (CloudLoopOpts.decorateProvider; a live run passes none): `cloudAgent/runProvider.ts`.
+  const composed = await composeRunProvider({
+    env, db, built: builtProvider, repoCtx,
+    run: { tenantId, taskId: taskRow.id, executionId, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths },
+    ...(opts?.sandbox ? { sandbox: opts.sandbox } : {}),
+    signal: abortController.signal,
+    heartbeat: () => heartbeatExecution(db, executionId),
+    ...(opts?.decorateProvider ? { decorate: opts.decorateProvider } : {}),
+  });
+  const decoratedProvider = composed.provider;
   // Delegation. A child is its OWN durable run (`cloudLiveOrchestration.ts`) — the same
   // backing every cloud surface spawns through — so a run with no place in a tree (a
   // rehearsal) gets no spawner: a dry run must not start real runs.
@@ -1299,7 +1271,9 @@ async function runCloudToolLoop(
     complete: async (ctx) => {
       // Per-step dynamic directive seam (the V3 affect block, + budget / task state) on
       // THIS request only — `messages` stays untouched. B1 trails it after the history.
-      const requestMessages = cost.turnMessages(messages, opts?.dynamicSystem);
+      // + the run's working-memory brief (what it already read/searched/changed) in the SAME
+      // tail, so a long run reasons from it instead of re-deriving the repo.
+      const requestMessages = cost.turnMessages(messages, opts?.dynamicSystem, [runKnowledge.brief()]);
       const turnTools = cost.tools();
 
       const tGen0 = Date.now();
@@ -1398,13 +1372,20 @@ async function runCloudToolLoop(
       // `finish` and `ask_human` come back as CONTROL signals the kernel interprets
       // (through the `onFinish` gates above).
       const dispatched = await cloudToolRegistry.dispatch(call.name, call.args, toolCtx);
-      return { data: dispatched.data, ...(dispatched.control ? { control: dispatched.control } : {}) };
+      // `analyze_codebase` (over the sandbox's shell): the full snapshot is saved for the
+      // visualizer and the model reads a bounded summary of it.
+      const data = call.name === ANALYZE_CODEBASE_TOOL && dispatched.data && typeof dispatched.data === 'object'
+        ? await withSavedAnalysis(db, { tenantId, projectId, executionId }, dispatched.data as Record<string, unknown>)
+        : dispatched.data;
+      return { data, ...(dispatched.control ? { control: dispatched.control } : {}) };
     },
   };
 
   // The in-run guards (`costLoop/loopGuards.ts`: A3 / D7 / D1 / D8) around the hooks and ports.
   const guardDeps: LoopGuardDeps = {
     db, evt, role: runRole, ladder, repoCtx, resolvedModel: () => lastResolvedModel, features: stepFeatures,
+    // The project's own fast checks over a turn's edits, run in the sandbox (D7 / D1).
+    ...(opts?.sandbox ? { sandbox: opts.sandbox } : {}),
     model: { get: () => modelState, set: (next) => { modelState = next; } },
     pause: (question) => pauseExecutionForQuestion(env, db, { tenantId, executionId, taskId: taskRow.id, projectId, ...(cloudAgentRef ? { cloudAgentRef } : {}), agentLabel, question, surface: 'durable' }),
   };
@@ -1454,6 +1435,7 @@ async function runCloudToolLoop(
     messages,
     writtenPaths: [...writtenPaths],
     step,
+    runKnowledge: runKnowledge.snapshot(),
     modelPolicy: modelState,
     routing,
     repoCtx,
@@ -1524,89 +1506,13 @@ async function runCloudToolLoop(
   // already ran in `onFinish`), then commits what the run learned. Both steps are
   // best-effort — neither may delay or undo the finalize below, which IS this run's
   // result.
-  await runVerifyThenRemember({ env, db, tenantId, projectId, executionId, taskRow, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths, runKnowledge, finalOutput, ciVerified: gates.ciVerified, modelState });
+  await runVerifyThenRemember({ env, db, tenantId, projectId, executionId, taskRow, agentLabel, ...(cloudAgentRef ? { cloudAgentRef } : {}), writtenPaths, runKnowledge, finalOutput, ciVerified: gates.ciVerified, modelState, ...(composed.verify ? { sandbox: composed.verify } : {}) });
 
   const fin = await finalizeCloudRun(env, db, {
     tenantId, cloudAgentRef, executionId, taskRow, agentLabel,
     repoCtx, repoMiss, writtenPaths, finalOutput, cancelled, ciVerified: gates.ciVerified,
   });
   return { ok: fin.ok, output: fin.output, cancelled, finished: true };
-}
-
-/**
- * The shared verify-then-remember tail, run from this file so it can move the run's
- * OWN policy state (only a host holding `modelState` can reduce it). Everything it
- * touches is best-effort by contract, so it is one call that cannot fail the run:
- *
- *  1. `runVerifyPhase` selects the verification verdict from what `onFinish` already
- *     ran (`ciVerified`), and `recordRunVerifyEvents` writes BOTH halves onto the
- *     timeline while returning the `verify_started` event for the reducer.
- *  2. The `verify_started` policy event is applied where the run actually VERIFIES —
- *     in `onFinish`, next to `verifyWrittenFiles`/`pollBranchCi` — because that is the
- *     only place the new phase can ride the live `modelState` into the turns a blocked
- *     finish forces. Applying it here, to a state this function only holds a COPY of
- *     and at the very end of the run, reduced it into a value nobody read. This tail
- *     asserts the phase rather than re-applying it.
- *  3. `commitRunMemory` writes the outcome into the governed memory the run already
- *     had as a capability. A failed write is reported and the run still finishes.
- */
-async function runVerifyThenRemember(args: {
-  env: Env;
-  db: Db;
-  tenantId: number;
-  projectId: number;
-  executionId: number;
-  taskRow: { id: number; title: string };
-  agentLabel: string;
-  cloudAgentRef?: string;
-  writtenPaths: Set<string>;
-  runKnowledge: RunKnowledgeRecorder;
-  finalOutput: string;
-  ciVerified: boolean;
-  modelState: CloudRunModelState;
-}): Promise<void> {
-  const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, writtenPaths, finalOutput, ciVerified, modelState } = args;
-  try {
-    // The durable surface has no shell, so its verification is the branch CI /
-    // static check `onFinish` already ran — recorded honestly, never as a local
-    // typecheck/test that did not happen.
-    const outcome = runVerifyPhase({
-      surface: 'durable',
-      writtenPaths,
-      results: ciVerified ? [{ command: 'branch-ci', exitCode: 0 }] : null,
-    });
-    recordRunVerifyEvents({ db, tenantId, executionId, ...(cloudAgentRef ? { cloudAgentRef } : {}) }, outcome);
-    // The `verify_started` POLICY event is applied where the run actually verifies —
-    // in `onFinish`, next to `verifyWrittenFiles`/`pollBranchCi` — because only the
-    // live `modelState` can carry the new phase into the turns a blocked finish
-    // forces. Applying it to a `modelState` this function only holds a COPY of, at
-    // the very end of the run, reduced the state into a value nobody read. Assert the
-    // invariant instead of pretending to perform the transition: a run that reaches
-    // here having verified must already be in the verify phase.
-    if (modelState.policy.phase !== 'verify') {
-      reportCaughtError(new Error(`run reached its verify tail still in the '${modelState.policy.phase}' phase`), {
-        source: 'application/runtime/cloudAgentEngine.ts',
-        operation: 'runVerifyThenRemember.assertVerifyPhase',
-        context: { logMessage: '[cloud-run] verify phase was not applied before the run end', details: { tenantId, executionId, phase: modelState.policy.phase } },
-      });
-    }
-    await commitRunMemory({
-      db, env, tenantId, projectId, ticketId: taskRow.id, executionId,
-      ...(cloudAgentRef ? { cloudAgentRef } : {}),
-      summary: finalOutput?.trim() || `${agentLabel} finished ${taskRow.title}`,
-      verifyNote: describeVerifyOutcome(outcome),
-      writtenPaths: [...writtenPaths],
-      codeMap: codeMapFromActivity(args.runKnowledge.activity),
-    });
-  } catch (error) {
-    // Belt-and-braces: `commitRunMemory` swallows its own failures, but a defect in
-    // the tail must still never cost this run its result.
-    reportCaughtError(error, {
-      source: 'application/runtime/cloudAgentEngine.ts',
-      operation: 'runVerifyThenRemember',
-      context: { logMessage: '[cloud-run] verify/remember tail failed; finishing without it', details: { tenantId, executionId, error } },
-    });
-  }
 }
 
 /** Capture the exact tree a run starts from. Best-effort on the provider read, but
@@ -1673,7 +1579,7 @@ export interface CloudEngineContext {
  */
 export type CloudEngineSurface =
   | { kind: 'worker' }
-  | { kind: 'durable'; maxSteps: number; limbicState?: LimbicState }
+  | { kind: 'durable'; maxSteps: number; limbicState?: LimbicState; sandbox?: RunSandbox }
   | { kind: 'rehearsal'; maxSteps: number; decorateProvider: (provider: CapabilityProvider) => CapabilityProvider; frozenReadRef?: string };
 
 /**
@@ -1715,7 +1621,7 @@ export class CloudLimbicEngine implements AgentEngine {
         ...(rc.execParams ? { execParams: rc.execParams } : {}),
         ...(input.genParams ? { genParams: { ...input.genParams } } : {}),
         ...(input.resume ? { resume: input.resume as CloudLoopState } : {}),
-        ...(surface.kind === 'durable' ? { maxSteps: surface.maxSteps, deferFinalize: true } : {}),
+        ...(surface.kind === 'durable' ? { maxSteps: surface.maxSteps, deferFinalize: true, ...(surface.sandbox ? { sandbox: surface.sandbox } : {}) } : {}),
         // A child's parent opens the pull request for the whole tree.
         ...(rc.delegation ? { delegation: rc.delegation, ...(isChildDelegation(rc.delegation) ? { suppressFinalize: true } : {}) } : {}),
         ...(surface.kind === 'rehearsal'
@@ -2369,7 +2275,7 @@ export async function prepareCloudRun(
     },
     // ── system channel ──────────────────────────────────────────────────────
     {
-      kind: 'tooling', subject: `executor:${opts?.shell ? 'container' : 'durable'}`, channel: 'system',
+      kind: 'tooling', subject: `executor:${opts?.shell ? 'sandbox' : 'durable'}`, channel: 'system',
       order: RUN_CONTEXT_ORDER.coreTooling, trustTier: 'operator', pinned: true,
       // The executor's tooling prompt (shell vs CI verification) with the D5 diff-edit
       // and D8 parallel-read wording when their levers are on.

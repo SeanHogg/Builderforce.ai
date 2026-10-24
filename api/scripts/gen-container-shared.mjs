@@ -1,26 +1,18 @@
 #!/usr/bin/env node
 /**
- * Generate (and, with `--check`, verify) the shared TypeScript modules the Cloudflare
- * Container imports — the same pattern as `gen-agent-loop-bundle.mjs`.
+ * Generate (and, with `--check`, verify) the shared TypeScript module the Cloudflare
+ * Container sandbox imports — the same pattern as `gen-agent-loop-bundle.mjs`.
  *
  * The container is plain Node ESM with no build step (its Dockerfile copies `.mjs`
  * files), so it cannot import a source-only package. Rather than hand-copy the logic
  * (which is how the container came to return the HEAD of a command's output while its
- * capture buffer kept the TAIL), each module below is compiled from its ONE source into
- * a dependency-free `.mjs` beside `server.mjs`:
+ * capture buffer kept the TAIL), the module below is compiled from its ONE source into
+ * a dependency-free `.mjs` beside `server.mjs`. Every tool definition (the `read_file`
+ * window, the `edit_file` core, `repo_map`) runs in the Worker's engine now, so the
+ * sandbox needs only the output cuts for what its shell prints:
  *
  *   • `container/toolOutputPolicy.mjs` ← `packages/tool-output-policy` (PRD C7: caps,
  *     head+tail cuts, the shell/test summarizer, JSON projection, read_file windows);
- *   • `container/stringEdit.mjs`       ← `packages/agent-tools/src/edit.ts` (the
- *     `edit_file` core every other provider uses: unique match, EOL-tolerant, `nearest`).
- *   • `container/fileWindow.mjs`       ← `packages/agent-tools/src/fileWindow.ts` (the
- *     `read_file` line window + its "call again with offset" note, so the image honours
- *     the `offset`/`limit` the shared schema advertises).
- *   • `container/semanticTools.mjs`    ← `packages/agent-tools/src/semantic-tools.ts` (+
- *     `tool.ts`): the shared `repo_map` / `semantic_search` definitions (PRD C5).
- *   • `container/readOnlyTools.mjs`    ← `api/src/application/runtime/costLoop/readOnlyTools.ts`:
- *     THE read-only tool table (PRD D8), so the image loop's `isReadOnly` port names the
- *     same tools the durable runner's does.
  *
  * `--check` needs no compiler: each bundle's header carries a hash of the source it was
  * built from, so the check recomputes it and fails the moment a source changes without
@@ -50,36 +42,6 @@ const BUNDLES = [
       'summarizeShellOutput', 'detectRunner', 'projectJson', 'windowReadFile', 'fitToolText', 'shapeToolResult',
       'modelToolResultPolicy',
     ],
-  },
-  {
-    out: join(API_ROOT, 'container', 'stringEdit.mjs'),
-    srcDir: join(REPO_ROOT, 'packages', 'agent-tools', 'src'),
-    files: ['edit.ts'],
-    exports: ['applyStringEdit', 'editFacts'],
-  },
-  {
-    out: join(API_ROOT, 'container', 'fileWindow.mjs'),
-    srcDir: join(REPO_ROOT, 'packages', 'agent-tools', 'src'),
-    files: ['fileWindow.ts'],
-    exports: ['READ_DEFAULT_LINE_LIMIT', 'windowFileContent', 'fileWindowNote'],
-  },
-  {
-    // THE `repo_map` / `semantic_search` definitions (PRD C5). The image backs their
-    // `repo.semantic` capability with its bf-context binary (`container/repoIndex.mjs`),
-    // so the result the model reads is the one Desktop and the durable runner produce.
-    // `tool.ts` rides along for `defineTool`; its imports are type-only.
-    out: join(API_ROOT, 'container', 'semanticTools.mjs'),
-    srcDir: join(REPO_ROOT, 'packages', 'agent-tools', 'src'),
-    files: ['tool.ts', 'semantic-tools.ts'],
-    exports: ['defineTool', 'semanticSearchTool', 'repoMapTool', 'SEMANTIC_TOOLS'],
-  },
-  {
-    // THE read-only tool table (PRD D8). The durable runner's `isReadOnly` port reads it
-    // in TypeScript; the image loop's reads this compiled copy — one list of names.
-    out: join(API_ROOT, 'container', 'readOnlyTools.mjs'),
-    srcDir: join(API_ROOT, 'src', 'application', 'runtime', 'costLoop'),
-    files: ['readOnlyTools.ts'],
-    exports: ['READ_ONLY_CLOUD_TOOLS', 'isReadOnlyCloudTool'],
   },
 ];
 

@@ -1,8 +1,11 @@
 /**
  * The capability set a cloud run holds, with the tenant's cost levers applied — the ONE
- * place the durable runner, its prep and the container `llm` op resolve it, so the
- * identity a run is issued, the schemas it is advertised and the services backing them
- * come from the same set and cannot drift.
+ * place the engine and its prep resolve it, so the identity a run is issued, the schemas
+ * it is advertised and the services backing them come from the same set and cannot drift.
+ *
+ * There is one set for every cloud run. A run with a SANDBOX (`sandbox/runSandbox.ts`)
+ * also holds what the sandbox backs (`shell`: `run_command`, the git tools,
+ * `analyze_codebase`) — on every plan; the plan decides only what the run is charged.
  *
  * C5 (`c5_cloud_repo_map`) is the lever that adds a capability today: `repo.semantic`.
  * On the durable surface it is backed by `createCloudRepoSemantic` over the run's BASE
@@ -13,18 +16,20 @@ import type { Capability, RepoSemanticCapability } from '@builderforce/agent-too
 import type { Env } from '../../../env';
 import type { TicketRepoContext } from '../../repos/commitFileAsPendingChange';
 import { createCloudRepoSemantic } from '../../repos/cloudRepoMap';
-import { cloudSurfaceCapsFor, containerSurfaceCapsFor } from '../cloudAgentTools';
+import { cloudSurfaceCapsFor } from '../cloudAgentTools';
+import { SANDBOX_CAPABILITIES } from '../sandbox/sandboxProvider';
 import { delegationCaps, type CloudRunDelegation } from '../cloudRunDelegation';
 
-/** The durable run's capability set: levers applied, `repo.semantic` only with a repo,
- *  then narrowed by its place in a delegation tree. */
+/** The run's capability set: levers applied, the sandbox's capabilities when it has one,
+ *  `repo.semantic` only with a repo, then narrowed by its place in a delegation tree. */
 export function durableRunCaps(
   env: unknown,
   tenantId: number,
   delegation: CloudRunDelegation | undefined,
   repoCtx: TicketRepoContext | null,
+  sandboxed = false,
 ): ReadonlySet<Capability> {
-  const levered = cloudSurfaceCapsFor(env, tenantId);
+  const levered = prepSurfaceCaps(env, tenantId, sandboxed);
   const backed = repoCtx || !levered.has('repo.semantic')
     ? levered
     : new Set([...levered].filter((c) => c !== 'repo.semantic'));
@@ -32,8 +37,9 @@ export function durableRunCaps(
 }
 
 /** The capability set prep issues the run identity with and builds its prompt from. */
-export function prepSurfaceCaps(env: unknown, tenantId: number, shell: boolean): ReadonlySet<Capability> {
-  return shell ? containerSurfaceCapsFor(env, tenantId) : cloudSurfaceCapsFor(env, tenantId);
+export function prepSurfaceCaps(env: unknown, tenantId: number, sandboxed: boolean): ReadonlySet<Capability> {
+  const base = cloudSurfaceCapsFor(env, tenantId);
+  return sandboxed ? new Set<Capability>([...base, ...SANDBOX_CAPABILITIES]) : base;
 }
 
 /** The durable surface's `repo.semantic` backing: the cloud repo map over the run's

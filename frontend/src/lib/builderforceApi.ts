@@ -3149,7 +3149,7 @@ export type PlanFeatureKey =
   | 'approvalWorkflows' | 'fleetMesh' | 'fullTelemetry' | 'customAgentRoles'
   | 'psychometricPersona' | 'teamApprovalInbox' | 'seatCostControls'
   | 'voiceCloning' | 'advancedInsights' | 'evermindTraining' | 'livePreview'
-  | 'containerRuntime' | 'removeBranding' | 'serverVideoRender' | 'sessionReplay';
+  | 'removeBranding' | 'serverVideoRender' | 'sessionReplay';
 
 export interface ConsumptionSnapshot {
   period: { start: string; resetsAt: string };

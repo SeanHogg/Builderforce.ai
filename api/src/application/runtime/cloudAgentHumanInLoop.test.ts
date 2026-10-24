@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { CLOUD_AGENT_TOOLS, CONTAINER_AGENT_TOOLS } from './cloudAgentTools';
+import { CLOUD_AGENT_TOOLS, cloudAgentToolsFor } from './cloudAgentTools';
+import { prepSurfaceCaps } from './cloudAgent/runSurfaceCaps';
 
 /**
  * Cloud human-in-the-loop wiring (migration 0120). These guard the contract that
@@ -27,12 +28,10 @@ describe('ask_human cloud tool', () => {
     expect(finish!.function.description.toLowerCase()).toContain('ask_human');
   });
 
-  it('is ALSO offered to the container / GitHub Actions surface, which now honours it', () => {
-    // Both images drive their whole loop in one process, so their pause is
-    // exit-and-redispatch: they post the `ask_human` container-op with their
-    // conversation, exit WITHOUT a terminal op, and are restarted with the answer.
-    // See containerPauseContract.test.ts for the image side of that contract.
-    const tool = byName(CONTAINER_AGENT_TOOLS, 'ask_human');
+  it("is offered to a sandboxed run too — the pause is the engine's, whatever serves the shell", () => {
+    // Every cloud run is the one engine on its durable runner: a question parks the
+    // runner's cursor, and the sandbox (container or Actions runner) only serves tools.
+    const tool = byName(cloudAgentToolsFor(prepSurfaceCaps({}, 1, true)), 'ask_human');
     expect(tool).toBeDefined();
     const params = tool!.function.parameters as { required?: string[] };
     expect(params.required).toContain('question');

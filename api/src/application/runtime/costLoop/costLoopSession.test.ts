@@ -4,7 +4,7 @@ import { openCostLoopSession, type CostLoopSessionArgs } from './costLoopSession
 import { ROLE_CORE_TOOLS } from './deferredTools';
 import { applyTaskStateUpdate, renderTaskState } from './taskState';
 import { renderBudget } from './runBudget';
-import { VOLATILE_TAIL_TAG } from '../../llm/vendors/anthropic';
+import { VOLATILE_TAIL_TAG } from '@seanhogg/builderforce-memory/handoff';
 
 const alert = vi.hoisted(() => ({ notifyContainmentStop: vi.fn(async () => 'raised' as const) }));
 vi.mock('../../alerts/containmentAlert', () => alert);

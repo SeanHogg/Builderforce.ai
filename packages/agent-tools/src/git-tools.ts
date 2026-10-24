@@ -52,7 +52,9 @@ export type GitAction = "status" | "diff" | "history" | "sync_latest" | "undo" |
  * aborts the merge and signals `MERGE_CONFLICT` rather than leaving a half-merged
  * tree. `undo`/`redo` are the classic reflog pair (`HEAD~1` / `HEAD@{1}`) and
  * refuse to run on a dirty tree so they can never silently discard uncommitted
- * work. Pushing the synced/rewound branch is the CALLER's job (surface-specific).
+ * work. Pushing the synced/rewound branch is the surface's call: a shell whose clone
+ * mirrors a surface-owned branch names it (`ShellCapability.trackedBranch`), and the
+ * script then absorbs that branch first and publishes to it after.
  */
 /**
  * The validated `repo` subdirectory, or null.
@@ -149,7 +151,7 @@ function notARepoResult(action: string, candidates: string[] = []): ToolResult {
   };
 }
 
-type GitShellCtx = { caps: { shell?: { run(c: string): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }> } } };
+type GitShellCtx = { caps: { shell?: { run(c: string): Promise<{ ok: boolean; stdout?: string; exitCode?: number; error?: string }>; trackedBranch?: string } } };
 
 async function notARepoWithCandidates(action: string, ctx: GitShellCtx): Promise<ToolResult> {
   const listed = await ctx.caps.shell!.run(buildListCheckoutsCommand());
@@ -160,7 +162,11 @@ async function notARepoWithCandidates(action: string, ctx: GitShellCtx): Promise
  *  "what is the base branch" has ONE answer across sync, commit, push and pull request. */
 const RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
 
-export function buildGitCommand(action: GitAction, opts?: { path?: string; baseBranch?: string; limit?: number; repo?: string }): string {
+/** A commit identity for a clone that has none configured. */
+const IDENTITY_EMAIL = 'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"';
+const IDENTITY_NAME = 'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"';
+
+export function buildGitCommand(action: GitAction, opts?: { path?: string; baseBranch?: string; limit?: number; repo?: string; trackedBranch?: string }): string {
   const path = safeGitArg(opts?.path);
   const pathArg = path ? ` -- "${path}"` : "";
   // A workspace root is not always the repository root: a monorepo checkout, or simply
@@ -184,6 +190,14 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
   // that CONTAINS checkouts rather than being one, they were unusable and said nothing
   // about why, while `git_status` — which does take `repo` — worked one call earlier.
   const scopedScript = (lines: string[]): string => repoScopedScript(lines.join("\n"), opts?.repo);
+  // A clone that mirrors a surface-owned branch (`ShellCapability.trackedBranch`): absorb
+  // that branch before moving history (the surface may have committed since) and
+  // publish the result, or the pull request never sees the sync / rewind.
+  const tracked = safeGitArg(opts?.trackedBranch);
+  const absorb = tracked
+    ? ["set -e", IDENTITY_EMAIL, IDENTITY_NAME, `git fetch origin "${tracked}" 2>/dev/null && git merge --ff-only "origin/${tracked}" 2>/dev/null || true`]
+    : [];
+  const publish = (force: boolean): string[] => (tracked ? [force ? "git push --force-with-lease origin HEAD" : "git push origin HEAD"] : []);
   switch (action) {
     case "status":
       return scoped("git status --short --branch");
@@ -197,12 +211,12 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
       const base = safeGitArg(opts?.baseBranch);
       const resolveBase = base ? `BASE="${base}"` : RESOLVE_BASE;
       return scopedScript([
-        "set -e",
+        ...(tracked ? absorb : ["set -e"]),
         resolveBase,
-        'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
-        'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
+        ...(tracked ? [] : [IDENTITY_EMAIL, IDENTITY_NAME]),
         'git fetch origin "$BASE"',
         'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
+        ...publish(false),
         'echo "Synced with origin/$BASE"',
       ]);
     }
@@ -210,15 +224,19 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
       // Drop the last commit, reflog-recoverable via redo. Guard a dirty tree so
       // uncommitted work is never silently lost.
       return scopedScript([
+        ...absorb,
         '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
         "git reset --hard HEAD~1",
+        ...publish(true),
         'echo "Undid the last commit (use git_redo to reapply)"',
       ]);
     case "redo":
       // Reapply the change undone by the most recent reset (the reflog redo).
       return scopedScript([
+        ...absorb,
         '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
         'git reset --hard "HEAD@{1}"',
+        ...publish(true),
         'echo "Reapplied the last undone change"',
       ]);
   }
@@ -248,7 +266,9 @@ async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?:
   const explicitRepo = opts.repo;
   let repo = explicitRepo;
   let path = opts.path;
-  let r = await ctx.caps.shell!.run(buildGitCommand(action, { ...opts, repo, path }));
+  const trackedBranch = ctx.caps.shell?.trackedBranch;
+  const build = (o: typeof opts) => buildGitCommand(action, trackedBranch ? { ...o, trackedBranch } : o);
+  let r = await ctx.caps.shell!.run(build({ ...opts, repo, path }));
   // "fatal: not a git repository" is not the end of the road. An explicit `repo` still
   // wins (the caller already chose). Otherwise: if a workspace-relative `path` starts
   // with a checkout, retry scoped there; if we still cannot, NAME the candidate
@@ -258,7 +278,7 @@ async function runGitTool(action: GitAction, opts: { path?: string; baseBranch?:
     if (inferred) {
       const inner = commitPathCandidates(opts.path ?? "", inferred);
       path = inner.length > 0 ? inner[inner.length - 1] : undefined;
-      r = await ctx.caps.shell!.run(buildGitCommand(action, { ...opts, repo: inferred, path }));
+      r = await ctx.caps.shell!.run(build({ ...opts, repo: inferred, path }));
       if (!isNotARepo(r)) repo = inferred;
     }
     if (isNotARepo(r)) return notARepoWithCandidates(action, ctx);

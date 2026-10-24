@@ -22,17 +22,15 @@ import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { dispatchGithubActionsRun, githubActionsAvailable } from './githubActionsDispatch';
 import { RuntimeService } from './RuntimeService';
 import { cloudRunnerStub } from './cloudRunnerStub';
-import { tenantHasFeature } from '../tenant/featureEntitlements';
 import {
-  resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
+  resolveCloudSurface, chooseCloudExecutor, cloudAgentTypeLabel,
   isTerminalExecutionStatus, parseCloudAgentRef, parseModel, parseRepoId, withDefaultModel, withExecutor,
 } from './cloudDispatch';
 import { ensureTaskPrd } from './cloudAgent/prd';
-import { launchContainerRun, type ContainerRunTarget } from './containerRunLauncher';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { notifyExecutionSubscribers } from './executionEvents';
 import {
-  markCloudExecutionRunning, recordCloudToolEvent, resolveCloudAgent, agentAllowsHostExecution,
+  recordCloudToolEvent, resolveCloudAgent, agentAllowsHostExecution,
 } from './cloudAgentEngine';
 import { resolveDefaultCloudAgentRef, UNATTRIBUTED_RUN_MESSAGE } from './defaultCloudAgent';
 import { recordAutoRunSkip, clearAutoRunSkip } from './autoRunSkipLedger';
@@ -595,40 +593,13 @@ export async function startDispatchedExecution(
     artifacts,
   };
 
-  // ONE agent engine (the V2 Agent) runs on three interchangeable long-lived
-  // surfaces — see agent taxonomy ([[agent-types-taxonomy]]):
-  //   • Durable Object (CloudRunnerDO)         — cloud, on-demand serverless.
-  //   • Container (long-lived Cloudflare)      — cloud, persistent process + shell.
-  //   • On-Prem machine                        — the client's machine, reached via
-  //     the AGENT_HOST_RELAY. It is ALSO a long-lived runtime (equivalent to a
-  //     container) and runs the SAME V2 Agent (Claude-Agent-SDK) the cloud surfaces
-  //     do, so a V2 agent pinned to a host executes ON the machine — no engine fork.
-  //
-  // WHICH of the two cloud surfaces is a PLAN decision: a container is billable
-  // Cloudflare compute for the length of the run, the Durable Object is effectively
-  // free, so a workspace that is not paying runs on the free infrastructure. Keyed on
-  // the TENANT, not on whoever pressed Run — the spend belongs to the workspace, and a
-  // board-auto run has no human at all, so keying on the caller would hand one tenant
-  // two different surfaces depending on the pathway. Served from the cached plan
-  // snapshot (L1 + KV), so this is not a per-run round trip.
-  const containerAllowed = await tenantHasFeature(env as Env, tenantId, undefined, 'containerRuntime');
-  const surface = resolveCloudSurface(agent.runtimeSurface, pinnedHostId != null, { containerAllowed });
+  // ONE agent engine runs every run. A cloud run runs it on the durable runner
+  // (CloudRunnerDO) on every plan, with the Cloudflare Container — or the repo's own
+  // GitHub Actions runner — as its sandbox; an On-Prem host (the client's machine,
+  // reached via the AGENT_HOST_RELAY) runs the same engine natively. The plan decides
+  // only what the run is charged (the cloud-run allowance below), never where it runs.
+  const surface = resolveCloudSurface(agent.runtimeSurface, pinnedHostId != null);
   const typeLabel = cloudAgentTypeLabel(surface);
-
-  // A plan demotion must SAY SO. The agent explicitly asked for the container and the
-  // workspace is not entitled to billable compute, so the run is about to behave nothing
-  // like what was configured — no shell, no clone, no build. The picker already disables
-  // the option, but an agent configured before the gate existed (or written through the
-  // API) reaches here, and a silent degrade explained by nothing is the exact failure this
-  // whole pass is about. The run still proceeds: the work gets done on the free surface.
-  if (agent.runtimeSurface === 'container' && !containerAllowed) {
-    await recordCloudToolEvent(db, {
-      tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-      toolName: 'runtime.route', category: 'planning',
-      detail: { reason: 'plan does not include containerRuntime', requested: 'container', ranOn: surface },
-      result: `Agent "${agent.label ?? agent.ref ?? 'cloud agent'}" is set to the long-lived Container surface, which needs a paid plan — running on the Durable (serverless) surface instead. Edits go through the git API rather than a shell, so this run cannot build or test in place.`,
-    }).catch((error) => reportCaughtError(error, { source: "application/runtime/dispatchCloudRun.ts", operation: "startDispatchedExecution", context: { logMessage: '[runtime-dispatch] surface demotion telemetry failed', details: { tenantId, executionId: execution.id, error } } }));
-  }
 
   // Dispatch to an On-Prem host when one is explicitly pinned AND the agent's
   // declared `runtime_support` permits host execution (an agent marked cloud-only
@@ -689,13 +660,8 @@ export async function startDispatchedExecution(
       return runtimeService.getExecution(execution.id).then((e) => e.toPlain()).catch(() => ({ id: execution.id, status: ExecutionStatus.FAILED }));
     }
 
-    // Route a container-surface run to the REAL long-lived Cloudflare Container
-    // (AgentContainerDO) when it's bound; everything else — a durable-surface run,
-    // and a container run with no Container binding — runs on the durable executor
-    // (CloudRunnerDO). The run carries its OWN model so it is never silently
-    // attributed to the gateway default. (One engine: the V2 Agent; V1 is deleted.)
-    const wantsContainer = surface === 'container';
-    const hasContainerBinding = wantsContainer && !!env.AGENT_CONTAINER;
+    // Every cloud run is driven by the durable runner (CloudRunnerDO). The run carries
+    // its OWN model so it is never silently attributed to the gateway default.
     const hasCloudRunner = !!env.CLOUD_RUNNER;
     // The GitHub Actions surface has no binding and no liveness probe — a runner
     // does not exist until GitHub schedules one — so the pre-flight is "can this
@@ -757,11 +723,11 @@ export async function startDispatchedExecution(
       }).catch((error) => reportCaughtError(error, { source: "application/runtime/dispatchCloudRun.ts", operation: "startGithubActions", context: { logMessage: '[runtime-dispatch] GitHub Actions dispatch telemetry failed', details: { tenantId, executionId: execution.id, error } } }));
     };
 
-    const startDurable = async () => {
+    const startDurable = async (): Promise<boolean> => {
       const cloudRunner = env.CLOUD_RUNNER;
       if (!cloudRunner) {
         await failCloudRuntimeUnavailable('the CLOUD_RUNNER binding is not configured');
-        return;
+        return false;
       }
       try {
         const stub = cloudRunnerStub(cloudRunner, execution.id);
@@ -776,75 +742,29 @@ export async function startDispatchedExecution(
         });
         if (!res.ok) {
           await failCloudRuntimeUnavailable(`CloudRunnerDO /start returned HTTP ${res.status}`);
+          return false;
         }
+        return true;
       } catch (e) {
         await failCloudRuntimeUnavailable(`CloudRunnerDO /start threw: ${e instanceof Error ? e.message : String(e)}`);
+        return false;
       }
     };
 
-    // Start the run in a real long-lived Cloudflare Container: prep the prompts
-    // (shell-capable variant), mint the per-run callback token, hand the container a
-    // tokened clone URL for its local workspace, and POST /run. The container drives
-    // the loop in its own process and calls back into /internal/container-op. Any
-    // failure to reach the container degrades to the durable executor.
-    // Container executor — the caller (orchestrate) has already proved the container
-    // is live via chooseCloudExecutor's health gate, so this just starts the run.
-    // Any kickoff failure still degrades to the durable executor.
-    const startContainer = async (stub: ContainerRunTarget) => {
-      // The kickoff itself (prompts, run token, clone URL, step budget) lives in the
-      // shared launcher, so the RESUME path relaunches a paused container with a
-      // byte-identical world. This route keeps only what is dispatch-specific: the
-      // degrade-to-durable fallback and the "it started" transition.
-      const launched = await launchContainerRun(env, db, stub, {
-        tenantId,
-        executionId: execution.id,
-        taskRow: { id: taskRow.id, title: taskRow.title, description: taskRow.description, projectId: taskRow.projectId },
-        agentLabel: agent.label ?? 'BuilderForce Agent',
-        model: agent.baseModel,
-        cloudAgentRef: agent.ref,
-        artifacts,
-        payload: dispatchPayload,
-      });
-      if (!launched.ok) {
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-          toolName: 'runtime.fallback', category: 'planning',
-          detail: { reason: launched.reason, ranOn: 'durable' },
-          result: `Cloudflare Container kickoff failed (${launched.reason}) — running on the durable executor instead.`,
-        });
-        await startDurable();
-        return;
-      }
-      // The container accepted the run and now drives the loop via callbacks to
-      // /internal/container-op, which only flips the row at finalize. Without this
-      // the execution would read PENDING for the whole live run. Mark it RUNNING
-      // now — parity with the durable (CloudRunnerDO.start) and Worker
-      // (runCloudExecution) executors, which both transition at kickoff.
-      await markCloudExecutionRunning(runtimeService, execution.id);
-    };
-
-    // Decide the executor INSIDE waitUntil: the container health probe is async and
-    // must not block the submit response. The decision, the why-not-container note,
-    // and the dispatch telemetry all reflect where the run ACTUALLY lands — not a
-    // 202 that masks a dead container.
+    // Decide the executor INSIDE waitUntil: the Actions pre-flight costs a GitHub call
+    // and must not block the submit response. The decision and the dispatch telemetry
+    // reflect where the run ACTUALLY lands.
     const orchestrate = async () => {
-      const stub = hasContainerBinding && env.AGENT_CONTAINER
-        ? env.AGENT_CONTAINER.get(env.AGENT_CONTAINER.idFromName(`exec:${execution.id}`))
-        : null;
-      const containerHealthy = stub ? await probeContainerHealth(stub) : false;
       const actionsAvailable = wantsGithubActions
         ? await resolveDefaultRepoForTask(db, tenantId, taskRow.id)
             .then((r) => (r ? githubActionsAvailable(env, db, tenantId, r.repoId) : false))
             .catch(() => false)
         : false;
-      const executor = chooseCloudExecutor({
-        wantsContainer, hasContainerBinding, containerHealthy, hasCloudRunner,
-        wantsGithubActions, githubActionsAvailable: actionsAvailable,
-      });
+      const executor = chooseCloudExecutor({ hasCloudRunner, wantsGithubActions, githubActionsAvailable: actionsAvailable });
 
       // Stamp the resolved executor onto the payload + the executions row so the orphan
       // reaper and read-path repair measure this run against the RIGHT silence ceiling:
-      // a long-lived 'durable'/'container' run heartbeats once per alarm tick and a tick
+      // a long-lived durable run heartbeats once per alarm tick and a tick
       // spans one slow LLM step, so it must not be reaped at the serverless 90s wall
       // (execution #136). The row is what the reaper reads; the kickoff body carries the
       // same stamped copy so a self-heal re-dispatch keeps it.
@@ -861,23 +781,8 @@ export async function startDispatchedExecution(
         result: `Dispatching ${typeLabel} to the ${executor} cloud executor (model: ${agent.baseModel ?? 'gateway default'}).`,
       });
 
-      // Explain a container→durable/worker downgrade so the timeline shows WHY.
-      if (wantsContainer && executor !== 'container') {
-        const why = !hasContainerBinding ? 'no long-lived Cloudflare Container is bound' : 'the Cloudflare Container is not live (health probe failed)';
-        const fallbackResult = executor === 'unavailable'
-          ? `${typeLabel}: ${why}, and no durable executor is available — failing without starting the unsafe in-request Worker loop.`
-          : `${typeLabel}: ${why} — running on the durable cloud executor instead, which executes the run to completion.`;
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-          toolName: 'runtime.fallback', category: 'planning',
-          detail: { requestedSurface: 'container', ranOn: executor, reason: !hasContainerBinding ? 'no AGENT_CONTAINER binding' : 'container /health unreachable' },
-          result: fallbackResult,
-        });
-      }
-
-      // Explain a github_actions→durable downgrade the same way the container
-      // downgrade is explained, so the timeline says WHY rather than silently
-      // running somewhere the tenant did not choose.
+      // Explain a github_actions→durable downgrade, so the timeline says WHY rather
+      // than silently running somewhere the tenant did not choose.
       if (wantsGithubActions && executor !== 'github_actions') {
         await recordCloudToolEvent(db, {
           tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
@@ -887,13 +792,14 @@ export async function startDispatchedExecution(
         });
       }
 
-      if (executor === 'github_actions') await startGithubActions();
-      else if (executor === 'container' && stub) await startContainer(stub);
-      else if (executor === 'durable') await startDurable();
+      // An Actions run is the durable runner too — its engine — with the queued runner as
+      // its sandbox: start the runner first, so it exists before the job polls it.
+      if (executor === 'github_actions') {
+        if (await startDurable()) await startGithubActions();
+      } else if (executor === 'durable') await startDurable();
       else await failCloudRuntimeUnavailable('the CLOUD_RUNNER binding is not configured');
     };
-    // orchestrate() degrades container→durable and fails fast when durable kickoff is
-    // unavailable. It never runs the multi-step loop inside waitUntil: that path is
+    // orchestrate() fails fast when durable kickoff is unavailable. It never runs the multi-step loop inside waitUntil: that path is
     // subject to the background-execution wall that caused the original timeouts.
     // Catch any unexpected orchestration failure so the row is never stranded pending.
     waitUntil(orchestrate().catch(async (err) => {

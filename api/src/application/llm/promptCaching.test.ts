@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyPromptCaching, markAnthropicHistoryBreakpoint, modelSupportsExplicitCaching, VOLATILE_TAIL_TAG } from './promptCaching';
+import { VOLATILE_TAIL_TAG } from '@seanhogg/builderforce-memory/handoff';
+import { applyPromptCaching, markAnthropicHistoryBreakpoint, modelSupportsExplicitCaching } from './promptCaching';
 
 // ---------------------------------------------------------------------------
 // modelSupportsExplicitCaching — gate to the Anthropic family (the only gateway

@@ -1,11 +1,12 @@
 import * as react from 'react';
 import { ReactNode } from 'react';
-import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel, P as PageEngine, d as LocalBackend, e as LocalModelUnfit, B as BfiWorkerEngineOptions, H as HfModelStore } from './bfiWorkerEngine-BTMv49rL.cjs';
-export { f as BfiEngineInstance, g as BfiEngineStatic, h as BfiModelInfo, i as BfiModule, j as BfiWorkerEngine, C as ChatCompletionChunk, k as ChatCompletionsRequest, E as ENGINE_WORKER_FATAL, l as ENGINE_WORKER_IDLE_MS, m as ENGINE_WORKER_INVALIDATE, n as EngineWorker, o as EngineWorkerEndpoint, p as EngineWorkerEvents, q as EngineWorkerHandle, r as EngineWorkerOptions, s as PAGE_ENGINE_REPLY_TYPES, t as PAGE_ENGINE_REQUEST_TYPES, u as PageEngineClient, v as PageEngineClientOptions, w as PageEngineError, x as PageEnginePort, y as PageEngineReply, z as PageEngineRequest, A as PageEngineServerIo, W as WorkerLike, D as createBfiWorkerEngine, F as createEngineWorker, G as createPageEngineClient, I as isPageEngineReply, J as isPageEngineRequest, K as isWasmTrap, M as serveEngineWorker, N as servePageEngines } from './bfiWorkerEngine-BTMv49rL.cjs';
+import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel, P as PageEngine, d as LocalBackend, e as LocalModelUnfit, B as BfiWorkerEngineOptions, H as HfModelStore } from './bfiWorkerEngine-BWryGMal.cjs';
+export { f as BfiEngineInstance, g as BfiEngineStatic, h as BfiModelInfo, i as BfiModule, j as BfiWorkerEngine, C as ChatCompletionChunk, k as ChatCompletionsRequest, E as ENGINE_WORKER_FATAL, l as ENGINE_WORKER_IDLE_MS, m as ENGINE_WORKER_INVALIDATE, n as EngineWorker, o as EngineWorkerEndpoint, p as EngineWorkerEvents, q as EngineWorkerHandle, r as EngineWorkerOptions, s as PAGE_ENGINE_REPLY_TYPES, t as PAGE_ENGINE_REQUEST_TYPES, u as PageEngineClient, v as PageEngineClientOptions, w as PageEngineError, x as PageEnginePort, y as PageEngineReply, z as PageEngineRequest, A as PageEngineServerIo, W as WorkerLike, D as createBfiWorkerEngine, F as createEngineWorker, G as createPageEngineClient, I as isPageEngineReply, J as isPageEngineRequest, K as isWasmTrap, M as serveEngineWorker, N as servePageEngines } from './bfiWorkerEngine-BWryGMal.cjs';
 import { ChatErrorAction } from './chatError.cjs';
 export { BrainRequestError, ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, PlatformRefusedCapability, brainRequestError, chatErrorAction } from './chatError.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 export { EvermindRecallItem, EvermindRecallResult, countReconciledMemories, formatEvermindMemoryBlock } from '@seanhogg/builderforce-memory/evermind';
+import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 import { DeltaLearnPayload, LocalSuccessOutcome } from '@seanhogg/builderforce-memory-engine';
 import { LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
 export { LimbicState } from '@seanhogg/builderforce-memory-engine/limbic';
@@ -668,8 +669,9 @@ declare function localPickerView<T extends LocalPickerRow>(rows: readonly T[], o
  *    completion is skipped. An UNREPORTED window is not disqualifying: an overflow there
  *    is an HTTP error from the runtime, which the failover does see and recovers from.
  *
- * Only `onDevice` runtimes take part — `kimi-code` is locally dispatched but hosted, so
- * it is reachable by an explicit pin and never by local-first. Pure.
+ * Only `onDevice` runtimes take part, in the registry's `automaticRank` — our engines
+ * first, a third-party server (Ollama, FreeToken) last. `kimi-code` is locally dispatched
+ * but hosted, so it is reachable by an explicit pin and never by local-first. Pure.
  */
 
 /**
@@ -2749,6 +2751,91 @@ interface RunWindowSources {
 /** {@link contextWindowOf} over a run's sources. A probe that fails leaves the catalog row. */
 declare function resolveContextWindow(modelRef: string | undefined, sources?: RunWindowSources): Promise<number | undefined>;
 
+/** Structural mirror of the runtime's PsychometricProfile (vector + optional skins). */
+interface PsychProfile {
+    vector?: Record<string, number>;
+    enneagramType?: number;
+    mbti?: string;
+}
+
+/** What one completed run did, as the note format understands it. */
+interface RunActivity {
+    /** Paths the run created. Duplicates are collapsed. */
+    created?: readonly string[];
+    /** Paths the run modified. Duplicates are collapsed. */
+    edited?: readonly string[];
+    /**
+     * Paths the run READ. The note lists the most-read few, so the next run in this
+     * workspace sees where the last one had to look; duplicates are kept here because
+     * how often a file was re-read is how much the run depended on it.
+     */
+    read?: readonly string[];
+    /** Paths the run deleted. Duplicates are collapsed. */
+    deleted?: readonly string[];
+    /** Tool names the run invoked. Duplicates are collapsed. */
+    tools?: readonly string[];
+    /**
+     * The run's own prompt — what it was asked to do. When present, the summary
+     * describes THAT rather than falling back to a fixed template, so two runs
+     * that both edited a test file do not read as the same "Test suite created".
+     */
+    prompt?: string;
+}
+
+/**
+ * run-knowledge — the TOOL VOCABULARY of a run's memory.
+ *
+ * Short-term vs long-term memory is a memory concept and lives in
+ * `@seanhogg/builderforce-memory/working`: {@link WorkingMemory} is what this run has
+ * read, searched and changed (restated before every turn by its `brief`), and
+ * `consolidate` / `mergeConsolidated` turn it into the per-area code map the next run
+ * recalls. That package knows observations, never tool names.
+ *
+ * This module is the one place that maps the platform's tool names onto those
+ * observations — every runtime's spelling (shared `write_file`, on-prem native
+ * `write`/`create`, …) — so the editor, on-prem and the cloud engine record a run the
+ * same way. {@link RunKnowledgeRecorder} is that adapter: it owns the run's
+ * {@link WorkingMemory} and the tool names a run note lists.
+ */
+
+/**
+ * The recorder's CONTRACT — what a loop or host hands across a package boundary. A
+ * structural interface, not the class: a bundled `.d.ts` (brain-embedded's) carries its
+ * own copy of a class, and two copies of a class with private fields are different
+ * types, so a host's recorder could not be passed to the loop by its class.
+ */
+interface RunKnowledgeLog {
+    setPrompt(prompt: string): void;
+    record(name: string, args?: unknown): void;
+    readonly isEmpty: boolean;
+    readonly activity: RunActivity;
+    /** The short-term brief for the next turn (`WorkingMemory.brief`), or null while not worth it. */
+    brief(): string | null;
+    /** The long-term code map this run consolidates into (`consolidate`), or null. */
+    consolidate(opts?: ConsolidateOptions): ConsolidatedMemory | null;
+}
+
+/**
+ * Deterministic JSON — object keys sorted at every depth — for anything KEYED on a
+ * value whose key order is incidental: a tool call's arguments, a cache key's request
+ * fields, a trace fingerprint. Two values a caller means identically (`{path, offset}`
+ * vs `{offset, path}`) must produce one string; `JSON.stringify` keeps insertion order,
+ * so it cannot.
+ *
+ * JSON-faithful for JSON values: an object entry whose value is `undefined` is dropped
+ * (as `JSON.stringify` drops it), a top-level `undefined` reads as `null`. Values JSON
+ * cannot express still get a stable, distinct form instead of collapsing: a non-finite
+ * number and a bigint as their string, an `Error` as its name/message/stack, bytes as
+ * their numbers.
+ *
+ * NOT for fingerprints that are stored and later re-compared (boardsync content
+ * hashes, sandbox verification stamps) — those keep `domain/shared/stableStringify`'s
+ * format until their stored hashes are migrated.
+ *
+ * Pure and dependency-free (this package's root is imported by the Worker).
+ */
+declare function stableStringify(value: unknown): string;
+
 /**
  * The run store's public contracts — what a host hands a run ({@link BrainRunRequest})
  * and what it observes ({@link BrainRunSnapshot}, {@link GlobalRunState}). Types only.
@@ -2776,6 +2863,12 @@ interface BrainRunPersistence {
 /** Everything a single run needs, captured at start time (survives navigation). */
 interface BrainRunRequest {
     resolvedSystemPrompt: string;
+    /**
+     * The run's record of what it did and read (`@builderforce/agent-tools`
+     * `run-knowledge`). A host that commits the run's code map at the end passes its own
+     * so there is ONE record per run; omitted, the loop keeps one for the per-turn ledger.
+     */
+    knowledge?: RunKnowledgeLog;
     tools?: BrainToolSpec[];
     model?: string;
     /** Hard-pin a deliberate user-selected model. */
@@ -3352,34 +3445,6 @@ interface LocalBrainPersistenceOptions {
     newId?: () => string;
 }
 declare function createLocalBrainPersistence(options: LocalBrainPersistenceOptions): BrainPersistenceAdapter;
-
-/** Structural mirror of the runtime's PsychometricProfile (vector + optional skins). */
-interface PsychProfile {
-    vector?: Record<string, number>;
-    enneagramType?: number;
-    mbti?: string;
-}
-
-/**
- * Deterministic JSON — object keys sorted at every depth — for anything KEYED on a
- * value whose key order is incidental: a tool call's arguments, a cache key's request
- * fields, a trace fingerprint. Two values a caller means identically (`{path, offset}`
- * vs `{offset, path}`) must produce one string; `JSON.stringify` keeps insertion order,
- * so it cannot.
- *
- * JSON-faithful for JSON values: an object entry whose value is `undefined` is dropped
- * (as `JSON.stringify` drops it), a top-level `undefined` reads as `null`. Values JSON
- * cannot express still get a stable, distinct form instead of collapsing: a non-finite
- * number and a bigint as their string, an `Error` as its name/message/stack, bytes as
- * their numbers.
- *
- * NOT for fingerprints that are stored and later re-compared (boardsync content
- * hashes, sandbox verification stamps) — those keep `domain/shared/stableStringify`'s
- * format until their stored hashes are migrated.
- *
- * Pure and dependency-free (this package's root is imported by the Worker).
- */
-declare function stableStringify(value: unknown): string;
 
 /**
  * Untaken tool call — detection + recovery, shared by every agent loop.
@@ -5212,6 +5277,9 @@ interface ParsedXmlToolCall {
     name: string;
     /** Raw JSON argument string (parse with `JSON.parse`). */
     args: string;
+    /** For a tag-style body: each argument's TEXT as written (before `args` read it as a
+     *  number / JSON), so `typeXmlToolArgs` can type it against the tool's schema. */
+    rawArgs?: Record<string, string>;
 }
 /**
  * Stateful streaming filter. Feed `push(delta)`; it returns the clean text safe
@@ -7910,13 +7978,15 @@ interface ChatDiagnosticsRun {
     /** `user:<id>` | `system:lane-auto` | `system:coordinator` | … — WHICH pathway started it. */
     submittedBy: string;
     source?: string;
-    /**
-     * WHERE it executed: 'container' (real shell + local clone) | 'durable' (shell-LESS,
-     * git-API edits) | 'github_actions'. Reported because the two cloud executors differ in
-     * what the run was CAPABLE of — only one of them can compile what it wrote — and from
-     * inside the transcript they are indistinguishable.
-     */
+    /** WHERE it executed: 'durable' (the one cloud runtime) | 'github_actions'. */
     executor?: string | null;
+    /**
+     * What served its shell and working tree: 'container' | 'actions' | 'none'. Reported
+     * because it decides what the run was CAPABLE of — a run with no sandbox edited over
+     * the git API and could not compile what it wrote — and from inside the transcript the
+     * two are indistinguishable.
+     */
+    sandbox?: string | null;
     /** The on-prem machine this run was delivered to, when it was one. */
     hostId?: number | null;
     hostName?: string | null;
@@ -7992,17 +8062,6 @@ interface ChatDiagnosticsAccount {
     modelFunding?: string | null;
     /** Whether the plan entitles the tenant to premium/frontier models. */
     canUsePremiumModels?: boolean;
-    /**
-     * Whether the plan covers the CONTAINER execution surface — a real shell and a local
-     * clone. Free workspaces run on the durable (serverless) surface, which is free
-     * Cloudflare infrastructure and provably cannot run a build, and a cloud agent
-     * explicitly set to `container` is DEMOTED at dispatch rather than refused.
-     *
-     * Stated explicitly because that demotion is correct, cheap and completely invisible:
-     * a free workspace whose agent "ran fine" and produced a diff nothing compiled reads
-     * exactly like a paid one that ran the full toolchain.
-     */
-    containerRuntime?: boolean;
     /** How many models the plan pool currently offers. */
     planModelCount?: number;
     /** Connected bring-your-own provider keys (empty ⇒ every turn is plan-funded). */
@@ -8242,15 +8301,6 @@ interface ChatDiagnosticsPlanSnapshot {
         billingStatus: string;
     };
     meters: ChatDiagnosticsMeter[];
-    /**
-     * Plan features as the SERVER resolved them — the same set the nav and the surface
-     * picker gate on. Read rather than re-derived from `plan.effective`, which would be a
-     * second evaluator that disagrees the first time a flag moves between plans. Optional:
-     * an older API sends no features, and "not known" must not render as "not entitled".
-     */
-    features?: {
-        entitled?: Record<string, boolean | undefined>;
-    };
     /** Every limit is lifted because the CALLER is a superadmin — not because the plan
      *  grants it. Optional: an older API does not send it. */
     limitsLiftedBySuperadmin?: boolean;

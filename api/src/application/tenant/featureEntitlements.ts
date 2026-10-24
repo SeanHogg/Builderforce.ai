@@ -68,8 +68,8 @@ export function toTenantPlan(ep: 'free' | 'pro' | 'teams'): TenantPlan {
  * dimension is skipped (machine callers can't be superadmins).
  *
  * This lives in the APPLICATION layer, not behind the route gate, because decisions other
- * than "reject this request" need it: cloud dispatch picks a run's surface from
- * `containerRuntime`, and a route handler is not in scope there. `requireFeature` in
+ * than "reject this request" need it (a run's live preview, a stored psychometric
+ * profile), and a route handler is not in scope there. `requireFeature` in
  * `presentation/middleware/featureGate` is the 402-answering wrapper over this.
  */
 export async function resolveFeatureEntitlement(
@@ -94,8 +94,8 @@ export async function resolveFeatureEntitlement(
 
 /**
  * Boolean convenience for decision sites that ATTACH or SHAPE a paid feature rather than
- * error on it (store a psychometric profile only if entitled; run on the container surface
- * only if entitled). Superadmin- and premium-override-aware, same as the erroring gate.
+ * error on it (store a psychometric profile only if entitled; start a live preview only
+ * if entitled). Superadmin- and premium-override-aware, same as the erroring gate.
  */
 export async function tenantHasFeature(
   env: Env,

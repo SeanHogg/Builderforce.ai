@@ -1,26 +1,37 @@
 /**
- * BuilderForce Agent Container — the long-lived process behind a "Cloud Agent
- * (Node/Container)" run (the `container` runtime surface). AgentContainerDO starts
- * this image and proxies `POST /run` to it.
+ * BuilderForce Agent Container — the run SANDBOX. AgentContainerDO starts this image and
+ * proxies requests to it; the Worker's ONE cloud engine (`cloudAgentEngine.ts`, driven by
+ * CloudRunnerDO on every plan) calls it for what a Worker physically cannot do.
  *
- * Unlike the durable surface (one LLM step per DO alarm tick, no shell), this runs
- * the whole agent loop in ONE persistent process with a REAL shell: it clones the
- * ticket repo to local disk, lets the agent read/write/build/test it, and verifies
- * with run_command before finishing.
+ * It runs no agent loop and makes no model or policy decision. The engine owns the loop,
+ * the tools (the SHARED `read_file` / `run_command` / `git_*` definitions), the write
+ * commits, verify and finalize. This file is the HTTP transport over one clone; the
+ * primitives themselves live in `sandboxCore.mjs`, which the GitHub Actions runner serves
+ * over its own transport:
  *
- * The Worker stays the source of truth: every LLM step, file commit, and the PR
- * finalize is delegated back to the Worker's internal container-op endpoint
- * (authenticated by the per-run token), so metering/commit/PR logic is never
- * duplicated here and no DB credentials live in the container. The only secret the
- * container holds is the short-lived tokened git clone URL it needs for the shell.
+ *   • `POST /sandbox/open`  — clone the ticket branch (falling back to base on run #1),
+ *     start the clone's post-edit checks and the live preview. Idempotent per execution;
+ *     a request for an execution this process has not opened answers 409 `not_open`, and
+ *     the engine re-opens (a recycled container is a fresh clone of the branch, which
+ *     already carries every committed write).
+ *   • `POST /sandbox/fs`    — list / read / write / delete in the clone. A write the
+ *     engine already COMMITTED is absorbed by fast-forwarding the clone to the ticket
+ *     branch, so the shell builds against it and the git tools see it as history.
+ *   • `POST /sandbox/run`   — a shell command in the clone. Closing the request (the
+ *     engine's cancel aborts its fetch) kills the command.
+ *   • `POST /sandbox/checks` — drain the post-edit checks for the edits since the last
+ *     drain: the verdict the engine's loop guards fold (D1) and show the model (D7).
+ *   • `POST /sandbox/close` — dispose the clone at run end.
  *
  * It also serves `POST /web-scan`: the two stages of the platform's web security scan
  * that a Worker physically cannot perform (reading the peer TLS certificate, which
  * needs a socket). Same rule as above — this process OBSERVES, the Worker decides.
  *
- * Plain Node ESM (no build step) — node:22 ships global fetch + the APIs used here. The
- * one shared package it runs, the agent-loop kernel, arrives pre-compiled and checked
- * in as `agentLoop.mjs` (see `api/scripts/gen-agent-loop-bundle.mjs`).
+ * The only Worker callbacks left are the `preview` op (the Worker owns the instance
+ * budget and the health probe) and timeline `event`s for its local services, both
+ * authenticated by the per-run token the open spec carries.
+ *
+ * Plain Node ESM (no build step) — node:22 ships global fetch + the APIs used here.
  */
 import { createServer, request as httpRequest } from 'node:http';
 import { connect as netConnect } from 'node:net';
@@ -28,80 +39,14 @@ import { connect as netConnect } from 'node:net';
 // `node:tls` is what lets this process read the peer certificate the Worker cannot.
 import { connect as tlsConnect } from 'node:tls';
 import { spawn } from 'node:child_process';
-import { access, mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
-import { join, dirname, relative, sep } from 'node:path';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzip } from 'node:zlib';
 import { promisify } from 'node:util';
-// The Worker-relayed half of the tool table — memory, PRD, coordination, search,
-// delegation, the platform catalog and the human pause. ONE implementation, shared
-// verbatim with the GitHub Actions runner (which inlines this same file), so a new
-// relayed tool is a one-file change instead of a per-image transcription. Everything
-// below that touches the clone or the shell stays here, because that half genuinely
-// differs between the two images.
-import { execRelayTool, SUPPORTED_TOOL_NAMES } from './agentRelay.mjs';
-import { runCodeAnalysis } from './codeAnalysis.mjs';
-// THE agent loop: the shared kernel (`@builderforce/agent-loop`, compiled into
-// `agentLoop.mjs` by `api/scripts/gen-agent-loop-bundle.mjs`) with the image semantics
-// on its hooks — the same file the GitHub Actions runner inlines.
-import { runImageLoop } from './agentImageLoop.mjs';
-// THE tool-output policy (`@builderforce/tool-output-policy`, PRD C7), THE edit_file
-// core (`packages/agent-tools/src/edit.ts`) and THE read_file line window
-// (`packages/agent-tools/src/fileWindow.ts`), compiled for this build-less image by
-// `api/scripts/gen-container-shared.mjs`.
-import { SHELL_CAPTURE_CHARS, fitToolText, keepTail, modelToolResultPolicy, toolOutputCap } from './toolOutputPolicy.mjs';
-import { applyStringEdit, editFacts } from './stringEdit.mjs';
-import { fileWindowNote, windowFileContent } from './fileWindow.mjs';
-// PRD C5: the shared `repo_map` / `semantic_search` definitions (compiled from
-// `packages/agent-tools/src/semantic-tools.ts`) over the image's bf-context index.
-import { repoMapTool, semanticSearchTool } from './semanticTools.mjs';
-import { REPO_INDEX_TOOL_NAMES, bfContextAvailable, startRepoIndex } from './repoIndex.mjs';
-// PRD D7: the project's own fast checks after a turn's edits, failures only.
-import { cloneCheckIo, createPostEditChecks } from './postEditChecks.mjs';
-// PRD D8: THE read-only tool table (compiled from `costLoop/readOnlyTools.ts` by
-// `api/scripts/gen-container-shared.mjs`), so the loop's `isReadOnly` port names the same
-// tools the durable runner's does.
-import { isReadOnlyCloudTool } from './readOnlyTools.mjs';
-
-/** Tools this image runs against its clone beyond the shared image-local set — the
- *  container's half of the capability handshake. The Actions runner does not implement
- *  `edit_file`, so it is named here rather than in the shared relay list. */
-const CONTAINER_LOCAL_TOOL_NAMES = ['edit_file'];
-
-/** This run's local tool names: the constant set, plus `repo_map` / `semantic_search`
- *  when the run's repo index is live (C5 lever on AND bf-context in this image). The
- *  Worker advertises only what the handshake names, so a run without the index is never
- *  offered the two tools. */
-function containerLocalToolNames(local) {
-  return local && local.repoIndex ? [...CONTAINER_LOCAL_TOOL_NAMES, ...REPO_INDEX_TOOL_NAMES] : CONTAINER_LOCAL_TOOL_NAMES;
-}
-
-/** The shared semantic tool definitions, by name — dispatched against the run's index. */
-const SEMANTIC_TOOL_BY_NAME = new Map([[repoMapTool.name, repoMapTool], [semanticSearchTool.name, semanticSearchTool]]);
-
-/** Whether the C7 lever is on for this run — decided by the Worker (it owns the tenant
- *  and the env) and carried on the run spec. Absent ⇒ off: an older Worker never
- *  turns on a behaviour it did not choose. */
-function toolOutputPolicyOn(spec) {
-  return spec.toolOutputPolicy === true;
-}
-
-/** A command's output as the model sees it. Defect 6: the capture buffer keeps the TAIL
- *  (the verdict prints last) and the reply used to return the HEAD, dropping every
- *  test/build summary — so it is head+tail with an elision marker, or, with the C7
- *  lever on, the failure summary (failing tests, error lines, diffs, the last lines). */
-function commandOutput(spec, tool, output) {
-  return fitToolText(output, toolOutputCap(tool), { tool, summarize: toolOutputPolicyOn(spec) });
-}
-
-/** The image loop's per-result budget, or `undefined` (plain JSON) with the lever off.
- *  `read_file` is shaped like every other tool: this image's `read_file` pages by the
- *  `offset`/`limit` the schema advertises, so the policy's "call again with offset"
- *  window is one the model can continue past. */
-function containerToolResultPolicy(spec) {
-  if (!toolOutputPolicyOn(spec)) return undefined;
-  return modelToolResultPolicy({ summarize: true });
-}
+// THE sandbox primitives (shell, working tree, post-edit checks) — the same module the
+// GitHub Actions runner inlines, so both transports serve one implementation.
+import { createSandboxBox, runShell, serveSandbox } from './sandboxCore.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
 // Live-preview passthrough: when a run starts a dev server on PREVIEW_PORT, the
@@ -137,20 +82,9 @@ function proxyPreviewHttp(req, res) {
   });
   req.pipe(upstream);
 }
-const MAX_LIST_ENTRIES = 500;
-const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
-// Liveness heartbeat cadence. A single run_command can run for minutes with no LLM
-// round-trip, so this timer keeps the run's `updated_at` fresh for the Worker's reaper
-// (5-min long-lived ceiling, orphanReasons.CLOUD_LONG_LIVED_SILENCE_MS). The Worker
-// throttles the WRITE to one per 2 min (runContext.HEARTBEAT_MIN_INTERVAL_MS); the beat
-// stays at 30s because its reply is also the cancel signal for an in-flight command.
-// Mirrored as runContext.CONTAINER_HEARTBEAT_CADENCE_MS.
-const HEARTBEAT_MS = 30 * 1000;
 
 const gzipAsync = promisify(gzip);
-/** Bodies at least this big are gzipped. The `llm` op re-posts the whole transcript
- *  every turn (the Worker is stateless and needs the full context), so its payload
- *  grows with the run; JSON transcripts compress several-fold. Small ops stay plain. */
+/** Bodies at least this big are gzipped; the few ops left are small and stay plain. */
 const GZIP_MIN_BYTES = 16 * 1024;
 
 /** POST a container-op back to the Worker; returns the parsed JSON body. */
@@ -170,430 +104,6 @@ async function op(spec, body) {
   return res.json();
 }
 
-/** Run a shell command in `cwd`, capturing combined stdout/stderr and the exit code.
- *  `proc` (optional) is a holder whose `.current` is set to the live child so the
- *  heartbeat loop can SIGKILL an in-flight command when the run is cancelled. */
-function runShell(command, cwd, proc, timeoutMs = COMMAND_TIMEOUT_MS) {
-  return new Promise((resolve) => {
-    const child = spawn('bash', ['-lc', command], { cwd, env: process.env });
-    if (proc) proc.current = child;
-    let out = '';
-    const cap = (chunk) => { out = keepTail(out + chunk, SHELL_CAPTURE_CHARS.container); };
-    child.stdout.on('data', cap);
-    child.stderr.on('data', cap);
-    let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs);
-    const done = (result) => { clearTimeout(timer); if (proc && proc.current === child) proc.current = null; resolve({ ...result, timedOut }); };
-    child.on('close', (code) => done({ exitCode: code ?? -1, output: out }));
-    child.on('error', (e) => done({ exitCode: -1, output: `${out}\n${e.message}` }));
-  });
-}
-
-/** Case-insensitive glob → RegExp (mirror of packages/agent-tools `globToRegExp`;
- *  inlined because this container is plain ESM with no build step / package imports).
- *  `**` crosses `/`, `*` stays within a segment, `?` is one non-slash char. */
-function globToRegExp(pattern) {
-  let re = '';
-  for (let i = 0; i < pattern.length; i++) {
-    const c = pattern[i];
-    if (c === '*') {
-      // `**/` is one token: zero or more directories, matching glob.ts.
-      if (pattern[i + 1] === '*') {
-        if (pattern[i + 2] === '/') { re += '(?:.*/)?'; i += 2; }
-        else { re += '.*'; i++; }
-      } else { re += '[^/]*'; }
-    } else if (c === '?') {
-      re += '[^/]';
-    } else {
-      re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    }
-  }
-  return new RegExp(`^${re}$`, 'i');
-}
-/** A slash-free glob matches the basename at any depth; otherwise the full path. */
-function matchGlob(p, pattern) {
-  const re = globToRegExp(pattern);
-  return pattern.includes('/') ? re.test(p) : re.test(p.slice(p.lastIndexOf('/') + 1));
-}
-/**
- * Scope-aware glob: `sub` is where the walk started, so a glob written against THAT
- * folder must resolve against the scope-relative path too. Filtering only the
- * repo-root-relative path silently dropped every match (and the tool's zero-match
- * note then reported real files as missing). Mirrors `matchGlobInScope` in
- * `@builderforce/agent-tools` — this server is standalone, so it keeps a local copy.
- */
-function matchGlobScoped(p, pattern, sub) {
-  const scope = (sub ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
-  if (!scope) return matchGlob(p, pattern);
-  if (p !== scope && !p.startsWith(scope + '/')) return false;
-  return matchGlob(p, pattern) || matchGlob(p.slice(scope.length + 1), pattern);
-}
-
-/** Mirror of `dirMayContainGlobMatch` in packages/agent-tools/src/glob.ts. */
-function dirMayContainGlob(dir, pattern, sub) {
-  const norm = (s) => (s ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
-  const d = norm(dir);
-  const scope = norm(sub);
-  const pat = String(pattern).split('\\').join('/');
-  if (scope && d && d !== scope && !d.startsWith(scope + '/') && !scope.startsWith(d + '/')) return false;
-  const literalPrefix = (p) => {
-    if (!p.includes('/')) return null;
-    const meta = p.search(/[*?\[]/);
-    if (meta === 0) return null;
-    const head = meta < 0 ? p : p.slice(0, meta);
-    const slash = head.lastIndexOf('/');
-    return slash < 0 ? null : head.slice(0, slash + 1);
-  };
-  const canReach = (directory, prefix) => {
-    if (directory === '') return true;
-    const dirSlash = directory + '/';
-    return prefix.startsWith(dirSlash) || dirSlash.startsWith(prefix);
-  };
-  const readings = [literalPrefix(pat)];
-  if (scope) {
-    const rel = literalPrefix(pat);
-    readings.push(rel == null ? scope + '/' : scope + '/' + rel);
-  }
-  for (const prefix of readings) {
-    if (prefix == null) {
-      if (!scope || d === '' || d === scope || d.startsWith(scope + '/') || scope.startsWith(d + '/')) return true;
-      continue;
-    }
-    if (canReach(d, prefix)) return true;
-  }
-  return false;
-}
-
-function emptyGlobNote(glob, sub, truncated) {
-  const scope = (sub ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
-  const base = 'No file matches glob "' + glob + '"' + (scope ? ' under "' + scope + '"' : '') + '.';
-  if (truncated) {
-    return base + ' This is NOT proof the file does not exist: the search was cut off before the tree was fully scanned, so this only means "not among the paths scanned so far". Narrow path to a smaller folder and re-run before concluding anything is missing.';
-  }
-  return base + ' Try a broader pattern, or list_files without a glob to see the tree. 0 matches means no such file exists in the paths scanned — do not claim one is missing without trying a broader glob first.';
-}
-
-/**
- * List repo files under `dir` (skipping .git/node_modules), capped. BREADTH-FIRST so
- * shallow files (root docs like ROADMAP.md) are collected before the cap is hit deep
- * in a large subtree; sorted for stable output. `glob` filters by name (case-
- * insensitive; a bare name matches the basename at any depth) so a file can be found
- * without dumping the tree.
- *
- * The glob is applied DURING the walk, so the cap counts MATCHES: a globbed listing is
- * never starved by unrelated files ahead of the match in the queue.
- */
-async function listFiles(dir, sub, glob) {
-  const root = sub ? join(dir, sub) : dir;
-  const acc = [];
-  const queue = [root];
-  let truncated = false;
-  while (queue.length > 0) {
-    if (acc.length >= MAX_LIST_ENTRIES) { truncated = true; break; }
-    const d = queue.shift();
-    let entries;
-    try { entries = await readdir(d, { withFileTypes: true }); } catch { continue; }
-    for (const e of entries) {
-      if (e.name === '.git' || e.name === 'node_modules') continue;
-      const full = join(d, e.name);
-      if (e.isDirectory()) {
-        if (glob) {
-          const relDir = relative(dir, full).split(sep).join('/');
-          if (!dirMayContainGlob(relDir, glob, sub)) continue;
-        }
-        queue.push(full);
-      }
-      else {
-        const rel = relative(dir, full).split(sep).join('/');
-        if (glob && !matchGlobScoped(rel, glob, sub)) continue;
-        if (acc.length >= MAX_LIST_ENTRIES) { truncated = true; break; }
-        acc.push(rel);
-      }
-    }
-  }
-  acc.sort((a, b) => a.localeCompare(b));
-  const result = { ok: true, paths: acc, truncated };
-  if (glob && acc.length === 0) result.note = emptyGlobNote(glob, sub, truncated);
-  return result;
-}
-
-/** Execute one tool call. Repo reads/writes hit local disk (the clone); write also
- *  mirrors to the ticket branch via the Worker; run_command and the git_* tools run
- *  in the shell; memory_* and builtin_* relay to the Worker (no DB creds here).
- *
- *  `ask_human` is the one tool that ENDS this process: it hands the conversation
- *  (`loop.messages`) to the Worker, which parks the run, and returns `paused: true`
- *  so runLoop stops without posting a terminal op. See the `ask_human` container-op
- *  for why the pause is exit-and-redispatch rather than block-and-poll. */
-/** The repo's declared package.json scripts, for the verify planner. A missing,
- *  unreadable or malformed manifest yields `null` — the planner then reports that it
- *  had nothing to run, which is honest, where guessing a command would not be. */
-async function readPackageScripts(workdir) {
-  try {
-    const manifest = JSON.parse(await readFile(join(workdir, 'package.json'), 'utf8'));
-    const scripts = manifest?.scripts;
-    if (!scripts || typeof scripts !== 'object' || Array.isArray(scripts)) return null;
-    return Object.fromEntries(Object.entries(scripts).filter(([, v]) => typeof v === 'string'));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * The verify → remember tail (findings 11 & 12), for the terminal branch of a run.
- *
- * Verification is a REAL action here — this image has the checkout and a shell, so it
- * runs the project's own declared checks over the files the run wrote. The plan comes
- * from the Worker's `verify` op, which is the one place that decides which scripts
- * apply; the image only executes it and reports the honest exit codes back.
- *
- * The memory commit is NOT done here: this process holds no DB and no memory API. It
- * rides the same `verify` op, which commits it server-side. That is deliberate — one
- * governed path writes memory, so a run cannot end up with two competing writes.
- */
-async function verifyThenRemember(spec, workdir, writtenPaths, finalOutput, proc) {
-  // Nothing written ⇒ nothing to check. Reporting a synthetic pass would be a lie.
-  if (!workdir || writtenPaths.size === 0) {
-    await op(spec, { op: 'verify', args: { writtenPaths: [...writtenPaths], results: null, summary: finalOutput } }).catch(() => {});
-    return;
-  }
-  // The Worker cannot see this repo's package.json (it holds no checkout), so the
-  // image sends the declared scripts along with the plan request — that is what lets
-  // the shared planner decide which checks actually apply to what changed.
-  const packageScripts = await readPackageScripts(workdir);
-  const plan = await op(spec, { op: 'verify', args: { plan: true, writtenPaths: [...writtenPaths], packageScripts } }).catch(() => null);
-  const commands = Array.isArray(plan?.commands) ? plan.commands.filter((c) => typeof c === 'string' && c.trim()) : [];
-  if (commands.length === 0) {
-    // No declared script applies to what changed (or the Worker had no plan to give):
-    // record that honestly — the run still verified, it simply had nothing to run.
-    await op(spec, { op: 'verify', args: { writtenPaths: [...writtenPaths], results: [], summary: finalOutput } }).catch(() => {});
-    return;
-  }
-  const results = [];
-  for (const command of commands.slice(0, 3)) {
-    try {
-      const { exitCode } = await runShell(command, workdir, proc);
-      results.push({ command, exitCode });
-    } catch (e) {
-      // A command that could not even launch is a failure, not a pass.
-      results.push({ command, exitCode: 1, error: e instanceof Error ? e.message : String(e) });
-    }
-  }
-  await op(spec, { op: 'verify', args: { writtenPaths: [...writtenPaths], results, summary: finalOutput } }).catch(() => {});
-}
-
-async function execTool(spec, workdir, writtenPaths, readMemo, name, parsed, proc, loop, local) {
-  if (SEMANTIC_TOOL_BY_NAME.has(name)) {
-    // The shared definition (argument parsing, budgets, result shape) over this run's
-    // bf-context index — the `repo.semantic` capability `repoIndex.mjs` backs.
-    if (!local || !local.repoIndex) return { ok: false, error: `${name} is not available on this run — use list_files / run_command (grep)` };
-    const r = await SEMANTIC_TOOL_BY_NAME.get(name).execute(parsed, { caps: { capabilities: new Set(['repo.semantic']), semantic: local.repoIndex } });
-    return r.data;
-  }
-  if (name === 'list_files') {
-    if (!workdir) return { ok: false, error: 'no repository bound to this task' };
-    return listFiles(
-      workdir,
-      typeof parsed.path === 'string' ? parsed.path : undefined,
-      typeof parsed.glob === 'string' && parsed.glob.trim() ? parsed.glob.trim() : undefined,
-    );
-  }
-  if (name === 'read_file') {
-    const path = typeof parsed.path === 'string' ? parsed.path : '';
-    if (!path) return { ok: false, error: 'path is required' };
-    if (!workdir) return { ok: false, error: 'no repository bound to this task' };
-    // The memo holds the WHOLE file; each call returns its own line window of it — the
-    // same `windowFileContent` every TypeScript surface pages with, so `offset`/`limit`
-    // behave here exactly as the shared `read_file` schema advertises.
-    let content = readMemo.get(path)?.ok ? readMemo.get(path).content : undefined;
-    if (content === undefined) {
-      try { content = await readFile(join(workdir, path), 'utf8'); } catch (e) { return { ok: false, error: `read failed: ${e.message}` }; }
-      readMemo.set(path, { ok: true, path, content });
-    }
-    const offset = typeof parsed.offset === 'number' && parsed.offset > 0 ? Math.floor(parsed.offset) : undefined;
-    const limit = typeof parsed.limit === 'number' && parsed.limit > 0 ? Math.floor(parsed.limit) : undefined;
-    const win = windowFileContent(content, { offset, limit });
-    const note = fileWindowNote(win);
-    return { ok: true, path, content: win.content, truncated: win.truncated, totalLines: win.totalLines, offset: win.offset, ...(note ? { note } : {}) };
-  }
-  if (name === 'write_file') {
-    const path = typeof parsed.path === 'string' ? parsed.path : '';
-    const content = typeof parsed.content === 'string' ? parsed.content : '';
-    if (!path || !content) return { ok: false, error: 'path and content are both required' };
-    const isNew = !writtenPaths.has(path);
-    // Mirror to local disk so run_command builds against the new code.
-    if (workdir) {
-      try { await mkdir(dirname(join(workdir, path)), { recursive: true }); await writeFile(join(workdir, path), content); } catch { /* non-fatal; commit is source of truth */ }
-    }
-    const r = await op(spec, { op: 'write', args: { path, content, summary: parsed.summary, isNew } });
-    if (r.ok) { writtenPaths.add(path); readMemo.delete(path); local?.checks?.touch(path); }
-    return r;
-  }
-  if (name === 'edit_file') {
-    // `repo.edit` on this surface: the SAME edit core as every other provider
-    // (`applyStringEdit` — unique match unless `replace_all`, EOL-tolerant, `nearest` on
-    // a miss), applied to the clone the run builds against, then committed through the
-    // Worker's existing `write` op like any other change — so the lease, the outbound
-    // inspection and the file-change ledger are the Worker's, not a second copy here.
-    const path = typeof parsed.path === 'string' ? parsed.path : '';
-    const oldString = typeof parsed.old_string === 'string' ? parsed.old_string : '';
-    const newString = typeof parsed.new_string === 'string' ? parsed.new_string : '';
-    const replaceAll = parsed.replace_all === true;
-    if (!path || !oldString) return { ok: false, error: 'path and old_string are required' };
-    if (!workdir) return { ok: false, error: 'no repository bound to this task' };
-    let current;
-    try { current = await readFile(join(workdir, path), 'utf8'); } catch (e) { return { ok: false, error: `cannot edit '${path}': ${e.message}` }; }
-    const edit = applyStringEdit(current, oldString, newString, replaceAll);
-    if (!edit.ok || edit.content == null) return { ok: false, ...editFacts(edit), error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}` };
-    const r = await op(spec, { op: 'write', args: { path, content: edit.content, summary: parsed.summary, isNew: false } });
-    if (!r.ok) return { ok: false, error: r.error || `could not commit the edit to '${path}'` };
-    // Mirror to local disk only once the commit landed, so the clone never holds an
-    // edit the branch does not.
-    try { await writeFile(join(workdir, path), edit.content); } catch { /* non-fatal; commit is source of truth */ }
-    writtenPaths.add(path);
-    readMemo.delete(path);
-    local?.checks?.touch(path);
-    const facts = editFacts(edit);
-    return {
-      ok: true,
-      ...(r.branch ? { branch: r.branch } : {}),
-      ...(r.commitUrl ? { commitUrl: r.commitUrl } : {}),
-      replaced: facts.replaced,
-      ...(facts.region ? { region: facts.region } : {}),
-      ...(facts.excerpt ? { excerpt: facts.excerpt } : {}),
-    };
-  }
-  if (name === 'analyze_codebase') {
-    if (!workdir) return { ok: false, error: 'no repository checked out' };
-    return runCodeAnalysis(parsed, {
-      run: async (command) => { const r = await runShell(command, workdir, proc); return { ok: r.exitCode === 0, exitCode: r.exitCode, stdout: r.output }; },
-      read: async (path) => {
-        const cached = readMemo.get(path);
-        if (cached?.ok) return { ok: true, content: cached.content };
-        const content = await readFile(join(workdir, path), 'utf8');
-        readMemo.set(path, { ok: true, path, content, truncated: false });
-        return { ok: true, content };
-      },
-      persist: async (snapshot) => { const r = await op(spec, { op: 'audit_analysis', args: { snapshot } }); if (!r.ok) throw new Error('Could not persist analyzer snapshot'); },
-    });
-  }
-  if (name === 'run_command') {
-    const command = typeof parsed.command === 'string' ? parsed.command : '';
-    if (!command) return { ok: false, error: 'command is required' };
-    if (!workdir) return { ok: false, error: 'no repository checked out — run_command needs a bound repo' };
-    const t0 = Date.now();
-    const { exitCode, output } = await runShell(command, workdir, proc);
-    await op(spec, { op: 'event', args: { toolName: 'run_command', category: 'tool', detail: { command, exitCode }, result: output.slice(0, 300), durationMs: Date.now() - t0 } }).catch(() => {});
-    return { ok: exitCode === 0, exitCode, output: commandOutput(spec, 'run_command', output) };
-  }
-  if (name.startsWith('git_')) {
-    if (!workdir) return { ok: false, error: 'no repository checked out — git tools need a bound repo' };
-    return gitTool(spec, workdir, proc, name, parsed);
-  }
-  // Everything else the model can call is backed by the WORKER, not by this process:
-  // durable memory, the ticket PRD, coordination leases + blackboard, web search,
-  // delegation, the curated platform tools and the human-in-the-loop pause. All of it
-  // is dispatched by the SHARED relay module — the same code the GitHub Actions runner
-  // inlines — so the two image surfaces cannot drift apart in what they can execute.
-  // `null` means "not a relayed tool", which here means nothing implements it.
-  const relayed = await execRelayTool(
-    (opName, opArgs) => op(spec, { op: opName, args: opArgs }),
-    name,
-    parsed,
-    {
-      messages: loop && Array.isArray(loop.messages) ? loop.messages : [],
-      step: loop && typeof loop.step === 'number' ? loop.step : 0,
-      toolCallId: (loop && loop.toolCallId) || '',
-      toolCallIds: (loop && loop.toolCallIds) || [],
-      writtenPaths,
-    },
-  );
-  if (relayed !== null) return relayed;
-  return { ok: false, error: `unknown tool '${name}'` };
-}
-
-/**
- * Git / version-control tools for the container surface — the execution side of
- * the shared schemas (`buildGitCommand` in packages/agent-tools/core-tools.ts is
- * the canonical command reference; the container runs its own loop and this image
- * has no build step, so it can't import the TS package and mirrors the verbs here).
- *
- * Surface-specific twist: the container persists every write as a Worker-side
- * GitHub-API commit to the remote ticket branch — the local clone does NOT carry
- * those commits. So before any MUTATING op we first fast-forward the local clone
- * to the remote branch head (absorb the API commits), then operate, then push —
- * otherwise a local reset/merge+push would clobber the agent's committed work.
- * Read ops (status/diff/history) run against the local clone directly.
- */
-async function gitTool(spec, workdir, proc, name, parsed) {
-  const safe = (v) => (typeof v === 'string' && /^[\w./@-]+$/.test(v) ? v : null);
-  const run = (cmd) => runShell(cmd, workdir, proc);
-  const head = safe(spec.repo && spec.repo.headBranch) || 'HEAD';
-  const clip = (r) => ({ ok: r.exitCode === 0, exitCode: r.exitCode, output: commandOutput(spec, name, r.output) });
-
-  if (name === 'git_status') return clip(await run('git status --short --branch'));
-  if (name === 'git_diff') {
-    const p = safe(parsed.path);
-    return clip(await run(`git --no-pager diff${p ? ` -- "${p}"` : ''}`));
-  }
-  if (name === 'git_history') {
-    const p = safe(parsed.path);
-    const limit = Number.isFinite(parsed.limit) && parsed.limit > 0 ? Math.min(Math.floor(parsed.limit), 200) : 30;
-    return clip(await run(`git --no-pager log --oneline -n ${limit}${p ? ` -- "${p}"` : ''}`));
-  }
-
-  // Identity + absorb any Worker-side API commits the local clone is missing, so a
-  // subsequent merge/reset+push builds on the agent's real latest work.
-  const preamble = [
-    'set -e',
-    'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
-    'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
-    `git fetch origin "${head}" 2>/dev/null && git merge --ff-only "origin/${head}" 2>/dev/null || true`,
-  ];
-
-  if (name === 'git_sync_latest') {
-    const base = safe(parsed.baseBranch);
-    const resolveBase = base
-      ? `BASE="${base}"`
-      : `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
-    const cmd = [
-      ...preamble,
-      resolveBase,
-      // Full clone (above) already carries the base branch + a shared merge-base.
-      'git fetch origin "$BASE"',
-      'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
-      'git push origin HEAD',
-      'echo "Synced with origin/$BASE"',
-    ].join('\n');
-    const r = await run(cmd);
-    if (r.exitCode === 3 || /MERGE_CONFLICT/.test(r.output)) {
-      return { ok: false, error: 'merge conflict — the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve the conflicting files and retry, or ask a human.', output: r.output.slice(0, 4000) };
-    }
-    await op(spec, { op: 'event', args: { toolName: 'git_sync_latest', category: 'tool', result: r.output.slice(0, 300) } }).catch(() => {});
-    return clip(r);
-  }
-
-  if (name === 'git_undo' || name === 'git_redo') {
-    const target = name === 'git_undo' ? 'HEAD~1' : '"HEAD@{1}"';
-    const msg = name === 'git_undo' ? 'Undid the last commit (use git_redo to reapply)' : 'Reapplied the last undone change';
-    const cmd = [
-      ...preamble,
-      `[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }`,
-      `git reset --hard ${target}`,
-      // Branch history rewound — publish it (the agent's own ticket branch).
-      `git push --force-with-lease origin HEAD`,
-      `echo "${msg}"`,
-    ].join('\n');
-    const r = await run(cmd);
-    if (r.exitCode === 4 || /\bDIRTY\b/.test(r.output)) {
-      return { ok: false, error: `you have uncommitted changes — commit or discard them before ${name} (it refuses to discard uncommitted work).` };
-    }
-    await op(spec, { op: 'event', args: { toolName: name, category: 'tool', result: r.output.slice(0, 300) } }).catch(() => {});
-    return clip(r);
-  }
-
-  return { ok: false, error: `unknown git tool '${name}'` };
-}
 
 /**
  * LIVE PREVIEW — start the project's own dev server on PREVIEW_PORT.
@@ -705,7 +215,7 @@ async function startPreviewDevServer(spec, workdir) {
   }
 
   // 4. Spawn DETACHED and unref'd: the dev server outlives this call and must not hold
-  //    the agent loop, the command timeout, or the cancel-kill handle — those belong to
+  //    the sandbox request, the command timeout, or the cancel-kill handle — those belong to
   //    the agent's own shell commands. `proc.current` is deliberately NOT set.
   let child;
   try {
@@ -752,229 +262,89 @@ function localServiceEvent(spec, toolName, detail, result) {
     .catch((e) => console.warn(`[container] ${toolName} event not recorded: ${e instanceof Error ? e.message : String(e)}`));
 }
 
-/**
- * Start the clone's local services, each behind its lever on the run spec:
- *   • C5 `spec.repoMap` — index the clone with bf-context in the background (never
- *     awaited: the first turn must not wait for it);
- *   • D7/D1 `spec.postEditChecks` — the debounced post-edit fast checks (their failures
- *     reach the model under `spec.postEditSteer`; their verdict reaches the Worker's cascade).
- */
-async function startLocalServices(spec, workdir, proc, local) {
-  if (spec.repoMap === true && (await bfContextAvailable())) {
-    try {
-      local.repoIndex = await startRepoIndex({
-        workdir,
-        onEvent: (e) => localServiceEvent(spec, 'runtime.repo_index', e, e.phase === 'ready' ? `repo index ready in ${e.durationMs}ms` : `repo index failed: ${e.error}`),
-      });
-    } catch (e) {
-      localServiceEvent(spec, 'runtime.repo_index', { phase: 'failed' }, `repo index could not start: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-  if (spec.postEditChecks === true) {
-    const bins = new Map();
-    const hasBin = (name) => {
-      if (!bins.has(name)) bins.set(name, runShell(`command -v ${name} >/dev/null 2>&1`, workdir, null, 10_000).then((r) => r.exitCode === 0));
-      return bins.get(name);
-    };
-    local.checks = createPostEditChecks({
-      workdir,
-      run: (command, cwd, timeoutMs) => runShell(command, cwd, proc, timeoutMs),
-      io: cloneCheckIo(workdir, { access, readFile, hasBin }),
-      fit: (output) => fitToolText(output, toolOutputCap('run_command'), { tool: 'run_command', summarize: true }),
-      onEvent: (e) => localServiceEvent(spec, 'runtime.post_edit_check', e, `${e.check}${e.cwd ? ` (${e.cwd})` : ''}: ${e.skipped ? `skipped (${e.skipped})` : e.timedOut ? 'timed out' : `exit ${e.exitCode}`}`),
-    });
-  }
-}
-
-/** The previous turn's post-edit verdict (`{ passed, verifier, reason?, steer }`), or
- *  null when no check judged it. A check runner that throws is recorded and costs the
- *  turn nothing. */
-async function drainPostEditChecks(spec, local) {
-  if (!local.checks) return null;
-  try {
-    return await local.checks.drainVerdict();
-  } catch (e) {
-    localServiceEvent(spec, 'runtime.post_edit_check', { error: true }, `post-edit checks failed to run: ${e instanceof Error ? e.message : String(e)}`);
-    return null;
-  }
-}
+// ── The sandbox ─────────────────────────────────────────────────────────────
 
 /**
- * Drive the agent loop to completion, then finalize (PR) via the Worker.
- *
- * THREE ways out, and exactly one terminal op each:
- *   • finished / cancelled → `finalize` (opens the PR, settles the row);
- *   • the loop threw       → `fail` (the Worker self-heals or fails with the reason);
- *   • the agent asked a human → NEITHER. The run is parked in `paused` by the
- *     `ask_human` op and this process exits clean, because a paused run is not a
- *     finished one and must not be marked failed. `resumePausedExecution` starts a
- *     fresh process seeded with `spec.resume` once someone answers.
+ * Open sandboxes by execution id: `{ spec, workdir, checks, previewStarted }`. One
+ * container instance serves one execution (`exec:<id>`), so this holds one entry in
+ * practice; the map keeps a stray request for another id from touching this clone.
  */
-async function runLoop(spec) {
-  let workdir = null;
-  // The run's local services over the clone: the C5 repo index and the D7 post-edit
-  // checks. Each exists only when its lever is on for this run (decided by the Worker,
-  // carried on the spec) and the clone landed.
-  const local = { repoIndex: null, checks: null };
-  const writtenPaths = new Set();
-  const readMemo = new Map();
-  let finalOutput = '';
-  let cancelled = false;
-  let crashed = null;
-  // Set when the agent called ask_human: the run is parked, not over.
-  let paused = false;
-  // Holds the live child process so the heartbeat can kill it on cancel.
-  const proc = { current: null };
-  // Liveness heartbeat: bump the run's `updated_at` on a timer so a long shell step
-  // (build/test) doesn't look orphaned to the Worker's reaper (5-min ceiling). A beat
-  // that reports the run cancelled also SIGKILLs an in-flight command so a cancel
-  // during a multi-minute build takes effect immediately instead of after timeout.
-  const heartbeat = setInterval(() => {
-    op(spec, { op: 'heartbeat' })
-      .then((r) => { if (r && r.cancelled && proc.current) { cancelled = true; proc.current.kill('SIGKILL'); } })
-      .catch(() => { /* a missed beat is covered by the next */ });
-  }, HEARTBEAT_MS);
-  if (typeof heartbeat.unref === 'function') heartbeat.unref();
-  try {
-    if (spec.repo && spec.repo.cloneUrl) {
-      workdir = await mkdtemp(join(tmpdir(), `bf-exec-${spec.executionId}-`));
-      const { cloneUrl, headBranch, baseBranch } = spec.repo;
-      // FULL clone (no `--depth`): a shallow clone caused two separate failures —
-      // it hid earlier passes (single-branch), and it has no merge-base with the
-      // base branch, so `git_sync_latest` / `git diff main` / `git merge-base`
-      // couldn't work. A complete clone carries every branch + full history, so the
-      // agent can sync the latest base, diff against it, and never build on stale
-      // code. Prefer the ticket's HEAD branch (prior runs' WIP); fall back to the
-      // base branch on the first run, before the head branch exists on the remote.
-      let checkedOut = null;
-      let clone = headBranch
-        ? await runShell(`git clone -b "${headBranch}" "${cloneUrl}" .`, workdir, proc)
-        : { exitCode: 1, output: 'no head branch' };
-      if (clone.exitCode === 0) {
-        checkedOut = headBranch;
-      } else {
-        const baseArg = baseBranch ? `-b "${baseBranch}"` : '';
-        clone = await runShell(`git clone ${baseArg} "${cloneUrl}" .`, workdir, proc);
-        if (clone.exitCode === 0) checkedOut = baseBranch || '(default)';
-      }
-      if (clone.exitCode !== 0) {
-        await op(spec, { op: 'event', args: { toolName: 'runtime.clone', category: 'planning', result: `clone failed: ${clone.output.slice(0, 200)}` } }).catch(() => {});
-        workdir = null; // continue without a shell workspace; writes still commit via the Worker
-      } else {
-        // Record the branch actually checked out so triage never has to reverse-engineer
-        // it from `git status` (the gap that made execution #67 waste its budget).
-        await op(spec, { op: 'event', args: { toolName: 'runtime.clone', category: 'planning', detail: { branch: checkedOut, requestedHead: headBranch ?? null, base: baseBranch ?? null }, result: `cloned ${spec.repo.cloneUrl.replace(/\/\/[^@]*@/, '//')} on branch ${checkedOut}` } }).catch(() => {});
-      }
-    }
+const sandboxes = new Map();
+/** In-flight opens, so two concurrent first calls clone once. */
+const opening = new Map();
 
-    if (workdir) await startLocalServices(spec, workdir, proc, local);
-
-    // ── LIVE PREVIEW ────────────────────────────────────────────────────────────
-    // Start the project's dev server BEFORE the agent loop, so the preview is already
-    // coming up while the first LLM turn is in flight rather than only after the run
-    // ends. Fire-and-forget on purpose: the health-check poll must not hold the loop,
-    // and a preview that never comes up must not delay or fail the RUN.
-    // Requires a shell workspace (a run whose clone failed has nothing to serve).
-    if (spec.preview && workdir) {
-      void startPreviewDevServer(spec, workdir).catch(() => { /* reported via the preview op */ });
-    }
-
-    // A RESUMED run continues the conversation the previous process exited with —
-    // the human's answer arrives separately, as a pending steer the Worker injects
-    // into the very next `llm` op. Only a fresh run starts from the task prompt.
-    // (`writtenPaths` is carried too, so the finalize still reports every file this
-    // execution wrote across both processes.)
-    const resume = spec.resume && Array.isArray(spec.resume.messages) && spec.resume.messages.length > 0 ? spec.resume : null;
-    const messages = resume
-      ? [...resume.messages]
-      : [
-          { role: 'system', content: spec.systemPrompt },
-          { role: 'user', content: spec.userContent },
-        ];
-    if (resume && Array.isArray(resume.writtenPaths)) {
-      for (const p of resume.writtenPaths) if (typeof p === 'string') writtenPaths.add(p);
-    }
-    // THE agent loop — the shared kernel with the image semantics on its hooks
-    // (`agentImageLoop.mjs`, which the Actions runner inlines too). No step cap: the
-    // kernel's failure-streak breaker is the only limit. This process makes NO model
-    // decision: the Worker's `llm` op owns the run's model hand-off policy
-    // (`@builderforce/run-policy`), and a turn that only narrated comes back with a
-    // re-prompt in `steering`, which the loop turns into "keep going".
-    const outcome = await runImageLoop({
-      messages,
-      // `supportedTools` is this image's capability HANDSHAKE. The Worker advertises
-      // the intersection of what the surface's capability set permits and what this
-      // process can actually dispatch, which is what lets a capability be added to
-      // `CONTAINER_SURFACE_CAPS` the moment its Worker-side op exists rather than only
-      // after every image has been rebuilt and deployed. An older image simply omits
-      // the new name and is never offered the tool.
-      llm: async (transcript) => {
-        // D7: the previous turn's edits are checked ONCE, here, before the next paid turn
-        // — so a batch of edits costs one check run, and the model reads only failures
-        // (when the Worker turned the steer on).
-        const checked = await drainPostEditChecks(spec, local);
-        if (checked && checked.steer && spec.postEditSteer === true) transcript.push({ role: 'user', content: checked.steer });
-        // D1: the same verdict goes to the Worker, whose `llm` op owns the model choice —
-        // a failed check moves a weak-first run one tier up for THIS turn. `checks` is
-        // present (null when nothing judged) only while this run has a verifier, which is
-        // what lets the Worker start it on the weak tier at all.
-        const checks = local.checks ? { checks: checked ? { passed: checked.passed, verifier: checked.verifier, ...(checked.reason ? { reason: checked.reason } : {}) } : null } : {};
-        return op(spec, { op: 'llm', args: { messages: transcript, supportedTools: [...SUPPORTED_TOOL_NAMES, ...containerLocalToolNames(local)], writtenPaths: [...writtenPaths], ...checks } });
-      },
-      execTool: (name, parsed, loop) => execTool(spec, workdir, writtenPaths, readMemo, name, parsed, proc, loop, local),
-      // The C7 per-result budget on every tool row the model re-reads (logs summarized,
-      // large JSON projected). Off ⇒ plain JSON, as before.
-      toolResultPolicy: containerToolResultPolicy(spec),
-      // D8: a turn's consecutive reads dispatch concurrently, while the Worker turned it on.
-      ...(spec.parallelReads === true ? { isReadOnly: isReadOnlyCloudTool } : {}),
-      // A heartbeat may have observed a cancel (and killed an in-flight command)
-      // since the last step — stop before spending another LLM call.
-      isCancelled: () => cancelled,
-    });
-    finalOutput = outcome.output;
-    if (outcome.cancelled) cancelled = true;
-    // A gateway error is routed to the `fail` channel (self-heal/retry), never to
-    // `finalize`, so the run is never marked COMPLETED on a gateway error.
-    if (outcome.crashed) crashed = outcome.crashed;
-    // Parked on a human question (a tool result reported `result.paused`): the Worker
-    // already paused the row, so this process exits without a terminal op.
-    if (outcome.paused) paused = true;
-  } catch (e) {
-    // The loop threw. Capture the REAL reason and report it on the dedicated `fail`
-    // channel (NOT finalize, which implies an orderly finish) so the Worker can
-    // self-heal or fail the run with what actually broke.
-    crashed = e instanceof Error ? e.message : String(e);
-  } finally {
-    clearInterval(heartbeat); // stop beating before the terminal op
-    try {
-      // PAUSED runs post NOTHING here. The `ask_human` op already parked the row and
-      // persisted the resume state; a `finalize` would open a PR on half-done work
-      // and a `fail` would mark a perfectly healthy, answerable run as failed.
-      if (paused) {
-        // A pause AND a crash means the crash happened after the park — report it as
-        // telemetry, not as the run's outcome.
-        if (crashed) await op(spec, { op: 'event', args: { toolName: 'runtime.paused_exit', category: 'error', result: `container exited after pausing, with an error: ${crashed}`.slice(0, 300) } }).catch(() => {});
-      } else if (crashed) {
-        await op(spec, { op: 'fail', args: { error: crashed } }).catch(() => {});
-      } else {
-        // ── Verify, then remember (findings 11 & 12) ──
-        // Runs the project's own checks over what this run wrote, and reports the
-        // verdict to the Worker BEFORE the terminal op. Two reasons for this order:
-        // the Worker owns the run's policy state, so only it can apply the
-        // `verify_started` transition the run policy declares; and a verify that
-        // blocks should be visible to `finalize` rather than arriving after it.
-        //
-        // Every failure here is swallowed — a verify that could not run, and a memory
-        // write that could not land, must never cost this run its result.
-        await verifyThenRemember(spec, workdir, writtenPaths, finalOutput, proc)
-          .catch((e) => op(spec, { op: 'event', args: { toolName: 'runtime.verify_skipped', category: 'error', result: `verify/remember step failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300) } }).catch(() => {}));
-        await op(spec, { op: 'finalize', args: { writtenPaths: [...writtenPaths], finalOutput, cancelled } }).catch(() => {});
-      }
-    } finally {
-      if (local.repoIndex) await local.repoIndex.dispose();
-      if (workdir) await rm(workdir, { recursive: true, force: true }).catch(() => {});
-    }
+/** Clone the ticket's HEAD branch (prior runs' WIP), falling back to base on run #1. */
+async function cloneInto(spec, workdir) {
+  const { cloneUrl, headBranch, baseBranch } = spec.repo;
+  // FULL clone (no `--depth`): a shallow clone hid earlier passes and had no merge-base
+  // with the base branch, so `git_sync_latest` / `git diff main` could not work.
+  let clone = headBranch
+    ? await runShell(`git clone -b "${headBranch}" "${cloneUrl}" .`, workdir, null)
+    : { exitCode: 1, output: 'no head branch' };
+  let checkedOut = clone.exitCode === 0 ? headBranch : null;
+  if (clone.exitCode !== 0) {
+    const baseArg = baseBranch ? `-b "${baseBranch}"` : '';
+    clone = await runShell(`git clone ${baseArg} "${cloneUrl}" .`, workdir, null);
+    if (clone.exitCode === 0) checkedOut = baseBranch || '(default)';
   }
+  return { ok: clone.exitCode === 0, branch: checkedOut, output: clone.output };
+}
+
+async function openSandbox(spec) {
+  const existing = sandboxes.get(spec.executionId);
+  if (existing) return { ok: true, branch: existing.branch, reused: true };
+  if (!spec.repo || typeof spec.repo.cloneUrl !== 'string') return { ok: false, error: 'no repository to clone' };
+  const workdir = await mkdtemp(join(tmpdir(), `bf-exec-${spec.executionId}-`));
+  const cloned = await cloneInto(spec, workdir);
+  if (!cloned.ok) {
+    await rm(workdir, { recursive: true, force: true }).catch(() => {});
+    localServiceEvent(spec, 'runtime.clone', { phase: 'failed' }, `clone failed: ${cloned.output.slice(0, 200)}`);
+    return { ok: false, error: `clone failed: ${cloned.output.slice(-300)}` };
+  }
+  const box = createSandboxBox({ spec, workdir, branch: cloned.branch, emit: (toolName, detail, result) => localServiceEvent(spec, toolName, detail, result) });
+  box.previewStarted = false;
+  sandboxes.set(spec.executionId, box);
+  localServiceEvent(spec, 'runtime.clone', { branch: cloned.branch, requestedHead: spec.repo.headBranch ?? null, base: spec.repo.baseBranch ?? null },
+    `cloned ${spec.repo.cloneUrl.replace(/\/\/[^@]*@/, '//')} on branch ${cloned.branch}`);
+  // The dev server comes up beside the run, never in front of it: fire-and-forget, and a
+  // preview that never answers must not delay or fail the run.
+  if (spec.preview) {
+    box.previewStarted = true;
+    void startPreviewDevServer(spec, workdir).catch(() => { /* reported via the preview op */ });
+  }
+  return { ok: true, branch: cloned.branch };
+}
+
+
+async function closeSandbox(executionId) {
+  const box = sandboxes.get(executionId);
+  if (!box) return { ok: true };
+  sandboxes.delete(executionId);
+  // A live preview serves out of this clone, so it outlives the run; the preview sweep
+  // stops the whole instance when it goes idle.
+  if (!box.previewStarted) await rm(box.workdir, { recursive: true, force: true }).catch(() => {});
+  return { ok: true };
+}
+
+/** Route one `/sandbox/*` request. Every body names its execution. */
+async function handleSandbox(path, body, req) {
+  if (typeof body.executionId !== 'number') return [400, { ok: false, error: 'executionId is required' }];
+  if (path === '/sandbox/open') {
+    if (!body.token || !body.internalBaseUrl) return [400, { ok: false, error: 'missing open spec fields' }];
+    let pending = opening.get(body.executionId);
+    if (!pending) {
+      pending = openSandbox(body).finally(() => opening.delete(body.executionId));
+      opening.set(body.executionId, pending);
+    }
+    const opened = await pending;
+    return [opened.ok ? 200 : 502, opened];
+  }
+  if (path === '/sandbox/close') return [200, await closeSandbox(body.executionId)];
+  const box = sandboxes.get(body.executionId);
+  if (!box) return [409, { ok: false, error: 'not_open' }];
+  if (!['/sandbox/fs', '/sandbox/run', '/sandbox/checks'].includes(path)) return [404, { ok: false, error: 'not found' }];
+  // The engine aborting its fetch (a cancel) closes this request: kill the command.
+  return [200, await serveSandbox(box, path, body, (kill) => { req.on('close', kill); return () => req.off('close', kill); })];
 }
 
 // ── Web-security-scan stages ─────────────────────────────────────────────────
@@ -1148,45 +518,49 @@ async function runWebScanStages(spec) {
   ]);
 }
 
+/** Read a request body as JSON; null when it is not JSON. */
+function readJson(req) {
+  return new Promise((resolve) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => { try { resolve(JSON.parse(raw)); } catch { resolve(null); } });
+  });
+}
+
+function sendJson(res, status, body) {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
+
 const server = createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true }));
+    sendJson(res, 200, { ok: true });
     return;
   }
   if (isPreviewUrl(req.url)) { proxyPreviewHttp(req, res); return; }
-  // Web-security-scan stages (TLS peer certificate + CVE fingerprint surface).
-  // Acked immediately like /run: the stages report their own results back to the
-  // Worker's ingest seam, so the Worker's dispatch never waits on a TLS handshake.
-  if (req.method === 'POST' && req.url === '/web-scan') {
-    let raw = '';
-    req.on('data', (c) => { raw += c; });
-    req.on('end', () => {
-      let spec;
-      try { spec = JSON.parse(raw); } catch { res.writeHead(400); res.end('bad request'); return; }
-      if (!spec || typeof spec.auditId !== 'number' || !spec.token || !spec.internalBaseUrl || !spec.host || !spec.origin) {
-        res.writeHead(400); res.end('missing web-scan spec fields'); return;
+  if (req.method === 'POST' && req.url.startsWith('/sandbox/')) {
+    void readJson(req).then(async (body) => {
+      if (!body) { sendJson(res, 400, { ok: false, error: 'bad request' }); return; }
+      try {
+        const [status, out] = await handleSandbox(req.url, body, req);
+        if (!res.writableEnded) sendJson(res, status, out);
+      } catch (e) {
+        if (!res.writableEnded) sendJson(res, 500, { ok: false, error: e instanceof Error ? e.message : String(e) });
       }
-      res.writeHead(202, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, accepted: spec.auditId }));
-      runWebScanStages(spec).catch((e) => console.error('[container] runWebScanStages crashed', e));
     });
     return;
   }
-  if (req.method === 'POST' && req.url === '/run') {
-    let raw = '';
-    req.on('data', (c) => { raw += c; });
-    req.on('end', () => {
-      let spec;
-      try { spec = JSON.parse(raw); } catch { res.writeHead(400); res.end('bad request'); return; }
-      if (!spec || typeof spec.executionId !== 'number' || !spec.token || !spec.internalBaseUrl) {
-        res.writeHead(400); res.end('missing run spec fields'); return;
+  // Web-security-scan stages (TLS peer certificate + CVE fingerprint surface).
+  // Acked immediately: the stages report their own results back to the Worker's ingest
+  // seam, so the Worker's dispatch never waits on a TLS handshake.
+  if (req.method === 'POST' && req.url === '/web-scan') {
+    void readJson(req).then((spec) => {
+      if (!spec) { res.writeHead(400); res.end('bad request'); return; }
+      if (typeof spec.auditId !== 'number' || !spec.token || !spec.internalBaseUrl || !spec.host || !spec.origin) {
+        res.writeHead(400); res.end('missing web-scan spec fields'); return;
       }
-      // Ack immediately; the loop runs long in this persistent process so the
-      // Worker's dispatch waitUntil is never blocked (no ~30s wall here).
-      res.writeHead(202, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, accepted: spec.executionId }));
-      runLoop(spec).catch((e) => console.error('[container] runLoop crashed', e));
+      sendJson(res, 202, { ok: true, accepted: spec.auditId });
+      runWebScanStages(spec).catch((e) => console.error('[container] runWebScanStages crashed', e));
     });
     return;
   }

@@ -48,7 +48,7 @@ import {
   serveEngineWorker,
   servePageEngines,
   webGpuSupport
-} from "./chunk-DX6W7SR7.mjs";
+} from "./chunk-OYLJNCGN.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useMemo } from "react";
@@ -188,27 +188,42 @@ function coerceArg(raw) {
     return v;
   }
 }
+function qwenText(raw) {
+  return raw.replace(/^\r?\n/, "").replace(/\r?\n$/, "");
+}
+function qwenArg(raw) {
+  const v = qwenText(raw);
+  if (/^(?:true|false|null)$/.test(v) || /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(v)) return JSON.parse(v);
+  return v;
+}
 var ARG_KEY_VALUE = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g;
-var PARAMETER_TAG = /<(?:xai:)?parameter\s+name\s*=\s*"([^"]*)"\s*>([\s\S]*?)<\/(?:xai:)?parameter>/g;
+var PARAMETER_TAG = /<(?:xai:)?parameter(?:\s+name\s*=\s*"([^"]*)"|\s*=\s*([^>]+?))\s*>([\s\S]*?)<\/(?:xai:)?parameter>/g;
 function argsFromTags(body) {
   const args = {};
+  const rawArgs = {};
   let found = false;
   for (const re of [ARG_KEY_VALUE, PARAMETER_TAG]) {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(body)) !== null) {
-      const key = m[1].trim();
+      const key = (m.slice(1, -1).find((g) => g !== void 0) ?? "").trim();
       if (!key) continue;
-      args[key] = coerceArg(m[2]);
+      const value = m[m.length - 1];
+      const qwen = re === PARAMETER_TAG && m[2] !== void 0;
+      rawArgs[key] = qwen ? qwenText(value) : value.trim();
+      args[key] = qwen ? qwenArg(value) : coerceArg(value);
       found = true;
     }
   }
-  return found ? args : null;
+  return found ? { args, rawArgs } : null;
+}
+function taggedCall(id, name, tagged) {
+  return { id, name, args: JSON.stringify(tagged.args), rawArgs: tagged.rawArgs };
 }
 function parseNamedBody(name, body, seq) {
   if (!name) return null;
   const tagged = argsFromTags(body);
-  if (tagged) return { id: `xmltc_${seq}`, name, args: JSON.stringify(tagged) };
+  if (tagged) return taggedCall(`xmltc_${seq}`, name, tagged);
   const jsonStart = body.indexOf("{");
   if (jsonStart >= 0) {
     try {
@@ -219,14 +234,28 @@ function parseNamedBody(name, body, seq) {
   }
   return { id: `xmltc_${seq}`, name, args: "{}" };
 }
+function parseWrappedNamed(trimmed, seq) {
+  for (const dialect of DIALECTS) {
+    if (isSelfClosing(dialect) || !dialect.namedInOpenTag) continue;
+    const m = dialect.open.exec(trimmed);
+    if (!m || m.index !== 0 || !m[1]) continue;
+    const rest = trimmed.slice(m[0].length);
+    const end = rest.lastIndexOf(dialect.close);
+    return parseNamedBody(m[1].trim(), end >= 0 ? rest.slice(0, end) : rest, seq);
+  }
+  return null;
+}
 function parseInner(inner, seq) {
   const trimmed = inner.trim();
   if (!trimmed) return null;
-  const firstArg = trimmed.search(/<arg_key>|<(?:xai:)?parameter\s/);
+  const wrapped = parseWrappedNamed(trimmed, seq);
+  if (wrapped) return wrapped;
+  const firstArg = trimmed.search(/<arg_key>|<(?:xai:)?parameter[\s=]/);
   if (firstArg >= 0) {
     const name = trimmed.slice(0, firstArg).trim();
     if (!name) return null;
-    return { id: `xmltc_${seq}`, name, args: JSON.stringify(argsFromTags(trimmed) ?? {}) };
+    const tagged = argsFromTags(trimmed);
+    return tagged ? taggedCall(`xmltc_${seq}`, name, tagged) : { id: `xmltc_${seq}`, name, args: "{}" };
   }
   const jsonStart = trimmed.indexOf("{");
   if (jsonStart >= 0) {
@@ -344,6 +373,59 @@ function extractXmlToolCalls(raw) {
   f.push(raw);
   f.flush();
   return { text: f.cleanText(), toolCalls: f.toolCalls() };
+}
+
+// src/xmlToolArgTypes.ts
+function asType(value, type) {
+  const types = Array.isArray(type) ? type : [type];
+  const text = value.trim();
+  for (const t of types) {
+    if (t === "string") return void 0;
+    if ((t === "object" || t === "array") && /^[[{]/.test(text)) {
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = void 0;
+      }
+      if (t === "array" ? Array.isArray(parsed) : parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    }
+    if ((t === "number" || t === "integer") && /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(text)) {
+      const n = Number(text);
+      if (t === "number" || Number.isInteger(n)) return n;
+    }
+    if (t === "boolean" && (text === "true" || text === "false")) return text === "true";
+  }
+  return void 0;
+}
+var plain = ({ id, name, args }) => ({ id, name, args });
+function typeXmlToolArgs(calls, tools) {
+  const schemas = new Map((tools ?? []).map((t) => [t.function.name, t.function.parameters]));
+  return calls.map((call2) => plain(typed(call2, schemas)));
+}
+function typed(call2, schemas) {
+  const props = schemas.get(call2.name)?.properties ?? void 0;
+  if (!props) return call2;
+  let args;
+  try {
+    const parsed = JSON.parse(call2.args);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return call2;
+    args = parsed;
+  } catch {
+    return call2;
+  }
+  let changed = false;
+  for (const [key, value] of Object.entries(args)) {
+    const type = props[key]?.type;
+    if (type === void 0) continue;
+    const text = call2.rawArgs?.[key] ?? (typeof value === "string" ? value : void 0);
+    if (text === void 0) continue;
+    const next = type === "string" || Array.isArray(type) && type[0] === "string" ? text : asType(text, type);
+    if (next === void 0 || next === value) continue;
+    args[key] = next;
+    changed = true;
+  }
+  return changed ? { ...call2, args: JSON.stringify(args) } : call2;
 }
 
 // ../packages/agent-loop/src/types.ts
@@ -1428,7 +1510,7 @@ async function runStreamChatCompletion(opts, handlers, request) {
   const xml = new XmlToolCallFilter();
   let finishReason = null;
   let shown = "";
-  const allToolCalls = () => [...assemble(toolAcc), ...xml.toolCalls()];
+  const allToolCalls = () => [...assemble(toolAcc), ...typeXmlToolArgs(xml.toolCalls(), opts.tools)];
   const reader = res.body?.getReader();
   if (!reader) {
     const data = await res.json().catch(() => null);
@@ -1447,7 +1529,7 @@ async function runStreamChatCompletion(opts, handlers, request) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
+    return { text, toolCalls: [...assemble(toolAcc), ...typeXmlToolArgs(xmlCalls, opts.tools)], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -2606,6 +2688,9 @@ function providerFailureTrace(ts, step, model, error, durationMs) {
   };
 }
 
+// src/localFirstTransport.ts
+import { isVolatileTail } from "@seanhogg/builderforce-memory/handoff";
+
 // ../packages/learned-routing/src/actionTypes.ts
 var ACTION_TYPES = [
   "sql",
@@ -2953,6 +3038,24 @@ var TOOL_NAME_ALIASES = {
 function resolveToolAlias(name) {
   const key = name.trim().toLowerCase();
   return TOOL_NAME_ALIASES[key] ?? name;
+}
+
+// ../packages/agent-tools/src/spec.ts
+function toolCallPaths(args) {
+  if (!args) return [];
+  const out = [];
+  const add = (v) => {
+    if (typeof v === "string" && v.trim()) out.push(v.trim());
+  };
+  add(args.path);
+  add(args.filePath);
+  add(args.file_path);
+  add(args.oldPath);
+  add(args.newPath);
+  if (Array.isArray(args.paths)) {
+    for (const p of args.paths) add(p);
+  }
+  return out;
 }
 
 // ../packages/agent-tools/src/compress.ts
@@ -4701,6 +4804,97 @@ function limbicTraits(profile) {
   };
 }
 
+// ../packages/agent-tools/src/knowledge-notes.ts
+import { rankByCount } from "@seanhogg/builderforce-memory/working";
+
+// ../packages/agent-tools/src/run-knowledge.ts
+import { WorkingMemory, consolidate } from "@seanhogg/builderforce-memory/working";
+var FILE_TOOL_KINDS = /* @__PURE__ */ new Map([
+  ["write_file", "create"],
+  ["write", "create"],
+  ["create", "create"],
+  ["edit_file", "edit"],
+  ["edit", "edit"],
+  ["apply_patch", "edit"],
+  ["delete_file", "delete"],
+  ["delete", "delete"],
+  ["read_file", "read"],
+  ["read", "read"],
+  ["view", "read"],
+  ["file_outline", "read"]
+]);
+function fileToolKind(name) {
+  return FILE_TOOL_KINDS.get(name);
+}
+var SEARCH_TOOLS = /* @__PURE__ */ new Map([
+  ["search_code", ["query", "pattern"]],
+  ["grep", ["query", "pattern"]],
+  ["find_symbol", ["name", "symbol", "query"]],
+  ["semantic_search", ["query"]],
+  ["list_files", ["glob", "path"]],
+  ["glob", ["glob", "pattern", "path"]]
+]);
+function searchLabel(name, args) {
+  const keys = SEARCH_TOOLS.get(name);
+  if (!keys || !args || typeof args !== "object") return void 0;
+  const rec = args;
+  const what = keys.map((k) => rec[k]).find((v) => typeof v === "string" && !!v.trim());
+  if (!what) return void 0;
+  const scope = typeof rec["path"] === "string" && rec["path"] !== what ? ` in ${rec["path"]}` : "";
+  return `${name} "${what.trim().slice(0, 80)}"${scope}`;
+}
+function argPath(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return void 0;
+  return toolCallPaths(args)[0];
+}
+var OBSERVATION = {
+  create: "created",
+  edit: "edited",
+  delete: "deleted",
+  read: "read"
+};
+var RunKnowledgeRecorder = class {
+  memory = new WorkingMemory();
+  tools = [];
+  setPrompt(prompt) {
+    this.memory.setTask(prompt);
+  }
+  /** Record one successful tool call. Unknown tools still count toward `tools`. */
+  record(name, args) {
+    this.tools.push(name);
+    const search = searchLabel(name, args);
+    if (search) {
+      this.memory.observe({ kind: "searched", query: search });
+      return;
+    }
+    const kind = fileToolKind(name);
+    const p = kind ? argPath(args) : void 0;
+    if (kind && p) this.memory.observe({ kind: OBSERVATION[kind], path: p });
+  }
+  /** True when nothing has been recorded — the caller can skip the write entirely. */
+  get isEmpty() {
+    return this.tools.length === 0;
+  }
+  /** This run's activity, in the shared note format's shape. `read` keeps duplicates. */
+  get activity() {
+    const s = this.memory.snapshot;
+    return {
+      created: s.created,
+      edited: s.edited,
+      deleted: s.deleted,
+      read: s.read,
+      tools: this.tools,
+      ...s.task ? { prompt: s.task } : {}
+    };
+  }
+  brief() {
+    return this.memory.brief({ observations: this.tools.length });
+  }
+  consolidate(opts) {
+    return consolidate(this.memory.snapshot, opts);
+  }
+};
+
 // ../packages/agent-tools/src/skill-tools.ts
 var skillProposeTool = defineTool({
   name: "skill_propose",
@@ -5220,7 +5414,7 @@ function localFirstApplies(call2) {
 }
 function coreMessages(messages) {
   const system = messages.filter((m) => m.role === "system");
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const lastUser = [...messages].reverse().find((m) => m.role === "user" && !isVolatileTail(m));
   return lastUser ? [...system, lastUser] : system;
 }
 function committingHandlers(handlers, commit, servedAs) {
@@ -5674,6 +5868,7 @@ function pageRuntimePin(ref) {
 }
 
 // src/localSuccess/turnFeatures.ts
+import { isVolatileTail as isVolatileTail2 } from "@seanhogg/builderforce-memory/handoff";
 var CODE_HEAVY = /```|^diff --git |^@@ [-+]\d|^\s+at \S+ \(?\S+:\d+:\d+\)?$|Traceback \(most recent call last\)/m;
 function contentText(content) {
   if (typeof content === "string") return content;
@@ -5683,7 +5878,7 @@ function contentChars(content) {
   return typeof content === "string" ? content.length : JSON.stringify(content).length;
 }
 function localTurnFeatures(call2, servedContextTokens) {
-  const users = call2.messages.filter((m) => m.role === "user");
+  const users = call2.messages.filter((m) => m.role === "user" && !isVolatileTail2(m));
   const last = users[users.length - 1];
   const promptChars = last ? contentChars(last.content) : 0;
   const totalChars = call2.messages.reduce((n, m) => n + contentChars(m.content), 0) + (call2.tools?.length ? JSON.stringify(call2.tools).length : 0);
@@ -5700,6 +5895,9 @@ function localTurnFeatures(call2, servedContextTokens) {
   };
 }
 
+// src/localSuccess/verifiedLocalLabel.ts
+import { isVolatileTail as isVolatileTail3 } from "@seanhogg/builderforce-memory/handoff";
+
 // src/localSuccess/localSuccessFailure.ts
 function reportLocalSuccessFailure(stage, error) {
   console.warn(`BuilderForce local-success predictor: ${stage} failed (${errorMessage(error)})`);
@@ -5715,20 +5913,25 @@ function labelWithVerdict(outcome, leverOn = verifiedLocalLabelOn()) {
   if (leverOn && verifier && !verifier.passed && engine.local === "succeeded") return { ...engine, local: "failed" };
   return engine;
 }
+function requestOf(call2) {
+  return call2.messages.filter((m) => !isVolatileTail3(m));
+}
 function lastUserIndex(messages) {
   for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === "user") return i;
   return -1;
 }
 function submitPrompt(call2) {
-  const i = lastUserIndex(call2.messages);
-  return i < 0 ? "" : contentText(call2.messages[i].content);
+  const messages = requestOf(call2);
+  const i = lastUserIndex(messages);
+  return i < 0 ? "" : contentText(messages[i].content);
 }
 var REFUSALS = [MALFORMED_CALL_RESULT, TRUNCATED_CALL_RESULT];
 function inferVerdict(pendingPrompt, next) {
-  const i = lastUserIndex(next.messages);
-  const prompt = i < 0 ? "" : contentText(next.messages[i].content);
+  const messages = requestOf(next);
+  const i = lastUserIndex(messages);
+  const prompt = i < 0 ? "" : contentText(messages[i].content);
   if (prompt !== pendingPrompt) return { passed: true, source: "continued" };
-  const tail = next.messages.slice(i + 1);
+  const tail = messages.slice(i + 1);
   if (tail.length === 0) return { passed: false, source: "retry" };
   let lastAssistant = -1;
   for (let j = tail.length - 1; j >= 0; j--) if (tail[j].role === "assistant") {
@@ -12751,6 +12954,11 @@ function stablePrefixOn() {
   const env = globalThis.process?.env;
   return isCostLeverOn(env, "b1_stable_prefix", null);
 }
+function recorderFor(userRequest, lent) {
+  const r = lent ?? new RunKnowledgeRecorder();
+  if (!r.activity.prompt) r.setPrompt(userRequest);
+  return r;
+}
 async function prepareRunLoop(chatId, c, req, runKey) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, runTool, stream, evermind } = req;
   const convo = c.transcript;
@@ -12882,6 +13090,9 @@ ${turnContext}` : systemPrompt),
     // starts circling. Both are invalidated together, and only for what a later
     // mutation actually touched — never wiped wholesale by an unrelated call.
     readCoverage: new ReadCoverage2(),
+    // What the run did and read, restated in front of every turn (its `brief()`) —
+    // the host's recorder when it keeps one, so the ledger and its code map agree.
+    knowledge: recorderFor(userRequest, req.knowledge),
     // What this run has already FAILED at (see `FailureTally` in `@builderforce/run-guards`). The read guards
     // above deliberately record only SUCCESSES, so an identical failing call — the same
     // `git_status` answered with the same remedy three times, the same platform read
@@ -12943,6 +13154,9 @@ ${turnContext}`;
   }
   return run;
 }
+
+// src/runStore/completeTurn.ts
+import { volatileTail } from "@seanhogg/builderforce-memory/handoff";
 
 // src/toolVocabulary.ts
 var EQUIVALENCE_CLASSES = [
@@ -13233,10 +13447,10 @@ function compactionSavedTokens(full, working, historyBudgetTokens = HISTORY_TOKE
   const withoutCompaction = Math.min(transcriptTokens(full), historyBudgetTokens);
   return Math.max(0, withoutCompaction - transcriptTokens(working));
 }
-function stampOncePerCall(stamped, plain) {
+function stampOncePerCall(stamped, plain2) {
   let used = false;
   return () => {
-    if (used) return plain;
+    if (used) return plain2;
     used = true;
     return stamped;
   };
@@ -13370,10 +13584,12 @@ function completeTurnPort(run) {
     let turnRole = nextTurn(run.policy, { hasTools: !!tools }).role;
     const turnToolChoice = run.forceToolChoice;
     run.forceToolChoice = void 0;
+    const ledger = tools ? volatileTail([run.knowledge.brief()]) : null;
     const request = async (extra = []) => {
       const ask = nextTurn(run.policy, { hasTools: !!tools });
       const callMetadata = nextCallMetadata();
-      const messages = await run.windowFit.prepare({ messages: extra.length > 0 ? [...working, ...extra] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
+      const perTurn = ledger ? [...extra, ledger] : extra;
+      const messages = await run.windowFit.prepare({ messages: perTurn.length > 0 ? [...working, ...perTurn] : working, model: ask.model, tools, maxTokens: turnMaxTokens(maxTokens, !!tools), step: iter });
       return asLiveTurn(c, () => stream(
         {
           messages,
@@ -13893,6 +14109,7 @@ function afterDispatchHook(run) {
       truncated: ran.truncated
     });
     usedTools.add(call2.name);
+    if (!isFailedToolResult(ran.out)) run.knowledge.record(call2.name, args);
     return void 0;
   };
 }
@@ -17510,15 +17727,14 @@ function diagnosticsSignals(d) {
   }
   const ran = runs?.runs ?? [];
   if (ran.length > 0) {
-    const shellless = ran.filter((r) => executorHasShell(r.executor) === false);
+    const shellless = ran.filter((r) => runHasShell(r) === false);
     if (shellless.length === ran.length) {
-      const why = d.account?.containerRuntime === false ? " This workspace's plan does not include the container surface, so every cloud run is routed there by design \u2014 upgrade, or run the work in the editor/on-prem where there IS a shell." : " The container surface was not used \u2014 either no agent here is set to it, or no container was live and the run was demoted. Check the agent's runtime surface.";
       out.push(
-        `\u26A0\uFE0F All ${ran.length} run(s) on this chat executed on the DURABLE surface, which has no shell: none of them could build, type-check or test the code they wrote.${why}`
+        `\u26A0\uFE0F All ${ran.length} run(s) on this chat ran WITHOUT a sandbox shell: none of them could build, type-check or test the code they wrote. The run timeline's runtime.sandbox event says why (no container bound, the ticket's repository could not be cloned, or the sandbox failed to open).`
       );
     } else if (shellless.length > 0) {
       out.push(
-        `\u2139\uFE0F ${shellless.length} of ${ran.length} run(s) executed on the shell-less durable surface and could not build or test their own output (runs ${shellless.slice(0, 5).map((r) => `#${r.executionId}`).join(", ")}).`
+        `\u2139\uFE0F ${shellless.length} of ${ran.length} run(s) ran without a sandbox shell and could not build or test their own output (runs ${shellless.slice(0, 5).map((r) => `#${r.executionId}`).join(", ")}).`
       );
     }
     const unknown = ran.filter((r) => r.executor == null && r.hostId == null);
@@ -17618,16 +17834,19 @@ function autoExecGloss(submittedBy) {
   if (kind === "reviewer") return role ? `board autonomy, reviewing as ${role}` : "board autonomy (auto-exec reviewer)";
   return "board autonomy (auto-exec)";
 }
-function executorGloss(executor) {
+function executorGloss(executor, sandbox) {
   if (executor === "on-prem") return "on-prem machine (real shell, the machine's own clone)";
+  if (sandbox === "container") return "cloud, container sandbox (real shell + clone \u2014 can build, type-check and test)";
+  if (sandbox === "actions" || executor === "github_actions") return "cloud, GitHub Actions sandbox (the repo's own runner)";
+  if (sandbox === "none") return "cloud, NO sandbox (edits over the git API; cannot build or test)";
   if (executor === "container") return "container (real shell + local clone \u2014 can build, type-check and test)";
   if (executor === "durable") return "durable (serverless, NO shell \u2014 edits over the git API; cannot build or test)";
-  if (executor === "github_actions") return "GitHub Actions (the repo's own runners)";
   return "executor not recorded";
 }
-function executorHasShell(executor) {
-  if (executor === "durable") return false;
-  if (executor === "container" || executor === "on-prem" || executor === "github_actions") return true;
+function runHasShell(run) {
+  if (run.sandbox) return run.sandbox !== "none";
+  if (run.executor === "durable") return false;
+  if (run.executor === "container" || run.executor === "on-prem" || run.executor === "github_actions") return true;
   return null;
 }
 function shortTime(iso) {
@@ -17652,14 +17871,14 @@ function runHistoryLines(runs) {
   );
   const executors = runs.executors ?? [];
   if (executors.length > 0) {
-    out.push(`  - ran on: ${executors.map(executorGloss).join("; ")}`);
+    out.push(`  - ran on: ${executors.map((e) => executorGloss(e)).join("; ")}`);
   }
   for (const run of runs.runs.slice(0, MAX_RUNS_LISTED)) {
     const who = run.agentName?.trim() || run.agentRef || "no agent recorded";
     const ticket = `#${run.taskId}${run.taskTitle ? ` "${run.taskTitle}"` : ""}`;
     const produced = run.produced === true ? " \xB7 produced output" : run.produced === false ? " \xB7 produced NOTHING" : "";
     const failed = run.errorMessage ? ` \xB7 ${run.errorMessage}` : "";
-    const where = run.hostName ? ` \xB7 on on-prem "${run.hostName}"` : run.executor ? ` \xB7 on ${run.executor}` : " \xB7 on ? (executor not recorded)";
+    const where = run.hostName ? ` \xB7 on on-prem "${run.hostName}"` : run.executor ? ` \xB7 on ${run.executor}${run.sandbox ? ` (sandbox: ${run.sandbox})` : ""}` : " \xB7 on ? (executor not recorded)";
     out.push(
       `  - run #${run.executionId} \xB7 ${who} \xB7 ${ticket} \xB7 ${run.status}${produced}${where} \xB7 by ${run.submittedBy}${run.source ? ` via ${run.source}` : ""} \xB7 ${shortTime(run.createdAt)}${run.completedAt ? ` \u2192 ${shortTime(run.completedAt)}` : ""}${failed}`
     );
@@ -17730,7 +17949,7 @@ function formatChatDiagnostics(d) {
   const acct = d.account;
   if (acct) {
     lines.push(
-      `- Plan: ${acct.plan ?? "unknown"} \xB7 billing ${acct.billingStatus ?? "none"}${acct.billingStatus === "none" || acct.billingStatus == null ? " (no payment method on file)" : ""}${acct.canUsePremiumModels != null ? ` \xB7 premium models ${acct.canUsePremiumModels ? "entitled" : "NOT entitled"}` : ""}${acct.containerRuntime != null ? ` \xB7 container runtime ${acct.containerRuntime ? "entitled (cloud runs get a real shell + clone)" : "NOT entitled (cloud runs are routed to the shell-less durable surface)"}` : ""}`
+      `- Plan: ${acct.plan ?? "unknown"} \xB7 billing ${acct.billingStatus ?? "none"}${acct.billingStatus === "none" || acct.billingStatus == null ? " (no payment method on file)" : ""}${acct.canUsePremiumModels != null ? ` \xB7 premium models ${acct.canUsePremiumModels ? "entitled" : "NOT entitled"}` : ""}`
     );
     lines.push(
       `- Model: ${acct.model ?? "auto (gateway routes per turn)"}${acct.modelFunding ? ` \xB7 funded by ${acct.modelFunding}` : ""}${acct.planModelCount != null ? ` \xB7 ${acct.planModelCount} models in plan pool` : ""} \xB7 BYO accounts: ${acct.byoProviders?.length ? acct.byoProviders.join(", ") : "none"}`
@@ -17897,10 +18116,6 @@ async function gatherChatDiagnostics(src) {
     // probe report could look clean about a chat whose model the plan cannot fund.
     modelFunding: src.modelSurface ? classifyModelFunding(src.model, src.modelSurface) : null,
     ...src.modelSurface?.canUsePremiumModels != null ? { canUsePremiumModels: src.modelSurface.canUsePremiumModels } : {},
-    // Spread-if-present, like every other optional above: an API that sends no feature
-    // set leaves the key ABSENT, and the report omits the line rather than claiming the
-    // workspace is not entitled. "Unknown" and "no" are different findings.
-    ...plan?.features?.entitled?.containerRuntime != null ? { containerRuntime: plan.features.entitled.containerRuntime } : {},
     ...src.modelSurface?.data ? { planModelCount: src.modelSurface.data.length } : {},
     byoProviders: src.modelSurface?.byo?.providers ?? [],
     extensionVersion: src.uiVersion ?? null,

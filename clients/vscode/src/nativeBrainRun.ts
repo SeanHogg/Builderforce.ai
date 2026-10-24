@@ -19,6 +19,7 @@
  * gateway — see `nativeBrainRun.test.ts`.
  */
 
+import type { RunKnowledgeLog } from "@builderforce/agent-tools";
 import {
   clearRunError,
   streamChatCompletion,
@@ -134,6 +135,9 @@ export interface NativeBrainRunOptions {
   persistence?: BrainRunPersistence;
   /** Project-Evermind hooks: recall, the memory-first answer, the answer cache. */
   evermind?: EvermindRunHooks;
+  /** The run's record of what it did and read — the per-turn ledger, and what the caller
+   *  commits at run end (`recordEditorRunEnd`). Omitted ⇒ the loop keeps its own. */
+  knowledge?: RunKnowledgeLog;
   signal: AbortSignal;
   labels: NativeRunLabels;
   events: NativeRunEvents;
@@ -500,6 +504,7 @@ export async function runNativeBrain(opts: NativeBrainRunOptions): Promise<void>
       ...(opts.chatMode ? { chatMode: opts.chatMode } : {}),
       ...(opts.projectId != null ? { projectId: opts.projectId } : {}),
       ...(opts.evermind ? { evermind: opts.evermind } : {}),
+      ...(opts.knowledge ? { knowledge: opts.knowledge } : {}),
       runTool,
       needsConfirm: nativeNeedsConfirm(tools, permissionMode, policyGates),
       stream: opts.stream,

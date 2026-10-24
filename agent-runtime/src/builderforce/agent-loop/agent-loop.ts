@@ -14,7 +14,8 @@ import {
   type LoopHooks,
   type LoopPorts,
 } from "@builderforce/agent-loop";
-import type { PolicyGate } from "@builderforce/agent-tools";
+import { RunKnowledgeRecorder, type PolicyGate, type RunKnowledgeLog } from "@builderforce/agent-tools";
+import { volatileTail } from "@seanhogg/builderforce-memory/handoff";
 import {
   evaluateOnPremPolicyGate,
   isPolicyRefusal,
@@ -80,6 +81,12 @@ export interface AgentLoopConfig {
    * tool never runs; the model sees the refusal as an error tool result.
    */
   policyGates?: readonly PolicyGate[];
+  /**
+   * THE run's record (`infra/run-knowledge-registry.ts`), when the host keeps one — so
+   * this loop's per-turn brief and the run's note and code map are one record. Omitted
+   * ⇒ the loop keeps its own for the brief.
+   */
+  knowledge?: RunKnowledgeLog;
 }
 
 type ToolResultLike = AgentToolResult<unknown>;
@@ -150,13 +157,17 @@ async function streamAssistantResponse(
   signal: AbortSignal | undefined,
   stream: EventStream<AgentEvent, AgentMessage[]>,
   streamFn: StreamFn,
+  /** The run's record of what it already did (its `brief()`), on THIS request only. */
+  ledger?: string | null,
 ): Promise<import("../model/types.js").AssistantMessage> {
+  // A tagged volatile tail: the cache breakpoint lands before it, and it rides last.
+  const tail = volatileTail([ledger]);
   let messages = context.messages;
   if (config.transformContext) messages = await config.transformContext(messages, signal);
   const llmMessages = await config.convertToLlm(messages);
   const llmContext = {
     systemPrompt: context.systemPrompt,
-    messages: llmMessages,
+    messages: tail ? [...llmMessages, { ...tail, timestamp: Date.now() }] : llmMessages,
     tools: context.tools,
   };
 
@@ -211,6 +222,10 @@ async function runLoop(
   // messages in as `user` turns: reading the newest user message later would ask
   // "did the user ask for a change?" of a nudge this loop wrote itself.
   const toolNames = (currentContext.tools ?? []).map((t) => t.name);
+  // What this run has read, searched and changed — the shared record every runtime
+  // keeps — restated in front of each turn so the model builds on its own work
+  // instead of re-deriving the repo once older results compact away.
+  const knowledge = config.knowledge ?? new RunKnowledgeRecorder();
   const userRequest =
     [...currentContext.messages]
       .reverse()
@@ -264,6 +279,7 @@ async function runLoop(
         signal,
         stream,
         streamFn,
+        knowledge.brief(),
       );
       // An errored / aborted turn never executes its calls: it is handed to the
       // no-tool-calls path, which records it and ends the run.
@@ -435,6 +451,7 @@ async function runLoop(
     },
     afterDispatch: async (call, result, row) => {
       const toolResultMessage = row as ToolResultMessage;
+      if (result.isError !== true) knowledge.record(call.name, call.args);
       if (!steeringAfterTools) {
         stream.push({
           type: "tool_execution_end",
@@ -559,6 +576,8 @@ export class Agent {
   private followUpQueue: AgentMessage[] = [];
   getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
   sessionId?: string;
+  /** THE run's record (see {@link AgentLoopConfig.knowledge}); set by the host per run. */
+  knowledge?: RunKnowledgeLog;
   private pickFallbackModel?: (tried: readonly string[]) => Model | undefined;
   private onModelFallback?: (from: Model, to: Model, notice: string) => void;
   private policyGates?: readonly PolicyGate[];
@@ -656,6 +675,7 @@ export class Agent {
         this.onModelFallback?.(from, to, notice);
       },
       ...(this.policyGates?.length ? { policyGates: this.policyGates } : {}),
+      ...(this.knowledge ? { knowledge: this.knowledge } : {}),
     };
     const context: AgentContext = {
       systemPrompt: this._state.systemPrompt,

@@ -8,6 +8,7 @@
  * back on one {@link ReplyTurnState}.
  */
 
+import { fileToolKind } from '@builderforce/agent-tools';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
 import { callBuiltinTool } from '../llm/builtinMcpService';
@@ -92,7 +93,6 @@ export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<Rep
   const { tools, nameToTool } = input.toolset;
   const verifyPin = requestedModelForRole(input.env, 'verify');
   let wroteFiles = false;
-  const FILE_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch', 'delete_file']);
   const enterVerifyTurn = (): void => {
     if (!wroteFiles || s.policy.phase === 'verify') return;
     s.policy = applyVerifyPhase(s.policy);
@@ -294,7 +294,9 @@ export async function runAgentReplyLoop(input: AgentReplyLoopInput): Promise<Rep
           category: 'tool', label: toolIdOf(toolCall.name), args: toolCall.args, result: result.data,
           isError: result.isError === true, durationMs: Date.now() - tStart,
         });
-        if (result.isError !== true && FILE_TOOLS.has(toolCall.name)) wroteFiles = true;
+        // The ONE file-tool classification (`run-knowledge`): anything but a read changed files.
+        const kind = fileToolKind(toolCall.name);
+        if (result.isError !== true && kind && kind !== 'read') wroteFiles = true;
         return undefined;
       },
     },

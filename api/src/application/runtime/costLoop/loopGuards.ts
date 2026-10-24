@@ -7,7 +7,9 @@
  *    model tier up, then a pause on a human question (`ask_human`, the same park the
  *    governance gate uses).
  *  - D7 post-edit check (`d7_deterministic_handlers`): a write/edit is checked the moment
- *    it lands; only a failure reaches the model, as one note on that tool result.
+ *    it lands; only a failure reaches the model, as one note on that tool result. A run
+ *    with a sandbox also runs the project's own fast checks over the turn's edits there;
+ *    their failures ride the next turn's volatile tail.
  *  - D1 verifier cascade (`d1_verifier_cascade`): a turn's edits and every finish attempt
  *    are units with a verifier; a failure moves the run one tier up (`CascadeSession`).
  *  - D8 concurrent reads (`d8_parallel_tool_calls`): the kernel's `isReadOnly` port.
@@ -31,6 +33,7 @@ import { recordCloudToolEvent } from '../cloudToolEvents';
 import { CascadeSession, type CascadeSessionState } from './verifierCascade';
 import { verifyAfterEdit, withPostEditNote } from './postEditVerify';
 import { isReadOnlyCloudTool, readOnlyDispatchPort } from './parallelReads';
+import type { RunSandbox } from '../sandbox/runSandbox';
 
 /** What the guards persist across durable ticks (spread into `CloudLoopState`). */
 export interface LoopGuardState {
@@ -40,6 +43,9 @@ export interface LoopGuardState {
   cascade?: CascadeSessionState;
   /** A3: a pause the next dispatched call parks the run on. */
   pendingPause?: string;
+  /** D7: the sandbox checks' failures, for the NEXT turn's tail. A durable tick runs one
+   *  step, so the turn that reads this note runs in the next tick's guards. */
+  checksNote?: string;
 }
 
 /** What the guards need from the engine — live views of its run state. */
@@ -60,6 +66,8 @@ export interface LoopGuardDeps {
   features(turnIndex: number): DifficultyFeatures;
   /** Park the run on a human question (the engine's `pauseExecutionForQuestion`). */
   pause(question: string): Promise<{ approvalId: string }>;
+  /** The run's sandbox, when it has one: the project's own fast checks over the clone. */
+  sandbox?: Pick<RunSandbox, 'checks'>;
 }
 
 export class LoopGuards {
@@ -70,6 +78,8 @@ export class LoopGuards {
   private pendingPause: string | undefined;
   /** This turn's post-edit verdicts — the D1 code unit's verifier. */
   private turnEdits: VerifyResult[] = [];
+  /** D7: the sandbox checks' failures from the last turn, for the next turn's tail. */
+  private checksNote = '';
 
   constructor(env: unknown, tenantId: number, resume?: LoopGuardState, db?: unknown) {
     this.cascade = new CascadeSession(env, tenantId, resume?.cascade, db);
@@ -79,11 +89,12 @@ export class LoopGuards {
     this.postEdit = isCostLeverOn(env, 'd7_deterministic_handlers', tenantId);
     this.readPort = readOnlyDispatchPort(env, tenantId);
     this.pendingPause = resume?.pendingPause;
+    this.checksNote = resume?.checksNote ?? '';
   }
 
   /** The volatile-tail sections this turn carries (empty strings drop out). */
   tailSections(): string[] {
-    return [this.progress?.steerNote() ?? '', this.cascade.steerNote()];
+    return [this.progress?.steerNote() ?? '', this.cascade.steerNote(), this.checksNote];
   }
 
   /** D1: the reasoning levers for a turn, raised while a unit is escalated. */
@@ -102,6 +113,7 @@ export class LoopGuards {
       // The cascade's seed facts serve A3's escalation too; with both levers off nothing persists.
       ...(this.cascade.on || this.progress ? { cascade: this.cascade.snapshot() } : {}),
       ...(this.pendingPause ? { pendingPause: this.pendingPause } : {}),
+      ...(this.checksNote ? { checksNote: this.checksNote } : {}),
     };
   }
 
@@ -158,12 +170,20 @@ export class LoopGuards {
   }
 
   private async endTurn(step: number, deps: LoopGuardDeps): Promise<void> {
+    this.checksNote = '';
     if (this.turnEdits.length > 0) {
       const errors = this.turnEdits.flatMap((v) => v.errors);
       this.turnEdits = [];
-      const verdict: CascadeVerdict = errors.length
+      const staticVerdict: CascadeVerdict = errors.length
         ? { passed: false, verifier: 'changed_files', reason: errors.slice(0, 5).map((e) => `${e.path}${e.line ? `:${e.line}` : ''} ${e.message}`).join('; ') }
         : { passed: true, verifier: 'changed_files' };
+      // With a sandbox the project's own checks (typecheck / lint / tests on what changed)
+      // also judge the turn: a stronger verifier than the static read of each file.
+      const checks = deps.sandbox ? await deps.sandbox.checks().catch(() => null) : null;
+      if (checks?.steer && this.postEdit) this.checksNote = checks.steer;
+      const verdict: CascadeVerdict = checks && !checks.passed && staticVerdict.passed
+        ? { passed: false, verifier: checks.verifier, ...(checks.reason ? { reason: checks.reason } : {}) }
+        : staticVerdict;
       await this.judge('code_edit', verdict, step, deps);
     }
     this.cascade.endTurn();
