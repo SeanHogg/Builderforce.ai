@@ -14090,6 +14090,27 @@ ${childTaskBrief(t, plan.summary, ids2[i])}`).join("\n\n")}`
 
 // ../packages/agent-skills/src/spec.ts
 var SPEC_FIELDS = ["name", "description", "license", "compatibility", "metadata", "allowed-tools"];
+var SKILL_BINARY_FILE_MAX_BYTES = 5 * 1024 * 1024;
+var SKILL_PACKAGE_MAX_BYTES = 10 * 1024 * 1024;
+var SKILL_BINARY_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "ico",
+  "pdf",
+  "woff",
+  "woff2",
+  "ttf",
+  "otf",
+  "zip",
+  "gz",
+  "mp3",
+  "mp4",
+  "wasm"
+];
+var BINARY_EXTENSION_SET = new Set(SKILL_BINARY_EXTENSIONS);
 var SKILL_READ_TOOL_NAME = "builtin_skills_read";
 
 // ../packages/agent-skills/src/validate.ts
@@ -14099,7 +14120,8 @@ var SPEC_FIELD_SET = new Set(SPEC_FIELDS);
 var DEFAULT_SKILL_PACKAGE_LIMITS = {
   maxFiles: 64,
   maxFileBytes: 256 * 1024,
-  maxTotalBytes: 1024 * 1024
+  maxBinaryFileBytes: SKILL_BINARY_FILE_MAX_BYTES,
+  maxTotalBytes: SKILL_PACKAGE_MAX_BYTES
 };
 
 // ../packages/agent-skills/src/catalog.ts

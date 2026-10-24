@@ -30,10 +30,11 @@ import { BrainProvider, localTransport, type BrainConfig, type BrainTransport } 
 import { CreationCanvas } from '@/components/creation-canvas/CreationCanvas';
 import { ToastProvider } from '@/components/ToastProvider';
 import { ConfirmProvider } from '@/components/ConfirmProvider';
-import { setEmbedAuth } from '@/lib/auth';
 import { sanitizeCanvasSurface } from '@/lib/canvasSurfaces';
 import { getToken, hostFetch, onInit, onTokenChange, post, refreshToken, type InitData } from './vscodeBridge';
 import { installCanvasHost } from './canvas/hostActions';
+import { useBoardAuth } from './canvas/useBoardAuth';
+import { BoardAuthNotice } from './canvas/BoardAuthNotice';
 import { invalidateGatewayModelOptions } from '@seanhogg/builderforce-brain-embedded';
 import { createHostPersistence } from './hostPersistence';
 import { installHostRunDriver } from './hostRunDriver';
@@ -85,6 +86,8 @@ export function WorkspaceApp() {
     await refreshToken();
     if (!getToken()) setTokenFailed(true);
   }, []);
+  // A pinned on-device model skips this gate's mint; a board that needs the gateway
+  // mints for itself (`useBoardAuth`).
   useEffect(() => {
     if (!init?.signedIn || init.localRoute) return;
     if (init.token || getToken()) {
@@ -163,18 +166,7 @@ function WorkspaceScreen({ init }: { init: InitData }) {
   const session = init.session;
   const locale = pickLocale(init.labels['canvas.locale']);
   const messages = catalogs[locale] ?? catalogs.en;
-
-  // Before first paint: the API client reads the token synchronously at call time,
-  // and the canvas fires its first fetch on mount.
-  const [tokenReady, setTokenReady] = useState(() => {
-    setEmbedAuth(getToken());
-    return getToken() != null;
-  });
-
-  useEffect(() => onTokenChange(() => {
-    setEmbedAuth(getToken());
-    setTokenReady(getToken() != null);
-  }), []);
+  const board = useBoardAuth(session, init.signedIn);
 
   useEffect(() => {
     installCanvasHost(
@@ -206,7 +198,6 @@ function WorkspaceScreen({ init }: { init: InitData }) {
    * agent sitting behind it, unreachable.
    */
   const chat = <VsCodeChatSurface init={init} />;
-  const boardReady = !!session && (tokenReady || !!init.localRoute);
 
   return (
     <IntlProvider
@@ -221,7 +212,7 @@ function WorkspaceScreen({ init }: { init: InitData }) {
       <ChatRuntimeProvider init={init}>
         <ToastProvider>
           <ConfirmProvider>
-            {boardReady ? (
+            {board.state === 'ready' ? (
               <CanvasBoundary
                 fallback={chat}
                 notice={init.labels['canvas.degraded'] ?? 'The board could not be drawn. The conversation is still here.'}
@@ -246,7 +237,12 @@ function WorkspaceScreen({ init }: { init: InitData }) {
                   />
                 </HostScopeProviders>
               </CanvasBoundary>
-            ) : chat}
+            ) : board.state === 'none' ? chat : (
+              <div className="bf-degraded-shell">
+                <BoardAuthNotice auth={board} labels={init.labels} />
+                {chat}
+              </div>
+            )}
           </ConfirmProvider>
         </ToastProvider>
       </ChatRuntimeProvider>
@@ -355,11 +351,12 @@ function HostRunBridge() {
  */
 function VisualizationScreen({ init }: { init: InitData }) {
   const session = init.session;
+  const board = useBoardAuth(session, init.signedIn);
 
   // A board with no account behind it cannot be written to the gateway — every read
   // would 401 — so it persists in this panel, exactly as the chat surface's does.
   // Signed out, the panel still mounts: the canvas is where an on-device user works.
-  const canvas = session ? (
+  const canvas = session && board.state === 'ready' ? (
     <HostScopeProviders projectId={init.project?.id ?? null}>
       <CreationCanvas
         sessionId={session.id}
@@ -369,7 +366,7 @@ function VisualizationScreen({ init }: { init: InitData }) {
         hostSurfaces={{}}
       />
     </HostScopeProviders>
-  ) : null;
+  ) : <BoardAuthNotice auth={board} labels={init.labels} />;
 
   // The fallback keeps the panel ALIVE on a failure: no board is drawn, but the
   // user is still in a working panel rather than a dead frame — and the change

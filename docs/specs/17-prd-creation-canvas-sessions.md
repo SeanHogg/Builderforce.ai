@@ -597,7 +597,7 @@ memberships
 - **Shares and invitations** were already kernel: invite links are `share_links` rows
   and email invitations `invitations` rows (kind `session`) on the same object.
 
-### `creation_session_presence` (canvas-only)
+### `creation_session_members` — presence only (canvas-only; the name is legacy)
 
 Realtime presence, deliberately NOT on the kernel membership row (it is rewritten every
 presence tick; the row every permission check reads must not be a write target):
@@ -611,12 +611,18 @@ viewport JSONB, cursor JSONB NULL, selection JSONB, typing BOOLEAN, following_us
 PRIMARY KEY(session_id,user_id)
 ```
 
-**Expand / contract.** Migration 1264 backfills `memberships` and leaves the old
-`creation_session_members` table (with its `role`, `invited_by`, `pinned`, `watch_state`,
-`joined_at` columns) in place, so a previous Worker still serving during a deploy keeps
-working; the new Worker mirrors each settled role onto the legacy `role` column for that
-window. The held contract migration 1270 re-runs the backfill for window writes, renames
-the table to `creation_session_presence` and drops the access columns.
+A presence row is optional: a new board's owner gets one only when the creating claim
+carried a camera, and every reader LEFT JOINs it.
+
+**Expand / contract.** Migration 1264 backfilled `memberships` and left
+`creation_session_members` (with its `role`, `invited_by`, `pinned`, `watch_state`,
+`joined_at` columns) in place for the deploy window, while the 1264 Worker mirrored each
+settled role onto `role`. Migration 1270 is the final catch-up: it re-ran the backfill for
+window writes and retired the kernel memberships of members removed in the window. The
+Worker released with it no longer mirrors and does not declare the access columns.
+Migration 1273 (the contract step, applied) dropped the five access columns and their
+`(user_id, joined_at)` index, replaced by `idx_creation_members_user_id (user_id)`. The
+table keeps its name and now carries presence only.
 
 ### `creation_session_events`
 

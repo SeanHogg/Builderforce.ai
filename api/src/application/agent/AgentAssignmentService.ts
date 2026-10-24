@@ -277,8 +277,9 @@ export class AgentAssignmentService {
   /**
    * Capabilities FIRST: `artifact_assignments.scope_id` has no FK behind it (it is
    * polymorphic across scopes), so dropping the assignment first would leave rows pointing
-   * at a handle nobody holds. Schedules are removed explicitly too: between migrations
-   * 1265 and 1269 `cron_jobs.project_agent_id` carries no FK, so nothing cascades them.
+   * at a handle nobody holds. Schedules are removed explicitly too, although
+   * `cron_jobs.project_agent_id`'s FK (1269) would cascade them: the delete is cheap and
+   * keeps this method independent of that constraint.
    */
   private async removeRows(tenantId: number, rows: readonly AgentAssignment[]): Promise<void> {
     const handles = rows.map((r) => r.agentHandle);

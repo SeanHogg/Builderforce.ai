@@ -67,14 +67,14 @@ BF	creation_sessions	Canvas & ideas	keep	creation_sessions
 BF	creation_session_objects	Canvas & ideas	keep	creation_session_objects
 BF	creation_session_timeline	Canvas & ideas	primitive	event_log
 BF	creation_session_connections	Canvas & ideas	primitive	connection
-BF	creation_session_members	Canvas & ideas	primitive	membership (board role on the board's objects row, mig 1264); presence half kept as creation_session_presence (mig 1270)
+BF	creation_session_members	Canvas & ideas	primitive	membership (board role on the board's objects row, mig 1264); presence half kept in the same table (window caught up mig 1270; access columns dropped mig 1273)
 BF	creation_session_invites	Canvas & ideas	primitive	invitation
 BF	creation_session_snapshots	Canvas & ideas	primitive	snapshot
 BF	creation_session_events	Canvas & ideas	primitive	event_log
 BF	creation_outcome_events	Canvas & ideas	primitive	event_log
 BF	creation_session_comments	Canvas & ideas	primitive	annotation
 BF	creation_session_project_links	Canvas & ideas	primitive	share_link
-BF	creation_session_templates	Canvas & ideas	primitive	catalog_item
+BF	creation_session_templates	Canvas & ideas	primitive	catalog_item (kind canvas_template, mig 1263; table dropped mig 1267)
 BF	creation_session_claims	Canvas & ideas	keep	creation_session_claims
 BF	marketplace_purchases	Commerce	primitive	ledger_entry
 BF	access_reviews	Governance & security	primitive	annotation
@@ -328,7 +328,7 @@ BF	task_reviews	Delivery & work	primitive	annotation
 BF	work_deltas	Delivery & work	keep	work_deltas
 BF	project_manager_configs	Delivery & work	primitive	setting
 BF	task_status_transitions	Delivery & work	primitive	event_log
-BF	project_agents	Delivery & work	merged	(folded into a sibling)
+BF	project_agents	Delivery & work	merged	(folded into agent_assignments, mig 1265; table dropped mig 1269)
 BF	agent_host_projects	Agents & runtime	flatten	a column, array or JSONB key
 BF	agent_host_sync_history	Agents & runtime	primitive	event_log
 BF	specs	Delivery & work	keep	specs
@@ -345,9 +345,9 @@ BF	boards	Delivery & work	keep	boards
 BF	swimlanes	Delivery & work	keep	swimlanes
 BF	swimlane_agent_assignments	Delivery & work	primitive	membership
 BF	swimlane_transitions	Delivery & work	primitive	event_log
-BF	kanban_templates	Delivery & work	primitive	catalog_item
-BF	kanban_template_lanes	Delivery & work	merged	(folded into a sibling)
-BF	kanban_template_lane_requirements	Delivery & work	keep	kanban_template_lane_requirements
+BF	kanban_templates	Delivery & work	primitive	catalog_item (kind kanban_template, mig 1263; table dropped mig 1267)
+BF	kanban_template_lanes	Delivery & work	merged	(folded into catalog_items body.lanes, mig 1263; table dropped mig 1267)
+BF	kanban_template_lane_requirements	Delivery & work	merged	(folded into catalog_items body.lanes[].requirements, mig 1263; table dropped mig 1267)
 BF	swimlane_requirements	Delivery & work	merged	(folded into a sibling)
 BF	project_role_assignments	Delivery & work	primitive	membership
 BF	ticket_role_signoffs	Support & knowledge	keep	ticket_role_signoffs

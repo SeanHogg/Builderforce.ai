@@ -205,14 +205,13 @@ export default {
       'anything.',
 
   "creation_session_members":
-      'realtime PRESENCE, not membership — since migration 1264 it is not read for access ' +
-      'at all: a board role is a kernel `memberships` row on the board registry object. ' +
-      'What this table still carries is `viewport`, `cursor`, `selection`, `typing` and ' +
+      'realtime PRESENCE, not membership — the name is legacy. Since migration 1264 it is ' +
+      'not read for access at all: a board role is a kernel `memberships` row on the board ' +
+      'registry object. What it carries is `viewport`, `cursor`, `selection`, `typing` and ' +
       '`followingUserId`, written on every presence tick and meaningless once the socket ' +
-      'drops, plus `lastSeenRevision`, the replay cursor above. Its legacy access columns ' +
-      'stay only for the expand/contract deploy window; the held contract migration 1270 ' +
-      'renames it to `creation_session_presence` (no longer a shape match) and drops them, ' +
-      'and this entry goes with it.',
+      'drops, plus `lastSeenRevision`, the replay cursor above. A member who never ticked ' +
+      'has no row. Its legacy access columns (`role`, `invited_by`, `pinned`, ' +
+      '`watch_state`, `joined_at`) were dropped by migration 1273.',
 
   "cron_jobs":
       'a SCHEDULE, not an execution. `schedule`, `enabled` and `nextRunAt` describe work that ' +

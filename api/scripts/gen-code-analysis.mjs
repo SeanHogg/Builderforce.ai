@@ -20,7 +20,8 @@ const outputs = [
 for (const [file, content] of outputs) {
   const target = resolve(root, file);
   if (process.argv.includes('--check')) {
-    const previous = await readFile(target, 'utf8').catch(() => '');
+    // The checked-out copy is CRLF on a Windows `core.autocrlf` checkout; compare as LF.
+    const previous = (await readFile(target, 'utf8').catch(() => '')).replace(/\r\n/g, '\n');
     if (previous !== content) throw new Error(`${file} is stale; run node scripts/gen-code-analysis.mjs`);
   } else { await mkdir(dirname(target), { recursive: true }); await writeFile(target, content); }
 }

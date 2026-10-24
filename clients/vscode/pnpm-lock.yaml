@@ -32,14 +32,14 @@ importers:
         specifier: link:../../packages/brain-ui
         version: link:../../packages/brain-ui
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.22
-        version: 2026.10.22(@seanhogg/builderforce-memory-engine@2026.10.22)
+        specifier: ^2026.10.23
+        version: 2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.10.22
-        version: 2026.10.22
+        specifier: ^2026.10.23
+        version: 2026.10.23
       '@seanhogg/builderforce-memory-mcp':
-        specifier: ^2026.10.22
-        version: 2026.10.22(@seanhogg/builderforce-memory-engine@2026.10.22)(@seanhogg/builderforce-memory@2026.10.22(@seanhogg/builderforce-memory-engine@2026.10.22))
+        specifier: ^2026.10.23
+        version: 2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)(@seanhogg/builderforce-memory@2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23))
       '@seanhogg/builderforce-studio':
         specifier: link:../../studio
         version: link:../../studio
@@ -959,18 +959,18 @@ packages:
   '@schummar/icu-type-parser@1.21.5':
     resolution: {integrity: sha512-bXHSaW5jRTmke9Vd0h5P7BtWZG9Znqb8gSDxZnxaGSJnGwPLDPfS+3g0BKzeWqzgZPsIVZkM7m2tbo18cm5HBw==}
 
-  '@seanhogg/builderforce-memory-engine@2026.10.22':
-    resolution: {integrity: sha512-cdhixQj4rIicQgQ8vhgyxSIbRwIvgv6gcz1ocAr/hOHAQmmDtPw3T8AL2RmRcKWS3nQ3yHKfo5S4sjucdHuxsQ==}
+  '@seanhogg/builderforce-memory-engine@2026.10.23':
+    resolution: {integrity: sha512-g1BBr1119eNNdxDRP1lVzrSRbBQc6UD5FHUu5EoPE7m5wUizBLBeATZGcTq+FlaUu8PFRRBN6+ukG4fjdeQilw==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory-mcp@2026.10.22':
-    resolution: {integrity: sha512-AS0o/zImVDlWGrSkEpsBLUTIS9FvGTwukKk+p3E34fEgA1V7LRI0QbZ6w+sla+k4ffHDQL5AcfkAvdKQynMxlQ==}
+  '@seanhogg/builderforce-memory-mcp@2026.10.23':
+    resolution: {integrity: sha512-X77TN5n9iKxhOdhb5PnVJmeOdS1ioP9GZz8y60G2xff9UUd7M6nr1X6jQ/LL1s7L8JofZKnuneqEJDXvmrbYlA==}
     engines: {node: '>=18.0.0'}
     hasBin: true
     peerDependencies:
       '@anthropic-ai/claude-agent-sdk': '>=0.1.0'
-      '@seanhogg/builderforce-memory': ^2026.10.22
-      '@seanhogg/builderforce-memory-engine': ^2026.10.22
+      '@seanhogg/builderforce-memory': ^2026.10.23
+      '@seanhogg/builderforce-memory-engine': ^2026.10.23
       fake-indexeddb: ^6.0.0
     peerDependenciesMeta:
       '@anthropic-ai/claude-agent-sdk':
@@ -982,11 +982,11 @@ packages:
       fake-indexeddb:
         optional: true
 
-  '@seanhogg/builderforce-memory@2026.10.22':
-    resolution: {integrity: sha512-4lpx4lYl9ZhUk6nAreF0Wwt88k9kWxIWXgCnbTDQljN8MjYNU6R9+QigC6PH28B1cmLlFDZ1mbTkDeDBWXVfZw==}
+  '@seanhogg/builderforce-memory@2026.10.23':
+    resolution: {integrity: sha512-UBVA81KJfYZ97IK/wE5gmc+ln0EBQYrIJ0ZkQIpG66e8Xb+O/p7H1IHul4mB1NChiEOWGbFlS6LhVM5dnquFZw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.10.22
+      '@seanhogg/builderforce-memory-engine': ^2026.10.23
 
   '@secretlint/config-creator@10.2.2':
     resolution: {integrity: sha512-BynOBe7Hn3LJjb3CqCHZjeNB09s/vgf0baBaHVw67w7gHF0d25c3ZsZ5+vv8TgwSchRdUCRrbbcq5i2B1fJ2QQ==}
@@ -4639,22 +4639,22 @@ snapshots:
 
   '@schummar/icu-type-parser@1.21.5': {}
 
-  '@seanhogg/builderforce-memory-engine@2026.10.22': {}
+  '@seanhogg/builderforce-memory-engine@2026.10.23': {}
 
-  '@seanhogg/builderforce-memory-mcp@2026.10.22(@seanhogg/builderforce-memory-engine@2026.10.22)(@seanhogg/builderforce-memory@2026.10.22(@seanhogg/builderforce-memory-engine@2026.10.22))':
+  '@seanhogg/builderforce-memory-mcp@2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)(@seanhogg/builderforce-memory@2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23))':
     dependencies:
       '@modelcontextprotocol/sdk': 1.30.1(zod@3.25.76)
       zod: 3.25.76
     optionalDependencies:
-      '@seanhogg/builderforce-memory': 2026.10.22(@seanhogg/builderforce-memory-engine@2026.10.22)
-      '@seanhogg/builderforce-memory-engine': 2026.10.22
+      '@seanhogg/builderforce-memory': 2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)
+      '@seanhogg/builderforce-memory-engine': 2026.10.23
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
 
-  '@seanhogg/builderforce-memory@2026.10.22(@seanhogg/builderforce-memory-engine@2026.10.22)':
+  '@seanhogg/builderforce-memory@2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)':
     dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.10.22
+      '@seanhogg/builderforce-memory-engine': 2026.10.23
 
   '@secretlint/config-creator@10.2.2':
     dependencies:

@@ -51,7 +51,6 @@ import {
   signatureRequests,
   snapshots,
   syncStates,
-  templatesFoldLedger,
   threads,
   workItems,
 } from '../../../infrastructure/database/schema/kernel';
@@ -88,14 +87,6 @@ export const KERNEL_ENTITIES = defineDomainEntities('kernel', [
    * can tell, so those rows are never returned here.
    */
   entity(catalogItems, { readOnly: true, visibleRows: CATALOG_BROWSABLE_ROWS }),
-  /**
-   * @deprecated — dropped by 1267. Migration 1263's fold ledger: migration-only
-   * bookkeeping with no tenant column, registered READ-ONLY so it is neither listed
-   * nor edited through the generic layer (tenant-less readability is opt-in). It is
-   * here only because every consolidated table must sit in an `entities.ts`; delete
-   * this line with the table (held-migrations/1267_drizzle.patch.md).
-   */
-  entity(templatesFoldLedger, { readOnly: true }),
   threads,
   messages,
   questionSets,

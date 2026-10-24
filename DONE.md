@@ -1,6 +1,20 @@
+## ✅ RESOLVED 2026-10-24 — VS Code canvas no longer calls the gateway without a token (VSIX, ships with the next build ≥ 2026.10.66)
+
+- **Symptom.** The BuilderForce output channel showed `[webview api] POST /api/creation-sessions/<id>/presence → 401 — Missing or malformed Authorization header`, and the same for `GET /api/agile/ceremonies/sessions`. The request carried no token at all.
+- **Root cause 1: a pinned on-device model freed the board, not just the chat.** `WorkspaceScreen` mounted the board on `tokenReady || init.localRoute`, and the root skipped the tenant-token mint on a local route. A durable (server-persisted) board then polled presence and loaded ceremonies through the web app's API client with no `setEmbedAuth` token.
+- **Root cause 2: the visualization split never handed the token over.** `VisualizationScreen` mounted the same server-persisted `CreationCanvas` without ever calling `setEmbedAuth`, so every canvas read in that panel went out without a token.
+- **Fix.** `webview/src/canvas/useBoardAuth.ts` is the one gate both screens read. It bridges the token into `setEmbedAuth`, mounts a local board (`durable === false`) at once, and makes a server board wait for the token, minting it itself when a local route skips the root gate. `canvas/BoardAuthNotice.tsx` says why a board isn't drawn yet (Connecting… / Couldn't reach · Retry / Sign in), above the chat, which stays usable. It reuses the existing `app.*` labels.
+- Tests: `src/authPanelSync.test.ts` ("never mounts a server-persisted board without the tenant token").
+
+## ✅ RESOLVED 2026-10-23 — Every consumer on builderforce-memory 2026.10.23 (api 2026.10.74 · frontend 2026.10.89 · agent-runtime 2026.10.17 · brain-embedded 2026.10.44 · VSIX 2026.10.65)
+
+- agent-runtime (and its memory-lancedb extension), brain-embedded and frontend were still on `^2026.10.3`. They never received 2026.10.22: lossless compaction, `memory_restore`, the recall ranking signals, packHandoff `pinned`, and reasoning tokens in wire usage. Every `@seanhogg/builderforce-memory*` range is now `^2026.10.23`, and the lockfiles are reinstalled.
+- The `gen-agent-relay-source` and `gen-code-analysis` `--check` modes now compare the checked-out output as LF. A Windows `core.autocrlf` checkout turns it into CRLF, and before this the check failed on every fresh worktree.
+- builderforce-memory 2026.10.23: the Stop capture hook no longer treats subagent hand-backs or task notifications as the person's words, and it strips reminders and IDE echoes from a real message before checking for a durable instruction. The fix is reinstalled locally.
+
 ## ✅ RESOLVED 2026-10-23 — Route consolidation: the four data-migration duplicates folded into one store each (api 2026.10.71 · frontend 2026.10.86)
 
-Operator decisions (2026-10-23): templates go into `catalog_items`, canvas relations go onto the kernel, `agent_assignments` is canonical, and releases carry plan vs actual dates. Each move ships expand/contract. Migrations 1263–1266 only add and backfill, so the old Worker keeps running through the deploy window. The drops (1267–1270) ship in the next release and reconcile what the old Worker wrote in the meantime.
+Operator decisions (2026-10-23): templates go into `catalog_items`, canvas relations go onto the kernel, `agent_assignments` is canonical, and releases carry plan vs actual dates. Each move ships expand/contract. Migrations 1263–1266 only add and backfill, so the old Worker keeps running through the deploy window. The contract followed in two more releases, each safe against the Worker still live during its deploy window. The second release (api 2026.10.73 · frontend 2026.10.88) re-ran each fold and dropped the legacy template tables (1267) and `project_agents` (1269), and 1270 carried the canvas window writes, including removals, into kernel memberships. The third (api 2026.10.75 · frontend 2026.10.90) dropped `release_date` and added the plan-vs-actual CHECK (1272), dropped the legacy member columns so `creation_session_members` carries presence only (1273), and dropped `skill_assignments` after checking every grant had been carried into `artifact_assignments` (1274). The second release had made `skill_assignments` a restricted entity, because the Worker before it still counted that table.
 
 - **Templates → `catalog_items` (1263):** kanban and canvas templates are catalog rows, read and written by one `catalogTemplateStore` (split into `templateKinds` / `templateCache`).
   - The generic entity surface is read-only for the catalog and hides private canvas templates.
@@ -8,7 +22,7 @@ Operator decisions (2026-10-23): templates go into `catalog_items`, canvas relat
   - The copy is recorded in a fold ledger, so window edits are refreshed (newest write wins) and window deletes are removed by 1267.
 - **Canvas members → kernel `memberships` (1264):** board access is a kernel membership on the board's object, cached per grant and bumped on every write.
   - Fixed: board share links could be minted and revoked by non-members; the gate now sits in `ObjectRegistry`. Accepting an invitation can no longer demote the last owner. Three board creators now seat an owner. The roster listing is gated.
-  - 1270 renames the remaining table to `creation_session_presence`.
+  - `creation_session_members` keeps only presence (viewport, cursor, replay cursor). Its legacy name stays, because renaming it would break the Worker live during a deploy. 1273 dropped its access columns.
 - **`project_agents` → `agent_assignments` (1265):** one assignment store with integer handles.
   - Removal must name its target scope, so a chat member can't delete other assignments.
   - The MCP tools moved out of `builtinMcpService` and are MANAGER-gated through the same policy as REST.

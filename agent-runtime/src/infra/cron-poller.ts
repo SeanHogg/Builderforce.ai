@@ -24,7 +24,7 @@ export type CronJobRecord = {
   schedule: string;
   enabled: boolean;
   taskId: number | null;
-  /** When set, the schedule runs as a specific assigned agent (agent_assignments.agent_handle). */
+  /** When set, the schedule runs as a specific assigned agent (agent_assignments.agent_handle; was project_agents.id before migrations 1265/1269). */
   projectAgentId: number | null;
   lastRunAt: string | null;
   nextRunAt: string | null;

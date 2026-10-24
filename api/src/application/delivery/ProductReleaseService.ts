@@ -93,8 +93,8 @@ function releasedAtSet(plan: ReleasedAtPlan): SQL | Date | null | undefined {
 
 /**
  * The ONE wire projection of a release row, used by every read and every
- * `.returning()`. Explicit rather than `select()` / `returning()` so the deprecated
- * `release_date` column (kept until 1268 drops it) never reaches a response.
+ * `.returning()`. Explicit rather than `select()` / `returning()`, so the wire shape is
+ * this list and nothing a later column adds leaks into a response.
  */
 const RELEASE_COLUMNS = {
   id: productReleases.id, name: productReleases.name, version: productReleases.version,

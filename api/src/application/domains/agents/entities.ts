@@ -34,7 +34,6 @@ import {
   tenantSkills,
   workflowActions,
   previewSessions,
-  skillAssignments,
 } from '../../../infrastructure/database/schema/agents';
 import {
   webSearchDocuments,
@@ -91,10 +90,6 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
    *  closed by the preview op and the eviction sweep, and hand-editing one is how two
    *  tenants end up believing they hold the same instance. */
   entity(previewSessions, { readOnly: true }),
-  /** @deprecated — the pre-1261 skill-assignment store, folded into `artifact_assignments`
-   *  by migration 1261 and dropped by the held contract migration. Read-only so the
-   *  generic reader can still show it during the deploy window, and nothing writes it. */
-  entity(skillAssignments, { readOnly: true }),
   /** The workspace's OWN skills (migration 1135): procedures a run worked out and
    *  proposed, and the ones a human approved. Read-only — `status` is a REVIEW
    *  DECISION, and the whole safety property of agent-authored skills is that nothing

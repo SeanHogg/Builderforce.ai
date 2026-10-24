@@ -83,7 +83,6 @@ portfolio_items
 pricing_simulations
 product_ideas
 products
-project_agents_fold_ledger
 promo_projects
 purchase_orders
 queue_job_to_process
@@ -107,7 +106,6 @@ sync_agenda_items
 sync_conflict_resolutions
 system_features
 task_time_entries
-templates_fold_ledger
 timesheets
 user_stock_media_usage
 validation_data_imports

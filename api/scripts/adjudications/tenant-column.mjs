@@ -193,17 +193,6 @@ export default {
   sales_commission_rules:
     'PLATFORM DESK: the platform commission schedule, keyed by `rule_key`. One rate table the whole desk is paid against — a per-tenant copy would mean the same sale paid differently depending on who bought.',
 
-  // ── MIGRATION BOOKKEEPING (dropped by a held contract migration) ───────────
-  // Not one of the four kinds above: these hold no customer data at all, only ids a
-  // fold migration carried, and app code never reads them. Each verdict leaves this
-  // file in the same commit as the migration that drops its table.
-
-  templates_fold_ledger:
-    'MIGRATION BOOKKEEPING: 1263\'s fold ledger — (catalog_id, legacy_table, legacy_id) for every legacy kanban / canvas template that fold copied into `catalog_items`, so 1267 can carry the old Worker\'s deploy-window deletes without resurrecting a copy. Written and read only by migrations 1263 and 1267; no query in app code touches it, so there is nothing for `check-tenant-scope.mjs` to check, and the copied row itself carries the tenant. Dropped by 1267; remove this verdict then (held-migrations/1267_drizzle.patch.md).',
-
-  project_agents_fold_ledger:
-    'MIGRATION BOOKKEEPING: 1265\'s fold ledger — the `project_agents` ids (agent handles) that fold carried into `agent_assignments`, so 1269 can tell a row the old Worker wrote in the deploy window from one 1265 already folded. Written and read only by migrations 1265 and 1269; no query in app code touches it, and the folded `agent_assignments` row carries the tenant. Dropped by 1269; remove this verdict then (held-migrations/1269_drizzle.patch.md).',
-
   // ── INHERITED, but outside what the guard can derive ───────────────────────
 
   admin_impersonation_role_switches:

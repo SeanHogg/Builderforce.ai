@@ -77,6 +77,20 @@ describe("post-login auth surface sync", () => {
     expect(app).toContain("void refreshToken()");
   });
 
+  it("never mounts a server-persisted board without the tenant token", () => {
+    // A pinned local model let the board mount (and the mint was skipped), so presence
+    // and ceremonies went out bare: "401 — Missing or malformed Authorization header".
+    const gate = src("..", "webview", "src", "canvas", "useBoardAuth.ts");
+    expect(gate).toContain("setEmbedAuth(getToken())");
+    expect(gate).toMatch(/!needsToken \|\| tokenReady/);
+    // The board mints for itself — the root's gate skips a local route.
+    expect(gate).toMatch(/if \(needsToken && signedIn && !getToken\(\)\) void retry\(\)/);
+    expect(app).not.toMatch(/tokenReady \|\| !!init\.localRoute/);
+    // BOTH board screens read the one gate, and say why a board is not drawn.
+    expect(app.match(/useBoardAuth\(session, init\.signedIn\)/g)?.length).toBe(2);
+    expect(app.match(/<BoardAuthNotice auth=\{board\}/g)?.length).toBe(2);
+  });
+
   it("offers Retry instead of an endless Connecting… when the mint comes back empty", () => {
     expect(app).toContain("setTokenFailed(true)");
     expect(app).toContain("'app.retry'");

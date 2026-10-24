@@ -4,7 +4,7 @@
  * ── WHERE MEMBERS LIVE ───────────────────────────────────────────────────────────
  * A board's members are kernel `memberships` rows on the board's registry object
  * (`objects` kind 'creation_session', see `sessionObjectRef.ts`). Migration 1264
- * backfilled them from `creation_session_members`, so `/api/objects/:id/members` and
+ * backfilled them from the old canvas member table, so `/api/objects/:id/members` and
  * the canvas read the same rows and cannot disagree. Per-member preferences that are
  * durable facts about the membership (`invitedBy`, `pinned`, `watchState`) ride in
  * `memberships.metadata`; realtime presence does NOT — it stays canvas-only
@@ -21,12 +21,6 @@
  * listing for the object. Board WRITES never read a cached grant at all
  * (`grantReadFor` in `sessionAccess.ts`), so the residual staleness — bounded by the
  * token's 2 s L1 and the grant's 60 s KV TTL — only ever affects reads.
- *
- * ── THE 1264 → 1270 WINDOW ───────────────────────────────────────────────────────
- * Every writer that settles a member's role also mirrors it onto the legacy
- * `creation_session_members.role` column (`mirrorLegacyRoleStatement`), so a
- * previous-Worker isolate still serving during the deploy agrees. 1270 drops the
- * column and the mirror.
  */
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
@@ -38,7 +32,6 @@ import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { findObject, invalidateObject, registerObject } from '../kernel/ObjectRegistry';
 import { acceptInvitationStatement, invalidateInvitations } from '../kernel/InvitationService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { mirrorLegacyRoleStatement } from './sessionPresenceStore';
 import {
   SESSION_MEMBER_KIND, SESSION_OBJECT_KIND, activeSessionMemberWhere, sessionMemberColumns, sessionRoleRankSql,
   type SessionKey,
@@ -150,7 +143,7 @@ function conflictRole(onConflict: SessionMemberConflict) {
 
 /**
  * One membership upsert, as a statement — batchable; RETURNS the effective role. The
- * caller owns {@link sessionMembersChanged} (and, in the window, the legacy mirror).
+ * caller owns {@link sessionMembersChanged}.
  *
  * REJOIN. When the existing row is RETIRED (the person was removed and is coming
  * back), the membership is re-activated, its `joined_at` restarts, and `invitedBy` is
@@ -187,10 +180,10 @@ export function insertSessionMemberStatement(
 }
 
 /**
- * A brand-new board's registry object, its owner's membership, and the owner's row in
- * the presence table (carrying the owner's camera when the caller has one, and — in the
- * 1264 → 1270 window — the legacy `role`), as batchable statements to run WITH the
- * session insert. The object id is minted here so the membership can point at it
+ * A brand-new board's registry object, its owner's membership, and — when the caller
+ * has the owner's camera — the owner's presence row carrying it, as batchable
+ * statements to run WITH the session insert. A presence row is optional (every reader
+ * LEFT JOINs it), so without a camera none is written. The object id is minted here so the membership can point at it
  * inside the same batch; this session id has never existed, so the registry row
  * cannot already be there. Every creator of a board uses this.
  */
@@ -217,17 +210,12 @@ export function newBoardOwnerStatements(
         userId: input.ownerUserId, role: 'owner', invitedBy: input.ownerUserId,
       }, 'set-role'),
     },
-    {
-      // WINDOW: `role: 'owner'` keeps the previous Worker able to open the board;
-      // after 1270 this row carries only presence (see the 1270 patch).
+    ...(input.ownerViewport === undefined ? [] : [{
       table: 'creation_session_members',
       statement: db.insert(creationSessionPresence).values({
-        sessionId: input.sessionId,
-        userId: input.ownerUserId,
-        role: 'owner',
-        ...(input.ownerViewport === undefined ? {} : { viewport: input.ownerViewport }),
+        sessionId: input.sessionId, userId: input.ownerUserId, viewport: input.ownerViewport,
       }),
-    },
+    }]),
   ];
 }
 
@@ -271,8 +259,7 @@ export async function addSessionMember(
 ): Promise<boolean> {
   const objectId = await sessionObjectIdFor(db, env, session);
   if (!objectId) return false;
-  const [row] = await insertSessionMemberStatement(db, session.tenantId, objectId, input, onConflict);
-  if (row) await mirrorLegacyRoleStatement(db, session.id, input.userId, row.role);
+  await insertSessionMemberStatement(db, session.tenantId, objectId, input, onConflict);
   await sessionMembersChanged(env, session, objectId);
   return true;
 }
@@ -300,7 +287,6 @@ export async function seatInvitedSessionMember(
     acceptInvitationStatement(db, { id: input.invitationId, tenantId: input.tenantId, inviteeRef: input.userId }),
   ] as unknown as Parameters<typeof db.batch>[0]) as unknown as [Array<{ role: string }>, unknown];
   const role = seated?.[0]?.role ?? input.role;
-  await mirrorLegacyRoleStatement(db, input.sessionId, input.userId, role);
   // The batch bypasses `acceptInvitation`, so both cache drops happen here.
   await Promise.all([
     invalidateInvitations(env, input.tenantId),
@@ -316,7 +302,6 @@ export async function setSessionMemberRole(
   const rows = await db.update(memberships).set({ role, updatedAt: new Date() })
     .where(activeSessionMemberWhere(session.tenantId, session.id, userId))
     .returning({ objectId: memberships.objectId });
-  if (rows[0]) await mirrorLegacyRoleStatement(db, session.id, userId, role);
   // A role change may be a demotion; the gate must not keep answering the old role.
   await sessionMembersChanged(env, session, rows[0]?.objectId, { revocation: true });
   return rows.length > 0;
@@ -325,8 +310,7 @@ export async function setSessionMemberRole(
 /**
  * Take somebody off a board. The membership is RETIRED, not deleted — who was on a
  * thing is the question an audit asks (see `memberships`) — and their presence row,
- * which is meaningless without a membership, is deleted (in the window that also
- * removes the previous Worker's access row).
+ * which is meaningless without a membership, is deleted.
  */
 export async function removeSessionMember(db: Db, env: Env | undefined, session: SessionKey, userId: string): Promise<boolean> {
   const rows = await db.update(memberships).set({ state: 'removed', updatedAt: new Date() })

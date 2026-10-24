@@ -744,40 +744,6 @@ export const executionMessages = pgTable('execution_messages', {
 });
 
 
-/**
- * @deprecated — dropped by the held contract migration (1271). Migration 1261 folded
- * every row into `artifact_assignments` (scope 'tenant' / 'host'); no code reads or
- * writes this table, and the declaration stays only until the drop lands so the
- * schema-drift reverse check holds through the deploy window.
- *
- * Skill assignment, at either scope (migration 1108).
- *
- * Was two tables — `tenant_skill_assignments` and `agent_host_skill_assignments` —
- * holding the same fact about the same skill, differing only in whether a host was
- * named. That is a SCOPE, and a scope is a column value. `scope` reuses the shared
- * `assignment_scope` enum so this answers "at what level" with the same vocabulary
- * as every other scoped assignment.
- *
- * `agentHostId` is NULL exactly when `scope` is 'tenant', enforced by a CHECK in
- * the migration rather than by whichever caller writes the row. Uniqueness is two
- * PARTIAL indexes, not one over the nullable column: Postgres treats NULLs as
- * distinct, so a single index would let the same tenant-wide skill be assigned
- * twice.
- */
-export const skillAssignments = pgTable('skill_assignments', {
-  id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  scope:       assignmentScopeEnum('scope').notNull().default('tenant'),
-  /** NULL = every agent host in the tenant; set = this host only. */
-  agentHostId: integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'cascade' }),
-  skillSlug:   varchar('skill_slug', { length: 255 }).notNull(),
-  assignedBy:  varchar('assigned_by', { length: 36 }).references(() => users.id),
-  assignedAt:  timestamp('assigned_at').notNull().defaultNow(),
-}, (t) => [
-  index('idx_skill_assignments_tenant').on(t.tenantId, t.scope),
-]);
-
-
 // ---------------------------------------------------------------------------
 // Unified artifact assignments (skills, personas, content at any scope level)
 // ---------------------------------------------------------------------------
@@ -879,7 +845,7 @@ export const artifactAssignments = pgTable('artifact_assignments', {
  * `application/swimlane/laneAgentAssignments.ts`).
  *
  * ── PROJECT STAFFING + THE WORKSPACE IDENTITY (migration 1265) ───────────────
- * `project_agents` is folded in (expand); 1269 drops it (contract). A project attachment is `scope = 'project'`
+ * `project_agents` was folded in (1265) and dropped (1269). A project attachment is `scope = 'project'`
  * with the real `projectId` FK beside `scopeId`; an agent's tenant-wide identity (what a
  * bridged/hired workforce agent is configured through) is `scope = 'workspace'`.
  * `agentHandle` is the INTEGER id per-agent capability assignments
@@ -1333,10 +1299,8 @@ export const cronJobs = pgTable('cron_jobs', {
   projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   /** Scopes the schedule to one assigned agent (`agent_assignments.agent_handle`, migration
    *  1265); NULL = project-wide. The column keeps its name — deployed hosts read
-   *  `projectAgentId` off the cron payload. Declared in the post-1269 shape: between 1265
-   *  and 1269 the database carries NO FK here (the old one targeted `project_agents`;
-   *  1269 adds this one), and `AgentAssignmentService` deletes a removed agent's
-   *  schedules itself, so nothing relies on the missing cascade. */
+   *  `projectAgentId` off the cron payload. The FK to the handle (ON DELETE CASCADE) was
+   *  added by 1269, replacing the one 1265 dropped from `project_agents`. */
   projectAgentId: integer('project_agent_id').references((): AnyPgColumn => agentAssignments.agentHandle, { onDelete: 'cascade' }),
   name:        varchar('name', { length: 255 }).notNull(),
   schedule:    varchar('schedule', { length: 255 }).notNull(),

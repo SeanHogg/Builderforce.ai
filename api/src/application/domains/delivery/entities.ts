@@ -20,7 +20,6 @@ import {
   listItems,
   portfolioCompanies,
   portfolioItems,
-  projectAgentsFoldLedger,
   realizations,
   releaseNoteBetaEnrollments,
   signOffs,
@@ -68,12 +67,6 @@ export const DELIVERY_ENTITIES = defineDomainEntities('delivery', [
   entity(evermindLearningBaselines, { readOnly: true }),
   entity(evermindLearningRuns, { readOnly: true }),
   entity(evermindLearningCandidates, { readOnly: true }),
-  /** @deprecated — dropped by 1269. Migration 1265's fold ledger: migration-only
-   *  bookkeeping with no tenant column, registered READ-ONLY so it is neither listed
-   *  nor edited through the generic layer (tenant-less readability is opt-in). Here
-   *  only because every consolidated table must sit in an `entities.ts`; delete this
-   *  line with the table (held-migrations/1269_drizzle.patch.md). */
-  entity(projectAgentsFoldLedger, { readOnly: true }),
   /** Customer discovery, the evidence a Realization is read against: a conversation
    *  with a real person, and a note toward answering the idea's own question. Same
    *  seat as `realizations` for the same reason (schema/discovery.ts's header) —

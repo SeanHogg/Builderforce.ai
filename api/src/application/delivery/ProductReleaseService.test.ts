@@ -93,7 +93,7 @@ describe('ProductReleaseService — deprecated releaseDate input alias', () => {
     expect(seen.set).not.toHaveProperty('releaseDate');
   });
 
-  it('create / update return the explicit projection — the deprecated release_date column never reaches a response', async () => {
+  it('create / update return the explicit projection — the legacy releaseDate is never read back from a column', async () => {
     const { db, seen } = fakeDb();
     const svc = new ProductReleaseService(db);
     await svc.create(SCOPE, { name: 'v1' }, NOW);

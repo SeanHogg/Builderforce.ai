@@ -71,7 +71,8 @@ const expected = render(source);
 if (process.argv.includes('--check')) {
   let actual = null;
   try {
-    actual = await readFile(OUT, 'utf8');
+    // The checked-out copy is CRLF on a Windows `core.autocrlf` checkout; compare as LF.
+    actual = (await readFile(OUT, 'utf8')).replace(/\r\n/g, '\n');
   } catch {
     actual = null;
   }
