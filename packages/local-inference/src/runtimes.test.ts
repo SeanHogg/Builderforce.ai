@@ -45,6 +45,11 @@ describe('registry', () => {
     ]);
   });
 
+  it('ranks our engines first and a third-party server last for automatic local-first', () => {
+    const ranked = LOCAL_RUNTIMES.filter((r) => r.onDevice).sort((a, b) => a.automaticRank - b.automaticRank);
+    expect(ranked.map((r) => r.id)).toEqual(['webllm', 'bfi', 'synapse', 'browser', 'ollama', 'freetoken']);
+  });
+
   it('lets only bfi fall back to the host (its wasm has a CPU backend), and only as a fallback', () => {
     expect(HOST_FALLBACK_RUNTIMES.map((r) => r.id)).toEqual(['bfi']);
     for (const r of HOST_FALLBACK_RUNTIMES) expect(r.reach).toBe('page');
@@ -237,19 +242,27 @@ describe('probeLocalRuntimes', () => {
     ]);
   });
 
-  it("learns Ollama tool support and context from /api/show, and drops embedding-only models", async () => {
+  it("learns Ollama tool support from /api/show and the SERVED window from /api/ps, and drops embedding-only models", async () => {
     const fetchImpl = vi.fn<FetchLike>(async (url, init) => {
-      if (url.endsWith('/v1/models')) return json({ data: [{ id: 'qwen3:8b' }, { id: 'gemma:2b' }, { id: 'nomic-embed-text' }, { id: 'old' }] });
+      if (url.endsWith('/v1/models')) return json({ data: [{ id: 'qwen3:8b' }, { id: 'gemma:2b' }, { id: 'coder' }, { id: 'nomic-embed-text' }, { id: 'old' }] });
+      if (url.endsWith('/api/ps'))
+        return json({ models: [{ name: 'qwen3:8b', model: 'qwen3:8b', context_length: 8_192 }, { name: 'coder', model: 'coder', context_length: 65_536 }] });
       const { model } = JSON.parse(String(init?.body)) as { model: string };
       if (model === 'qwen3:8b') return json({ capabilities: ['completion', 'tools'], model_info: { 'qwen3.context_length': 40_960 } });
-      if (model === 'gemma:2b') return json({ capabilities: ['completion'] });
+      if (model === 'gemma:2b') return json({ capabilities: ['completion'], model_info: { 'gemma.context_length': 8_192 } });
+      // A Modelfile `num_ctx` is what OUR (option-less) requests load with — whatever
+      // window another client loaded it at.
+      if (model === 'coder') return json({ capabilities: ['completion', 'tools'], model_info: { 'qwen3moe.context_length': 262_144 }, parameters: 'stop "<|im_end|>"\nnum_ctx                        16384\ntemperature 0.7' });
       if (model === 'nomic-embed-text') return json({ capabilities: ['embedding'] });
       return new Response('', { status: 404 });
     });
     const [ollama] = await probeLocalRuntimes(fetchImpl, { ollama: { baseUrl: 'http://127.0.0.1:11434' } }, { capabilities: true });
     expect(ollama!.models).toEqual([
-      { ref: 'local/ollama/qwen3:8b', provider: 'ollama', model: 'qwen3:8b', tools: true, contextTokens: 40_960 },
-      { ref: 'local/ollama/gemma:2b', provider: 'ollama', model: 'gemma:2b' },
+      // Loaded: the window it is serving, not the 40,960 it was trained for.
+      { ref: 'local/ollama/qwen3:8b', provider: 'ollama', model: 'qwen3:8b', tools: true, contextTokens: 8_192 },
+      // Not loaded: Ollama's default load window, capped by the trained one.
+      { ref: 'local/ollama/gemma:2b', provider: 'ollama', model: 'gemma:2b', contextTokens: 4_096 },
+      { ref: 'local/ollama/coder', provider: 'ollama', model: 'coder', tools: true, contextTokens: 16_384 },
       // No card at all: listed, but never trusted with tools.
       { ref: 'local/ollama/old', provider: 'ollama', model: 'old' },
     ]);

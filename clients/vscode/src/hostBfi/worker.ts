@@ -1,22 +1,25 @@
 /**
  * The extension host's `bfi` worker (a `worker_threads` entry, `out/bfiHostWorker.js`):
- * the SAME vendored `bfi-web` wasm the chat webview runs, on its CPU backend (Node has
- * no WebGPU), behind the SAME `bfi` page-engine adapter over the host's file cache —
- * served with brain-embedded's ONE engine-worker half (`serveEngineWorker`): the
- * page-engine frames, the INVALIDATE frame, and a FATAL frame when the wasm traps —
+ * Synapse's engine behind the SAME `bfi` page-engine adapter a page runs, over the host's
+ * file cache — served with brain-embedded's ONE engine-worker half (`serveEngineWorker`):
+ * the page-engine frames, the INVALIDATE frame, and a FATAL frame when the engine traps —
  * reported by the engine or surfacing as an unhandled rejection (the host then starts a
  * fresh worker).
  *
- * Single-threaded: the threaded artifact's pool spawns Web Workers (wasm-bindgen-rayon),
- * and Node's `worker_threads` provides no `Worker` global to spawn them with.
+ * The engine is the NATIVE addon when this build ships one for this platform and it
+ * loads (`nativeEngine.ts`): native wgpu for the GPU, every core for the CPU, so it
+ * serves both backends. Otherwise the vendored `bfi-web` wasm, CPU only and
+ * single-threaded (Node has no WebGPU, and `worker_threads` provides no `Worker` global
+ * for wasm-bindgen-rayon's pool).
  *
- * A worker, not the extension host's thread: decoding on the CPU blocks for each token,
- * and the extension host must keep answering the editor.
+ * A worker, not the extension host's thread: decoding blocks for each token, and the
+ * extension host must keep answering the editor.
  */
 import { readFileSync } from "node:fs";
 import { parentPort, workerData } from "node:worker_threads";
 import { createBfiEngine, forgetBfiWeb, loadBfiWeb, serveEngineWorker } from "@seanhogg/builderforce-brain-embedded/bfi";
 import { createFileModelStore } from "./modelFiles";
+import { loadNativeBfi } from "./nativeEngine";
 import type { HostBfiWorkerData } from "./protocol";
 
 const port = parentPort;
@@ -38,11 +41,17 @@ const served = serveEngineWorker(
   { onFatal: forgetBfiWeb },
 );
 
+const native = loadNativeBfi(data.nativePath, (error) =>
+  console.error("[bfi] the native engine did not load here; the wasm serves instead:", error),
+);
+
 const engine = createBfiEngine({
-  loadBfi: () => loadBfiWeb(readFileSync(data.wasmPath)),
+  loadBfi: async () => native ?? loadBfiWeb(readFileSync(data.wasmPath)),
   store: createFileModelStore(data.modelDir),
   deviceMemoryBytes: data.deviceMemoryBytes,
-  // The host worker is the editor's CPU engine (the webview's worker serves WebGPU only).
-  backends: ["cpu"],
+  // Native: the GPU (wgpu) and the CPU. Wasm: the CPU only — the webview's worker is the
+  // one that serves WebGPU then.
+  backends: native ? ["webgpu", "cpu"] : ["cpu"],
+  ...(native ? { supportFromEngine: true } : {}),
   onTrap: (error) => served.fatal(error),
 });

@@ -938,5 +938,8 @@
   "You can change this any time in the / menu, under Model.": "Sie können das jederzeit im /-Menü unter „Modell“ ändern.",
   "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.": "„Nur lokal“ hält diesen Lauf auf diesem Gerät, daher konnte er BuilderForce nicht erreichen. Wechsle im /-Menü unter „Modell“ zu „Hybrid“, um es zuzulassen.",
   "Account sync is off, so this could not be saved to your account. Turn on builderforce.platform.synchronize in Settings, or keep working locally.": "Die Kontosynchronisierung ist aus, daher konnte dies nicht in deinem Konto gespeichert werden. Aktiviere builderforce.platform.synchronize in den Einstellungen oder arbeite lokal weiter.",
-  "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "Eine deiner builderforce.platform.*-Einstellungen hat ausgeschaltet, was dieser Lauf brauchte. Ändere sie in den Einstellungen oder wähle im /-Menü ein anderes Modell."
+  "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "Eine deiner builderforce.platform.*-Einstellungen hat ausgeschaltet, was dieser Lauf brauchte. Ändere sie in den Einstellungen oder wähle im /-Menü ein anderes Modell.",
+  "Setting up {0} to run turns on this machine…": "{0} wird eingerichtet, damit Anfragen auf diesem Rechner laufen…",
+  "{0} is ready. Hybrid now runs turns on this machine first.": "{0} ist bereit. Hybrid führt Anfragen jetzt zuerst auf diesem Rechner aus.",
+  "Could not download {0} for on-device turns: {1}": "{0} konnte für Anfragen auf dem Gerät nicht heruntergeladen werden: {1}"
 }

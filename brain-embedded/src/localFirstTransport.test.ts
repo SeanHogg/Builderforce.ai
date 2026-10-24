@@ -146,6 +146,27 @@ describe('createLocalFirstStream', () => {
     expect(cloud).toHaveBeenCalledTimes(1);
   });
 
+  it('tries Ollama after our engines, and serves a tool turn on it when nothing above can', async () => {
+    const ollama: LocalRuntimeProbe = {
+      provider: 'ollama',
+      endpoint: { baseUrl: 'http://127.0.0.1:11434' },
+      reachable: true,
+      models: [{ ref: 'local/ollama/qwen3-coder', provider: 'ollama', model: 'qwen3-coder', tools: true, contextTokens: 32_768 }],
+    };
+    const seen: string[] = [];
+    const fetchImpl = vi.fn(async (url: string) => {
+      seen.push(url);
+      return sse('hi');
+    });
+    const cloud = cloudStream();
+    const ranked = await createLocalFirstStream({ probes: [ollama, probes[0]!], cloud, fetch: fetchImpl })(toolTurn);
+    expect(ranked.resolvedModel).toBe('local/synapse/qwen3-8b');
+    const last = await createLocalFirstStream({ probes: [ollama], cloud, fetch: fetchImpl })(toolTurn);
+    expect(last.resolvedModel).toBe('local/ollama/qwen3-coder');
+    expect(seen.at(-1)).toBe('http://127.0.0.1:11434/v1/chat/completions');
+    expect(cloud).not.toHaveBeenCalled();
+  });
+
   it('packs each LOCAL attempt with `fit`, and hands the cloud attempt the original messages', async () => {
     const sent: unknown[] = [];
     const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
@@ -201,10 +222,10 @@ describe('completeLocalFirst', () => {
     const cloud = vi.fn(async () => 'summary-from-cloud');
     const probes: LocalRuntimeProbe[] = [
       {
-        provider: 'ollama',
+        provider: 'synapse',
         endpoint: { baseUrl: 'http://127.0.0.1:11434' },
         reachable: true,
-        models: [{ ref: 'local/ollama/gemma:2b', provider: 'ollama', model: 'gemma:2b' }],
+        models: [{ ref: 'local/synapse/gemma:2b', provider: 'synapse', model: 'gemma:2b' }],
       },
     ];
     await expect(

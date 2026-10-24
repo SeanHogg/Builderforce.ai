@@ -1,0 +1,27 @@
+{
+  "name": "@seanhogg/bfi-node",
+  "version": "2026.10.12",
+  "private": true,
+  "description": "VENDORED build of bfi-node (builderforce-inference crates/bfi-node, napi-rs over bfi-engine): Synapse's 1-bit Bonsai (GGUF Q1_0) engine as a native Node addon — native wgpu (Vulkan / Metal / DX12) or every CPU core — exposed as the BfiEngine JS class of PRD 34 §3.1. One prebuilt bfi_node.<platform>-<arch>.node per platform. Not published — hosts consume it by `link:`. Rebuild with `node scripts/vendor-bfi-node.mjs`; SOURCE.json records the commit and file hashes this copy came from.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SeanHogg/builderforce-inference",
+    "directory": "crates/bfi-node"
+  },
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "bfi_node.*.node",
+    "SOURCE.json"
+  ]
+}

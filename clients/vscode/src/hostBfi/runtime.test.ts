@@ -157,6 +157,50 @@ describe("installHostBfiRuntime", () => {
     expect(o.bridge.connected("bfi")).toBe(true);
   });
 
+  describe("with the native engine shipped", () => {
+    const NATIVE_SUPPORT = { supported: true, f16: true, maxBufferBytes: 2 ** 31, backends: { cpu: { supported: true, simd: false, threads: 16, kvBudgetBytes: 2 ** 31, maxMemoryBytes: 2 ** 34, deviceMemoryBytes: 2 ** 35 } } };
+    const nativeModule = { BfiEngine: { create: vi.fn(), support: vi.fn(async () => NATIVE_SUPPORT), contextFor: vi.fn(() => 0) } };
+
+    it("hands the worker the addon, PREFERS its port over a webview, and answers the picker from the native record", async () => {
+      const { spawn } = fakeSpawn();
+      const loadNative = vi.fn(() => nativeModule);
+      const o = { ...options(fakeStore([BONSAI]), spawn), nativePath: "/ext/out/bfi_node.node", loadNative };
+      const attach = vi.spyOn(o.bridge, "attach");
+      const runtime = installHostBfiRuntime(o);
+      await flush();
+      expect(runtime.native).toBe(true);
+      expect(attach).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ runtimes: ["bfi"], preferred: true }));
+      expect(await runtime.support()).toBe(NATIVE_SUPPORT);
+      void o.bridge.probe({ fresh: true });
+      await flush();
+      expect(spawn.mock.calls[0]![1]).toMatchObject({ nativePath: "/ext/out/bfi_node.node" });
+    });
+
+    it("does not load the addon at install when nothing is cached — only once something asks", async () => {
+      const { spawn } = fakeSpawn();
+      const loadNative = vi.fn(() => nativeModule);
+      const runtime = installHostBfiRuntime({ ...options(fakeStore(), spawn), nativePath: "/ext/out/bfi_node.node", loadNative });
+      await flush();
+      expect(loadNative).not.toHaveBeenCalled();
+      expect(runtime.native).toBe(true);
+      expect(runtime.native).toBe(true);
+      expect(loadNative).toHaveBeenCalledTimes(1);
+    });
+
+    it("claims nothing native when the addon will not load: the wasm worker is not preferred", async () => {
+      const { spawn } = fakeSpawn();
+      const o = { ...options(fakeStore([BONSAI]), spawn), nativePath: "/ext/out/bfi_node.node", loadNative: vi.fn(() => null) };
+      const attach = vi.spyOn(o.bridge, "attach");
+      const runtime = installHostBfiRuntime(o);
+      await flush();
+      expect(runtime.native).toBe(false);
+      expect(attach.mock.calls[0]![1]).not.toHaveProperty("preferred");
+      void o.bridge.probe({ fresh: true });
+      await flush();
+      expect(spawn.mock.calls[0]![1]).not.toHaveProperty("nativePath");
+    });
+  });
+
   it("dispose detaches", async () => {
     const { spawn } = fakeSpawn();
     const o = options(fakeStore([BONSAI]), spawn);

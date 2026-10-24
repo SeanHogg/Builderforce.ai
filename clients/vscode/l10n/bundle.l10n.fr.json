@@ -938,5 +938,8 @@
   "You can change this any time in the / menu, under Model.": "Vous pouvez le modifier à tout moment dans le menu /, sous Modèle.",
   "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.": "« Local uniquement » garde cette exécution sur cet appareil, elle n’a donc pas pu joindre BuilderForce. Passez à « Hybride » dans le menu /, sous Modèle, pour l’autoriser.",
   "Account sync is off, so this could not be saved to your account. Turn on builderforce.platform.synchronize in Settings, or keep working locally.": "La synchronisation du compte est désactivée : ceci n’a pas pu être enregistré dans votre compte. Activez builderforce.platform.synchronize dans les paramètres, ou continuez en local.",
-  "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "L’un de vos paramètres builderforce.platform.* a désactivé ce dont cette exécution avait besoin. Modifiez-le dans les paramètres, ou choisissez un autre modèle dans le menu /."
+  "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "L’un de vos paramètres builderforce.platform.* a désactivé ce dont cette exécution avait besoin. Modifiez-le dans les paramètres, ou choisissez un autre modèle dans le menu /.",
+  "Setting up {0} to run turns on this machine…": "Configuration de {0} pour exécuter les tours sur cette machine…",
+  "{0} is ready. Hybrid now runs turns on this machine first.": "{0} est prêt. Le mode hybride exécute désormais les tours d’abord sur cette machine.",
+  "Could not download {0} for on-device turns: {1}": "Impossible de télécharger {0} pour les tours sur l’appareil : {1}"
 }

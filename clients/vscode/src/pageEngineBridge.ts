@@ -12,10 +12,13 @@
  * A second kind of port serves only some runtimes: the extension host's own `bfi`
  * worker (`hostBfi/`), the editor's CPU engine (the registry's `fallbackReach: 'host'`).
  * Every port serving a runtime is probed, and the answers are MERGED per model in rank —
- * webviews (newest first), then such fallback ports: the first port offering a model owns
- * it. The webview's `bfi` worker serves only WebGPU, so it offers a Bonsai row only when
- * the fit puts it on the GPU, and every CPU-only row comes from the host worker (one
- * resident CPU copy, never beside the chat UI) — both kinds in one list.
+ * a PREFERRED port first, then webviews (newest first), then the other fallback ports:
+ * the first port offering a model owns it. The webview's `bfi` worker serves only
+ * WebGPU, so it offers a Bonsai row only when the fit puts it on the GPU, and every
+ * CPU-only row comes from the host worker (one resident CPU copy, never beside the chat
+ * UI) — both kinds in one list. The host worker is preferred when it runs the NATIVE
+ * engine (`@seanhogg/bfi-node`): its GPU is native wgpu with the native KV budget, so it
+ * owns a Bonsai row even while a webview could serve it too.
  *
  * Failure is quiet by contract: with no port for a runtime (the panel closed, nothing
  * cached) a probe answers null — the runtime is simply absent — and a chat is refused with
@@ -51,6 +54,9 @@ export interface PageEnginePortOptions {
   runtimes?: readonly LocalRuntimeId[];
   /** This port's probe timeout (default the bridge's) — a cold worker answers slower. */
   probeTimeoutMs?: number;
+  /** Ranks before every webview: the port owns a model it offers even while a webview
+   *  offers it too (the host's native engine). */
+  preferred?: boolean;
 }
 
 export interface HostPageEngineBridge {
@@ -79,7 +85,7 @@ export interface HostPageEngineBridgeOptions {
 /** A webview that does not answer a probe this quickly is treated as not there. */
 export const PAGE_ENGINE_PROBE_TIMEOUT_MS = 2_000;
 
-type Attached = { port: PageEnginePort; runtimes?: readonly LocalRuntimeId[]; probeTimeoutMs?: number };
+type Attached = { port: PageEnginePort; runtimes?: readonly LocalRuntimeId[]; probeTimeoutMs?: number; preferred?: boolean };
 
 /**
  * One runtime's engine over every port that serves it: every port is probed, the first
@@ -149,10 +155,12 @@ export function createHostPageEngineBridge(options: HostPageEngineBridgeOptions 
     },
   });
   const serving = (runtime: LocalRuntimeId) => ports.filter((p) => !dormant.has(p) && (!p.runtimes || p.runtimes.includes(runtime)));
-  /** Webviews (no runtime list) first, newest first; then fallback ports, newest first. */
+  /** Preferred ports first; then webviews (no runtime list), newest first; then the other
+   *  fallback ports, newest first. */
   const ranked = (runtime: LocalRuntimeId): Attached[] => {
     const candidates = serving(runtime).reverse();
-    return [...candidates.filter((p) => !p.runtimes), ...candidates.filter((p) => p.runtimes)];
+    const rest = candidates.filter((p) => !p.preferred);
+    return [...candidates.filter((p) => p.preferred), ...rest.filter((p) => !p.runtimes), ...rest.filter((p) => p.runtimes)];
   };
 
   const engines = LOCAL_RUNTIMES.filter((runtime) => runtime.reach === "page" && runtime.defaultBaseUrl).map((runtime) =>
@@ -166,6 +174,7 @@ export function createHostPageEngineBridge(options: HostPageEngineBridgeOptions 
         port,
         ...(attachOptions.runtimes ? { runtimes: attachOptions.runtimes } : {}),
         ...(attachOptions.probeTimeoutMs !== undefined ? { probeTimeoutMs: attachOptions.probeTimeoutMs } : {}),
+        ...(attachOptions.preferred ? { preferred: true } : {}),
       };
       ports.push(entry);
       return () => {

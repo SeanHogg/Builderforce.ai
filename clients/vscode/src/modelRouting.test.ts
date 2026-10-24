@@ -179,7 +179,19 @@ describe("the platform stays on the gateway when the model does not", () => {
 
   it("keeps the run's transport free to be the local one", () => {
     // The whole point: the completion goes to the machine, the catalogue does not.
-    expect(ports).toMatch(/routeStream\(await resolveModelRoute\(secrets\)/);
+    expect(ports).toMatch(/routeStream\(await resolveModelRoute\(secrets, \{ turn: true \}\)/);
+  });
+
+  it("starts provisioning a local model only from a turn — never from a panel opening or a scan", () => {
+    // `turn: true` is what lets the route call `hostModelProvisioner.ensure()`; the two
+    // chat surfaces pass it, the panel init and the workspace scan resolve without it.
+    const participant = stripComments(fs.readFileSync(path.join(SRC, "chatParticipant.ts"), "utf8"));
+    expect(participant).toContain("resolveModelRoute(ctx.secrets, { turn: true })");
+    const init = stripComments(fs.readFileSync(path.join(SRC, "workspaceInit.ts"), "utf8"));
+    const extension = stripComments(fs.readFileSync(path.join(SRC, "extension.ts"), "utf8"));
+    for (const source of [init, extension]) expect(source).not.toContain("turn: true");
+    const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
+    expect(routing).toContain("if (request.turn && config.enabled && config.localFirst) hostModelProvisioner.ensure();");
   });
 
   it("never lets a Hybrid fallback be silent — both chat surfaces hear onFallback", () => {
@@ -189,7 +201,7 @@ describe("the platform stays on the gateway when the model does not", () => {
     // The seam hands the shared step the surface's handler…
     expect(routing).toContain("...(onFallback ? { onFallback } : {})");
     // …the panel's run host passes one that announces the notice to that chat's panel…
-    expect(ports).toMatch(/routeStream\(await resolveModelRoute\(secrets\), await getApiKey\(secrets\), onFallback\)/);
+    expect(ports).toMatch(/routeStream\(await resolveModelRoute\(secrets, \{ turn: true \}\), await getApiKey\(secrets\), onFallback\)/);
     expect(host).toContain('type: "run.modelFallback"');
     // …and the participant writes the line into its own response.
     expect(participant).toMatch(/routeStream\(modelChoice, key, \(event\) =>/);

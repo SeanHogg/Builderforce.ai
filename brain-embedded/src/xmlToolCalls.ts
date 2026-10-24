@@ -34,6 +34,9 @@ export interface ParsedXmlToolCall {
   name: string;
   /** Raw JSON argument string (parse with `JSON.parse`). */
   args: string;
+  /** For a tag-style body: each argument's TEXT as written (before `args` read it as a
+   *  number / JSON), so `typeXmlToolArgs` can type it against the tool's schema. */
+  rawArgs?: Record<string, string>;
 }
 
 /** Where a call's body ends: `at` is the body's length, `length` the terminator's. */
@@ -258,36 +261,68 @@ function coerceArg(raw: string): unknown {
   }
 }
 
+/**
+ * A Qwen3-Coder `<parameter=…>` value, as its own parser reads it: exactly one newline
+ * stripped from each end (the template puts the value on its own line) and the text kept
+ * verbatim — an edit's leading indentation, a file's trailing newline and a JSON file's
+ * content all arrive as written. Only a bare number, boolean or null is a scalar
+ * (`timeout` 30); a leading-zero number (`0123`) stays text.
+ */
+function qwenText(raw: string): string {
+  return raw.replace(/^\r?\n/, '').replace(/\r?\n$/, '');
+}
+
+function qwenArg(raw: string): unknown {
+  const v = qwenText(raw);
+  if (/^(?:true|false|null)$/.test(v) || /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(v)) return JSON.parse(v);
+  return v;
+}
+
 const ARG_KEY_VALUE = /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g;
-/** `<parameter name="…">`, or Grok's namespaced `<xai:parameter name="…">`. */
-const PARAMETER_TAG = /<(?:xai:)?parameter\s+name\s*=\s*"([^"]*)"\s*>([\s\S]*?)<\/(?:xai:)?parameter>/g;
+/**
+ * `<parameter name="…">`, Grok's namespaced `<xai:parameter name="…">`, or Qwen3-Coder's
+ * `<parameter=…>` (its native tool format, which Ollama passes through as text for a
+ * model imported without the `qwen3-coder` parser). The key is whichever form matched.
+ */
+const PARAMETER_TAG = /<(?:xai:)?parameter(?:\s+name\s*=\s*"([^"]*)"|\s*=\s*([^>]+?))\s*>([\s\S]*?)<\/(?:xai:)?parameter>/g;
 
 /**
  * Pull key/value arguments out of a body written in either tag style
  * (`<arg_key>`/`<arg_value>` pairs, or Anthropic-style `<parameter name="…">`).
  * Returns null when the body uses neither, so the caller can fall back to JSON.
  */
-function argsFromTags(body: string): Record<string, unknown> | null {
+function argsFromTags(body: string): { args: Record<string, unknown>; rawArgs: Record<string, string> } | null {
   const args: Record<string, unknown> = {};
+  const rawArgs: Record<string, string> = {};
   let found = false;
   for (const re of [ARG_KEY_VALUE, PARAMETER_TAG]) {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(body)) !== null) {
-      const key = m[1].trim();
+      // The value is the last group; the key the first one the matching form filled.
+      const key = (m.slice(1, -1).find((g) => g !== undefined) ?? '').trim();
       if (!key) continue;
-      args[key] = coerceArg(m[2]);
+      // Group 2 is only ever Qwen3-Coder's `<parameter=…>`.
+      const value = m[m.length - 1]!;
+      const qwen = re === PARAMETER_TAG && m[2] !== undefined;
+      rawArgs[key] = qwen ? qwenText(value) : value.trim();
+      args[key] = qwen ? qwenArg(value) : coerceArg(value);
       found = true;
     }
   }
-  return found ? args : null;
+  return found ? { args, rawArgs } : null;
+}
+
+/** A tag-style call: its read arguments plus the text each was read from. */
+function taggedCall(id: string, name: string, tagged: NonNullable<ReturnType<typeof argsFromTags>>): ParsedXmlToolCall {
+  return { id, name, args: JSON.stringify(tagged.args), rawArgs: tagged.rawArgs };
 }
 
 /** Parse a body whose tool NAME came from the opening tag — arguments only. */
 function parseNamedBody(name: string, body: string, seq: number): ParsedXmlToolCall | null {
   if (!name) return null;
   const tagged = argsFromTags(body);
-  if (tagged) return { id: `xmltc_${seq}`, name, args: JSON.stringify(tagged) };
+  if (tagged) return taggedCall(`xmltc_${seq}`, name, tagged);
 
   const jsonStart = body.indexOf('{');
   if (jsonStart >= 0) {
@@ -301,18 +336,39 @@ function parseNamedBody(name: string, body: string, seq: number): ParsedXmlToolC
   return { id: `xmltc_${seq}`, name, args: '{}' };
 }
 
+/**
+ * A wrapper body that is itself a NAMED call — Qwen3-Coder's native format:
+ * `<tool_call><function=bash><parameter=command>ls</parameter></function></tool_call>`.
+ * Read through the named dialect it opens with; null when the body opens with none.
+ */
+function parseWrappedNamed(trimmed: string, seq: number): ParsedXmlToolCall | null {
+  for (const dialect of DIALECTS) {
+    if (isSelfClosing(dialect) || !dialect.namedInOpenTag) continue;
+    const m = dialect.open.exec(trimmed);
+    if (!m || m.index !== 0 || !m[1]) continue;
+    const rest = trimmed.slice(m[0].length);
+    const end = rest.lastIndexOf(dialect.close);
+    return parseNamedBody(m[1].trim(), end >= 0 ? rest.slice(0, end) : rest, seq);
+  }
+  return null;
+}
+
 /** Parse a body that carries its own tool name (the `<tool_call>`-style dialects). */
 function parseInner(inner: string, seq: number): ParsedXmlToolCall | null {
   const trimmed = inner.trim();
   if (!trimmed) return null;
 
+  const wrapped = parseWrappedNamed(trimmed, seq);
+  if (wrapped) return wrapped;
+
   // Primary format: `name<arg_key>k</arg_key><arg_value>v</arg_value>…`, or the
-  // same shape with `<parameter name="k">v</parameter>`.
-  const firstArg = trimmed.search(/<arg_key>|<(?:xai:)?parameter\s/);
+  // same shape with `<parameter name="k">v</parameter>` / `<parameter=k>v</parameter>`.
+  const firstArg = trimmed.search(/<arg_key>|<(?:xai:)?parameter[\s=]/);
   if (firstArg >= 0) {
     const name = trimmed.slice(0, firstArg).trim();
     if (!name) return null;
-    return { id: `xmltc_${seq}`, name, args: JSON.stringify(argsFromTags(trimmed) ?? {}) };
+    const tagged = argsFromTags(trimmed);
+    return tagged ? taggedCall(`xmltc_${seq}`, name, tagged) : { id: `xmltc_${seq}`, name, args: '{}' };
   }
 
   // Fallback formats: `name {json-args}` or `{"name":…,"arguments":{…}}`.

@@ -938,5 +938,8 @@
   "You can change this any time in the / menu, under Model.": "You can change this any time in the / menu, under Model.",
   "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.": "Local only keeps this run on this device, so it could not reach BuilderForce. Switch to Hybrid in the / menu under Model to let it.",
   "Account sync is off, so this could not be saved to your account. Turn on builderforce.platform.synchronize in Settings, or keep working locally.": "Account sync is off, so this could not be saved to your account. Turn on builderforce.platform.synchronize in Settings, or keep working locally.",
-  "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu."
+  "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.": "One of your builderforce.platform.* settings turned off what this run needed. Change it in Settings, or pick another model in the / menu.",
+  "Setting up {0} to run turns on this machine…": "Setting up {0} to run turns on this machine…",
+  "{0} is ready. Hybrid now runs turns on this machine first.": "{0} is ready. Hybrid now runs turns on this machine first.",
+  "Could not download {0} for on-device turns: {1}": "Could not download {0} for on-device turns: {1}"
 }

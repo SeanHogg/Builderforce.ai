@@ -81,7 +81,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
     // Resolved BEFORE the sign-in gate because the answer decides whether that gate
     // applies at all: an on-device model is served by this machine, so a local turn owes
     // nothing to an account. Safe signed out — every lookup inside is best-effort.
-    const modelChoice = await resolveModelRoute(ctx.secrets);
+    const modelChoice = await resolveModelRoute(ctx.secrets, { turn: true });
     // Local only with nothing on this machine: signing in would not help — offer Hybrid
     // or a download instead.
     if (routeNeedsLocalModel(modelChoice)) {

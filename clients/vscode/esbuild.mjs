@@ -160,6 +160,24 @@ function copyBfiWasm() {
   const wasm = createRequire(import.meta.url).resolve("@seanhogg/bfi-web/bfi_web_bg.wasm");
   fs.mkdirSync("out", { recursive: true });
   fs.copyFileSync(wasm, path.join("out", "bfi_web_bg.wasm"));
+  copyBfiNative();
+}
+
+/**
+ * The native engine for THIS platform (`@seanhogg/bfi-node`, vendored per platform) as
+ * `out/bfi_node.node` — the .vsix is packaged per platform (`vsce-platform.mjs`), so it
+ * carries the one addon that runs where it installs. A platform with no vendored addon
+ * ships without it, and the host worker runs the wasm (`hostBfi/nativeEngine.ts`).
+ */
+function copyBfiNative() {
+  const dir = path.dirname(createRequire(import.meta.url).resolve("@seanhogg/bfi-node/package.json"));
+  const addon = path.join(dir, `bfi_node.${process.platform}-${process.arch}.node`);
+  const target = path.join("out", "bfi_node.node");
+  if (fs.existsSync(addon)) fs.copyFileSync(addon, target);
+  else {
+    fs.rmSync(target, { force: true });
+    console.warn(`[esbuild] no bfi-node addon for ${process.platform}-${process.arch}: the host bfi worker will run the wasm.`);
+  }
 }
 
 if (watch) {

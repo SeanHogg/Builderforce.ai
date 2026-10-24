@@ -16,20 +16,25 @@
  * file cache holds a model for one of these runtimes; that cache is the editor's ONE copy
  * (`files`, the model-file frames the webview's store uses), so a download re-attaches.
  *
- * The webview's picker needs this engine's CPU record too — a model that fits only the
+ * The webview's picker needs this engine's record too — a model that fits only the
  * CPU is downloaded from there and served here — so `files` answers `modelFile.support`
- * from what the host can read WITHOUT its wasm (`bfiSupportWithoutWasm` over
- * `os.totalmem()`): asking never starts the worker.
+ * without starting the worker: from the native engine's own probe when this build ships
+ * the addon (its GPU, its RAM — cheap, no wasm), else from what the host can read
+ * without the wasm (`bfiSupportWithoutWasm` over `os.totalmem()`).
+ *
+ * With the native engine (`nativeEngine.ts`) the worker serves the GPU too, and its port
+ * is PREFERRED on the bridge: it owns a Bonsai row even while a webview could serve it.
  */
 import * as os from "node:os";
 import * as path from "node:path";
 import { Worker } from "node:worker_threads";
-import { HOST_FALLBACK_RUNTIMES, localCatalogFor } from "@builderforce/local-inference";
+import { HOST_FALLBACK_RUNTIMES, localCatalogFor, type LocalDeviceSupport } from "@builderforce/local-inference";
 import { createEngineWorker, type EngineWorkerHandle } from "@seanhogg/builderforce-brain-embedded";
-import { bfiSupportWithoutWasm } from "@seanhogg/builderforce-brain-embedded/bfi";
+import { bfiSupportWithoutWasm, type BfiModule } from "@seanhogg/builderforce-brain-embedded/bfi";
 import type { HostPageEngineBridge, PageEnginePort } from "../pageEngineBridge";
 import { createModelFileServer, type ModelFileServer } from "./modelFileServer";
 import { createFileModelStore, type FileModelStore } from "./modelFiles";
+import { loadNativeBfi, nativeAddonPath } from "./nativeEngine";
 import type { HostBfiWorkerData } from "./protocol";
 
 export interface HostBfiRuntimeOptions {
@@ -40,6 +45,10 @@ export interface HostBfiRuntimeOptions {
   bridge: HostPageEngineBridge;
   /** Injected by tests. */
   store?: FileModelStore;
+  /** The native addon's path (`null` = none); default: detected in `out/`. */
+  nativePath?: string | null;
+  /** Loads the addon; injected by tests. */
+  loadNative?: typeof loadNativeBfi;
   spawn?: (script: string, data: HostBfiWorkerData) => Pick<Worker, "postMessage" | "on" | "terminate">;
   /** Idle teardown (default the lifecycle's five minutes). */
   idleMs?: number;
@@ -51,6 +60,13 @@ export interface HostBfiRuntime {
   refresh(): Promise<void>;
   /** The cache as the webview's model store sees it (the panel answers its frames). */
   readonly files: ModelFileServer;
+  /** The cache itself — where a provisioned model lands (`provision.ts`). */
+  readonly store: FileModelStore;
+  /** The engine runs natively (`@seanhogg/bfi-node`) rather than as wasm. Reading it
+   *  loads the addon (once). */
+  readonly native: boolean;
+  /** This engine's device record, without starting the worker. */
+  support(): Promise<LocalDeviceSupport>;
   dispose(): void;
 }
 
@@ -67,6 +83,20 @@ const REFS = RUNTIMES.flatMap((runtime) => localCatalogFor(runtime).filter((m) =
 
 export function installHostBfiRuntime(options: HostBfiRuntimeOptions): HostBfiRuntime {
   const out = path.join(options.extensionPath, "out");
+  const addon = options.nativePath === undefined ? nativeAddonPath(out) : (options.nativePath ?? undefined);
+  // Loaded once, on first need: attaching the port (a Bonsai is cached — at activation
+  // too, since the port's rank depends on it), a support read, the worker's spawn, or a
+  // turn asking whether to provision. With nothing cached and no local turn, the addon
+  // is never mapped. "Native" is claimed only when it really loads on this machine: a
+  // worker that fell back to the wasm must not outrank a webview's WebGPU.
+  let loaded: { module: BfiModule | null } | undefined;
+  const nativeModule = (): BfiModule | null =>
+    (loaded ??= {
+      module: (options.loadNative ?? loadNativeBfi)(addon, (error) =>
+        console.error("[bfi] the native engine did not load; the host worker runs the wasm:", error),
+      ),
+    }).module;
+  const nativePath = (): string | undefined => (nativeModule() ? addon : undefined);
   const data: HostBfiWorkerData = {
     wasmPath: path.join(out, HOST_BFI_WASM_FILE),
     modelDir: path.join(options.storagePath, "local-models", "bfi"),
@@ -79,7 +109,8 @@ export function installHostBfiRuntime(options: HostBfiRuntimeOptions): HostBfiRu
 
   const worker = createEngineWorker({
     spawn(events): EngineWorkerHandle {
-      const w = spawnWorker(path.join(out, HOST_BFI_WORKER_FILE), data);
+      const native = nativePath();
+      const w = spawnWorker(path.join(out, HOST_BFI_WORKER_FILE), native ? { ...data, nativePath: native } : data);
       w.on("message", (message: unknown) => events.onMessage(message));
       w.on("error", (e: Error) => events.onGone(e.message));
       w.on("exit", (code: number) => events.onGone(`exit ${code}`));
@@ -98,7 +129,11 @@ export function installHostBfiRuntime(options: HostBfiRuntimeOptions): HostBfiRu
     // Disposed while the cache was being read: attach nothing.
     if (disposed) return;
     if (ready && !detach) {
-      detach = options.bridge.attach(port, { runtimes: RUNTIMES, probeTimeoutMs: HOST_BFI_PROBE_TIMEOUT_MS });
+      detach = options.bridge.attach(port, {
+        runtimes: RUNTIMES,
+        probeTimeoutMs: HOST_BFI_PROBE_TIMEOUT_MS,
+        ...(nativePath() ? { preferred: true } : {}),
+      });
     } else if (!ready && detach) {
       const d = detach;
       detach = undefined;
@@ -110,12 +145,18 @@ export function installHostBfiRuntime(options: HostBfiRuntimeOptions): HostBfiRu
   let inflight: Promise<void> | undefined;
   let queued: Promise<void> | undefined;
 
+  const support = async (): Promise<LocalDeviceSupport> => {
+    const native = nativeModule();
+    return native ? native.BfiEngine.support() : bfiSupportWithoutWasm(data.deviceMemoryBytes);
+  };
+
   const runtime: HostBfiRuntime = {
-    files: createModelFileServer(
-      store,
-      () => void runtime.refresh(),
-      () => bfiSupportWithoutWasm(data.deviceMemoryBytes),
-    ),
+    files: createModelFileServer(store, () => void runtime.refresh(), support),
+    store,
+    get native() {
+      return nativeModule() !== null;
+    },
+    support,
     refresh() {
       if (!inflight) {
         inflight = run().finally(() => {

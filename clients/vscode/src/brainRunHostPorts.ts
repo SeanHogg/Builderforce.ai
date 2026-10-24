@@ -261,7 +261,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   // globalState persists it, so an eager bind at construction would throw
   // local_device_id_required and crash the extension host on first activation).
   const streamForRoute = async (onFallback?: (event: ModelFallbackEvent) => void): Promise<BrainStreamFn> =>
-    routeStream(await resolveModelRoute(secrets), await getApiKey(secrets), onFallback);
+    routeStream(await resolveModelRoute(secrets, { turn: true }), await getApiKey(secrets), onFallback);
   const host = createBrainRunHost({
     tools: async (projectId, children, signal, opts) => {
       const tools = await brainToolCatalog(secrets, workspaceRoot() || undefined, projectId, children, signal, opts);

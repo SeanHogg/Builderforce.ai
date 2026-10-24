@@ -58,7 +58,7 @@
   "config.localModels.ollamaUrl.desc": "你的 Ollama 运行时的基础 URL。会自动追加 OpenAI 兼容路径 `/v1/models` 和 `/v1/chat/completions`，因此 `http://127.0.0.1:11434` 和 `http://127.0.0.1:11434/v1` 均可使用。",
   "config.localModels.freetokenUrl.desc": "你的 FreeToken 引擎的基础 URL。会自动追加 OpenAI 兼容路径 `/v1/models` 和 `/v1/chat/completions`，因此 `http://127.0.0.1:1919` 和 `http://127.0.0.1:1919/v1` 均可使用。",
   "config.localModels.synapseUrl.desc": "Synapse 原生引擎（`bfi serve`）的基础 URL。留空则自动发现：Synapse 桌面应用会发布该地址，独立运行的 `bfi serve` 会在 `~/.builderforce/bfi.json` 中公布其端口（从 11434 开始，若该端口被 Ollama 占用则向上顺延）。其 API 密钥也通过同一发现机制获取。`http://127.0.0.1:11435` 和 `http://127.0.0.1:11435/v1` 均可使用。",
-  "config.localModels.localFirst.desc": "优先使用本机已安装且兼容的模型。回退到网关需要单独的网关推理权限；明确固定的本地模型始终优先。",
+  "config.localModels.localFirst.desc": "优先使用本机上的兼容模型：先使用内置引擎（WebGPU 上的 WebLLM 和 Builderforce 引擎，其次是 Synapse），最后才是 Ollama 和 FreeToken。回退到网关需要单独的网关推理权限；明确固定的本地模型始终优先。",
   "config.inferenceMode.desc": "模型在哪里运行。不设置时使用默认值：登录后为**混合**，未登录为**仅本地**。`builderforce.platform.*` 设置是对此模式所允许内容的高级覆盖。",
   "config.inferenceMode.hybrid": "**混合**（推荐）——优先使用本设备，需要时再使用 BuilderForce 云（网关优先使用免费层级）。",
   "config.inferenceMode.localOnly": "**仅本地**——只使用本设备上的模型，不向 BuilderForce 网关发送任何内容。",

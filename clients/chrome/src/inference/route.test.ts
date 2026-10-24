@@ -19,6 +19,13 @@ const ollama: LocalRuntimeProbe = {
   reachable: true,
   models: [{ ref: 'local/ollama/gemma:2b', provider: 'ollama', model: 'gemma:2b' }],
 };
+/** An automatic on-device runtime (Ollama serves only an explicit pick). */
+const device: LocalRuntimeProbe = {
+  provider: 'synapse',
+  endpoint: { baseUrl: 'http://127.0.0.1:11435' },
+  reachable: true,
+  models: [{ ref: 'local/synapse/gemma:2b', provider: 'synapse', model: 'gemma:2b' }],
+};
 const nothing: LocalRuntimeProbe[] = [{ provider: 'ollama', endpoint: { baseUrl: 'http://127.0.0.1:11434' }, reachable: false, models: [] }];
 const hello = { messages: [{ role: 'user' as const, content: 'hello' }] };
 
@@ -34,11 +41,11 @@ function route(probes: LocalRuntimeProbe[], key: string | null) {
 
 describe('Rovr model route — local first, failover to the gateway', () => {
   it('serves a turn on this device, with no account and no bearer', async () => {
-    const { stream, seen } = route([ollama], null);
+    const { stream, seen } = route([device], null);
     const result = await stream(hello);
     expect(result.text).toBe('from-device');
-    expect(result.resolvedModel).toBe('local/ollama/gemma:2b');
-    expect(seen).toEqual([{ url: 'http://127.0.0.1:11434/v1/chat/completions', auth: undefined }]);
+    expect(result.resolvedModel).toBe('local/synapse/gemma:2b');
+    expect(seen).toEqual([{ url: 'http://127.0.0.1:11435/v1/chat/completions', auth: undefined }]);
   });
 
   it('uses the gateway with the signed-in key when nothing local is running', async () => {
@@ -49,7 +56,7 @@ describe('Rovr model route — local first, failover to the gateway', () => {
   });
 
   it('sends a tool turn to the gateway when no local model can take tools', async () => {
-    const { stream, seen } = route([ollama], 'bfk_test');
+    const { stream, seen } = route([device], 'bfk_test');
     await stream({ ...hello, tools: [{ type: 'function', function: { name: 'browser_click', description: 'click', parameters: {} } }] });
     expect(seen.map((s) => s.url)).toEqual([`${BASE}/llm/v1/chat/completions`]);
   });
@@ -119,7 +126,7 @@ describe('Rovr model route — local first, failover to the gateway', () => {
       const s = createRovrStream({
         baseUrl: BASE,
         fetch: fetchImpl,
-        prober: prober([ollama]),
+        prober: prober([device]),
         endpoints: async () => loopbackEndpoints(null),
         key: async () => null,
         page: { probe: async () => [], fetch: fetchImpl },
@@ -128,7 +135,7 @@ describe('Rovr model route — local first, failover to the gateway', () => {
       return { stream: s, seen: seenUrls };
     })();
     await stream(hello);
-    expect(seen).toEqual(['http://127.0.0.1:11434/v1/chat/completions']);
+    expect(seen).toEqual(['http://127.0.0.1:11435/v1/chat/completions']);
   });
 
   it('sends a PINNED gateway model to the gateway first, tagged rovr — hard-pinned only under Specific', async () => {
@@ -139,7 +146,7 @@ describe('Rovr model route — local first, failover to the gateway', () => {
       headers.push(init.headers as Record<string, string>);
       return sse('from-cloud');
     });
-    const probeHttp = vi.fn(async () => [ollama]);
+    const probeHttp = vi.fn(async () => [device]);
     const stream = createRovrStream({
       baseUrl: BASE,
       fetch: gateway,
@@ -199,14 +206,14 @@ describe('Rovr model route — local first, failover to the gateway', () => {
     const stream = createRovrStream({
       baseUrl: BASE,
       fetch: fetchImpl,
-      prober: prober([ollama]),
+      prober: prober([device]),
       endpoints: async () => loopbackEndpoints(null),
       key: async () => null,
       pinned: async () => 'anthropic/claude-sonnet-4',
     });
     const result = await stream(hello);
     expect(result.text).toBe('from-device');
-    expect(seenUrls).toEqual(['http://127.0.0.1:11434/v1/chat/completions']);
+    expect(seenUrls).toEqual(['http://127.0.0.1:11435/v1/chat/completions']);
   });
 
   it('asks for sign-in when signed out with nothing local that fits', async () => {
@@ -234,7 +241,7 @@ describe('Rovr model route — local first, failover to the gateway', () => {
     };
 
     it('Local only never reaches the gateway, signed in or not', async () => {
-      const { stream, seen } = modeRoute([ollama], 'bfk_test', 'local-only');
+      const { stream, seen } = modeRoute([device], 'bfk_test', 'local-only');
       await stream({ ...hello, tools: [{ type: 'function', function: { name: 'browser_click', description: 'click', parameters: {} } }] }).catch(() => undefined);
       await stream(hello);
       expect(seen.some((url) => url.startsWith(BASE))).toBe(false);
@@ -251,7 +258,7 @@ describe('Rovr model route — local first, failover to the gateway', () => {
       const stream = createRovrStream({
         baseUrl: BASE,
         fetch: vi.fn(async (url: string) => { seen.push(url); return sse('from-device'); }),
-        prober: prober([ollama]),
+        prober: prober([device]),
         endpoints: async () => loopbackEndpoints(null),
         key: async () => 'bfk_test',
         pinned: async () => 'local/kimi-code/kimi-k2',

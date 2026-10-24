@@ -9,6 +9,9 @@
 export interface HostBfiWorkerData {
   /** Absolute path of the vendored `bfi_web_bg.wasm` copied beside the bundle. */
   wasmPath: string;
+  /** Absolute path of the native engine (`out/bfi_node.node`), when this build ships one
+   *  for this platform — preferred over the wasm (`nativeEngine.ts`). */
+  nativePath?: string;
   /** The host's model file cache (`globalStorageUri/local-models/bfi`). */
   modelDir: string;
   /** `os.totalmem()` — the worker's wasm cannot read the machine's RAM itself. */

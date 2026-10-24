@@ -21,6 +21,9 @@ export default [
   // holds its bytes to the commit + hashes in its SOURCE.json — no Rust needed — so a
   // hand-edited or half-replaced engine fails here instead of in a browser.
   ['check:bfi-web-vendored', '../../scripts/vendor-bfi-web.mjs', '--check'],
+  // Its native twin: `packages/bfi-node` (the addon the editor's extension host runs),
+  // each platform's binary held to the commit it was built from.
+  ['check:bfi-node-vendored', '../../scripts/vendor-bfi-node.mjs', '--check'],
   ['check:schema', 'check-schema-drift.mjs'],
   // Type-checks, passes every stubbed test, and fails on EVERY execution against a real
   // Postgres: an ON CONFLICT on a partial unique index that omits the predicate. That

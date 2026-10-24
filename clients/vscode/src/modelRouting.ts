@@ -60,6 +60,7 @@ import { authorizeLocalEndpoint } from "./localEndpointAuth";
 import { probeLocalFirstRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeBrainRun";
+import { hostModelProvisioner } from "./hostBfi/provision";
 import { hostPageEngines } from "./pageEngineBridge";
 import { localSuccessFederation, localSuccessStore } from "./localSuccessStorage";
 import { assertPlatformCapability, platformPolicy } from "./platformPolicy";
@@ -93,14 +94,33 @@ export interface ModelRoute {
   inferenceMode?: InferenceMode;
 }
 
+/** Who is asking for a route. */
+export interface RouteRequest {
+  /** A chat turn is about to run on the answer — the one caller that may start
+   *  provisioning a local model (a panel opening or a workspace scan never does). */
+  turn?: boolean;
+}
+
 /**
  * Resolve the route for a turn. Safe to call signed out — every lookup underneath is
  * best-effort — which is what lets a caller ask BEFORE deciding whether sign-in is
  * required (see {@link routeRequiresSignIn}).
  */
-export async function resolveModelRoute(secrets: vscode.SecretStorage): Promise<ModelRoute> {
-  const route = await resolveChoiceRoute(secrets, { ...(await resolveEffectiveModelChoice(secrets)), inferenceMode: currentInferenceMode() });
-  return route.inferenceMode === "local-only" && !route.local && !route.localFirst ? onDeviceOnly(route) : route;
+export async function resolveModelRoute(secrets: vscode.SecretStorage, request: RouteRequest = {}): Promise<ModelRoute> {
+  const route = await resolveChoiceRoute(secrets, { ...(await resolveEffectiveModelChoice(secrets)), inferenceMode: currentInferenceMode() }, request);
+  return route.inferenceMode === "local-only" && !route.local && !route.localFirst ? onDeviceOnly(route, request) : route;
+}
+
+/**
+ * The runtimes an UNPINNED turn may try on this machine — and, for a real turn the first
+ * time it finds no Bonsai cached, Synapse's engine in the editor starts provisioning one
+ * for the turns after it (`hostBfi/provision.ts`; a no-op without the native engine or
+ * after the session's one attempt). Gated exactly like the probe: local models on,
+ * local-first on.
+ */
+async function unpinnedLocalProbes(config: LocalModelsConfig, request: RouteRequest): Promise<LocalRuntimeProbe[]> {
+  if (request.turn && config.enabled && config.localFirst) hostModelProvisioner.ensure();
+  return probeLocalFirstRuntimes(config);
 }
 
 /**
@@ -109,15 +129,15 @@ export async function resolveModelRoute(secrets: vscode.SecretStorage): Promise<
  * shared stream sets the gateway pick aside). Nothing probed ⇒ the route stays as it is,
  * and `routeStream` fails it `no_local_model`.
  */
-async function onDeviceOnly(route: ModelRoute): Promise<ModelRoute> {
-  const probes = await probeLocalFirstRuntimes(getLocalModelsConfig());
+async function onDeviceOnly(route: ModelRoute, request: RouteRequest): Promise<ModelRoute> {
+  const probes = await unpinnedLocalProbes(getLocalModelsConfig(), request);
   return probes.some((p) => p.models.length > 0) ? { ...route, localFirst: { probes } } : route;
 }
 
-async function resolveChoiceRoute(secrets: vscode.SecretStorage, choice: ModelRoute): Promise<ModelRoute> {
+async function resolveChoiceRoute(secrets: vscode.SecretStorage, choice: ModelRoute, request: RouteRequest): Promise<ModelRoute> {
   const config = getLocalModelsConfig();
   const pin = parseLocalModelRef(choice.model);
-  if (!pin) return withLocalFirst(choice, config);
+  if (!pin) return withLocalFirst(choice, config, request);
   // A model the chat webview runs (`local/bfi/…`, `local/webllm/…`) is served over the
   // page-engine bridge: it needs a port for its runtime, not a configured endpoint — the
   // webview, or for a runtime the registry lets fall back to the host (`bfi`) the
@@ -153,9 +173,9 @@ async function resolveChoiceRoute(secrets: vscode.SecretStorage, choice: ModelRo
  * the rule the web app's stream reads too). Probing is memoized in `localModels`, so
  * asking per turn costs nothing while nothing changed.
  */
-async function withLocalFirst(choice: ModelRoute, config: LocalModelsConfig): Promise<ModelRoute> {
+async function withLocalFirst(choice: ModelRoute, config: LocalModelsConfig, request: RouteRequest): Promise<ModelRoute> {
   if (!localFirstApplies(choice)) return choice;
-  const probes = await probeLocalFirstRuntimes(config);
+  const probes = await unpinnedLocalProbes(config, request);
   if (!probes.some((p) => p.models.length > 0)) return choice;
   return { ...choice, localFirst: { probes } };
 }

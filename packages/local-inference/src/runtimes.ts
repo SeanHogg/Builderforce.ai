@@ -64,7 +64,14 @@ export type LocalRuntimeReach = 'http' | 'page';
 
 export interface LocalRuntime {
   id: LocalRuntimeId;
-  /** Automatic local-first preference. Explicit model pins never consult this value. */
+  /**
+   * Automatic local-first preference, lowest first. Explicit model pins never consult it.
+   * The engines we ship and size ourselves come first — WebLLM and our `bfi` on WebGPU,
+   * then Synapse's native `bfi` — then the browser's built-in model. A third-party server
+   * the person runs (Ollama, FreeToken) is tried LAST: it is still a real local engine,
+   * but only as good as the window it reports (`probe.ts` reads the one it SERVES) and
+   * the tool-call dialect its model writes (`xmlToolCalls.ts` lifts the inline ones).
+   */
   automaticRank: number;
   /** Brand token, deliberately NOT localized — "Ollama" is "Ollama" in every catalog. */
   label: string;
@@ -104,7 +111,7 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
   { id: 'synapse', automaticRank: 30, label: 'Synapse', onDevice: true, catalog: 'probe', tools: 'all', reach: 'http', ownedBy: 'bfi' },
   {
     id: 'ollama',
-    automaticRank: 40,
+    automaticRank: 50,
     label: 'Ollama',
     onDevice: true,
     defaultBaseUrl: 'http://127.0.0.1:11434',
@@ -114,7 +121,7 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
   },
   {
     id: 'freetoken',
-    automaticRank: 50,
+    automaticRank: 60,
     label: 'FreeToken',
     onDevice: true,
     defaultBaseUrl: 'http://127.0.0.1:1919',
@@ -145,7 +152,7 @@ export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
   },
   {
     id: 'browser',
-    automaticRank: 60,
+    automaticRank: 40,
     label: 'Gemini Nano',
     onDevice: true,
     defaultBaseUrl: BROWSER_ENGINE_BASE_URL,

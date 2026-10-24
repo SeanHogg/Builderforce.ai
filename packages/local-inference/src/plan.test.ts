@@ -31,6 +31,15 @@ const OLLAMA: LocalRuntimeProbe = {
     { ref: 'local/ollama/qwen3:8b', provider: 'ollama', model: 'qwen3:8b', tools: true, contextTokens: 8_000 },
   ],
 };
+const BFI: LocalRuntimeProbe = {
+  provider: 'bfi',
+  endpoint: { baseUrl: 'http://bfi.local' },
+  reachable: true,
+  models: [
+    { ref: 'local/bfi/bonsai-mini', provider: 'bfi', model: 'bonsai-mini', tools: true, contextTokens: 1_000 },
+    { ref: 'local/bfi/bonsai', provider: 'bfi', model: 'bonsai', tools: true, contextTokens: 8_000 },
+  ],
+};
 const BROWSER: LocalRuntimeProbe = {
   provider: 'browser',
   endpoint: { baseUrl: 'http://browser.local' },
@@ -43,14 +52,28 @@ const TOOL_TURN = { agentic: true, inputTokens: 1_000, outputTokens: 800 };
 const refs = (plan: LocalFirstAttempt[]): string[] => plan.map((a) => (a.kind === 'local' ? a.ref : `cloud:${a.model ?? 'auto'}`));
 
 describe('localFirstPlan', () => {
-  it('tries one capable local model, Synapse first, then the cloud', () => {
-    expect(refs(localFirstPlan({ probes: [OLLAMA, SYNAPSE], workload: CHAT, cloud: {} }))).toEqual([
-      'local/synapse/qwen3-8b',
+  it('tries one capable local model, in registry rank, then the cloud', () => {
+    expect(refs(localFirstPlan({ probes: [SYNAPSE, BFI], workload: CHAT, cloud: {} }))).toEqual([
+      'local/bfi/bonsai',
       'cloud:auto',
     ]);
     expect(
-      refs(localFirstPlan({ probes: [OLLAMA, SYNAPSE], workload: CHAT, cloud: { model: 'x' }, maxLocalAttempts: 3 })),
-    ).toEqual(['local/synapse/qwen3-8b', 'local/ollama/gemma:2b', 'local/ollama/qwen3:8b', 'cloud:x']);
+      refs(localFirstPlan({ probes: [SYNAPSE, BFI], workload: CHAT, cloud: { model: 'x' }, maxLocalAttempts: 3 })),
+    ).toEqual(['local/bfi/bonsai', 'local/synapse/qwen3-8b', 'cloud:x']);
+  });
+
+  it('tries a third-party server (Ollama) last — after our engines, but still locally', () => {
+    expect(refs(localFirstPlan({ probes: [OLLAMA], workload: CHAT, cloud: {} }))).toEqual(['local/ollama/gemma:2b', 'cloud:auto']);
+    expect(refs(localFirstPlan({ probes: [OLLAMA, SYNAPSE], workload: TOOL_TURN, cloud: {}, maxLocalAttempts: 5 }))).toEqual([
+      'local/synapse/qwen3-8b',
+      'local/ollama/qwen3:8b',
+      'cloud:auto',
+    ]);
+    expect(refs(localFirstPlan({ probes: [OLLAMA, BROWSER], workload: CHAT, cloud: null, maxLocalAttempts: 5 }))).toEqual([
+      'local/browser/gemini-nano',
+      'local/ollama/gemma:2b',
+      'local/ollama/qwen3:8b',
+    ]);
   });
 
   it('prefers an installed workload-compatible WebLLM model before other local runtimes', () => {
@@ -60,30 +83,35 @@ describe('localFirstPlan', () => {
       reachable: true,
       models: [{ ref: 'local/webllm/hermes', provider: 'webllm', model: 'hermes', tools: true, contextTokens: 8_000 }],
     };
-    expect(refs(localFirstPlan({ probes: [SYNAPSE, webllm, OLLAMA], workload: TOOL_TURN, cloud: null }))).toEqual([
+    expect(refs(localFirstPlan({ probes: [SYNAPSE, webllm, BFI], workload: TOOL_TURN, cloud: null }))).toEqual([
       'local/webllm/hermes',
     ]);
-    expect(refs(localFirstPlan({ probes: [SYNAPSE, webllm, OLLAMA], workload: TOOL_TURN, cloud: null, preferred: 'local/synapse/qwen3-8b' }))).toEqual([
+    expect(refs(localFirstPlan({ probes: [SYNAPSE, webllm, BFI], workload: TOOL_TURN, cloud: null, preferred: 'local/synapse/qwen3-8b' }))).toEqual([
       'local/synapse/qwen3-8b',
     ]);
   });
 
   it('never hands a tool turn to a model whose tool support is unknown', () => {
-    expect(refs(localFirstPlan({ probes: [OLLAMA], workload: TOOL_TURN, cloud: {}, maxLocalAttempts: 5 }))).toEqual([
-      'local/ollama/qwen3:8b',
+    const untooled: LocalRuntimeProbe = {
+      ...BFI,
+      provider: 'webllm',
+      models: [{ ref: 'local/webllm/llama', provider: 'webllm', model: 'llama', contextTokens: 8_000 }],
+    };
+    expect(refs(localFirstPlan({ probes: [untooled, BFI], workload: TOOL_TURN, cloud: {}, maxLocalAttempts: 5 }))).toEqual([
+      'local/bfi/bonsai',
       'cloud:auto',
     ]);
   });
 
   it('skips a model whose reported window cannot hold the call', () => {
     const big = { agentic: true, inputTokens: 7_500, outputTokens: 800 };
-    expect(refs(localFirstPlan({ probes: [OLLAMA], workload: big, cloud: {} }))).toEqual(['cloud:auto']);
+    expect(refs(localFirstPlan({ probes: [BFI], workload: big, cloud: {} }))).toEqual(['cloud:auto']);
   });
 
   it('honours a preferred local ref when it is capable', () => {
     expect(
-      refs(localFirstPlan({ probes: [SYNAPSE, OLLAMA], workload: CHAT, cloud: {}, preferred: 'local/ollama/qwen3:8b' })),
-    ).toEqual(['local/ollama/qwen3:8b', 'cloud:auto']);
+      refs(localFirstPlan({ probes: [SYNAPSE, BFI], workload: CHAT, cloud: {}, preferred: 'local/synapse/qwen3-8b' })),
+    ).toEqual(['local/synapse/qwen3-8b', 'cloud:auto']);
   });
 
   it("takes the browser's built-in model for a chat turn, after the installed runtimes", () => {
@@ -91,8 +119,8 @@ describe('localFirstPlan', () => {
       'local/browser/gemini-nano',
       'cloud:auto',
     ]);
-    expect(refs(localFirstPlan({ probes: [BROWSER, OLLAMA], workload: CHAT, cloud: {} }))).toEqual([
-      'local/ollama/gemma:2b',
+    expect(refs(localFirstPlan({ probes: [BROWSER, SYNAPSE], workload: CHAT, cloud: {} }))).toEqual([
+      'local/synapse/qwen3-8b',
       'cloud:auto',
     ]);
   });
@@ -111,8 +139,8 @@ describe('localFirstPlan', () => {
       reachable: true,
       models: [{ ref: 'local/kimi-code/k3', provider: 'kimi-code', model: 'k3', tools: true }],
     };
-    expect(refs(localFirstPlan({ probes: [down, kimi, OLLAMA], workload: CHAT, cloud: null }))).toEqual([
-      'local/ollama/gemma:2b',
+    expect(refs(localFirstPlan({ probes: [down, kimi, BFI], workload: CHAT, cloud: null }))).toEqual([
+      'local/bfi/bonsai',
     ]);
     expect(localFirstPlan({ probes: [down, kimi], workload: CHAT, cloud: null })).toEqual([]);
   });

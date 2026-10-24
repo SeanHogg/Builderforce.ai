@@ -22,6 +22,9 @@ importers:
       '@huggingface/transformers':
         specifier: ^3.8.1
         version: 3.8.1(@types/node@20.19.43)
+      '@seanhogg/bfi-node':
+        specifier: link:../../packages/bfi-node
+        version: link:../../packages/bfi-node
       '@seanhogg/bfi-web':
         specifier: link:../../packages/bfi-web
         version: link:../../packages/bfi-web

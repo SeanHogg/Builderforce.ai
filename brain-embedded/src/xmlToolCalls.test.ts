@@ -114,6 +114,41 @@ describe('XmlToolCallFilter — additional inline dialects', () => {
     expect(JSON.parse(toolCalls[0].args)).toEqual({ id: 75 });
   });
 
+  it("lifts Qwen3-Coder's native <tool_call><function=…><parameter=…> call, however it is chunked", () => {
+    const raw =
+      'Checking the tree.\n<tool_call>\n<function=run_command>\n<parameter=command>\ngit status\n</parameter>\n' +
+      '<parameter=timeout>\n30\n</parameter>\n</function>\n</tool_call>';
+    for (const size of [1, 7, raw.length]) {
+      const { text, calls } = streamInChunks(raw, size);
+      expect(text.trim()).toBe('Checking the tree.');
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.name).toBe('run_command');
+      expect(JSON.parse(calls[0]!.args)).toEqual({ command: 'git status', timeout: 30 });
+    }
+  });
+
+  it('lifts a bare <function=…> call with <parameter=…> arguments', () => {
+    const { toolCalls } = extractXmlToolCalls('<function=read_file>\n<parameter=path>\nsrc/a.ts\n</parameter>\n</function>');
+    expect(toolCalls[0]!.name).toBe('read_file');
+    expect(JSON.parse(toolCalls[0]!.args)).toEqual({ path: 'src/a.ts' });
+  });
+
+  it("keeps a <parameter=…> value verbatim, as Qwen3-Coder's own parser does", () => {
+    const call =
+      '<tool_call>\n<function=write_file>\n<parameter=content>\n  indented();\n</parameter>\n' +
+      '<parameter=json>\n{"name": "x"}\n</parameter>\n<parameter=code>\n0123\n</parameter>\n' +
+      '<parameter=tail>\nline\n\n</parameter>\n<parameter=force>\ntrue\n</parameter>\n</function>\n</tool_call>';
+    const { toolCalls } = extractXmlToolCalls(call);
+    expect(JSON.parse(toolCalls[0]!.args)).toEqual({
+      // One newline off each end — the indentation, the JSON text and the leading zero stay.
+      content: '  indented();',
+      json: '{"name": "x"}',
+      code: '0123',
+      tail: 'line\n',
+      force: true,
+    });
+  });
+
   it('handles an <invoke> open tag split across stream chunks', () => {
     const f = new XmlToolCallFilter();
     let out = '';

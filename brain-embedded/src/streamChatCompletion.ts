@@ -21,6 +21,7 @@
  */
 
 import { XmlToolCallFilter, extractXmlToolCalls } from './xmlToolCalls';
+import { typeXmlToolArgs } from './xmlToolArgTypes';
 import { detectRepetitionLoop } from '@builderforce/agent-loop';
 import { brainRequestError } from './chatError';
 import { describeNetworkError, isConnectFailure, retryOnConnectFailure } from './networkErrorDetail';
@@ -632,8 +633,9 @@ async function runStreamChatCompletion(
   // Every visible character so far — what the repetition guard reads on each delta.
   let shown = '';
 
-  /** Stitch the native + inline-XML tool calls; native first, XML as fallback. */
-  const allToolCalls = (): AssembledToolCall[] => [...assemble(toolAcc), ...xml.toolCalls()];
+  /** Stitch the native + inline-XML tool calls; native first, XML as fallback (its text
+   *  arguments typed by the advertised schemas). */
+  const allToolCalls = (): AssembledToolCall[] => [...assemble(toolAcc), ...typeXmlToolArgs(xml.toolCalls(), opts.tools)];
 
   const reader = res.body?.getReader();
   if (!reader) {
@@ -656,7 +658,7 @@ async function runStreamChatCompletion(
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
+    return { text, toolCalls: [...assemble(toolAcc), ...typeXmlToolArgs(xmlCalls, opts.tools)], finishReason, resolvedModel: resolvedModel(), resolvedVendor: resolvedVendor(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage, upstream };
   }
 
   const decoder = new TextDecoder();

@@ -59,6 +59,17 @@ describe('bfi probe', () => {
     expect(loadBfi).not.toHaveBeenCalled();
   });
 
+  it('asks a native engine for its support record before any download (it has no wasm to compile)', async () => {
+    const { module } = fakeBfi(streaming);
+    const loadBfi = vi.fn(async () => module);
+    const engine = createBfiEngine({ loadBfi, store: fakeStore([]), supportFromEngine: true });
+    expect(await engine.support()).toBe(gpu);
+    expect(module.BfiEngine.support).toHaveBeenCalledTimes(1);
+    // The probe still answers nothing to serve until a model is downloaded.
+    expect(await engine.probe()).toBeNull();
+    expect(module.BfiEngine.create).not.toHaveBeenCalled();
+  });
+
   it('lists the downloaded Bonsai models as tool-capable, asking support() but creating no device', async () => {
     const { module } = fakeBfi(streaming);
     const engine = createBfiEngine({ loadBfi: async () => module, store: fakeStore([`local/bfi/${BONSAI}`]) });
@@ -327,6 +338,24 @@ describe('bfi — failures', () => {
     expect(res.status).toBeGreaterThanOrEqual(500);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(cancel).toHaveBeenCalled();
+  });
+
+  it('a lost GPU drops (and disposes) that engine, so the next turn opens a fresh one against a fresh device record', async () => {
+    const { module, instance } = fakeBfi(streaming);
+    const dispose = vi.fn();
+    Object.assign(instance, { dispose });
+    instance.chat.mockRejectedValueOnce(new Error('webgpu_unavailable: the GPU device was lost (Unknown); create a new BfiEngine'));
+    const engine = createBfiEngine({ loadBfi: async () => module, store: fakeStore([`local/bfi/${BONSAI}`]) });
+    const fetchFn = pageEnginesFetch([engine]);
+    const body = post({ model: BONSAI, messages: [{ role: 'user', content: 'x' }], stream: true });
+    expect((await fetchFn(CHAT_URL, body)).status).toBe(503);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    const supportReads = vi.mocked(module.BfiEngine.support).mock.calls.length;
+    const again = await fetchFn(CHAT_URL, body);
+    expect(again.status).toBe(200);
+    await again.text();
+    expect(module.BfiEngine.create).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(module.BfiEngine.support).mock.calls.length).toBeGreaterThan(supportReads);
   });
 
   it('a trap ends the turn with bfi_engine_crashed and reports it ONCE to the host, which replaces the worker', async () => {

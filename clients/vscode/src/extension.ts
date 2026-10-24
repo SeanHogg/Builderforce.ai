@@ -72,6 +72,8 @@ import { localBrainApplication } from "./localFirstStore";
 import { configurePolicyGatesPersistence } from "./policyGates";
 import { createPolicyGatesPersistence } from "./policySnapshots";
 import { installHostBfiRuntime } from "./hostBfi/runtime";
+import { createModelProvisioner, hostModelProvisioner } from "./hostBfi/provision";
+import { provisionProgressReporter } from "./hostBfi/provisionProgress";
 import { hostPageEngines } from "./pageEngineBridge";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
@@ -152,6 +154,20 @@ export function activate(context: vscode.ExtensionContext): void {
     bridge: hostPageEngines,
   });
   context.subscriptions.push({ dispose: () => hostBfi.dispose() });
+  // Where Synapse's engine runs natively, Hybrid's first local-first turn with nothing
+  // cached provisions a Bonsai it can serve (`hostBfi/provision.ts`) — whether it does is
+  // read on that turn, so the addon is not loaded at activation.
+  context.subscriptions.push({
+    dispose: hostModelProvisioner.install(
+      createModelProvisioner({
+        available: () => hostBfi.native,
+        store: hostBfi.store,
+        support: () => hostBfi.support(),
+        onReady: () => void hostBfi.refresh(),
+        report: provisionProgressReporter(),
+      }),
+    ),
+  });
   // G12: bind the policy's send permission into the durable outbox store HERE, beside the
   // fetch guard it comes from, so `builderforce.platform.synchronize` going off actually
   // stops sends. Without this the store's gate has no administrative source: the outboxes

@@ -75,8 +75,10 @@ an unreported RAM reads as 4 GiB); `localModelFit` returns the backend it chose 
 picker badges `bfi` rows "GPU" / "CPU". The web app and Rovr run the whole `bfi` page engine
 in a dedicated Web Worker (`createBfiWorkerEngine` / `runBfiWorker`, over the same remote
 page-engine frames the editor uses), so CPU decoding never blocks the page. The editor's
-extension host runs the same wasm in a `worker_threads` worker (registry `fallbackReach:
-'host'`), so a `local/bfi/…` pin is served with the chat panel closed; in the editor the
+extension host runs the engine in a `worker_threads` worker (registry `fallbackReach:
+'host'`) — the native addon `@seanhogg/bfi-node` where it ships (GPU and multi-threaded
+CPU, a native KV budget of a quarter of the RAM share, 512 MiB–2 GiB, on the CPU), else
+the same wasm — so a `local/bfi/…` pin is served with the chat panel closed; in the editor the
 host's file cache is the ONE copy of a model — the webview's model store is a view of
 it and its engine streams the bytes back over the bridge.
 
@@ -140,10 +142,20 @@ when the system message + directive alone exceed it).
 - Page engines implement one `PageEngine` contract (probe → `LocalRuntimeProbe | null`,
   never downloading; `chatCompletions(request, signal)` → OpenAI chunks) and share ONE fetch
   shim; the Prompt API engine is refactored onto it.
-- Downloads happen only from the picker (never from a chat turn), into Cache Storage, with
-  progress and delete.
-- VSIX: the engine runs in the chat webview (WebGPU); the extension host reaches it over a
-  postMessage bridge. Rovr: in the side panel. Web: in the page.
+- Downloads happen from the picker, into Cache Storage, with progress and delete — with
+  ONE exception (operator decision 2026-10-24): in the VSIX with the native engine, the
+  first unpinned local-first turn with no Bonsai cached starts one background download of
+  the largest recommended Bonsai the device fits, up to 4B (`hostBfi/provision.ts`). That
+  turn goes to the cloud; later turns run on Bonsai.
+- VSIX: Synapse's engine runs INSIDE the editor as a native addon (`@seanhogg/bfi-node`,
+  `packages/bfi-node`: napi over `bfi-engine`, the core `bfi-web` shares) in the extension
+  host's `bfi` worker — native wgpu (Vulkan; Metal on macOS) or every CPU core, with the
+  native KV budget — and its bridge port is PREFERRED over the webview's. Where no addon
+  ships for the platform (or it will not load), the worker runs the wasm on the CPU and
+  the webview's worker serves WebGPU, as before. Rovr: in the side panel. Web: in the page.
+- Automatic local-first ranks our engines first (WebLLM, `bfi`, Synapse, the browser's
+  model) and a third-party server (Ollama, FreeToken) last; Ollama's window is the one it
+  SERVES (`/api/ps`), never the trained length.
 - `bfi-web` is vendored at `packages/bfi-web` (`@seanhogg/bfi-web`, private, consumed by
   `link:`; `scripts/vendor-bfi-web.mjs` rebuilds it and `--check` holds it to
   `SOURCE.json`). ONE loader, `loadBfiWeb`/`bfiWebLoader` in brain-embedded's `/bfi` entry

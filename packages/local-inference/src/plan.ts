@@ -10,8 +10,9 @@
  *    completion is skipped. An UNREPORTED window is not disqualifying: an overflow there
  *    is an HTTP error from the runtime, which the failover does see and recovers from.
  *
- * Only `onDevice` runtimes take part — `kimi-code` is locally dispatched but hosted, so
- * it is reachable by an explicit pin and never by local-first. Pure.
+ * Only `onDevice` runtimes take part, in the registry's `automaticRank` — our engines
+ * first, a third-party server (Ollama, FreeToken) last. `kimi-code` is locally dispatched
+ * but hosted, so it is reachable by an explicit pin and never by local-first. Pure.
  */
 
 import type { LocalModel, LocalRuntimeProbe } from './probe.js';

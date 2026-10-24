@@ -92,6 +92,10 @@ export interface BfiEngineInstance {
   ): Promise<BfiModelInfo>;
   chat(requestJson: string, onChunk: (chunkJson: string) => void, signal?: AbortSignal): Promise<string>;
   unload(): void;
+  /** Native (`@seanhogg/bfi-node`) only: stop the engine's thread and free its model. A
+   *  wasm engine dies with its worker; a native one lives in the process, so a trap must
+   *  end it explicitly. */
+  dispose?(): void;
 }
 
 /** The `BfiEngine` class's statics (§3.1). */
@@ -121,13 +125,19 @@ export interface BfiEngineOptions {
    *  `os.totalmem()`; a page leaves it to `navigator.deviceMemory`. */
   deviceMemoryBytes?: number;
   /** The backends this host SERVES `bfi` on (default both): the probe and the chat. The
-   *  editor's webview worker serves `['webgpu']` and the extension host's worker
-   *  `['cpu']`, so CPU decoding never runs beside the chat UI. `support()` — the
-   *  picker's record — is never restricted. */
+   *  editor's webview worker serves `['webgpu']`, so CPU decoding never runs beside the
+   *  chat UI; the extension host's worker serves both on the native addon (its GPU is
+   *  native wgpu) and `['cpu']` on the wasm fallback. `support()` — the picker's record
+   *  — is never restricted. */
   backends?: readonly LocalBackend[];
   /** A wasm trap poisoned the instance: the host terminates this worker and starts a
-   *  fresh one (`serveEngineWorker`'s `fatal`). */
+   *  fresh one (`serveEngineWorker`'s `fatal`). A native engine's panic arrives the same
+   *  way (`@seanhogg/bfi-node` raises it as a `RuntimeError`). */
   onTrap?: (error: unknown) => void;
+  /** The engine's own `support()` is cheap here — a native addon (`@seanhogg/bfi-node`)
+   *  has no wasm to compile — so it answers the picker and the probe even before any
+   *  model is downloaded, and the record is the real device's (its GPU, its RAM). */
+  supportFromEngine?: boolean;
   ttlMs?: number;
   now?: () => number;
 }
@@ -254,6 +264,13 @@ export function createBfiEngine(options: BfiEngineOptions): BfiPageEngine {
     if (poisoned) return true;
     poisoned = true;
     module = undefined;
+    for (const engine of engines.values()) {
+      try {
+        engine.dispose?.();
+      } catch (e) {
+        reportPageEngineFailure('bfi', 'unload', e);
+      }
+    }
     engines.clear();
     resident = undefined;
     prober.invalidate();
@@ -262,6 +279,22 @@ export function createBfiEngine(options: BfiEngineOptions): BfiPageEngine {
     for (const end of [...crashes]) end(failure);
     options.onTrap?.(error);
     return true;
+  };
+
+  /** The GPU went away under an engine (`webgpu_unavailable:` — a lost device): drop
+   *  that engine and re-probe, so the next turn fits against what the device record
+   *  says NOW (a native lost device reads unsupported, and the turn runs on the CPU). */
+  const gpuGone = (error: unknown): void => {
+    if (!errorMessage(error).startsWith('webgpu_unavailable')) return;
+    const gpu = engines.get('webgpu');
+    engines.delete('webgpu');
+    if (resident?.backend === 'webgpu') resident = undefined;
+    try {
+      gpu?.dispose?.();
+    } catch (e) {
+      reportPageEngineFailure('bfi', 'unload', e);
+    }
+    prober.invalidate();
   };
 
   // The wasm reports the RAM it can read (`navigator.deviceMemory`) and otherwise plans
@@ -284,12 +317,12 @@ export function createBfiEngine(options: BfiEngineOptions): BfiPageEngine {
     };
   };
   // With nothing downloaded the picker's support read must not compile the wasm: the
-  // record comes from what the realm can read itself. A wasm that will not load (or a
-  // support read that throws) is "this device cannot run bfi" — with the reason
-  // reported, not dropped.
+  // record comes from what the realm can read itself — unless the engine's own read is
+  // cheap (`supportFromEngine`). A module that will not load (or a support read that
+  // throws) is "this device cannot run bfi" — with the reason reported, not dropped.
   const support = async (): Promise<LocalDeviceSupport> => {
     try {
-      return (await anyBfiModelDownloaded(options.store))
+      return options.supportFromEngine || (await anyBfiModelDownloaded(options.store))
         ? withDeviceMemory(await (await bfi()).BfiEngine.support())
         : await bfiSupportWithoutWasm(options.deviceMemoryBytes);
     } catch (e) {
@@ -373,10 +406,15 @@ export function createBfiEngine(options: BfiEngineOptions): BfiPageEngine {
     } catch (e) {
       release();
       if (trapped(e)) throw crashError(e);
+      gpuGone(e);
       const mapped = bfiError(e);
       throw mapped instanceof PageEngineError ? mapped : new PageEngineError(503, 'bfi_engine_unavailable', errorMessage(e));
     }
-    const mapError = (e: unknown): unknown => (trapped(e) ? crashError(e) : bfiError(e));
+    const mapError = (e: unknown): unknown => {
+      if (trapped(e)) return crashError(e);
+      gpuGone(e);
+      return bfiError(e);
+    };
     return releasing(bfiChunks(live, JSON.stringify({ ...body, stream: true }), signal, mapError, crashes), release);
   }
 

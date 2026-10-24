@@ -98,7 +98,9 @@ function catalogRows(json: unknown): Array<{ id: string; ownedBy?: string }> {
 
 /**
  * Ollama's per-model card (`POST /api/show`): `capabilities` (`completion`, `tools`,
- * `embedding`, …) and `model_info["<arch>.context_length"]`. `undefined` = the runtime
+ * `embedding`, …), `model_info["<arch>.context_length"]` — the TRAINED window, which
+ * only caps the served one ({@link servedWindow}) — and the Modelfile's `num_ctx`
+ * (`parameters`), which every request without options loads with. `undefined` = the runtime
  * gave no card (an older Ollama, or an Ollama-compatible server that lacks the route).
  */
 async function ollamaCard(
@@ -106,7 +108,7 @@ async function ollamaCard(
   endpoint: LocalEndpoint,
   model: string,
   timeoutMs: number,
-): Promise<{ capabilities?: string[]; contextTokens?: number } | undefined> {
+): Promise<{ capabilities?: string[]; contextTokens?: number; numCtx?: number } | undefined> {
   const json = await fetchJson(
     fetchImpl,
     `${normalizeLocalBaseUrl(endpoint.baseUrl)}/api/show`,
@@ -118,7 +120,7 @@ async function ollamaCard(
     timeoutMs,
   );
   if (!json || typeof json !== 'object') return undefined;
-  const { capabilities, model_info } = json as { capabilities?: unknown; model_info?: unknown };
+  const { capabilities, model_info, parameters } = json as { capabilities?: unknown; model_info?: unknown; parameters?: unknown };
   const caps = Array.isArray(capabilities) ? capabilities.filter((c): c is string => typeof c === 'string') : undefined;
   let contextTokens: number | undefined;
   if (model_info && typeof model_info === 'object') {
@@ -126,7 +128,63 @@ async function ollamaCard(
       if (key.endsWith('.context_length') && typeof value === 'number' && value > 0) contextTokens = value;
     }
   }
-  return { ...(caps ? { capabilities: caps } : {}), ...(contextTokens ? { contextTokens } : {}) };
+  const numCtx = typeof parameters === 'string' ? Number(/^\s*num_ctx\s+(\d+)\s*$/m.exec(parameters)?.[1]) : NaN;
+  return {
+    ...(caps ? { capabilities: caps } : {}),
+    ...(contextTokens ? { contextTokens } : {}),
+    ...(numCtx > 0 ? { numCtx } : {}),
+  };
+}
+
+/**
+ * The window Ollama loads a model with when nothing set one (`OLLAMA_CONTEXT_LENGTH`
+ * unset, no Modelfile `num_ctx`). A model that is not loaded yet will load with this, so
+ * it — not the trained length on the card — is the window a turn may plan on.
+ */
+const OLLAMA_DEFAULT_CONTEXT_TOKENS = 4_096;
+
+/**
+ * The windows Ollama is SERVING right now (`GET /api/ps` → `context_length` per loaded
+ * model). The card's `<arch>.context_length` is what the weights were trained for (a
+ * 256K Qwen3-Coder), while the runtime truncates a longer prompt to its loaded window
+ * without an error — so a plan sized on the card hands it turns it silently mangles.
+ */
+async function ollamaLoadedWindows(
+  fetchImpl: FetchLike,
+  endpoint: LocalEndpoint,
+  timeoutMs: number,
+): Promise<Map<string, number>> {
+  const json = await fetchJson(
+    fetchImpl,
+    `${normalizeLocalBaseUrl(endpoint.baseUrl)}/api/ps`,
+    { headers: { accept: 'application/json', ...localAuthHeaders(endpoint) } },
+    timeoutMs,
+  );
+  const loaded = new Map<string, number>();
+  const models = (json as { models?: unknown } | undefined)?.models;
+  if (!Array.isArray(models)) return loaded;
+  for (const entry of models) {
+    const { name, model, context_length } = (entry ?? {}) as { name?: unknown; model?: unknown; context_length?: unknown };
+    if (typeof context_length !== 'number' || context_length <= 0) continue;
+    for (const id of [name, model]) if (typeof id === 'string' && id.length > 0) loaded.set(id, context_length);
+  }
+  return loaded;
+}
+
+/**
+ * The window a probed Ollama model will serve OUR requests (OpenAI-compatible, so they
+ * carry no `num_ctx`): the Modelfile's `num_ctx` when it sets one — exact, whoever
+ * loaded the model — else its loaded window, else the default load window; never past
+ * what it was trained for.
+ *
+ * The loaded window is the server's default only when a request like ours loaded it;
+ * another client's `num_ctx` shows here too, and Ollama reloads at the default for our
+ * request. No Ollama route reports that default (`OLLAMA_CONTEXT_LENGTH` lives in the
+ * server's environment), so this is the closest reading the API allows.
+ */
+function servedWindow(card: { contextTokens?: number; numCtx?: number }, loaded: number | undefined): number {
+  const window = card.numCtx ?? loaded ?? OLLAMA_DEFAULT_CONTEXT_TOKENS;
+  return Math.min(window, card.contextTokens ?? window);
 }
 
 async function probeRuntime(
@@ -145,6 +203,9 @@ async function probeRuntime(
   );
   if (json === undefined) return { probe: { provider, endpoint, reachable: false, models: [] }, ownedBy };
   const rows = catalogRows(json);
+  const loaded = runtime.tools === 'probe' && options.capabilities
+    ? await ollamaLoadedWindows(fetchImpl, endpoint, options.timeoutMs)
+    : new Map<string, number>();
   const models = await Promise.all(
     rows.map(async ({ id, ownedBy: owner }): Promise<LocalModel | null> => {
       ownedBy.set(id, owner);
@@ -161,7 +222,7 @@ async function probeRuntime(
       return {
         ...base,
         ...(card.capabilities?.includes('tools') ? { tools: true } : {}),
-        ...(card.contextTokens ? { contextTokens: card.contextTokens } : {}),
+        contextTokens: servedWindow(card, loaded.get(id)),
       };
     }),
   );

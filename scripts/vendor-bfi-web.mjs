@@ -50,10 +50,10 @@
  * The sibling repo is `../builderforce-inference` beside this one; `BFI_REPO` overrides.
  */
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { diffAgainst, hashFile, requireStampedBuild as requireStamped, sourceRepository, writeBuildStamp } from './lib/vendoredBuild.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const vendorDir = join(repoRoot, 'packages', 'bfi-web');
@@ -68,6 +68,7 @@ const THREADS_DIR = 'threads';
  *  from the recorded commit. */
 const SOURCE_INPUTS = [
   'crates/bfi-web',
+  'crates/bfi-engine',
   'crates/bfi-core',
   'crates/bfi-models',
   'crates/bfi-runtime',
@@ -83,8 +84,6 @@ const LIMITS_FILE = join(repoRoot, ...LIMITS_KEY.split('/'));
 /** The wasm-pack output files that are vendored. Everything else in the package is hand-written. */
 const VENDORED_FILES = ['bfi_web.js', 'bfi_web.d.ts', 'bfi_web_bg.wasm'];
 const BUILD_ARGS = ['build', crate, '--target', 'web', '--release', '--out-dir', 'pkg'];
-/** Written into each build output: what the bytes were built from. */
-const BUILD_STAMP = '.bfi-build-stamp.json';
 
 /** Every file of the threaded artifact a host serves: the glue, its types, the wasm and
  *  wasm-bindgen-rayon's worker snippet(s), relative to `dir`. */
@@ -119,17 +118,6 @@ function vendoredThreadFiles() {
   return out;
 }
 
-/**
- * sha256 of a file, with CRLF folded to LF for the text files — wasm-pack emits LF, and a
- * Windows checkout under `core.autocrlf` must not read as drift (the package's
- * `.gitattributes` already pins the bytes; this is the belt to that brace).
- */
-function hashFile(file) {
-  const bytes = readFileSync(file);
-  const content = file.endsWith('.wasm') ? bytes : Buffer.from(bytes.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
-  return createHash('sha256').update(content).digest('hex');
-}
-
 function fail(message) {
   console.error(`❌  bfi-web vendor: ${message}`);
   process.exit(1);
@@ -140,54 +128,12 @@ function readRecord() {
   return JSON.parse(readFileSync(sourceRecordPath, 'utf8'));
 }
 
-/** Problems with the files `names` in `dir` against `expected` (name → sha256). */
-function diffAgainst(dir, expected, names) {
-  const problems = [];
-  for (const name of names) {
-    const file = join(dir, ...name.split('/'));
-    if (!existsSync(file)) {
-      problems.push(`${name}: missing`);
-      continue;
-    }
-    if (!expected[name]) {
-      problems.push(`${name}: not recorded in SOURCE.json`);
-      continue;
-    }
-    const actual = hashFile(file);
-    if (actual !== expected[name]) problems.push(`${name}: sha256 ${actual.slice(0, 12)}… ≠ recorded ${expected[name].slice(0, 12)}…`);
-  }
-  return problems;
-}
-
-function git(args) {
-  const run = spawnSync('git', ['-C', sourceRepo, ...args], { encoding: 'utf8' });
-  return run.status === 0 ? run.stdout.trim() : '';
-}
-
+const source = sourceRepository(sourceRepo);
+const git = source.git;
 /** The inference tree now: HEAD, and whether any input of the wasm differs from it. */
-function sourceState() {
-  return { commit: git(['rev-parse', 'HEAD']), dirty: git(['status', '--porcelain', '--', ...SOURCE_INPUTS]) !== '' };
-}
-
-/** Record in `dir` what its build was made from. */
-function writeBuildStamp(dir, state) {
-  writeFileSync(join(dir, BUILD_STAMP), `${JSON.stringify({ commit: state.commit || 'unknown', dirty: state.dirty }, null, 2)}
-`);
-}
-
-/** `--no-build`: refuse unless the tree is clean and `dir` was built from HEAD by this script. */
-function requireStampedBuild(dir, state) {
-  if (!state.commit) fail(`cannot read HEAD of ${sourceRepo} — --no-build needs a git checkout to record.`);
-  if (state.dirty) fail('--no-build refuses to record HEAD: the inference tree has uncommitted changes to the wasm inputs — commit them, or rebuild without --no-build.');
-  const stampFile = join(dir, BUILD_STAMP);
-  if (!existsSync(stampFile)) fail(`--no-build: ${relative(sourceRepo, dir)} has no ${BUILD_STAMP} — it was not built by this script; rebuild without --no-build.`);
-  const stamp = JSON.parse(readFileSync(stampFile, 'utf8'));
-  if (stamp.dirty !== false || stamp.commit !== state.commit) {
-    fail(
-      `--no-build: ${relative(sourceRepo, dir)} was built from ${String(stamp.commit).slice(0, 7)}${stamp.dirty === false ? '' : ' (dirty)'}, not the clean HEAD ${state.commit.slice(0, 7)} — rebuild without --no-build.`,
-    );
-  }
-}
+const sourceState = () => source.state(SOURCE_INPUTS);
+/** `--no-build`: refuse unless the tree is clean and `dir` was built from HEAD. */
+const requireStampedBuild = (dir, state) => requireStamped(dir, state, { sourceRepo, fail });
 
 function wasmPackBuild(withThreads) {
   if (!existsSync(join(sourceRepo, ...crate.split('/')))) fail(`no ${crate} under ${sourceRepo} — set BFI_REPO to the builderforce-inference checkout.`);

@@ -161,7 +161,7 @@ describe("page-engine bridge — a host fallback port (the extension host's bfi 
   });
 
   /** Serve `engines` to `host` over a fake async port declaring `runtimes`. */
-  function serve(host: HostPageEngineBridge, engines: PageEngine[], runtimes?: readonly ("bfi" | "webllm")[]) {
+  function serve(host: HostPageEngineBridge, engines: PageEngine[], runtimes?: readonly ("bfi" | "webllm")[], preferred = false) {
     let deliver: ((request: PageEngineRequest) => void) | undefined;
     servePageEngines(() => engines, {
       reply: (type, payload) => queueMicrotask(() => host.receive({ type, ...payload })),
@@ -170,7 +170,10 @@ describe("page-engine bridge — a host fallback port (the extension host's bfi 
         return () => (deliver = undefined);
       },
     });
-    return host.attach({ post: (message) => queueMicrotask(() => deliver?.(message)) }, runtimes ? { runtimes } : {});
+    return host.attach(
+      { post: (message) => queueMicrotask(() => deliver?.(message)) },
+      { ...(runtimes ? { runtimes } : {}), ...(preferred ? { preferred } : {}) },
+    );
   }
 
   it("serves only its declared runtimes, so a webllm pin is still unconnected", async () => {
@@ -197,6 +200,13 @@ describe("page-engine bridge — a host fallback port (the extension host's bfi 
     expect((await host.probe({ fresh: true }))[0]!.models[0]!.label).toBe("webview");
     detachWebview();
     expect((await host.probe({ fresh: true }))[0]!.models[0]!.label).toBe("worker");
+  });
+
+  it("lets a PREFERRED port (the host's native engine) outrank an attached webview", async () => {
+    const host = createHostPageEngineBridge({ probeTimeoutMs: 200 });
+    serve(host, [bfiEngine("webview")]);
+    serve(host, [bfiEngine("native")], ["bfi"], true);
+    expect((await host.probe({ fresh: true }))[0]!.models[0]!.label).toBe("native");
   });
 
   it("merges the ports' rows per model: the webview's GPU rows AND the host worker's CPU-only rows, each served by its owner", async () => {

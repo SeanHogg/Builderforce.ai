@@ -1,0 +1,29 @@
+{
+  "repository": "SeanHogg/builderforce-inference",
+  "crate": "crates/bfi-node",
+  "commit": "2b4378558bff0265ce2ca205af8513d70fd26ca0",
+  "version": "2026.10.12",
+  "build": "node crates/bfi-node/build.mjs [--target <rust triple>]",
+  "files": {
+    "index.js": "e1b2d8ecc9f426aced7a961f2c9b0f75ffe918c4a4c4e60b0517ef87e6bae5b5",
+    "index.d.ts": "895c5903fa317c4dd15361f7204c7962bcf4c2b8f0dc90eaf3dd5c05133a5c4e"
+  },
+  "platforms": {
+    "darwin-arm64": {
+      "commit": "2b4378558bff0265ce2ca205af8513d70fd26ca0",
+      "sha256": "a138628a8022aaa8e4cc120ee6fc1ba0d80678b0ac68350ef9b3a633c2142a2f"
+    },
+    "darwin-x64": {
+      "commit": "2b4378558bff0265ce2ca205af8513d70fd26ca0",
+      "sha256": "7eb40ff43965e37b10845f42b151b354e64695f459d542d2c481c516d290b763"
+    },
+    "linux-x64": {
+      "commit": "2b4378558bff0265ce2ca205af8513d70fd26ca0",
+      "sha256": "bc7b6908328f64bb2d191e5b612aeee817d7e61e417396a7a0b9e1a7e61a2345"
+    },
+    "win32-x64": {
+      "commit": "2b4378558bff0265ce2ca205af8513d70fd26ca0",
+      "sha256": "7ca94cc90524296f03511570e31da5d4d523e19fa5adf33c7e8f9d36a2e24571"
+    }
+  }
+}

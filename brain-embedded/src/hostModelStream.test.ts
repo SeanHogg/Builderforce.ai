@@ -22,11 +22,11 @@ const sse = (text: string): Response =>
 
 const hello = { messages: [{ role: 'user' as const, content: 'hello' }] };
 
-const ollama: LocalRuntimeProbe = {
-  provider: 'ollama',
+const synapse: LocalRuntimeProbe = {
+  provider: 'synapse',
   endpoint: { baseUrl: 'http://127.0.0.1:11434' },
   reachable: true,
-  models: [{ ref: 'local/ollama/gemma:2b', provider: 'ollama', model: 'gemma:2b' }],
+  models: [{ ref: 'local/synapse/gemma:2b', provider: 'synapse', model: 'gemma:2b' }],
 };
 
 function fakeCloud() {
@@ -41,7 +41,7 @@ function fakeCloud() {
 describe('createHostModelStream', () => {
   it('serves a page pin the call names through the host fetch, without probing', async () => {
     const fetchImpl = vi.fn(async (url: string) => sse(url === 'http://bfi.local/v1/chat/completions' ? 'from-bonsai' : 'wrong'));
-    const probes = vi.fn(async () => [ollama]);
+    const probes = vi.fn(async () => [synapse]);
     const { cloud, calls } = fakeCloud();
     const stream = createHostModelStream({ cloud: () => cloud, probes, fetch: fetchImpl, fit: async (m) => m });
     const result = await stream({ ...hello, model: 'local/bfi/bonsai-8b-q1_0' });
@@ -66,12 +66,12 @@ describe('createHostModelStream', () => {
     const fetchImpl = vi.fn(async () => sse('from-device'));
     const stream = createHostModelStream({
       pinned: () => 'anthropic/claude-sonnet-4',
-      probes: async () => [ollama],
+      probes: async () => [synapse],
       cloud: () => null,
       fetch: fetchImpl,
       fit: async (m) => m,
     });
-    expect((await stream(hello)).resolvedModel).toBe('local/ollama/gemma:2b');
+    expect((await stream(hello)).resolvedModel).toBe('local/synapse/gemma:2b');
   });
 
   it('sends the call to the gateway untouched when nothing is probed, and asks for sign-in signed out', async () => {
@@ -84,7 +84,7 @@ describe('createHostModelStream', () => {
   it('never serves an explicit byo_pool call on the device', async () => {
     const fetchImpl = vi.fn(async () => sse('from-device'));
     const { cloud, calls } = fakeCloud();
-    const stream = createHostModelStream({ probes: async () => [ollama], cloud: () => cloud, fetch: fetchImpl });
+    const stream = createHostModelStream({ probes: async () => [synapse], cloud: () => cloud, fetch: fetchImpl });
     await stream({ ...hello, routingMode: 'byo_pool' });
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(calls).toHaveLength(1);
@@ -95,12 +95,12 @@ describe('createHostModelStream', () => {
     const stream = createHostModelStream({
       pinned: () => 'local/bfi/bonsai-8b-q1_0',
       localPin: () => null,
-      probes: async () => [ollama],
+      probes: async () => [synapse],
       cloud: () => null,
       fetch: fetchImpl,
       fit: async (m) => m,
     });
-    expect((await stream(hello)).resolvedModel).toBe('local/ollama/gemma:2b');
+    expect((await stream(hello)).resolvedModel).toBe('local/synapse/gemma:2b');
   });
 
   describe('inference mode', () => {
@@ -122,14 +122,14 @@ describe('createHostModelStream', () => {
       const stream = createHostModelStream({
         mode: () => 'local-only',
         pinned: () => 'anthropic/claude-sonnet-4',
-        probes: async () => [ollama],
+        probes: async () => [synapse],
         cloud: () => cloud,
         fetch: fetchImpl,
         fit: async (m) => m,
       });
-      expect((await stream(hello)).resolvedModel).toBe('local/ollama/gemma:2b');
-      expect((await stream({ ...hello, model: 'openai/gpt-5', modelStrict: true })).resolvedModel).toBe('local/ollama/gemma:2b');
-      expect((await stream({ ...hello, routingMode: 'byo_pool' })).resolvedModel).toBe('local/ollama/gemma:2b');
+      expect((await stream(hello)).resolvedModel).toBe('local/synapse/gemma:2b');
+      expect((await stream({ ...hello, model: 'openai/gpt-5', modelStrict: true })).resolvedModel).toBe('local/synapse/gemma:2b');
+      expect((await stream({ ...hello, routingMode: 'byo_pool' })).resolvedModel).toBe('local/synapse/gemma:2b');
       expect(calls).toEqual([]);
     });
 
@@ -152,12 +152,12 @@ describe('createHostModelStream', () => {
         mode: () => 'local-only',
         pinned: () => 'local/kimi-code/kimi-k2',
         localPin,
-        probes: async () => [ollama],
+        probes: async () => [synapse],
         cloud: () => null,
         fetch: vi.fn(async () => sse('from-device')),
         fit: async (m) => m,
       });
-      expect((await withDevice(hello)).resolvedModel).toBe('local/ollama/gemma:2b');
+      expect((await withDevice(hello)).resolvedModel).toBe('local/synapse/gemma:2b');
     });
 
     it('a signed-in person whose cloud route is unavailable never sees the sign-in prompt', async () => {
@@ -165,7 +165,7 @@ describe('createHostModelStream', () => {
       await expect(stream(hello)).rejects.toThrow('no_local_model');
       const probed = createHostModelStream({
         mode: () => 'hybrid',
-        probes: async () => [{ ...ollama, models: [] }],
+        probes: async () => [{ ...synapse, models: [] }],
         cloud: () => null,
         signedIn: () => true,
       });
@@ -179,7 +179,7 @@ describe('createHostModelStream', () => {
 
     it('Specific: the host pin wins', async () => {
       const { cloud, calls } = fakeCloud();
-      const stream = createHostModelStream({ mode: () => 'specific', pinned: () => 'anthropic/claude-sonnet-4', probes: async () => [ollama], cloud: () => cloud });
+      const stream = createHostModelStream({ mode: () => 'specific', pinned: () => 'anthropic/claude-sonnet-4', probes: async () => [synapse], cloud: () => cloud });
       await stream(hello);
       expect(calls[0]).toMatchObject({ model: 'anthropic/claude-sonnet-4', modelStrict: true });
     });
@@ -204,12 +204,12 @@ describe('createHostModelStream', () => {
     it('Hybrid + Auto (no pick): local first, then the gateway', async () => {
       const fetchImpl = vi.fn(async () => sse('from-device'));
       const { cloud, calls } = fakeCloud();
-      const stream = createHostModelStream({ mode: () => 'hybrid', probes: async () => [ollama], cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m });
-      expect((await stream(hello)).resolvedModel).toBe('local/ollama/gemma:2b');
+      const stream = createHostModelStream({ mode: () => 'hybrid', probes: async () => [synapse], cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m });
+      expect((await stream(hello)).resolvedModel).toBe('local/synapse/gemma:2b');
       expect(calls).toEqual([]);
       const down = createHostModelStream({
         mode: () => 'hybrid',
-        probes: async () => [ollama],
+        probes: async () => [synapse],
         cloud: () => cloud,
         fetch: vi.fn(async () => new Response('down', { status: 503 })),
         fit: async (m) => m,
@@ -221,11 +221,11 @@ describe('createHostModelStream', () => {
     it('Hybrid + a pick: the pick first, NOT hard-pinned; a failed pick falls back to the local engine, then the gateway on Auto', async () => {
       const { cloud, calls } = failingCloud();
       const fetchImpl = vi.fn(async () => sse('from-device'));
-      const stream = createHostModelStream({ mode: () => 'hybrid', probes: async () => [ollama], cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m });
+      const stream = createHostModelStream({ mode: () => 'hybrid', probes: async () => [synapse], cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m });
       // The web app / editor carry the pick on the call, strictly.
       const result = await stream({ ...hello, model: 'anthropic/claude-sonnet-4', modelStrict: true });
       expect(calls[0]).toMatchObject({ model: 'anthropic/claude-sonnet-4', modelStrict: false });
-      expect(result.resolvedModel).toBe('local/ollama/gemma:2b');
+      expect(result.resolvedModel).toBe('local/synapse/gemma:2b');
       // Nothing local either: Auto at the gateway, with the pick and its strictness dropped.
       const gatewayOnly = createHostModelStream({ mode: () => 'hybrid', pinned: () => 'anthropic/claude-sonnet-4', probes: async () => [], cloud: () => cloud });
       expect((await gatewayOnly(hello)).text).toBe('from-auto');
@@ -281,14 +281,14 @@ describe('createHostModelStream', () => {
         handlers?.onTextDelta?.('partial');
         throw new Error('dropped mid-stream');
       };
-      const stream = createHostModelStream({ mode: () => 'hybrid', pinned: () => 'anthropic/claude-sonnet-4', probes: async () => [ollama], cloud: () => cloud, fetch: vi.fn(async () => sse('from-device')) });
+      const stream = createHostModelStream({ mode: () => 'hybrid', pinned: () => 'anthropic/claude-sonnet-4', probes: async () => [synapse], cloud: () => cloud, fetch: vi.fn(async () => sse('from-device')) });
       await expect(stream(hello, { onTextDelta: () => {} })).rejects.toThrow('dropped mid-stream');
     });
 
     it('Specific + a pick: exactly the pinned route, modelStrict, no local attempt and no fallback', async () => {
       const { cloud, calls } = failingCloud();
       const fetchImpl = vi.fn(async () => sse('from-device'));
-      const probes = vi.fn(async () => [ollama]);
+      const probes = vi.fn(async () => [synapse]);
       const stream = createHostModelStream({ mode: () => 'specific', probes, cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m });
       await expect(stream({ ...hello, model: 'anthropic/claude-sonnet-4', modelStrict: true })).rejects.toThrow('pinned model unavailable');
       expect(calls).toHaveLength(1);
@@ -299,7 +299,7 @@ describe('createHostModelStream', () => {
 
     it('Specific with no pick fails no_specific_model — never a silent Hybrid', async () => {
       const { cloud, calls } = fakeCloud();
-      const probes = vi.fn(async () => [ollama]);
+      const probes = vi.fn(async () => [synapse]);
       const stream = createHostModelStream({ mode: () => 'specific', probes, cloud: () => cloud, signedIn: () => true });
       await expect(stream(hello)).rejects.toThrow('no_specific_model');
       // A model the call names WITHOUT strictness (a project pin, a failover) is not the person's pick.
@@ -338,12 +338,12 @@ describe("createHostModelStream — Hybrid's run.local-success predictor", () =>
       const fetchImpl = vi.fn(async () => sse('from-device'));
       const { cloud, calls } = fakeCloud();
       const store = memoryStore(failsHead);
-      const stream = createHostModelStream({ mode: () => 'hybrid', probes: async () => [ollama], cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m, localSuccess: store });
+      const stream = createHostModelStream({ mode: () => 'hybrid', probes: async () => [synapse], cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m, localSuccess: store });
       expect((await stream(hello)).text).toBe('from-cloud');
       expect(fetchImpl).not.toHaveBeenCalled();
       expect(calls).toHaveLength(1);
       const [outcome] = await settled(store);
-      expect(outcome).toMatchObject({ ref: 'local/ollama/gemma:2b', cloud: 'succeeded' });
+      expect(outcome).toMatchObject({ ref: 'local/synapse/gemma:2b', cloud: 'succeeded' });
       expect(outcome!.local).toBeUndefined();
     } finally {
       random.mockRestore();
@@ -354,10 +354,10 @@ describe("createHostModelStream — Hybrid's run.local-success predictor", () =>
     const fetchImpl = vi.fn(async () => sse('from-device'));
     const { cloud, calls } = fakeCloud();
     const store = memoryStore();
-    const stream = createHostModelStream({ mode: () => 'hybrid', probes: async () => [ollama], cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m, localSuccess: store });
-    expect((await stream(hello)).resolvedModel).toBe('local/ollama/gemma:2b');
+    const stream = createHostModelStream({ mode: () => 'hybrid', probes: async () => [synapse], cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m, localSuccess: store });
+    expect((await stream(hello)).resolvedModel).toBe('local/synapse/gemma:2b');
     expect(calls).toEqual([]);
-    expect((await settled(store))[0]).toMatchObject({ ref: 'local/ollama/gemma:2b', local: 'succeeded' });
+    expect((await settled(store))[0]).toMatchObject({ ref: 'local/synapse/gemma:2b', local: 'succeeded' });
   });
 
   it("records a local failure that fell back to the gateway as the local model's failure", async () => {
@@ -365,7 +365,7 @@ describe("createHostModelStream — Hybrid's run.local-success predictor", () =>
     const store = memoryStore();
     const stream = createHostModelStream({
       mode: () => 'hybrid',
-      probes: async () => [ollama],
+      probes: async () => [synapse],
       cloud: () => cloud,
       fetch: vi.fn(async () => new Response('down', { status: 503 })),
       fit: async (m) => m,
@@ -380,8 +380,8 @@ describe("createHostModelStream — Hybrid's run.local-success predictor", () =>
     try {
       const fetchImpl = vi.fn(async () => sse('from-device'));
       const store = memoryStore(failsHead);
-      const stream = createHostModelStream({ mode: () => 'local-only', probes: async () => [ollama], cloud: () => null, fetch: fetchImpl, fit: async (m) => m, localSuccess: store });
-      expect((await stream(hello)).resolvedModel).toBe('local/ollama/gemma:2b');
+      const stream = createHostModelStream({ mode: () => 'local-only', probes: async () => [synapse], cloud: () => null, fetch: fetchImpl, fit: async (m) => m, localSuccess: store });
+      expect((await stream(hello)).resolvedModel).toBe('local/synapse/gemma:2b');
       expect(store.saved()).toBeUndefined();
     } finally {
       random.mockRestore();
@@ -395,15 +395,15 @@ describe("createHostModelStream — Hybrid's run.local-success predictor", () =>
       const { cloud, calls } = fakeCloud();
       const stream = createHostModelStream({
         mode: () => 'hybrid',
-        pinned: () => 'local/ollama/gemma:2b',
-        localPin: () => ({ endpoint: ollama.endpoint, model: 'gemma:2b' }),
-        probes: async () => [ollama],
+        pinned: () => 'local/synapse/gemma:2b',
+        localPin: () => ({ endpoint: synapse.endpoint, model: 'gemma:2b' }),
+        probes: async () => [synapse],
         cloud: () => cloud,
         fetch: fetchImpl,
         fit: async (m) => m,
         localSuccess: memoryStore(failsHead),
       });
-      expect((await stream(hello)).resolvedModel).toBe('local/ollama/gemma:2b');
+      expect((await stream(hello)).resolvedModel).toBe('local/synapse/gemma:2b');
       expect(calls).toEqual([]);
     } finally {
       random.mockRestore();
@@ -424,7 +424,7 @@ describe('createHostModelStream — federating the run.local-success head', () =
     return createHostModelStream({
       mode: () => input.mode,
       signedIn: () => input.signedIn,
-      probes: async () => [ollama],
+      probes: async () => [synapse],
       cloud: () => (input.mode === 'local-only' ? null : cloud),
       fetch: vi.fn(async () => sse('from-device')),
       fit: async (m) => m,
