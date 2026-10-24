@@ -43,14 +43,15 @@ export class VisualizationPanel extends WebviewPanelBase<VisualizationInbound> {
     private readonly session: WorkspaceCanvasSession,
     private readonly runHost: BrainRunHost,
   ) {
-    // Beside, not on top of: the point of the panel is that the chat stays visible
-    // next to it. `WebviewPanelBase` opens Active, so the column is taken here.
+    // In the editor area, NOT beside the user's file: the chat now lives in the sidebar,
+    // so `Beside` would split whatever code editor is focused. Opened without stealing
+    // focus — the person is typing in the chat or reading a file when it appears.
     super(ctx, {
       viewType: "builderforce.visualization",
       title: vscode.l10n.t("BuilderForce Visualization"),
       htmlTitle: "BuilderForce Visualization",
+      show: { viewColumn: vscode.ViewColumn.Active, preserveFocus: true },
     });
-    this.panel.reveal(vscode.ViewColumn.Beside, true);
     // The canvas picks its palette from the editor theme, as the workspace panel does.
     this.disposables.push(vscode.window.onDidChangeActiveColorTheme(() => void this.sendInit()));
     // The run's file list is the panel's reason to exist (AC4): a tool that writes,
@@ -58,18 +59,28 @@ export class VisualizationPanel extends WebviewPanelBase<VisualizationInbound> {
     this.disposables.push(watchPendingChanges(() => void this.pushPendingChanges()));
   }
 
-  /** Open (or reveal) the visualization panel beside the current chat. */
-  static open(ctx: vscode.ExtensionContext, runHost: BrainRunHost): void {
+  /** The open in flight: the session lookup can be a network round trip, and a second
+   *  caller in that window (the auto-open and an early Visualize click) must not get a
+   *  second tab. */
+  private static opening: Promise<void> | undefined;
+
+  /** Open (or reveal) the visualization panel in the editor area. Rejects when the
+   *  board's session could not be resolved, so a caller can try again later. */
+  static open(ctx: vscode.ExtensionContext, runHost: BrainRunHost): Promise<void> {
+    if (VisualizationPanel.current) {
+      VisualizationPanel.current.panel.reveal(undefined, true);
+      return Promise.resolve();
+    }
     // The board is the SAME session the chat is working in — the canvas must not fork
     // into a second board, or the user would edit one and see the other.
-    void workspaceCanvasSession(ctx).then((session) => {
-      if (VisualizationPanel.current) {
-        VisualizationPanel.current.panel.reveal(vscode.ViewColumn.Beside, true);
-        return;
-      }
-      const panel = new VisualizationPanel(ctx, session, runHost);
-      VisualizationPanel.current = panel;
-    });
+    VisualizationPanel.opening ??= workspaceCanvasSession(ctx)
+      .then((session) => {
+        VisualizationPanel.current ??= new VisualizationPanel(ctx, session, runHost);
+      })
+      .finally(() => {
+        VisualizationPanel.opening = undefined;
+      });
+    return VisualizationPanel.opening;
   }
 
   protected async onMessage(msg: VisualizationInbound): Promise<void> {

@@ -59,13 +59,20 @@ export abstract class WebviewPanelBase<M extends WebviewInbound = WebviewInbound
 
   protected constructor(
     protected readonly ctx: vscode.ExtensionContext,
-    init: { viewType: string; title: string; htmlTitle: string; localResourceRoots?: vscode.Uri[] },
+    init: {
+      viewType: string;
+      title: string;
+      htmlTitle: string;
+      localResourceRoots?: vscode.Uri[];
+      /** Where the panel opens. Default: the active column, taking focus. */
+      show?: { viewColumn: vscode.ViewColumn; preserveFocus?: boolean };
+    },
   ) {
     this.htmlTitle = init.htmlTitle;
     this.panel = vscode.window.createWebviewPanel(
       init.viewType,
       init.title,
-      vscode.ViewColumn.Active,
+      init.show ?? vscode.ViewColumn.Active,
       {
         enableScripts: true,
         retainContextWhenHidden: true,

@@ -4,7 +4,7 @@ All notable changes to the BuilderForce VS Code extension are documented here.
 
 ## [2026.10.69] — The chat gets the whole sidebar; the board opens beside it
 
-- **The conversation is no longer squeezed under the board.** The chat in the side panel now shows only the conversation. The board, with your codebase and the run's changes, opens in its own editor tab beside the chat, so you can watch the work and read the conversation at the same time.
+- **The conversation is no longer squeezed under the board.** The chat in the side panel now shows only the conversation. The board, with your codebase and the run's changes, opens in its own tab in the editor area, so you can watch the work and read the conversation at the same time. It appears once you're signed in, and it doesn't split the file you have open or take the cursor from you.
 - **Bring the board back with one click.** If you close it, the Visualize button in the chat header opens it again.
 - **See which version you're running.** The chat header shows the installed BuilderForce version, so "do I have the fix?" is answered at a glance.
 - **A run's memory goes only to the project it started in.** A run started with no project no longer writes what it learned to whatever project happens to be selected when it finishes.

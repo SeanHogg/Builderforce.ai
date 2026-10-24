@@ -14,7 +14,7 @@
 import { and, eq, isNull, lt, or } from 'drizzle-orm';
 import { findCanonicalBoard } from '../../swimlane/canonicalBoard';
 import { parseCloudAgentRef } from '../cloudDispatch';
-import { getOrSetCached } from '../../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, peekCached, setCached } from '../../../infrastructure/cache/readThroughCache';
 import { executions, tasks } from '../../../infrastructure/database/schema';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { throttledWriteDue } from '../../agentHost/heartbeatThrottle';

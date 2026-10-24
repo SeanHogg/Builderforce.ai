@@ -371,13 +371,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.refreshEvermind", () => evermindView?.triggerRefresh()),
   );
 
-  // The Visualization panel — the SECOND editor column. The chat keeps the left
-  // column it is already in and the canvas gets a right-hand panel beside it, so
-  // the two are read at once instead of traded against each other in one tab.
+  // The Visualization panel — the board and the run's changes, in the editor area,
+  // while the chat holds the sidebar: the two are read at once instead of traded
+  // against each other in one view.
   //
-  // It is a PANEL, not a sidebar view: it needs real estate, and the split is the
-  // whole point of it. `ViewColumn.Beside` therefore opens it NEXT TO whatever is
-  // focused, which is the chat when the command is run from a chat turn.
+  // It is a PANEL, not a sidebar view: it needs real estate. It opens in the active
+  // editor column without taking focus (`VisualizationPanel`), so with the chat in the
+  // sidebar the board fills the editor area instead of splitting the open file.
   //
   // `retainContextWhenHidden` matches every other bundled-React surface here (see
   // `WebviewPanelBase`): the code-change tree is fed live by the run, and losing it
@@ -390,7 +390,7 @@ export function activate(context: vscode.ExtensionContext): void {
       // The class, not an inline `createWebviewPanel`: the webview posts `ready` at
       // module load, and only a panel that ANSWERS it ever leaves the boot screen.
       // See `src/visualizationPanel.ts` for what was broken before this existed.
-      VisualizationPanel.open(context, runHost);
+      return VisualizationPanel.open(context, runHost);
     }),
   );
 
