@@ -35,7 +35,22 @@
  */
 export const KIMI_OAUTH_CLIENT_ID = '17e5f671-d194-4dfb-9706-5516cb48c098';
 
-export const KIMI_OAUTH_DEFAULT_HOST = 'https://auth.kimi.com';
+/**
+ * Kimi's US/international domain — the ONE place it is spelled. Every Kimi endpoint the
+ * gateway, the editor and Rovr use derives from it. Its install config names the same
+ * hosts (`base_url`, `oauth_host`). Regions are not interchangeable: a grant issued on
+ * one is refused by the other as `invalid_grant`.
+ */
+export const KIMI_DOMAIN = 'kimi.ai';
+
+export const KIMI_OAUTH_DEFAULT_HOST = `https://auth.${KIMI_DOMAIN}`;
+
+/** Kimi Code's API host — the origin a browser client must be granted. */
+export const KIMI_CODE_API_HOST = `api.${KIMI_DOMAIN}`;
+
+/** Kimi Code's OpenAI-compatible base. The gateway dispatches to its `/chat/completions`
+ *  and the local-credential route hands it to a runtime on the person's own machine. */
+export const KIMI_CODE_API_BASE_URL = `https://${KIMI_CODE_API_HOST}/coding/v1`;
 
 export const KIMI_DEVICE_AUTHORIZATION_PATH = '/api/oauth/device_authorization';
 export const KIMI_TOKEN_PATH = '/api/oauth/token';

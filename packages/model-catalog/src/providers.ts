@@ -72,7 +72,7 @@ export const LLM_PROVIDER_INFO: readonly LlmProviderInfo[] = [
   { id: 'meta',      label: 'Meta AI (MUSE)',     credential: 'api_key', keyPlaceholder: 'meta-…',   subscription: null },
   // A Kimi Code subscription issues no API key at all — its own config leaves `api_key`
   // empty beside an OAuth record — so it connects by device-code redirect, never paste.
-  { id: 'kimi',      label: 'Kimi',               credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: 'device', signInDomains: ['kimi.com'] },
+  { id: 'kimi',      label: 'Kimi',               credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: 'device', signInDomains: ['kimi.ai', 'kimi.com'] },
   { id: 'moonshot',  label: 'Moonshot AI',        credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: null },
   { id: 'qwen',      label: 'Qwen',               credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: null },
   { id: 'minimax',   label: 'MiniMax',            credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: null },

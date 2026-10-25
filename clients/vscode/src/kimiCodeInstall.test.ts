@@ -130,6 +130,15 @@ describe("parseKimiCodeConfig", () => {
   it("returns no endpoint for a file that declares none, rather than throwing", () => {
     expect(parseKimiCodeConfig("# nothing here\n")).toEqual({ baseUrl: null, models: [] });
   });
+
+  // A US install signs in at auth.kimi.ai; refreshing that grant at auth.kimi.com answers
+  // `invalid_grant` (seen live 2026-10-25), so the refresh must go to the declared host.
+  it("reads the sign-in host the login was issued by", () => {
+    const us = '[providers."managed:kimi-code"]\nbase_url = "https://api.kimi.ai/coding/v1"\n\n'
+      + '[providers."managed:kimi-code".oauth]\nstorage = "file"\noauth_host = "https://auth.kimi.ai"\n';
+    expect(parseKimiCodeConfig(us)).toMatchObject({ baseUrl: "https://api.kimi.ai/coding/v1", oauthHost: "https://auth.kimi.ai" });
+    expect(parseKimiCodeConfig(CONFIG)).not.toHaveProperty("oauthHost");
+  });
 });
 
 describe("loadKimiCodeInstall", () => {

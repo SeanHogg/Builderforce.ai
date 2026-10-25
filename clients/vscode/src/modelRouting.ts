@@ -57,6 +57,7 @@ import {
   type ChatMessage,
 } from "./gateway";
 import { authorizeLocalEndpoint } from "./localEndpointAuth";
+import { logLine } from "./errorReporter";
 import { probeLocalFirstRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "./nativeBrainRun";
@@ -92,6 +93,22 @@ export interface ModelRoute {
    * `no_local_model`, and it never needs an account.
    */
   inferenceMode?: InferenceMode;
+  /**
+   * Specific, on a provider only this machine can reach (registry `gatewayVendor` — Kimi
+   * Code), whose credential could not be resolved. The gateway cannot serve that pick
+   * either, so the turn fails with WHY ({@link routeStream}) instead of reaching a server
+   * that answers `local_egress_required`.
+   */
+  unauthorized?: { provider: LocalRuntimeId; detail: string };
+}
+
+/** The error a turn on an {@link ModelRoute.unauthorized} route fails with. */
+function unauthorizedError(unauthorized: NonNullable<ModelRoute["unauthorized"]>): Error {
+  const label = localRuntime(unauthorized.provider).label;
+  return new Error(
+    `${label} could not be authorized on this machine, so this turn was not sent. ${unauthorized.detail} `
+      + `Sign in again in ${label}, or connect it with "BuilderForce: Manage Model Provider Connections".`,
+  );
 }
 
 /** Who is asking for a route. */
@@ -164,7 +181,13 @@ async function resolveChoiceRoute(secrets: vscode.SecretStorage, choice: ModelRo
   // Kimi token cannot be refreshed from inside it. A provider that cannot authorize falls
   // back to the gateway rather than dispatching a request that is certain to 401.
   const authorized = await authorizeLocalEndpoint(pin.provider, endpoint, secrets);
-  if (!authorized.ok) return choice;
+  if (!authorized.ok) {
+    // Only Specific promises the pick and nothing else; Hybrid answers with Auto.
+    const failTurn = choice.inferenceMode === "specific" && localRuntime(pin.provider).gatewayVendor !== undefined;
+    logLine(`[route] ${choice.model} could not run on this machine (${authorized.detail}); ${failTurn ? "failing the turn" : "routing to the gateway"}.`);
+    return failTurn ? { ...choice, unauthorized: { provider: pin.provider, detail: authorized.detail } } : choice;
+  }
+  logLine(`[route] ${choice.model} runs on this machine via ${pin.provider}.`);
   return { ...choice, local: { ...pin, endpoint: authorized.endpoint } };
 }
 
@@ -260,6 +283,7 @@ export function routeStream(
   apiKey: string | undefined,
   onFallback?: (event: ModelFallbackEvent) => void,
 ): BrainStreamFn {
+  if (route.unauthorized) throw unauthorizedError(route.unauthorized);
   if (routeNeedsLocalModel(route)) throw new Error(NO_LOCAL_MODEL);
   if (!apiKey && routeRequiresSignIn(route)) throw new Error(NOT_SIGNED_IN);
   const cloud = !localOnly(route) && apiKey && platformPolicy().allows("gateway-inference") ? createNativeStream(getBaseUrl(), apiKey) : null;
@@ -302,6 +326,7 @@ export async function routeComplete(
   messages: ChatMessage[],
   signal?: AbortSignal,
 ): Promise<string> {
+  if (route.unauthorized) throw unauthorizedError(route.unauthorized);
   if (route.local) return completeLocal(route.local.endpoint, route.local.model, messages, signal, hostPageEngines.fetch());
   if (routeNeedsSpecificModel(route)) throw new Error(NO_SPECIFIC_MODEL);
   const signedIn = Boolean(await getApiKey(secrets));

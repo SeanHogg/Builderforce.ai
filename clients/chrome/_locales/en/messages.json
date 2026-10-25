@@ -1637,7 +1637,8 @@
     "description": "$1 = the reason"
   },
   "kimiOriginDenied": {
-    "message": "Rovr needs permission to reach api.kimi.com to run Kimi from this browser."
+    "message": "Rovr needs permission to reach $1 to run Kimi from this browser.",
+    "description": "$1 = Kimi's API host"
   },
   "kimiK3Plan": {
     "message": "needs a Kimi plan with K3"

@@ -151,7 +151,7 @@ export interface VendorEnv {
   /** Moonshot AI (Kimi) Open Platform — api.moonshot.ai/v1 (international), with
    *  api.moonshot.cn/v1 (China) resolved automatically when the key is rejected there. */
   MOONSHOT_API_KEY?: string | null;
-  /** Kimi Code subscription — api.kimi.com/coding/v1 (not interchangeable with Moonshot keys). */
+  /** Kimi Code subscription — `KIMI_CODE_API_BASE_URL` in `@builderforce/kimi-oauth` (not interchangeable with Moonshot keys). */
   KIMI_CODE_API_KEY?: string | null;
   QWEN_API_KEY?: string | null;
   /** Hyperbolic — api.hyperbolic.xyz/v1. */

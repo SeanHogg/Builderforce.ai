@@ -19,6 +19,7 @@
  * provider hosts via the prefix, not just catalog members.
  */
 
+import { KIMI_CODE_API_BASE_URL } from '@builderforce/kimi-oauth';
 import { createOpenAICompatibleVendor, type VendorApiKeyEnv } from './openaiCompatible';
 import type { AiCapability, AiModelTier, VendorEnv, VendorModule } from './types';
 
@@ -66,12 +67,6 @@ interface VendorSpec {
   listsModels?: boolean;
 }
 
-/**
- * Kimi Code's OpenAI-compatible base — the ONE spelling. The gateway dispatches to its
- * `/chat/completions` (through a tenant's connected runtime), and the local-credential
- * route hands the same base to a runtime on the person's own machine.
- */
-export const KIMI_CODE_API_BASE_URL = 'https://api.kimi.com/coding/v1';
 
 const SPECS: ReadonlyArray<VendorSpec> = [
   {

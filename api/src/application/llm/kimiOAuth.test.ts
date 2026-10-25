@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { KIMI_OAUTH_CLIENT_ID } from '@builderforce/kimi-oauth';
+import { KIMI_OAUTH_CLIENT_ID, KIMI_OAUTH_DEFAULT_HOST } from '@builderforce/kimi-oauth';
 import {
   pollKimiDeviceToken,
   refreshKimiOAuth,
@@ -36,7 +36,7 @@ describe('device authorization', () => {
     }) as unknown as typeof fetch;
 
     const authorization = await startKimiDeviceAuthorization();
-    expect(seen!.url).toBe('https://auth.kimi.com/api/oauth/device_authorization');
+    expect(seen!.url).toBe(`${KIMI_OAUTH_DEFAULT_HOST}/api/oauth/device_authorization`);
     expect(seen!.headers['content-type']).toBe('application/x-www-form-urlencoded');
     expect(new URLSearchParams(seen!.body).get('client_id')).toBe(KIMI_OAUTH_CLIENT_ID);
     // `verification_uri_complete` already carries the code — that is what makes this a

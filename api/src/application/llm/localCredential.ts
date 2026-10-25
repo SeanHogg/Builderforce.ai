@@ -32,7 +32,7 @@ import {
   type ByoUnresolvedReason,
 } from './tenantProviderKeyService';
 import { getModule, type VendorId } from './vendors';
-import { KIMI_CODE_API_BASE_URL } from './vendors/openaiCompatibleVendors';
+import { KIMI_CODE_API_BASE_URL } from '@builderforce/kimi-oauth';
 
 /** How one provider's subscription is issued to a local runtime. */
 interface LocalCredentialSource {

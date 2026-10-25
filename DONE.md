@@ -1,3 +1,20 @@
+## ✅ RESOLVED 2026-10-25 — Kimi uses its US hosts, spelled once; a failed Kimi sign-in is logged and never silent (VSIX 2026.10.84 · api 2026.10.83 · Rovr 2026.10.27)
+
+**Reported:** on VSIX 2026.10.83 the Kimi turn went back to the server (`local_egress_required`) with nothing logged.
+
+- **Cause.** The Kimi Code CLI login on this machine had died. Kimi answered its refresh with `invalid_grant`. The install's config names `oauth_host = https://auth.kimi.ai`, but the VSIX refreshed against the hard-coded `https://auth.kimi.com`. Kimi's regions refuse each other's grants. The Kimi Code VS Code extension also refreshes the same `~/.kimi-code` credential. When authorization failed, `resolveChoiceRoute` returned the bare pick (`if (!authorized.ok) return choice;`), which sent the turn to the server without any log.
+- **One owner for Kimi's hosts.** `KIMI_DOMAIN = 'kimi.ai'` in `@builderforce/kimi-oauth` is the only spelling. `KIMI_OAUTH_DEFAULT_HOST`, `KIMI_CODE_API_HOST` and `KIMI_CODE_API_BASE_URL` derive from it.
+  - The server's vendor spec, local-credential route and provider-key copy import it.
+  - Rovr's host permission and `kimiOriginDenied` copy (`$1`, all five locales) import it.
+  - The server copy of `KIMI_CODE_API_BASE_URL` is gone.
+- **Refresh at the issuing host.** `parseKimiCodeConfig` reads `oauth_host`, and the authorizer refreshes there. An explicit `KIMI_CODE_OAUTH_HOST` still wins.
+- **Logged, never silent.**
+  - `authorizeLocalEndpoint` writes each step to the BuilderForce output channel (`[kimi auth]`): CLI login used or why not, and workspace connection used or why not.
+  - A failure is filed through `reportExtensionError` (`kimi.authorize`).
+  - `resolveChoiceRoute` logs every route decision (`[route]`).
+  - Under Specific, a pick for a provider only this machine can reach (registry `gatewayVendor`) that cannot be authorized now fails the turn with the reason and the remedy. Hybrid still answers with Auto, but logged.
+- **Known consequence.** A workspace Kimi connection granted on `auth.kimi.com` before this change will ask to be reconnected once, which re-grants it on `kimi.ai`.
+
 ## ✅ RESOLVED 2026-10-25 — A connected Kimi pick runs from this machine, with sign-in (VSIX 2026.10.83 · brain-embedded 2026.10.56 · api 2026.10.82)
 
 **Reported:** chat #5091 pinned `direct/kimi-code/k3` in the VSIX and every turn failed `Strict-pin: model 'direct/kimi-code/k3' is unavailable (local_egress_required)`. The Kimi login was never offered. After the routing half shipped (VSIX 2026.10.82), the turn reached Kimi and failed `Invalid request Error`: 2026.10.82 was verified only by unit tests, never against the live API.

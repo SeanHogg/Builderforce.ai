@@ -47,8 +47,11 @@ export interface KimiCodeModel {
 export interface KimiCodeInstall {
   /** Resolved `KIMI_CODE_HOME`. */
   home: string;
-  /** OpenAI-compatible base, e.g. `https://api.kimi.com/coding/v1`. */
+  /** OpenAI-compatible base, as the install declares it. */
   baseUrl: string;
+  /** The sign-in host that issued the login (`oauth_host`).
+   *  A refresh MUST go back to it: the other region answers `invalid_grant`. */
+  oauthHost?: string;
   /** Models the install declares, in file order (Kimi lists its default first). */
   models: readonly KimiCodeModel[];
   /** The stored credential's lifecycle at read time — `fresh` (send it) or `stale`
@@ -94,6 +97,8 @@ export function resolveKimiCodeHome(
 /** The subset of `config.toml` this module needs. */
 export interface KimiCodeConfig {
   baseUrl: string | null;
+  /** `[providers."managed:kimi-code".oauth] oauth_host`, when declared. */
+  oauthHost?: string;
   models: KimiCodeModel[];
 }
 
@@ -127,6 +132,7 @@ function scalar(raw: string): string | number | null {
 export function parseKimiCodeConfig(text: string): KimiCodeConfig {
   const models: KimiCodeModel[] = [];
   let baseUrl: string | null = null;
+  let oauthHost: string | undefined;
   let table = "";
   let current: KimiCodeModel | null = null;
 
@@ -156,6 +162,10 @@ export function parseKimiCodeConfig(text: string): KimiCodeConfig {
       baseUrl = value;
       continue;
     }
+    if (table === '[providers."managed:kimi-code".oauth]' && key === "oauth_host" && typeof value === "string") {
+      oauthHost = value;
+      continue;
+    }
     if (!current) continue;
     // `model` overrides the id parsed from the header: the header is Kimi's REF
     // (`kimi-code/k3`), the field is what its API expects on the wire (`k3`).
@@ -164,7 +174,7 @@ export function parseKimiCodeConfig(text: string): KimiCodeConfig {
     if (key === "max_context_size" && typeof value === "number") current.maxContextSize = value;
   }
 
-  return { baseUrl, models };
+  return { baseUrl, ...(oauthHost ? { oauthHost } : {}), models };
 }
 
 // ---------------------------------------------------------------------------
@@ -218,5 +228,5 @@ export function loadKimiCodeInstall(
   }
   // `stale` is offered exactly like `fresh`: it is refreshable, and refusing to list a
   // model that one grant away is usable would put the user back to poking another app.
-  return { home, baseUrl: config.baseUrl, models: config.models, credential };
+  return { home, baseUrl: config.baseUrl, ...(config.oauthHost ? { oauthHost: config.oauthHost } : {}), models: config.models, credential };
 }

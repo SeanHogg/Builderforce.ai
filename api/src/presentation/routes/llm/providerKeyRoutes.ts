@@ -33,6 +33,7 @@ import { byoProviderUsage30d, byoUsageByProvider } from '../../../application/ll
 import { mountProviderModelRoutes } from '../providerModelRoutes';
 import { mountSubscriptionOAuthRoutes } from '../subscriptionOAuthRoutes';
 import { mountLocalCredentialRoutes } from '../localCredentialRoutes';
+import { KIMI_CODE_API_HOST } from '@builderforce/kimi-oauth';
 import { requireTenantAccess, respondToAccessError, type TenantAccess } from './access';
 
 export function mountProviderKeyRoutes(router: Hono<HonoEnv>): void {
@@ -143,7 +144,7 @@ export function mountProviderKeyRoutes(router: Hono<HonoEnv>): void {
           // with none online the candidate never dispatches (`local_egress_required`
           // above), so "you have no runtime" is no longer a reachable reading of a 403.
           ? provider === 'kimi' && probe.diagnostic?.edgeBlocked
-            ? `Kimi's edge refused this request even though it was made from your connected Builderforce runtime, not from our cloud. That points at the runtime machine's own network rather than at this key — check whether it can reach api.kimi.com directly. A Moonshot Open Platform key works from anywhere if you need a route now.`
+            ? `Kimi's edge refused this request even though it was made from your connected Builderforce runtime, not from our cloud. That points at the runtime machine's own network rather than at this key — check whether it can reach ${KIMI_CODE_API_HOST} directly. A Moonshot Open Platform key works from anywhere if you need a route now.`
             : provider === 'xai'
             ? `xAI connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Check the account's SuperGrok/API access, or use an xAI API key.`
             : provider === 'kimi'

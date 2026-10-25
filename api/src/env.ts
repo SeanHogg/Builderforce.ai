@@ -148,7 +148,7 @@ export interface Env {
   /** Moonshot AI (Kimi) Open Platform — api.moonshot.ai/v1 (international); a key
    *  issued by the China platform resolves to api.moonshot.cn/v1 automatically. */
   MOONSHOT_API_KEY?: string;
-  /** Kimi Code subscription API — api.kimi.com/coding/v1. */
+  /** Kimi Code subscription API — `KIMI_CODE_API_BASE_URL` (`@builderforce/kimi-oauth`). */
   KIMI_CODE_API_KEY?: string;
   QWEN_API_KEY?: string;
   /** Hyperbolic — api.hyperbolic.xyz/v1. */

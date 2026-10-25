@@ -30,15 +30,15 @@ function json(data: Record<string, unknown>) {
 
 describe('host resolution', () => {
   it('defaults to Kimi and honours Kimi Code’s own overrides', () => {
-    expect(kimiOAuthHost()).toBe('https://auth.kimi.com');
-    expect(kimiOAuthHost({})).toBe('https://auth.kimi.com');
+    expect(kimiOAuthHost()).toBe('https://auth.kimi.ai');
+    expect(kimiOAuthHost({})).toBe('https://auth.kimi.ai');
     expect(kimiOAuthHost({ KIMI_CODE_OAUTH_HOST: 'https://staging.example/' })).toBe('https://staging.example');
     expect(kimiOAuthHost({ KIMI_OAUTH_HOST: 'https://alt.example//' })).toBe('https://alt.example');
   });
 
   it('ignores a blank override rather than building an empty-host URL', () => {
     // A cleared env var must not produce `POST /api/oauth/token` against nothing.
-    expect(kimiOAuthHost({ KIMI_CODE_OAUTH_HOST: '   ' })).toBe('https://auth.kimi.com');
+    expect(kimiOAuthHost({ KIMI_CODE_OAUTH_HOST: '   ' })).toBe('https://auth.kimi.ai');
   });
 });
 
@@ -56,9 +56,9 @@ describe('request shapes', () => {
   });
 
   it('targets Kimi’s two endpoints', () => {
-    expect(kimiDeviceAuthorizationRequest().url).toBe('https://auth.kimi.com/api/oauth/device_authorization');
-    expect(kimiDeviceTokenRequest('d').url).toBe('https://auth.kimi.com/api/oauth/token');
-    expect(kimiRefreshTokenRequest('r').url).toBe('https://auth.kimi.com/api/oauth/token');
+    expect(kimiDeviceAuthorizationRequest().url).toBe('https://auth.kimi.ai/api/oauth/device_authorization');
+    expect(kimiDeviceTokenRequest('d').url).toBe('https://auth.kimi.ai/api/oauth/token');
+    expect(kimiRefreshTokenRequest('r').url).toBe('https://auth.kimi.ai/api/oauth/token');
   });
 
   it('uses the RFC 8628 grant type for device polling and refresh_token for renewal', () => {

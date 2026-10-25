@@ -12,6 +12,7 @@ vi.mock('./providerModelSelection', () => ({
   listProviderModelSelections: (...args: unknown[]) => listProviderModelSelections(...args),
 }));
 
+import { KIMI_CODE_API_BASE_URL } from '@builderforce/kimi-oauth';
 import { issueLocalCredential, supportsLocalCredential } from './localCredential';
 
 const env = {} as never;
@@ -56,7 +57,7 @@ describe('issueLocalCredential', () => {
       runtime: 'kimi-code',
       accessToken: 'access-1',
       expiresAt: 900_000,
-      baseUrl: 'https://api.kimi.com/coding/v1',
+      baseUrl: KIMI_CODE_API_BASE_URL,
     });
     expect(JSON.stringify(result.body)).not.toContain('refresh');
     expect(result.body.models.map((m) => m.model)).toEqual(['kimi-for-coding', 'k3', 'k3-256k', 'kimi-for-coding-highspeed']);

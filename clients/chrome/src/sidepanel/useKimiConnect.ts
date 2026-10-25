@@ -3,7 +3,7 @@
  * it use (Settings → Model, and the Connect card a Kimi turn raises in the chat).
  *
  * Order matters: Chrome grants an optional origin only from inside a user gesture, so the
- * `api.kimi.com` request is the FIRST await of the click. Then THE shared reconnect flow
+ * Kimi API origin request is the FIRST await of the click. Then THE shared reconnect flow
  * (brain-ui `useProviderReconnect`, the same one the composer's Connected accounts runs, so
  * a connect started in either place shows in both): the gateway starts a device grant,
  * Kimi's approval page opens in a tab, the flow waits for the approval, and the short-lived
@@ -14,6 +14,7 @@ import { useCallback, useState, useSyncExternalStore } from 'react';
 import { useProviderReconnect, type ReconnectFailure } from '@seanhogg/builderforce-brain-ui';
 import type { LocalCredential } from '@builderforce/provider-connect';
 import { t } from '../i18n/t';
+import { KIMI_CODE_API_HOST } from '@builderforce/kimi-oauth';
 import { KIMI_API_ORIGINS, KIMI_PROVIDER } from '../inference/connectedAccount';
 import { useServices } from './hooks';
 
@@ -51,7 +52,7 @@ export function useKimiConnect(): {
     // First, inside the gesture: without the origin Rovr cannot call Kimi at all.
     const granted = await chrome.permissions.request({ origins: KIMI_API_ORIGINS }).catch(() => false);
     if (!granted) {
-      setAround({ phase: 'failed', message: t('kimiOriginDenied') });
+      setAround({ phase: 'failed', message: t('kimiOriginDenied', KIMI_CODE_API_HOST) });
       return false;
     }
     // Already connected in the workspace (from the web or the editor) — just fetch the token.

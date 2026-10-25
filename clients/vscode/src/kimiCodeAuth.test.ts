@@ -146,7 +146,7 @@ describe("the refresh grant", () => {
     });
     const result = await refreshKimiAccessToken("old-r", { fetchImpl, nowMs: NOW });
 
-    expect(seen!.url).toBe("https://auth.kimi.com/api/oauth/token");
+    expect(seen!.url).toBe("https://auth.kimi.ai/api/oauth/token");
     // Lowercase because the shared protocol module spells headers the way the Fetch
     // standard normalizes them anyway — spelling them two ways is what invited the drift
     // this package removed.

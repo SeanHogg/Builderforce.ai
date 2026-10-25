@@ -38,7 +38,7 @@ export interface LocalCredential {
   accessToken: string;
   /** Absolute expiry, epoch MILLISECONDS. */
   expiresAt: number;
-  /** OpenAI-compatible base, e.g. `https://api.kimi.com/coding/v1`. */
+  /** OpenAI-compatible base, e.g. Kimi's `KIMI_CODE_API_BASE_URL`. */
   baseUrl: string;
   /** In the tenant's chosen order — position 0 leads. */
   models: readonly LocalCredentialModel[];

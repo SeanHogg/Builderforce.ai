@@ -1517,7 +1517,8 @@
     "message": "无法连接 Kimi：$1"
   },
   "kimiOriginDenied": {
-    "message": "Rovr 需要访问 api.kimi.com 的权限，才能从此浏览器运行 Kimi。"
+    "message": "Rovr 需要访问 $1 的权限，才能从此浏览器运行 Kimi。",
+    "description": "$1 = Kimi's API host"
   },
   "kimiK3Plan": {
     "message": "需要包含 K3 的 Kimi 套餐"

@@ -10,6 +10,7 @@ import {
 } from './registry';
 import { CAPACITY_LIMIT_MARKER, VendorRetryableError, type UpstreamDiagnostic, type VendorEnv } from './types';
 import { createOpenAICompatibleVendor } from './openaiCompatible';
+import { KIMI_CODE_API_BASE_URL } from '@builderforce/kimi-oauth';
 import {
   openAICompatibleModules,
   openAICompatibleModulesById,
@@ -150,7 +151,7 @@ describe('a factory vendor builds a correct OpenAI-compatible request', () => {
     ]);
   });
 
-  it('routes Kimi Code subscription keys to api.kimi.com, not the Moonshot Open Platform', async () => {
+  it('routes Kimi Code subscription keys to the Kimi Code API, not the Moonshot Open Platform', async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
       calls.push({ url: typeof input === 'string' ? input : input.toString(), init: init ?? {} });
@@ -170,7 +171,7 @@ describe('a factory vendor builds a correct OpenAI-compatible request', () => {
     });
 
     expect(result.vendorUsed).toBe('kimi-code');
-    expect(calls.map((call) => call.url)).toEqual(['https://api.kimi.com/coding/v1/chat/completions']);
+    expect(calls.map((call) => call.url)).toEqual([`${KIMI_CODE_API_BASE_URL}/chat/completions`]);
     expect((calls[0]!.init.headers as Record<string, string>)['User-Agent']).toBe('Builderforce.ai');
   });
 
@@ -415,7 +416,7 @@ describe('upstream diagnostic capture', () => {
 
     const diagnostic = await diagnosticFrom(callKimi);
     expect(diagnostic).toMatchObject({
-      endpoint: 'https://api.kimi.com/coding/v1/chat/completions',
+      endpoint: `${KIMI_CODE_API_BASE_URL}/chat/completions`,
       status: 403,
       // The load-bearing bit: the API never saw the key, so this is not a credential problem.
       edgeBlocked: true,
@@ -561,7 +562,7 @@ describe('local egress routing', () => {
       egress,
     });
 
-    expect(calls.map((c) => c.endpoint)).toEqual(['https://api.kimi.com/coding/v1/chat/completions']);
+    expect(calls.map((c) => c.endpoint)).toEqual([`${KIMI_CODE_API_BASE_URL}/chat/completions`]);
     // The credential rides the relayed request — it is the tenant's own key going to
     // the tenant's own machine, which is what makes the call a licensed personal client.
     expect((calls[0]!.init.headers as Record<string, string>).Authorization).toBe('Bearer sk-kimi-code');

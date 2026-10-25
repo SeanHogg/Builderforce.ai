@@ -1517,7 +1517,8 @@
     "message": "No se pudo conectar Kimi: $1"
   },
   "kimiOriginDenied": {
-    "message": "Rovr necesita permiso para acceder a api.kimi.com y usar Kimi desde este navegador."
+    "message": "Rovr necesita permiso para acceder a $1 y usar Kimi desde este navegador.",
+    "description": "$1 = Kimi's API host"
   },
   "kimiK3Plan": {
     "message": "requiere un plan de Kimi con K3"

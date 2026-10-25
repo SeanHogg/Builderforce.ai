@@ -9,9 +9,10 @@
  *
  * A pinned Kimi model that cannot be served raises {@link ProviderConnectRequired} rather
  * than routing elsewhere: the person picked Kimi, and the panel answers that error with a
- * Connect card (a user gesture, which Chrome needs to grant the `api.kimi.com` origin).
+ * Connect card (a user gesture, which Chrome needs to grant Kimi's API origin).
  */
 import type { HostLocalPin } from '@seanhogg/builderforce-brain-embedded';
+import { KIMI_CODE_API_HOST } from '@builderforce/kimi-oauth';
 import { clientPinOf } from '@builderforce/local-inference';
 import { createLocalCredentialStore, type GatewayRequest, type LocalCredentialStore } from '@builderforce/provider-connect';
 import type { KeyValueStore } from '../platform/keyValue';
@@ -20,7 +21,7 @@ export const KIMI_PROVIDER = 'kimi';
 /** The local runtime id a Kimi model ref names (`local/kimi-code/<model>`). */
 export const KIMI_RUNTIME = 'kimi-code';
 /** The origin Rovr must be granted to call Kimi — requested from the Connect click. */
-export const KIMI_API_ORIGINS = ['https://api.kimi.com/*'];
+export const KIMI_API_ORIGINS = [`https://${KIMI_CODE_API_HOST}/*`];
 
 const CONNECT_REQUIRED_PREFIX = 'provider_connect_required:';
 
