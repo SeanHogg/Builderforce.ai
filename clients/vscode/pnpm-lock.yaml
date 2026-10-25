@@ -35,14 +35,14 @@ importers:
         specifier: link:../../packages/brain-ui
         version: link:../../packages/brain-ui
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.25
-        version: 2026.10.25(@seanhogg/builderforce-memory-engine@2026.10.23)
+        specifier: ^2026.10.26
+        version: 2026.10.26(@seanhogg/builderforce-memory-engine@2026.10.23)
       '@seanhogg/builderforce-memory-engine':
         specifier: ^2026.10.23
         version: 2026.10.23
       '@seanhogg/builderforce-memory-mcp':
         specifier: ^2026.10.23
-        version: 2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)(@seanhogg/builderforce-memory@2026.10.25(@seanhogg/builderforce-memory-engine@2026.10.23))
+        version: 2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)(@seanhogg/builderforce-memory@2026.10.26(@seanhogg/builderforce-memory-engine@2026.10.23))
       '@seanhogg/builderforce-studio':
         specifier: link:../../studio
         version: link:../../studio
@@ -985,11 +985,11 @@ packages:
       fake-indexeddb:
         optional: true
 
-  '@seanhogg/builderforce-memory@2026.10.25':
-    resolution: {integrity: sha512-HTP05J4pgiU5BnHdRa1Y+bIX9hZZSkeS/G0DKRusNJlzGj8jvRAC1VKRkrmoLoyK5QZzZGo83xZwEI9xuT+6ow==}
+  '@seanhogg/builderforce-memory@2026.10.26':
+    resolution: {integrity: sha512-02v031fqacT99H7k73PhuZCoLc2y+3KJ15QZns7Ny5P69OWvON0FCaH8i25XeDV2ZAkTKtDI5RuMvyMCzr0KjQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.10.25
+      '@seanhogg/builderforce-memory-engine': ^2026.10.26
 
   '@secretlint/config-creator@10.2.2':
     resolution: {integrity: sha512-BynOBe7Hn3LJjb3CqCHZjeNB09s/vgf0baBaHVw67w7gHF0d25c3ZsZ5+vv8TgwSchRdUCRrbbcq5i2B1fJ2QQ==}
@@ -4644,18 +4644,18 @@ snapshots:
 
   '@seanhogg/builderforce-memory-engine@2026.10.23': {}
 
-  '@seanhogg/builderforce-memory-mcp@2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)(@seanhogg/builderforce-memory@2026.10.25(@seanhogg/builderforce-memory-engine@2026.10.23))':
+  '@seanhogg/builderforce-memory-mcp@2026.10.23(@seanhogg/builderforce-memory-engine@2026.10.23)(@seanhogg/builderforce-memory@2026.10.26(@seanhogg/builderforce-memory-engine@2026.10.23))':
     dependencies:
       '@modelcontextprotocol/sdk': 1.30.1(zod@3.25.76)
       zod: 3.25.76
     optionalDependencies:
-      '@seanhogg/builderforce-memory': 2026.10.25(@seanhogg/builderforce-memory-engine@2026.10.23)
+      '@seanhogg/builderforce-memory': 2026.10.26(@seanhogg/builderforce-memory-engine@2026.10.23)
       '@seanhogg/builderforce-memory-engine': 2026.10.23
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
 
-  '@seanhogg/builderforce-memory@2026.10.25(@seanhogg/builderforce-memory-engine@2026.10.23)':
+  '@seanhogg/builderforce-memory@2026.10.26(@seanhogg/builderforce-memory-engine@2026.10.23)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.10.23
 
