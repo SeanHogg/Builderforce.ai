@@ -16,7 +16,8 @@
  * {@link AgentEngine} and the psychometric compiler beside it. The modality compilers
  * (`compile()`) and surface deployers (`deploy()`) that produce and consume an
  * `AgentSpec` are layered on top in the `api`/`agent-runtime` packages; this file
- * owns only the IR and its lowering. See `PRD-agent-compile-primitive.md`.
+ * owns only the IR and its lowering. The shipped compile
+ * primitive is recorded in DONE.md (2026-10-25 docs-cleanup entry).
  */
 
 import { matchGlob } from "./glob.js";

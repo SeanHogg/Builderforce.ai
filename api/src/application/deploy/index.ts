@@ -1,6 +1,6 @@
 /**
  * The `deploy()` primitive (compile primitive Phase C4, see
- * `PRD-agent-compile-primitive.md`).
+ * DONE.md, 2026-10-25 docs-cleanup entry).
  *
  *   deploy(spec, surface) → DeployPlan
  *

@@ -12,12 +12,17 @@ import { RUN_TELEMETRY_TABLES } from './runTelemetryDatabase';
  * stale rows rather than an error.
  */
 describe('RUN_TELEMETRY_TABLES', () => {
-  it('matches the tables transactional-migrations/0013 creates, less later drops', () => {
+  it('matches the tables transactional-migrations/0013 (and any later @run-telemetry migration) creates, less later drops', () => {
     const dir = fileURLToPath(new URL('../../../transactional-migrations/', import.meta.url).href);
     const sql = readFileSync(join(dir, '0013_run_telemetry.sql'), 'utf8');
     const created = new Set([...sql.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)].map((m) => m[1]));
-    for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql') && f > '0013_run_telemetry.sql')) {
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql') && f > '0013_run_telemetry.sql').sort()) {
       const later = readFileSync(join(dir, file), 'utf8');
+      // A later migration that adds run telemetry says so; other operational tables
+      // (replay, batch jobs) are not routed by this set.
+      if (later.includes('@run-telemetry')) {
+        for (const m of later.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)) created.add(m[1]);
+      }
       for (const m of later.matchAll(/DROP TABLE(?: IF EXISTS)? (\w+)/g)) created.delete(m[1]);
     }
     expect([...RUN_TELEMETRY_TABLES].sort()).toEqual([...created].sort());

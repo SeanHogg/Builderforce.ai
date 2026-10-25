@@ -1,5 +1,6 @@
 -- 0023 · `brain_chat_steps` — a Brain run's steps (tool calls, LLM turns, memory steps)
 -- on the OPERATIONAL endpoint. Mirror: migrations/1276.
+-- @run-telemetry — routed by RUN_TELEMETRY_TABLES (runTelemetryDatabase.test.ts reads this marker).
 --
 -- Steps used to be `role:'tool'` rows in core's `brain_chat_messages` ("the single store
 -- for run steps", migration 1212). They are run telemetry — written at every tool call —

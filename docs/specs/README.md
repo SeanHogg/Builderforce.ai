@@ -1,217 +1,38 @@
-# BuilderForce.ai — Product Management & Agile Survival Extraction
+# Specs — status index
 
-> **Purpose of this folder.** These are the domain + PRD design documents for **extracting
-> the Product Management and Agile Survival domains out of BurnRateOS** and rebuilding them
-> inside **BuilderForce.ai** — an agentic AI platform for software development and product
-> management — which is then **re-embedded back into BurnRateOS** as a tenant.
->
-> Hand these documents to the agentic build solution that will construct BuilderForce. Each
-> document is self-contained and written to be implementable without reading the BurnRateOS
-> source, while staying faithful to the real schema and routes that exist today.
+A numbered PRD "PRD N" is the file NN-prd-*.md here. Shipped PRDs are recorded in ../../DONE.md and their files removed; git history keeps them.
 
-## The four locked decisions (these shape everything below)
+Every file below is a live contract: it is still read when the area changes. Its outstanding work is
+tracked in [ROADMAP.md](../../ROADMAP.md) (the Consolidated Gap Register), under the section named in
+the last column. `NNa-*` is the build hand-off for `NN`. Numbers are never reused; a gap in the
+sequence is a PRD that shipped. Index last rewritten 2026-10-25.
 
-| # | Decision | Choice |
-|---|----------|--------|
-| 1 | **System of record** | **BuilderForce owns the data.** Ideas, MVPs, roadmaps, backlog, work items, sprints, planning poker, retros, validation, feature ROI, business-value config all live in BuilderForce. BurnRateOS reads via embed + API. |
-| 2 | **Agentic depth** | **Full autonomous dev agents.** Port every PM/Agile feature *and* add agentic software-development: repo/PR integration, agents that turn backlog items into code/PRs, autonomous sprint execution, code-review agents. Built on the existing `api.builderforce.ai` gateway. |
-| 3 | **BurnRateOS side** | **Thin embed shells.** `/product/*` and `/agile/*` nav entries stay, but each page renders an embedded BuilderForce surface via the existing embed rail. Dogfooding + cross-domain links preserved. |
-| 4 | **Identity & tenancy** | **BurnRateOS is the IdP; BuilderForce is multi-tenant.** BurnRateOS is **one tenant** in BuilderForce. Because BurnRateOS is itself multi-tenant, a **Segment** carries the client's `(accountId, companyId)` so no customer's data bleeds. Isolation hierarchy: **Tenant → Segment → Entity.** |
+| # | Title | Status | ROADMAP section |
+|---|---|---|---|
+| 05 | [Integration, Embed-Back & Identity Federation](./05-integration-embed-and-identity.md) | Partly built | OTHER › Identity and governance |
+| 08 | [Agentic Security & Governance (policy packs, governance-auditor, DevSecOps §10)](./08-prd-agentic-governance.md) | Partly built | Run › `[governance]` Security automation |
+| 09 | [Cloud Agent Validation & Hardening](./09-prd-cloud-agent-validation.md) | Partly built (gaps need re-audit) | Make › Cloud and IDE agent runs |
+| 18 | [hired.video → Builderforce.ai port](./18-prd-hired-video-port.md) | Partly built | Programs; Make › Canvas runtimes and studio |
+| 19 | [burnrateos.com → Builderforce.ai consolidation](./19-prd-burnrateos-consolidation.md) | Partly built | Programs |
+| 20 | [The Consolidated Data Model](./20-prd-consolidated-data-model.md) | Partly built | OTHER › Data model — PRD 20 |
+| 21 | [The Unified Experience](./21-prd-unified-experience.md) — start here for any UI work | Live (design system); partly built | OTHER › Frontend, i18n and code health; Reach › Marketplace and commerce |
+| 22 | [Browser Performance, Domain Execution, and Codebase Health](./22-prd-browser-performance-domain-execution-analysis.md) | Partly built | OTHER › Frontend, i18n and code health |
+| 23 | [Manager PR Review, Acceptance Evidence, and Ticket Recovery](./23-prd-manager-pr-ticket-recovery.md) | Partly built | Make › Autonomous delivery |
+| 25 | [Vertical KPI Dashboards](./25-prd-vertical-kpi-dashboards.md) · hand-off [25a](./25a-vertical-kpi-dashboards-implementation.md) | Partly built (Slice A shipped) | Measure › `[finance]` |
+| 26 | [Advisor Platform](./26-prd-advisor-platform.md) | Partly built | Reach › Marketplace and commerce |
+| 30 | [Prompt-driven marketing campaign](./30-prd-guided-marketing-campaign.md) | Partly built | Reach › Marketing and campaigns |
+| 31 | [Build, run and ship a real app on Builderforce](./31-prd-customer-app-platform.md) | Proposed, not started | Make › Previews, repos and hosting |
+| 33 | [Insights: session replay, heatmaps, live visitors](./33-prd-session-replay.md) | Live in code; production provisioning open | Measure › `[growth]` |
+| 35 | [One agent, one kernel](./35-prd-one-agent-one-kernel.md) | Partly built (in progress) | Make › Cloud and IDE agent runs (ONE execution core) |
+| 37 | [Coordinated Role Participation & Execution Verification](./37-prd-coordinated-role-participation.md) | Mostly built | Make › Autonomous delivery |
 
-## Reading order
+Also here:
 
-1. **[00 — Extraction Strategy & Two-App Architecture](./00-extraction-strategy.md)**
-   Why, the extraction boundary (what moves vs. what stays), the two-app topology, the
-   migration plan, rollout/cutover, and risks.
+- [`data-model/`](./data-model/) — the consolidation coverage map read by the `check:burnrate-parity`
+  and model-coverage guards.
 
-2. **[01 — Domain Model & Tenancy](./01-domain-model.md)**
-   The complete BuilderForce data model: the Tenant→Segment→Entity isolation model, every
-   ported entity with full field unions, the new agentic entities, enums, and indexes.
-
-3. **[02 — PRD: Product Management Pillar](./02-prd-product-management.md)**
-   Discovery, MVP Scaffolding, AI Roadmap, Validation Lab, Strategic Backlog, Custom
-   Business-Value Models, Feature ROI Portfolio. User stories, flows, acceptance criteria, API.
-
-4. **[03 — PRD: Agile Survival Pillar](./03-prd-agile-survival.md)**
-   Planning Poker, Retrospectives, Kanban, Sprint Forecasting, Velocity, Feature Scoring &
-   Capacity, Cost/Runway. Real-time collaboration, financial integration, API.
-
-5. **[04 — PRD: Agentic Software-Development Layer](./04-prd-agentic-dev-layer.md)**
-   The net-new BuilderForce value: autonomous dev agents, repo/PR automation, the agent
-   orchestrator, code-review agents, and how they consume the PM/Agile graph.
-
-6. **[05 — PRD: Integration, Embed-Back & Identity Federation](./05-integration-embed-and-identity.md)**
-   The contract between the two apps: SSO/JWT federation, the Segment provisioning handshake,
-   the embed rail extension, the BurnRateOS thin-shell migration, and the cross-domain API.
-
-7. **[06 — Marketing-Parity Additions & Traceability](./06-marketing-parity-additions.md)**
-   Every capability the BurnRateOS marketing copy promises, mapped to where it's specced — plus
-   the net-new scope it surfaced (Jira/Linear import, EMP/DORA + PR analytics, git activity sync,
-   Slack, kanban swim lanes + gamified budget economics, cross-sprint retro sentiment, Product
-   Analytics / Release Planning / Changelog / Feature-Flag surfaces, investor-milestone seams,
-   validation experiment templates). **Read this with docs 02–05 — it extends them.**
-
-8. **[07 — PRD (Phase 2): Security, Governance & Compliance + DevSecOps Agents](./07-prd-security-compliance-phase2.md)**
-   Ships **after** Phase 1. Moves the full CISO Governance & Compliance program to BuilderForce
-   *except identity* (SOC 2, vendor register, incidents, PII inventory, DPA, training, compliance
-   calendar, per-Segment DSR + suppression) plus build-new Access Reviews + Vulnerability Scans,
-   and adds DevSecOps agents (auto-scan + security-review gate on agent PRs, auto SOC 2 evidence).
-   RBAC/SSO/multi-tenant accounts stay in BurnRateOS (it's the IdP).
-
-9. **[08 — PRD: Agentic Security & Governance (Policy Packs + Governance-Auditor Agent)](./08-prd-agentic-governance.md)**
-   The "agents **enforce** the rules" moat. doc 07 made BuilderForce a security *tracker*; doc 08
-   makes it *enforce*: DB-backed policy packs + rules (PM-editable, with optional in-repo
-   `.builderforce/policies/*.yaml` overrides), a `governance-auditor` agent + `governance_audit` tool
-   that audits any connected repo against the resolved ruleset, and `governance_audit_runs` /
-   `governance_findings` under `/api/governance`. BLOCKER findings gate auto-merge; CRITICALs
-   auto-open incidents; clean runs auto-collect SOC 2 evidence. Closes the gap-register item
-   "governance/security/audit AGENTS that check repos against rules are not built."
-
-10. **[09 — PRD: Cloud Agent Validation & Hardening](./09-prd-cloud-agent-validation.md)**
-    The **validation gate** for cloud agents. Summarizes the three as-built execution paths (V1 pi
-    loop, V2 Claude Agent SDK, cloud-Worker fallback) and the dispatch→clone→work→steer→PR→telemetry
-    lifecycle, then enumerates **50 falsifiable gaps** (dispatch/engine, workspace/PR, parity,
-    steering/cancel, telemetry integrity, billing/BYO-key, security/isolation) plus a repeatable
-    `pnpm qa:cloud-agents` golden-path E2E. P0-first phasing (9a telemetry/billing → 9b isolation →
-    9c lifecycle → 9d parity+harness) so the operator can prove cloud agents deliver a merged PR
-    with no self-hosted host online before GA.
-
-11. **[10 — PRD: PI Framework Cutover](./10-prd-pi-cutover.md)**
-    The **on-prem runtime de-framework**: remove `@mariozechner/pi-*` (138 files) and run the
-    On-Prem agent on the native, surface-agnostic `LocalAgentEngine`. Records what's **done +
-    verified** (Stage 1 — all ~40 tools native; Stage 2 foundations — native LLM client +
-    streaming + native model types) and the **remaining staged plan** (2a type repoint → 2b
-    completion/auth→gateway → 3 agent-loop swap → 4 TUI → 5 delete + flip default), each with
-    tasks + falsifiable acceptance checks. Multi-session by design; nothing is deleted before its
-    replacement is wired + verified.
-
-12. **[11 — PRD: Agent Engine Consolidation](./11-prd-engine-consolidation.md)**
-    The **umbrella** PRD for the whole "one tool contract + one swappable engine seam, four
-    surfaces" program (cloud Worker/DO, cloud Container, on-prem Node). Records the three pillars
-    (shared `@builderforce/agent-tools` contract, the `resolveEngine` DI seam, capability-gated
-    providers), what's **done** (cloud fully derived from the shared registry + model cascade;
-    shared contract built; on-prem Stage 1/2 per doc 10), and the **full remaining-capability
-    catalog**: the pi-removal tail (doc 10), parity gaps (`ask_human` on Node + Container,
-    `web.search` backend, local-engine streaming), and the cloud concretions of the Node-only
-    tools (orchestrate / memory / message / media), with a surfaces × capabilities target matrix.
-    Read this for the feature-level picture; doc 10 for the pi-removal staging detail.
-
-13. **[13 — PRD: Learned Model Routing](./13-prd-learned-model-routing.md)**
-    Closes the model-selection feedback loop: label each task with an **action type** (free-model
-    classifier, cached on the task), score each terminal cloud run's **outcome** (composite of PR
-    merged + green CI + no-degradation + efficiency) into a `run_model_outcomes` fact table, and feed
-    it back into `pickCloudModel`'s soft-seed so a run prefers the empirically-best reachable model per
-    action type (project→tenant→global scope). **Cost model (§4.1, load-bearing):** the routing
-    *decision* must work headless, so it's a **server-side O(1) read of a tiny incrementally-maintained
-    `routing:<scope>` KV blob** (no SQL/aggregation on the hot path); the heavy **SSM/Samba recall runs
-    on the client GPU** (WebGPU/builderforce-memory, IndexedDB) and only *biases* interactive runs — zero server
-    CPU/DB. 3 phases (Capture → Analyze+Route → client-SSM recall); degrades to today's static cascade
-    under cold-start/error/headless/kill-switch. Builds on existing `llm_usage_log` capture + the curated
-    coding pool — see [[claude-direct-coding-floor]].
-
-14. **[14 — PRD: BuilderForce VS Code Extension](./14-prd-vscode-extension.md)**
-    The first **editor-native client**, built by **reuse, not rebuild**. A sidebar webview renders the
-    **exact same `BrainPanel` chat the web app uses** — by extracting the Brain UI into the shared
-    `@seanhogg/builderforce-brain-embedded` package (new `/ui` subpath, app couplings made injectable),
-    repointing the frontend, and deleting the app-resident copies (one source, two hosts; no fork). The
-    agent runs **in-process** (`agentLoop()`) against **whatever folder is open** (sandboxed via the
-    existing `wrapToolWorkspaceRootGuard`), LLM traffic on the unchanged gateway, with the **gateway key
-    held only in the extension host** (`SecretStorage`) and webview LLM calls **proxied through the host**
-    (brain-embedded's injectable `transport`) so the secret never enters the webview. **Codebase-aware so
-    it doesn't misfire:** on first open of a folder it runs a **scan + knowledge summary** (the
-    PRD-initialization flow — `initializeBuilderForceAgentsProject` + a net-new `architecture.md`
-    auto-fill + seeded `SsmMemoryService`, cached by a git-HEAD/tree version token) and keeps learning via
-    `KnowledgeLoopService`. **Consumes [13 — Learned Model Routing](./13-prd-learned-model-routing.md):**
-    the Node extension host is PRD 13's SSM client — it classifies the action type, reads the cached
-    `routing:<scope>` table, computes a local SSM `routingBias` over this repo's memory, seeds the
-    best reachable model via `rankModelsForAction`, and writes each run's outcome back into the **same
-    `run_model_outcomes` brain** as cloud runs (`source='vscode'`, table extended with two nullable
-    columns). **Auth:** browser **device-code login** (RFC 8628) → scoped gateway key
-    (`generateApiKey('clu')`) in the OS keychain, reused across restarts, no gateway-auth change. The
-    only server work is the device-authorization grant (3 endpoints + `device_authorizations` table +
-    verify page) + a `run-outcome` write endpoint. 4 phases (shared-UI extract+auth → chat+agent →
-    codebase scan/knowledge → learned routing). Out of scope: Visual Studio (C#/VSIX) and JetBrains —
-    same backend, separate clients.
-
-15. **[15 — PRD: RFP / RFQ Response](./15-prd-rfp-response.md)**
-    Adds grounded, co-branded pre-sales proposal generation: portfolio matching, diagnostics freshness,
-    CTO/Product Owner personas, cost and margin modeling, delivery plans, risks, dependencies, and
-    self-contained proposal export. It composes existing project, diagnostics, agent, and finance
-    primitives rather than introducing a disconnected proposal workflow.
-
-16. **[16 — PRD: Insights Answer Engine](./16-prd-insights-answer-engine.md)**
-    Turns vague leadership questions into safe, composed visual answers using the existing metric and
-    widget registries. Adds deterministic answer templates, an out-of-box Executive dashboard, delivery
-    risk and RCA visual primitives, and one shared answer path for Insights and the Brain.
-
-17. **[17 — PRD: Creation Sessions and the Infinite Canvas](./17-prd-creation-canvas-sessions.md)**
-    Recasts chat as a durable, tenant-owned Creation Session and unifies Brain Storm, Workflows,
-    IDE/Builder, websites, data, models, voice, projects, workforce, and application widgets on one
-    multiplayer canvas. Projects become optional live context and delivery destinations; `/dashboard`
-    defaults to visual Create-session cards; onboarding starts in a guided session; generated roadmaps,
-    feature mockups, tasks, and agent delivery stay in the same creative context; the web and VSIX share
-    one canvas engine and command contract.
-
-18. **[18 — PRD: hired.video Port](./18-prd-hired-video-port.md)**
-    Absorbs hired.video, contributing the **Recruiter** and **HR** agents. Read PRD 19 §2 first —
-    that register governs both.
-
-19. **[19 — PRD: BurnRateOS Consolidation](./19-prd-burnrateos-consolidation.md)**
-    Absorbs burnrateos.com, completing the AI C-suite (**CEO, CFO, CRO, CMO, CPO, CISO**) and the
-    eight product domains they own. §2 is the capability ownership register and governs PRD 18 too.
-    **What arrives.**
-
-20. **[20 — PRD: The Consolidated Data Model](./20-prd-consolidated-data-model.md)**
-    1,206 → **387** tables: a 25-table kernel owned by no domain, plus fifteen domains each owned by
-    one seat. The schema, the API on it, and the generated DDL. **What the data is.**
-
-21. **[21 — PRD: The Unified Experience](./21-prd-unified-experience.md)** ← **start here for any UI work**
-    Consolidates 19 and 20 on the experience axis. **The canvas is the product**: sessions in the
-    left panel, the C-suite as draggable **teammates in the footer**, every other destination a
-    **panel over a board that never unmounts**. Carries the complete, implementable **design system**
-    — every token in both themes, the type scale, the metric scales, the component contracts and the
-    ten rules an implementing agent must follow. **Where any of it appears, and to whom.**
-
-22. **[22 — PRD: Browser Performance, Domain Execution, and Codebase Health](./22-prd-browser-performance-domain-execution-analysis.md)**
-    Defines browser delivery, worker, WebNN/WebGPU/WASM and PWA/storage policy, then consolidates the
-    repository-wide LOC/DDD/clone/complexity audit, current cleanup status, backend-speed workstreams,
-    ratchets and falsifiable acceptance criteria. **Where work executes, who owns it, and how the
-    implementation stays understandable and fast.**
-
-26. **[26 — PRD: Advisor Platform](./26-prd-advisor-platform.md)**
-    SCORE-class advising composed from marketplace talent, public booking, meetings, and minutes→tasks.
-    Advisors and new/solo entrepreneurs; dogfood via marketplace listings (Meeting Notes agent,
-    Minutes-to-board skill). **Not a SCORE clone.**
-
-28. **[28 — PRD: Canvas — one composer, and the phone as a first-class canvas client](./28-prd-canvas-one-composer-phone-chrome.md)**
-    A surface declares a VERB, never its own text input; Brain never covers the surface uninvited;
-    on a phone the `+` IS the command bar and the persistent bottom nav stays. The code landed
-    uncommitted at frontend 2026.9.34 — this PRD is the **remainder**: the verification gate that
-    `DONE.md` is writing a cheque for, the phone arrangements no jsdom test can see, the VS Code
-    webview that compiles the same canvas source, and four implementer decisions awaiting a ruling.
-
-29. **[29 — PRD: Verify and package the run-visibility + ticket-parent changes](./29-prd-run-visibility-verify-and-package.md)**
-    A verification runbook, not a design. The composing run phase (a streaming tool call stops
-    looking like a hang), the stream idle watchdog, the context-exhaustion verdict that now needs
-    a consequence, and the ticket rail naming each ticket's parent epic — all written, none
-    compiled, tested or packaged. **Run the checks in order, then package one VSIX.**
-
-30. **[30 — PRD: Prompt-driven marketing campaign](./30-prd-guided-marketing-campaign.md)**
-    A founder who says “I want to run a marketing campaign” gets a run (intake → checklist →
-    connect → copy → confirmed send), not a portfolio table. Compose Growth + canvas kinds +
-    social/ads tools. **Not a HubSpot clone.** Campaign ROI and a frontend ICP picker are later
-    tracks. First slice: the canvas journey prompt (C0).
-
-> **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
-> embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
-> (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own
-> platform-global shared-contact-graph DSR.
-
-## Source-of-truth provenance
-
-Every entity and route in these docs was reverse-engineered from the live BurnRateOS codebase
-(`product/api/prisma/schema.prisma`, `product/api/src/worker/routes/*`,
-`product/frontend/src/domains/{productManagement,agileSurvival}/*`) as of **2026-05-31**.
-Where the catalog/marketing copy promised a flow that the code did not yet implement (e.g.
-auto feedback→backlog, auto runway→cost), the PRDs treat it as a **requirement to build**, not
-an existing behavior, and flag it explicitly.
+Design docs live in [`../design/`](../design/): the PRD 35 design
+([`one-agent-one-kernel.html`](../design/one-agent-one-kernel.html)), the local-first review
+([`vsix-offline-first-architecture-review.md`](../design/vsix-offline-first-architecture-review.md),
+including the offline memory scope) and the creation-canvas set. Implementation guides (email,
+multi-auth) live in [`../guides/`](../guides/).

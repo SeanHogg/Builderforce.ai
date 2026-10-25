@@ -1,6 +1,6 @@
 -- 1201 · Release note: the canvas knows where you are — Operate, Launch, and a path for every phase.
 --
--- `new`: PRD 32 (`docs/specs/32-prd-canvas-phase-lens.md`). A canvas's phase
+-- `new`: PRD 32 (canvas phase lens; shipped, recorded in DONE.md 2026-10-04). A canvas's phase
 -- (Idea → Make → Run → Measure → Reach) is now per canvas and defaults to the first
 -- phase not yet done. Readiness is derived from the board's own objects
 -- (`lib/canvasPhaseReadiness.ts`) and never gates: an unready phase opens with a path

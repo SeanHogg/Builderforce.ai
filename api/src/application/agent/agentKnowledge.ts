@@ -1,7 +1,7 @@
 /**
  * Agent knowledge ingestion + recall — the data provider behind the AgentSpec
  * `memory.recalledContext` field (compile primitive Phase C3, see
- * `PRD-agent-compile-primitive.md`).
+ * DONE.md, 2026-10-25 docs-cleanup entry).
  *
  * Ingest: proprietary documents → chunked (shared `chunkText`) → stored in
  * `agent_knowledge_chunks`. Recall: at inference, the agent's chunks are loaded

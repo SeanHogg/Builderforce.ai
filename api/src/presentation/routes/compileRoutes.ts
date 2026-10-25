@@ -1,7 +1,7 @@
 /**
  * The compile primitive's HTTP front door: `POST /api/compile` and
  * `POST /api/compile/run` (compile primitive Phases C2/C4/C5,
- * `PRD-agent-compile-primitive.md`).
+ * recorded in DONE.md, 2026-10-25 docs-cleanup entry).
  *
  *   POST /api/compile      { need|needs, deploy?, engineId? } → { spec, plan? }
  *   POST /api/compile/run  { need|needs, sample? }            → { spec, plan, output }

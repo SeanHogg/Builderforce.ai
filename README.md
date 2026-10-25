@@ -734,7 +734,7 @@ Builderforce exposes **three distinct LLM systems** — they are easy to conflat
 
 | # | Surface | What it is | Status | Entry point |
 |---|---------|------------|--------|-------------|
-| **A** | **LLM Gateway** | Multi-vendor hosted chat proxy (failover, cooldowns, per-tenant budgets). Powers IDE Brain chat and studio prompt-expansion. | ✅ Shipped | [api/src/application/llm/](api/src/application/llm/), [PRD](PRD-builderforce-llm-gateway.md) |
+| **A** | **LLM Gateway** | Multi-vendor hosted chat proxy (failover, cooldowns, per-tenant budgets). Powers IDE Brain chat and studio prompt-expansion. | ✅ Shipped | [api/src/application/llm/](api/src/application/llm/), [DONE.md](DONE.md) (gateway PRD shipped; long tail in [ROADMAP.md](ROADMAP.md)) |
 | **B** | **Custom LLM Support** | Serve a user's fine-tuned LoRA agent to the `builderforce` CLI (`POST /api/agents/:id/chat`). | 🟡 Specced — P0 gaps open (see below) | "## Custom LLM Support" section below |
 | **C** | **In-IDE `llm` modality** | Build + train a custom model in the browser (dataset → WebGPU LoRA/Mamba → publish), then chat with it. | 🟢 Cloud path live; Local/Hybrid pending | [frontend/src/lib/modality.ts](frontend/src/lib/modality.ts), [LlmStudioPanel.tsx](frontend/src/components/LlmStudioPanel.tsx) |
 

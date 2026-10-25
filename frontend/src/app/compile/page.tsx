@@ -17,7 +17,7 @@ import { faultMessage } from '@/lib/apiClient';
  * the platform compiles it into an `AgentSpec`, resolves the deploy plan for the
  * chosen surface, and (on Run) drives a real first turn through the gateway. This
  * is "any human defines a need, the agentic system solves it" made literal — see
- * `PRD-agent-compile-primitive.md`.
+ * the compile primitive entry in DONE.md (2026-10-25 docs-cleanup).
  */
 
 const SURFACES: CompileSurface[] = ['cloud-durable', 'workspace', 'workflow-node', 'cloud-container', 'desktop'];

@@ -2,7 +2,7 @@
 
 **Status:** Approved direction 2026-09-15 (vocabulary shipped; product build next, slice A first) · **Owner:** platform (CFO seat) · **Created:** 2026-09-15
 **Implementation hand-off:** [PRD 25a](./25a-vertical-kpi-dashboards-implementation.md) — every remaining piece, in build order, with the exact seams, signatures, tests and definition of done for a coding agent.
-**Companion to:** [PRD 19 — BurnRateOS consolidation](./19-prd-burnrateos-consolidation.md) §10 (runway, startup listing), [PRD 16 — Insights answer engine](./16-prd-insights-answer-engine.md) (metric registry, presets), [PRD 24 — Developer portal](./24-prd-developer-portal.md) (the extension marketplace this product deliberately does not use)
+**Companion to:** [PRD 19 — BurnRateOS consolidation](./19-prd-burnrateos-consolidation.md) §10 (runway, startup listing), PRD 16 — Insights answer engine (metric registry, presets) and PRD 24 — Developer portal (the extension marketplace this product deliberately does not use), both shipped and recorded in [DONE.md](../../DONE.md)
 **Goal:** make KPI management and dashboarding simple: a preconfigured dashboard per vertical, sold and installed through the marketplace as a first-party product that Builderforce itself dogfoods, with runway, ownership, dilution, market size and LTV tranches on the same surface.
 
 **Operator decisions (2026-09-15):**

@@ -23,7 +23,7 @@ const TELEMETRY_WINDOWS: Record<string, number> = {
   marketing_sessions: 90, marketing_session_prompts: 90, marketing_heatmap_pages: 90,
   project_insight_events: 180,
   evermind_learning_runs: 90,
-  usage_snapshots: 90, run_model_outcomes: 400,
+  usage_snapshots: 90, run_model_outcomes: 400, brain_chat_steps: 30,
   replay_visit_summaries: 400, replay_releases: 400,
   cascade_outcomes: 90, llm_batch_jobs: 30, llm_specialist_eval_cases: 180,
 };
@@ -40,7 +40,7 @@ describe('bounded telemetry retention entries', () => {
 
   it('sweeps the run-telemetry tables on the operational endpoint ONLY (never core) and everything else on core', () => {
     // Sweeping core's empty copy is how core kept collecting telemetry: a rollup inserts.
-    const operational = ['execution_claims', 'execution_claim_evidence', 'usage_snapshots', 'run_model_outcomes', 'replay_visit_summaries', 'replay_releases', 'llm_batch_jobs'];
+    const operational = ['execution_claims', 'execution_claim_evidence', 'usage_snapshots', 'run_model_outcomes', 'brain_chat_steps', 'replay_visit_summaries', 'replay_releases', 'llm_batch_jobs'];
     for (const relation of Object.keys(TELEMETRY_WINDOWS)) {
       expect([...byName(relation).connections], relation).toEqual(operational.includes(relation) ? ['transactional'] : ['primary']);
     }

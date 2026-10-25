@@ -9,7 +9,7 @@ import type { StatusToneMap } from '@/lib/statusTone';
  * One question per project, answered the same way for all of them: is this thing
  * moving, what is the single biggest thing stopping it, and what is the one next
  * action. That is FR-1..FR-4 of the original Cross-Project Health Dashboard spec
- * (`docs/design/cross-project-health-dashboard.md`), except that nothing here is a
+ * (since removed; recorded in DONE.md 2026-10-25), except that nothing here is a
  * point-in-time snapshot somebody edits each sprint: every field is derived from the
  * live `/api/projects` list, which already attaches per-project task counts and the
  * compact `deliverySignals` bundle.

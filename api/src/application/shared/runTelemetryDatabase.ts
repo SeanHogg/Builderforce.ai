@@ -2,9 +2,9 @@
  * THE DATABASE THAT OWNS AGENT-RUN TELEMETRY.
  *
  * `tool_audit_events` (+ its `tool_audit_daily` fold and the `execution_claims` /
- * `execution_claim_evidence` that cite it), `usage_snapshots`, `run_context_state` and
- * `run_model_outcomes` live on the operational endpoint beside the usage ledger, not on
- * core.
+ * `execution_claim_evidence` that cite it), `usage_snapshots`, `run_context_state`,
+ * `run_model_outcomes` and a Brain run's steps (`brain_chat_steps`) live on the
+ * operational endpoint beside the usage ledger, not on core.
  *
  * WHY THERE. Neon bills each project's compute by its own awake time, so tables are
  * grouped by WHEN they are written, not by subject. These are written at the same
@@ -25,6 +25,7 @@
 import { getTableName } from 'drizzle-orm';
 import { siblingDatabaseOf, type Db } from '../../infrastructure/database/connection';
 import {
+  brainChatSteps,
   executionClaimEvidence,
   executionClaims,
   runContextState,
@@ -40,7 +41,7 @@ import {
  * from the Drizzle tables so a rename cannot drop one back onto core. Read by code that is generic over tables and knows a relation only by name.
  */
 export const RUN_TELEMETRY_TABLES: ReadonlySet<string> = new Set(
-  [toolAuditEvents, toolAuditDaily, executionClaims, executionClaimEvidence, usageSnapshots, runContextState, runModelOutcomes]
+  [toolAuditEvents, toolAuditDaily, executionClaims, executionClaimEvidence, usageSnapshots, runContextState, runModelOutcomes, brainChatSteps]
     .map((table) => getTableName(table)),
 );
 

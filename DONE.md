@@ -1,3 +1,66 @@
+## ✅ RESOLVED 2026-10-25 — Docs cleanup: shipped PRDs recorded, their files removed (docs only)
+
+- **What changed.** Five read-only triage passes checked every doc in `docs/specs/` and `docs/design/` against the code and both ledgers. Anything still outstanding was ported to ROADMAP.md first. Shipped docs are recorded here and their files removed, and git history keeps them. Superseded docs were folded into the doc that replaced them. `docs/specs/README.md` is now a status index of the numbered PRDs that remain. `PRD-coordinated-role-participation.md` became **PRD 37** (`37-prd-coordinated-role-participation.md`). `EMAIL_IMPLEMENTATION.md` and `MULTI_AUTH_IMPLEMENTATION.md` moved to `docs/guides/`. The stray `specs/PRD.md` (an agent artifact from task #470) was deleted. Removing PRD 27 (staffed work) also ends the 27/27 number collision.
+- **Shipped and removed.**
+  - **02 Product Management pillar:** PM-1..7, plus A/B tests and feature flags.
+  - **03 Agile Survival pillar:** AS-1..7.
+  - **04 Agentic dev layer:** repo connect, implement/review agents, the orchestrator.
+  - **10 PI cutover:** `pi-ai`, `pi-agent-core` and `pi-coding-agent` removed. Only `pi-tui` remains (Gap Register).
+  - **13 Learned model routing:** action-type classifier, the `run_model_outcomes` scorer, the ranker, and the client SSM bias.
+  - **14 VS Code extension:** shared Brain UI, device-code login, codebase scan, learned routing.
+  - **15 RFP response:** includes the risk register and brand extraction.
+  - **16 Insights answer engine:** `composeAnswer`, the Executive preset, `DependencyGraph`, the postmortem 5-Whys.
+  - **17 Creation sessions and the infinite canvas:** the repository implementation is complete. Its §49 deployed-evidence gates R-01..R-07 are in the Gap Register.
+  - **24 Developer portal:** phases 1–3. Hyperscaler listings stay in the Gap Register.
+  - **27 Idea validation surveys:** the B0 form loop, B4 `addFromCrm`, the B5 stage select and `idea.reveal`. Its §11 adjacent gaps and §9 operator decisions are in the Gap Register.
+  - **27 Staffed work and chat diagnostics:** recorded 2026-09-21 below.
+  - **28 Canvas, one composer and phone chrome:** the redesign shipped and the §4 verdicts were recorded 2026-09-16. Its §6 real-browser pass at 390px and desktop, in both themes, is in the Gap Register.
+  - **29 Run visibility:** see the 2026-10-10 roadmap re-validation (packages shipped at brain-embedded 2026.10.4 and VSIX 2026.10.4).
+  - **32 Canvas phase lens:** 2026-10-04 entry.
+  - **34 Local models everywhere:** 2026-10-17 entry. The real-browser end-to-end turn is in the Gap Register.
+  - **36 VS Code chat identity and local spend:** 2026-10-24 entry.
+  - **Compile primitive** (`need → AgentSpec → surface`, C1–C5, completed 2026-06-28). It delivered:
+    - the `compile()` / `deploy()` / `deployAndDispatch()` registries;
+    - six modality adapters;
+    - `PolicyGate` hard-enforced at every engine's tool seam;
+    - grounded `/v1` recall;
+    - `/compile`, `POST /api/compile` and `POST /api/compile/run`.
+    Code comments that cited the PRD file now cite this entry.
+  - **Agent-stack parity** (shipped 2026-06-27): hybrid RAG plus lexical/judge semantic eval, migration 0222. The gap that per-run faithfulness is relevance-only is in the Gap Register.
+  - **LLM gateway** steps 1–3: SDK, C1, `LocalAgentTransport` / `CompositeAgentTransport`. Its four long-tail items are in the Gap Register.
+  - **Evermind targets panel and native VSIX loop consolidation.**
+  - **Marketplace V2:** commerce, the public API, publisher unification.
+  - **Superadmin impersonation and permissions.** The missing `tenant_modules` table is in the Gap Register as an operator question.
+  - **VSIX session tabs:** VSIX 2026.7.80.
+  - **Design: cross-project health dashboard:** live at Projects → Portfolio → Health, `frontend/src/lib/pm/portfolioHealth.ts`.
+  - **Design: light theme, BurnRateOS cool slate:** `globals.css` `html[data-theme='light']`.
+  - **Design: universal audits:** the `systemAudits.ts` catalog and the run/findings/report/remediation lifecycle for Web, VSIX and Rovr, migration 1243.
+  - **06 Marketing-parity additions:**
+    - A1 Jira/Linear/CSV import;
+    - A2 DORA and PR analytics;
+    - A3 git activity sync;
+    - A4 Slack;
+    - A7 Product Analytics, Release Planning, Changelog and Feature Flags.
+    A5 (earned budget), A6 (retro themes), A8 (investor milestone push) and A9 (experiment templates) are in the Gap Register.
+  - **07 Security & compliance, Phase 2:** the SEC-1..11 trackers (SOC 2 controls, vendor register, incidents, PII inventory, DPA, training, compliance calendar, access reviews, vulnerability scans, per-Segment DSR and suppression). Its §5 DevSecOps layer, which is not built, was folded into PRD 08 §10.
+- **Folded into the doc that superseded them, then removed.**
+  - **00** Extraction strategy, into PRD 19 (§9.0 already superseded it).
+  - **01** Domain model, into PRD 20 (which records the decision).
+  - **07** §5, into PRD 08 §10. PRD 08 §9's FACTS line was also corrected, because `/api/facts` exists.
+  - **11 / 12 / 12a**, engine consolidation and the unified engine. Their unbuilt items are in the Gap Register (`pi-tui`; engine/tool convergence, whose default-ON state is now stated correctly). PRD 35 was not edited, at the operator's request.
+    - 12a §3.3 (converged `write`/`edit` always guarded to the workspace root) is resolved in code. The converged pair now takes its confinement from the same `tools.fs.workspaceOnly` as the native pair (`agent-runtime/src/agents/coding-tools.ts`, `coding-tools.converged-file-tools.test.ts`), so turning it on moved no boundary.
+  - **26** implementation notes, into PRD 26 §12. Corrected along the way: Book on talent profiles and A1 provisioning (`advisoryProvisioning.ts`) are built. The Gap Register entry and the 2026-10-18 correction below said otherwise.
+  - **Design: C2 ICP picker**, into PRD 30 §4.1 (its C2 is PRD 30's C3).
+  - **Design: offline inference and memory scope**, into the offline-first review's "Shared offline memory scope". Gaps M01–M11, which live in the builderforce-memory repo, are in the Gap Register.
+- **Kept as live contracts:**
+  - specs 05, 08, 09, 18–23, 25, 25a, 26, 30, 31, 33, 35 and 37;
+  - design: `one-agent-one-kernel.html` and `vsix-offline-first-architecture-review.md`.
+  - Dated notes were added where a status line was stale:
+    - 05: `webhook_subscriptions` vs `tenant_webhooks`;
+    - 09: needs a re-audit;
+    - the offline-first review: its G01–G27 table predates `ed26ab8a8`.
+- **Docs only.** No build or test was run. No source changed apart from code comments that cited a renamed or removed doc.
+
 ## ✅ RESOLVED 2026-10-24 — VSIX memory growth while a chat streams, from PRD 36 and the run host (VSIX 2026.10.73 · local-first 2026.10.26 · brain-embedded 2026.10.49)
 
 - **What was wrong.**
@@ -1084,7 +1147,7 @@ Pin spawn/delegation roles to catalog model ids from `ROLE_MODELS` / `ROLE_MODEL
 
 ## ✅ RESOLVED 2026-10-12 — Docs consolidated under `docs/`; strategy docs and gitignored files kept out of the public repo
 
-- **One docs home.** `specs/builderforce/` → `docs/specs/`; root `PRD.md` (task #295's PRD) → `specs/tasks/task-295.md`; `LIGHT_THEME_BURNRATE.md` → `docs/design/light-theme-burnrate.md`. [`docs/README.md`](./docs/README.md) says what goes where. Every path reference (data-model guard scripts, code comments, ROADMAP/DONE, task PRDs) was rewritten. `specs/tasks/` stays at the root: `commitPrdToRepo.ts` writes task PRDs there in every bound repo.
+- **One docs home.** `specs/builderforce/` → `docs/specs/`; root `PRD.md` (task #295's PRD) → `specs/tasks/task-295.md`; `LIGHT_THEME_BURNRATE.md` → `docs/design/light-theme-burnrate.md` (removed 2026-10-25 as shipped). [`docs/README.md`](./docs/README.md) says what goes where. Every path reference (data-model guard scripts, code comments, ROADMAP/DONE, task PRDs) was rewritten. `specs/tasks/` stays at the root: `commitPrdToRepo.ts` writes task PRDs there in every bound repo.
 - **Strategy is operator-only.** The pitch-deck source, SXSW pitch brief, distribution-channel GTM research, the Cursor/Continue feature-gap analysis and the zero-cost-hosting research moved to gitignored `docs/private/`. `ROADMAP.md`'s Buyer, ARR Milestones and Risk Register sections moved to `docs/private/strategy.md`. Dead `BUSINESS_ROADMAP.md` / `FEATURE_GAP_ANALYSIS.md` links in `agent-runtime/docs` were removed.
 - **Gitignored files leaked into committed grounding.** The workspace symbol index and the VS Code codebase scan walked the disk with only a skip list. They wrote the 40 headings of `SECURITY-FINDINGS.local.md` (and `qa-e2e/test-results/`, `*.log`) into the committed `.builderforce/symbols.json`, `project-map.md` and `scan.json`. The fix is one primitive, `@builderforce/agent-tools/node-git-ignore` (`gitIgnoredMatcher` for full walks, `gitIgnoredSubset` for watcher batches; git is the authority, and outside a repo nothing is ignored). Both `WorkspaceSymbolIndex` (walk + dirty refresh) and `codebaseScan.ts` use it. The tracked artifacts were scrubbed. Test: `packages/agent-tools/src/node-git-ignore.test.ts`.
 - **Project-map tree misattributed children.** `renderTree` sorted raw strings, and `-` sorts before `/`, so `docs/api/` was drawn under `docs-site/`. It now sorts by path segment.

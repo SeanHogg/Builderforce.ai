@@ -1,6 +1,6 @@
 /**
  * The `compile()` primitive — modality registry types (compile primitive Phase C2,
- * see `PRD-agent-compile-primitive.md`).
+ * recorded in DONE.md, 2026-10-25 docs-cleanup entry).
  *
  * The platform has several "define a need → run an agent" front doors. Each used to
  * compile a *different* representation of a need into a *different* artifact, with no

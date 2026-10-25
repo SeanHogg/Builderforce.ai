@@ -1,7 +1,7 @@
 -- Agent knowledge chunks — proprietary documents ingested for a published
 -- Workforce agent, chunked for retrieval. Recalled (BM25) at inference time and
 -- injected as grounded context via the AgentSpec `memory.recalledContext` field
--- (the compile primitive, PRD-agent-compile-primitive.md Phase C3). Raw-SQL table
+-- (the compile primitive Phase C3; recorded in DONE.md, 2026-10-25). Raw-SQL table
 -- mirroring `ide_agents` (no Drizzle schema.ts entry, like the other ide_* tables).
 CREATE TABLE IF NOT EXISTS agent_knowledge_chunks (
   id TEXT PRIMARY KEY,

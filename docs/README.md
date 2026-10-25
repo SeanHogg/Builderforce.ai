@@ -6,7 +6,7 @@ not in a new top-level folder.
 | Folder | What lives there |
 |---|---|
 | [`specs/`](specs/) | Product PRDs and implementation notes, numbered (`NN-prd-*.md`; `NNa-*` is the build hand-off for `NN`). [`specs/README.md`](specs/README.md) is the index; `specs/data-model/` is the consolidation coverage map the `check:burnrate-parity` / model-coverage guards read. |
-| [`design/`](design/) | UI and system design docs (creation canvas, dashboards, theme). |
+| [`design/`](design/) | UI and system design docs (creation canvas, the PRD 35 one-kernel design, the local-first review). |
 | [`compliance/`](compliance/) | Privacy, accessibility and data-processing policies and assessments. |
 | [`guides/`](guides/) | How-to guides for contributors. |
 | [`marketing/`](marketing/) | Marketing process rules (claims review). |

@@ -1,6 +1,6 @@
 /**
  * The `compile()` primitive (compile primitive Phase C2, see
- * `PRD-agent-compile-primitive.md`).
+ * DONE.md, 2026-10-25 docs-cleanup entry).
  *
  *   compile(need, deps) → AgentSpec
  *

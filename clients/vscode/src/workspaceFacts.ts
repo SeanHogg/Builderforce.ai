@@ -8,7 +8,7 @@
  * store — the thing the persona tells the agent to consult BEFORE searching — filled
  * only when a model chose to call `remember_fact`, so on a fresh project `recall_facts`
  * returned nothing and the agent went straight to search-and-read. The editor spec
- * (14-prd-vscode-extension) always meant the scan digest to land in memory; it never did.
+ * (PRD 14, VS Code extension; shipped, see DONE.md) always meant the scan digest to land in memory; it never did.
  *
  * One fact per sub-project (the directories holding a manifest), naming its main folders
  * and its most-exported modules WITH their exported names — the lexical and semantic

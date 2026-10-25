@@ -76,7 +76,7 @@ export function resolveInferenceMode(d: AgentDescriptor): 'base' | 'lora' | 'hyb
 /**
  * Builds the persona (+ persona directives + recalled/Mamba memory) system prompt
  * for an agent, via the shared {@link lowerAgentSpec} so every surface assembles
- * it identically (see `PRD-agent-compile-primitive.md`).
+ * it identically (compile primitive; recorded in DONE.md, 2026-10-25 docs-cleanup entry).
  */
 export function buildAgentSystemPrompt(d: AgentDescriptor): string {
   return lowerAgentSpec(specFromDescriptor(d)).systemPrompt;
