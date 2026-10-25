@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { describeNetworkError } from "@seanhogg/builderforce-brain-embedded";
+import { fetchLocal } from "@builderforce/local-inference";
 import { getLocalModelsConfig } from "./gateway";
 import { resolveLocalChatEndpoint } from "./localModels";
 import { authorizeLocalEndpoint } from "./localEndpointAuth";
@@ -85,7 +86,8 @@ export class LocalFetchProxy implements vscode.Disposable {
       // neither see this machine's Kimi bearer nor be able to aim one somewhere else.
       // An on-device engine has no token and the header stays absent, exactly as before.
       const { authorization: _drop, Authorization: _dropCased, ...callerHeaders } = msg.headers ?? {};
-      const res = await fetch(url, {
+      // `fetchLocal`: an endpoint with a `credential` gets its current token, and one retry on a 401.
+      const res = await fetchLocal(endpoint, fetch, url, {
         method: msg.method ?? "POST",
         headers: {
           ...callerHeaders,

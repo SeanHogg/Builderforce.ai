@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-10-25 — A Kimi turn no longer dies after its first step (VSIX 2026.10.87 · api 2026.10.84 · brain-embedded 2026.10.57 · Rovr 2026.10.29)
+
+The first Kimi call in a turn worked; the next failed "The API Key appears to be invalid or may have expired". Two causes:
+
+- **Server handed out a token about to die.** `resolveKimiOAuthResolution` returned the held access token until its REAL expiry (Kimi's stored `expires` has no margin), so a client got a token with seconds left. It now rotates inside `OAUTH_SAFETY_MARGIN_MS` (5 min), so every issued token outlives the client's 2-minute refresh margin. Guarded in `tenantProviderKeyService.test.ts`.
+- **Client captured one token for the whole run.** The route (and its bearer) is resolved once per run. `LocalEndpoint.credential` (`@builderforce/local-inference`) is now asked for the current token before EVERY request by the one helper `fetchLocal`, which also retries a 401 once with a replacement. The shared `localTransport` / `completeLocal` and the VSIX panel proxy all go through it. The token source comes from the shared `createConnectedAccounts.credentialFor` (VSIX and Rovr) or the Kimi Code CLI login. Guarded in `fetchLocal.test.ts` and `connectedAccounts.test.ts`.
+
 ## ✅ RESOLVED 2026-10-25 — Kimi uses its US hosts, spelled once; a failed Kimi sign-in is logged and never silent (VSIX 2026.10.84 · api 2026.10.83 · Rovr 2026.10.27)
 
 **Reported:** on VSIX 2026.10.83 the Kimi turn went back to the server (`local_egress_required`) with nothing logged.

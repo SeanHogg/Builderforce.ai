@@ -62,10 +62,16 @@ export async function authorizeLocalEndpoint(
     const env = install.oauthHost && !process.env.KIMI_CODE_OAUTH_HOST
       ? { ...process.env, KIMI_CODE_OAUTH_HOST: install.oauthHost }
       : process.env;
-    const resolved = await ensureFreshKimiToken(nodeFs, install.home, { env });
+    const fresh = () => ensureFreshKimiToken(nodeFs, install.home, { env });
+    const resolved = await fresh();
     if (resolved.kind === "token") {
       if (interactive) log(`Kimi Code CLI login used (${install.home}, ${install.baseUrl}).`);
-      return { ok: true, endpoint: { baseUrl: install.baseUrl, ...endpoint, token: resolved.accessToken } };
+      // Re-read before every request: the run outlives the fifteen-minute token it started with.
+      const credential = async () => {
+        const next = await fresh();
+        return next.kind === "token" ? next.accessToken : null;
+      };
+      return { ok: true, endpoint: { baseUrl: install.baseUrl, ...endpoint, token: resolved.accessToken, credential } };
     }
     cliDetail = resolved.detail;
     if (interactive) log(`Kimi Code CLI login unusable (${resolved.kind}, sign-in host ${env.KIMI_CODE_OAUTH_HOST ?? "default"}): ${resolved.detail}`);
@@ -75,12 +81,16 @@ export async function authorizeLocalEndpoint(
 
   // The workspace's connected account for this runtime (registry `accountProvider`), through
   // the shared connected accounts — offering the sign-in when none is usable.
-  const accountProvider = editorAccounts(secrets).providerFor(provider);
+  const accounts = editorAccounts(secrets);
+  const accountProvider = accounts.providerFor(provider);
   if (!accountProvider) return { ok: false, detail: cliDetail ?? `${provider} has no connected account.` };
   const outcome = await ensureLocalProviderCredential(secrets, accountProvider, localRuntime(provider).label, { prompt: interactive });
   if (outcome.kind === "credential") {
     if (interactive) log(`Workspace Kimi connection used (${outcome.credential.baseUrl}).`);
-    return { ok: true, endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken } };
+    return {
+      ok: true,
+      endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken, credential: accounts.credentialFor(accountProvider) },
+    };
   }
   const accountDetail = outcome.kind === "unavailable"
     ? `The workspace Kimi connection could not be read (${outcome.detail}).`

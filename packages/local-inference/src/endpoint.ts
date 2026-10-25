@@ -52,6 +52,38 @@ export function rewriteToLocalUrl(url: string): string {
     : url;
 }
 
+/**
+ * One request to a local runtime with the endpoint's CURRENT bearer. An endpoint with a
+ * `credential` is asked for its token right before the call, and a 401 gets one retry with
+ * a replacement — the token a run was routed with can expire before its last step. Every
+ * other endpoint keeps the headers it was given.
+ */
+export async function fetchLocal(
+  endpoint: LocalEndpoint,
+  fetchImpl: (input: string, init: RequestInit) => Promise<Response>,
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  const credential = endpoint.credential;
+  if (!credential) return fetchImpl(url, init);
+  const send = (token: string | null) => fetchImpl(url, { ...init, headers: withBearer(init.headers, token) });
+  const token = await credential();
+  const res = await send(token);
+  if (res.status !== 401 || !token) return res;
+  const replacement = await credential(token);
+  if (!replacement || replacement === token) return res;
+  await res.body?.cancel().catch(() => undefined);
+  return send(replacement);
+}
+
+/** `headers` with its Authorization replaced by `token` (removed for null). */
+function withBearer(headers: HeadersInit | undefined, token: string | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  new Headers(headers).forEach((value, key) => { if (key !== 'authorization') out[key] = value; });
+  if (token) out.authorization = `Bearer ${token}`;
+  return out;
+}
+
 /** The Authorization header an endpoint takes, or none — never an empty Bearer. */
 export function localAuthHeaders(endpoint: LocalEndpoint): Record<string, string> {
   return endpoint.token ? { authorization: `Bearer ${endpoint.token}` } : {};

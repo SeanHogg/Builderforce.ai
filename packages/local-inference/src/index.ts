@@ -44,6 +44,7 @@ export { LOCAL_MODEL_PREFIX, clientPinOf, formatLocalModelRef, isLocalModelRef, 
 export {
   GATEWAY_COMPLETIONS_PATH,
   LOCAL_COMPLETIONS_PATH,
+  fetchLocal,
   localAuthHeaders,
   localChatCompletionsUrl,
   localModelsUrl,

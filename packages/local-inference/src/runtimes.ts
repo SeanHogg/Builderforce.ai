@@ -27,6 +27,13 @@ export interface LocalEndpoint {
   baseUrl: string;
   /** Bearer credential, when this runtime needs one. */
   token?: string;
+  /**
+   * A bearer that outlives no run — a fifteen-minute Kimi token — asked for afresh before
+   * every request (`fetchLocal`), so a long run never sends one that expired mid-way.
+   * `rejected` is the token the provider just answered 401 to: drop it and get another,
+   * or null when there is none better.
+   */
+  credential?: (rejected?: string) => Promise<string | null>;
 }
 
 /** The endpoints a host resolved, per runtime. An absent runtime is simply not offered. */

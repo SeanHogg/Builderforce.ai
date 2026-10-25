@@ -262,7 +262,10 @@ describe("the inference mode is decided by the seam", () => {
   it("authorizes Kimi through the shared connected accounts, with no init step to forget", () => {
     const auth = stripComments(fs.readFileSync(path.join(SRC, "localEndpointAuth.ts"), "utf8"));
     const store = stripComments(fs.readFileSync(path.join(SRC, "localProviderCredentials.ts"), "utf8"));
-    expect(auth).toContain("editorAccounts(secrets).providerFor(provider)");
+    expect(auth).toContain("const accounts = editorAccounts(secrets);");
+    expect(auth).toContain("accounts.providerFor(provider)");
+    // Every request asks the shared accounts for the current token, not the one the run started with.
+    expect(auth).toContain("accounts.credentialFor(accountProvider)");
     expect(store).toContain('from "@builderforce/provider-connect/accounts"');
     expect(store).not.toContain("initLocalProviderCredentials");
   });

@@ -70,7 +70,12 @@ vi.mock('./anthropicOAuth', async (orig) => {
   return { ...actual, refreshAnthropicToken: (t: string) => refreshBox.current(t) };
 });
 
+// Kimi's refresh, counted — the resolver must rotate AHEAD of expiry.
+const kimiRefresh = vi.fn(async () => ({ access: 'KIMI-FRESH', refresh: 'KR2', expires: Date.now() + 900_000 }));
+vi.mock('./kimiOAuth', async (orig) => ({ ...((await orig()) as Record<string, unknown>), refreshKimiOAuth: () => kimiRefresh() }));
+
 import {
+  resolveKimiOAuthResolution,
   resolveAnthropicResolution,
   formatByoUnresolvedHeader,
   PROVIDER_VENDOR_MAP,
@@ -206,5 +211,28 @@ describe('formatByoUnresolvedHeader — provider:reason encoding', () => {
   it('is empty when everything resolved and nothing is connected elsewhere', () => {
     const ok: TenantLlmCredentials = { anthropicOAuthToken: 'tok', vendorKeys: {}, configuredProviders: ['anthropic'], unresolvedReasons: {}, vendorPriority: [] };
     expect(formatByoUnresolvedHeader(ok)).toBe('');
+  });
+});
+
+// The Kimi access token is handed to a client's machine, which runs a whole turn on it: one
+// handed out with seconds left died mid-turn ("The API Key appears to be invalid or may have
+// expired"). The resolver rotates inside the safety margin instead.
+describe('resolveKimiOAuthResolution — refresh ahead of expiry', () => {
+  const stageKimi = (expires: number) => {
+    rowsBox.current = [{ id: 'k1', provider: 'kimi', keyEnc: 'enc', authType: 'oauth' }];
+    decryptBox.current = () => JSON.stringify({ access: 'KIMI-OLD', refresh: 'KR1', expires });
+  };
+  afterEach(() => kimiRefresh.mockClear());
+
+  it('hands out the held token while it has more than the margin left', async () => {
+    stageKimi(Date.now() + OAUTH_SAFETY_MARGIN_MS + 60_000);
+    expect((await resolveKimiOAuthResolution(env, 1)).token).toBe('KIMI-OLD');
+    expect(kimiRefresh).not.toHaveBeenCalled();
+  });
+
+  it('rotates a token that expires inside the margin, before it reaches a client', async () => {
+    stageKimi(Date.now() + 60_000);
+    expect((await resolveKimiOAuthResolution(env, 1)).token).toBe('KIMI-FRESH');
+    expect(kimiRefresh).toHaveBeenCalledTimes(1);
   });
 });

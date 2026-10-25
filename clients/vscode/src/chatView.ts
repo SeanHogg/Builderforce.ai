@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import { renderWebviewHtml } from "./webviewShared";
-import { SECRET_KEY } from "./gateway";
 import { handleSharedHostMessage } from "./webviewHostBridge";
 import { workspaceCanvasSession } from "./workspaceSession";
 import { WorkspaceSurface, type BrainInbound, type BrainIntent } from "./workspaceSurface";
@@ -74,8 +73,8 @@ class BuilderForceChatViewProvider implements vscode.WebviewViewProvider {
       await (await surface).handle(m);
     });
     view.webview.html = renderWebviewHtml(view.webview, this.ctx, { title: "BuilderForce" });
-    // The visualization is the other half of this view, so it opens with it.
-    void openVisualizationOnce(this.ctx);
+    // The visualization does NOT open with the chat view: it opens only on the header's
+    // Visualize lever or the `builderforce.openVisualization` command — never on its own.
     // A token may have refreshed while the view was hidden.
     const visibility = view.onDidChangeVisibility(() => { if (view.visible) void surface.then((s) => s.refresh()); });
     view.onDidDispose(() => {
@@ -94,25 +93,6 @@ class BuilderForceChatViewProvider implements vscode.WebviewViewProvider {
 }
 
 let provider: BuilderForceChatViewProvider | undefined;
-/** The visualization panel was opened alongside the chat view in this window. */
-let visualizationOpened = false;
-
-/**
- * Open the visualization beside this view ONCE per window — after closing it the person
- * reopens it from the header's Visualize lever. Signed out there is no board to draw
- * (the panel would only show the sign-in notice), so it waits for the first sign-in;
- * a failed open (the board's session could not be resolved) is not counted, so the
- * next sign-in or view resolve tries again.
- */
-async function openVisualizationOnce(ctx: vscode.ExtensionContext): Promise<void> {
-  if (visualizationOpened || !(await ctx.secrets.get(SECRET_KEY))) return;
-  visualizationOpened = true;
-  try {
-    await vscode.commands.executeCommand("builderforce.openVisualization");
-  } catch {
-    visualizationOpened = false;
-  }
-}
 /** Which of the two view ids this editor shows. */
 let activeViewId = CHAT_VIEW_ID;
 
@@ -123,10 +103,6 @@ export function registerChatView(ctx: vscode.ExtensionContext): void {
     void vscode.commands.executeCommand("setContext", NO_SECONDARY_SIDEBAR_CTX, true);
   }
   provider = new BuilderForceChatViewProvider(ctx);
-  // Signing in is when a board first exists to show.
-  ctx.subscriptions.push(ctx.secrets.onDidChange((e) => {
-    if (e.key === SECRET_KEY) void openVisualizationOnce(ctx);
-  }));
   const options = { webviewOptions: { retainContextWhenHidden: true } };
   ctx.subscriptions.push(
     vscode.window.registerWebviewViewProvider(CHAT_VIEW_ID, provider, options),

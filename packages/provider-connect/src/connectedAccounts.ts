@@ -16,13 +16,13 @@
  * own gate (Rovr's origin permission). Kept on its own subpath because it reads the runtime
  * registry, which the web settings card — a consumer of the root entry — never needs.
  */
-import { LOCAL_RUNTIMES, clientPinOf, localRuntime, type LocalRuntimeId } from '@builderforce/local-inference';
+import { LOCAL_RUNTIMES, clientPinOf, localRuntime, type LocalEndpoint, type LocalRuntimeId } from '@builderforce/local-inference';
 import { createLocalCredentialStore, type CredentialStringStore, type LocalCredentialStore } from './localCredential.js';
 import type { GatewayRequest } from './port.js';
 
 /** Where a connected account's runtime is called, or what stands in the way. */
 export type AccountEndpointOutcome =
-  | { kind: 'endpoint'; provider: string; endpoint: { baseUrl: string; token: string } }
+  | { kind: 'endpoint'; provider: string; endpoint: LocalEndpoint & { token: string } }
   /** Nothing usable is connected (or its grant is dead): the host offers the connect. */
   | { kind: 'connect'; provider: string; reason: 'not_connected' | 'reconnect'; detail?: string }
   /** No answer from the gateway — say so; connecting would not help. */
@@ -36,6 +36,12 @@ export interface ConnectedAccounts {
   hydrate(): Promise<void>;
   /** The provider's credential store — created (and hydrated) on first use. */
   store(provider: string): LocalCredentialStore;
+  /**
+   * The provider's token as an endpoint's `credential`: asked before every request, so a run
+   * routed with a token that has since expired sends the current one. Handed the token the
+   * provider just refused, it drops that one and fetches again.
+   */
+  credentialFor(provider: string): NonNullable<LocalEndpoint['credential']>;
   /** The account provider a runtime is called with, or null for a runtime that needs none. */
   providerFor(runtime: LocalRuntimeId): string | null;
   /** Where a runtime is called with the workspace's account, or null when it uses none. */
@@ -69,6 +75,13 @@ export function createConnectedAccounts(deps: {
     return ready;
   };
 
+  const credentialFor = (provider: string): NonNullable<LocalEndpoint['credential']> => async (rejected) => {
+    const held = store(provider);
+    if (rejected && held.snapshot()?.accessToken === rejected) await held.clear();
+    const outcome = await held.resolve();
+    return outcome.kind === 'credential' ? outcome.credential.accessToken : null;
+  };
+
   const providerFor = (runtime: LocalRuntimeId): string | null => localRuntime(runtime).accountProvider ?? null;
 
   const endpointFor = async (runtime: LocalRuntimeId): Promise<AccountEndpointOutcome | null> => {
@@ -77,7 +90,11 @@ export function createConnectedAccounts(deps: {
     const outcome = await store(provider).resolve();
     switch (outcome.kind) {
       case 'credential':
-        return { kind: 'endpoint', provider, endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken } };
+        return {
+          kind: 'endpoint',
+          provider,
+          endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken, credential: credentialFor(provider) },
+        };
       case 'not_connected':
         return { kind: 'connect', provider, reason: 'not_connected' };
       case 'reconnect':
@@ -93,6 +110,7 @@ export function createConnectedAccounts(deps: {
     providers,
     hydrate: async () => { await Promise.all(providers.map((p) => store(p).hydrate())); },
     store,
+    credentialFor,
     providerFor,
     endpointFor,
     async pinFor(ref) {

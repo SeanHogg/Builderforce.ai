@@ -331,7 +331,10 @@ export async function resolveKimiOAuthResolution(env: Env, tenantId: number, fre
   try { tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, credentialSecret(env), { tenantId, legacySecret: env.JWT_SECRET })) as KimiOAuthTokens; }
   catch { return { token: null, reason: 'undecryptable' }; }
   if (!tokens.access || !tokens.refresh) return { token: null, reason: 'undecryptable' };
-  if (Date.now() < tokens.expires) return { token: tokens.access, expires: tokens.expires };
+  // Refresh AHEAD of expiry: this token is also handed to a client's machine (`localCredential`),
+  // which runs a whole turn on it. Kimi's stored expiry is the real one, so handing it out
+  // until the last second sent clients a token that died mid-turn ("API Key … expired").
+  if (Date.now() < tokens.expires - OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access, expires: tokens.expires };
   if (!fresh) return resolveKimiOAuthResolution(env, tenantId, true); // see the OpenAI resolver
   try {
     const refreshed = await refreshKimiOAuth(tokens.refresh);

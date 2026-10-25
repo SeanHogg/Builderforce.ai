@@ -16,6 +16,7 @@
 
 import {
   clientPinOf,
+  fetchLocal,
   formatLocalModelRef,
   isLocalModelRef,
   localAuthHeaders,
@@ -87,7 +88,7 @@ export function localTransport(
     ...(options.runtime && localRuntime(options.runtime).providerSampling ? { providerSampling: true } : {}),
     fetch: async (input, init) => {
       try {
-        return await fetchImpl(rewriteToLocalUrl(input), init);
+        return await fetchLocal(endpoint, fetchImpl, rewriteToLocalUrl(input), init);
       } catch (e) {
         if (!options.failFast || init.signal?.aborted) throw e;
         throw new Error(`local_runtime_unreachable: ${e instanceof Error ? e.message : String(e)}`);
@@ -392,7 +393,7 @@ export async function completeLocal(
   signal?: AbortSignal,
   fetchImpl: LocalFetch = globalFetch,
 ): Promise<string> {
-  const res = await fetchImpl(localChatCompletionsUrl(endpoint.baseUrl), {
+  const res = await fetchLocal(endpoint, fetchImpl, localChatCompletionsUrl(endpoint.baseUrl), {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...localAuthHeaders(endpoint) },
     body: JSON.stringify({ model, messages, stream: false }),

@@ -42,7 +42,7 @@ describe("createConnectedAccounts", () => {
       expect(await accounts.pinFor(ref)).toEqual({
         kind: "endpoint",
         provider: "kimi",
-        endpoint: { baseUrl: "https://api.kimi.ai/coding/v1", token: "kc-token" },
+        endpoint: { baseUrl: "https://api.kimi.ai/coding/v1", token: "kc-token", credential: expect.any(Function) },
         model: "k3",
       });
     }
@@ -76,6 +76,17 @@ describe("createConnectedAccounts", () => {
     await accounts.store("kimi").resolve();
     await accounts.store("kimi").resolve();
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("credentialFor drops a token the provider refused and fetches the next", async () => {
+    let issued = 0;
+    const request = vi.fn<GatewayRequest>(async () => ({ status: 200, body: { ...credential(now), accessToken: `kc-${++issued}` } }));
+    const accounts = createConnectedAccounts({ request, store: memoryStore(), now: () => now });
+    const token = accounts.credentialFor("kimi");
+    expect(await token()).toBe("kc-1");
+    expect(await token()).toBe("kc-1");
+    expect(await token("kc-1")).toBe("kc-2");
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   it("leaves every ref and runtime without a connected account alone", async () => {
