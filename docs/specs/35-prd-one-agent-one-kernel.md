@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Approved design, not started. WS0 (finish the in-flight cloud-runtime change) runs first. Revised 2026-10-25: adds run efficiency (§2.1, WS8, §6.10, §8.4). Evidence: one VS Code run took 79 turns to update this PRD and never updated it. **WS8a–h shipped 2026-10-25 in VSIX 2026.10.76** (DONE.md). Its leftovers are in ROADMAP. |
+| Status | Approved design, in progress. **WS0 landed** (clean tree, `main` = `origin/main` at `6b1a1469e`, 2026-10-25). **WS8a–h shipped 2026-10-25 in VSIX 2026.10.76** (DONE.md); its leftovers are in ROADMAP. **WS1 is running** (contract, package skeleton, conformance harness, guards) on branch `feat/agent-run-ws1`; WS2a–g and WS6 are queued behind it, then WS3/WS4/WS5, then WS7. Board: epic 5979, one ticket per workstream. Revised 2026-10-25: adds run efficiency (§2.1, WS8, §6.10, §8.4). Evidence: one VS Code run took 79 turns to update this PRD and never updated it. |
 | Owner | Agents program (planning: the session model; implementation: Opus agents; verify: Sonnet agents) |
 | Entry points | VS Code · Rovr / Web / canvas · On-prem agent · Cloud / container |
 | Design reference | [`docs/design/one-agent-one-kernel.html`](../design/one-agent-one-kernel.html), the picture: end state, both matrices, retention ledger, telemetry. Live copy: https://claude.ai/artifact/Ggc3G5y2ZLkJsVe1jDHag8 |
