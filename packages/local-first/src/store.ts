@@ -276,11 +276,14 @@ export function createMemoryLocalFirstStore(initial?: Partial<LocalFirstSnapshot
   let tail: Promise<unknown> = Promise.resolve();
   const listeners = new Set<() => void>();
   return {
-    read: (work) => work(transaction(clone(state), false)),
+    // No whole-state clone per transaction: `transaction` indexes the committed rows into
+    // fresh maps, every getter returns a clone and every write stores one, so a draft
+    // never touches a committed row. A clone of the whole store per read was O(store)
+    // on every lookup — megabytes per streamed token once a hot path read it.
+    read: (work) => work(transaction(state, false)),
     transact(work) {
       const run = tail.then(async () => {
-        const draft = clone(state);
-        const tx = transaction(draft, true);
+        const tx = transaction(state, true);
         const result = await work(tx);
         state = tx.committed();
         for (const listener of [...listeners]) listener();

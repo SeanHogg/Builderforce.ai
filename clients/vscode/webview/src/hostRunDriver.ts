@@ -21,6 +21,7 @@
 import {
   applyRemoteRun,
   createModelFallbackChannel,
+  getRunSnapshot,
   getRunTrace,
   installRunDriver,
   setMcpToolStatus,
@@ -76,9 +77,12 @@ export function setHostRunContext(next: HostRunContext): void {
 
 interface RunSyncFrame {
   chatId: number;
-  snapshot: Omit<BrainRunSnapshot, 'trace'>;
+  snapshot: Omit<BrainRunSnapshot, 'trace' | 'streamingText'>;
   traceFrom: number;
   trace: BrainTraceEvent[];
+  /** The streamed text arrives as a delta from this offset (0 = the whole text). */
+  textFrom: number;
+  text: string;
 }
 
 /** Serialize the request: functions stay behind, the host supplies its own. */
@@ -114,7 +118,8 @@ export function installHostRunDriver(): () => void {
   const offSync = onHostMessage<RunSyncFrame>('run.sync', (m) => {
     const prior = getRunTrace(m.chatId);
     const trace = m.traceFrom > 0 ? [...prior.slice(0, m.traceFrom), ...m.trace] : m.trace;
-    applyRemoteRun(m.chatId, { ...m.snapshot, trace, hasTrace: trace.length > 0 });
+    const streamingText = m.textFrom > 0 ? getRunSnapshot(m.chatId).streamingText.slice(0, m.textFrom) + m.text : m.text;
+    applyRemoteRun(m.chatId, { ...m.snapshot, streamingText, trace, hasTrace: trace.length > 0 });
   });
   const offSettled = onHostMessage<{ chatId: number }>('run.settled', (m) => {
     pending.get(m.chatId)?.resolve();

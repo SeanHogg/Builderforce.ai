@@ -1,3 +1,18 @@
+## ✅ RESOLVED 2026-10-24 — VSIX memory growth while a chat streams, from PRD 36 and the run host (VSIX 2026.10.73 · local-first 2026.10.26 · brain-embedded 2026.10.49)
+
+- **What was wrong.**
+  - **Per-token full-store copies (PRD 36 regression).** PRD 36 made the run host translate running LOCAL chats to their SERVER ids for the Sessions tree. It did that on every run-store event (`clients/vscode/src/brainRunHostPorts.ts` `onRunsChanged`). The run store emits on every streamed text delta, and each lookup (`identity.serverIdFor`) is a `store.read`. The in-memory local-first store `structuredClone`d its whole state on every read and every transaction (`packages/local-first/src/store.ts`). On a 14 MB store that is about 14 MB of copying per token for each running chat, and the async reads piled up faster than they finished.
+  - **Run cells never evicted (older than PRD 36, found in review).** The host subscribed to every run key it ever ran and never unsubscribed (`brainRunHost.ts` `watch`). The run store never evicts a cell that has a listener, so every chat's and sub-agent's cell stayed for the editor's whole session, each with up to 500 trace events and 50 appended messages. The panel replay set (`known`), each panel's delta bookkeeping, the stored run specs (with the turn's seed and research) and empty note recorders also only grew.
+  - **Per-token repaints and resends.** The forced closing turn repainted on every delta instead of once per frame (`brain-embedded/src/runStore/runLoop.ts`). Every 32 ms frame relayed the WHOLE streamed reply to each panel, so a long reply cost O(n²) bytes in the host (`brainRunHostProtocol.ts` `syncMessageFor`).
+- **Fix.**
+  - The run host looks the bound ids up only when the run set changes (a key of the sorted running and awaiting ids), or when a store commit may have bound a live chat.
+  - The memory store indexes committed rows into fresh maps without cloning the whole state first. Its getters already return clones and its writes already store clones, so a draft never touches a committed row.
+  - `clients/vscode/src/runWatches.ts` subscribes to a run only while it is live and releases it when the run settles, so the store can evict its cell. The replay set is capped at the store's 50-cell bound, and a dropped key's per-panel bookkeeping goes with it. A settled run's cleared error is relayed directly.
+  - Stored specs drop the turn's seed, research and message, which no child or wake reuses. Empty note recorders are deleted.
+  - The closing turn coalesces its deltas like every other turn.
+  - The streamed text is relayed as a delta from what each panel was last sent (`textFrom` / `text`). `webview/src/hostRunDriver.ts` splices it back.
+- **Still open (Gap Register).** The unbound journal keeps a second full copy of every message. *Blocker: operator decision.*
+
 ## ✅ RESOLVED 2026-10-24 — PRD 36: a VS Code chat's local number never leaves the machine; chats bind on sign-in, spend is priced on the device, history syncs on enable (api 2026.10.78 · VSIX 2026.10.71 · brain-embedded 2026.10.48 · brain-ui 2026.10.23 · local-first 2026.10.25 · Rovr 2026.10.25 · frontend 2026.10.92)
 
 - **What was wrong.** VS Code numbers its chats 1, 2, 3… on the device. It sent that number to the server as the chat id: in gateway metadata, in the model's prompt, in the ticket backstops, in run context and Evermind scope, and in the ticket rail. So local chat N read, edited and was billed to server chat N. The spend pill never showed in VS Code. Rovr sent its negative device ids the same way. The native session restore and the cloud audit path read the server by local id.

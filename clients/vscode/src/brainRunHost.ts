@@ -37,7 +37,6 @@ import {
   runAbortSignal,
   startRun,
   stopRun,
-  subscribeRun,
   subscribeRunStore,
   type BrainRunOutcome,
   type BrainRunPersistence,
@@ -58,6 +57,7 @@ import { syncMessageFor, type RunHostMessage, type RunSink, type SinkEntry, type
 import { childControls, directionText, type ChildControls, type ChildOwner } from "./childRunSpawner";
 import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
 import { createChildApprovalRelay, type ChildApprover } from "./childApprovalRelay";
+import { createRunWatches } from "./runWatches";
 
 export { syncMessageFor } from "./brainRunHostProtocol";
 
@@ -229,9 +229,6 @@ function argsRecord(value: unknown): Record<string, unknown> {
 
 export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const sinks = new Set<SinkEntry>();
-  /** Chats this host has run — the ones a newly attached panel is brought up to date on. */
-  const known = new Set<number>();
-  const watched = new Set<number>();
   const notes = new Map<number, RunKnowledgeRecorder>();
   /** Live per-run gate flags; `needsConfirm` reads them so a switch flipped mid-run
    *  takes effect on the NEXT call instead of after the run (the shared gate's rule). */
@@ -253,14 +250,16 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
   const broadcastSync = (chatId: number): void => {
     for (const entry of sinks) entry.sink.post(syncMessageFor(entry, chatId));
   };
-  const watch = (chatId: number): void => {
-    if (watched.has(chatId)) return;
-    watched.add(chatId);
-    subscribeRun(chatId, () => {
+  /** The runs this host relays: subscribed while live, the recent ones replayed to a new panel. */
+  const watches = createRunWatches(
+    (chatId) => {
       broadcastSync(chatId);
       approvals.changed(chatId);
-    });
-  };
+    },
+    (chatId) => {
+      for (const entry of sinks) entry.sent.delete(chatId);
+    },
+  );
   const offStore = subscribeRunStore(() => ports.onRunsChanged?.(getGlobalRunState()));
 
   const notesFor = (chatId: number): RunKnowledgeRecorder => {
@@ -274,8 +273,9 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
 
   const flushNote = async (runKey: number, chatId: number, opts: RunNoteOptions): Promise<void> => {
     const n = notes.get(runKey);
-    if (!n || n.isEmpty) return;
+    // Dropped even when empty: a recorder per key that never noted anything is still a recorder.
     notes.delete(runKey);
+    if (!n || n.isEmpty) return;
     try {
       await ports.sessionNote?.(chatId, n, opts);
     } catch {
@@ -295,18 +295,22 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
    */
   const run = async (p: RunSpec): Promise<void> => {
     const key = p.chatId;
-    known.add(key);
-    watch(key);
+    watches.watch(key);
     // Already running (a second tab, a double submit): the live run owns this key.
     // Returning before the setup keeps a no-op start from deleting the live run's Auto
     // flag on the way out.
     if (active.has(key) || isRunning(key)) return;
     active.add(key);
-    specs.set(key, p);
+    // What a child derives from and a wake restarts with; the turn's own seed, research and
+    // message are never reused (a wake passes the next turn), so they are not kept.
+    const { seed: _seed, priorResearch: _prior, userTurn: _turn, ...kept } = p;
+    specs.set(key, kept);
     try {
       await runTurn(p);
     } finally {
       active.delete(key);
+      // Settled: stop pinning its cell. Before `afterRun`, whose wake re-watches the key.
+      watches.release(key);
       // A child's report that arrived as this run was ending is heard now.
       childHost.afterRun(key);
     }
@@ -479,7 +483,11 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     // "stopped" rather than "failed".
     stop: (runKey) => childHost.stop(runKey),
     confirm: (runKey, ok) => resolveRunConfirm(runKey, ok),
-    clearError: (runKey) => clearRunError(runKey),
+    // A settled run is no longer subscribed, so its cleared error is relayed here.
+    clearError: (runKey) => {
+      clearRunError(runKey);
+      broadcastSync(runKey);
+    },
     steer(runKey, text) {
       if (!isRunning(runKey) || !text.trim()) return;
       const lineage = registry.lineageOf(runKey);
@@ -515,6 +523,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     attach(sink) {
       const entry: SinkEntry = { sink, sent: new Map() };
       sinks.add(entry);
+      const known = watches.known();
       for (const chatId of known) sink.post(syncMessageFor(entry, chatId));
       for (const chatId of known) if (chatId > 0) sink.post({ type: "run.children", chatId, children: registry.viewsIn(chatId) });
       return () => {
@@ -523,6 +532,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     },
     dispose() {
       offStore();
+      watches.dispose();
       sinks.clear();
     },
   };

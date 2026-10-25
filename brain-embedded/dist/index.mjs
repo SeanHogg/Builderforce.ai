@@ -1900,10 +1900,10 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [2e-8, 1e-6],
   "~deepseek/deepseek-pro-latest": [1188e-10, 8e-6],
-  "~deepseek/deepseek-v4-flash-latest": [422e-10, 1763e-10],
+  "~deepseek/deepseek-v4-flash-latest": [422e-10, 1694e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [19e-8, 85258e-10],
+  "~moonshotai/kimi-latest": [189e-9, 119e-7],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -1911,8 +1911,8 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-terra-latest": [2e-6, 12e-6],
   "~unbiased/pareto-latest": [8e-7, 32e-7],
   "~x-ai/grok-latest": [2e-6, 6e-6],
-  "~z-ai/glm-flash-latest": [502e-10, 819e-10],
-  "~z-ai/glm-latest": [75e-9, 4295e-9],
+  "~z-ai/glm-flash-latest": [191e-10, 1352e-10],
+  "~z-ai/glm-latest": [703e-10, 43843e-10],
   "aion-labs/aion-2.0": [8e-7, 16e-7],
   "aion-labs/aion-3.0": [3e-6, 6e-6],
   "aion-labs/aion-3.0-mini": [7e-7, 14e-7],
@@ -1978,7 +1978,7 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [28e-8, 42e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [91e-9, 182e-9],
-  "deepseek/deepseek-v4-flash-0731": [4444e-11, 13332e-11],
+  "deepseek/deepseek-v4-flash-0731": [422e-10, 1694e-10],
   "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
   "deepseek/deepseek-v4-pro": [2088e-10, 4176e-10],
   "deepseek/deepseek-v4-pro-0813": [66e-8, 198e-8],
@@ -2048,7 +2048,7 @@ var PRICE_SNAPSHOT = {
   "meta-llama/llama-3.1-70b-instruct": [4e-7, 4e-7],
   "meta-llama/llama-3.1-8b-instruct": [5e-8, 8e-8],
   "meta-llama/llama-3.2-1b-instruct": [27e-9, 201e-9],
-  "meta-llama/llama-3.2-3b-instruct": [509e-10, 335e-9],
+  "meta-llama/llama-3.2-3b-instruct": [5e-8, 33e-8],
   "meta-llama/llama-3.3-70b-instruct": [1e-7, 32e-8],
   "meta-llama/llama-4-maverick": [1875e-10, 6525e-10],
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
@@ -2311,9 +2311,9 @@ var PRICE_SNAPSHOT = {
   "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
   "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
   "tencent/hy-mt2-7b": [74e-9, 295e-9],
-  "tencent/hy3": [825e-10, 33e-8],
+  "tencent/hy3": [132e-9, 528e-9],
   "tencent/hy3-preview": [18e-8, 6e-7],
-  "tencent/hy4-preview": [7506e-10, 22509e-10],
+  "tencent/hy4-preview": [834e-9, 2501e-9],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
@@ -2354,7 +2354,7 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5-turbo": [12e-7, 4e-6],
   "z-ai/glm-5.1": [14e-7, 44e-7],
   "z-ai/glm-5.2": [341e-10, 7e-6],
-  "z-ai/glm-5.3": [908e-10, 161e-8],
+  "z-ai/glm-5.3": [79e-9, 14e-7],
   "z-ai/glm-5.3-flash": [15e-8, 5e-7],
   "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
@@ -15408,10 +15408,15 @@ async function runLoop(chatId, c, req, runKey) {
         {
           onModel: liveTurnModel(c),
           onConnectRetry: connectRetryStep(c, loop.step),
+          // The first token repaints now; every later delta coalesces into a frame (as `completeTurn` does).
           onTextDelta: (d) => {
-            if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
             c.streamingText += d;
-            emit(c);
+            if (closeFirstTokenAt === void 0) {
+              closeFirstTokenAt = nowMs2();
+              emit(c);
+              return;
+            }
+            emitStreaming(c);
           }
         }
       ));

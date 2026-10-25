@@ -29,7 +29,7 @@ import { nextTurn } from '@builderforce/run-policy';
 import type { ChatCompletionMessage } from '../streamChatCompletion';
 import { windowed } from '../workingTranscript';
 import type { RunCell } from './runCell';
-import { accrueByoUnresolved, accrueProviderCap, emit, nowIso, nowMs, pushTrace, recordAppended, recordRunFailure } from './runCells';
+import { accrueByoUnresolved, accrueProviderCap, emit, emitStreaming, nowIso, nowMs, pushTrace, recordAppended, recordRunFailure } from './runCells';
 import { asLiveTurn, canonicalTurnText, connectRetryStep, liveTurnModel, provenanceMetadata } from './turnPersistence';
 import { emitEvermindLearnReconcile } from './runMemory';
 import { prepareRunLoop } from './runPreamble';
@@ -100,7 +100,16 @@ export async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest, 
         {
           onModel: liveTurnModel(c),
           onConnectRetry: connectRetryStep(c, loop.step),
-          onTextDelta: (d) => { if (closeFirstTokenAt === undefined) closeFirstTokenAt = nowMs(); c.streamingText += d; emit(c); },
+          // The first token repaints now; every later delta coalesces into a frame (as `completeTurn` does).
+          onTextDelta: (d) => {
+            c.streamingText += d;
+            if (closeFirstTokenAt === undefined) {
+              closeFirstTokenAt = nowMs();
+              emit(c);
+              return;
+            }
+            emitStreaming(c);
+          },
         },
       ));
       accrueByoUnresolved(c, closing.byoUnresolved);

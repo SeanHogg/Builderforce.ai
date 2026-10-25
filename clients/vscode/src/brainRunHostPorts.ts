@@ -7,7 +7,7 @@
  */
 
 import * as vscode from "vscode";
-import { getRunSnapshot, isRunning, withRunUsage, type BrainStreamFn, type ModelFallbackEvent } from "@seanhogg/builderforce-brain-embedded";
+import { getGlobalRunState, getRunSnapshot, isRunning, withRunUsage, type BrainStreamFn, type ModelFallbackEvent } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, postRunOutcome } from "./gateway";
 import { fetchRunContextSection, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
@@ -257,7 +257,24 @@ function routeDeniedDomainTools(
 export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeRunHostHooks): BrainRunHost {
   const { secrets } = ctx;
   const local = localBrainApplication(ctx);
+  // Runs are keyed by LOCAL chat id; the tree lists SERVER chats, so each report carries
+  // the bound server ids (latest report wins — the lookups are async). The run store
+  // fires on every streamed token, and each id lookup reads the local store, so only a
+  // change of the run set looks them up — or, forced, a commit that may have bound a
+  // live chat (a bind, a sync receipt) while the set stayed the same.
   let runsReport = 0;
+  let runsKey: string | undefined;
+  const sortedIds = (ids: readonly number[]): string => [...ids].sort((a, b) => a - b).join(",");
+  const reportRuns = (state: { running: number[]; awaiting: number[] }, force = false): void => {
+    // Sorted: the run store lists cells in LRU order, which moves without the set changing.
+    const key = `${sortedIds(state.running)}|${sortedIds(state.awaiting)}`;
+    if (!force && key === runsKey) return;
+    runsKey = key;
+    const report = ++runsReport;
+    void boundServerIds(local.identity, [...state.running, ...state.awaiting]).then((serverIds) => {
+      if (report === runsReport) setLocalChatRuns(RUNS_SOURCE, state, serverIds);
+    });
+  };
   // installHostDomainTools is intentionally deferred to the tool-dispatch path
   // (lazy on purpose: localBrainApplication mints the device id only after
   // globalState persists it, so an eager bind at construction would throw
@@ -319,14 +336,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       // file is NOT opened in the editor — edits land on disk and stay out of the way.
       refreshPendingChanges();
     },
-    // Runs are keyed by LOCAL chat id; the tree lists SERVER chats, so each report carries
-    // the bound server ids (latest report wins — the lookups are async).
-    onRunsChanged: (state) => {
-      const report = ++runsReport;
-      void boundServerIds(local.identity, [...state.running, ...state.awaiting]).then((serverIds) => {
-        if (report === runsReport) setLocalChatRuns(RUNS_SOURCE, state, serverIds);
-      });
-    },
+    onRunsChanged: (state) => reportRuns(state),
     // The note, then (Memory on) the code map + learned facts — the one run-end step the
     // native chat participant shares.
     sessionNote: (chatId, run, opts) =>
@@ -351,6 +361,11 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
     log: hostLog,
   });
   const detachLifecycle = host.attach(lifecycle.sink);
+  // A commit while chats run may have bound one of them (the run's own bind, a sync
+  // receipt, an adopt): re-read the bound ids. Commits are per message or model call.
+  const offBindings = local.store.subscribe(() => {
+    if (runsKey !== undefined && runsKey !== "|") reportRuns(getGlobalRunState(), true);
+  });
   // Baseline before the turn, immutable change set after it. A duplicate start while
   // the chat is already running is a no-op in the host — don't finalize that, or the
   // live run's edits would be claimed twice, and don't journal a start that will never
@@ -373,6 +388,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       );
     },
     dispose() {
+      offBindings();
       detachLifecycle();
       host.dispose();
     },

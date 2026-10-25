@@ -40,14 +40,18 @@ export interface WebviewRunStart {
   modelSurface?: ModelFallbackSurface | null;
 }
 
-/** One relayed change of a run — the snapshot, plus only the trace events not yet sent. */
+/** One relayed change of a run — the snapshot, plus only the trace events and the
+ *  streamed text not yet sent. */
 export interface RunSyncMessage {
   type: "run.sync";
   chatId: number;
-  snapshot: Omit<BrainRunSnapshot, "trace">;
+  snapshot: Omit<BrainRunSnapshot, "trace" | "streamingText">;
   /** Index the delta continues from; 0 with a full trace when the sink must resync. */
   traceFrom: number;
   trace: BrainTraceEvent[];
+  /** Offset the streamed text continues from; 0 with the whole text when the sink must resync. */
+  textFrom: number;
+  text: string;
 }
 
 export interface RunToolMessage {
@@ -77,10 +81,10 @@ export interface RunSink {
   post(message: RunHostMessage): void;
 }
 
-/** Per-sink bookkeeping for the trace delta: what was last sent for each chat. */
+/** Per-sink bookkeeping for the deltas: what was last sent for each chat. */
 export interface SinkEntry {
   sink: RunSink;
-  sent: Map<number, { len: number; first: BrainTraceEvent | undefined }>;
+  sent: Map<number, { len: number; first: BrainTraceEvent | undefined; text?: string }>;
 }
 
 /**
@@ -88,6 +92,10 @@ export interface SinkEntry {
  * store appends in place and trims from the head only past its bound, so the events
  * after the last sent index are new unless the head moved (or the sink is new) — in
  * which case the whole bounded trace is resent from 0.
+ *
+ * The streamed text is a delta too: a reply only grows within a turn, and resending all
+ * of it on every frame made a long reply O(n²) bytes through the host. It continues from
+ * what was sent when the text still starts with it; a new turn (the text reset) resends.
  */
 export function syncMessageFor(entry: SinkEntry, chatId: number): RunSyncMessage {
   const snapshot = getRunSnapshot(chatId);
@@ -95,7 +103,9 @@ export function syncMessageFor(entry: SinkEntry, chatId: number): RunSyncMessage
   const last = entry.sent.get(chatId);
   const continues = last !== undefined && last.len <= trace.length && (last.len === 0 || trace[0] === last.first);
   const traceFrom = continues ? last.len : 0;
-  entry.sent.set(chatId, { len: trace.length, first: trace[0] });
-  const { trace: _omit, ...rest } = snapshot;
-  return { type: "run.sync", chatId, snapshot: rest, traceFrom, trace: trace.slice(traceFrom) };
+  const text = snapshot.streamingText;
+  const textFrom = last?.text !== undefined && text.startsWith(last.text) ? last.text.length : 0;
+  entry.sent.set(chatId, { len: trace.length, first: trace[0], text });
+  const { trace: _omit, streamingText: _text, ...rest } = snapshot;
+  return { type: "run.sync", chatId, snapshot: rest, traceFrom, trace: trace.slice(traceFrom), textFrom, text: text.slice(textFrom) };
 }
