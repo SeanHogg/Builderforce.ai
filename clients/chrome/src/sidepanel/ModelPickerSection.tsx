@@ -19,10 +19,11 @@ export function ModelPickerSection() {
   const locale = useMemo(() => chrome.i18n.getUILanguage(), []);
   const local = useLocalModels(services.pageEngines.store);
   // The ONE pin — the composer's `/` Model tab reads and sets the same one.
-  const [pinned, choose] = usePinnedModel();
+  const [pinned, choose, pick] = usePinnedModel();
 
   // A pinned model that was removed (or no longer fits this device) cannot serve a turn;
-  // fall back to automatic rather than leave a pin every turn would fail on.
+  // fall back to automatic rather than leave a pin every turn would fail on. The panel's
+  // own clear, not a pick: it never moves the mode.
   const pinnedRow = pinned ? local.rows?.find((row) => row.ref === pinned) : undefined;
   useEffect(() => {
     if (pinnedRow && (pinnedRow.state === 'absent' || pinnedRow.state === 'unsupported')) choose(null);
@@ -37,7 +38,7 @@ export function ModelPickerSection() {
         type="button"
         className={`bf-btn${pinned ? '' : ' bf-btn--primary'}`}
         aria-pressed={!pinned}
-        onClick={() => choose(null)}
+        onClick={() => pick(null)}
       >
         {t('modelAuto')} · <span>{t('modelAutoHint')}</span>
       </button>
@@ -46,7 +47,7 @@ export function ModelPickerSection() {
         labels={labels}
         locale={locale}
         {...(pinned ? { activeRef: pinned } : {})}
-        onSelect={choose}
+        onSelect={pick}
       />
       <KimiAccountSection />
     </div>

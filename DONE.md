@@ -1,3 +1,26 @@
+## ✅ RESOLVED 2026-10-25 — The model you pick is the model that runs (brain-embedded 2026.10.55 · brain-ui 2026.10.26 · VSIX 2026.10.81)
+
+**Reported:** picking a BYO model (`direct/kimi-code/k3`) left the mode control on Hybrid, and the turn was answered by `direct/minimax/MiniMax-M3.1-Flash-Preview`.
+
+- **Cause.** Under Hybrid, `createHostModelStream` only tries a pick: it sends `modelStrict: false` (`pickThenAuto`), so the gateway could fail the pick over to another model. Local only sets aside any pick that leaves the device. Picking a model never changed the mode.
+- **The rule, in one place.** `inferenceModeForModelPick` (`brain-embedded/src/inferenceModeForModelPick.ts`) is pure and has vitest tests.
+  - A model or the BYO pool selects Specific.
+  - Auto while on Specific returns to Hybrid.
+  - An on-device pick under Local only keeps Local only. On-device is `runsOnDevice`, moved into `@builderforce/local-inference` beside `localRuntime` and shared with `createHostModelStream`, so a Kimi Code pick counts as off-device.
+  - An undecided Local only is never lifted by a pick, so the first-run opt-in still asks.
+  - An undecided Hybrid does move to Specific, which also answers the first-run question.
+- **Applied once per pick, where the pick is made.**
+  - Menu picks on every host go through brain-ui `ModelPane`, which applies the mode before the model. The hosts' menu setters (VS Code `model.set`, Rovr `choose`, the web's selection state) set only the model, so there is never a second, possibly stale, mode write.
+  - Picks outside the menu: in VS Code, `clients/vscode/src/modelPick.ts` `applyModelPick` covers the QuickPick, the signed-out on-device list and Kimi connect. In Rovr, `usePinnedModel`'s `pick` covers Settings → Model and Kimi connect.
+  - A pin a host clears on its own never moves the mode. This covers the VS Code entitlement clear (Specific then reports `no_specific_model`) and Rovr's removed-model clear.
+- **Rovr no longer offers "your connected accounts".** It pins one model string, so a pool pick ran as Auto. The new `ChatModelOptions.byoPool: false`, set through `composerModel({ byoPool: false })`, drops that row.
+- **Stale init.** `WorkspaceSurface.sendInit` posts only the newest build. A superseded call waits on the newest, so `ready` still posts the init before the intent.
+- A rejected mode write is caught in `ModelPane`, `applyModelPick` and Rovr's `pick`, leaving the mode as it was.
+- **Known, by design:**
+  - A pin saved earlier under Hybrid stays a soft pin until it is picked again, and the mode control honestly shows Hybrid.
+  - If someone picks a cloud model while Local only is still undecided and then answers Hybrid at the first-run question, they get Hybrid's try-then-fall-back. Hybrid is their explicit answer there.
+  - On the web, an anonymous visitor who chose Local only and then picks a cloud model moves to Specific, and the guest allowance is minted. That explicit cloud pick is the opt-in.
+
 ## ✅ RESOLVED 2026-10-25 — Main's Release CI green again (run 40208698931)
 
 Main had been red since `5ce9137bf`. Fixed across `c70cf33a9` and `a866daf22`:

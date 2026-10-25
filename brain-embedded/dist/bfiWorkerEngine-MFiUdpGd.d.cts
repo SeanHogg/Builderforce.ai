@@ -131,6 +131,21 @@ interface LocalDeviceSupport {
 /** Why a model cannot run here — a stable code a picker maps to copy. */
 type LocalModelUnfit = 'webgpu_unavailable' | 'shader_f16_unavailable' | 'buffer_too_small' | 'vram_too_small' | 'memory_insufficient';
 
+/** Where a published file is fetched from (Hugging Face redirects to its CDN). */
+declare function hfResolveUrl(repo: string, file: string): string;
+interface HfModelStore {
+    status(ref: string): Promise<'absent' | 'ready'>;
+    /** Stream the file into the cache, reporting 0..1. A failed or cancelled download
+     *  leaves nothing behind (Cache Storage `put` is all-or-nothing). */
+    download(ref: string, onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<void>;
+    remove(ref: string): Promise<void>;
+    /** The cached file as a byte stream plus its size — what `BfiEngine.load` takes. */
+    open(ref: string): Promise<{
+        stream: ReadableStream<Uint8Array>;
+        bytes: number;
+    }>;
+}
+
 /**
  * THE contract every engine that runs INSIDE the page implements (PRD 34 §3.4) — Chrome's
  * built-in model (Prompt API), WebLLM and our WebGPU `bfi`.
@@ -394,21 +409,6 @@ interface ServedEngineWorker {
 declare function serveEngineWorker(endpoint: EngineWorkerEndpoint, engines: () => readonly PageEngine[], onOther?: (message: unknown) => void, options?: EngineWorkerServeOptions): ServedEngineWorker;
 /** Whether `e` is a WebAssembly trap — the instance that threw it is poisoned. */
 declare function isWasmTrap(e: unknown): boolean;
-
-/** Where a published file is fetched from (Hugging Face redirects to its CDN). */
-declare function hfResolveUrl(repo: string, file: string): string;
-interface HfModelStore {
-    status(ref: string): Promise<'absent' | 'ready'>;
-    /** Stream the file into the cache, reporting 0..1. A failed or cancelled download
-     *  leaves nothing behind (Cache Storage `put` is all-or-nothing). */
-    download(ref: string, onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<void>;
-    remove(ref: string): Promise<void>;
-    /** The cached file as a byte stream plus its size — what `BfiEngine.load` takes. */
-    open(ref: string): Promise<{
-        stream: ReadableStream<Uint8Array>;
-        bytes: number;
-    }>;
-}
 
 /**
  * Our transformer — Synapse's `bfi` compiled to WebAssembly over WebGPU, or over the CPU

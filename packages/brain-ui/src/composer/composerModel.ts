@@ -65,6 +65,8 @@ export interface ComposerModelInput {
   localStore?: PromptOptionsModel['localStore'];
   /** Whether entitlement is still unknown; defaults to "no real catalogue yet". */
   identityPending?: boolean;
+  /** `false` on a host that cannot carry the BYO pool route (`ChatModelOptions.byoPool`). */
+  byoPool?: boolean;
 }
 
 /** `ComposerOptions.model` for one host. Pure — memoize on its inputs. */
@@ -72,7 +74,7 @@ export function composerModel(input: ComposerModelInput): PromptOptionsModel {
   const listed = withLocalModels(input.catalog, input.local);
   return {
     selection: input.selection,
-    options: listed.options,
+    options: input.byoPool === false ? { ...listed.options, byoPool: false } : listed.options,
     onChange: input.onChange,
     effective: input.effective,
     identity: (input.catalog ? input.catalog.identity : undefined) ?? input.fallbackIdentity,

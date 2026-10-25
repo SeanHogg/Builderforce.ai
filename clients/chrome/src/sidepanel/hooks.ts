@@ -3,7 +3,7 @@
  * every Brain surface reads), the device record and the subscriptions behind them.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { getRunSnapshot, subscribeRun, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
+import { getRunSnapshot, inferenceModeForModelPick, subscribeRun, type BrainRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
 import { inferenceModeOption, type PromptOptionsInferenceMode } from '@seanhogg/builderforce-brain-ui';
 import type { PanelServices } from '../host/panelServices';
 import type { RovrInferenceModeState } from '../platform/policy';
@@ -103,9 +103,14 @@ export function useSetting<T>(read: (settings: RovrSettings) => Promise<T>, init
 }
 
 /** The model pinned for every turn (`local/<runtime>/<model>` or a gateway id), or null for automatic
- *  routing — and the one way to change it (Settings → Model and the `/` Model tab). */
-export function usePinnedModel(): [string | null, (ref: string | null) => void] {
-  const { settings } = useServices();
+ *  routing — the ONE pin Settings → Model, the `/` Model tab and Kimi connect all set.
+ *
+ *  `choose` sets the pin and nothing else: the `/` menu's own pick (brain-ui `ModelPane` moves
+ *  the mode itself) and a pin the panel clears on its own (a removed model). `pick` is a
+ *  person's pick from a picker OUTSIDE the menu: the inference mode moves with it
+ *  (brain-embedded `inferenceModeForModelPick`), so the model picked is the model that runs. */
+export function usePinnedModel(): [string | null, (ref: string | null) => void, (ref: string | null) => void] {
+  const { settings, policy } = useServices();
   const stored = useSetting((s) => s.pinnedModel(), null);
   const [optimistic, setOptimistic] = useState<{ ref: string | null } | null>(null);
   useEffect(() => setOptimistic(null), [stored]);
@@ -116,7 +121,18 @@ export function usePinnedModel(): [string | null, (ref: string | null) => void] 
     },
     [settings],
   );
-  return [optimistic ? optimistic.ref : stored, choose];
+  const pick = useCallback(
+    (ref: string | null) => {
+      const state = policy.inferenceMode();
+      const mode = state.loaded
+        ? inferenceModeForModelPick(state.mode, ref ? { mode: 'model', model: ref } : { mode: 'auto' }, { undecided: !state.chosen })
+        : null;
+      if (mode) policy.setInferenceMode(mode).catch(() => undefined);
+      choose(ref);
+    },
+    [policy, choose],
+  );
+  return [optimistic ? optimistic.ref : stored, choose, pick];
 }
 
 /** What is waiting to sync — read once, then kept current by the worker's change

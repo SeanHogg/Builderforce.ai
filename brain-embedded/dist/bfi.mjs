@@ -23,7 +23,7 @@ import {
   servePageEngines,
   webGpuSupport,
   withTimeout
-} from "./chunk-OYLJNCGN.mjs";
+} from "./chunk-F5PXU2EH.mjs";
 
 // src/pageEngines/bfiChunks.ts
 function closingChunk(finalJson) {

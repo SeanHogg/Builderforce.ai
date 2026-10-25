@@ -13,8 +13,9 @@
  *     one local model), hard-pinned: no local attempt, no fallback; no pick is an error
  *     (`no_specific_model`), never a silent Hybrid. Gateway inference AND direct providers on.
  *
- * Picking a model never changes the mode by itself — Specific is chosen in the mode
- * control. What each mode does with a pick is brain-embedded's `createHostModelStream`.
+ * A pick moves the mode with it (brain-embedded `inferenceModeForModelPick`): picking a
+ * model selects Specific, so the model picked is the model that runs; Auto returns to Hybrid.
+ * What each mode does with a pick is brain-embedded's `createHostModelStream`.
  *
  * Default: `hybrid` once signed in, `local-only` signed out. A host persists only the
  * person's explicit choice; an unset mode is re-derived, so signing in moves an

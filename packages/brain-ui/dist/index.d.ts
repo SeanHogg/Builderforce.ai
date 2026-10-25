@@ -1661,6 +1661,27 @@ interface PromptOptionsSession {
     onFork: () => void;
 }
 
+/** The mode wiring a host hands the composer. */
+interface PromptOptionsInferenceMode {
+    /** The mode in force (the chosen one, else the host's derived default). */
+    value: InferenceMode;
+    onChange: (mode: InferenceMode) => void | Promise<void>;
+    /**
+     * The person has not chosen yet and should be asked before their next turn (a first run —
+     * the host decides who is asked: signed in everywhere, and on the web an anonymous
+     * visitor too, for whom it is the Hybrid opt-in). THE first-run gate
+     * (`useInferenceModeGate`) then holds that turn behind the question.
+     */
+    needsChoice?: boolean;
+}
+interface InferenceModeControlProps {
+    inferenceMode?: PromptOptionsInferenceMode;
+    labels: InferenceModeLabels;
+    /** Called after a pick (the menu closes itself). */
+    onPicked?: () => void;
+}
+declare function InferenceModeControl({ inferenceMode, labels, onPicked }: InferenceModeControlProps): react.JSX.Element | null;
+
 /** Model wiring for the `/` menu. Omit it on a surface with no model choice. */
 interface PromptOptionsModel {
     selection: ChatModelSelection;
@@ -1694,27 +1715,6 @@ interface PromptOptionsModel {
      */
     identityPending?: boolean;
 }
-
-/** The mode wiring a host hands the composer. */
-interface PromptOptionsInferenceMode {
-    /** The mode in force (the chosen one, else the host's derived default). */
-    value: InferenceMode;
-    onChange: (mode: InferenceMode) => void | Promise<void>;
-    /**
-     * The person has not chosen yet and should be asked before their next turn (a first run —
-     * the host decides who is asked: signed in everywhere, and on the web an anonymous
-     * visitor too, for whom it is the Hybrid opt-in). THE first-run gate
-     * (`useInferenceModeGate`) then holds that turn behind the question.
-     */
-    needsChoice?: boolean;
-}
-interface InferenceModeControlProps {
-    inferenceMode?: PromptOptionsInferenceMode;
-    labels: InferenceModeLabels;
-    /** Called after a pick (the menu closes itself). */
-    onPicked?: () => void;
-}
-declare function InferenceModeControl({ inferenceMode, labels, onPicked }: InferenceModeControlProps): react.JSX.Element | null;
 
 interface PromptOptionsMenuProps {
     labels?: Partial<PromptOptionsLabels>;
@@ -4755,6 +4755,8 @@ interface ComposerModelInput {
     localStore?: PromptOptionsModel['localStore'];
     /** Whether entitlement is still unknown; defaults to "no real catalogue yet". */
     identityPending?: boolean;
+    /** `false` on a host that cannot carry the BYO pool route (`ChatModelOptions.byoPool`). */
+    byoPool?: boolean;
 }
 /** `ComposerOptions.model` for one host. Pure — memoize on its inputs. */
 declare function composerModel(input: ComposerModelInput): PromptOptionsModel;

@@ -10,6 +10,7 @@ import { requestComposerMenu, useComposerMenuRequest } from '../promptOptions/co
 import { useInferenceModeGate, type InferenceModeGate } from './useInferenceModeGate';
 import { inferenceModeOption, modelRemedies } from './modelRemedies';
 import type { PromptOptionsInferenceMode } from './InferenceModeControl';
+import type { ChatModelSelection, InferenceMode } from '@seanhogg/builderforce-brain-embedded';
 
 function mount(ui: ReactElement): { el: HTMLDivElement; rerender: (next: ReactElement) => void; unmount: () => void } {
   const el = document.createElement('div');
@@ -341,30 +342,81 @@ describe('requestComposerMenu', () => {
   });
 });
 
-describe('picking a model never changes the mode', () => {
-  it('reports the pick through the model onChange only — Specific is chosen in the mode control', () => {
+describe('a model pick moves the mode with it', () => {
+  function pickIn(mode: InferenceMode, selection: ChatModelSelection, name: RegExp, opts: { needsChoice?: boolean; byoPool?: boolean } = {}) {
     const onModel = vi.fn();
     const onMode = vi.fn();
     const { el, unmount } = mount(
       <PromptOptionsMenu
-        inferenceMode={{ value: 'hybrid', onChange: onMode }}
+        inferenceMode={{ value: mode, onChange: onMode, ...(opts.needsChoice ? { needsChoice: true } : {}) }}
         model={{
-          selection: { mode: 'auto' },
-          options: { byo: [], free: ['meta/llama'], plan: [], paid: [] },
+          selection,
+          options: {
+            local: [
+              { id: 'local/ollama/qwen', label: 'Qwen on Ollama', runtime: 'Ollama' },
+              { id: 'local/kimi-code/k3', label: 'Kimi K3', runtime: 'Kimi Code' },
+            ],
+            byo: [{ id: 'openai/gpt-x', vendor: 'openai' }],
+            ...(opts.byoPool === false ? { byoPool: false } : {}),
+            free: ['meta/llama'],
+            plan: [],
+            paid: [],
+          },
           onChange: onModel,
           identity: { product: 'pro', canChoose: true },
         }}
       />,
     );
     act(() => { (el.querySelector('.bf-pmenu__trigger') as HTMLButtonElement).click(); });
-    const item = Array.from(el.querySelectorAll('button')).find(
-      (b) => b.getAttribute('role') !== 'radio' && /llama/i.test(b.textContent ?? ''),
-    ) as HTMLButtonElement;
-    expect(item).toBeTruthy();
-    act(() => { item.click(); });
+    const rows = Array.from(el.querySelectorAll('button')).filter((b) => b.getAttribute('role') === 'option');
+    const item = rows.find((b) => name.test(b.textContent ?? '')) as HTMLButtonElement | undefined;
+    if (item) act(() => { item.click(); });
+    unmount();
+    return { onModel, onMode, found: !!item };
+  }
+
+  it('picking a model under Hybrid selects Specific — the mode first, then the model', () => {
+    const { onModel, onMode } = pickIn('hybrid', { mode: 'auto' }, /meta\/llama/);
+    expect(onMode).toHaveBeenCalledWith('specific');
+    expect(onModel).toHaveBeenCalledWith({ mode: 'model', model: 'meta/llama' });
+    expect(onMode.mock.invocationCallOrder[0]).toBeLessThan(onModel.mock.invocationCallOrder[0]!);
+  });
+
+  it('picking the connected-accounts pool under Hybrid selects Specific', () => {
+    const { onModel, onMode } = pickIn('hybrid', { mode: 'auto' }, /BYO pool/);
+    expect(onModel).toHaveBeenCalledWith({ mode: 'byo_pool' });
+    expect(onMode).toHaveBeenCalledWith('specific');
+  });
+
+  it('a host that cannot carry the pool does not offer it', () => {
+    expect(pickIn('hybrid', { mode: 'auto' }, /BYO pool/, { byoPool: false }).found).toBe(false);
+  });
+
+  it('picking a model already on Specific leaves the mode alone', () => {
+    const { onModel, onMode } = pickIn('specific', { mode: 'auto' }, /meta\/llama/);
+    expect(onModel).toHaveBeenCalledWith({ mode: 'model', model: 'meta/llama' });
+    expect(onMode).not.toHaveBeenCalled();
+  });
+
+  it('picking Auto on Specific returns to Hybrid', () => {
+    const { onModel, onMode } = pickIn('specific', { mode: 'model', model: 'meta/llama' }, /auto/i);
+    expect(onModel).toHaveBeenCalledWith({ mode: 'auto' });
+    expect(onMode).toHaveBeenCalledWith('hybrid');
+  });
+
+  it('Local only keeps an on-device pick, but a Kimi Code pick (hosted) selects Specific', () => {
+    const qwen = pickIn('local-only', { mode: 'auto' }, /Qwen on Ollama/);
+    expect(qwen.onModel).toHaveBeenCalledWith({ mode: 'model', model: 'local/ollama/qwen' });
+    expect(qwen.onMode).not.toHaveBeenCalled();
+    const kimi = pickIn('local-only', { mode: 'auto' }, /Kimi K3/);
+    expect(kimi.onModel).toHaveBeenCalledWith({ mode: 'model', model: 'local/kimi-code/k3' });
+    expect(kimi.onMode).toHaveBeenCalledWith('specific');
+  });
+
+  it('an undecided Local only is never lifted by a cloud pick — the first-run question still asks', () => {
+    const { onModel, onMode } = pickIn('local-only', { mode: 'auto' }, /meta\/llama/, { needsChoice: true });
     expect(onModel).toHaveBeenCalled();
     expect(onMode).not.toHaveBeenCalled();
-    unmount();
   });
 });
 

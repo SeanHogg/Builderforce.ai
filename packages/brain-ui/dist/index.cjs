@@ -3959,7 +3959,7 @@ function useLocalModels(store) {
 
 // src/promptOptions/ModelPane.tsx
 var import_jsx_runtime34 = require("react/jsx-runtime");
-function ModelPane({ model, labels, identity, inUse, onPicked }) {
+function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) {
   const [query, setQuery] = (0, import_react27.useState)("");
   const [filter, setFilter] = (0, import_react27.useState)("all");
   const local = useLocalModels(model.localStore);
@@ -3976,6 +3976,10 @@ function ModelPane({ model, labels, identity, inUse, onPicked }) {
   const activeKey = (0, import_builderforce_brain_embedded14.activeModelKey)(model.selection);
   const activeRef = model.selection.mode === "model" ? model.selection.model : void 0;
   const pick = (selection) => {
+    if (inferenceMode) {
+      const mode = (0, import_builderforce_brain_embedded14.inferenceModeForModelPick)(inferenceMode.value, selection, { undecided: !!inferenceMode.needsChoice });
+      if (mode) void Promise.resolve(inferenceMode.onChange(mode)).catch(() => void 0);
+    }
     model.onChange(selection);
     setQuery("");
     onPicked();
@@ -4277,7 +4281,7 @@ function PromptOptionsMenu({
             activeTab === "model" && /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(import_jsx_runtime36.Fragment, { children: [
               /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(InferenceModeControl, { inferenceMode, labels, onPicked: close }),
               inferenceMode && model && /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { className: "bf-pmenu__sep" }),
-              model && /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ModelPane, { model, labels, identity, inUse, onPicked: close })
+              model && /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ModelPane, { model, labels, identity, inUse, ...inferenceMode ? { inferenceMode } : {}, onPicked: close })
             ] }),
             activeTab === "status" && /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { className: "bf-pmenu__status", children: [
               status,
@@ -9847,7 +9851,7 @@ function composerModel(input) {
   const listed = withLocalModels(input.catalog, input.local);
   return {
     selection: input.selection,
-    options: listed.options,
+    options: input.byoPool === false ? { ...listed.options, byoPool: false } : listed.options,
     onChange: input.onChange,
     effective: input.effective,
     identity: (input.catalog ? input.catalog.identity : void 0) ?? input.fallbackIdentity,

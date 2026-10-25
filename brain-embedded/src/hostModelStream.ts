@@ -53,7 +53,7 @@
  * unavailable, or anyone on Local only, gets `no_local_model` — never a sign-in prompt.
  */
 
-import { isLocalModelRef, localRuntime, parseLocalModelRef, type LocalEndpoint, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
+import { isLocalModelRef, runsOnDevice, type LocalEndpoint, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import type { InferenceMode } from '@builderforce/local-first';
 import { BrainRequestError, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, NOT_SIGNED_IN } from './chatError';
 import { createHandoffFit } from './windowFit/packForModel';
@@ -315,16 +315,6 @@ async function pickThenAuto(
 function unpicked(opts: CallOpts): CallOpts {
   const { modelStrict: _strict, model: _model, routingMode: _routing, ...rest } = opts;
   return rest;
-}
-
-/**
- * Whether a ref names a model served ON THIS DEVICE — read from the runtime registry's
- * `onDevice`, never a per-runtime branch: a hosted runtime dispatched from here (Kimi
- * Code) is local in grammar but leaves the device.
- */
-function runsOnDevice(ref: string): boolean {
-  const parsed = parseLocalModelRef(ref);
-  return !!parsed && localRuntime(parsed.provider).onDevice;
 }
 
 /** A call as Local only may send it: a model that leaves the device or the BYO pool is

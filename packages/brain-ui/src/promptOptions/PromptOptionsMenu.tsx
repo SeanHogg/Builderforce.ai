@@ -257,7 +257,7 @@ export function PromptOptionsMenu({
               <>
                 <InferenceModeControl inferenceMode={inferenceMode} labels={labels} onPicked={close} />
                 {inferenceMode && model && <div className="bf-pmenu__sep" />}
-                {model && <ModelPane model={model} labels={labels} identity={identity} inUse={inUse} onPicked={close} />}
+                {model && <ModelPane model={model} labels={labels} identity={identity} inUse={inUse} {...(inferenceMode ? { inferenceMode } : {})} onPicked={close} />}
               </>
             )}
 

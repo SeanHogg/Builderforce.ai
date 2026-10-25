@@ -1,7 +1,7 @@
 import * as react from 'react';
 import { ReactNode } from 'react';
-import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel, P as PageEngine, d as LocalBackend, e as LocalModelUnfit, B as BfiWorkerEngineOptions, H as HfModelStore } from './bfiWorkerEngine-BWryGMal.js';
-export { f as BfiEngineInstance, g as BfiEngineStatic, h as BfiModelInfo, i as BfiModule, j as BfiWorkerEngine, C as ChatCompletionChunk, k as ChatCompletionsRequest, E as ENGINE_WORKER_FATAL, l as ENGINE_WORKER_IDLE_MS, m as ENGINE_WORKER_INVALIDATE, n as EngineWorker, o as EngineWorkerEndpoint, p as EngineWorkerEvents, q as EngineWorkerHandle, r as EngineWorkerOptions, s as PAGE_ENGINE_REPLY_TYPES, t as PAGE_ENGINE_REQUEST_TYPES, u as PageEngineClient, v as PageEngineClientOptions, w as PageEngineError, x as PageEnginePort, y as PageEngineReply, z as PageEngineRequest, A as PageEngineServerIo, W as WorkerLike, D as createBfiWorkerEngine, F as createEngineWorker, G as createPageEngineClient, I as isPageEngineReply, J as isPageEngineRequest, K as isWasmTrap, M as serveEngineWorker, N as servePageEngines } from './bfiWorkerEngine-BWryGMal.js';
+import { L as LocalRuntimeId, a as LocalEndpoint, b as LocalRuntimeProbe, c as LocalModel, d as LocalBackend, e as LocalModelUnfit, P as PageEngine, B as BfiWorkerEngineOptions, H as HfModelStore } from './bfiWorkerEngine-MFiUdpGd.js';
+export { f as BfiEngineInstance, g as BfiEngineStatic, h as BfiModelInfo, i as BfiModule, j as BfiWorkerEngine, C as ChatCompletionChunk, k as ChatCompletionsRequest, E as ENGINE_WORKER_FATAL, l as ENGINE_WORKER_IDLE_MS, m as ENGINE_WORKER_INVALIDATE, n as EngineWorker, o as EngineWorkerEndpoint, p as EngineWorkerEvents, q as EngineWorkerHandle, r as EngineWorkerOptions, s as PAGE_ENGINE_REPLY_TYPES, t as PAGE_ENGINE_REQUEST_TYPES, u as PageEngineClient, v as PageEngineClientOptions, w as PageEngineError, x as PageEnginePort, y as PageEngineReply, z as PageEngineRequest, A as PageEngineServerIo, W as WorkerLike, D as createBfiWorkerEngine, F as createEngineWorker, G as createPageEngineClient, I as isPageEngineReply, J as isPageEngineRequest, K as isWasmTrap, M as serveEngineWorker, N as servePageEngines } from './bfiWorkerEngine-MFiUdpGd.js';
 import { ChatErrorAction } from './chatError.js';
 export { BrainRequestError, ChatErrorActionKind, LOCAL_ENGINE_FAILURE_CODES, LocalEngineFailureCode, NOT_SIGNED_IN, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, PlatformRefusedCapability, brainRequestError, chatErrorAction } from './chatError.js';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
@@ -28,8 +28,9 @@ import { HandoffPack } from '@seanhogg/builderforce-memory/handoff';
  *     one local model), hard-pinned: no local attempt, no fallback; no pick is an error
  *     (`no_specific_model`), never a silent Hybrid. Gateway inference AND direct providers on.
  *
- * Picking a model never changes the mode by itself — Specific is chosen in the mode
- * control. What each mode does with a pick is brain-embedded's `createHostModelStream`.
+ * A pick moves the mode with it (brain-embedded `inferenceModeForModelPick`): picking a
+ * model selects Specific, so the model picked is the model that runs; Auto returns to Hybrid.
+ * What each mode does with a pick is brain-embedded's `createHostModelStream`.
  *
  * Default: `hybrid` once signed in, `local-only` signed out. A host persists only the
  * person's explicit choice; an unset mode is re-derived, so signing in moves an
@@ -4628,6 +4629,446 @@ declare function createHostModelStream(input: HostModelStreamInput): StreamFn;
 declare function isFallbackFailure(err: unknown, local: boolean): boolean;
 
 /**
+ * Per-reply model/account provenance — the durable "which LLM, and whose account,
+ * produced this turn" signal shown as a small chip under an assistant message.
+ *
+ * Motivation: a SUCCESSFUL Brain turn used to reveal nothing about how it was
+ * served, so "why didn't it use my paid Claude?" was invisible until a turn came
+ * back empty (the only case the diagnostic note fired). This attaches the resolved
+ * model + whether the tenant's OWN connected frontier account served it — or the
+ * shared pool did despite a connected account existing — to every assistant turn,
+ * so the confirmation is always on screen.
+ *
+ * Single source of truth for the convention, shared by the writers (server-side
+ * `agentReply` metadata + the streaming gateway's `x-builderforce-account` header,
+ * captured client-side and persisted) and the renderer (the BrainTimeline chip).
+ * The `account` string values are the wire contract with the server — the api's
+ * `classifyReplyAccount()` MUST emit these exact literals.
+ */
+/** The metadata key under which a message's provenance rides. */
+declare const PROVENANCE_META_KEY = "provenance";
+/**
+ * Which account served a completed turn:
+ * - `own`               — the tenant's OWN connected frontier account (a Claude
+ *                         subscription or a BYO vendor key) served it; the platform
+ *                         paid nothing and the user is on the model they connected.
+ * - `shared`            — the shared model pool served it AND the tenant has no
+ *                         connected account (nothing else was possible).
+ * - `shared_byo_unused` — the shared pool served it EVEN THOUGH the tenant has a
+ *                         connected account — the case worth flagging inline
+ *                         ("your connected account wasn't used for this turn").
+ */
+type ProvenanceAccount = 'own' | 'shared' | 'shared_byo_unused';
+/** Durable provenance for one assistant turn. */
+interface MessageProvenance {
+    /** The model the gateway ACTUALLY used (resolved, post-failover). */
+    model: string;
+    /**
+     * Which account served it — see {@link ProvenanceAccount}. OPTIONAL: the
+     * gateway reports it via `x-builderforce-account`, which an older gateway (or a
+     * CORS setup that doesn't expose the header) omits. Requiring it used to drop
+     * the whole record, so a turn's MODEL — the thing users most need when output
+     * quality collapses — went unreported too. Absent = "model known, account not".
+     */
+    account?: ProvenanceAccount;
+    /** Vendor that owns `model` (e.g. `anthropic`), when known — names the account
+     *  in tooltips ("your connected Claude account"). */
+    vendor?: string;
+    /** Present when the project's own self-learning Evermind generated this reply's
+     *  final prose (opt-in inference). `version` is the Evermind head the turn ran on.
+     *  Absent for turns served by a frontier/pool model — so the "🧠 Evermind vN" chip
+     *  shows ONLY when the learned model actually spoke. */
+    evermind?: {
+        version: number;
+    };
+    /**
+     * What the surface ASKED for when it differed from {@link model} (gateway failover /
+     * downgrade). Absent on a turn that got exactly what it requested — so a copied
+     * transcript can stamp `## BuilderForce · actual (requested X)` only when the two
+     * disagree. Optional: older turns never carried it.
+     */
+    requestedModel?: string;
+}
+/** The wire's account literal, or undefined for anything else — the one reading of it,
+ *  for the stream header on the way in and a persisted blob on the way out. */
+declare function asProvenanceAccount(value: unknown): ProvenanceAccount | undefined;
+/** True when a turn ran on the shared pool despite a connected account existing —
+ *  the only state the chip flags inline. Shared by the chip and any host that
+ *  wants to nudge the user to check their connection. */
+declare function isConnectedAccountUnused(prov: MessageProvenance | null | undefined): boolean;
+/** Parse a message's persisted provenance, or `null` when it carries none (older
+ *  turns). The MODEL is the only required field — a turn whose gateway didn't
+ *  report an account still names the model that answered. Defensive: a malformed
+ *  blob yields `null` rather than throwing. */
+declare function parseMessageProvenance(msg: {
+    metadata?: string | null;
+}): MessageProvenance | null;
+/**
+ * The model that most recently ANSWERED in this conversation — the newest message
+ * carrying provenance. A composer labelled from the requested model alone reads
+ * "Builderforce Free" under auto while a connected Qwen or Grok is doing the work;
+ * this is what the label should say once anything has actually answered. `undefined`
+ * before the first served reply, so the caller falls back to the requested model.
+ */
+declare function lastServedModel(messages: readonly {
+    metadata?: string | null;
+}[]): string | undefined;
+/**
+ * Merge a provenance object into a message's metadata (preserving any other keys,
+ * e.g. `authoredBy` on an agent's reply). Returns a serialized string, or
+ * `undefined` when there is nothing to store — ready to hand to
+ * `persistence.sendMessages`. Mirrors `withDirectedMetadata`.
+ */
+declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
+/**
+ * Markdown heading for one assistant turn in a copied transcript.
+ *
+ * Without this every block is just `## BuilderForce`, so a multi-model run looks like
+ * one voice and the aggregate "Models used" / "Per model" lines are the only attribution.
+ * Prefer the resolved model id from persisted provenance; when the turn was downgraded,
+ * append `(requested …)` so failover is visible on the block itself.
+ */
+declare function formatAssistantTranscriptHeading(assistantName: string, message: {
+    metadata?: string | null;
+}): string;
+
+/**
+ * WHAT THE USER IS TOLD RAN THEIR TURN — the one rule, shared by every surface.
+ *
+ * A turn served by BuilderForce's own routed pool IS the product the user signed up
+ * for: "Builderforce Free" or "Builderforce PRO". Which upstream model the cascade
+ * happened to land on (`minimaxai/minimax-m3`, `@cf/zai-org/glm-4.7-flash`, …) is an
+ * implementation detail of that product — it changes per turn, per vendor outage, per
+ * cooldown, and the user on a routed plan has no control over it. Naming it in the UI
+ * only ever raises a question they cannot act on ("why did I get Minimax?").
+ *
+ * The id is NOT hidden from us. It still rides every `llm_usage_log` row, every
+ * execution trace, the provenance metadata on the message, and the "Copy diagnostics"
+ * report — the places where WE need to know exactly which model served a turn. This
+ * module governs the DISPLAY layer only.
+ *
+ * It is shown to the user in exactly the two cases where the choice is theirs:
+ *   • the turn ran on their OWN connected account (BYO) — it is their model, on their
+ *     key, and naming it is the whole point of connecting it; or
+ *   • they are entitled to pick a model at all (a paid plan, or a connected provider),
+ *     in which case the catalog is theirs to browse and pin.
+ *
+ * Everyone else — the free plan and the anonymous canvas — sees the product name.
+ *
+ * Lives in brain-embedded (not a UI package) because four surfaces have to agree on
+ * it: the shared `/` composer menu, the per-reply provenance chip in the transcript,
+ * the VS Code host's `Change model` QuickPick, and the public `/models` catalog page.
+ */
+
+/** The two BuilderForce routing products. A turn with no explicit pin runs on one of
+ *  them, and that PRODUCT is what the user sees named. */
+type RoutedProduct = 'free' | 'pro';
+/**
+ * The user-facing names of our two routing products. THE single source — the composer
+ * menu, the provenance chip and the public `/models` catalog all read these, so the
+ * product can never be called three different things in three places.
+ *
+ * Brand tokens, deliberately NOT localized (see the i18n rule for brand names).
+ */
+declare const BUILDERFORCE_PRODUCT_NAME: Readonly<Record<RoutedProduct, string>>;
+/**
+ * What this viewer is allowed to see about model identity.
+ *
+ * `product`   — which routing product funds their unpinned turns.
+ * `canChoose` — may they pick a model at all (paid plan OR a connected provider)?
+ *               This is the SAME gate the gateway enforces on a strict pin, so the
+ *               label a user reads and the choice they are offered agree by construction.
+ */
+interface ModelIdentityContext {
+    product: RoutedProduct;
+    canChoose: boolean;
+}
+/**
+ * The safe default: a free, choice-less viewer. Deliberately the FALLBACK for a host
+ * that has not wired an identity yet, so the failure mode of forgetting is "masked",
+ * never "leaked". A host that is wired always passes its own.
+ */
+declare const DEFAULT_MODEL_IDENTITY: ModelIdentityContext;
+/** The product name for this viewer — "Builderforce Free" / "Builderforce PRO". */
+declare function productModelName(identity: ModelIdentityContext | null | undefined): string;
+/** Which product a plan funds. One mapping, so "paid ⇒ PRO" is not re-decided per host. */
+declare function productForPlan(isPaid: boolean): RoutedProduct;
+/** True when `model` is a user-configured ref (Evermind head / saved LLM config)
+ *  rather than an upstream catalog id. */
+declare function isUserConfiguredModelRef(model: string | null | undefined): boolean;
+/**
+ * THE decision: may this viewer be shown the raw model id, or do they get the product
+ * name? See the module header for the rule. `account` is the turn's provenance account
+ * when known — a turn served by the tenant's OWN connected account always names its
+ * model, because that model is the thing they connected.
+ */
+declare function revealsModelId(identity: ModelIdentityContext | null | undefined, account?: ProvenanceAccount): boolean;
+/**
+ * The name to PUT ON SCREEN for `model`. Returns the model id when this viewer owns the
+ * choice (see {@link revealsModelId}) or when the ref names something they configured
+ * themselves; otherwise the routing product's name.
+ *
+ * Every surface that renders a model to a user goes through this — the composer menu,
+ * the provenance chip, the QuickPick — so a masked plan cannot leak an upstream id
+ * through whichever surface was written last.
+ */
+declare function displayModelName(model: string | null | undefined, identity: ModelIdentityContext | null | undefined, opts?: {
+    account?: ProvenanceAccount;
+}): string;
+
+/**
+ * THE local model store — the ONE API the picker drives for every on-device model a page
+ * engine can run, whichever engine and whichever cache holds it.
+ *
+ * Each catalog row's `source` picks the backend: an `hf-file` model streams into our own
+ * Cache Storage bucket (`hfModelStore`); a `webllm` model goes through WebLLM's own cache
+ * APIs. The picker never sees the difference: it lists rows with a state (`absent`,
+ * `downloading`, `ready`, `unsupported`), starts and cancels downloads, removes models
+ * and subscribes to changes. A finished download or a removal invalidates the engines'
+ * memoized probes, so the very next turn can be served by the new model.
+ *
+ * Downloads start only here (PRD 34 §3.4) — a chat turn never downloads.
+ */
+
+type LocalModelState = 'absent' | 'downloading' | 'ready' | 'unsupported';
+type LocalModelRow = LocalCatalogModel & {
+    state: LocalModelState;
+    /** Where it runs on this device (the fit's choice), when it can: `webgpu` or the
+     *  engine's `cpu`. The picker labels `bfi` rows by it. */
+    backend?: LocalBackend;
+    /** 0..1 while `downloading`. */
+    progress?: number;
+    /** Why it is `unsupported`: a fit code, or `engine_unavailable` when this host does not
+     *  carry the engine. */
+    reason?: LocalModelUnfit | 'engine_unavailable';
+    /** An `unsupported` row whose bytes are still cached here — listed, and removable. */
+    downloaded?: boolean;
+};
+interface LocalModelStore {
+    listLocalModels(): Promise<LocalModelRow[]>;
+    /** Start (or join) a download. Rejects with the failure; the row returns to `absent`. */
+    download(ref: string, onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<void>;
+    remove(ref: string): Promise<void>;
+    /** Notified on every state or progress change; returns the unsubscribe. */
+    subscribe(listener: () => void): () => void;
+}
+/**
+ * A {@link LocalModelStore} that reaches the real one only when first used — the picker's
+ * port in a host whose engines must stay off first paint (the web composer imports them
+ * lazily; the editor's webview builds them on first use). `store` is asked per call and
+ * memoized by the host; `subscribe` attaches once it resolves, and an unsubscribe that
+ * lands first wins, so a listener is never left attached.
+ */
+declare function deferredLocalModelStore(store: () => LocalModelStore | Promise<LocalModelStore>): LocalModelStore;
+
+/**
+ * WHICH MODELS a chat surface may offer, in WHAT ORDER, and WHO PAYS for each —
+ * the model-choice domain, with no UI in it.
+ *
+ * It lives here rather than in the React UI package because three very different
+ * surfaces have to agree on it: the shared `/` composer menu (web + VS Code
+ * webview), and the VS Code extension HOST's `Change model` QuickPick, which runs
+ * in the Node extension process and cannot import React. When each owned its own
+ * list they drifted on grouping order, on how a connected provider was named, and
+ * on the sentence that told the user who was being billed.
+ */
+
+/** The gateway pin that expands to a project's CURRENT Evermind head at call time.
+ *  Mirrors `PROJECT_EVERMIND_MODEL_PREFIX` on the gateway (api/.../projectEvermind.ts). */
+declare const PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
+/** What the user picked. `auto` lets the gateway route; `byo_pool` walks the
+ *  tenant's connected accounts in their configured priority order; `model` is a
+ *  strict pin. */
+type ChatModelSelection = {
+    mode: 'auto';
+} | {
+    mode: 'byo_pool';
+} | {
+    mode: 'model';
+    model: string;
+};
+/**
+ * The per-turn `routingMode` a selection sends. Only "your keys" is an explicit choice;
+ * `auto` sends NOTHING, so the gateway applies the person's account preference (free
+ * tier first, connected accounts first, or inferred from them — api `fundingOrder.ts`)
+ * instead of a client default overriding it.
+ */
+declare function routingModeForSelection(selection: ChatModelSelection): 'byo_pool' | undefined;
+/** The selectable model surface, grouped by WHO PAYS (see {@link ModelCategory}). */
+interface ChatModelOptions {
+    /** Tenant-defined named LLM configs (`tenant_model:<slug>`). */
+    configured?: Array<{
+        id: string;
+        label: string;
+    }>;
+    /** Models served by a runtime on the user's OWN machine (`local/<runtime>/<model>`).
+     *  `runtime` is the display name of what serves it (Ollama, FreeToken). */
+    local?: Array<{
+        id: string;
+        label: string;
+        runtime: string;
+    }>;
+    /** Models the tenant's own connected provider accounts can serve. */
+    byo: Array<{
+        id: string;
+        vendor: string;
+        cost?: string;
+    }>;
+    /**
+     * `false` where the host cannot carry "your connected accounts" (`routingMode:
+     * 'byo_pool'`) to the gateway — Rovr pins one model string — so the pool row is not
+     * offered as a choice the host would quietly turn into Auto. Default: offered.
+     */
+    byoPool?: boolean;
+    free: Array<string | {
+        id: string;
+        cost?: string;
+    }>;
+    plan: Array<string | {
+        id: string;
+        cost?: string;
+    }>;
+    paid: Array<string | {
+        id: string;
+        cost?: string;
+    }>;
+}
+/** Funding tier of a model row — the axis the list is grouped and filtered by. */
+type ModelCategory = 'auto' | 'local' | 'byo' | 'free' | 'plan' | 'paid' | 'configured';
+/** One row in the model list. `detail` is the funding sentence for that row. */
+interface ModelItem {
+    key: string;
+    label: string;
+    detail: string;
+    category: ModelCategory;
+    selection: ChatModelSelection;
+}
+/**
+ * The strings a model list needs. Hosts pass their own localized bundle (the web
+ * app via next-intl, the VS Code surfaces via `vscode.l10n`); the English defaults
+ * keep the list readable unmapped. The composer menu's own chrome extends this
+ * (see `PromptOptionsLabels` in brain-ui).
+ */
+interface ModelChoiceLabels {
+    categoryAuto: string;
+    categoryByo: string;
+    categoryFree: string;
+    categoryPlan: string;
+    categoryPaid: string;
+    categoryConfigured: string;
+    /** Group name for models served by a runtime on this machine. */
+    categoryLocal: string;
+    /** The funding sentence for the routed row. Its NAME comes from the product
+     *  ({@link BUILDERFORCE_PRODUCT_NAME}), not from a label — a brand token is not
+     *  translated, and the tier it states must match what the gateway actually funds. */
+    autoDetail: string;
+    poolLabel: string;
+    poolDetail: string;
+    freeDetail: string;
+    planDetail: string;
+    paidDetail: string;
+    /** Per-model premium price line. `{input}` / `{output}` are the formatted
+     *  per-1M-token rates (see {@link premiumCostLabel}). */
+    paidCostDetail: string;
+    /** `{vendor}` is substituted with the connected provider's display name. */
+    byoDetail: string;
+    configuredDetail: string;
+    /** Funding sentence for an on-device row. `{runtime}` is the serving runtime's name. */
+    localDetail: string;
+    /** Display name for a `project_evermind:<id>` pin (the raw pin is not a model name). */
+    evermindLabel: string;
+    /** Funding line for a `project_evermind:<id>` pin (a plan feature, not a catalog model). */
+    evermindDetail: string;
+}
+declare const DEFAULT_MODEL_CHOICE_LABELS: ModelChoiceLabels;
+declare function byoVendorLabel(vendor: string): string;
+/** A gateway per-token rate as the per-1M-token price every surface quotes. */
+declare function perMillionUsd(rate: number): string;
+/**
+ * What a premium (metered) model costs, formatted from the gateway's per-token
+ * rates against the host's localized `paidCostDetail` line. For a host with an
+ * ICU formatter (the web app) prefer interpolating {@link perMillionUsd} through
+ * it; this is the plain-substitution path for hosts without one.
+ */
+declare function premiumCostLabel(pricing: {
+    prompt: number;
+    completion: number;
+}, template: string): string;
+/** The categories, in display order. Only the populated ones are ever offered. */
+declare const MODEL_CATEGORIES: ModelCategory[];
+declare function modelCategoryLabel(category: ModelCategory, labels: ModelChoiceLabels): string;
+/**
+ * Every selectable route, ordered by what it COSTS the user: BuilderForce
+ * collections (free → plan → paid) lead, then the tenant's own connected
+ * accounts (BYO pool + its models, in the server-supplied provider priority
+ * order), then saved workspace LLM configs. A model already listed in a cheaper
+ * group is never repeated.
+ *
+ * On-device models lead the whole list: they spend nothing, need no account, and run
+ * on hardware the user has already paid for, so nothing on the list is cheaper.
+ *
+ * `identity` names the ROUTED row after the product that actually funds it —
+ * "Builderforce Free" / "Builderforce PRO" rather than a bare "Auto" — because that
+ * is the thing the user bought and the only honest answer to "what am I running on?"
+ * when the gateway picks per turn. Omit it and the row degrades to the free product
+ * (see {@link DEFAULT_MODEL_IDENTITY}: the safe default is masked, never leaked).
+ */
+declare function buildModelItems(options: ChatModelOptions, labels: ModelChoiceLabels, identity?: ModelIdentityContext): ModelItem[];
+/**
+ * The options with every DOWNLOADED page-engine model (the picker's local model store
+ * rows in state `ready`) joined to the on-device group — so a model fetched into this
+ * browser is a row like any other: listed under All, searchable, and named as the model
+ * in use once pinned. Rows already present (an HTTP runtime serving the same ref) are
+ * left as they are; the builder never repeats an id.
+ */
+declare function withReadyPageModels(options: ChatModelOptions, rows: readonly LocalModelRow[] | null | undefined): ChatModelOptions;
+/** The key identifying the active row (matches {@link ModelItem.key}). */
+declare function activeModelKey(selection: ChatModelSelection): string;
+/** Search + category narrowing. Matches label, funding detail, and category name. */
+declare function filterModelItems(items: ModelItem[], labels: ModelChoiceLabels, query: string, category: 'all' | ModelCategory): ModelItem[];
+/**
+ * What is ACTUALLY running the next turn, said in one line: the pinned model, the
+ * BYO pool, or — under `auto` — the routing PRODUCT that funds it.
+ *
+ * `effective` (what the host resolved an `auto` turn to) is honoured only when it names
+ * something the user owns: a project-Evermind head, a saved workspace LLM config, or —
+ * for a viewer entitled to pick models at all — a catalog id. On a routed plan the
+ * answer is the product, not the upstream model the cascade happened to reach for; see
+ * `modelIdentity.ts` for why. This is the fix for a free-plan composer that announced
+ * "minimaxai/minimax-m3" beside a menu that would not let the user change it.
+ */
+declare function modelInUse(selection: ChatModelSelection, items: ModelItem[], labels: ModelChoiceLabels, effective?: string, identity?: ModelIdentityContext): {
+    name: string;
+    detail: string;
+};
+
+/**
+ * THE mode a model pick implies — so the model a person picks is the model that runs, on
+ * every host and from every picker (the `/` menu, the editor's QuickPick, Kimi connect).
+ *
+ * Hybrid only TRIES a pick (`createHostModelStream`: never hard-pinned, so the gateway may
+ * fail it over and the turn falls back to Auto), and Local only sets aside any pick that
+ * leaves the device. A pick left under either read as "picked Kimi, got MiniMax" while the
+ * mode control still showed the old mode. So a pick moves the mode with it:
+ *
+ *   - a model or "your connected accounts" ⇒ Specific (hard-pinned, no fallback);
+ *   - Auto while on Specific ⇒ Hybrid (Specific with nothing picked is `no_specific_model`);
+ *   - an ON-DEVICE pick under Local only keeps Local only — it already runs as picked.
+ *     On-device is the registry's `onDevice` (`runsOnDevice`), the same rule the stream
+ *     applies, so a Kimi Code pick (local grammar, hosted) is NOT on-device;
+ *   - UNDECIDED Local only (the person never chose; for an anonymous web visitor that
+ *     question is the Hybrid opt-in) is never lifted by a pick: the first-run question
+ *     still holds the next turn and asks.
+ *
+ * Returns the mode to switch to, or null when the mode in force already honours the pick.
+ * Pure — the host applies it through its own mode setter.
+ */
+
+declare function inferenceModeForModelPick(current: InferenceMode, selection: ChatModelSelection, options?: {
+    undecided?: boolean;
+}): InferenceMode | null;
+
+/**
  * THE hand-off from the routing step to a host's UI when Hybrid's pick failed and the
  * turn was answered with Auto (`createHostModelStream`'s `onFallback`). The stream runs
  * where the host builds it (a config module, the extension host, Rovr's worker), not
@@ -4969,51 +5410,6 @@ declare function pageEnginesFetch(engines: readonly PageEngine[], base?: LocalFe
 declare function probePageEngines(engines: readonly PageEngine[], options?: {
     fresh?: boolean;
 }): Promise<LocalRuntimeProbe[]>;
-
-/**
- * THE local model store — the ONE API the picker drives for every on-device model a page
- * engine can run, whichever engine and whichever cache holds it.
- *
- * Each catalog row's `source` picks the backend: an `hf-file` model streams into our own
- * Cache Storage bucket (`hfModelStore`); a `webllm` model goes through WebLLM's own cache
- * APIs. The picker never sees the difference: it lists rows with a state (`absent`,
- * `downloading`, `ready`, `unsupported`), starts and cancels downloads, removes models
- * and subscribes to changes. A finished download or a removal invalidates the engines'
- * memoized probes, so the very next turn can be served by the new model.
- *
- * Downloads start only here (PRD 34 §3.4) — a chat turn never downloads.
- */
-
-type LocalModelState = 'absent' | 'downloading' | 'ready' | 'unsupported';
-type LocalModelRow = LocalCatalogModel & {
-    state: LocalModelState;
-    /** Where it runs on this device (the fit's choice), when it can: `webgpu` or the
-     *  engine's `cpu`. The picker labels `bfi` rows by it. */
-    backend?: LocalBackend;
-    /** 0..1 while `downloading`. */
-    progress?: number;
-    /** Why it is `unsupported`: a fit code, or `engine_unavailable` when this host does not
-     *  carry the engine. */
-    reason?: LocalModelUnfit | 'engine_unavailable';
-    /** An `unsupported` row whose bytes are still cached here — listed, and removable. */
-    downloaded?: boolean;
-};
-interface LocalModelStore {
-    listLocalModels(): Promise<LocalModelRow[]>;
-    /** Start (or join) a download. Rejects with the failure; the row returns to `absent`. */
-    download(ref: string, onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<void>;
-    remove(ref: string): Promise<void>;
-    /** Notified on every state or progress change; returns the unsubscribe. */
-    subscribe(listener: () => void): () => void;
-}
-/**
- * A {@link LocalModelStore} that reaches the real one only when first used — the picker's
- * port in a host whose engines must stay off first paint (the web composer imports them
- * lazily; the editor's webview builds them on first use). `store` is asked per call and
- * memoized by the host; `subscribe` attaches once it resolves, and an unsubscribe that
- * lands first wins, so a listener is never left attached.
- */
-declare function deferredLocalModelStore(store: () => LocalModelStore | Promise<LocalModelStore>): LocalModelStore;
 
 /**
  * Every page engine a host carries, composed ONCE — so the web app, Rovr and the editor's
@@ -8027,110 +8423,6 @@ declare const BRAIN_AGENT_ASSIGNMENTS_PATH = "/api/agent-assignments?scope=brain
 /** Load the Brain's assigned agents through a host's transport. Degrades to []. */
 declare function loadBrainPersonaAgentsVia(request: PoolRequest): Promise<BrainPersonaAgent[]>;
 
-/**
- * Per-reply model/account provenance — the durable "which LLM, and whose account,
- * produced this turn" signal shown as a small chip under an assistant message.
- *
- * Motivation: a SUCCESSFUL Brain turn used to reveal nothing about how it was
- * served, so "why didn't it use my paid Claude?" was invisible until a turn came
- * back empty (the only case the diagnostic note fired). This attaches the resolved
- * model + whether the tenant's OWN connected frontier account served it — or the
- * shared pool did despite a connected account existing — to every assistant turn,
- * so the confirmation is always on screen.
- *
- * Single source of truth for the convention, shared by the writers (server-side
- * `agentReply` metadata + the streaming gateway's `x-builderforce-account` header,
- * captured client-side and persisted) and the renderer (the BrainTimeline chip).
- * The `account` string values are the wire contract with the server — the api's
- * `classifyReplyAccount()` MUST emit these exact literals.
- */
-/** The metadata key under which a message's provenance rides. */
-declare const PROVENANCE_META_KEY = "provenance";
-/**
- * Which account served a completed turn:
- * - `own`               — the tenant's OWN connected frontier account (a Claude
- *                         subscription or a BYO vendor key) served it; the platform
- *                         paid nothing and the user is on the model they connected.
- * - `shared`            — the shared model pool served it AND the tenant has no
- *                         connected account (nothing else was possible).
- * - `shared_byo_unused` — the shared pool served it EVEN THOUGH the tenant has a
- *                         connected account — the case worth flagging inline
- *                         ("your connected account wasn't used for this turn").
- */
-type ProvenanceAccount = 'own' | 'shared' | 'shared_byo_unused';
-/** Durable provenance for one assistant turn. */
-interface MessageProvenance {
-    /** The model the gateway ACTUALLY used (resolved, post-failover). */
-    model: string;
-    /**
-     * Which account served it — see {@link ProvenanceAccount}. OPTIONAL: the
-     * gateway reports it via `x-builderforce-account`, which an older gateway (or a
-     * CORS setup that doesn't expose the header) omits. Requiring it used to drop
-     * the whole record, so a turn's MODEL — the thing users most need when output
-     * quality collapses — went unreported too. Absent = "model known, account not".
-     */
-    account?: ProvenanceAccount;
-    /** Vendor that owns `model` (e.g. `anthropic`), when known — names the account
-     *  in tooltips ("your connected Claude account"). */
-    vendor?: string;
-    /** Present when the project's own self-learning Evermind generated this reply's
-     *  final prose (opt-in inference). `version` is the Evermind head the turn ran on.
-     *  Absent for turns served by a frontier/pool model — so the "🧠 Evermind vN" chip
-     *  shows ONLY when the learned model actually spoke. */
-    evermind?: {
-        version: number;
-    };
-    /**
-     * What the surface ASKED for when it differed from {@link model} (gateway failover /
-     * downgrade). Absent on a turn that got exactly what it requested — so a copied
-     * transcript can stamp `## BuilderForce · actual (requested X)` only when the two
-     * disagree. Optional: older turns never carried it.
-     */
-    requestedModel?: string;
-}
-/** The wire's account literal, or undefined for anything else — the one reading of it,
- *  for the stream header on the way in and a persisted blob on the way out. */
-declare function asProvenanceAccount(value: unknown): ProvenanceAccount | undefined;
-/** True when a turn ran on the shared pool despite a connected account existing —
- *  the only state the chip flags inline. Shared by the chip and any host that
- *  wants to nudge the user to check their connection. */
-declare function isConnectedAccountUnused(prov: MessageProvenance | null | undefined): boolean;
-/** Parse a message's persisted provenance, or `null` when it carries none (older
- *  turns). The MODEL is the only required field — a turn whose gateway didn't
- *  report an account still names the model that answered. Defensive: a malformed
- *  blob yields `null` rather than throwing. */
-declare function parseMessageProvenance(msg: {
-    metadata?: string | null;
-}): MessageProvenance | null;
-/**
- * The model that most recently ANSWERED in this conversation — the newest message
- * carrying provenance. A composer labelled from the requested model alone reads
- * "Builderforce Free" under auto while a connected Qwen or Grok is doing the work;
- * this is what the label should say once anything has actually answered. `undefined`
- * before the first served reply, so the caller falls back to the requested model.
- */
-declare function lastServedModel(messages: readonly {
-    metadata?: string | null;
-}[]): string | undefined;
-/**
- * Merge a provenance object into a message's metadata (preserving any other keys,
- * e.g. `authoredBy` on an agent's reply). Returns a serialized string, or
- * `undefined` when there is nothing to store — ready to hand to
- * `persistence.sendMessages`. Mirrors `withDirectedMetadata`.
- */
-declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
-/**
- * Markdown heading for one assistant turn in a copied transcript.
- *
- * Without this every block is just `## BuilderForce`, so a multi-model run looks like
- * one voice and the aggregate "Models used" / "Per model" lines are the only attribution.
- * Prefer the resolved model id from persisted provenance; when the turn was downgraded,
- * append `(requested …)` so failover is visible on the block itself.
- */
-declare function formatAssistantTranscriptHeading(assistantName: string, message: {
-    metadata?: string | null;
-}): string;
-
 /** The metadata key that marks a persisted assistant message as stopped mid-stream. */
 declare const STOPPED_TURN_META_KEY = "stoppedByUser";
 /** The trace/step label a user Stop records — `args.model` names the model it cut off. */
@@ -8146,90 +8438,6 @@ declare function stoppedTurnMetadata(source: StoppedTurnSource): string;
 declare function isStoppedTurn(msg: {
     metadata?: string | null;
 }): boolean;
-
-/**
- * WHAT THE USER IS TOLD RAN THEIR TURN — the one rule, shared by every surface.
- *
- * A turn served by BuilderForce's own routed pool IS the product the user signed up
- * for: "Builderforce Free" or "Builderforce PRO". Which upstream model the cascade
- * happened to land on (`minimaxai/minimax-m3`, `@cf/zai-org/glm-4.7-flash`, …) is an
- * implementation detail of that product — it changes per turn, per vendor outage, per
- * cooldown, and the user on a routed plan has no control over it. Naming it in the UI
- * only ever raises a question they cannot act on ("why did I get Minimax?").
- *
- * The id is NOT hidden from us. It still rides every `llm_usage_log` row, every
- * execution trace, the provenance metadata on the message, and the "Copy diagnostics"
- * report — the places where WE need to know exactly which model served a turn. This
- * module governs the DISPLAY layer only.
- *
- * It is shown to the user in exactly the two cases where the choice is theirs:
- *   • the turn ran on their OWN connected account (BYO) — it is their model, on their
- *     key, and naming it is the whole point of connecting it; or
- *   • they are entitled to pick a model at all (a paid plan, or a connected provider),
- *     in which case the catalog is theirs to browse and pin.
- *
- * Everyone else — the free plan and the anonymous canvas — sees the product name.
- *
- * Lives in brain-embedded (not a UI package) because four surfaces have to agree on
- * it: the shared `/` composer menu, the per-reply provenance chip in the transcript,
- * the VS Code host's `Change model` QuickPick, and the public `/models` catalog page.
- */
-
-/** The two BuilderForce routing products. A turn with no explicit pin runs on one of
- *  them, and that PRODUCT is what the user sees named. */
-type RoutedProduct = 'free' | 'pro';
-/**
- * The user-facing names of our two routing products. THE single source — the composer
- * menu, the provenance chip and the public `/models` catalog all read these, so the
- * product can never be called three different things in three places.
- *
- * Brand tokens, deliberately NOT localized (see the i18n rule for brand names).
- */
-declare const BUILDERFORCE_PRODUCT_NAME: Readonly<Record<RoutedProduct, string>>;
-/**
- * What this viewer is allowed to see about model identity.
- *
- * `product`   — which routing product funds their unpinned turns.
- * `canChoose` — may they pick a model at all (paid plan OR a connected provider)?
- *               This is the SAME gate the gateway enforces on a strict pin, so the
- *               label a user reads and the choice they are offered agree by construction.
- */
-interface ModelIdentityContext {
-    product: RoutedProduct;
-    canChoose: boolean;
-}
-/**
- * The safe default: a free, choice-less viewer. Deliberately the FALLBACK for a host
- * that has not wired an identity yet, so the failure mode of forgetting is "masked",
- * never "leaked". A host that is wired always passes its own.
- */
-declare const DEFAULT_MODEL_IDENTITY: ModelIdentityContext;
-/** The product name for this viewer — "Builderforce Free" / "Builderforce PRO". */
-declare function productModelName(identity: ModelIdentityContext | null | undefined): string;
-/** Which product a plan funds. One mapping, so "paid ⇒ PRO" is not re-decided per host. */
-declare function productForPlan(isPaid: boolean): RoutedProduct;
-/** True when `model` is a user-configured ref (Evermind head / saved LLM config)
- *  rather than an upstream catalog id. */
-declare function isUserConfiguredModelRef(model: string | null | undefined): boolean;
-/**
- * THE decision: may this viewer be shown the raw model id, or do they get the product
- * name? See the module header for the rule. `account` is the turn's provenance account
- * when known — a turn served by the tenant's OWN connected account always names its
- * model, because that model is the thing they connected.
- */
-declare function revealsModelId(identity: ModelIdentityContext | null | undefined, account?: ProvenanceAccount): boolean;
-/**
- * The name to PUT ON SCREEN for `model`. Returns the model id when this viewer owns the
- * choice (see {@link revealsModelId}) or when the ref names something they configured
- * themselves; otherwise the routing product's name.
- *
- * Every surface that renders a model to a user goes through this — the composer menu,
- * the provenance chip, the QuickPick — so a masked plan cannot leak an upstream id
- * through whichever surface was written last.
- */
-declare function displayModelName(model: string | null | undefined, identity: ModelIdentityContext | null | undefined, opts?: {
-    account?: ProvenanceAccount;
-}): string;
 
 /**
  * Which model ACTUALLY answered — per conversation — and how a tool call gets told.
@@ -8915,181 +9123,6 @@ declare function buildChatDiagnosticsReport(input: BuildChatDiagnosticsReportInp
 declare function formatChatDiagnosticsReportJson(report: ChatDiagnosticsReport): string[];
 
 /**
- * WHICH MODELS a chat surface may offer, in WHAT ORDER, and WHO PAYS for each —
- * the model-choice domain, with no UI in it.
- *
- * It lives here rather than in the React UI package because three very different
- * surfaces have to agree on it: the shared `/` composer menu (web + VS Code
- * webview), and the VS Code extension HOST's `Change model` QuickPick, which runs
- * in the Node extension process and cannot import React. When each owned its own
- * list they drifted on grouping order, on how a connected provider was named, and
- * on the sentence that told the user who was being billed.
- */
-
-/** The gateway pin that expands to a project's CURRENT Evermind head at call time.
- *  Mirrors `PROJECT_EVERMIND_MODEL_PREFIX` on the gateway (api/.../projectEvermind.ts). */
-declare const PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
-/** What the user picked. `auto` lets the gateway route; `byo_pool` walks the
- *  tenant's connected accounts in their configured priority order; `model` is a
- *  strict pin. */
-type ChatModelSelection = {
-    mode: 'auto';
-} | {
-    mode: 'byo_pool';
-} | {
-    mode: 'model';
-    model: string;
-};
-/**
- * The per-turn `routingMode` a selection sends. Only "your keys" is an explicit choice;
- * `auto` sends NOTHING, so the gateway applies the person's account preference (free
- * tier first, connected accounts first, or inferred from them — api `fundingOrder.ts`)
- * instead of a client default overriding it.
- */
-declare function routingModeForSelection(selection: ChatModelSelection): 'byo_pool' | undefined;
-/** The selectable model surface, grouped by WHO PAYS (see {@link ModelCategory}). */
-interface ChatModelOptions {
-    /** Tenant-defined named LLM configs (`tenant_model:<slug>`). */
-    configured?: Array<{
-        id: string;
-        label: string;
-    }>;
-    /** Models served by a runtime on the user's OWN machine (`local/<runtime>/<model>`).
-     *  `runtime` is the display name of what serves it (Ollama, FreeToken). */
-    local?: Array<{
-        id: string;
-        label: string;
-        runtime: string;
-    }>;
-    /** Models the tenant's own connected provider accounts can serve. */
-    byo: Array<{
-        id: string;
-        vendor: string;
-        cost?: string;
-    }>;
-    free: Array<string | {
-        id: string;
-        cost?: string;
-    }>;
-    plan: Array<string | {
-        id: string;
-        cost?: string;
-    }>;
-    paid: Array<string | {
-        id: string;
-        cost?: string;
-    }>;
-}
-/** Funding tier of a model row — the axis the list is grouped and filtered by. */
-type ModelCategory = 'auto' | 'local' | 'byo' | 'free' | 'plan' | 'paid' | 'configured';
-/** One row in the model list. `detail` is the funding sentence for that row. */
-interface ModelItem {
-    key: string;
-    label: string;
-    detail: string;
-    category: ModelCategory;
-    selection: ChatModelSelection;
-}
-/**
- * The strings a model list needs. Hosts pass their own localized bundle (the web
- * app via next-intl, the VS Code surfaces via `vscode.l10n`); the English defaults
- * keep the list readable unmapped. The composer menu's own chrome extends this
- * (see `PromptOptionsLabels` in brain-ui).
- */
-interface ModelChoiceLabels {
-    categoryAuto: string;
-    categoryByo: string;
-    categoryFree: string;
-    categoryPlan: string;
-    categoryPaid: string;
-    categoryConfigured: string;
-    /** Group name for models served by a runtime on this machine. */
-    categoryLocal: string;
-    /** The funding sentence for the routed row. Its NAME comes from the product
-     *  ({@link BUILDERFORCE_PRODUCT_NAME}), not from a label — a brand token is not
-     *  translated, and the tier it states must match what the gateway actually funds. */
-    autoDetail: string;
-    poolLabel: string;
-    poolDetail: string;
-    freeDetail: string;
-    planDetail: string;
-    paidDetail: string;
-    /** Per-model premium price line. `{input}` / `{output}` are the formatted
-     *  per-1M-token rates (see {@link premiumCostLabel}). */
-    paidCostDetail: string;
-    /** `{vendor}` is substituted with the connected provider's display name. */
-    byoDetail: string;
-    configuredDetail: string;
-    /** Funding sentence for an on-device row. `{runtime}` is the serving runtime's name. */
-    localDetail: string;
-    /** Display name for a `project_evermind:<id>` pin (the raw pin is not a model name). */
-    evermindLabel: string;
-    /** Funding line for a `project_evermind:<id>` pin (a plan feature, not a catalog model). */
-    evermindDetail: string;
-}
-declare const DEFAULT_MODEL_CHOICE_LABELS: ModelChoiceLabels;
-declare function byoVendorLabel(vendor: string): string;
-/** A gateway per-token rate as the per-1M-token price every surface quotes. */
-declare function perMillionUsd(rate: number): string;
-/**
- * What a premium (metered) model costs, formatted from the gateway's per-token
- * rates against the host's localized `paidCostDetail` line. For a host with an
- * ICU formatter (the web app) prefer interpolating {@link perMillionUsd} through
- * it; this is the plain-substitution path for hosts without one.
- */
-declare function premiumCostLabel(pricing: {
-    prompt: number;
-    completion: number;
-}, template: string): string;
-/** The categories, in display order. Only the populated ones are ever offered. */
-declare const MODEL_CATEGORIES: ModelCategory[];
-declare function modelCategoryLabel(category: ModelCategory, labels: ModelChoiceLabels): string;
-/**
- * Every selectable route, ordered by what it COSTS the user: BuilderForce
- * collections (free → plan → paid) lead, then the tenant's own connected
- * accounts (BYO pool + its models, in the server-supplied provider priority
- * order), then saved workspace LLM configs. A model already listed in a cheaper
- * group is never repeated.
- *
- * On-device models lead the whole list: they spend nothing, need no account, and run
- * on hardware the user has already paid for, so nothing on the list is cheaper.
- *
- * `identity` names the ROUTED row after the product that actually funds it —
- * "Builderforce Free" / "Builderforce PRO" rather than a bare "Auto" — because that
- * is the thing the user bought and the only honest answer to "what am I running on?"
- * when the gateway picks per turn. Omit it and the row degrades to the free product
- * (see {@link DEFAULT_MODEL_IDENTITY}: the safe default is masked, never leaked).
- */
-declare function buildModelItems(options: ChatModelOptions, labels: ModelChoiceLabels, identity?: ModelIdentityContext): ModelItem[];
-/**
- * The options with every DOWNLOADED page-engine model (the picker's local model store
- * rows in state `ready`) joined to the on-device group — so a model fetched into this
- * browser is a row like any other: listed under All, searchable, and named as the model
- * in use once pinned. Rows already present (an HTTP runtime serving the same ref) are
- * left as they are; the builder never repeats an id.
- */
-declare function withReadyPageModels(options: ChatModelOptions, rows: readonly LocalModelRow[] | null | undefined): ChatModelOptions;
-/** The key identifying the active row (matches {@link ModelItem.key}). */
-declare function activeModelKey(selection: ChatModelSelection): string;
-/** Search + category narrowing. Matches label, funding detail, and category name. */
-declare function filterModelItems(items: ModelItem[], labels: ModelChoiceLabels, query: string, category: 'all' | ModelCategory): ModelItem[];
-/**
- * What is ACTUALLY running the next turn, said in one line: the pinned model, the
- * BYO pool, or — under `auto` — the routing PRODUCT that funds it.
- *
- * `effective` (what the host resolved an `auto` turn to) is honoured only when it names
- * something the user owns: a project-Evermind head, a saved workspace LLM config, or —
- * for a viewer entitled to pick models at all — a catalog id. On a routed plan the
- * answer is the product, not the upstream model the cascade happened to reach for; see
- * `modelIdentity.ts` for why. This is the fix for a free-plan composer that announced
- * "minimaxai/minimax-m3" beside a menu that would not let the user change it.
- */
-declare function modelInUse(selection: ChatModelSelection, items: ModelItem[], labels: ModelChoiceLabels, effective?: string, identity?: ModelIdentityContext): {
-    name: string;
-    detail: string;
-};
-
-/**
  * The gateway's model catalogue, read the ONE way every client reads it.
  *
  *   GET /llm/v1/models   — plan pool, free subset, BYO surface, entitlements
@@ -9655,4 +9688,4 @@ interface ChatCreation {
 }
 declare function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }: ChatCreationOptions): ChatCreation;
 
-export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type AnswerOriginCost, type ArmedNewChat, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS, BROWSER_ENGINE_MODEL, BUILDERFORCE_PRODUCT_NAME, BfiWorkerEngineOptions, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunEngine, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BrowserEngineProber, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatBindingPort, type ChatCompletionMessage, type ChatCreation, type ChatCreationOptions, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsHistory, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatStateGet, type ChatTicket, type ChatTurns, type ChatTurnsOptions, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type ContextUsage, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_FALLBACK_TEMPLATE, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, EMPTY_GATEWAY_MODEL_OPTIONS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GatewayJsonRequest, type GatewayModelOptions, type GatewayModelSurface, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type HandoffFitOptions, HfModelStore, type HostLocalPin, type HostModelStreamInput, INFERENCE_MODES, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageUrlContentPart, type IndexedDbStepDurabilityOptions, type InferenceMode, LOCAL_PICKER_GROUPS, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalAttemptFit, type LocalBrainPersistenceOptions, type LocalChatIdentity, type LocalChatMessage, type LocalFetch, type LocalFirstAttemptSummary, type LocalFirstStreamInput, type LocalModelRow, type LocalModelState, type LocalModelStore, type LocalPickerGroup, type LocalPickerView, type LocalRatingVerdict, type LocalStreamRoute, type LocalSuccessContribution, type LocalSuccessFederation, type LocalSuccessFleetHead, type LocalSuccessSnapshot, type LocalSuccessStore, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryAnswerOptions, type MemoryFirstAnswer, type MemorySurface, type MentionToken, type MessageProvenance, type MessageRatings, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackChannel, type ModelFallbackEvent, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelPreflightResult, type ModelScore, type ModelTurn, type ModelWindowSources, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, type OnDeviceStoreScope, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type PackForModelInput, type PackForModelResult, PageEngine, type PageEngineSet, type PageEngineSetOptions, type PageRuntimePin, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, type ProviderFailureEvent, type QueuedItem, type QueuedTurns, type QueuedTurnsOptions, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, RUN_REFRESH_MS, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunEngineControl, type RunKey, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunNoteStep, type RunProgress, type RunStopHook, type RunStopInput, type RunTurn, type RunUsageLedger, type RunWindowSources, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type SavingsBreakdown, type SavingsBySource, type SavingsSourceKey, type ServedRead, type SpendBreakdown, type SpendSavingsSummary, type StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, type SummaryStreamFn, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, USAGE_SURFACES, USAGE_SURFACE_HEADER, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UsageSurface, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, type WindowFitTrace, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, bindChatHistoryForSync, brainPersonaAgents, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, contextUsageOf, contextWindowOf, createBrainRestPersistence, createBrowserEngineProber, createComposingActivity, createHandoffFit, createHostModelStream, createLocalBrainPersistence, createLocalChatIdentity, createLocalFirstStream, createLocalStream, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, createPayloadBudget, createRunUsageLedger, declinesReview, declinesShipping, defaultInferenceMode, deferredLocalModelStore, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gatewayCanChooseModel, gatewayModelIdentity, gatewayModelWindows, gatewayPlanIsPaid, gatewayPlanModels, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, hasPromptApi, hasWebGPU, installIndexedDbStepDurability, installRunDriver, installStepDurability, invalidateGatewayModelOptions, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isFallbackFailure, isInferenceMode, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isModelReply, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUsageSurface, isUserConfiguredModelRef, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, loadGatewayModelOptions, loadOnDeviceAnswerStore, localFallbackTrace, localFirstApplies, localFirstWorkload, localPickerView, localRatingVerdict, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelFallbackText, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, noteRunStep, onDeviceMemoryHooks, packForModel, pageEnginesFetch, pageRuntimePin, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, personalitySetpoints, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, probePageEngines, productForPlan, productModelName, progressDuration, projectMemoryHooks, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, providerFailureEvent, providerFailureTrace, queueRunSteering, ratedTurnContext, ratedTurnTool, readChatRunHistory, readChatTicketLinks, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resetOnDeviceStoresForTests, resolveBrainStream, resolveContextWindow, resolveRecipient, resolveRunConfirm, retryOnConnectFailure, revealsModelId, revisitAdvisory, routerToolSpecs, routingModeForSelection, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, serverChatIdOf, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startEngineRun, startRun, stepRow, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, streamSummaryCompletion, stripAskUser, studioToolsIn, submitLocalTurnVerdict, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeLocalFirstAttempt, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSchemaTokens, toolSpecsFor, traceWithPersistedSteps, transcriptSeedOf, transportRetryTrace, trimToolResult, turnAffectBlock, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, useArmedNewChat, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useChatCreation, useChatTurns, useMcpExtensions, useOptionalBrainContext, useQueuedTurns, useRegisterBrainActions, useRunRefreshTick, useRunSnapshot, useToolConfirmationGate, utf8ByteLength, webStorageLocalSuccessStore, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, withRating, withReadyPageModels, withRunUsage, withUsageSurface, workFiledNotStaffedVerdict, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AGENT_POOL_PATHS, API_VERSION_PROBE_TIMEOUT_MS, API_VERSION_TTL_MS, ASK_USER_TOOL, ASK_USER_TOOL_SPEC, AUTHORED_BY_META_KEY, type AgentDispatchActivity, type AllowanceState, type AnswerOriginCost, type ArmedNewChat, type ArtifactKind, type AskUserMessageLike, type AskUserOption, type AskUserPayload, type AskUserToolSpec, type AssembledToolCall, BACK_TO_BACK_AT, BASE_BRANCHES, BRAIN_AGENT_ASSIGNMENTS_PATH, BROWSER_ENGINE_FALLBACK_CONTEXT_TOKENS, BROWSER_ENGINE_MODEL, BUILDERFORCE_PRODUCT_NAME, BfiWorkerEngineOptions, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainDiagnosticsContext, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, type BrainPersonaAgent, type BrainPersonaChoice, BrainProvider, type BrainRestInit, type BrainRestOptions, type BrainRestPersistence, type BrainRestRequest, type BrainRunActivity, type BrainRunDriver, type BrainRunEngine, type BrainRunOutcome, type BrainRunPersistence, type BrainRunPhase, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainStreamFn, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BrowserEngineProber, type BuildBrainTriageOptions, type BuildChatDiagnosticsReportInput, type ByoUnresolvedEntry, CHAT_DIAGNOSTICS_SCHEMA_VERSION, CHAT_MODES, CHAT_MODE_ICON, CODE_CHANGE_TOOLS, CONNECT_RETRY_DELAYS_MS, type CachedRead, type ChatActivity, type ChatActivityLabels, type ChatBindingPort, type ChatCompletionMessage, type ChatCreation, type ChatCreationOptions, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsEvermindHead, type ChatDiagnosticsHistory, type ChatDiagnosticsMessageLike, type ChatDiagnosticsMeter, type ChatDiagnosticsModelSurface, type ChatDiagnosticsPlanSnapshot, type ChatDiagnosticsProvenance, type ChatDiagnosticsReport, type ChatDiagnosticsRun, type ChatDiagnosticsRuns, type ChatDiagnosticsSources, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type ChatRosterAgent, type ChatStateGet, type ChatTicket, type ChatTurns, type ChatTurnsOptions, type ChatWorkDirectiveOptions, type CompletionMetadata, type ComposerDirectiveOptions, type ComposingActivity, type ComposingOptions, type ComposingSink, type ConnectRetryOptions, type ContentPart, type ContextUsage, type CreatedWorkItemLink, DEFAULT_AGENT_MODEL_SENTINEL, DEFAULT_CHAT_ACTIVITY_LABELS, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_FALLBACK_TEMPLATE, DEFAULT_MODEL_IDENTITY, DEFAULT_PERSONA, DEFAULT_TOOL_FAILURE_STREAK, DEFAULT_TOOL_LIMIT, type DirectedGroup, type DirectedRecipient, type DispatchRefusal, EMPTY_GATEWAY_MODEL_OPTIONS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRunHooks, FAILURE_HARD_AT, FAILURE_NUDGE_AT, FILE_DELIVERY_RULE, FailureTally, type GatewayJsonRequest, type GatewayModelOptions, type GatewayModelSurface, type GitShortStatus, type GlobalRunState, HAND_OFF_TOOL, HAND_OFF_TOOL_SPEC, type HandOffOutcome, type HandOffPlan, type HandOffPorts, type HandOffTask, type HandoffFitOptions, HfModelStore, type HostLocalPin, type HostModelStreamInput, INFERENCE_MODES, type IdleWatchdogOptions, type IdleWatchdogReader, type ImageUrlContentPart, type IndexedDbStepDurabilityOptions, type InferenceMode, LOCAL_PICKER_GROUPS, LOCAL_SKIP_CONFIDENCE, LOCAL_SKIP_EXPLORE, LOCAL_WORKSPACE_TOOLS, type LinkedTicketToAdvance, type LocalAttemptFit, type LocalBrainPersistenceOptions, type LocalChatIdentity, type LocalChatMessage, type LocalFetch, type LocalFirstAttemptSummary, type LocalFirstStreamInput, type LocalModelRow, type LocalModelState, type LocalModelStore, type LocalPickerGroup, type LocalPickerView, type LocalRatingVerdict, type LocalStreamRoute, type LocalSuccessContribution, type LocalSuccessFederation, type LocalSuccessFleetHead, type LocalSuccessSnapshot, type LocalSuccessStore, MAX_STOP_HOOK_ROUNDS, MAX_TOOL_RESULT_CHARS, MODALITY_PERSONAS, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MemoryAnswerOptions, type MemoryFirstAnswer, type MemorySurface, type MentionToken, type MessageProvenance, type MessageRatings, type ModalityPersona, type ModelCategory, type ModelChoiceLabels, type ModelFallbackChannel, type ModelFallbackEvent, type ModelFallbackSurface, type ModelIdentityContext, type ModelItem, type ModelPreflightResult, type ModelScore, type ModelTurn, type ModelWindowSources, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, ON_DEVICE_ANSWER_THRESHOLD, type OnDeviceAnswerStore, type OnDeviceStoreScope, PERSONA_MODALITY_IDS, PMO_FOCUS_PARAM, PREVIEW_REVIEW_TOOL, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type PackForModelInput, type PackForModelResult, PageEngine, type PageEngineSet, type PageEngineSetOptions, type PageRuntimePin, type ParsedXmlToolCall, type PayloadBudget, type PayloadBudgetOptions, type PayloadBudgetStats, type PendingAskUser, type PersistedStep, type PersonaModalityId, type PersonaSubagent, type PlaceholderHit, type PoolAgent, type PoolRegisteredAgentRow, type PoolRequest, type PoolWorkforceAgentRow, type PreparedImage, type ProjectMemoryRequest, type PromptApiAvailability, type PromptApiFactory, type PromptApiMessage, type PromptApiSession, PromptInput, type PromptInputProps, type ProvenanceAccount, type ProviderFailureEvent, type QueuedItem, type QueuedTurns, type QueuedTurnsOptions, READ_FILE_RESULT_CHARS, RESTING_CHAT_MODE, REVISIT_HARD_AT, REVISIT_NUDGE_AT, RUN_REFRESH_MS, type RatableMessage, type RatedTurnContext, ReadCoverage, type ReadVisit, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RepeatStreak, type RepeatedTarget, RepetitionLoopError, type RoutedProduct, type RunEngineControl, type RunKey, type RunLineage, type RunMilestoneActivity, type RunMilestonePhase, type RunNoteStep, type RunProgress, type RunStopHook, type RunStopInput, type RunTurn, type RunUsageLedger, type RunWindowSources, STEP_MESSAGE_ROLE, STOPPED_TURN_META_KEY, STOPPED_TURN_STEP, STREAM_IDLE_MS, STUDIO_WORKSPACE_TOOLS, SUBAGENT_OF_META_KEY, type SavingsBreakdown, type SavingsBySource, type SavingsSourceKey, type ServedRead, type SpendBreakdown, type SpendSavingsSummary, type StaffingSummary, type StepDurability, type StepOutgoingMessage, type StoppedTurnSource, type StreamChatOptions, type StreamChatResult, type StreamHandlers, StreamIdleError, StreamInterruptedError, type SubagentDiagnosticsInput, type SubagentOrigin, type SummaryStreamFn, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type TicketTag, type TicketToken, type ToolCatalogMatch, type ToolConfirmationGate, type ToolConfirmationGateOptions, type ToolConfirmationPersistence, type ToolExposure, type ToolSelection, TransportError, type TrimOptions, type TrimmedToolResult, type TurnInterruption, UNBACKED_TICKET_CLAIM_NOTICE, UNBACKED_WRITE_CLAIM_NOTICE, UNSCOPED_MUTATION_TOOLS, USAGE_SURFACES, USAGE_SURFACE_HEADER, type UnreviewedChangeInput, type UnshippedChangeInput, type UpstreamTurnEvidence, type UsageSurface, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, WEB_FETCH_TOOL_NAME, type WindowFitTrace, XmlToolCallFilter, accountUsedInTrace, activeHashtagToken, activeMentionToken, activeModelKey, activeTicketToken, activityIcon, activityMessageCount, activityTarget, activityTone, agentPersonaChoice, agentPersonaPrompt, allowanceState, announcesUntakenAction, appendRunMessage, applyRemoteRun, artifactRoutePath, asProvenanceAccount, askStopHook, askUserAnchorId, askUserBlock, attachEvermindLearn, attemptedPublish, bindChatHistoryForSync, brainPersonaAgents, buildBrainTriageReport, buildChatDiagnosticsReport, buildComposerDirectives, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, canChangeCodeHere, canReviewInPreview, canRunInParallel, canShipHere, catalogToolNamesMentionedIn, chatActivityText, chatConversationDirective, chatModeDirective, chatRosterFromParticipants, chatWorkDirective, chatWorkLinkingDirective, childTaskBrief, claimsMissingToolData, classifyModelFunding, clearRunError, codeChangeFile, codeChangesOf, coerceAskUserPayload, completeLocal, completeLocalFirst, composeEvermindHooks, computeBrainDiagnostics, computeRunProgress, contextUsageOf, contextWindowOf, createBrainRestPersistence, createBrowserEngineProber, createComposingActivity, createHandoffFit, createHostModelStream, createLocalBrainPersistence, createLocalChatIdentity, createLocalFirstStream, createLocalStream, createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, createPayloadBudget, createRunUsageLedger, declinesReview, declinesShipping, defaultInferenceMode, deferredLocalModelStore, deriveChatTitle, describeLiveStep, describeNetworkError, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, directedAgentRecipients, dirtyPathsOf, displayModelName, drainRunSteering, effortProfile, executeHandOff, extractXmlToolCalls, failureReason, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, filterTicketCandidates, findTools, forgetResolvedModels, formatAssistantTranscriptHeading, formatBrainDiagnostics, formatBrainProvenance, formatBytes, formatChatDiagnostics, formatChatDiagnosticsReportJson, formatDispatchRefusals, formatEvermindLearnStep, formatModelScorecard, formatModelTurnLog, formatRunProgress, formatStaffingSummary, formatSubagentDiagnostics, gatewayCanChooseModel, gatewayModelIdentity, gatewayModelWindows, gatewayPlanIsPaid, gatewayPlanModels, gatherChatDiagnostics, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunDriver, getRunSnapshot, getRunTrace, handleRouterCall, hasEditIntent, hasPromptApi, hasWebGPU, inferenceModeForModelPick, installIndexedDbStepDurability, installRunDriver, installStepDurability, invalidateGatewayModelOptions, isActivityMessage, isChatMode, isCodeChangeTool, isCoderReask, isConnectFailure, isConnectedAccountUnused, isDirectedToParticipant, isDispatchTool, isEffort, isEvermindModel, isFailedToolResult, isFallbackFailure, isInferenceMode, isLocalWorkspaceTool, isMalformedToolCall, isManagerRole, isModelReply, isMutationTool, isReadOnlyShellCall, isRepoPublishTool, isRouterTool, isRunning, isStepMessage, isStoppedTurn, isTicketRecordingTool, isTicketWriteTool, isTruncatedTurn, isUnscopedMutationTool, isUsageSurface, isUserConfiguredModelRef, lastServedModel, leftChangeUnreviewed, leftChangeUnshipped, linkedTicketsToAdvance, linkedTicketsToComplete, loadAgentPoolVia, loadBrainPersonaAgentsVia, loadGatewayModelOptions, loadOnDeviceAnswerStore, localFallbackTrace, localFirstApplies, localFirstWorkload, localPickerView, localRatingVerdict, localStorageConfirmationPersistence, localToolsIn, localTransport, mcpActionsFrom, mentionRecipient, midRunNotice, modalityPersonaChoice, modelCategoryLabel, modelFailoversInTrace, modelFallbackText, modelInUse, modelScorecard, modelTurnLog, modelsUsedInTrace, narratedUnadvertisedInTrace, nextFallbackModel, normalizeChatMode, noteRunStep, onDeviceMemoryHooks, packForModel, pageEnginesFetch, pageRuntimePin, parseAskUser, parseByoUnresolved, parseChatActivity, parseDirectedRecipients, parseGitShortStatus, parseHandOff, parseMessageAuthor, parseMessageProvenance, parsePmoFocus, parseStepMessage, parseSubagentOrigin, perMillionUsd, personaAgentOf, personaModalityOf, personaModel, personaOverlay, personaSystemPrompt, personalitySetpoints, placeholderAdvisory, placeholdersWritten, planMessage, pmoFocusDomId, pmoFocusValue, poolAgentsFrom, premiumCostLabel, prepareImageDataUrl, previewReviewDirective, probePageEngines, productForPlan, productModelName, progressDuration, projectMemoryHooks, promptApiAvailability, promptApiFactory, promptApiInputQuota, promptApiMeasure, promptStreamDeltas, providerFailureEvent, providerFailureTrace, queueRunSteering, ratedTurnContext, ratedTurnTool, readChatRunHistory, readChatTicketLinks, readWithIdleWatchdog, reasoningForRun, repeatedFailureAdvisory, resetApiVersionCache, resetBrainRunStore, resetOnDeviceStoresForTests, resolveBrainStream, resolveContextWindow, resolveRecipient, resolveRunConfirm, retryOnConnectFailure, revealsModelId, revisitAdvisory, routerToolSpecs, routingModeForSelection, routingQueryForTurn, runAbortSignal, startRun as runBrainLoop, runProgressVerdict, savePendingPrompt, selectPendingAskUser, selectToolsForTurn, selfReviewShipDirective, serializeAskUser, serverChatIdOf, setLastResolvedModel, setMcpToolStatus, shippedToBaseBranch, shortenTarget, stableStringify, staffingSummaryInTrace, stallRecoveriesInTrace, stallUnrecoveredInTrace, startEngineRun, startRun, stepRow, stepSig, stopRun, stoppedTurnMetadata, streamChatCompletion, streamSummaryCompletion, stripAskUser, studioToolsIn, submitLocalTurnVerdict, subscribeRun, subscribeRunStore, subscribeToChatMessages, summarizeLocalFirstAttempt, takePendingPrompt, ticketsReviewedInPreview, toPromptApiTurn, toolActivity, toolCallArgBytes, toolExposureInTrace, toolNamesMentionedIn, toolSchemaTokens, toolSpecsFor, traceWithPersistedSteps, transcriptSeedOf, transportRetryTrace, trimToolResult, turnAffectBlock, turnInterruption, turnOptimizationDirective, unreviewedChangeNudge, unshippedChangeNudge, useArmedNewChat, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useChatCreation, useChatTurns, useMcpExtensions, useOptionalBrainContext, useQueuedTurns, useRegisterBrainActions, useRunRefreshTick, useRunSnapshot, useToolConfirmationGate, utf8ByteLength, webStorageLocalSuccessStore, withAdvisory, withDirectedMetadata, withObservedModel, withProvenanceMetadata, withRating, withReadyPageModels, withRunUsage, withUsageSurface, workFiledNotStaffedVerdict, workItemLinkFromCreate };

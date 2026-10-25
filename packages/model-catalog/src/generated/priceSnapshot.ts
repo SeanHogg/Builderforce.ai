@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-10-25T15:53:39.664Z";
+export const PRICE_SNAPSHOT_AT = "2026-10-25T17:12:02.353Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -17,7 +17,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~deepseek/deepseek-v4-flash-latest": [4.22e-8, 1.763e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
-  "~moonshotai/kimi-latest": [1.919e-7, 0.0000081113],
+  "~moonshotai/kimi-latest": [1.52e-7, 0.000016],
   "~openai/gpt-astra-latest": [0.00001, 0.00005],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [7.5e-7, 0.0000045],
@@ -390,7 +390,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "qwen/qwen3.5-flash-02-23": [6.5e-8, 2.6e-7],
   "qwen/qwen3.5-plus-02-15": [2.6e-7, 0.00000156],
   "qwen/qwen3.5-plus-20260420": [3e-7, 0.0000018],
-  "qwen/qwen3.6-27b": [2.5e-7, 0.000002],
+  "qwen/qwen3.6-27b": [3.2e-7, 0.0000032],
   "qwen/qwen3.6-35b-a3b": [1e-7, 9.5e-7],
   "qwen/qwen3.6-flash": [1.875e-7, 0.000001125],
   "qwen/qwen3.6-plus": [3.25e-7, 0.00000195],
@@ -425,9 +425,9 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "tencent/hy-mt2-1.8b": [4.4e-8, 1.77e-7],
   "tencent/hy-mt2-30b-a3b": [7.4e-8, 2.95e-7],
   "tencent/hy-mt2-7b": [7.4e-8, 2.95e-7],
-  "tencent/hy3": [1.32e-7, 5.28e-7],
+  "tencent/hy3": [8.25e-8, 3.3e-7],
   "tencent/hy3-preview": [1.8e-7, 6e-7],
-  "tencent/hy4-preview": [8.34e-7, 0.000002501],
+  "tencent/hy4-preview": [7.506e-7, 0.0000022509],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [5.5e-7, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],

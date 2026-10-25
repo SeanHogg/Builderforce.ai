@@ -3499,6 +3499,7 @@ import {
   activeModelKey,
   buildModelItems,
   filterModelItems,
+  inferenceModeForModelPick,
   MODEL_CATEGORIES,
   modelCategoryLabel,
   withReadyPageModels
@@ -3764,7 +3765,7 @@ function useLocalModels(store) {
 
 // src/promptOptions/ModelPane.tsx
 import { Fragment as Fragment9, jsx as jsx34, jsxs as jsxs32 } from "react/jsx-runtime";
-function ModelPane({ model, labels, identity, inUse, onPicked }) {
+function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }) {
   const [query, setQuery] = useState15("");
   const [filter, setFilter] = useState15("all");
   const local = useLocalModels(model.localStore);
@@ -3781,6 +3782,10 @@ function ModelPane({ model, labels, identity, inUse, onPicked }) {
   const activeKey = activeModelKey(model.selection);
   const activeRef = model.selection.mode === "model" ? model.selection.model : void 0;
   const pick = (selection) => {
+    if (inferenceMode) {
+      const mode = inferenceModeForModelPick(inferenceMode.value, selection, { undecided: !!inferenceMode.needsChoice });
+      if (mode) void Promise.resolve(inferenceMode.onChange(mode)).catch(() => void 0);
+    }
     model.onChange(selection);
     setQuery("");
     onPicked();
@@ -4082,7 +4087,7 @@ function PromptOptionsMenu({
             activeTab === "model" && /* @__PURE__ */ jsxs34(Fragment10, { children: [
               /* @__PURE__ */ jsx36(InferenceModeControl, { inferenceMode, labels, onPicked: close }),
               inferenceMode && model && /* @__PURE__ */ jsx36("div", { className: "bf-pmenu__sep" }),
-              model && /* @__PURE__ */ jsx36(ModelPane, { model, labels, identity, inUse, onPicked: close })
+              model && /* @__PURE__ */ jsx36(ModelPane, { model, labels, identity, inUse, ...inferenceMode ? { inferenceMode } : {}, onPicked: close })
             ] }),
             activeTab === "status" && /* @__PURE__ */ jsxs34("div", { className: "bf-pmenu__status", children: [
               status,
@@ -9685,7 +9690,7 @@ function composerModel(input) {
   const listed = withLocalModels(input.catalog, input.local);
   return {
     selection: input.selection,
-    options: listed.options,
+    options: input.byoPool === false ? { ...listed.options, byoPool: false } : listed.options,
     onChange: input.onChange,
     effective: input.effective,
     identity: (input.catalog ? input.catalog.identity : void 0) ?? input.fallbackIdentity,

@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.81] — The model you pick is the model that runs
+
+- **Picking a model selects Specific.** Under Hybrid a picked model was only tried first, so another model could answer, for example MiniMax answering a Kimi pick, while the mode control still showed Hybrid. Picking a model or "your connected accounts" now switches the mode to Specific, which holds the pick with no fallback. Picking Auto switches back to Hybrid. This applies to every picker: the `/` menu, **Select BuilderForce model**, and connecting a Kimi model.
+- **Local only keeps its promise.** An on-device pick stays on Local only. A Kimi Code pick runs off the device, so it switches to Specific rather than being set aside. If you never chose a mode, a cloud pick never lifts Local only on its own: the first-run question still asks first.
+- **A pin the extension clears on its own never changes your mode.** If your plan no longer allows a pinned model, the pin is cleared and your mode stays as you set it.
+- **The `/` menu no longer flickers back after a pick.** An older panel refresh can no longer overwrite the newer one.
+
 ## [2026.10.79] — A sub-agent follows the same rules as the agent that started it
 
 - **A sub-agent follows the same rules as the agent that started it.** In 2026.10.78 a sub-agent was simply never asked to delegate. Now every run, top-level or sub-agent, follows one rule. Only a request that actually asks for sub-agents ("use sub-agents", "spawn agents") counts. A brief that only mentions them, as every plan brief does, no longer prompts any run to delegate, while a sub-agent whose brief asks for sub-agents is prompted exactly as its parent would be.

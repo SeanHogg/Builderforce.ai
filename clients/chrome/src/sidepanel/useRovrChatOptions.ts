@@ -114,6 +114,9 @@ export function useRovrChatOptions(chat: LocalChat | undefined, onChatsChanged: 
       onChange: (selection: ChatModelSelection) => choosePinned(selection.mode === 'model' ? selection.model : null),
       fallbackIdentity: { product: productForPlan(isPaid), canChoose: false },
       localStore: store,
+      // The pin is one model string: "your connected accounts" has no route here, so it
+      // is not offered (a pick of it would quietly run as Auto).
+      byoPool: false,
     }),
     [pinned, choosePinned, catalog, isPaid, store],
   );

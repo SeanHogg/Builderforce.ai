@@ -85,6 +85,10 @@ function parseLocalModelRef(ref) {
 function isLocalModelRef(ref) {
   return parseLocalModelRef(ref) !== null;
 }
+function runsOnDevice(ref) {
+  const parsed = parseLocalModelRef(ref);
+  return !!parsed && localRuntime(parsed.provider).onDevice;
+}
 
 // ../packages/local-inference/src/webllmCatalog.generated.ts
 var WEBLLM_CATALOG = [
@@ -1275,6 +1279,7 @@ export {
   formatLocalModelRef,
   parseLocalModelRef,
   isLocalModelRef,
+  runsOnDevice,
   normalizeLocalBaseUrl,
   localChatCompletionsUrl,
   rewriteToLocalUrl,
@@ -1319,4 +1324,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-OYLJNCGN.mjs.map
+//# sourceMappingURL=chunk-F5PXU2EH.mjs.map

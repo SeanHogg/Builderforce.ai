@@ -31,7 +31,8 @@ import { DiagnosticsController } from "./diagnostics";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
 import { registerWorkspace } from "./desktopContext";
-import { onModelChange, setSelectedModel, setSelectedModelPool } from "./modelState";
+import { onModelChange, setSelectedModel } from "./modelState";
+import { applyModelPick } from "./modelPick";
 import { modelChoiceLabels } from "./modelChoiceLabels";
 // The model list itself: one builder for the composer `/` menu AND this picker.
 import { buildModelItems, installStepDurability, modelCategoryLabel, type ChatModelSelection, type ModelCategory, type ModelChoiceLabels, NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
@@ -1465,7 +1466,7 @@ async function pickLocalOnly(rows: ModelPickRow[]): Promise<boolean> {
     return true;
   }
   if (!pick?.selection || pick.selection.mode !== "model") return false;
-  setSelectedModel(pick.selection.model);
+  applyModelPick(pick.selection);
   return true;
 }
 
@@ -1505,6 +1506,8 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       // upgrade path — otherwise a developer with Ollama running is told to buy a plan to
       // use hardware they already own.
       if ((localRows.length > 0 || synapseRows.length > 0) && (await pickLocalOnly([...localRows, ...synapseRows]))) return;
+      // A clear, not a person's pick: the mode they chose stays (Specific then says
+      // `no_specific_model` rather than quietly running Auto).
       setSelectedModel(undefined);
       const action = await vscode.window.showInformationMessage(
         vscode.l10n.t(
@@ -1607,8 +1610,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       return;
     }
     if (!pick.selection) return;
-    if (pick.selection.mode === "byo_pool") setSelectedModelPool();
-    else setSelectedModel(pick.selection.mode === "model" ? pick.selection.model : undefined);
+    applyModelPick(pick.selection);
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);
     if (message.includes(NOT_SIGNED_IN)) {

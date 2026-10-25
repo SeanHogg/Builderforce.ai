@@ -38,7 +38,7 @@ function KimiConnectControls({ state, onConnect, onCancel }: { state: KimiConnec
 export function KimiAccountSection() {
   const signedIn = useSignedIn();
   const { credential, state, connect, cancel } = useKimiConnect();
-  const [pinned, choose] = usePinnedModel();
+  const [pinned, , pick] = usePinnedModel();
   if (!signedIn) return null;
 
   return (
@@ -56,7 +56,7 @@ export function KimiAccountSection() {
                   type="button"
                   className={`bf-btn${pinned === ref ? ' bf-btn--primary' : ''}`}
                   aria-pressed={pinned === ref}
-                  onClick={() => choose(ref)}
+                  onClick={() => pick(ref)}
                 >
                   {entry.displayName}
                   {K3_IDS.has(entry.model) ? <span className="rovr-muted"> · {t('kimiK3Plan')}</span> : null}

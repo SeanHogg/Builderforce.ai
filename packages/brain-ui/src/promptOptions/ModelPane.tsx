@@ -8,7 +8,9 @@
  * `bfi`, WebLLM) come from the host's local model store with a state each — download,
  * progress, ready, unsupported — and a downloaded one joins the ordinary rows too, so
  * it is listed under All and named as the model in use once pinned. Picking either kind
- * calls the SAME `onChange` a cloud model does: a pin is a pin, whoever serves it.
+ * calls the SAME `onChange` a cloud model does: a pin is a pin, whoever serves it. A pick
+ * also moves the inference mode with it (`inferenceModeForModelPick`) — a model picked
+ * under Hybrid is only TRIED, so picking one selects Specific, and Auto returns to Hybrid.
  *
  * An on-device model spends nothing and needs no plan, so the store's list is offered
  * even to a viewer the plan does not let pin a catalog model — and once such a viewer
@@ -19,6 +21,7 @@ import {
   activeModelKey,
   buildModelItems,
   filterModelItems,
+  inferenceModeForModelPick,
   MODEL_CATEGORIES,
   modelCategoryLabel,
   withReadyPageModels,
@@ -31,6 +34,7 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { LocalModelList } from '../localModels/LocalModelList';
 import { useLocalModels } from '../localModels/useLocalModels';
+import type { PromptOptionsInferenceMode } from '../inferenceMode/InferenceModeControl';
 import type { PromptOptionsLabels } from './types';
 
 /** Model wiring for the `/` menu. Omit it on a surface with no model choice. */
@@ -72,13 +76,15 @@ export interface ModelPaneProps {
   labels: PromptOptionsLabels;
   identity: ModelIdentityContext;
   inUse: { name: string; detail: string } | null;
+  /** The mode a pick moves with it (`inferenceModeForModelPick`); omitted where no mode is shown. */
+  inferenceMode?: PromptOptionsInferenceMode;
   /** Close the menu after a pick. */
   onPicked: () => void;
 }
 
 type Filter = 'all' | ModelCategory;
 
-export function ModelPane({ model, labels, identity, inUse, onPicked }: ModelPaneProps) {
+export function ModelPane({ model, labels, identity, inUse, inferenceMode, onPicked }: ModelPaneProps) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const local = useLocalModels(model.localStore);
@@ -98,7 +104,14 @@ export function ModelPane({ model, labels, identity, inUse, onPicked }: ModelPan
   const activeKey = activeModelKey(model.selection);
   const activeRef = model.selection.mode === 'model' ? model.selection.model : undefined;
 
+  // The mode moves with the pick (brain-embedded's ONE rule), applied first so the next
+  // turn already runs in it.
   const pick = (selection: ChatModelSelection) => {
+    if (inferenceMode) {
+      const mode = inferenceModeForModelPick(inferenceMode.value, selection, { undecided: !!inferenceMode.needsChoice });
+      // A failed mode write leaves the mode as it was — the control still shows it.
+      if (mode) void Promise.resolve(inferenceMode.onChange(mode)).catch(() => undefined);
+    }
     model.onChange(selection);
     setQuery('');
     onPicked();

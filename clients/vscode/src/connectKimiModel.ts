@@ -10,7 +10,7 @@ import * as vscode from "vscode";
 import { formatLocalModelRef } from "@builderforce/local-inference";
 import type { LocalCredential } from "@builderforce/provider-connect";
 import { localCredentialStore } from "./localProviderCredentials";
-import { setSelectedModel } from "./modelState";
+import { applyModelPick } from "./modelPick";
 import { connectProviderInteractively } from "./providerConnect";
 
 const K3_IDS = new Set(["k3", "k3-256k"]);
@@ -53,6 +53,6 @@ export async function connectKimiAndPin(secrets: vscode.SecretStorage): Promise<
     { title: vscode.l10n.t("Which Kimi model should new turns use?") },
   );
   if (!pick) return;
-  setSelectedModel(formatLocalModelRef("kimi-code", pick.model));
+  applyModelPick({ mode: "model", model: formatLocalModelRef("kimi-code", pick.model) });
   void vscode.window.showInformationMessage(vscode.l10n.t("BuilderForce: new turns run on {0}, called from this machine.", pick.label));
 }

@@ -8,7 +8,7 @@
  * (it spends nothing).
  */
 
-import { isLocalRuntimeId, type LocalRuntimeId } from './runtimes.js';
+import { isLocalRuntimeId, localRuntime, type LocalRuntimeId } from './runtimes.js';
 
 export const LOCAL_MODEL_PREFIX = 'local/';
 
@@ -39,4 +39,14 @@ export function parseLocalModelRef(ref: string | undefined): { provider: LocalRu
 /** Whether a ref names a locally-served model (so it must bypass gateway entitlement). */
 export function isLocalModelRef(ref: string | undefined): boolean {
   return parseLocalModelRef(ref) !== null;
+}
+
+/**
+ * Whether a ref names a model served ON THIS DEVICE — read from the runtime registry's
+ * `onDevice`, never a per-runtime branch: a hosted runtime dispatched from here (Kimi
+ * Code) is local in grammar but leaves the device.
+ */
+export function runsOnDevice(ref: string | undefined): boolean {
+  const parsed = parseLocalModelRef(ref);
+  return !!parsed && localRuntime(parsed.provider).onDevice;
 }

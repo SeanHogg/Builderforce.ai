@@ -50,6 +50,12 @@ export interface ChatModelOptions {
   local?: Array<{ id: string; label: string; runtime: string }>;
   /** Models the tenant's own connected provider accounts can serve. */
   byo: Array<{ id: string; vendor: string; cost?: string }>;
+  /**
+   * `false` where the host cannot carry "your connected accounts" (`routingMode:
+   * 'byo_pool'`) to the gateway — Rovr pins one model string — so the pool row is not
+   * offered as a choice the host would quietly turn into Auto. Default: offered.
+   */
+  byoPool?: boolean;
   free: Array<string | { id: string; cost?: string }>;
   plan: Array<string | { id: string; cost?: string }>;
   paid: Array<string | { id: string; cost?: string }>;
@@ -225,7 +231,7 @@ export function buildModelItems(
     const model = normalized(value);
     add(model.id, model.id, model.cost ?? labels.paidDetail, 'paid');
   }
-  if (options.byo.length) {
+  if (options.byo.length && options.byoPool !== false) {
     items.push({ key: 'byo_pool', label: labels.poolLabel, detail: labels.poolDetail, category: 'byo', selection: { mode: 'byo_pool' } });
   }
   for (const model of options.byo) {

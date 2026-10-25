@@ -422,6 +422,8 @@ export class WorkspaceSurface implements vscode.Disposable {
       // it fires onModelChange → refresh → a fresh `init`, which is how the menu
       // learns what the pick actually resolved to (entitlement may drop a pin).
       case "model.set":
+        // The menu has already moved the mode with the pick (brain-ui `ModelPane`), so
+        // only the model is set here — never a second, possibly stale, mode write.
         if (msg.mode === "byo_pool") setSelectedModelPool();
         else setSelectedModel(msg.mode === "model" && typeof msg.model === "string" ? msg.model : undefined);
         break;
@@ -509,9 +511,22 @@ export class WorkspaceSurface implements vscode.Disposable {
     this.post({ type: "pendingChanges", pendingChanges: await detectPendingChanges() });
   }
 
-  private async sendInit(): Promise<void> {
-    const init = await buildWorkspaceInit(this.ctx, { session: this.session, surface: this.surfaceRequest, boardBeside: !!this.host.boardBeside });
-    this.post(this.host.frame ? this.host.frame(init) : init);
+  /** The latest `init` being built: one pick fires several refreshes, and an older build
+   *  (read before the pick landed) must never be posted after a newer one. */
+  private initSeq = 0;
+  private latestInit: Promise<void> = Promise.resolve();
+
+  /** Resolves once the NEWEST init is posted — a superseded build waits on it rather than
+   *  returning early, so a caller (`ready`) still posts after an init has landed. */
+  private sendInit(): Promise<void> {
+    const seq = ++this.initSeq;
+    const run = (async (): Promise<void> => {
+      const init = await buildWorkspaceInit(this.ctx, { session: this.session, surface: this.surfaceRequest, boardBeside: !!this.host.boardBeside });
+      if (seq !== this.initSeq) return this.latestInit;
+      this.post(this.host.frame ? this.host.frame(init) : init);
+    })();
+    this.latestInit = run;
+    return run;
   }
 
   dispose(): void {

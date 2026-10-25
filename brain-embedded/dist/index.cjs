@@ -262,6 +262,7 @@ __export(src_exports, {
   hasEditIntent: () => hasEditIntent,
   hasPromptApi: () => hasPromptApi,
   hasWebGPU: () => hasWebGPU,
+  inferenceModeForModelPick: () => inferenceModeForModelPick,
   installIndexedDbStepDurability: () => installIndexedDbStepDurability,
   installRunDriver: () => installRunDriver,
   installStepDurability: () => installStepDurability,
@@ -2481,7 +2482,7 @@ var PRICE_SNAPSHOT = {
   "~deepseek/deepseek-v4-flash-latest": [422e-10, 1763e-10],
   "~google/gemini-flash-latest": [75e-8, 375e-8],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
-  "~moonshotai/kimi-latest": [226e-9, 16e-6],
+  "~moonshotai/kimi-latest": [161e-9, 16e-6],
   "~openai/gpt-astra-latest": [1e-5, 5e-5],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
@@ -2854,7 +2855,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
-  "qwen/qwen3.6-27b": [25e-8, 2e-6],
+  "qwen/qwen3.6-27b": [32e-8, 32e-7],
   "qwen/qwen3.6-35b-a3b": [1e-7, 95e-8],
   "qwen/qwen3.6-flash": [1875e-10, 1125e-9],
   "qwen/qwen3.6-plus": [325e-9, 195e-8],
@@ -2889,9 +2890,9 @@ var PRICE_SNAPSHOT = {
   "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
   "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
   "tencent/hy-mt2-7b": [74e-9, 295e-9],
-  "tencent/hy3": [132e-9, 528e-9],
+  "tencent/hy3": [825e-10, 33e-8],
   "tencent/hy3-preview": [18e-8, 6e-7],
-  "tencent/hy4-preview": [834e-9, 2501e-9],
+  "tencent/hy4-preview": [7506e-10, 22509e-10],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
@@ -5307,6 +5308,10 @@ function parseLocalModelRef(ref) {
 }
 function isLocalModelRef(ref) {
   return parseLocalModelRef(ref) !== null;
+}
+function runsOnDevice(ref) {
+  const parsed = parseLocalModelRef(ref);
+  return !!parsed && localRuntime(parsed.provider).onDevice;
 }
 
 // ../packages/local-inference/src/endpoint.ts
@@ -10527,15 +10532,21 @@ function unpicked(opts) {
   const { modelStrict: _strict, model: _model, routingMode: _routing, ...rest } = opts;
   return rest;
 }
-function runsOnDevice(ref) {
-  const parsed = parseLocalModelRef(ref);
-  return !!parsed && localRuntime(parsed.provider).onDevice;
-}
 function onDeviceOnly(opts) {
   const offDevice = !!opts.model && !runsOnDevice(opts.model);
   if (!offDevice && (opts.routingMode ?? "auto") === "auto") return opts;
   const { modelStrict: _strict, model, ...rest } = opts;
   return { ...rest, ...offDevice || !model ? {} : { model }, routingMode: "auto" };
+}
+
+// src/inferenceModeForModelPick.ts
+function inferenceModeForModelPick(current, selection, options = {}) {
+  if (selection.mode === "auto") return current === "specific" ? "hybrid" : null;
+  if (current === "local-only") {
+    if (selection.mode === "model" && runsOnDevice(selection.model)) return null;
+    if (options.undecided) return null;
+  }
+  return current === "specific" ? null : "specific";
 }
 
 // src/modelFallback.ts
@@ -21265,7 +21276,7 @@ function buildModelItems(options, labels, identity = DEFAULT_MODEL_IDENTITY) {
     const model = normalized(value);
     add(model.id, model.id, model.cost ?? labels.paidDetail, "paid");
   }
-  if (options.byo.length) {
+  if (options.byo.length && options.byoPool !== false) {
     items.push({ key: "byo_pool", label: labels.poolLabel, detail: labels.poolDetail, category: "byo", selection: { mode: "byo_pool" } });
   }
   for (const model of options.byo) {
@@ -22485,6 +22496,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   hasEditIntent,
   hasPromptApi,
   hasWebGPU,
+  inferenceModeForModelPick,
   installIndexedDbStepDurability,
   installRunDriver,
   installStepDurability,

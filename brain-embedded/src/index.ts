@@ -48,6 +48,7 @@ export type { LocalAttemptFit, LocalChatMessage, LocalFetch, LocalFirstStreamInp
 // that the web app, Rovr and the editor each supply only their pin, probes and cloud to.
 export { createHostModelStream } from './hostModelStream';
 export { isFallbackFailure } from './hostModelStream';
+export { inferenceModeForModelPick } from './inferenceModeForModelPick';
 export { createModelFallbackChannel, modelFallbackText, DEFAULT_MODEL_FALLBACK_TEMPLATE } from './modelFallback';
 export type { ModelFallbackChannel } from './modelFallback';
 export type { HostLocalPin, HostModelStreamInput, ModelFallbackEvent } from './hostModelStream';
