@@ -27,6 +27,9 @@
  *  - **Hybrid, no pick (Auto):** local first, then the gateway — the probed runtimes
  *    through `createLocalFirstStream`, which owns which calls are open to local-first
  *    (`localFirstApplies`) and the invisible failover; with nothing probed, the gateway.
+ *    A connected subscription this host calls itself (`accounts` — Kimi, which refuses our
+ *    cloud) is tried after this device and before the gateway, the way the gateway leads
+ *    with the tenant's other connected accounts.
  *    With a `localSuccess` store, the engine's `run.local-success` predictor is consulted
  *    before the local attempt — skipped when it is confident the turn would fail there —
  *    and every outcome (local served, local failed → gateway, skipped) trains it. Only
@@ -53,7 +56,14 @@
  * unavailable, or anyone on Local only, gets `no_local_model` — never a sign-in prompt.
  */
 
-import { isLocalModelRef, runsOnDevice, type LocalEndpoint, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
+import {
+  isLocalModelRef,
+  runsOnDevice,
+  type LocalEndpoint,
+  type LocalFirstAccount,
+  type LocalFirstAttemptRecord,
+  type LocalRuntimeProbe,
+} from '@builderforce/local-inference';
 import type { InferenceMode } from '@builderforce/local-first';
 import { BrainRequestError, NO_LOCAL_MODEL, NO_SPECIFIC_MODEL, NOT_SIGNED_IN } from './chatError';
 import { createHandoffFit } from './windowFit/packForModel';
@@ -97,6 +107,12 @@ export interface HostModelStreamInput {
   localPin?: (ref: string) => HostLocalPin | null | undefined;
   /** The runtimes to try local-first, probed WITH capabilities; absent = gateway only. */
   probes?: () => Promise<readonly LocalRuntimeProbe[]>;
+  /**
+   * The connected accounts this host calls itself (Kimi), read per Hybrid Auto call — never
+   * prompting; an account that is not connected is simply absent. Absent = none (the web
+   * app, which cannot reach Kimi).
+   */
+  accounts?: () => Promise<readonly LocalFirstAccount[]>;
   /** The gateway stream for this call, or null signed out. */
   cloud: () => MaybePromise<StreamFn | null>;
   /** The local fetch (page engines' shim, the editor's bridge…); the global by default. */
@@ -174,7 +190,9 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
       const local = localRef ? resolveLocal(localRef) : null;
       if (local && localRef) return createLocalStream(local.endpoint, local.model, input.fetch, { ref: localRef, cloud, fit })(call, h);
       const probes = input.probes ? await input.probes() : [];
-      if (probes.length === 0) {
+      // Hybrid only: Local only never leaves the device, and Specific makes no Auto attempt.
+      const accounts = mode === 'hybrid' && input.accounts ? await input.accounts().catch(() => []) : [];
+      if (probes.length === 0 && accounts.length === 0) {
         if (!cloud) throw new Error(noModel);
         return cloud(call, h);
       }
@@ -198,6 +216,7 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
         : undefined;
       const stream = createLocalFirstStream({
         probes,
+        ...(accounts.length > 0 ? { accounts } : {}),
         cloud,
         fit,
         noModel,

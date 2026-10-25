@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-10-25 — Hybrid uses your Kimi subscription (VSIX 2026.10.90 · Rovr 2026.10.30 · brain-embedded 2026.10.58)
+
+Hybrid used the tenant's connected accounts (MiniMax, Grok, Anthropic) through the gateway, but never Kimi. Kimi refuses our cloud, local-first only takes on-device runtimes, and the gateway skips a vendor that needs local egress. Operator decision: a connected Kimi always goes ahead of the cloud step in Hybrid.
+
+- `localFirstPlan` (`@builderforce/local-inference`) takes `accounts` (`LocalFirstAccount`) and orders them: device attempts, then the accounts, then the cloud. The on-device filter stays, so **Local only never uses Kimi**.
+- `createHostModelStream` takes an `accounts` port, read only on a Hybrid Auto call. The `run.local-success` predictor gates only the DEVICE attempt, never an account (`hybridLocalSuccess.ts`).
+- The shared `createConnectedAccounts.hybridAccounts()` lists a connected account on its lead model, with the per-request token. It never prompts, and it asks the gateway at most once per session when nothing is connected. The VSIX attaches it to every Hybrid route (`modelRouting.ts`); Rovr passes it once Kimi's origin is granted. The web app passes none, because the browser cannot reach Kimi.
+- A Kimi refusal (401, rate limit, outage) falls to the gateway as any failed local-first attempt does.
+- Guarded in `plan.test.ts`, `hostModelStream.test.ts` and `connectedAccounts.test.ts`.
+
 ## ✅ RESOLVED 2026-10-25 — A picked model survives a reload (VSIX 2026.10.89)
 
 After reloading VS Code, Specific model still showed Kimi K3 in the `/` menu, but every turn failed `no_specific_model` (diagnostics: `Model: auto`). The mode is a setting (`builderforce.inferenceMode`) and survived; the pick (`modelState.selected`) lived only in memory and did not. The pick is now saved in the extension's global state (`builderforce.modelPick`) and restored at activation (`bindModelPickStore`), so the mode and the pick always come back together. Guarded in `modelState.test.ts`.

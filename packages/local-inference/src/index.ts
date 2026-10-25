@@ -101,6 +101,7 @@ export {
 export {
   localFirstPlan,
   localModelUnfitReason,
+  type LocalFirstAccount,
   type LocalFirstAttempt,
   type LocalFirstInput,
   type LocalFirstWorkload,

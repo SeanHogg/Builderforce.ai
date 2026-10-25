@@ -89,6 +89,26 @@ describe("createConnectedAccounts", () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 
+  it("hybridAccounts lists a connected account on its lead model, with the per-request token", async () => {
+    const request = vi.fn<GatewayRequest>(async () => ({ status: 200, body: credential(now) }));
+    const accounts = createConnectedAccounts({ request, store: memoryStore(), now: () => now });
+    expect(await accounts.hybridAccounts()).toEqual([{
+      ref: "local/kimi-code/k3",
+      provider: "kimi-code",
+      model: "k3",
+      endpoint: { baseUrl: "https://api.kimi.ai/coding/v1", token: "kc-token", credential: expect.any(Function) },
+    }]);
+  });
+
+  // Read on every Hybrid call: an unconnected workspace must not cost a round trip each time.
+  it("hybridAccounts asks the gateway once per session when nothing is connected, and never prompts", async () => {
+    const request = vi.fn<GatewayRequest>(async () => ({ status: 404, body: { code: "provider_not_connected" } }));
+    const accounts = createConnectedAccounts({ request, store: memoryStore(), now: () => now });
+    expect(await accounts.hybridAccounts()).toEqual([]);
+    expect(await accounts.hybridAccounts()).toEqual([]);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it("leaves every ref and runtime without a connected account alone", async () => {
     const request = vi.fn<GatewayRequest>();
     const accounts = createConnectedAccounts({ request, store: memoryStore(), now: () => now });

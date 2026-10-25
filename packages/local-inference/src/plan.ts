@@ -47,8 +47,17 @@ export type LocalFirstAttempt =
       model?: string;
     };
 
+/**
+ * A connected subscription this host calls ITSELF because its provider refuses our cloud
+ * (Kimi Code — registry `accountProvider`). Hybrid tries it after this device and before
+ * the cloud, the way the gateway leads with the tenant's other connected accounts.
+ */
+export type LocalFirstAccount = Omit<Extract<LocalFirstAttempt, { kind: 'local' }>, 'kind'>;
+
 export interface LocalFirstInput {
   probes: readonly LocalRuntimeProbe[];
+  /** Connected accounts to try after the device attempts, before the cloud. */
+  accounts?: readonly LocalFirstAccount[];
   workload: LocalFirstWorkload;
   /** The cloud fallback, or null when there is none (signed out: local-only). */
   cloud: { model?: string } | null;
@@ -95,5 +104,8 @@ export function localFirstPlan(input: LocalFirstInput): LocalFirstAttempt[] {
     : -1;
   if (preferredIndex > 0) candidates.unshift(...candidates.splice(preferredIndex, 1));
   const local = candidates.slice(0, Math.max(0, input.maxLocalAttempts ?? 1));
-  return input.cloud ? [...local, { kind: 'cloud', ...(input.cloud.model ? { model: input.cloud.model } : {}) }] : local;
+  // A connected account's runtime takes every call its registry row allows (`tools: 'all'`).
+  const accounts = (input.accounts ?? []).map((account): LocalFirstAttempt => ({ kind: 'local', ...account }));
+  const leading = [...local, ...accounts];
+  return input.cloud ? [...leading, { kind: 'cloud', ...(input.cloud.model ? { model: input.cloud.model } : {}) }] : leading;
 }

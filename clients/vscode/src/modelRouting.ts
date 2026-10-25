@@ -45,6 +45,7 @@ import {
   localRuntime,
   formatLocalModelRef,
   type LocalEndpoint,
+  type LocalFirstAccount,
   type LocalFirstAttemptRecord,
   type LocalRuntimeId,
   type LocalRuntimeProbe,
@@ -57,6 +58,7 @@ import {
   type ChatMessage,
 } from "./gateway";
 import { authorizeLocalEndpoint } from "./localEndpointAuth";
+import { editorAccounts } from "./providerConnect";
 import { logLine } from "./errorReporter";
 import { probeLocalFirstRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice } from "./modelState";
@@ -100,6 +102,11 @@ export interface ModelRoute {
    * that answers `local_egress_required`.
    */
   unauthorized?: { provider: LocalRuntimeId; detail: string };
+  /**
+   * Hybrid: the connected accounts this editor calls itself (Kimi), read per Auto call and
+   * tried after this device and before the gateway (`createHostModelStream`).
+   */
+  accounts?: () => Promise<readonly LocalFirstAccount[]>;
 }
 
 /** The error a turn on an {@link ModelRoute.unauthorized} route fails with. */
@@ -124,7 +131,9 @@ export interface RouteRequest {
  * required (see {@link routeRequiresSignIn}).
  */
 export async function resolveModelRoute(secrets: vscode.SecretStorage, request: RouteRequest = {}): Promise<ModelRoute> {
-  const route = await resolveChoiceRoute(secrets, { ...(await resolveEffectiveModelChoice(secrets)), inferenceMode: currentInferenceMode() }, request);
+  const inferenceMode = currentInferenceMode();
+  const route = await resolveChoiceRoute(secrets, { ...(await resolveEffectiveModelChoice(secrets)), inferenceMode }, request);
+  if (inferenceMode === "hybrid") return { ...route, accounts: () => editorAccounts(secrets).hybridAccounts() };
   return route.inferenceMode === "local-only" && !route.local && !route.localFirst ? onDeviceOnly(route, request) : route;
 }
 
@@ -297,6 +306,7 @@ export function routeStream(
     // The turn's local-first probes; for a picked route (none resolved up front) the SAME
     // memoized probe, read only when Hybrid falls back from a failed pick to Auto.
     probes: async () => route.localFirst?.probes ?? localWindowProbes(),
+    ...(route.accounts ? { accounts: route.accounts } : {}),
     cloud: () => cloud,
     // The bridge's fetch answers a page runtime's root (`http://bfi.local`, …) from the
     // webview's engines and passes every other runtime's request to the global fetch.

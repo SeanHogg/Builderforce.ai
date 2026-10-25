@@ -28,6 +28,7 @@ import {
   rewriteToLocalUrl,
   runLocalFirst,
   type LocalEndpoint,
+  type LocalFirstAccount,
   type LocalFirstAttempt,
   type LocalFirstAttemptRecord,
   type LocalFirstWorkload,
@@ -252,6 +253,9 @@ export function localFirstApplies(call: { model?: string; routingMode?: 'auto' |
 export interface LocalFirstStreamInput {
   /** The runtimes as probed WITH capabilities (`createLocalRuntimeProber({ capabilities: true })`). */
   probes: readonly LocalRuntimeProbe[];
+  /** Connected accounts this host calls itself (Kimi), tried after the device and before
+   *  the cloud — Hybrid only (`createHostModelStream`). */
+  accounts?: readonly LocalFirstAccount[];
   /** The gateway stream, or null when signed out (local-only). */
   cloud: StreamFn | null;
   /** Lent to the local attempts; the global `fetch` by default. */
@@ -353,6 +357,7 @@ export function createLocalFirstStream(input: LocalFirstStreamInput): StreamFn {
     const routed: Omit<StreamChatOptions, 'transport'> = opts.model ? { ...opts, model: undefined } : opts;
     const planned = localFirstPlan({
       probes: input.probes,
+      ...(input.accounts?.length ? { accounts: input.accounts } : {}),
       workload: localFirstWorkload(input.fit ? { ...routed, messages: coreMessages(routed.messages) } : routed),
       cloud: input.cloud ? {} : null,
     });

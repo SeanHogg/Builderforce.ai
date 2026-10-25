@@ -16,7 +16,15 @@
  * own gate (Rovr's origin permission). Kept on its own subpath because it reads the runtime
  * registry, which the web settings card — a consumer of the root entry — never needs.
  */
-import { LOCAL_RUNTIMES, clientPinOf, localRuntime, type LocalEndpoint, type LocalRuntimeId } from '@builderforce/local-inference';
+import {
+  LOCAL_RUNTIMES,
+  clientPinOf,
+  formatLocalModelRef,
+  localRuntime,
+  type LocalEndpoint,
+  type LocalFirstAccount,
+  type LocalRuntimeId,
+} from '@builderforce/local-inference';
 import { createLocalCredentialStore, type CredentialStringStore, type LocalCredentialStore } from './localCredential.js';
 import type { GatewayRequest } from './port.js';
 
@@ -49,6 +57,13 @@ export interface ConnectedAccounts {
   /** Where a pick served by a connected account runs (with the model id its API expects), or
    *  null for any other ref. */
   pinFor(ref: string): Promise<(AccountEndpointOutcome & { model: string }) | null>;
+  /**
+   * The connected accounts Hybrid tries after this device and before the cloud, each on its
+   * lead model (the tenant's order, position 0). Never prompts: an account that is not
+   * connected is simply absent — asked of the gateway once per session, so an unconnected
+   * workspace costs no round trip per call.
+   */
+  hybridAccounts(): Promise<LocalFirstAccount[]>;
   /** Forget every held credential — sign-out; the next account starts clean. */
   clear(): Promise<void>;
 }
@@ -104,6 +119,27 @@ export function createConnectedAccounts(deps: {
     }
   };
 
+  /** Providers already asked this session — a store with no credential after that is
+   *  not connected, and is not asked again until a credential arrives. */
+  const asked = new Set<string>();
+  const hybridAccount = async (runtime: (typeof LOCAL_RUNTIMES)[number]): Promise<LocalFirstAccount[]> => {
+    const provider = runtime.accountProvider;
+    if (!provider) return [];
+    const held = store(provider);
+    if (!held.snapshot() && asked.has(provider)) return [];
+    asked.add(provider);
+    const outcome = await held.resolve();
+    if (outcome.kind !== 'credential') return [];
+    const lead = outcome.credential.models[0];
+    if (!lead) return [];
+    return [{
+      ref: formatLocalModelRef(runtime.id, lead.model),
+      provider: runtime.id,
+      model: lead.model,
+      endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken, credential: credentialFor(provider) },
+    }];
+  };
+
   const providers = [...new Set(LOCAL_RUNTIMES.flatMap((r) => (r.accountProvider ? [r.accountProvider] : [])))];
 
   return {
@@ -119,6 +155,10 @@ export function createConnectedAccounts(deps: {
       const outcome = await endpointFor(pin.provider);
       return outcome ? { ...outcome, model: pin.model } : null;
     },
-    clear: async () => { await Promise.all([...stores.values()].map((s) => s.clear())); },
+    hybridAccounts: async () => (await Promise.all(LOCAL_RUNTIMES.map(hybridAccount))).flat(),
+    clear: async () => {
+      asked.clear();
+      await Promise.all([...stores.values()].map((s) => s.clear()));
+    },
   };
 }

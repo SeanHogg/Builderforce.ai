@@ -144,6 +144,19 @@ describe('localFirstPlan', () => {
     ]);
     expect(localFirstPlan({ probes: [down, kimi], workload: CHAT, cloud: null })).toEqual([]);
   });
+
+  // Hybrid uses a connected subscription only this machine can reach (Kimi) the way the
+  // gateway uses the tenant's other accounts: after this device, before the cloud.
+  it('tries a connected account after the device and before the cloud', () => {
+    const kimi = { ref: 'local/kimi-code/k3', provider: 'kimi-code' as const, model: 'k3', endpoint: { baseUrl: 'https://api.kimi.ai/coding/v1' } };
+    expect(refs(localFirstPlan({ probes: [SYNAPSE], accounts: [kimi], workload: TOOL_TURN, cloud: {} }))).toEqual([
+      'local/synapse/qwen3-8b',
+      'local/kimi-code/k3',
+      'cloud:auto',
+    ]);
+    expect(refs(localFirstPlan({ probes: [], accounts: [kimi], workload: TOOL_TURN, cloud: {} }))).toEqual(['local/kimi-code/k3', 'cloud:auto']);
+    expect(refs(localFirstPlan({ probes: [], accounts: [kimi], workload: TOOL_TURN, cloud: null }))).toEqual(['local/kimi-code/k3']);
+  });
 });
 
 describe('localCatalogView', () => {

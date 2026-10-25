@@ -218,7 +218,10 @@ describe("the inference mode is decided by the seam", () => {
   const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
 
   it("stamps the mode on every route from the one setting module", () => {
-    expect(routing).toContain("inferenceMode: currentInferenceMode()");
+    expect(routing).toContain("const inferenceMode = currentInferenceMode();");
+    expect(routing).toContain("inferenceMode }, request)");
+    // Hybrid tries the connected accounts this editor calls itself (Kimi) before the gateway.
+    expect(routing).toContain('if (inferenceMode === "hybrid") return { ...route, accounts: () => editorAccounts(secrets).hybridAccounts() };');
     const readers = sourceFiles()
       .filter(({ text }) => text.includes('"inferenceMode"'))
       .map(({ name }) => name);

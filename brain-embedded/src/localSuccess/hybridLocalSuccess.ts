@@ -19,7 +19,7 @@
  * transport label (`verifiedLocalLabel.ts`).
  */
 
-import type { LocalFirstAttempt, LocalFirstAttemptRecord, LocalRuntimeProbe } from '@builderforce/local-inference';
+import { runsOnDevice, type LocalFirstAttempt, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import type { LocalSuccessOutcome, TurnResult } from '@seanhogg/builderforce-memory-engine';
 import { BrainRequestError } from '../chatError';
 import type { StreamChatOptions } from '../streamChatCompletion';
@@ -44,6 +44,11 @@ export interface HybridLocalSuccessTurn {
   onAttempt(record: LocalFirstAttemptRecord): void;
   /** The call finished (`error` when it threw). Records the outcome; never throws. */
   settle(error?: unknown): void;
+}
+
+/** An attempt on THIS DEVICE — what the predictor assesses (not a connected account, not the cloud). */
+function onDevice(attempt: LocalFirstAttempt): attempt is Extract<LocalFirstAttempt, { kind: 'local' }> {
+  return attempt.kind === 'local' && runsOnDevice(attempt.ref);
 }
 
 function cloudResult(records: readonly LocalFirstAttemptRecord[], error: unknown): TurnResult | undefined {
@@ -73,13 +78,14 @@ export function hybridLocalSuccessTurn(
         deferred.observe(conversation, call);
         submit = { conversation, prompt: submitPrompt(call) };
       }
-      const local = plan.find((a): a is Extract<LocalFirstAttempt, { kind: 'local' }> => a.kind === 'local');
+      // The predictor is about THIS DEVICE: a connected account (Kimi) is never skipped by it.
+      const local = plan.find(onDevice);
       // Only a plan with somewhere to go instead is worth gating.
-      if (!local || !plan.some((a) => a.kind === 'cloud')) return plan;
+      if (!local || !plan.some((a) => !onDevice(a))) return plan;
       try {
         const verdict = await router.assess(local.ref, localTurnFeatures(call, contextWindowOf(local.ref, { probes })));
         assessed = { ref: local.ref, outcome: { turn: verdict.turn } };
-        return verdict.skip ? plan.filter((a) => a.kind === 'cloud') : plan;
+        return verdict.skip ? plan.filter((a) => !onDevice(a)) : plan;
       } catch {
         return plan; // the predictor never blocks a turn
       }

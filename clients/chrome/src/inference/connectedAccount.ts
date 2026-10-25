@@ -13,7 +13,7 @@
  */
 import type { HostLocalPin } from '@seanhogg/builderforce-brain-embedded';
 import { KIMI_CODE_API_HOST } from '@builderforce/kimi-oauth';
-import { clientPinOf } from '@builderforce/local-inference';
+import { clientPinOf, type LocalFirstAccount } from '@builderforce/local-inference';
 import type { GatewayRequest, LocalCredentialStore } from '@builderforce/provider-connect';
 import { createConnectedAccounts } from '@builderforce/provider-connect/accounts';
 import type { KeyValueStore } from '../platform/keyValue';
@@ -47,6 +47,8 @@ export interface ConnectedAccount {
   /** Where a Kimi pin (`local/kimi-code/<model>` or the gateway's `direct/kimi-code/<model>`)
    *  runs, or null for any other ref. */
   pinFor(ref: string): Promise<HostLocalPin | null>;
+  /** The accounts Hybrid tries before the gateway — none until Kimi's origin is granted. */
+  hybridAccounts(): Promise<LocalFirstAccount[]>;
 }
 
 /**
@@ -85,6 +87,9 @@ export function createConnectedAccount(deps: {
       if (outcome.kind === 'endpoint') return { endpoint: outcome.endpoint, model: outcome.model };
       if (outcome.kind === 'unavailable') throw new Error(outcome.detail);
       throw new ProviderConnectRequired(provider, outcome.reason);
+    },
+    async hybridAccounts() {
+      return (await deps.originGranted()) ? accounts.hybridAccounts() : [];
     },
   };
 }

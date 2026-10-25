@@ -218,6 +218,34 @@ describe('createHostModelStream', () => {
       expect(calls).toHaveLength(1);
     });
 
+    // A connected Kimi subscription is tried after this device and before the gateway,
+    // like the tenant's other connected accounts — and only under Hybrid.
+    it('Hybrid + Auto: a connected account (Kimi) before the gateway; a refusal falls to the gateway', async () => {
+      const kimi = { ref: 'local/kimi-code/k3', provider: 'kimi-code' as const, model: 'k3', endpoint: { baseUrl: 'https://api.kimi.ai/coding/v1', token: 't' } };
+      const { cloud, calls } = fakeCloud();
+      const served = createHostModelStream({ mode: () => 'hybrid', accounts: async () => [kimi], cloud: () => cloud, fetch: vi.fn(async () => sse('from-kimi')), fit: async (m) => m });
+      expect((await served(hello)).resolvedModel).toBe('local/kimi-code/k3');
+      expect(calls).toEqual([]);
+      const refused = createHostModelStream({
+        mode: () => 'hybrid',
+        accounts: async () => [kimi],
+        cloud: () => cloud,
+        fetch: vi.fn(async () => new Response('{"error":"expired"}', { status: 401 })),
+        fit: async (m) => m,
+      });
+      expect((await refused(hello)).text).toBe('from-cloud');
+      expect(calls).toHaveLength(1);
+    });
+
+    it('Local only and Specific never read the connected accounts', async () => {
+      const accounts = vi.fn(async () => []);
+      const { cloud } = fakeCloud();
+      const fetchImpl = vi.fn(async () => sse('from-device'));
+      await createHostModelStream({ mode: () => 'local-only', probes: async () => [synapse], accounts, cloud: () => cloud, fetch: fetchImpl, fit: async (m) => m })(hello);
+      await createHostModelStream({ mode: () => 'specific', pinned: () => 'direct/minimax/m', accounts, cloud: () => cloud, fit: async (m) => m })(hello);
+      expect(accounts).not.toHaveBeenCalled();
+    });
+
     it('Hybrid + a pick: the pick first, NOT hard-pinned; a failed pick falls back to the local engine, then the gateway on Auto', async () => {
       const { cloud, calls } = failingCloud();
       const fetchImpl = vi.fn(async () => sse('from-device'));

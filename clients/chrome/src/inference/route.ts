@@ -38,6 +38,7 @@ import {
 import type { InferenceMode } from '@builderforce/local-first';
 import type {
   LocalEndpoints,
+  LocalFirstAccount,
   LocalFirstAttemptRecord,
   LocalRuntimeProbe,
   LocalRuntimeProber,
@@ -70,6 +71,12 @@ export interface RovrRouteDeps {
    * synchronous `localPin` below. May throw `ProviderConnectRequired`.
    */
   accountPin?(ref: string): Promise<HostLocalPin | null>;
+  /**
+   * The connected accounts Hybrid tries after this machine and before the gateway (Kimi),
+   * read per Auto call; never prompts — an account not connected (or its origin not
+   * granted) is simply absent.
+   */
+  accounts?(): Promise<readonly LocalFirstAccount[]>;
   onAttempt?(record: LocalFirstAttemptRecord): void;
   /** The person's inference mode, read per call; absent = Hybrid. */
   mode?(): InferenceMode;
@@ -124,6 +131,7 @@ export function createRovrStream(deps: RovrRouteDeps): BrainStreamFn {
       ]);
       return [...resolveLoopbackProbes(probes), ...page];
     },
+    ...(deps.accounts ? { accounts: deps.accounts } : {}),
     cloud: async () => {
       const key = await deps.key();
       if (!key || (deps.gatewayAllowed && !deps.gatewayAllowed())) return null;
