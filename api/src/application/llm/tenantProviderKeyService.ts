@@ -323,7 +323,13 @@ export interface KimiOAuthResolution {
  * rotates on nearly every resolution, and the rotated refresh token must be stored or the
  * next call presents one the server has already retired.
  */
-export async function resolveKimiOAuthResolution(env: Env, tenantId: number, fresh = false): Promise<KimiOAuthResolution> {
+/**
+ * `rejected`: the access token a client's provider call was just refused with (401) although
+ * it had not expired — a second sign-in on the same account revoked it. When it is the token
+ * held, the grant is rotated now; any other value means a rotation already happened, so the
+ * current token is the answer.
+ */
+export async function resolveKimiOAuthResolution(env: Env, tenantId: number, fresh = false, rejected?: string): Promise<KimiOAuthResolution> {
   const row = await loadProviderRow(env, tenantId, 'kimi', fresh);
   if (row?.lookup_failed) return { token: null, reason: 'lookup_failed' };
   if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { token: null };
@@ -334,8 +340,9 @@ export async function resolveKimiOAuthResolution(env: Env, tenantId: number, fre
   // Refresh AHEAD of expiry: this token is also handed to a client's machine (`localCredential`),
   // which runs a whole turn on it. Kimi's stored expiry is the real one, so handing it out
   // until the last second sent clients a token that died mid-turn ("API Key … expired").
-  if (Date.now() < tokens.expires - OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access, expires: tokens.expires };
-  if (!fresh) return resolveKimiOAuthResolution(env, tenantId, true); // see the OpenAI resolver
+  const refused = rejected !== undefined && rejected === tokens.access;
+  if (!refused && Date.now() < tokens.expires - OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access, expires: tokens.expires };
+  if (!fresh) return resolveKimiOAuthResolution(env, tenantId, true, rejected); // see the OpenAI resolver
   try {
     const refreshed = await refreshKimiOAuth(tokens.refresh);
     await setTenantProviderOAuth(env, tenantId, 'kimi', refreshed, null);
@@ -343,7 +350,8 @@ export async function resolveKimiOAuthResolution(env: Env, tenantId: number, fre
   } catch (e) {
     if (isRevokedRefresh(e)) return { token: null, reason: 'revoked' };
     // A refresh that failed for a transient reason must not disconnect a working account:
-    // inside the safety margin the existing token is still worth trying.
+    // inside the safety margin the existing token is still worth trying. A refused one too:
+    // answering null here would read as "reconnect" and prompt for a sign-in over a blip.
     if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access, expires: tokens.expires };
     return { token: null, reason: 'expired' };
   }

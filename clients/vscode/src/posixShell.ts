@@ -101,6 +101,23 @@ export function cmdCannotRun(output: string): boolean {
   return !!output && CMD_CANNOT_RUN.some((re) => re.test(output));
 }
 
+/**
+ * `cmd.exe`'s null device is `nul`; bash's is `/dev/null`. A model writing Windows-style
+ * commands reaches for `2>nul` / `>NUL`, and when that command lands in bash — routed by
+ * {@link needsPosixShell} or by the {@link cmdCannotRun} retry — bash creates a real FILE
+ * named `nul` in the working directory. Windows treats that name as a reserved device, so
+ * Explorer and `git clean` cannot delete it and it sits untracked in `git status`
+ * (`packages/brain-ui/nul`, holding the stderr of a `findstr … 2>nul`).
+ *
+ * Rewrite only a redirection TARGET of exactly `nul` (any case): `foo.nul`, `nullable`
+ * and `> nul.txt` are untouched.
+ */
+const CMD_NULL_REDIRECT = /(\d?>>?|&>>?)\s*nul(?![\w.\/\\:-])/gi;
+
+export function toBashNullDevice(command: string): string {
+  return command.replace(CMD_NULL_REDIRECT, "$1/dev/null");
+}
+
 /** Cached bash lookup — resolving it walks the filesystem, and the shell capability
  *  is called once per tool step. `undefined` = not looked up yet, `null` = absent. */
 let cachedBash: string | null | undefined;

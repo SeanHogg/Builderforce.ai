@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { needsPosixShell, cmdCannotRun, findBash, bashCandidates, posixShellReport, posixShellStatus, resetBashCache } from "./posixShell";
+import { needsPosixShell, cmdCannotRun, findBash, bashCandidates, posixShellReport, posixShellStatus, resetBashCache, toBashNullDevice } from "./posixShell";
 import { buildGitCommand } from "@builderforce/agent-tools";
 
 beforeEach(resetBashCache);
@@ -158,5 +158,26 @@ describe("cmdCannotRun", () => {
       "npm ERR! code ELIFECYCLE",
       "",
     ]) expect(cmdCannotRun(out)).toBe(false);
+  });
+});
+
+describe("toBashNullDevice", () => {
+  it("maps every cmd-style null redirect to /dev/null", () => {
+    // Under bash these each created a real, undeletable `nul` file (packages/brain-ui/nul).
+    expect(toBashNullDevice("findstr /s foo *.ts 2>nul")).toBe("findstr /s foo *.ts 2>/dev/null");
+    expect(toBashNullDevice("dir dist 2> NUL | head")).toBe("dir dist 2>/dev/null | head");
+    expect(toBashNullDevice("git fetch >nul 2>&1")).toBe("git fetch >/dev/null 2>&1");
+    expect(toBashNullDevice("echo x >> Nul && ls")).toBe("echo x >>/dev/null && ls");
+    expect(toBashNullDevice("npm test &>nul")).toBe("npm test &>/dev/null");
+  });
+
+  it("leaves anything that is not exactly a nul target alone", () => {
+    for (const cmd of [
+      "grep -r nullable src > out.txt",
+      "cat foo > nul.txt",
+      "ls nul",
+      "cp a > nulls/x",
+      "git log --oneline 2>/dev/null | head -5",
+    ]) expect(toBashNullDevice(cmd)).toBe(cmd);
   });
 });

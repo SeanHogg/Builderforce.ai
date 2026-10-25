@@ -85,15 +85,13 @@ export function createConnectedAccounts(deps: {
     // Hydrate before the first resolve, so a token persisted by an earlier session is reused
     // rather than raced by a network fetch that a late hydrate would then overwrite.
     const hydrated = created.hydrate();
-    const ready: LocalCredentialStore = { ...created, resolve: async () => { await hydrated; return created.resolve(); } };
+    const ready: LocalCredentialStore = { ...created, resolve: async (options) => { await hydrated; return created.resolve(options); } };
     stores.set(provider, ready);
     return ready;
   };
 
   const credentialFor = (provider: string): NonNullable<LocalEndpoint['credential']> => async (rejected) => {
-    const held = store(provider);
-    if (rejected && held.snapshot()?.accessToken === rejected) await held.clear();
-    const outcome = await held.resolve();
+    const outcome = await store(provider).resolve(rejected ? { rejected } : undefined);
     return outcome.kind === 'credential' ? outcome.credential.accessToken : null;
   };
 

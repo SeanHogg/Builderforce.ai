@@ -157,6 +157,15 @@ export interface ModelFallbackEvent {
   reason: string;
 }
 
+/**
+ * The connected accounts could not be read (a storage or permission failure): the turn goes
+ * on without them — device, then the gateway — and the reason is logged, not dropped.
+ */
+function accountsUnavailable(error: unknown): LocalFirstAccount[] {
+  console.warn(`Hybrid: connected accounts unavailable for this call (${error instanceof Error ? error.message : String(error)})`);
+  return [];
+}
+
 /** Packs a local attempt for its model's window — `@seanhogg/builderforce-memory/handoff`. */
 const handoffFit = createHandoffFit();
 
@@ -191,7 +200,7 @@ export function createHostModelStream(input: HostModelStreamInput): StreamFn {
       if (local && localRef) return createLocalStream(local.endpoint, local.model, input.fetch, { ref: localRef, cloud, fit })(call, h);
       const probes = input.probes ? await input.probes() : [];
       // Hybrid only: Local only never leaves the device, and Specific makes no Auto attempt.
-      const accounts = mode === 'hybrid' && input.accounts ? await input.accounts().catch(() => []) : [];
+      const accounts = mode === 'hybrid' && input.accounts ? await input.accounts().catch(accountsUnavailable) : [];
       if (probes.length === 0 && accounts.length === 0) {
         if (!cloud) throw new Error(noModel);
         return cloud(call, h);

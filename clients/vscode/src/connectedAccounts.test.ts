@@ -87,6 +87,12 @@ describe("createConnectedAccounts", () => {
     expect(await token()).toBe("kc-1");
     expect(await token("kc-1")).toBe("kc-2");
     expect(request).toHaveBeenCalledTimes(2);
+    // The gateway is told which token was refused, so it rotates the grant instead of
+    // handing the same revoked token back.
+    expect(request).toHaveBeenLastCalledWith("/llm/provider-keys/kimi/local-credential", { method: "POST", json: { rejected: "kc-1" } });
+    // A refusal of a token no longer held is answered by the one held now — no fetch.
+    expect(await token("kc-1")).toBe("kc-2");
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   it("hybridAccounts lists a connected account on its lead model, with the per-request token", async () => {

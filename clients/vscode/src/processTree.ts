@@ -12,6 +12,7 @@
  */
 
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from "child_process";
+import { toBashNullDevice } from "./posixShell";
 
 /**
  * Start a command so {@link killProcessTree} reaches everything it starts: in its own
@@ -24,7 +25,8 @@ import { execFile, spawn, type ChildProcess, type SpawnOptions } from "child_pro
  */
 export function spawnCommand(command: string, bash: string | null, options: SpawnOptions): ChildProcess {
   const opts: SpawnOptions = { ...options, windowsHide: true, ...(process.platform === "win32" ? {} : { detached: true }) };
-  const child = bash ? spawn(bash, ["-c", command], opts) : spawn(command, { ...opts, shell: true });
+  // Under bash a cmd-style `2>nul` would create an undeletable `nul` file — see toBashNullDevice.
+  const child = bash ? spawn(bash, ["-c", toBashNullDevice(command)], opts) : spawn(command, { ...opts, shell: true });
   child.stdout?.setEncoding("utf8");
   child.stderr?.setEncoding("utf8");
   return child;

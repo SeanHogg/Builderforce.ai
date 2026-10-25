@@ -230,6 +230,15 @@ describe('resolveKimiOAuthResolution — refresh ahead of expiry', () => {
     expect(kimiRefresh).not.toHaveBeenCalled();
   });
 
+  // A second sign-in on the same account revokes a token early; the client reports it.
+  it('rotates a live token the client reports refused, and only that token', async () => {
+    stageKimi(Date.now() + OAUTH_SAFETY_MARGIN_MS + 60_000);
+    expect((await resolveKimiOAuthResolution(env, 1, false, 'SOMETHING-ELSE')).token).toBe('KIMI-OLD');
+    expect(kimiRefresh).not.toHaveBeenCalled();
+    expect((await resolveKimiOAuthResolution(env, 1, false, 'KIMI-OLD')).token).toBe('KIMI-FRESH');
+    expect(kimiRefresh).toHaveBeenCalledTimes(1);
+  });
+
   it('rotates a token that expires inside the margin, before it reaches a client', async () => {
     stageKimi(Date.now() + 60_000);
     expect((await resolveKimiOAuthResolution(env, 1)).token).toBe('KIMI-FRESH');

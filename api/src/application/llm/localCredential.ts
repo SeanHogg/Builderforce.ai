@@ -44,8 +44,9 @@ interface LocalCredentialSource {
   baseUrl: string;
   /** The provider's own names and windows for its models. Unknown ids show bare. */
   models: Readonly<Record<string, { displayName: string; contextWindow?: number }>>;
-  /** A fresh access token, rotating the stored grant when it is due. */
-  resolve(env: Env, tenantId: number): Promise<{ token: string | null; reason?: ByoUnresolvedReason; expires?: number }>;
+  /** A fresh access token, rotating the stored grant when it is due — or now, when the
+   *  client reports the held token `rejected`. */
+  resolve(env: Env, tenantId: number, rejected?: string): Promise<{ token: string | null; reason?: ByoUnresolvedReason; expires?: number }>;
 }
 
 const LOCAL_CREDENTIAL_SOURCES: Partial<Record<LlmProvider, LocalCredentialSource>> = {
@@ -60,7 +61,7 @@ const LOCAL_CREDENTIAL_SOURCES: Partial<Record<LlmProvider, LocalCredentialSourc
       'kimi-for-coding': { displayName: 'Kimi K2.8 Coding', contextWindow: 1_048_576 },
       'kimi-for-coding-highspeed': { displayName: 'Kimi K2.7 Code HighSpeed', contextWindow: 262_144 },
     },
-    resolve: resolveKimiOAuthResolution,
+    resolve: (env, tenantId, rejected) => resolveKimiOAuthResolution(env, tenantId, false, rejected),
   },
 };
 
@@ -106,6 +107,7 @@ export async function issueLocalCredential(
   tenantId: number,
   provider: LlmProvider,
   nowMs: number = Date.now(),
+  rejected?: string,
 ): Promise<LocalCredentialResult> {
   const source = LOCAL_CREDENTIAL_SOURCES[provider];
   if (!source) return { kind: 'unsupported' };
@@ -115,7 +117,7 @@ export async function issueLocalCredential(
   if (connection.authType !== 'oauth') return { kind: 'reconnect', reason: 'api_key_connection' };
 
   const [resolution, selections] = await Promise.all([
-    source.resolve(env, tenantId),
+    source.resolve(env, tenantId, rejected),
     listProviderModelSelections(env, tenantId).catch(() => ({})),
   ]);
   if (!resolution.token) return { kind: 'reconnect', reason: resolution.reason ?? 'revoked' };

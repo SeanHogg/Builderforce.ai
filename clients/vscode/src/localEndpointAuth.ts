@@ -36,6 +36,18 @@ export type LocalEndpointAuthorization =
 const log = (line: string): void => logLine(`[kimi auth] ${line}`);
 
 /**
+ * The per-request credential, with every provider refusal logged: the retry it drives is
+ * silent in the chat, so the output channel is where a recurring revocation shows.
+ */
+function logRejections(credential: NonNullable<LocalEndpoint["credential"]>): NonNullable<LocalEndpoint["credential"]> {
+  return async (rejected) => {
+    const next = await credential(rejected);
+    if (rejected) log(next && next !== rejected ? "Kimi refused the token; rotated it and retried." : "Kimi refused the token and no fresh one was available.");
+    return next;
+  };
+}
+
+/**
  * `endpoint` may be absent for Kimi: a pin made before any Kimi source existed on this
  * machine still has to reach the connect offer, and the workspace credential carries its
  * own base URL.
@@ -89,7 +101,7 @@ export async function authorizeLocalEndpoint(
     if (interactive) log(`Workspace Kimi connection used (${outcome.credential.baseUrl}).`);
     return {
       ok: true,
-      endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken, credential: accounts.credentialFor(accountProvider) },
+      endpoint: { baseUrl: outcome.credential.baseUrl, token: outcome.credential.accessToken, credential: logRejections(accounts.credentialFor(accountProvider)) },
     };
   }
   const accountDetail = outcome.kind === "unavailable"

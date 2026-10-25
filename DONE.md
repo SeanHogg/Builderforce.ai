@@ -1,3 +1,17 @@
+## ✅ RESOLVED 2026-10-25 — Agent commands no longer leave undeletable `nul` files (VSIX 2026.10.92)
+
+Kimi sometimes wrote Windows-style commands with `2>nul`. When `run_command` sent one to Git Bash, bash created a real file named `nul` (at the repo root and in `packages/brain-ui/`). Windows treats `nul` as a reserved name, so `git clean` failed with "Permission denied" and the files stayed untracked in `git status`. `spawnCommand` (`clients/vscode/src/processTree.ts`) now passes every bash command through `toBashNullDevice` (`posixShell.ts`), which turns a redirect to exactly `nul` into `/dev/null`. Commands run by `cmd.exe` are unchanged. Guarded in `posixShell.test.ts`.
+
+## ✅ RESOLVED 2026-10-25 — A refused Kimi token is rotated and retried silently (VSIX 2026.10.91 · api 2026.10.85 · Rovr 2026.10.31)
+
+After many good turns, a Kimi call still failed "The API Key appears to be invalid or may have expired" (chat #5091, turn 69). The next turn worked. The per-request retry asked our gateway for a replacement, and the gateway handed back the same token, because by its clock the token was still live; Kimi had revoked it early. The likely cause is a second sign-in on the same Kimi account, such as the Kimi Code extension, which uses the same public client id. Unconfirmed.
+
+- The client now tells the gateway which token Kimi refused (`POST …/local-credential { rejected }`, through `fetchLocalCredential` / `LocalCredentialStore.resolve({ rejected })`).
+- `resolveKimiOAuthResolution` rotates the grant when the refused token is the one it holds. Any other value means a rotation already happened, so it returns the current token.
+- The retry stays silent in the chat. The VSIX logs each refusal to the output channel (`[kimi auth] Kimi refused the token; rotated it and retried.`), so a recurring revocation is visible there.
+- A transient refresh failure still answers with the held token, never with "reconnect", so a blip does not prompt for a sign-in.
+- Guarded in `connectedAccounts.test.ts` and `tenantProviderKeyService.test.ts`.
+
 ## ✅ RESOLVED 2026-10-25 — Hybrid uses your Kimi subscription (VSIX 2026.10.90 · Rovr 2026.10.30 · brain-embedded 2026.10.58)
 
 Hybrid used the tenant's connected accounts (MiniMax, Grok, Anthropic) through the gateway, but never Kimi. Kimi refuses our cloud, local-first only takes on-device runtimes, and the gateway skips a vendor that needs local egress. Operator decision: a connected Kimi always goes ahead of the cloud step in Hybrid.

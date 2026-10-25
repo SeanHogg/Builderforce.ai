@@ -2,7 +2,7 @@
  * The LOCAL CREDENTIAL — a connected subscription's short-lived access token, handed to a
  * runtime on the person's own machine so it can call the provider directly.
  *
- *   POST /llm/provider-keys/:provider/local-credential
+ *   POST /llm/provider-keys/:provider/local-credential   [{ rejected }]
  *     200 { provider, runtime, accessToken, expiresAt (epoch ms), baseUrl, models[] }
  *     404 { code: 'provider_not_connected' }       → connect first
  *     409 { code: 'provider_reconnect_required' }  → the stored grant is dead; connect again
@@ -17,6 +17,10 @@
  * them is always holding a retired token. So the server stays the single refresher and a
  * client only ever receives the access token, never the refresh token. That is also what
  * makes persisting it locally safe: the worst a leaked cache entry buys is fifteen minutes.
+ *
+ * `rejected` is the token the provider just refused (401) although our clock says it is still
+ * live — a second sign-in on the same account revoked it early. The gateway then rotates the
+ * grant instead of handing the same dead token back.
  *
  * Persisted through an injected string store (the editor's SecretStorage, Rovr's
  * `chrome.storage.local`), so a restart reuses an unexpired token instead of a round trip.
@@ -53,11 +57,14 @@ export type LocalCredentialOutcome =
   /** No answer, or one this client cannot use — say so and do not prompt. */
   | { kind: 'unavailable'; detail: string };
 
-/** One fetch, decided. Never throws. */
-export async function fetchLocalCredential(request: GatewayRequest, provider: string): Promise<LocalCredentialOutcome> {
+/** One fetch, decided. Never throws. `rejected`: see the module comment. */
+export async function fetchLocalCredential(request: GatewayRequest, provider: string, rejected?: string): Promise<LocalCredentialOutcome> {
   let res: { status: number; body: unknown };
   try {
-    res = await request(`/llm/provider-keys/${encodeURIComponent(provider)}/local-credential`, { method: 'POST' });
+    res = await request(`/llm/provider-keys/${encodeURIComponent(provider)}/local-credential`, {
+      method: 'POST',
+      ...(rejected ? { json: { rejected } } : {}),
+    });
   } catch (error) {
     return { kind: 'unavailable', detail: error instanceof Error ? error.message : String(error) };
   }
@@ -112,8 +119,10 @@ export interface LocalCredentialStore {
   /**
    * A credential safe to send right now: the persisted one while it has life left,
    * else a fresh fetch (persisted on success). Concurrent callers share one fetch.
+   * `rejected` — the held token the provider just refused: fetch past it, and have the
+   * gateway rotate the grant rather than return the same token.
    */
-  resolve(): Promise<LocalCredentialOutcome>;
+  resolve(options?: { rejected?: string }): Promise<LocalCredentialOutcome>;
   /**
    * The last known credential's ENDPOINT AND MODELS, synchronously, without any I/O —
    * what a synchronous model list reads. Never trust its token: it may have expired.
@@ -160,8 +169,8 @@ export function createLocalCredentialStore(deps: {
     notify();
   };
 
-  const fetchFresh = async (): Promise<LocalCredentialOutcome> => {
-    const outcome = await fetchLocalCredential(deps.request, deps.provider);
+  const fetchFresh = async (rejected?: string): Promise<LocalCredentialOutcome> => {
+    const outcome = await fetchLocalCredential(deps.request, deps.provider, rejected);
     if (outcome.kind === 'credential') await persist(outcome.credential);
     // A definite "not connected" / "reconnect" retires what we held; "unavailable" (offline,
     // a gateway blip) does not — the persisted token may well still work.
@@ -170,9 +179,11 @@ export function createLocalCredentialStore(deps: {
   };
 
   return {
-    async resolve() {
-      if (usable(current)) return { kind: 'credential', credential: current };
-      if (!inFlight) inFlight = fetchFresh().finally(() => { inFlight = null; });
+    async resolve(options) {
+      // A refusal of a token we no longer hold is already answered by the one we hold now.
+      const rejected = options?.rejected && options.rejected === current?.accessToken ? options.rejected : undefined;
+      if (!rejected && usable(current)) return { kind: 'credential', credential: current };
+      if (!inFlight) inFlight = fetchFresh(rejected).finally(() => { inFlight = null; });
       return inFlight;
     },
     snapshot: () => current,

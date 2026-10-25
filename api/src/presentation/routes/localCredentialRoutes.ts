@@ -7,6 +7,10 @@
  *   404 { code: 'provider_not_connected' }        → the client offers to connect
  *   409 { code: 'provider_reconnect_required' }   → the stored grant is dead; connect again
  *
+ * Body (optional): `{ rejected }` — the access token the provider just refused although it
+ * had not expired (a second sign-in on the same account revoked it). When it is the token we
+ * hold, the grant is rotated now instead of handing the same dead token back.
+ *
  * POST, not GET: resolving may ROTATE the stored grant, and nothing between the client
  * and us should ever cache or prefetch a credential. `no-store` says the same to anything
  * that would.
@@ -19,6 +23,7 @@ import type { Context, Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import { isSupportedProvider } from '../../application/llm/tenantProviderKeyService';
 import { issueLocalCredential, supportsLocalCredential } from '../../application/llm/localCredential';
+import { parseOptionalBody, z } from './requestBody';
 
 /** The narrow auth shape this module needs — `TenantAccess` satisfies it structurally. */
 export interface LocalCredentialGate {
@@ -39,7 +44,9 @@ export function mountLocalCredentialRoutes(router: Hono<HonoEnv>, gate: LocalCre
       return c.json({ error: `${provider} cannot be used from a local runtime.`, code: 'unsupported_provider' }, 400);
     }
 
-    const result = await issueLocalCredential(c.env, access.tenantId, provider);
+    // Optional: a plain request carries no body at all.
+    const { rejected } = await parseOptionalBody(c, z.object({ rejected: z.string().min(1).optional() }));
+    const result = await issueLocalCredential(c.env, access.tenantId, provider, Date.now(), rejected);
     switch (result.kind) {
       case 'credential':
         return c.json(result.body);
