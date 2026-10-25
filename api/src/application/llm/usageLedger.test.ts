@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  storedIdempotencyKey,
   computeCostMillicents,
   clampTokenCount,
   sanitizeUsage,
@@ -168,5 +169,20 @@ describe('sanitizeUsage — every token field is clamped, cache-absence preserve
     expect(
       sanitizeUsage({ promptTokens: 1, completionTokens: 1, totalTokens: 2, cacheReadTokens: Number.NaN, cacheCreationTokens: -5 }),
     ).toMatchObject({ cacheReadTokens: 0, cacheCreationTokens: 0 });
+  });
+});
+
+describe('storedIdempotencyKey — the sync prefix is reserved for the sync importer', () => {
+  it('drops a gateway caller key that claims the sync prefix, so its row is still written and billed', () => {
+    expect(storedIdempotencyKey('sync-usage:x', false)).toBeNull();
+    expect(storedIdempotencyKey('client-key-1', false)).toBe('client-key-1');
+  });
+  it('keeps only sync keys on a sync import', () => {
+    expect(storedIdempotencyKey('sync-usage:abc', true)).toBe('sync-usage:abc');
+    expect(storedIdempotencyKey('client-key-1', true)).toBeNull();
+  });
+  it('drops a key the column cannot hold rather than failing the insert', () => {
+    expect(storedIdempotencyKey('k'.repeat(129), false)).toBeNull();
+    expect(storedIdempotencyKey('', false)).toBeNull();
   });
 });

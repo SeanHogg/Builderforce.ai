@@ -168,6 +168,8 @@ export interface SyncReferenceReader {
   taskInTenant(tenantId: number, taskId: number): Promise<boolean>;
   /** An ACTIVE membership of `userId` in the tenant. */
   tenantMember(tenantId: number, userId: string): Promise<boolean>;
+  /** Whether the chat is `userId`'s own chat in the tenant (PRD 36.4). */
+  chatOwnedBy(tenantId: number, userId: string, chatId: number): Promise<boolean>;
 }
 
 // ── Entity importers (the owning contexts' import use cases) ────────────────
@@ -189,6 +191,11 @@ export interface SyncImportContext {
   resolveTaskId(reference: string): Promise<number | null>;
   /** Whether `userId` is an active member of the caller's tenant (assignees). */
   isTenantMember(userId: string): Promise<boolean>;
+  /**
+   * A server chat id, when it is the CALLER'S own chat in this tenant — the only chat a
+   * sync import may adopt or write history into. `null` otherwise.
+   */
+  resolveOwnChatId(chatId: number): Promise<number | null>;
 }
 
 /** Mapping fields the push persists beside the receipt. */
@@ -245,9 +252,11 @@ export interface SyncNamedImporters {
  * sync transaction: a retried event is deduped by the row's idempotency key instead.
  */
 export interface SyncUsageLedger {
-  /** Whether a usage row with this idempotency key already exists for the tenant. */
-  hasRow(tenantId: number, idempotencyKey: string): Promise<boolean>;
-  /** Write one row through the canonical ledger writer. Best-effort, never throws. */
+  /**
+   * Write one row through the canonical ledger writer, once per idempotency key: a row
+   * already written under the key is a no-op. THROWS when the write fails, so the
+   * importer answers it as retryable rather than applied.
+   */
   record(row: RecordUsageRow): Promise<void>;
 }
 

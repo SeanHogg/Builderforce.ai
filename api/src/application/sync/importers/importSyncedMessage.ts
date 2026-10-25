@@ -23,7 +23,7 @@
 import { and, eq, isNotNull } from 'drizzle-orm';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import type { Tx } from '../../../infrastructure/database/connection';
-import { brainChatMessages } from '../../../infrastructure/database/schema';
+import { brainChatMessages, brainChats } from '../../../infrastructure/database/schema';
 import { bumpChatMessages } from '../../brain/chatCacheVersions';
 import type { SyncEntityMappingRow, SyncEventInput, SyncImportContext, SyncStoreSet } from '../syncPorts';
 import {
@@ -32,7 +32,7 @@ import {
   clampedClientTime,
   conflict,
   insertedId,
-  mappedChatId,
+  mappedChat,
   mutateGate,
   pending,
   preludeRejection,
@@ -111,8 +111,10 @@ async function createMessage(
     if (sameCanonical(mapping, event.payload)) return appliedExisting(mapping, event.payload);
     return conflict(mapping, 'entity_already_imported');
   }
-  const chatId = await mappedChatId(stores, ctx.auth.tenantId, fields.chatClientId);
-  if (chatId === null) return pending('message_chat_pending');
+  const chat = await mappedChat(stores, ctx, fields.chatClientId);
+  if (chat.kind === 'unmapped') return pending('message_chat_pending');
+  if (chat.kind === 'foreign') return rejected('message_chat_not_owned');
+  const { chatId } = chat;
   try {
     const rows = await tx.transaction((savepoint) => savepoint.insert(brainChatMessages).values({
       chatId,
@@ -135,6 +137,20 @@ async function createMessage(
   }
 }
 
+/**
+ * The chat a server message is on, when that chat is the caller's own. A delete names its
+ * message by mapping alone — a tombstone carries no payload, so no chat id to resolve.
+ */
+async function ownMessageChatId(tx: Tx, ctx: SyncImportContext, messageId: number): Promise<number | null> {
+  const [row] = await tx
+    .select({ chatId: brainChatMessages.chatId })
+    .from(brainChatMessages)
+    .innerJoin(brainChats, eq(brainChats.id, brainChatMessages.chatId))
+    .where(and(eq(brainChatMessages.id, messageId), eq(brainChats.tenantId, ctx.auth.tenantId), eq(brainChats.userId, ctx.auth.userId)))
+    .limit(1);
+  return row?.chatId ?? null;
+}
+
 /** Update (a feedback change rewrites `metadata`) and delete, both scoped to the chat. */
 async function mutateMessage(
   event: SyncEventInput,
@@ -149,17 +165,21 @@ async function mutateMessage(
   const current = mapping as SyncEntityMappingRow;
   const id = serverNumericId(current.serverId);
   if (id === null) return rejected('server_id_invalid');
-  const parsed = readMessage(event.payload);
-  if (!parsed.ok) return rejected(parsed.detail);
-  const chatId = await mappedChatId(stores, ctx.auth.tenantId, parsed.value.chatClientId);
-  if (chatId === null) return rejected('message_chat_unresolved');
-  const scope = and(eq(brainChatMessages.id, id), eq(brainChatMessages.chatId, chatId));
   try {
     if (isDelete) {
-      await tx.transaction((savepoint) => savepoint.delete(brainChatMessages).where(scope));
+      const chatId = await ownMessageChatId(tx, ctx, id);
+      // Already gone, or not the caller's: nothing of theirs to delete.
+      if (chatId === null) return appliedNew(current.serverId, current.serverVersion + 1, ctx.destinationKey, null);
+      await tx.transaction((savepoint) => savepoint.delete(brainChatMessages).where(and(eq(brainChatMessages.id, id), eq(brainChatMessages.chatId, chatId))));
       await bumpChatMessages(chatId);
       return appliedNew(current.serverId, current.serverVersion + 1, ctx.destinationKey, null);
     }
+    const parsed = readMessage(event.payload);
+    if (!parsed.ok) return rejected(parsed.detail);
+    const chat = await mappedChat(stores, ctx, parsed.value.chatClientId);
+    if (chat.kind !== 'own') return rejected(chat.kind === 'foreign' ? 'message_chat_not_owned' : 'message_chat_unresolved');
+    const { chatId } = chat;
+    const scope = and(eq(brainChatMessages.id, id), eq(brainChatMessages.chatId, chatId));
     if (sameCanonical(current, event.payload)) return appliedExisting(current, event.payload);
     const rows = await tx.transaction((savepoint) => savepoint.update(brainChatMessages)
       .set({ metadata: parsed.value.metadata })

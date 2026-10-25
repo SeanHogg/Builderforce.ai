@@ -16,6 +16,7 @@ export type {
   LocalEntityType,
   LocalRecord,
   ProjectValue,
+  ServerMapping,
   SyncConflict,
   SyncReceipt,
   TerminalExecutionStatus,
@@ -79,3 +80,14 @@ export {
   type SyncStatusStoreEvent,
 } from './syncStatus.js';
 export * from './bootDeniedHost.js';
+export {
+  HTTP_SYNC_PULL_PATH,
+  HTTP_SYNC_PUSH_PATH,
+  HttpSyncTransportError,
+  createHttpSyncTransport,
+  type HttpSyncFetch,
+  type HttpSyncHeaders,
+  type HttpSyncRequest,
+  type HttpSyncResponse,
+  type HttpSyncTransportOptions,
+} from './httpSyncTransport.js';

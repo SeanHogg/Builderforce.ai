@@ -317,7 +317,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext, runHost?
         await recordEditorRunEnd(ctx.secrets, root, `chat-${brainChatId}`, knowledge, {
           memory: !!activeProject,
           ...(activeProject ? { projectId: activeProject.id } : {}),
-        }).catch(() => undefined);
+        }, { ledger: local.usage, chatId: runChatId, runKey: runChatId, identity: local.identity }).catch(() => undefined);
       }
     }
 

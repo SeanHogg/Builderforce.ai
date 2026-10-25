@@ -249,6 +249,9 @@ export async function createPanelServices(): Promise<PanelServices> {
       const { specs, run } = createRovrToolRegistry(tools);
       return withPlatformTools({ specs, run, needsConfirm: browserNeedsConfirm(safety) }, await platform.actions());
     },
+    // PRD 36: the platform chat the sync outbox created for this device chat, or none —
+    // the device id (negative until then) never leaves the machine.
+    serverChatId: async (chatId) => (await records.getChat(chatId))?.serverId ?? null,
     // The chat's `/` Work panel choices, read from its device record per run.
     runOptions: createRunOptions({
       getChat: (chatId) => records.getChat(chatId),

@@ -14,6 +14,13 @@ import {
 
 vi.mock("vscode", () => ({
   l10n: { t: (message: string) => message },
+  // The application module wires the chat account (PRD 36), whose bfApi constructs this
+  // at load. The store under test does not call the network.
+  EventEmitter: class {
+    event = () => ({ dispose() {} });
+    fire(): void {}
+    dispose(): void {}
+  },
 }));
 
 type Host = Parameters<typeof createVsCodeLocalFirstStore>[0];

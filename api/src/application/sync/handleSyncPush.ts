@@ -76,6 +76,23 @@ async function resolveReference(
   return mapping ? serverNumericId(mapping.serverId) : null;
 }
 
+/**
+ * Chat ownership answered once per push: a batch of one chat's messages and usage asks
+ * the same question for every event. Keyed by the push's deps, so it never outlives it.
+ */
+const ownedChatsByPush = new WeakMap<SyncPushDeps, Map<number, Promise<boolean>>>();
+
+function ownsChat(deps: SyncPushDeps, chatId: number): Promise<boolean> {
+  let owned = ownedChatsByPush.get(deps);
+  if (!owned) ownedChatsByPush.set(deps, (owned = new Map()));
+  let answer = owned.get(chatId);
+  if (!answer) {
+    answer = deps.stores.references.chatOwnedBy(deps.auth.tenantId, deps.auth.userId, chatId);
+    owned.set(chatId, answer);
+  }
+  return answer;
+}
+
 function importContext(
   tx: SyncStoreSet,
   deps: SyncPushDeps,
@@ -92,6 +109,7 @@ function importContext(
     resolveProjectId: (reference) => resolveReference(tx, deps.stores, tenantId, 'project', reference),
     resolveTaskId: (reference) => resolveReference(tx, deps.stores, tenantId, 'ticket', reference),
     isTenantMember: (userId) => deps.stores.references.tenantMember(tenantId, userId),
+    resolveOwnChatId: async (chatId) => ((await ownsChat(deps, chatId)) ? chatId : null),
   };
 }
 

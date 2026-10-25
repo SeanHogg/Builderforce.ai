@@ -15,7 +15,8 @@ describe('platform route table', () => {
     ['/api/data-sources/abc/query', 'POST', 'connected-feature'],
     ['/api/vscode/connect', 'POST', 'connected-feature'],
     ['/api/runtime/attention', 'GET', 'connected-feature'],
-    ['/api/brain/chats', 'POST', 'synchronize'],
+    // PRD 36: the bind on sign-in — a title and project, never the transcript.
+    ['/api/brain/chats', 'POST', 'connected-feature'],
     ['/api/tasks/4', 'PATCH', 'synchronize'],
     ['/api/tasks/4', 'DELETE', 'synchronize'],
     ['/llm/v1/run-outcome', 'POST', 'synchronize'],

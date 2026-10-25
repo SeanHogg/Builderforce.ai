@@ -77,15 +77,27 @@ export function clampedClientTime(raw: unknown, now: Date): Date {
   return at.getTime() > now.getTime() ? now : at;
 }
 
-/** The server chat a client chat uuid was imported as in this tenant, or null. */
-export async function mappedChatId(
+/**
+ * The server chat a client chat uuid was imported as: the caller's own chat, a chat that
+ * has not landed yet, or one that is NOT the caller's. The mapping keyspace is the
+ * tenant's, so a member who learns another member's chat uuid must not be able to push
+ * history into it — a mapping in another destination, or onto a chat someone else owns,
+ * is `foreign`.
+ */
+export type MappedChat = { kind: 'own'; chatId: number } | { kind: 'unmapped' } | { kind: 'foreign' };
+
+export async function mappedChat(
   stores: Pick<SyncStoreSet, 'findMapping'>,
-  tenantId: number,
+  ctx: Pick<SyncImportContext, 'auth' | 'destinationKey' | 'resolveOwnChatId'>,
   chatClientId: unknown,
-): Promise<number | null> {
-  if (typeof chatClientId !== 'string' || chatClientId.trim() === '') return null;
-  const mapping = await stores.findMapping(tenantId, 'chat', chatClientId);
-  return mapping ? serverNumericId(mapping.serverId) : null;
+): Promise<MappedChat> {
+  if (typeof chatClientId !== 'string' || chatClientId.trim() === '') return { kind: 'unmapped' };
+  const mapping = await stores.findMapping(ctx.auth.tenantId, 'chat', chatClientId);
+  if (!mapping) return { kind: 'unmapped' };
+  if (mapping.destinationKey !== ctx.destinationKey) return { kind: 'foreign' };
+  const serverChatId = serverNumericId(mapping.serverId);
+  const chatId = serverChatId === null ? null : await ctx.resolveOwnChatId(serverChatId);
+  return chatId === null ? { kind: 'foreign' } : { kind: 'own', chatId };
 }
 
 export function conflict(row: SyncEntityMappingRow, detail: string): BoundedImportOutcome {

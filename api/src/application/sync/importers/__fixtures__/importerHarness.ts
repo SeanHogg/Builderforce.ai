@@ -23,6 +23,7 @@ export function ctx(overrides: Partial<SyncImportContext> = {}): SyncImportConte
     resolveProjectId: async () => 3,
     resolveTaskId: async () => null,
     isTenantMember: async () => true,
+    resolveOwnChatId: async (chatId) => chatId,
     ...overrides,
   };
 }

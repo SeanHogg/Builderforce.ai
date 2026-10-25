@@ -15,11 +15,19 @@ const references: SyncReferenceReader = {
   projectInTenant: async () => true,
   taskInTenant: async () => true,
   tenantMember: async () => true,
+  chatOwnedBy: async () => true,
 };
 
 const noImporters = (): SyncNamedImporters => {
   const refuse = async () => ({ status: 'rejected' as const, detail: 'unused' });
-  return { importSyncedTicket: refuse, importSyncedProject: refuse, importMirrorRecord: refuse };
+  return {
+    importSyncedTicket: refuse,
+    importSyncedProject: refuse,
+    importSyncedChat: refuse,
+    importSyncedMessage: refuse,
+    importSyncedUsage: refuse,
+    importMirrorRecord: refuse,
+  };
 };
 
 function repo(results: Array<unknown[] | Error> = [], importersFor = (_tx: Tx) => noImporters()) {

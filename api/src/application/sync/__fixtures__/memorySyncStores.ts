@@ -177,6 +177,7 @@ export function createMemorySyncStores(options: MemorySyncStoresOptions): Memory
     projectInTenant: async () => false,
     taskInTenant: async () => false,
     tenantMember: async () => false,
+    chatOwnedBy: async () => false,
     ...options.references,
   };
 

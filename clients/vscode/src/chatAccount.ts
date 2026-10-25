@@ -55,6 +55,11 @@ export function chatBindingPort(secrets: vscode.SecretStorage): ChatBindingPort 
  *  and the panel re-reads its chat list then anyway. */
 const spendCache = ttlCache<number, ReadonlyMap<number, SpendSavingsSummary>>(30_000);
 
+/** Drop the cached platform spend — after a sync pass put usage on the platform. */
+export function invalidateServerChatSpend(): void {
+  spendCache.invalidate();
+}
+
 /** The platform's spend for the bound chats a list shows. Rejects when it cannot be read,
  *  so the caller keeps its own estimate rather than showing nothing. */
 export function serverChatSpend(secrets: vscode.SecretStorage) {

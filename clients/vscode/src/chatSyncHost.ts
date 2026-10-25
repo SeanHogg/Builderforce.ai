@@ -22,7 +22,7 @@ import {
 } from "@builderforce/local-first";
 import { bindChatHistoryForSync } from "@seanhogg/builderforce-brain-embedded";
 import { getTenantJwt } from "./bfApi";
-import { chatAccountDestination } from "./chatAccount";
+import { chatAccountDestination, invalidateServerChatSpend } from "./chatAccount";
 import { getBaseUrl } from "./gateway";
 import { installSyncCoordinator } from "./installSyncCoordinator";
 import { localBrainApplication } from "./localFirstStore";
@@ -72,6 +72,9 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
     if (!installed.installed || !installed.started) return;
     await bindChatHistoryForSync(local.store, local.deviceId, destination);
     await installed.coordinator.synchronize(destination);
+    // A receipt moved usage onto the platform: re-read its figure rather than serve the
+    // cached one, which the device's own estimate no longer covers for those rows.
+    invalidateServerChatSpend();
   };
 
   const run = async (): Promise<void> => {

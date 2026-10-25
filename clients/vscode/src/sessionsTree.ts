@@ -271,7 +271,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<SessionTree
     };
     item.description = description;
     item.contextValue = "builderforceSession";
-    item.command = { command: "builderforce.openSession", title: vscode.l10n.t("Open Chat"), arguments: [chat.id] };
+    item.command = { command: "builderforce.openSession", title: vscode.l10n.t("Open Chat"), arguments: [chat.id, { title: chat.title, projectId: chat.projectId, ownerId: chat.ownerId ?? null }] };
     return item;
   }
 

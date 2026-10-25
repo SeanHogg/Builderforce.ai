@@ -9,15 +9,28 @@
  *   2. The project facts (code map + learned decisions), gated on the Memory switch in
  *      `commitRunKnowledgeIfAllowed` — NOT awaited: it is a network write (and a model
  *      completion when files changed), and a caller holding a chat until it returns
- *      would drop a turn sent in the meantime.
+ *      would drop a turn sent in the meantime. Its model call is one more call of the
+ *      chat's run, so it lands in the chat's usage ledger like every other (PRD 36).
  */
 
 import type * as vscode from "vscode";
+import { withRunUsage, type LocalChatIdentity, type RunUsageLedger } from "@seanhogg/builderforce-brain-embedded";
 import { rememberProjectFact } from "./bfApi";
-import { resolveModelRoute, routeComplete } from "./modelRouting";
+import { getApiKey } from "./gateway";
+import { resolveModelRoute, routeStream } from "./modelRouting";
 import { appendSessionNote } from "./sessionNotes";
 import { commitRunKnowledgeIfAllowed, MEMORY_COMMIT_SYSTEM, type FinishedRun } from "./memoryCommit";
 import type { RunNoteOptions } from "./brainRunHost";
+
+/** The chat whose usage ledger the run-end model call is recorded on. */
+export interface RunEndUsage {
+  ledger: RunUsageLedger;
+  /** The LOCAL chat. */
+  chatId: number;
+  runKey: number;
+  /** Names the call's server chat on the wire, as the run's own turns do (PRD 36). */
+  identity: Pick<LocalChatIdentity, "serverIdFor">;
+}
 
 export async function recordEditorRunEnd(
   secrets: vscode.SecretStorage,
@@ -25,6 +38,7 @@ export async function recordEditorRunEnd(
   sessionKey: string,
   run: FinishedRun,
   opts: RunNoteOptions,
+  usage: RunEndUsage,
 ): Promise<void> {
   if (!root) return;
   await appendSessionNote(root, { sessionKey, activity: run.activity });
@@ -35,11 +49,24 @@ export async function recordEditorRunEnd(
     projectId == null
       ? undefined
       : {
-          complete: async (user) =>
-            routeComplete(await resolveModelRoute(secrets), secrets, [
-              { role: "system", content: MEMORY_COMMIT_SYSTEM },
-              { role: "user", content: user },
-            ]),
+          complete: async (user) => {
+            const [route, serverChatId] = await Promise.all([resolveModelRoute(secrets), usage.identity.serverIdFor(usage.chatId)]);
+            const stream = withRunUsage(routeStream(route, await getApiKey(secrets)), usage.ledger, {
+              chatId: usage.chatId,
+              runKey: usage.runKey,
+            });
+            const result = await stream({
+              messages: [
+                { role: "system", content: MEMORY_COMMIT_SYSTEM },
+                { role: "user", content: user },
+              ],
+              ...(route.model ? { model: route.model } : {}),
+              ...(route.modelStrict !== undefined ? { modelStrict: route.modelStrict } : {}),
+              ...(route.routingMode ? { routingMode: route.routingMode } : {}),
+              ...(serverChatId !== undefined ? { metadata: { chatId: serverChatId } } : {}),
+            });
+            return result.text;
+          },
           remember: (key, content) => rememberProjectFact(secrets, projectId, key, content),
         },
   );

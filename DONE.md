@@ -1,3 +1,26 @@
+## ✅ RESOLVED 2026-10-24 — PRD 36: a VS Code chat's local number never leaves the machine; chats bind on sign-in, spend is priced on the device, history syncs on enable (api 2026.10.78 · VSIX 2026.10.71 · brain-embedded 2026.10.48 · brain-ui 2026.10.23 · local-first 2026.10.25 · Rovr 2026.10.25 · frontend 2026.10.92)
+
+- **What was wrong.** VS Code numbers its chats 1, 2, 3… on the device. It sent that number to the server as the chat id: in gateway metadata, in the model's prompt, in the ticket backstops, in run context and Evermind scope, and in the ticket rail. So local chat N read, edited and was billed to server chat N. The spend pill never showed in VS Code. Rovr sent its negative device ids the same way. The native session restore and the cloud audit path read the server by local id.
+- **36.1, the leak.** A chat reaches the server only through a binding (`BrainRunRequest.serverChatId`, `serverChatIdOf`). An unbound chat sends no chat id at all. The gateway also drops a `chatId` that the caller's tenant does not own (`resolveCallerAttribution`). Acceptance test: `brain-embedded/src/runStore/serverChat.test.ts`.
+- **36.2, bind on sign-in.** `createLocalChatIdentity` binds a chat on its first signed-in run. It sends only the title and project; `POST /api/brain/chats` is now a connected feature. The rail, participants and diagnostics use the bound chat. The Sessions tree translates between the server ids it lists and local ids (`clients/vscode/src/sessionChats.ts`). It continues only the caller's own chats; a colleague's chat opens on the web.
+- **36.3, spend on the device.** The fold and the cost rule moved into `@builderforce/spend-contract`, and the api re-exports them. A bundled price snapshot in `@builderforce/model-catalog` is regenerated on every VSIX release. A per-call usage ledger records the cache split and the run-end memory call. The pill shows spend offline, with ≈ on estimates. A new `local_model` saving prices local calls against the chat's paid route. All 5 locales on VS Code, Rovr and the web.
+- **36.4, sync on enable.** The server gains chat, message and usage importers. They write only into the caller's OWN chat (`resolveOwnChatId`). A synced usage row is written once: partial unique index migrations `1275` / transactional `0022`, and the `sync-usage:` key prefix is reserved for the importer, so a gateway caller cannot use it to skip billing. A failed write is retried, never marked applied. Offline history goes up as one import per row. After sync, a bound chat's pill does not count imported rows twice.
+- **Review.** Two Opus reviews ran: a peer session's review of the first commit, then a review of the fix diff. Both found real defects, and every one is fixed; the details are in the PRD's §7 "As built".
+- **Test decisions that change behaviour, not retargets.** `syncImporterFor('chat')` is now `importSyncedChat`. `POST /api/brain/chats` is now `connected-feature`. The `unlinkedRunId` test was removed with the function, which has no caller.
+- **Verified (Sonnet, targeted).**
+  - Builds: brain-embedded and brain-ui `dist`, including `.d.ts`.
+  - Typechecks: api, brain-embedded, brain-ui, VS Code host/webview/canvas/harness, Rovr and spend-contract.
+  - Guards: source-package graph, plus api conflict-targets, tenant-scope, layering, application-layering, domain-boundary, usage-counts, signature-duplication, migrations and schema.
+  - Tests:
+    - api: 14 sync / llm files
+    - brain-embedded: 5 files, 115 tests
+    - local-first: 534 tests
+    - brain-ui: 42 tests
+    - VS Code: 15 files, 179 tests
+    - Rovr: 6 tests
+- **Not proven here.** Not run against a live Postgres: the migrations and the `ON CONFLICT` predicate, which `check:conflict-targets` checks lexically. Not exercised end to end: sync with a real account.
+- **Still open (Gap Register).** Cross-device chat history: chats synced from another device are hidden, and a web-only chat opens without its earlier transcript. *Blocker: operator decision.*
+
 ## ✅ RESOLVED 2026-10-24 — One cloud runtime: every run is the one engine, and the container is only its sandbox (api 2026.10.76 · agent-runtime 2026.10.18 · frontend 2026.10.91 · VSIX 2026.10.68)
 
 - **What was wrong.** The paid "container" surface ran its OWN agent loop inside `api/container/server.mjs` (`runImageLoop`, a compiled copy of the kernel, a relayed tool table, an `llm` op, `finalize`/`fail` ops). The GitHub Actions runner inlined a third copy. So a run behaved differently by plan, and every engine improvement had to be made twice. The run record, the code map, the per-turn brief and the IDE-workspace writes reached some surfaces and not others.

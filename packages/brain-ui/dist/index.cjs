@@ -4872,15 +4872,16 @@ var import_jsx_runtime45 = require("react/jsx-runtime");
 function SpendBreakdown({ summary, labels, locale }) {
   const { spend, saved, savedPct } = summary;
   const usd = (n2) => formatUsd(n2, locale);
+  const spent = (n2) => `${spend.estimated ? "\u2248" : ""}${usd(n2)}`;
   return /* @__PURE__ */ (0, import_jsx_runtime45.jsxs)("div", { className: "bf-spend", children: [
     /* @__PURE__ */ (0, import_jsx_runtime45.jsx)("div", { className: "bf-spend__group", children: labels.spendHeading }),
     /* @__PURE__ */ (0, import_jsx_runtime45.jsxs)("div", { className: "bf-spend__row", children: [
       /* @__PURE__ */ (0, import_jsx_runtime45.jsx)("span", { className: "bf-spend__k", children: labels.platform }),
-      /* @__PURE__ */ (0, import_jsx_runtime45.jsx)("span", { className: "bf-spend__v", children: usd(spend.platformUsd) })
+      /* @__PURE__ */ (0, import_jsx_runtime45.jsx)("span", { className: "bf-spend__v", children: spent(spend.platformUsd) })
     ] }),
     spend.yourKeyUsd > 0 && /* @__PURE__ */ (0, import_jsx_runtime45.jsxs)("div", { className: "bf-spend__row", title: labels.yourKeyHint, children: [
       /* @__PURE__ */ (0, import_jsx_runtime45.jsx)("span", { className: "bf-spend__k", children: labels.yourKey }),
-      /* @__PURE__ */ (0, import_jsx_runtime45.jsx)("span", { className: "bf-spend__v", children: usd(spend.yourKeyUsd) })
+      /* @__PURE__ */ (0, import_jsx_runtime45.jsx)("span", { className: "bf-spend__v", children: spent(spend.yourKeyUsd) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime45.jsxs)("div", { className: "bf-spend__meta", children: [
       fill(labels.tokens, { tokens: formatTokens(spend.totalTokens, locale) }),
@@ -4934,7 +4935,8 @@ var DEFAULT_SPEND_LABELS = {
     evermind_answer: "Answered by Evermind",
     response_cache: "Repeated request",
     context_trim: "Context kept lean",
-    recall_overhead: "Recall added"
+    recall_overhead: "Recall added",
+    local_model: "On this machine"
   },
   sourceHints: {
     prompt_cache: "The provider served part of the prompt from its cache at a tenth of the price",
@@ -4942,7 +4944,8 @@ var DEFAULT_SPEND_LABELS = {
     evermind_answer: "The project\u2019s Evermind answered \u2014 no paid model call",
     response_cache: "An identical request was answered from the gateway cache \u2014 no model call",
     context_trim: "Compaction kept earlier turns out of each call",
-    recall_overhead: "What recalled memories added to each prompt \u2014 the cost of recall"
+    recall_overhead: "What recalled memories added to each prompt \u2014 the cost of recall",
+    local_model: "A model on this machine served the call \u2014 what your paid route would have charged for the same tokens"
   }
 };
 function spendLabels(overrides) {
@@ -4988,7 +4991,10 @@ function SpendPill({ summary, labels: overrides, locale }) {
         "aria-expanded": open,
         onClick: toggle,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime46.jsx)("span", { className: "bf-spend-pill__spent", children: formatUsd(spend.totalUsd, locale) }),
+          /* @__PURE__ */ (0, import_jsx_runtime46.jsxs)("span", { className: "bf-spend-pill__spent", children: [
+            spend.estimated ? "\u2248" : "",
+            formatUsd(spend.totalUsd, locale)
+          ] }),
           /* @__PURE__ */ (0, import_jsx_runtime46.jsx)("span", { className: "bf-spend-pill__sep", "aria-hidden": true, children: "\xB7" }),
           /* @__PURE__ */ (0, import_jsx_runtime46.jsx)("span", { className: "bf-spend-pill__tok", children: fill(labels.tokens, { tokens: formatTokens(spend.totalTokens, locale) }) }),
           savedText && /* @__PURE__ */ (0, import_jsx_runtime46.jsxs)(import_jsx_runtime46.Fragment, { children: [

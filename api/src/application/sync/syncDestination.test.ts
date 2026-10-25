@@ -10,6 +10,7 @@ function stores(options: { mapped?: string[]; owned?: number[] } = {}): Pick<Syn
     projectInTenant: async (tenantId, id) => tenantId === 7 && (options.owned ?? []).includes(id),
     taskInTenant: async () => false,
     tenantMember: async () => false,
+    chatOwnedBy: async () => false,
   };
   return {
     references,

@@ -24,6 +24,7 @@ import { providerForVendor } from './llmProviderCatalog';
 import { sql, type SQL } from 'drizzle-orm';
 import { addUsageToTenantTotals, getTenantUsageTotalsForEnv } from './tokenUsage';
 import { pickPersistedMetadata } from './usageMetadata';
+import { IDEMPOTENCY_KEY_MAX_LENGTH } from '../shared/idempotentReplay';
 import { loadTenantProviderRows } from './tenantProviderRows';
 import { computeCostMillicents, type UsageSurface } from '@builderforce/spend-contract';
 import { COST_LEVER_ARMS_KEY, costLeverArmsStamp } from '../costMetrics/leverArms';
@@ -541,137 +542,198 @@ async function resolveByoCredentialId(
   }
 }
 
+/**
+ * The idempotency-key prefix of a usage row a device reported through sync (PRD 36.4).
+ * A partial unique index (migrations 1275 / transactional 0022) holds one row per key,
+ * because the sync push commits to another database and a retry re-sends what landed.
+ *
+ * RESERVED. A gateway caller's `Idempotency-Key` is client-chosen, so only the sync
+ * importer (`writeUsageRow(…, { syncImport: true })`) may store this prefix; on any other
+ * write it is dropped. Otherwise a caller could send it on every call and have each row
+ * after the first swallowed by the index — served, never billed.
+ */
+export const SYNC_USAGE_IDEMPOTENCY_PREFIX = 'sync-usage:';
+
+const isSyncUsageKey = (key: string | null | undefined): key is string =>
+  typeof key === 'string' && key.startsWith(SYNC_USAGE_IDEMPOTENCY_PREFIX);
+
+/**
+ * The key a row is stored under. A key the column cannot hold, or a reserved sync key on
+ * a write that is not the sync importer's, is dropped rather than failing the insert —
+ * a usage row is never lost over its key.
+ */
+export function storedIdempotencyKey(key: string | null | undefined, syncImport: boolean): string | null {
+  if (typeof key !== 'string' || key.length === 0 || key.length > IDEMPOTENCY_KEY_MAX_LENGTH) return null;
+  return isSyncUsageKey(key) === syncImport ? key : null;
+}
+
+/** The request path's writer: usage logging must never fail the request it records. */
 export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Promise<void> {
   try {
-    const usageDb = resolveUsageDatabase(env, db);
-    // Clamp tokens ONCE at the canonical write boundary so neither the cost price
-    // nor the persisted columns can carry a NaN/negative/fractional from a bad
-    // upstream turn — every usage producer (gateway + cloud) funnels through here.
-    const usage = sanitizeUsage(row.usage);
+    await writeUsageRow(db, env, row);
+  } catch (error) { /* never let usage logging fail the request */
+    reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "recordUsageRow" });
+  }
+}
 
-    // Price the call at write time so the dashboard/billing sums a recorded
-    // column instead of re-pricing tokens against a moving catalog. Catalog read
-    // is L1+KV cached, so this is a cheap lookup on the hot logging path.
-    // BYO rows are served by the tenant's OWN provider account, so token cost is
-    // zero. A registered OpenRouter connection still uses our routing/metering
-    // product, however, and its flat platform surcharge is independent of who
-    // paid OpenRouter for the tokens.
-    // What memory did on this row — an avoided call's figures, or the loop's per-call
-    // compaction / recall numbers carried in the metadata it already sends.
-    const savings = row.savings ?? readMemoryEffect(row.metadata);
-    let pricing: { prompt: number; completion: number } | undefined;
-    // A BYO row is still priced when it carries savings: they are valued at LIST, since
-    // the person's own key would have paid for the tokens memory kept off the call.
-    if (!row.byo || savings) {
-      try {
-        // The SAME price book the router orders cost-first calls by (`catalogView.ts`),
-        // so what a call was expected to cost and what it is recorded as costing come
-        // from one lookup — including its `openrouter/` prefix normalization.
-        // A BYO row is valued at LIST (`listPriceOf`, which also resolves a direct-vendor
-        // id); a platform row bills on `priceOf` alone, unchanged.
-        const book = await loadPriceBook(env);
-        const price = row.byo ? listPriceOf(book, row.model) : book.priceOf(row.model);
-        pricing = price ? { prompt: price.input, completion: price.output } : undefined;
-      } catch (error) { /* pricing unavailable — record tokens with cost 0 */ 
-        reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "recordUsageRow" });
-      }
+/**
+ * The ONE canonical usage write. Throws on failure — for a caller that must know the row
+ * landed (the sync importer answers a failed write as retryable, never as applied).
+ * With `syncImport`, the row's key must be a sync key and is held to one row: false
+ * when it already exists — nothing is written and the tenant totals do not move.
+ */
+export async function writeUsageRow(
+  db: Db,
+  env: Env,
+  row: RecordUsageRow,
+  opts: { syncImport?: boolean } = {},
+): Promise<boolean> {
+  const syncImport = opts.syncImport === true;
+  const idempotencyKey = storedIdempotencyKey(row.idempotencyKey, syncImport);
+  if (syncImport && idempotencyKey === null) throw new Error('A synced usage row needs its sync idempotency key');
+  const usageDb = resolveUsageDatabase(env, db);
+  // Clamp tokens ONCE at the canonical write boundary so neither the cost price
+  // nor the persisted columns can carry a NaN/negative/fractional from a bad
+  // upstream turn — every usage producer (gateway + cloud) funnels through here.
+  const usage = sanitizeUsage(row.usage);
+
+  // Price the call at write time so the dashboard/billing sums a recorded
+  // column instead of re-pricing tokens against a moving catalog. Catalog read
+  // is L1+KV cached, so this is a cheap lookup on the hot logging path.
+  // BYO rows are served by the tenant's OWN provider account, so token cost is
+  // zero. A registered OpenRouter connection still uses our routing/metering
+  // product, however, and its flat platform surcharge is independent of who
+  // paid OpenRouter for the tokens.
+  // What memory did on this row — an avoided call's figures, or the loop's per-call
+  // compaction / recall numbers carried in the metadata it already sends.
+  const savings = row.savings ?? readMemoryEffect(row.metadata);
+  let pricing: { prompt: number; completion: number } | undefined;
+  // A BYO row is still priced when it carries savings: they are valued at LIST, since
+  // the person's own key would have paid for the tokens memory kept off the call.
+  if (!row.byo || savings) {
+    try {
+      // The SAME price book the router orders cost-first calls by (`catalogView.ts`),
+      // so what a call was expected to cost and what it is recorded as costing come
+      // from one lookup — including its `openrouter/` prefix normalization.
+      // A BYO row is valued at LIST (`listPriceOf`, which also resolves a direct-vendor
+      // id); a platform row bills on `priceOf` alone, unchanged.
+      const book = await loadPriceBook(env);
+      const price = row.byo ? listPriceOf(book, row.model) : book.priceOf(row.model);
+      pricing = price ? { prompt: price.input, completion: price.output } : undefined;
+    } catch (error) { /* pricing unavailable — record tokens with cost 0 */ 
+      reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "writeUsageRow.pricing" });
     }
-    // A batch-API call is billed at the batch rate; savings below stay valued at list.
-    const costUsdMillicents = computeRecordedCostMillicents(
-      pricingForTier(pricing, row.pricingTier),
-      usage,
-      row.byo === true,
-      row.premiumSurcharge === true,
-    );
-    const savedCostUsdMillicents = row.savedCostMillicents != null && Number.isFinite(row.savedCostMillicents)
-      ? Math.round(row.savedCostMillicents)
-      : computeSavedCostMillicents(pricing, savings);
-    // Stamp the surcharge into metadata so an invoice/usage row can show it explicitly.
-    // Only the non-denied, size-bounded keys are PERSISTED (see usageMetadata) — the raw caller bag held
-    // guest prompt text and was the bulk of this table's size. `savings` above already read
-    // the full bag.
-    const keptMetadata = pickPersistedMetadata(row.metadata);
-    // The cost-lever arms this tenant was in when the row was written — A4's control
-    // group. Stamped here, the single writer, so every surface carries it; added AFTER
-    // the persistence filter so a caller cannot spoof its own arm, and bounded by
-    // construction (partial-rollout lever ids only — see costLeverArmsStamp).
-    const leverArms = costLeverArmsStamp(env, row.tenantId);
-    const armed: Record<string, unknown> | null = leverArms
-      ? { ...(keptMetadata ?? {}), [COST_LEVER_ARMS_KEY]: leverArms }
-      : keptMetadata;
-    // The pricing tier is the writer's fact, stamped after the filter like the arms, so
-    // an invoice line can say why the row costs half.
-    const stamped: Record<string, unknown> | null = row.pricingTier === 'batch'
-      ? { ...(armed ?? {}), pricingTier: 'batch' }
-      : armed;
-    const metadata = row.premiumSurcharge
-      ? { ...(stamped ?? {}), premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS }
-      : stamped;
-    // Chat attribution is promoted OUT of metadata into real columns (0934) so
-    // per-chat/per-mode spend is an indexed read rather than a JSON scan that
-    // silently drops every row whose metadata is absent or not an object. It stays
-    // in metadata as well — the SDK's billing trace-back contract reads it there.
-    const chatAttribution = readChatAttribution(metadata);
-    // WHICH key instance paid (0953). Resolved here — the single write boundary —
-    // rather than threaded through the proxy, because every producer already reaches
-    // this function with the two facts it needs (tenant + the provider we stamped)
-    // and none of them would otherwise carry a credential id. Served from the cached
-    // tenant provider rows (shared with credential resolution, invalidated on every key
-    // write), so a warm BYO row costs no statement; a platform-funded row costs nothing.
-    const byoCredentialId = row.byo && row.byoProvider && row.tenantId != null
-      ? await resolveByoCredentialId(env, row.tenantId, row.byoProvider)
-      : null;
+  }
+  // A batch-API call is billed at the batch rate; savings below stay valued at list.
+  const costUsdMillicents = computeRecordedCostMillicents(
+    pricingForTier(pricing, row.pricingTier),
+    usage,
+    row.byo === true,
+    row.premiumSurcharge === true,
+  );
+  const savedCostUsdMillicents = row.savedCostMillicents != null && Number.isFinite(row.savedCostMillicents)
+    ? Math.round(row.savedCostMillicents)
+    : computeSavedCostMillicents(pricing, savings);
+  // Stamp the surcharge into metadata so an invoice/usage row can show it explicitly.
+  // Only the non-denied, size-bounded keys are PERSISTED (see usageMetadata) — the raw caller bag held
+  // guest prompt text and was the bulk of this table's size. `savings` above already read
+  // the full bag.
+  const keptMetadata = pickPersistedMetadata(row.metadata);
+  // The cost-lever arms this tenant was in when the row was written — A4's control
+  // group. Stamped here, the single writer, so every surface carries it; added AFTER
+  // the persistence filter so a caller cannot spoof its own arm, and bounded by
+  // construction (partial-rollout lever ids only — see costLeverArmsStamp).
+  const leverArms = costLeverArmsStamp(env, row.tenantId);
+  const armed: Record<string, unknown> | null = leverArms
+    ? { ...(keptMetadata ?? {}), [COST_LEVER_ARMS_KEY]: leverArms }
+    : keptMetadata;
+  // The pricing tier is the writer's fact, stamped after the filter like the arms, so
+  // an invoice line can say why the row costs half.
+  const stamped: Record<string, unknown> | null = row.pricingTier === 'batch'
+    ? { ...(armed ?? {}), pricingTier: 'batch' }
+    : armed;
+  const metadata = row.premiumSurcharge
+    ? { ...(stamped ?? {}), premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS }
+    : stamped;
+  // Chat attribution is promoted OUT of metadata into real columns (0934) so
+  // per-chat/per-mode spend is an indexed read rather than a JSON scan that
+  // silently drops every row whose metadata is absent or not an object. It stays
+  // in metadata as well — the SDK's billing trace-back contract reads it there.
+  const chatAttribution = readChatAttribution(metadata);
+  // WHICH key instance paid (0953). Resolved here — the single write boundary —
+  // rather than threaded through the proxy, because every producer already reaches
+  // this function with the two facts it needs (tenant + the provider we stamped)
+  // and none of them would otherwise carry a credential id. Served from the cached
+  // tenant provider rows (shared with credential resolution, invalidated on every key
+  // write), so a warm BYO row costs no statement; a platform-funded row costs nothing.
+  const byoCredentialId = row.byo && row.byoProvider && row.tenantId != null
+    ? await resolveByoCredentialId(env, row.tenantId, row.byoProvider)
+    : null;
 
-    await usageDb.insert(llmUsageLog).values({
-      tenantId:            row.tenantId,
-      userId:              row.userId,
-      llmProduct:          row.llmProduct,
-      model:               row.model,
-      promptTokens:        usage.promptTokens,
-      completionTokens:    usage.completionTokens,
-      totalTokens:         usage.totalTokens,
-      cacheReadTokens:     usage.cacheReadTokens     ?? 0,
-      cacheCreationTokens: usage.cacheCreationTokens ?? 0,
-      // NULL, not 0, when the vendor reports no reasoning split (Anthropic) — so the
-      // reasoning share is computed only over rows that could have reported one.
-      reasoningTokens:     usage.reasoningTokens ?? null,
-      turnIndex:           clampOptionalCount(row.turnIndex),
-      toolSchemaTokens:    clampOptionalCount(row.toolSchemaTokens),
-      retries:             row.retries ?? 0,
-      streamed:            row.streamed ?? false,
-      metadata:            metadata ?? null,
-      chatId:              chatAttribution.chatId,
-      chatMode:            chatAttribution.chatMode,
-      idempotencyKey:      row.idempotencyKey ?? null,
-      useCase:             row.useCase ?? null,
-      tenantApiKeyId:      row.tenantApiKeyId ?? null,
-      agentHostId:         row.attribution?.agentHostId ?? null,
-      cloudAgentRef:       row.attribution?.cloudAgentRef ?? null,
-      executionId:         row.attribution?.executionId ?? null,
-      taskId:              row.attribution?.taskId ?? null,
-      projectId:           row.attribution?.projectId ?? null,
-      role:                row.attribution?.role ?? null,
-      costUsdMillicents,
-      traceId:             row.traceId ?? null,
-      paidOverflow:        row.paidOverflow ?? false,
-      // Premium-ness rides its own column so the daily cap can SUM it (0952). It is
-      // derived from the same `premiumSurcharge` signal that stamps the metadata key,
-      // so the two can never disagree about what a premium turn was.
-      premium:             row.premium ?? row.premiumSurcharge ?? false,
-      byo:                 row.byo ?? false,
-      byoProvider:         row.byo ? (row.byoProvider ?? null) : null,
-      byoCredentialId,
-      surface:             row.surface ?? 'web',
-      calls:               row.calls ?? 1,
-      savingsSource:          savings?.source ?? null,
-      savingsEstimated:       savings?.estimated ?? false,
-      savedPromptTokens:      clampTokenCount(savings?.savedPromptTokens ?? 0),
-      savedCompletionTokens:  clampTokenCount(savings?.savedCompletionTokens ?? 0),
-      recallPromptTokens:     clampTokenCount(savings?.recallPromptTokens ?? 0),
-      savedCostUsdMillicents,
-      ...(row.createdAt ? { createdAt: row.createdAt } : {}),
-    });
+  const insert = usageDb.insert(llmUsageLog).values({
+    tenantId:            row.tenantId,
+    userId:              row.userId,
+    llmProduct:          row.llmProduct,
+    model:               row.model,
+    promptTokens:        usage.promptTokens,
+    completionTokens:    usage.completionTokens,
+    totalTokens:         usage.totalTokens,
+    cacheReadTokens:     usage.cacheReadTokens     ?? 0,
+    cacheCreationTokens: usage.cacheCreationTokens ?? 0,
+    // NULL, not 0, when the vendor reports no reasoning split (Anthropic) — so the
+    // reasoning share is computed only over rows that could have reported one.
+    reasoningTokens:     usage.reasoningTokens ?? null,
+    turnIndex:           clampOptionalCount(row.turnIndex),
+    toolSchemaTokens:    clampOptionalCount(row.toolSchemaTokens),
+    retries:             row.retries ?? 0,
+    streamed:            row.streamed ?? false,
+    metadata:            metadata ?? null,
+    chatId:              chatAttribution.chatId,
+    chatMode:            chatAttribution.chatMode,
+    idempotencyKey,
+    useCase:             row.useCase ?? null,
+    tenantApiKeyId:      row.tenantApiKeyId ?? null,
+    agentHostId:         row.attribution?.agentHostId ?? null,
+    cloudAgentRef:       row.attribution?.cloudAgentRef ?? null,
+    executionId:         row.attribution?.executionId ?? null,
+    taskId:              row.attribution?.taskId ?? null,
+    projectId:           row.attribution?.projectId ?? null,
+    role:                row.attribution?.role ?? null,
+    costUsdMillicents,
+    traceId:             row.traceId ?? null,
+    paidOverflow:        row.paidOverflow ?? false,
+    // Premium-ness rides its own column so the daily cap can SUM it (0952). It is
+    // derived from the same `premiumSurcharge` signal that stamps the metadata key,
+    // so the two can never disagree about what a premium turn was.
+    premium:             row.premium ?? row.premiumSurcharge ?? false,
+    byo:                 row.byo ?? false,
+    byoProvider:         row.byo ? (row.byoProvider ?? null) : null,
+    byoCredentialId,
+    surface:             row.surface ?? 'web',
+    calls:               row.calls ?? 1,
+    savingsSource:          savings?.source ?? null,
+    savingsEstimated:       savings?.estimated ?? false,
+    savedPromptTokens:      clampTokenCount(savings?.savedPromptTokens ?? 0),
+    savedCompletionTokens:  clampTokenCount(savings?.savedCompletionTokens ?? 0),
+    recallPromptTokens:     clampTokenCount(savings?.recallPromptTokens ?? 0),
+    savedCostUsdMillicents,
+    ...(row.createdAt ? { createdAt: row.createdAt } : {}),
+  });
+  if (syncImport) {
+    const written = await insert.onConflictDoNothing({
+      target: [llmUsageLog.tenantId, llmUsageLog.idempotencyKey],
+      // Restates the partial index's predicate (`check:conflict-targets`).
+      where: sql`${llmUsageLog.idempotencyKey} LIKE 'sync-usage:%'`,
+    }).returning({ id: llmUsageLog.id });
+    if (written.length === 0) return false;
+  } else {
+    await insert;
+  }
 
+  // The row is written. What follows is derived from it, so a failure here is reported,
+  // never thrown: a caller that retries a "failed" write would find the row already there
+  // and skip these steps for good.
+  try {
     // Keep the cached cap totals exact between loads (see tokenUsage).
     await addUsageToTenantTotals(env, row.tenantId, {
       llmProduct: row.llmProduct,
@@ -689,10 +751,13 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     // capacity alert. This is what makes rolling/session limits recover automatically:
     // cooldown opens a half-open retry, the provider serves it, and the stale warning is
     // retired immediately instead of lingering until the daily probe or a manual Test.
-    if (row.byo && row.byoProvider) {
+    // Not for a synced row: a device's own call used the device's key, not the
+    // workspace's connected one, and says nothing about its health.
+    if (row.byo && row.byoProvider && !syncImport) {
       await clearProviderAuthAlertAfterByoSuccess(env, row.tenantId, row.byoProvider);
     }
-  } catch (error) { /* never let usage logging fail the request */ 
-    reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "recordUsageRow" });
+  } catch (error) {
+    reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "writeUsageRow.afterInsert" });
   }
+  return true;
 }

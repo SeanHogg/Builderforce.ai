@@ -13,7 +13,7 @@ import type { BrainChat, BrainMessage } from './types';
 import { boundServerId } from './localChat/chatIdentity';
 import { journalWrite } from './localChat/journal';
 import { liveRecords, type ChatValue, type MessageValue } from './localChat/records';
-import { ledgerSpend, usageRowsByChat, type RunUsageValue } from './localChat/usageLedger';
+import { importedUsageIds, ledgerSpend, usageRowsByChat, type RunUsageValue } from './localChat/usageLedger';
 
 export interface LocalBrainPersistenceOptions {
   store: LocalFirstStore;
@@ -46,6 +46,8 @@ interface ProjectionInput {
   record: LocalRecord<ChatValue>;
   serverId: number | undefined;
   usage: readonly RunUsageValue[];
+  /** The rows a sync import already put on the platform (bound chats only). */
+  imported: ReadonlySet<string>;
 }
 
 export function createLocalBrainPersistence(options: LocalBrainPersistenceOptions): BrainPersistenceAdapter {
@@ -74,11 +76,16 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
   const projectionInputs = async (tx: LocalFirstTransaction, rows: readonly LocalRecord<ChatValue>[]): Promise<ProjectionInput[]> => {
     const account = options.accountDestination?.();
     const usage = await usageRowsByChat(tx, options.deviceId);
-    return Promise.all(rows.map(async (record) => ({
-      record,
-      serverId: await boundServerId(tx, record.id, account),
-      usage: usage.get(record.id) ?? [],
-    })));
+    return Promise.all(rows.map(async (record) => {
+      const serverId = await boundServerId(tx, record.id, account);
+      const chatUsage = usage.get(record.id) ?? [];
+      return {
+        record,
+        serverId,
+        usage: chatUsage,
+        imported: serverId !== undefined && account ? await importedUsageIds(tx, chatUsage, account) : new Set<string>(),
+      };
+    }));
   };
 
   /**
@@ -96,12 +103,16 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
         server = null; // offline: the device's own estimate stands
       }
     }
-    return inputs.map(({ record, serverId, usage }) => {
+    return inputs.map(({ record, serverId, usage, imported }) => {
       const chat = chatValue(record);
       // The platform's figure covers the gateway's calls only when it HAS this chat; a
       // chat it could not report keeps the device's estimate of every call.
       const fromServer = serverId !== undefined ? server?.get(serverId) ?? null : null;
-      const local = ledgerSpend(usage, { excludeGateway: fromServer !== null, ...(options.priceBook ? { book: options.priceBook() } : {}) });
+      const local = ledgerSpend(usage, {
+        excludeGateway: fromServer !== null,
+        imported,
+        ...(options.priceBook ? { book: options.priceBook() } : {}),
+      });
       const spend = fromServer && local ? combineSpendSavings(fromServer, local) : fromServer ?? local;
       return {
         ...chat,

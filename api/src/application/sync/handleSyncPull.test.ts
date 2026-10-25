@@ -35,7 +35,14 @@ const apply: SyncMutationImporter = async (event, ctx, stores) => {
     payload: event.payload,
   };
 };
-const IMPORTERS: SyncNamedImporters = { importSyncedTicket: apply, importSyncedProject: apply, importMirrorRecord: apply };
+const IMPORTERS: SyncNamedImporters = {
+  importSyncedTicket: apply,
+  importSyncedProject: apply,
+  importSyncedChat: apply,
+  importSyncedMessage: apply,
+  importSyncedUsage: apply,
+  importMirrorRecord: apply,
+};
 
 let counter = 0;
 const uuid = (n: number) => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;

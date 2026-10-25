@@ -74,7 +74,7 @@ describe('importSyncedChat', () => {
   });
 
   it('adopts the chat bound on sign-in instead of minting a second one, and strips the hint', async () => {
-    const db = dbOf([[{ id: 40 }]]);
+    const db = dbOf();
     const outcome = await importSyncedChat(
       event({ entityType: 'chat', operation: 'import', payload: { ...chatValue, serverId: 40 } }),
       ctx(),
@@ -83,19 +83,19 @@ describe('importSyncedChat', () => {
     );
     expect(outcome).toMatchObject({ status: 'applied', serverId: '40', payload: chatValue });
     if (outcome.status === 'applied') expect(outcome.payloadHash).toBe(hashSyncPayload(chatValue));
-    expect(db.calls.map((call) => call.kind)).toEqual(['select']);
+    expect(db.calls).toHaveLength(0);
   });
 
   it('ignores a hint that is not the caller’s own chat', async () => {
-    const db = dbOf([[], [{ id: 22 }]]);
+    const db = dbOf([[{ id: 22 }]]);
     const outcome = await importSyncedChat(
       event({ entityType: 'chat', operation: 'import', payload: { ...chatValue, serverId: 99 } }),
-      ctx(),
+      ctx({ resolveOwnChatId: async () => null }),
       stores(),
       db,
     );
     expect(outcome).toMatchObject({ status: 'applied', serverId: '22' });
-    expect(db.calls.map((call) => call.kind)).toEqual(['select', 'insert']);
+    expect(db.calls.map((call) => call.kind)).toEqual(['insert']);
   });
 
   it('answers a retried import from its mapping without writing', async () => {
@@ -177,6 +177,18 @@ describe('importSyncedMessage', () => {
     expect(db.calls).toHaveLength(0);
   });
 
+  it('refuses a message whose mapped chat is another member’s — nothing is written into it', async () => {
+    const db = dbOf();
+    const outcome = await importSyncedMessage(
+      event({ entityType: 'message', operation: 'import', payload: messageValue }),
+      ctx({ resolveOwnChatId: async () => null }),
+      storesWith({ chat: mapping({ serverId: '42' }) }),
+      db,
+    );
+    expect(outcome).toEqual({ status: 'rejected', detail: 'message_chat_not_owned' });
+    expect(db.calls).toHaveLength(0);
+  });
+
   it('adopts the row already on the chat under the same event key', async () => {
     const db = dbOf([[], [{ id: 55 }]]);
     const outcome = await importSyncedMessage(
@@ -214,6 +226,18 @@ describe('importSyncedMessage', () => {
     expect(db.calls[0]?.payload).toEqual({ metadata: '{"feedback":"up"}' });
   });
 
+  it('deletes a message from its tombstone alone, on the caller’s own chat', async () => {
+    const db = dbOf([[{ chatId: 42 }], []]);
+    const outcome = await importSyncedMessage(
+      event({ entityType: 'message', operation: 'delete', payload: null, baseVersion: 2 }),
+      ctx(),
+      storesWith({ message: mapping({ serverId: '77' }) }),
+      db,
+    );
+    expect(outcome).toMatchObject({ status: 'applied', serverVersion: 3 });
+    expect(db.calls.map((call) => call.kind)).toEqual(['select', 'delete']);
+  });
+
   it('rejects an unknown role', async () => {
     const outcome = await importSyncedMessage(
       event({ entityType: 'message', operation: 'import', payload: { ...messageValue, message: { ...messageValue.message, role: 'root' } } }),
@@ -227,7 +251,8 @@ describe('importSyncedMessage', () => {
 
 describe('importSyncedUsage', () => {
   const localCall = {
-    clientEventId: '33333333-3333-4333-8333-333333333333',
+    // The event's own entity id (the harness default) — the ledger key is derived from it.
+    clientEventId: '11111111-1111-4111-8111-111111111111',
     clientChatId: CHAT_CLIENT_ID,
     runKey: 3,
     model: 'local/ollama/qwen3:8b',
@@ -244,17 +269,17 @@ describe('importSyncedUsage', () => {
     at: '2026-10-01T00:00:00.000Z',
   };
 
-  function ledger(existing = false): SyncUsageLedger & { rows: RecordUsageRow[]; keys: string[] } {
+  /** The ledger port's contract: one row per idempotency key, and a failed write throws. */
+  function ledger(options: { fail?: boolean } = {}): SyncUsageLedger & { rows: RecordUsageRow[]; keys: string[] } {
     const rows: RecordUsageRow[] = [];
     const keys: string[] = [];
     return {
       rows,
       keys,
-      hasRow: async (_tenantId, key) => {
-        keys.push(key);
-        return existing;
-      },
       record: async (row) => {
+        if (options.fail) throw new Error('usage database unavailable');
+        if (keys.includes(row.idempotencyKey ?? '')) return;
+        keys.push(row.idempotencyKey ?? '');
         rows.push(row);
       },
     };
@@ -269,7 +294,6 @@ describe('importSyncedUsage', () => {
       usage,
     );
     expect(outcome).toMatchObject({ status: 'applied', serverVersion: 1, payload: localCall });
-    expect(usage.keys).toEqual([`sync-usage:${localCall.clientEventId}`]);
     expect(usage.rows).toHaveLength(1);
     expect(usage.rows[0]).toMatchObject({
       tenantId: 7,
@@ -299,16 +323,38 @@ describe('importSyncedUsage', () => {
     expect(usage.rows).toHaveLength(0);
   });
 
-  it('does not write twice when the usage row already exists (a retry after a lost receipt)', async () => {
-    const usage = ledger(true);
-    const outcome = await importSyncedUsage(
+  it('does not write twice when the receipt was lost and the push is retried', async () => {
+    const usage = ledger();
+    const retry = () => importSyncedUsage(
       event({ entityType: 'usage', operation: 'import', payload: localCall }),
       ctx(),
       storesWith({}),
       usage,
     );
-    expect(outcome.status).toBe('applied');
-    expect(usage.rows).toHaveLength(0);
+    expect((await retry()).status).toBe('applied');
+    expect((await retry()).status).toBe('applied');
+    expect(usage.rows).toHaveLength(1);
+  });
+
+  it('answers a failed write as pending — retried, never applied and lost', async () => {
+    const outcome = await importSyncedUsage(
+      event({ entityType: 'usage', operation: 'import', payload: localCall }),
+      ctx(),
+      storesWith({}),
+      ledger({ fail: true }),
+    );
+    expect(outcome).toEqual({ status: 'pending', detail: 'usage_write_failed' });
+  });
+
+  it('never attributes a call to a chat that is not the caller’s own', async () => {
+    const usage = ledger();
+    await importSyncedUsage(
+      event({ entityType: 'usage', operation: 'import', payload: localCall }),
+      ctx({ resolveOwnChatId: async () => null }),
+      storesWith({ chat: mapping({ serverId: '42' }) }),
+      usage,
+    );
+    expect(usage.rows[0]?.metadata).not.toHaveProperty('chatId');
   });
 
   it('records a direct-provider call as the person’s own key, unattributed when its chat is unmapped', async () => {
@@ -318,6 +364,18 @@ describe('importSyncedUsage', () => {
     expect(usage.rows[0]).toMatchObject({ byo: true, byoProvider: 'minimax' });
     expect(usage.rows[0]?.metadata).not.toHaveProperty('chatId');
     expect(usage.rows[0]).not.toHaveProperty('savings');
+  });
+
+  it('refuses a payload that names another event, or a token count no call reports', async () => {
+    for (const [payload, detail] of [
+      [{ ...localCall, clientEventId: '44444444-4444-4444-8444-444444444444' }, 'usage_event_id_mismatch'],
+      [{ ...localCall, promptTokens: 1e12 }, 'usage_tokens_out_of_range'],
+    ] as const) {
+      const usage = ledger();
+      const outcome = await importSyncedUsage(event({ entityType: 'usage', operation: 'import', payload }), ctx(), storesWith({}), usage);
+      expect(outcome).toEqual({ status: 'rejected', detail });
+      expect(usage.rows).toHaveLength(0);
+    }
   });
 
   it('is immutable', async () => {

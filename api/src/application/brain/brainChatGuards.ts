@@ -60,14 +60,7 @@ export async function verifyChatOwnership(
   // A personal chat is still personal to an admin: administering the workspace
   // does not mean reading, renaming or archiving a colleague's conversation.
   const origin = (chat as { origin?: string | null }).origin ?? BRAIN_ORIGIN;
-  if (origin === BRAIN_ORIGIN) {
-    const [owned] = await db
-      .select({ id: brainChats.id })
-      .from(brainChats)
-      .where(and(eq(brainChats.id, chatId), eq(brainChats.tenantId, tenantId), eq(brainChats.userId, userId)))
-      .limit(1);
-    if (!owned) return null;
-  }
+  if (origin === BRAIN_ORIGIN && !(await chatOwnedBy(db, tenantId, userId, chatId))) return null;
   return chat;
 }
 
@@ -136,6 +129,20 @@ export async function chatInTenant(db: Db, tenantId: number, chatId: number): Pr
     .select({ id: brainChats.id })
     .from(brainChats)
     .where(and(eq(brainChats.id, chatId), eq(brainChats.tenantId, tenantId)))
+    .limit(1);
+  return !!chat;
+}
+
+/**
+ * Whether `chatId` is `userId`'s OWN chat in the tenant. A sync import writes history
+ * into a chat (messages, usage), and a client-held mapping is not proof the chat is the
+ * caller's: a tenant shares one mapping keyspace across its members (PRD 36.4).
+ */
+export async function chatOwnedBy(db: Db, tenantId: number, userId: string, chatId: number): Promise<boolean> {
+  const [chat] = await db
+    .select({ id: brainChats.id })
+    .from(brainChats)
+    .where(and(eq(brainChats.id, chatId), eq(brainChats.tenantId, tenantId), eq(brainChats.userId, userId)))
     .limit(1);
   return !!chat;
 }

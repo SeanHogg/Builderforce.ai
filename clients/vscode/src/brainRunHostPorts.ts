@@ -16,6 +16,7 @@ import { brainToolCatalog } from "./brainToolCatalog";
 import { localWindowProbes, resolveModelRoute, routeStream } from "./modelRouting";
 import { refreshPendingChanges } from "./gitChanges";
 import { recordEditorRunEnd } from "./editorRunEnd";
+import { boundServerIds } from "./sessionChats";
 import { getStableGrounding, recentActivitySection } from "./grounding";
 import { setLocalChatRuns } from "./attention";
 import { createBrainRunHost, type BrainRunHost } from "./brainRunHost";
@@ -256,6 +257,7 @@ function routeDeniedDomainTools(
 export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeRunHostHooks): BrainRunHost {
   const { secrets } = ctx;
   const local = localBrainApplication(ctx);
+  let runsReport = 0;
   // installHostDomainTools is intentionally deferred to the tool-dispatch path
   // (lazy on purpose: localBrainApplication mints the device id only after
   // globalState persists it, so an eager bind at construction would throw
@@ -317,10 +319,18 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
       // file is NOT opened in the editor — edits land on disk and stay out of the way.
       refreshPendingChanges();
     },
-    onRunsChanged: (state) => setLocalChatRuns(RUNS_SOURCE, state),
+    // Runs are keyed by LOCAL chat id; the tree lists SERVER chats, so each report carries
+    // the bound server ids (latest report wins — the lookups are async).
+    onRunsChanged: (state) => {
+      const report = ++runsReport;
+      void boundServerIds(local.identity, [...state.running, ...state.awaiting]).then((serverIds) => {
+        if (report === runsReport) setLocalChatRuns(RUNS_SOURCE, state, serverIds);
+      });
+    },
     // The note, then (Memory on) the code map + learned facts — the one run-end step the
     // native chat participant shares.
-    sessionNote: (chatId, run, opts) => recordEditorRunEnd(secrets, workspaceRoot(), `chat-${chatId}`, run, opts),
+    sessionNote: (chatId, run, opts) =>
+      recordEditorRunEnd(secrets, workspaceRoot(), `chat-${chatId}`, run, opts, { ledger: local.usage, chatId, runKey: chatId, identity: local.identity }),
     // Fresh per run: the notes of the run that just finished, not the panel's copy.
     recentActivity: () => recentActivitySection(workspaceRoot() || undefined),
     grounding: () => getStableGrounding(workspaceRoot() || undefined),

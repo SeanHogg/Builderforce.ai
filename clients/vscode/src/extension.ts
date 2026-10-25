@@ -42,6 +42,7 @@ import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from ".
 import { InboxQuickActionsProvider, InboxTreeProvider } from "./inboxTree";
 import { AttentionPoller, onLocalRunsChange, managerAttention } from "./attention";
 import { confirmChatDelete } from "./chatDeletion";
+import { localChatOf, openableLocalChat, openServerChatOnWeb, type SessionChat } from "./sessionChats";
 import { registerTaskActions } from "./taskActions";
 import { ClosedTasksTreeProvider } from "./closedTasksTree";
 import { createVsCodeRunHost } from "./brainRunHostPorts";
@@ -517,9 +518,14 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.newSession", () =>
       openWorkspace(context, { kind: "new" }),
     ),
-    vscode.commands.registerCommand("builderforce.openSession", (id: number | string) => {
-      const chatId = chatIdOf(id);
-      openWorkspace(context, chatId != null ? { kind: "focus", chatId } : { kind: "new" });
+    // The tree names a SERVER chat; the panel opens its local copy (`sessionChats.ts`).
+    // A chat the editor does not continue (a colleague's, or no account) opens on the web.
+    vscode.commands.registerCommand("builderforce.openSession", async (id: number | string, chat?: SessionChat) => {
+      const serverId = chatIdOf(id);
+      if (serverId == null) return openWorkspace(context, { kind: "new" });
+      const chatId = chat ? await openableLocalChat(context, serverId, chat) : await localChatOf(context, serverId);
+      if (chatId === undefined) return openServerChatOnWeb(serverId);
+      return openWorkspace(context, { kind: "focus", chatId });
     }),
     vscode.commands.registerCommand("builderforce.selectProject", () => selectProject(context, projects)),
     vscode.commands.registerCommand("builderforce.createProject", () => createProject(context, projects)),
@@ -654,8 +660,13 @@ export function activate(context: vscode.ExtensionContext): void {
       try {
         await bfApi.deleteBrainChat(context.secrets, id);
         tree.refresh();
-        // Only a panel showing THIS chat leaves it; every other one just re-reads its list.
-        notifyChatDeleted(id);
+        // The tree names the SERVER chat; the panel knows its local copy, if this machine has one.
+        const localId = await localChatOf(context, id);
+        if (localId !== undefined) {
+          await localBrainApplication(context).persistence.deleteChat(localId);
+          // Only a panel showing THIS chat leaves it; every other one just re-reads its list.
+          notifyChatDeleted(localId);
+        }
       } catch (e) {
         surfaceError(e, "command:deleteSession", `BuilderForce: could not delete chat (${(e as Error).message}).`);
       }
@@ -672,7 +683,11 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       if (title === undefined) return;
       try {
-        await bfApi.renameBrainChat(context.secrets, id, title.trim() || vscode.l10n.t("New chat"));
+        const renamed = title.trim() || vscode.l10n.t("New chat");
+        await bfApi.renameBrainChat(context.secrets, id, renamed);
+        // The local copy too: its next synced write carries its title, and must not undo this.
+        const localId = await localChatOf(context, id);
+        if (localId !== undefined) await localBrainApplication(context).persistence.updateChat(localId, { title: renamed });
         tree.refresh();
       } catch (e) {
         surfaceError(e, "command:renameSession", `BuilderForce: could not rename chat (${(e as Error).message}).`);
@@ -688,8 +703,12 @@ export function activate(context: vscode.ExtensionContext): void {
         await bfApi.deleteBrainChat(context.secrets, chat.id);
         tree.archiveSession(`chat:${chat.id}`);
         tree.refresh();
-        // Only a panel showing THIS chat leaves it; every other one just re-reads its list.
-        notifyChatDeleted(chat.id);
+        const localId = await localChatOf(context, chat.id);
+        if (localId !== undefined) {
+          await localBrainApplication(context).persistence.archiveChat(localId);
+          // Only a panel showing THIS chat leaves it; every other one just re-reads its list.
+          notifyChatDeleted(localId);
+        }
       } catch (e) {
         surfaceError(e, "command:archiveSession", `BuilderForce: could not archive chat (${(e as Error).message}).`);
       }
@@ -698,6 +717,10 @@ export function activate(context: vscode.ExtensionContext): void {
       const chat = chatOfSessionNode(item);
       if (!chat) return;
       tree.unarchiveSession(`chat:${chat.id}`);
+      // The local copy leaves the archive too, so the panel lists it again and its next
+      // synced write does not re-archive the chat.
+      const localId = await localChatOf(context, chat.id);
+      if (localId !== undefined) await localBrainApplication(context).persistence.updateChat(localId, { isArchived: false });
     }),
     vscode.commands.registerCommand("builderforce.toggleShowArchived", () => {
       tree.setShowArchived(!tree.showArchived);

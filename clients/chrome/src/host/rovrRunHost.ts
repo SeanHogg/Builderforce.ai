@@ -37,6 +37,12 @@ export interface RovrRunHostPorts {
   catalog(chatId: number): Promise<RunCatalog>;
   /** Rovr's system prompt for this run (playbooks, working tab, allowed sites). */
   systemPrompt(): Promise<string>;
+  /**
+   * PRD 36: the PLATFORM chat this device chat is synced to, or null while it is only on
+   * this device. Every server-addressed part of the run (gateway attribution, the model's
+   * chatId, ticket links) names it, or nothing — never the device's own id.
+   */
+  serverChatId?(chatId: number): Promise<number | null>;
   /** The chat's `/` Work panel choices for this run (`runOptions.ts`) — mode, effort,
    *  thinking, memory. Absent: a Chat-mode run at the default effort, with no memory. */
   runOptions?(chatId: number): Promise<RovrRunOptions>;
@@ -54,10 +60,11 @@ export interface RovrRunHost {
 export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
   return {
     async prepareRun(chatId) {
-      const [catalog, systemPrompt, options] = await Promise.all([
+      const [catalog, systemPrompt, options, serverChatId] = await Promise.all([
         ports.catalog(chatId),
         ports.systemPrompt(),
         ports.runOptions ? ports.runOptions(chatId) : Promise.resolve(null),
+        ports.serverChatId ? ports.serverChatId(chatId) : Promise.resolve(undefined),
       ]);
       return {
         resolvedSystemPrompt: options?.directives ? `${systemPrompt}\n\n${options.directives}` : systemPrompt,
@@ -71,6 +78,7 @@ export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
         ...(options ? { maxTokens: options.maxTokens } : {}),
         ...(options?.reasoning ? { reasoning: options.reasoning } : {}),
         ...(options?.evermind ? { evermind: options.evermind } : {}),
+        ...(serverChatId !== undefined ? { serverChatId } : {}),
         projectId: null,
       };
     },

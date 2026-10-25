@@ -37,8 +37,18 @@ export function managerAttention(): BfAttentionManager {
  * several panels are live at once and each reports only ITS OWN chat, so a single
  * shared map would let the last reporter erase every other panel's runs. Each
  * panel owns its own bucket and {@link attentionFor} merges across all of them.
+ *
+ * TWO id spaces (PRD 36). A run is keyed by its LOCAL chat id — what the panel's own
+ * tab reads ({@link editorChatState}). The server attention map and the Sessions tree
+ * are keyed by SERVER chat id, so a bucket also carries each local chat's bound server
+ * id, and {@link attentionFor} matches on that; an unbound chat has no server row.
  */
-const localBySource = new Map<string, Map<number, BfAttentionState>>();
+interface LocalRunBucket {
+  states: Map<number, BfAttentionState>;
+  /** Local chat id → its bound server chat id. */
+  serverIds: ReadonlyMap<number, number>;
+}
+const localBySource = new Map<string, LocalRunBucket>();
 const _onLocalRunsChange = new vscode.EventEmitter<void>();
 /** Fires when the webview-local run set changes (subscribe to repaint the trees). */
 export const onLocalRunsChange = _onLocalRunsChange.event;
@@ -51,34 +61,52 @@ function strongestState(...states: Array<BfAttentionState | undefined>): BfAtten
   return undefined;
 }
 
-/** Replace ONE source's editor-local run set (chat ids the host-owned Brain loop is
- *  running / paused on — runs the server cannot see). Pass an empty set to retire a
- *  source. Fires {@link onLocalRunsChange} only when that source's set changes. */
-export function setLocalChatRuns(sourceId: string, runs: { running: number[]; awaiting: number[] }): void {
+/** Replace ONE source's editor-local run set (LOCAL chat ids the host-owned Brain loop
+ *  is running / paused on — runs the server cannot see — and each one's bound server
+ *  chat id). Pass an empty set to retire a source. Fires {@link onLocalRunsChange} only
+ *  when that source's set changes. */
+export function setLocalChatRuns(
+  sourceId: string,
+  runs: { running: number[]; awaiting: number[] },
+  serverIds: ReadonlyMap<number, number> = new Map(),
+): void {
   const next = new Map<number, BfAttentionState>();
   for (const id of runs.running) next.set(id, "running");
   // Awaiting wins over running for the same id — it's the state the user must act on.
   for (const id of runs.awaiting) next.set(id, "awaiting_input");
-  const prev = localBySource.get(sourceId) ?? new Map<number, BfAttentionState>();
-  if (next.size === prev.size && [...next].every(([k, v]) => prev.get(k) === v)) return;
+  const prev = localBySource.get(sourceId);
+  const same = (a: ReadonlyMap<number, unknown>, b: ReadonlyMap<number, unknown> | undefined) =>
+    a.size === (b?.size ?? 0) && [...a].every(([k, v]) => b?.get(k) === v);
+  if (same(next, prev?.states) && same(serverIds, prev?.serverIds)) return;
   // An empty report retires the bucket outright, so a closed panel leaves nothing behind.
   if (next.size === 0) localBySource.delete(sourceId);
-  else localBySource.set(sourceId, next);
+  else localBySource.set(sourceId, { states: next, serverIds });
   _onLocalRunsChange.fire();
 }
 
-/** The strongest webview-local state for a chat across every reporting panel. */
-function localChatState(id: number): BfAttentionState | undefined {
+/** The strongest editor-local run state of a LOCAL chat — the panel's own tab. */
+export function editorChatState(localId: number): BfAttentionState | undefined {
   let out: BfAttentionState | undefined;
-  for (const bucket of localBySource.values()) out = strongestState(out, bucket.get(id));
+  for (const bucket of localBySource.values()) out = strongestState(out, bucket.states.get(localId));
   return out;
 }
 
-/** The live state of a task or Brain chat, or undefined when idle. Merges the
- *  server attention map with the webview-local run overlay (chats only). */
+/** The strongest editor-local run state of the local chats bound to a SERVER chat. */
+function localStateOfServerChat(serverId: number): BfAttentionState | undefined {
+  let out: BfAttentionState | undefined;
+  for (const bucket of localBySource.values()) {
+    for (const [localId, state] of bucket.states) {
+      if (bucket.serverIds.get(localId) === serverId) out = strongestState(out, state);
+    }
+  }
+  return out;
+}
+
+/** The live state of a task or SERVER Brain chat, or undefined when idle. Merges the
+ *  server attention map with the editor-local run overlay (chats only). */
 export function attentionFor(kind: "task" | "chat", id: number): BfAttentionState | undefined {
   const server = (kind === "task" ? current.tasks[id] : current.chats[id])?.state;
-  const local = kind === "chat" ? localChatState(id) : undefined;
+  const local = kind === "chat" ? localStateOfServerChat(id) : undefined;
   return strongestState(server, local);
 }
 

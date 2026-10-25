@@ -11,7 +11,8 @@
  * it served the call — so it is refused (`usage_server_observed`). And because the
  * usage ledger lives in a different database than the push's unit of work, a retry
  * cannot be deduped by the sync transaction alone: the row carries the idempotency
- * key `sync-usage:<clientEventId>`, and an existing row under it is never written again.
+ * key `sync-usage:<clientEventId>`, which a unique index holds to one row (a retry's
+ * write is a no-op). A write that FAILS is answered pending — retried, never applied.
  *
  * WHO PAID. Both routes are tenant-funded on the person's own machine, so the row is
  * `byo` on surface `vsix`: zero platform cost and exempt from the plan allowance, the
@@ -24,14 +25,16 @@
  * verbatim, so a pull round-trips it unchanged.
  */
 
-import { normalizeByoProvider } from '../../llm/usageLedger';
+import { reportCaughtError } from '../../observability/caughtErrorReporter';
+import { normalizeByoProvider, SYNC_USAGE_IDEMPOTENCY_PREFIX } from '../../llm/usageLedger';
 import type { SyncEventInput, SyncImportContext, SyncStoreSet, SyncUsageLedger } from '../syncPorts';
 import {
   appliedExisting,
   appliedNew,
   clampedClientTime,
   conflict,
-  mappedChatId,
+  mappedChat,
+  pending,
   preludeRejection,
   rejected,
   type BoundedImportOutcome,
@@ -42,7 +45,6 @@ const MODES = new Set(['chat', 'work']);
 /** `llm_usage_log.model` is varchar(200). */
 const MODEL_MAX = 200;
 
-export const USAGE_IDEMPOTENCY_PREFIX = 'sync-usage:';
 export const USAGE_USE_CASE = 'vsix-local-usage';
 
 interface UsageFields {
@@ -63,13 +65,25 @@ type Parsed<T> = { ok: true; value: T } | { ok: false; detail: string };
 
 /** A token count: a non-negative integer, else 0 (an estimate never turns into NaN). */
 const count = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : 0);
+/**
+ * No real call reports more. Bounding each count keeps every column (and their sum) in
+ * `integer` range, so a bad payload is REJECTED here instead of failing the write — a
+ * failed write is answered pending, and a write that can never succeed would be retried
+ * forever.
+ */
+const MAX_TOKENS = 100_000_000;
 
 function readUsage(payload: unknown, clientEntityId: string): Parsed<UsageFields> {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { ok: false, detail: 'payload_invalid' };
   const raw = payload as Record<string, unknown>;
   if (typeof raw.model !== 'string' || raw.model.trim() === '') return { ok: false, detail: 'usage_model_required' };
   if (typeof raw.route !== 'string' || !ROUTES.has(raw.route)) return { ok: false, detail: 'usage_route_invalid' };
-  const clientEventId = typeof raw.clientEventId === 'string' && raw.clientEventId !== '' ? raw.clientEventId : clientEntityId;
+  // The ledger key is the EVENT'S entity id, which the push validated: a client-chosen id
+  // could overflow the key column or name another member's row and suppress it.
+  if (raw.clientEventId !== undefined && raw.clientEventId !== clientEntityId) return { ok: false, detail: 'usage_event_id_mismatch' };
+  const clientEventId = clientEntityId;
+  const tokens = [raw.promptTokens, raw.completionTokens, raw.cacheReadTokens, raw.cacheCreationTokens, raw.savedPrompt, raw.savedCompletion, raw.recallPrompt, raw.savedCostMc];
+  if (tokens.some((value) => count(value) > MAX_TOKENS)) return { ok: false, detail: 'usage_tokens_out_of_range' };
   const local = raw.savingsSource === 'local_model'
     ? {
         savedPrompt: count(raw.savedPrompt),
@@ -128,11 +142,12 @@ export async function importSyncedUsage(
     return conflict(mapping, 'entity_already_imported');
   }
 
-  const idempotencyKey = `${USAGE_IDEMPOTENCY_PREFIX}${usage.clientEventId}`;
-  if (!(await ledger.hasRow(tenantId, idempotencyKey))) {
-    // Unmapped chat ⇒ the row is still written, unattributed: spend is never dropped
-    // because its conversation has not landed.
-    const chatId = await mappedChatId(stores, tenantId, usage.clientChatId);
+  const idempotencyKey = `${SYNC_USAGE_IDEMPOTENCY_PREFIX}${usage.clientEventId}`;
+  // A chat that has not landed (or is not the caller's) ⇒ the row is still written,
+  // unattributed: spend is never dropped, and never pinned on someone else's chat.
+  const chat = await mappedChat(stores, ctx, usage.clientChatId);
+  const chatId = chat.kind === 'own' ? chat.chatId : null;
+  try {
     await ledger.record({
       tenantId,
       userId: ctx.auth.userId,
@@ -171,6 +186,9 @@ export async function importSyncedUsage(
           }
         : {}),
     });
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/sync/importers/importSyncedUsage.ts', operation: 'importSyncedUsage' });
+    return pending('usage_write_failed');
   }
   return appliedNew(event.clientEntityId, 1, ctx.destinationKey, event.payload);
 }

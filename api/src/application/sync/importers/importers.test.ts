@@ -398,7 +398,8 @@ describe('importMirrorRecord', () => {
 
   it('conflicts a divergent history replay', async () => {
     const outcome = await importMirrorRecord(
-      event({ entityType: 'chat', operation: 'create', payload: { title: 'later' } }),
+      // Chat has its own importer since PRD 36.4; execution is still history-only.
+      event({ entityType: 'execution', operation: 'create', payload: { title: 'later' } }),
       ctx(),
       stores(mapping({ serverId: 'chat-1', serverVersion: 3 })),
     );

@@ -459,7 +459,7 @@ var isCountSeparator = (code) => code === 32 || code === 9 || code === 10 || cod
 function tailCountingRun(text) {
   let pos = text.length;
   let expected = null;
-  let count = 0;
+  let count2 = 0;
   let start = pos;
   for (; ; ) {
     let end = pos;
@@ -470,13 +470,13 @@ function tailCountingRun(text) {
     if (begin > 0 && !isCountSeparator(text.charCodeAt(begin - 1))) break;
     const value = Number(text.slice(begin, end));
     if (expected !== null && value !== expected) break;
-    count += 1;
+    count2 += 1;
     start = begin;
     pos = begin;
     expected = value - 1;
   }
-  if (count < COUNT_MIN_RUN) return null;
-  return { block: text.slice(start).trim(), copies: count, kept: text.slice(0, start).trimEnd() };
+  if (count2 < COUNT_MIN_RUN) return null;
+  return { block: text.slice(start).trim(), copies: count2, kept: text.slice(0, start).trimEnd() };
 }
 var LOOP_MIN_COPIES = 3;
 var LOOP_MIN_BLOCK_CHARS = 40;
@@ -1502,7 +1502,15 @@ async function runStreamChatCompletion(opts, handlers, request) {
     if (!u || typeof u !== "object") return;
     const o = u;
     const num = (x) => typeof x === "number" && Number.isFinite(x) ? x : void 0;
-    const next = { prompt: num(o.prompt_tokens), completion: num(o.completion_tokens), total: num(o.total_tokens) };
+    const cacheRead = num(o.cache_read_input_tokens) ?? num(o.prompt_tokens_details?.cached_tokens);
+    const cacheCreation = num(o.cache_creation_input_tokens) ?? num(o.prompt_tokens_details?.cache_write_tokens);
+    const next = {
+      prompt: num(o.prompt_tokens),
+      completion: num(o.completion_tokens),
+      total: num(o.total_tokens),
+      ...cacheRead != null ? { cacheRead } : {},
+      ...cacheCreation != null ? { cacheCreation } : {}
+    };
     if (next.prompt != null || next.completion != null || next.total != null) usage = next;
   };
   let upstream;
@@ -1680,6 +1688,10 @@ var PLATFORM_ROUTE_RULES = Object.freeze([
   { path: "/api/projects/*/evermind", match: "contains", capability: "connected-feature", content: true, note: "a project's Evermind memory" },
   { path: "/api/evermind", match: "contains", capability: "connected-feature", content: true, note: "Evermind memory" },
   { path: "/api/sync", match: "prefix", capability: "synchronize", content: true, note: "the local-first sync transport \u2014 the records themselves" },
+  // PRD 36: a signed-in editor BINDS its local chat to a server chat so the chat's
+  // tickets, usage and memory land on it. The bind sends a title and a project — never
+  // the transcript (that is `/messages`, below, and the sync transport above).
+  { path: "/api/brain/chats", capability: "connected-feature", note: "binding a chat to the account \u2014 its title and project only" },
   { path: "/api/brain/chats/*/messages", content: true, note: "a Brain chat's transcript" },
   { path: "/api/chats/*/messages", content: true, note: "a chat's transcript" },
   { path: "/api/brain/upload", content: true, note: "an uploaded file" },
@@ -1790,6 +1802,1021 @@ var INDEXEDDB_REDACTED_KEYS = [
 ];
 var INDEXEDDB_REDACTION_RULE = `Only exportForUploadOrLog() output may be uploaded or logged. It strips every secret-shaped key at every depth \u2014 a key whose lowercase name is one of ${INDEXEDDB_REDACTED_KEYS.join(", ")} or contains token, secret, password, authorization, cookie, or apikey \u2014 so accessToken, client_secret and sessionCookie are stripped too. The strip is recursive through arrays and nested objects, the input is not mutated, and a dropped key is absent rather than blanked. export() is the unfiltered local record and must not leave the device.`;
 
+// ../packages/spend-contract/src/cost.ts
+var MILLICENTS_PER_USD = 1e5;
+function millicentsToUsd(millicents) {
+  return Number(millicents ?? 0) / MILLICENTS_PER_USD;
+}
+var CACHE_READ_MULTIPLIER = 0.1;
+var CACHE_CREATION_MULTIPLIER = 1.25;
+function computeCostMillicents(pricing, usage) {
+  if (!pricing) return 0;
+  const cacheRead = usage.cacheReadTokens ?? 0;
+  const cacheCreation = usage.cacheCreationTokens ?? 0;
+  const fullPrompt = Math.max(0, usage.promptTokens - cacheRead - cacheCreation);
+  const usd2 = fullPrompt * pricing.prompt + cacheRead * pricing.prompt * CACHE_READ_MULTIPLIER + cacheCreation * pricing.prompt * CACHE_CREATION_MULTIPLIER + usage.completionTokens * pricing.completion;
+  return Math.round(usd2 * 1e5);
+}
+
+// ../packages/model-catalog/src/price.ts
+var TOKENS_PER_MILLION = 1e6;
+function perMillionToPerToken(usdPerMillion) {
+  return usdPerMillion / TOKENS_PER_MILLION;
+}
+var ZERO_PRICE = Object.freeze({ input: 0, output: 0 });
+
+// ../packages/model-catalog/src/priceTiers.ts
+var tier = (aboveInputTokens, inputPerMillion, outputPerMillion) => ({
+  aboveInputTokens,
+  input: perMillionToPerToken(inputPerMillion),
+  output: perMillionToPerToken(outputPerMillion)
+});
+var PRICE_TIERS = Object.freeze({
+  // Google AI Studio / Vertex list price: $1.25 / $10 per M up to 200K prompt tokens,
+  // $2.50 / $15 above (ai.google.dev/gemini-api/docs/pricing). Verify against vendor pricing page.
+  "gemini-2-5-pro": [tier(2e5, 2.5, 15)],
+  // Anthropic long-context pricing for the 1M-window Sonnet 4 / 4.5: $3 / $15 per M up
+  // to 200K input, $6 / $22.50 above (docs.claude.com pricing, "long context").
+  // Verify against vendor pricing page.
+  "claude-sonnet-4": [tier(2e5, 6, 22.5)],
+  "claude-sonnet-4-5": [tier(2e5, 6, 22.5)],
+  // Claude Haiku 5.5: $0.10 / $0.50 per M for prompts up to 100K, $0.50 / $2.50 beyond
+  // (Anthropic model pricing table, 2026-10). Verify against vendor pricing page.
+  "claude-haiku-5-5": [tier(1e5, 0.5, 2.5)]
+});
+function priceTierFamily(modelId) {
+  let id = (modelId ?? "").trim().toLowerCase();
+  id = id.slice(id.lastIndexOf("/") + 1);
+  id = id.replace(/^(?:[a-z]{2,3}\.)?anthropic\./, "");
+  id = id.replace(/:.*$/, "");
+  id = id.replace(/\./g, "-");
+  id = id.replace(/-\d{8}(?:-v\d+)?$/, "");
+  return id;
+}
+function priceTiersFor(modelId) {
+  return PRICE_TIERS[priceTierFamily(modelId)];
+}
+function priceTierBoundary(modelId) {
+  const tiers = priceTiersFor(modelId);
+  return tiers && tiers.length > 0 ? Math.min(...tiers.map((t) => t.aboveInputTokens)) : void 0;
+}
+function withPriceTiers(modelId, price) {
+  const tiers = price.priceTiers ?? priceTiersFor(modelId);
+  return tiers ? { ...price, priceTiers: tiers } : price;
+}
+
+// ../packages/model-catalog/src/priceBook.ts
+function directCatalogId(model) {
+  return model.startsWith("direct/") ? model.slice("direct/".length).toLowerCase() : void 0;
+}
+function catalogPriceId(model) {
+  return model.startsWith("openrouter/") ? model.slice("openrouter/".length) : model;
+}
+function listPriceOf(book2, model) {
+  return book2.listPriceOf ? book2.listPriceOf(model) : book2.priceOf(model);
+}
+function priceBookFromPrices(prices) {
+  const byId = /* @__PURE__ */ new Map();
+  const byLowerId = /* @__PURE__ */ new Map();
+  for (const [id, price] of prices) {
+    byId.set(id, price);
+    byLowerId.set(id.toLowerCase(), price);
+  }
+  const priceOf = (model) => byId.get(catalogPriceId(model));
+  return {
+    priceOf,
+    listPriceOf: (model) => {
+      const direct = directCatalogId(model);
+      return priceOf(model) ?? (direct ? byLowerId.get(direct) : void 0);
+    }
+  };
+}
+
+// ../packages/model-catalog/src/generated/priceSnapshot.ts
+var PRICE_SNAPSHOT = {
+  "~anthropic/claude-fable-latest": [1e-5, 5e-5],
+  "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
+  "~anthropic/claude-opus-latest": [4e-6, 2e-5],
+  "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
+  "~deepseek/deepseek-flash-latest": [2e-8, 1e-6],
+  "~deepseek/deepseek-pro-latest": [1188e-10, 8e-6],
+  "~deepseek/deepseek-v4-flash-latest": [422e-10, 1763e-10],
+  "~google/gemini-flash-latest": [75e-8, 375e-8],
+  "~google/gemini-pro-latest": [2e-6, 1e-5],
+  "~moonshotai/kimi-latest": [19e-8, 85258e-10],
+  "~openai/gpt-astra-latest": [1e-5, 5e-5],
+  "~openai/gpt-luna-latest": [1e-7, 5e-7],
+  "~openai/gpt-mini-latest": [75e-8, 45e-7],
+  "~openai/gpt-sol-latest": [2e-6, 1e-5],
+  "~openai/gpt-terra-latest": [2e-6, 12e-6],
+  "~unbiased/pareto-latest": [8e-7, 32e-7],
+  "~x-ai/grok-latest": [2e-6, 6e-6],
+  "~z-ai/glm-flash-latest": [502e-10, 819e-10],
+  "~z-ai/glm-latest": [75e-9, 4295e-9],
+  "aion-labs/aion-2.0": [8e-7, 16e-7],
+  "aion-labs/aion-3.0": [3e-6, 6e-6],
+  "aion-labs/aion-3.0-mini": [7e-7, 14e-7],
+  "aion-labs/aion-3.5": [3e-6, 6e-6],
+  "aion-labs/aion-3.5-mini": [7e-7, 14e-7],
+  "aion-labs/aion-rp-llama-3.1-8b": [8e-7, 16e-7],
+  "amazon/nova-2-lite-v1": [3e-7, 25e-7],
+  "amazon/nova-lite-v1": [6e-8, 24e-8],
+  "amazon/nova-micro-v1": [35e-9, 14e-8],
+  "amazon/nova-premier-v1": [25e-7, 125e-7],
+  "amazon/nova-pro-v1": [8e-7, 32e-7],
+  "anthracite-org/magnum-v4-72b": [25e-7, 5e-6],
+  "anthropic/claude-fable-5": [1e-5, 5e-5],
+  "anthropic/claude-fable-5:batch": [5e-6, 25e-6],
+  "anthropic/claude-fable-5.1": [1e-5, 5e-5],
+  "anthropic/claude-fable-5.1:batch": [5e-6, 25e-6],
+  "anthropic/claude-haiku-4.5": [1e-6, 5e-6],
+  "anthropic/claude-haiku-4.5:batch": [5e-7, 25e-7],
+  "anthropic/claude-haiku-5.5": [1e-7, 5e-7],
+  "anthropic/claude-haiku-5.5:batch": [5e-8, 25e-8],
+  "anthropic/claude-opus-4.1": [15e-6, 75e-6],
+  "anthropic/claude-opus-4.1:batch": [75e-7, 375e-7],
+  "anthropic/claude-opus-4.5": [5e-6, 25e-6],
+  "anthropic/claude-opus-4.5:batch": [25e-7, 125e-7],
+  "anthropic/claude-opus-4.6": [5e-6, 25e-6],
+  "anthropic/claude-opus-4.6:batch": [25e-7, 125e-7],
+  "anthropic/claude-opus-4.7": [5e-6, 25e-6],
+  "anthropic/claude-opus-4.7:batch": [25e-7, 125e-7],
+  "anthropic/claude-opus-4.8": [5e-6, 25e-6],
+  "anthropic/claude-opus-4.8:batch": [25e-7, 125e-7],
+  "anthropic/claude-opus-5": [5e-6, 25e-6],
+  "anthropic/claude-opus-5:batch": [25e-7, 125e-7],
+  "anthropic/claude-opus-5.5": [4e-6, 2e-5],
+  "anthropic/claude-opus-5.5:batch": [2e-6, 1e-5],
+  "anthropic/claude-sonnet-4.5": [3e-6, 15e-6],
+  "anthropic/claude-sonnet-4.5:batch": [15e-7, 75e-7],
+  "anthropic/claude-sonnet-4.6": [3e-6, 15e-6],
+  "anthropic/claude-sonnet-4.6:batch": [15e-7, 75e-7],
+  "anthropic/claude-sonnet-5": [2e-6, 1e-5],
+  "anthropic/claude-sonnet-5:batch": [1e-6, 5e-6],
+  "anthropic/claude-sonnet-5.5": [2e-6, 1e-5],
+  "anthropic/claude-sonnet-5.5:batch": [1e-6, 5e-6],
+  "arcee-ai/trinity-large-thinking": [25e-8, 8e-7],
+  "bytedance-seed/seed-1.6": [25e-8, 2e-6],
+  "bytedance-seed/seed-1.6-flash": [75e-9, 3e-7],
+  "bytedance-seed/seed-2-1-turbo": [5e-7, 25e-7],
+  "bytedance-seed/seed-2.0-code": [5e-7, 3e-6],
+  "bytedance-seed/seed-2.0-lite": [25e-8, 2e-6],
+  "bytedance-seed/seed-2.0-mini": [1e-7, 4e-7],
+  "bytedance/ui-tars-1.5-7b": [1e-7, 2e-7],
+  "cognitivecomputations/dolphin-mistral-24b-venice-edition": [2e-7, 9e-7],
+  "cohere/command-a": [25e-7, 1e-5],
+  "cohere/command-a-plus": [3e-7, 15e-7],
+  "cohere/command-r-08-2024": [15e-8, 6e-7],
+  "cohere/command-r-plus-08-2024": [25e-7, 1e-5],
+  "cohere/command-r7b-12-2024": [375e-10, 15e-8],
+  "cohere/north-mini-code:free": [0, 0],
+  "deepseek/deepseek-chat": [2574e-10, 10287e-10],
+  "deepseek/deepseek-chat-v3-0324": [29e-8, 114e-8],
+  "deepseek/deepseek-chat-v3.1": [25e-8, 95e-8],
+  "deepseek/deepseek-r1-0528": [5e-7, 215e-8],
+  "deepseek/deepseek-v3.1-terminus": [27e-8, 1e-6],
+  "deepseek/deepseek-v3.2": [28e-8, 42e-8],
+  "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
+  "deepseek/deepseek-v4-flash": [91e-9, 182e-9],
+  "deepseek/deepseek-v4-flash-0731": [4444e-11, 13332e-11],
+  "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
+  "deepseek/deepseek-v4-pro": [2088e-10, 4176e-10],
+  "deepseek/deepseek-v4-pro-0813": [66e-8, 198e-8],
+  "deepseek/deepseek-v4.1-flash": [2e-8, 1e-6],
+  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
+  "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
+  "dots-studio/dots-3-note-preview:free": [0, 0],
+  "elorian/glimpse": [6e-7, 3e-6],
+  "fireworks/ember-1": [3e-6, 15e-6],
+  "google/gemini-2.5-flash": [3e-7, 25e-7],
+  "google/gemini-2.5-flash-image": [3e-7, 25e-7],
+  "google/gemini-2.5-flash-lite": [1e-7, 4e-7],
+  "google/gemini-2.5-pro": [125e-8, 1e-5],
+  "google/gemini-2.5-pro-preview": [125e-8, 1e-5],
+  "google/gemini-3-flash-preview": [5e-7, 3e-6],
+  "google/gemini-3-flash-preview:batch": [25e-8, 15e-7],
+  "google/gemini-3-pro-image": [2e-6, 12e-6],
+  "google/gemini-3-pro-image-preview": [2e-6, 12e-6],
+  "google/gemini-3.1-flash-image": [5e-7, 3e-6],
+  "google/gemini-3.1-flash-image-preview": [5e-7, 3e-6],
+  "google/gemini-3.1-flash-lite": [25e-8, 15e-7],
+  "google/gemini-3.1-flash-lite-image": [25e-8, 15e-7],
+  "google/gemini-3.1-flash-lite-preview": [25e-8, 15e-7],
+  "google/gemini-3.1-flash-lite:batch": [125e-9, 75e-8],
+  "google/gemini-3.1-pro-preview": [2e-6, 12e-6],
+  "google/gemini-3.1-pro-preview-customtools": [2e-6, 12e-6],
+  "google/gemini-3.1-pro-preview:batch": [1e-6, 6e-6],
+  "google/gemini-3.5-flash": [15e-7, 9e-6],
+  "google/gemini-3.5-flash-lite": [3e-7, 25e-7],
+  "google/gemini-3.5-flash-lite:batch": [15e-8, 125e-8],
+  "google/gemini-3.5-flash:batch": [75e-8, 45e-7],
+  "google/gemini-3.6-flash": [75e-8, 375e-8],
+  "google/gemini-3.6-flash:batch": [375e-9, 1875e-9],
+  "google/gemini-3.7-flash": [75e-8, 375e-8],
+  "google/gemini-3.7-flash:batch": [375e-9, 1875e-9],
+  "google/gemini-3.8-flash": [825e-9, 4125e-9],
+  "google/gemini-3.8-flash:batch": [375e-9, 1875e-9],
+  "google/gemini-4-argon": [2e-6, 1e-5],
+  "google/gemini-4-argon:batch": [1e-6, 5e-6],
+  "google/gemini-nano-banana-2.1": [15e-7, 75e-7],
+  "google/gemma-2-27b-it": [65e-8, 65e-8],
+  "google/gemma-3-12b-it": [5e-8, 15e-8],
+  "google/gemma-3-27b-it": [8e-8, 35e-8],
+  "google/gemma-3-4b-it": [4e-8, 5e-8],
+  "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
+  "google/gemma-4-26b-a4b-it:free": [0, 0],
+  "google/gemma-4-31b-it": [2e-7, 4e-7],
+  "google/gemma-4-31b-it:free": [0, 0],
+  "google/lyria-3-clip-preview": [0, 0],
+  "google/lyria-3-pro-preview": [0, 0],
+  "gryphe/mythomax-l2-13b": [8e-8, 11e-8],
+  "ibm-granite/granite-4.0-h-micro": [17e-9, 112e-9],
+  "ibm-granite/granite-4.2-8b": [6e-8, 25e-8],
+  "inception/mercury-2": [25e-8, 75e-8],
+  "inception/mercury-2.5": [4e-8, 15e-8],
+  "inception/mercury-3": [1e-7, 35e-8],
+  "inclusionai/ling-3.0-flash": [21e-9, 63e-9],
+  "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
+  "inclusionai/ling-3.1-flash": [75e-9, 225e-9],
+  "inference-net/schematron-v2-small": [5e-8, 23e-8],
+  "inference-net/schematron-v2-turbo": [3e-8, 15e-8],
+  "liquid/lfm-2.5-2.6b": [35e-8, 5e-7],
+  "liquid/lfm-2.5-2.6b:free": [0, 0],
+  "liquid/lfm-2.5-24b-a2b": [5e-8, 7e-7],
+  "mancer/weaver": [4e-7, 75e-8],
+  "meituan/longcat-2.0": [3e-7, 12e-7],
+  "meta-llama/llama-3.1-70b-instruct": [4e-7, 4e-7],
+  "meta-llama/llama-3.1-8b-instruct": [5e-8, 8e-8],
+  "meta-llama/llama-3.2-1b-instruct": [27e-9, 201e-9],
+  "meta-llama/llama-3.2-3b-instruct": [509e-10, 335e-9],
+  "meta-llama/llama-3.3-70b-instruct": [1e-7, 32e-8],
+  "meta-llama/llama-4-maverick": [1875e-10, 6525e-10],
+  "meta-llama/llama-4-scout": [1e-7, 3e-7],
+  "meta-llama/llama-guard-4-12b": [18e-8, 18e-8],
+  "meta/muse-glimmer-30b": [3e-7, 12e-7],
+  "meta/muse-spark-1.1": [125e-8, 425e-8],
+  "meta/muse-spark-1.2": [125e-8, 425e-8],
+  "meta/muse-spark-1.2-contributor": [1e-7, 2e-7],
+  "meta/muse-spark-1.3": [125e-8, 425e-8],
+  "meta/muse-spark-1.3-contributor": [1e-7, 2e-7],
+  "meta/muse-spark-open": [125e-8, 425e-8],
+  "meta/muse-wonder": [4e-6, 2e-5],
+  "microsoft/phi-4": [7e-8, 14e-8],
+  "minimax/minimax-01": [2e-7, 11e-7],
+  "minimax/minimax-m1": [55e-8, 22e-7],
+  "minimax/minimax-m2": [255e-9, 102e-8],
+  "minimax/minimax-m2-her": [3e-7, 12e-7],
+  "minimax/minimax-m2.1": [3e-7, 12e-7],
+  "minimax/minimax-m2.5": [3e-7, 12e-7],
+  "minimax/minimax-m2.7": [3e-7, 12e-7],
+  "minimax/minimax-m3": [3e-7, 12e-7],
+  "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
+  "mistralai/codestral-2508": [3e-7, 9e-7],
+  "mistralai/codestral-2508:batch": [15e-8, 45e-8],
+  "mistralai/devstral-2512": [4e-7, 2e-6],
+  "mistralai/ministral-14b-2512": [2e-7, 2e-7],
+  "mistralai/ministral-3b-2512": [1e-7, 1e-7],
+  "mistralai/ministral-8b-2512": [15e-8, 15e-8],
+  "mistralai/ministral-8b-2512:batch": [75e-9, 75e-9],
+  "mistralai/mistral-large": [2e-6, 6e-6],
+  "mistralai/mistral-large-2407": [2e-6, 6e-6],
+  "mistralai/mistral-large-2512": [5e-7, 15e-7],
+  "mistralai/mistral-large-2512:batch": [25e-8, 75e-8],
+  "mistralai/mistral-large-4-0": [136e-8, 418e-8],
+  "mistralai/mistral-medium-3": [4e-7, 2e-6],
+  "mistralai/mistral-medium-3-5": [15e-7, 75e-7],
+  "mistralai/mistral-medium-3-5:batch": [75e-8, 375e-8],
+  "mistralai/mistral-medium-3.1": [4e-7, 2e-6],
+  "mistralai/mistral-medium-3.1:batch": [2e-7, 1e-6],
+  "mistralai/mistral-nemo": [29e-9, 3e-8],
+  "mistralai/mistral-saba": [2e-7, 6e-7],
+  "mistralai/mistral-small-24b-instruct-2501": [5e-8, 8e-8],
+  "mistralai/mistral-small-2603": [15e-8, 6e-7],
+  "mistralai/mistral-small-2603:batch": [75e-9, 3e-7],
+  "mistralai/mistral-small-3.1-24b-instruct": [351e-9, 555e-9],
+  "mistralai/mistral-small-3.2-24b-instruct": [75e-9, 2e-7],
+  "mistralai/mixtral-8x22b-instruct": [2e-6, 6e-6],
+  "mistralai/voxtral-small-24b-2507": [1e-7, 3e-7],
+  "moondream/moondream3-preview": [3e-7, 25e-7],
+  "moondream/moondream3.1-9b-a2b": [3e-7, 25e-7],
+  "moonshotai/kimi-k2": [57e-8, 23e-7],
+  "moonshotai/kimi-k2-0905": [6e-7, 25e-7],
+  "moonshotai/kimi-k2-thinking": [6e-7, 25e-7],
+  "moonshotai/kimi-k2.5": [5e-7, 25e-7],
+  "moonshotai/kimi-k2.6": [65e-8, 341e-8],
+  "moonshotai/kimi-k2.7-code": [6712e-10, 335e-8],
+  "moonshotai/kimi-k3": [239e-9, 108e-7],
+  "moonshotai/kimi-k3:batch": [228e-8, 114e-7],
+  "moonshotai/kimi-k3.1-pro": [2e-6, 1e-5],
+  "morph/morph-v3-fast": [8e-7, 12e-7],
+  "morph/morph-v3-large": [9e-7, 19e-7],
+  "nex-agi/nex-n2.5-mini": [25e-9, 1e-7],
+  "nex-agi/nex-n2.5-pro": [75e-9, 25e-8],
+  "nousresearch/hermes-3-llama-3.1-405b": [1e-6, 1e-6],
+  "nousresearch/hermes-3-llama-3.1-70b": [7e-7, 7e-7],
+  "nousresearch/hermes-4-405b": [1e-6, 3e-6],
+  "nvidia/nemotron-3-nano-30b-a3b": [6e-8, 24e-8],
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": [0, 0],
+  "nvidia/nemotron-3-super-120b-a12b": [3e-7, 24e-7],
+  "nvidia/nemotron-3-super-120b-a12b:free": [0, 0],
+  "nvidia/nemotron-3-ultra-550b-a55b": [6e-7, 24e-7],
+  "nvidia/nemotron-3-ultra-550b-a55b:free": [0, 0],
+  "nvidia/nemotron-3.5-content-safety": [2e-7, 2e-7],
+  "nvidia/nemotron-3.5-content-safety:free": [0, 0],
+  "nvidia/nemotron-3.5-lightning": [7e-8, 2e-7],
+  "nvidia/nemotron-3.5-lightning:free": [0, 0],
+  "nvidia/nemotron-3.5-super-vl": [15e-8, 5e-7],
+  "nvidia/nemotron-3.5-super-vl:free": [0, 0],
+  "nvidia/switchyard": [0, 0],
+  "openai/gpt-3.5-turbo-0613": [1e-6, 2e-6],
+  "openai/gpt-3.5-turbo-16k": [3e-6, 4e-6],
+  "openai/gpt-4": [3e-5, 6e-5],
+  "openai/gpt-4-turbo": [1e-5, 3e-5],
+  "openai/gpt-4-turbo:batch": [5e-6, 15e-6],
+  "openai/gpt-4.1": [2e-6, 8e-6],
+  "openai/gpt-4.1-mini": [4e-7, 16e-7],
+  "openai/gpt-4.1-mini:batch": [2e-7, 8e-7],
+  "openai/gpt-4.1-nano": [1e-7, 4e-7],
+  "openai/gpt-4.1-nano:batch": [5e-8, 2e-7],
+  "openai/gpt-4.1:batch": [1e-6, 4e-6],
+  "openai/gpt-4o": [25e-7, 1e-5],
+  "openai/gpt-4o-2024-05-13": [5e-6, 15e-6],
+  "openai/gpt-4o-2024-08-06": [25e-7, 1e-5],
+  "openai/gpt-4o-2024-11-20": [25e-7, 1e-5],
+  "openai/gpt-4o-mini": [15e-8, 6e-7],
+  "openai/gpt-4o-mini-2024-07-18": [15e-8, 6e-7],
+  "openai/gpt-4o-mini:batch": [75e-9, 3e-7],
+  "openai/gpt-4o:batch": [125e-8, 5e-6],
+  "openai/gpt-5": [125e-8, 1e-5],
+  "openai/gpt-5-image": [1e-5, 1e-5],
+  "openai/gpt-5-image-mini": [25e-7, 2e-6],
+  "openai/gpt-5-mini": [25e-8, 2e-6],
+  "openai/gpt-5-mini:batch": [125e-9, 1e-6],
+  "openai/gpt-5-nano": [5e-8, 4e-7],
+  "openai/gpt-5-nano:batch": [25e-9, 2e-7],
+  "openai/gpt-5-pro": [15e-6, 12e-5],
+  "openai/gpt-5-pro:batch": [75e-7, 6e-5],
+  "openai/gpt-5:batch": [625e-9, 5e-6],
+  "openai/gpt-5.1": [125e-8, 1e-5],
+  "openai/gpt-5.1-codex": [125e-8, 1e-5],
+  "openai/gpt-5.1-codex-max": [125e-8, 1e-5],
+  "openai/gpt-5.1-codex-mini": [25e-8, 2e-6],
+  "openai/gpt-5.1:batch": [625e-9, 5e-6],
+  "openai/gpt-5.2": [175e-8, 14e-6],
+  "openai/gpt-5.2-chat": [175e-8, 14e-6],
+  "openai/gpt-5.2-codex": [175e-8, 14e-6],
+  "openai/gpt-5.2-pro": [21e-6, 168e-6],
+  "openai/gpt-5.2-pro:batch": [105e-7, 84e-6],
+  "openai/gpt-5.2:batch": [875e-9, 7e-6],
+  "openai/gpt-5.3-codex": [175e-8, 14e-6],
+  "openai/gpt-5.4": [25e-7, 15e-6],
+  "openai/gpt-5.4-image-2": [8e-6, 15e-6],
+  "openai/gpt-5.4-mini": [75e-8, 45e-7],
+  "openai/gpt-5.4-mini:batch": [375e-9, 225e-8],
+  "openai/gpt-5.4-nano": [2e-7, 125e-8],
+  "openai/gpt-5.4-nano:batch": [1e-7, 625e-9],
+  "openai/gpt-5.4-pro": [3e-5, 18e-5],
+  "openai/gpt-5.4-pro:batch": [15e-6, 9e-5],
+  "openai/gpt-5.4:batch": [125e-8, 75e-7],
+  "openai/gpt-5.5": [5e-6, 3e-5],
+  "openai/gpt-5.5-pro": [3e-5, 18e-5],
+  "openai/gpt-5.5-pro:batch": [15e-6, 9e-5],
+  "openai/gpt-5.5:batch": [25e-7, 15e-6],
+  "openai/gpt-5.6-luna": [2e-7, 12e-7],
+  "openai/gpt-5.6-luna-pro": [2e-7, 12e-7],
+  "openai/gpt-5.6-luna-pro:batch": [1e-7, 6e-7],
+  "openai/gpt-5.6-luna:batch": [1e-7, 6e-7],
+  "openai/gpt-5.6-sol": [4e-6, 2e-5],
+  "openai/gpt-5.6-sol-pro": [4e-6, 2e-5],
+  "openai/gpt-5.6-sol-pro:batch": [2e-6, 1e-5],
+  "openai/gpt-5.6-sol:batch": [2e-6, 1e-5],
+  "openai/gpt-5.6-terra": [2e-6, 12e-6],
+  "openai/gpt-5.6-terra-pro": [2e-6, 12e-6],
+  "openai/gpt-5.6-terra-pro:batch": [1e-6, 6e-6],
+  "openai/gpt-5.6-terra:batch": [1e-6, 6e-6],
+  "openai/gpt-6-astra": [1e-5, 5e-5],
+  "openai/gpt-6-astra-pro": [1e-5, 5e-5],
+  "openai/gpt-6-astra-pro:batch": [5e-6, 25e-6],
+  "openai/gpt-6-astra:batch": [5e-6, 25e-6],
+  "openai/gpt-6-luna": [1e-7, 5e-7],
+  "openai/gpt-6-luna-pro": [1e-7, 5e-7],
+  "openai/gpt-6-luna-pro:batch": [5e-8, 25e-8],
+  "openai/gpt-6-luna:batch": [5e-8, 25e-8],
+  "openai/gpt-6-sol": [2e-6, 1e-5],
+  "openai/gpt-6-sol-pro": [2e-6, 1e-5],
+  "openai/gpt-6-sol-pro:batch": [1e-6, 5e-6],
+  "openai/gpt-6-sol:batch": [1e-6, 5e-6],
+  "openai/gpt-6.1-sol": [2e-6, 1e-5],
+  "openai/gpt-6.1-sol-pro": [2e-6, 1e-5],
+  "openai/gpt-6.1-sol-pro:batch": [1e-6, 5e-6],
+  "openai/gpt-6.1-sol:batch": [1e-6, 5e-6],
+  "openai/gpt-audio": [25e-7, 1e-5],
+  "openai/gpt-audio-mini": [6e-7, 24e-7],
+  "openai/gpt-chat-latest": [5e-6, 3e-5],
+  "openai/gpt-oss-120b": [15e-8, 6e-7],
+  "openai/gpt-oss-120b:batch": [296e-10, 136e-9],
+  "openai/gpt-oss-20b": [18e-9, 9e-8],
+  "openai/gpt-oss-20b:batch": [24e-9, 112e-9],
+  "openai/gpt-oss-safeguard-20b": [75e-9, 3e-7],
+  "openai/o1": [15e-6, 6e-5],
+  "openai/o1-pro": [15e-5, 6e-4],
+  "openai/o3": [2e-6, 8e-6],
+  "openai/o3-mini": [11e-7, 44e-7],
+  "openai/o3-mini-high": [11e-7, 44e-7],
+  "openai/o3-mini:batch": [55e-8, 22e-7],
+  "openai/o3-pro": [2e-5, 8e-5],
+  "openai/o3:batch": [1e-6, 4e-6],
+  "openai/o4-mini": [11e-7, 44e-7],
+  "openai/o4-mini-high": [11e-7, 44e-7],
+  "openai/o4-mini:batch": [55e-8, 22e-7],
+  "openrouter/auto": [0, 0],
+  "openrouter/auto-beta": [0, 0],
+  "openrouter/bodybuilder": [0, 0],
+  "openrouter/free": [0, 0],
+  "openrouter/fusion": [0, 0],
+  "openrouter/pareto-code": [0, 0],
+  "perceptron/perceptron-mk1": [15e-8, 15e-7],
+  "perceptron/perceptron-mk1.5": [15e-8, 15e-7],
+  "perplexity/sonar": [1e-6, 1e-6],
+  "perplexity/sonar-deep-research": [2e-6, 8e-6],
+  "perplexity/sonar-pro": [3e-6, 15e-6],
+  "perplexity/sonar-pro-search": [3e-6, 15e-6],
+  "perplexity/sonar-reasoning-pro": [2e-6, 8e-6],
+  "poolside/laguna-s-2.1": [9e-8, 18e-8],
+  "poolside/laguna-s-2.1:free": [0, 0],
+  "poolside/laguna-xs-2.1": [6e-8, 12e-8],
+  "poolside/laguna-xs-2.1:free": [0, 0],
+  "prism-ml/ternary-bonsai-2-27b": [75e-9, 5e-7],
+  "qwen/qwen-2.5-72b-instruct": [36e-8, 4e-7],
+  "qwen/qwen-2.5-7b-instruct": [1e-7, 2e-7],
+  "qwen/qwen-2.5-coder-32b-instruct": [66e-8, 1e-6],
+  "qwen/qwen-plus": [26e-8, 78e-8],
+  "qwen/qwen2.5-vl-72b-instruct": [8e-7, 1e-6],
+  "qwen/qwen3-14b": [12e-8, 24e-8],
+  "qwen/qwen3-235b-a22b-2507": [9e-8, 55e-8],
+  "qwen/qwen3-235b-a22b-thinking-2507": [45e-8, 35e-7],
+  "qwen/qwen3-30b-a3b": [12e-8, 5e-7],
+  "qwen/qwen3-30b-a3b-instruct-2507": [9e-8, 3e-7],
+  "qwen/qwen3-32b": [8e-8, 28e-8],
+  "qwen/qwen3-coder": [3e-7, 1e-6],
+  "qwen/qwen3-coder-30b-a3b-instruct": [7e-8, 28e-8],
+  "qwen/qwen3-coder-flash": [195e-9, 975e-9],
+  "qwen/qwen3-coder-next": [12e-8, 8e-7],
+  "qwen/qwen3-next-80b-a3b-instruct": [9e-8, 11e-7],
+  "qwen/qwen3-next-80b-a3b-thinking": [15e-8, 12e-7],
+  "qwen/qwen3-vl-235b-a22b-instruct": [21e-8, 19e-7],
+  "qwen/qwen3-vl-30b-a3b-instruct": [15e-8, 6e-7],
+  "qwen/qwen3-vl-30b-a3b-thinking": [29e-8, 1e-6],
+  "qwen/qwen3-vl-8b-instruct": [25e-8, 75e-8],
+  "qwen/qwen3.5-122b-a10b": [4e-7, 32e-7],
+  "qwen/qwen3.5-27b": [27e-8, 216e-8],
+  "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
+  "qwen/qwen3.5-397b-a17b": [5e-7, 36e-7],
+  "qwen/qwen3.5-9b": [17e-8, 25e-8],
+  "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
+  "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
+  "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
+  "qwen/qwen3.6-27b": [25e-8, 2e-6],
+  "qwen/qwen3.6-35b-a3b": [1e-7, 95e-8],
+  "qwen/qwen3.6-flash": [1875e-10, 1125e-9],
+  "qwen/qwen3.6-plus": [325e-9, 195e-8],
+  "qwen/qwen3.7-flash": [3e-8, 13e-8],
+  "qwen/qwen3.7-max": [1475e-9, 4425e-9],
+  "qwen/qwen3.7-plus": [32e-8, 128e-8],
+  "qwen/qwen3.7-plus:batch": [23e-8, 92e-8],
+  "qwen/qwen3.8-2.4t-a95b": [2e-6, 6e-6],
+  "qwen/qwen3.8-27b": [2e-7, 25e-7],
+  "qwen/qwen3.8-flash": [15e-8, 47e-8],
+  "qwen/qwen3.8-max-0902": [2e-6, 6e-6],
+  "qwen/qwen3.8-max-prime": [4e-6, 12e-6],
+  "qwen/qwen3.8-omni-flash": [15e-8, 47e-8],
+  "recursive/flint-v1.0:free": [0, 0],
+  "reflection/beam-1.0-501b-a23b": [25e-8, 1e-6],
+  "rekaai/reka-edge": [1e-7, 1e-7],
+  "rekaai/reka-flash-3": [1e-7, 2e-7],
+  "relace/relace-apply-3": [85e-8, 125e-8],
+  "relace/relace-search": [1e-6, 3e-6],
+  "sakana/fugu-max": [2e-6, 6e-6],
+  "sakana/fugu-ultra": [5e-6, 3e-5],
+  "sakana/fugu-ultra-v2": [5e-6, 3e-5],
+  "sakana/sakana-namazu": [95e-8, 4e-6],
+  "sao10k/l3-lunaris-8b": [4e-8, 5e-8],
+  "sao10k/l3.1-euryale-70b": [85e-8, 85e-8],
+  "scaledown/extract": [4e-8, 0],
+  "scaledown/summarize": [4e-8, 0],
+  "stepfun/step-3.5-flash": [1e-7, 3e-7],
+  "stepfun/step-3.7-flash": [2e-7, 115e-8],
+  "stepfun/step-5-preview": [1e-6, 27e-7],
+  "tencent/hunyuan-a13b-instruct": [14e-8, 57e-8],
+  "tencent/hy-mt2-1.8b": [44e-9, 177e-9],
+  "tencent/hy-mt2-30b-a3b": [74e-9, 295e-9],
+  "tencent/hy-mt2-7b": [74e-9, 295e-9],
+  "tencent/hy3": [825e-10, 33e-8],
+  "tencent/hy3-preview": [18e-8, 6e-7],
+  "tencent/hy4-preview": [7506e-10, 22509e-10],
+  "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
+  "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
+  "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
+  "thinkingmachines/inkling": [1e-6, 405e-8],
+  "thinkingmachines/inkling-small": [45e-8, 12e-7],
+  "thinkingmachines/inkling-small:free": [0, 0],
+  "thinkingmachines/inkling:free": [0, 0],
+  "typesafe/jev-router": [0, 0],
+  "unbiased/pareto-26.10": [8e-7, 32e-7],
+  "unbiased/pareto-26.9": [25e-7, 75e-7],
+  "undi95/remm-slerp-l2-13b": [35e-8, 65e-8],
+  "upstage/solar-mini4": [5e-8, 2e-7],
+  "upstage/solar-pro-3": [15e-8, 6e-7],
+  "upstage/solar-pro4": [15e-8, 6e-7],
+  "writer/palmyra-x5": [6e-7, 6e-6],
+  "x-ai/grok-4.20": [125e-8, 25e-7],
+  "x-ai/grok-4.20-multi-agent": [125e-8, 25e-7],
+  "x-ai/grok-4.3": [125e-8, 25e-7],
+  "x-ai/grok-4.3:batch": [1e-6, 2e-6],
+  "x-ai/grok-4.5": [2e-6, 6e-6],
+  "x-ai/grok-4.6": [2e-6, 6e-6],
+  "x-ai/grok-4.7": [2e-6, 6e-6],
+  "x-ai/grok-build-0.1": [1e-6, 2e-6],
+  "xiaomi/mimo-v2.5": [119e-9, 238e-9],
+  "xiaomi/mimo-v2.5-pro": [3045e-10, 609e-9],
+  "xiaomi/mimo-v2.6-flash": [14e-8, 28e-8],
+  "xiaomi/mimo-v2.6-pro": [435e-9, 87e-8],
+  "xiaomi/mimo-v2.6-pro-ultraspeed": [435e-8, 87e-7],
+  "xingchen-agi/xing4.0-29b-a4b:free": [0, 0],
+  "z-ai/glm-4.5": [6e-7, 22e-7],
+  "z-ai/glm-4.5-air": [13e-8, 85e-8],
+  "z-ai/glm-4.5v": [6e-7, 18e-7],
+  "z-ai/glm-4.6": [55e-8, 22e-7],
+  "z-ai/glm-4.6v": [3e-7, 9e-7],
+  "z-ai/glm-4.7": [54e-8, 198e-8],
+  "z-ai/glm-4.7-flash": [605e-10, 4e-7],
+  "z-ai/glm-5": [1e-6, 32e-7],
+  "z-ai/glm-5-turbo": [12e-7, 4e-6],
+  "z-ai/glm-5.1": [14e-7, 44e-7],
+  "z-ai/glm-5.2": [341e-10, 7e-6],
+  "z-ai/glm-5.3": [908e-10, 161e-8],
+  "z-ai/glm-5.3-flash": [15e-8, 5e-7],
+  "z-ai/glm-5.3-flash:batch": [5e-8, 18e-8],
+  "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
+  "z-ai/glm-5.3-prime": [28e-7, 88e-7],
+  "z-ai/glm-5.3:batch": [45e-8, 2e-6],
+  "z-ai/glm-5v-turbo": [12e-7, 4e-6]
+};
+
+// ../packages/model-catalog/src/snapshotPriceBook.ts
+var book;
+function snapshotPriceBook() {
+  book ??= priceBookFromPrices(
+    Object.entries(PRICE_SNAPSHOT).map(([id, [input, output]]) => [id, withPriceTiers(id, { input, output })])
+  );
+  return book;
+}
+
+// ../packages/model-catalog/src/providers.ts
+var LLM_PROVIDER_INFO = [
+  { id: "anthropic", label: "Anthropic (Claude)", credential: "api_key", keyPlaceholder: "sk-ant-\u2026", subscription: "paste" },
+  { id: "openai", label: "OpenAI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "paste" },
+  { id: "google", label: "Google (Gemini)", credential: "api_key", keyPlaceholder: "AIza\u2026", subscription: null },
+  { id: "meta", label: "Meta AI (MUSE)", credential: "api_key", keyPlaceholder: "meta-\u2026", subscription: null },
+  // A Kimi Code subscription issues no API key at all — its own config leaves `api_key`
+  // empty beside an OAuth record — so it connects by device-code redirect, never paste.
+  { id: "kimi", label: "Kimi", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "device" },
+  { id: "moonshot", label: "Moonshot AI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "qwen", label: "Qwen", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "minimax", label: "MiniMax", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  { id: "xai", label: "xAI (Grok)", credential: "api_key", keyPlaceholder: "xai-\u2026", subscription: "paste" },
+  { id: "ollama", label: "Ollama Cloud", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
+  {
+    id: "ollama-local",
+    label: "Ollama",
+    credential: "local_runtime",
+    keyPlaceholder: "",
+    subscription: null,
+    localRuntime: { defaultBaseUrl: "http://127.0.0.1:11434", exampleModel: "llama3.1:8b" }
+  },
+  // FreeToken's engine default; it serves whatever model the tenant loaded, so no example.
+  {
+    id: "freetoken",
+    label: "FreeToken",
+    credential: "local_runtime",
+    keyPlaceholder: "",
+    subscription: null,
+    localRuntime: { defaultBaseUrl: "http://127.0.0.1:1919" }
+  }
+];
+var LLM_PROVIDERS = LLM_PROVIDER_INFO.map((p) => p.id);
+var INFO_BY_ID = new Map(LLM_PROVIDER_INFO.map((p) => [p.id, p]));
+
+// ../packages/model-catalog/src/anthropic.ts
+var ANTHROPIC_RELEASES = {
+  opus: ["5.5", "5", "4.8", "4.7", "4.6", "4.5", "4.1", "4.0"],
+  sonnet: ["5.5", "5", "4.6", "4.5", "4.0"],
+  haiku: ["5.5", "4.5"],
+  fable: ["5.1", "5"]
+};
+
+// ../packages/spend-contract/src/fold.ts
+var AVOIDED_SOURCES = /* @__PURE__ */ new Set(["memory_answer", "evermind_answer", "response_cache"]);
+var LOCAL_MODEL_SOURCE = "local_model";
+function addSaving(acc, source, mc, tokens2, events, estimated) {
+  if (tokens2 === 0 && mc === 0) return;
+  const key = `${source}:${estimated ? "e" : "m"}`;
+  const prev = acc.get(key) ?? { source, mc: 0, tokens: 0, events: 0, estimated };
+  acc.set(key, { ...prev, mc: prev.mc + mc, tokens: prev.tokens + tokens2, events: prev.events + events });
+}
+function savedFrom(acc, spentUsd) {
+  let measuredMc = 0;
+  let estimatedMc = 0;
+  let tokensSaved = 0;
+  const bySource = [];
+  for (const v of acc.values()) {
+    if (v.estimated) estimatedMc += v.mc;
+    else measuredMc += v.mc;
+    tokensSaved += v.tokens;
+    bySource.push({ source: v.source, usd: millicentsToUsd(v.mc), tokens: v.tokens, events: v.events, estimated: v.estimated });
+  }
+  bySource.sort((a, b) => b.usd - a.usd);
+  const saved = {
+    measuredUsd: millicentsToUsd(measuredMc),
+    estimatedUsd: millicentsToUsd(estimatedMc),
+    netUsd: millicentsToUsd(measuredMc + estimatedMc),
+    tokensSaved: Math.max(0, tokensSaved),
+    bySource
+  };
+  const denom = spentUsd + Math.max(0, saved.netUsd);
+  return { saved, savedPct: denom > 0 ? Math.max(0, saved.netUsd) / denom : null };
+}
+function foldSpendSavings(slices, book2) {
+  const spend = {
+    platformUsd: 0,
+    yourKeyUsd: 0,
+    totalUsd: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 0,
+    unpricedTokens: 0,
+    requests: 0
+  };
+  let platformMc = 0;
+  let yourKeyMc = 0;
+  const acc = /* @__PURE__ */ new Map();
+  for (const g of slices) {
+    if (g.savingsSource && AVOIDED_SOURCES.has(g.savingsSource)) {
+      addSaving(acc, g.savingsSource, g.savedCostMc, g.savedPrompt + g.savedCompletion, g.rows, g.savingsEstimated);
+      continue;
+    }
+    spend.promptTokens += g.prompt;
+    spend.completionTokens += g.completion;
+    spend.cacheReadTokens += g.cacheRead;
+    spend.totalTokens += g.total;
+    spend.requests += g.calls;
+    if (g.savingsSource === LOCAL_MODEL_SOURCE) {
+      addSaving(acc, LOCAL_MODEL_SOURCE, g.savedCostMc, g.savedPrompt + g.savedCompletion, g.calls, true);
+      continue;
+    }
+    platformMc += g.costMc;
+    const price = listPriceOf(book2, g.model);
+    const pricing = price ? { prompt: price.input, completion: price.output } : void 0;
+    if (!pricing) spend.unpricedTokens += g.total;
+    else if (g.byo) {
+      yourKeyMc += computeCostMillicents(pricing, {
+        promptTokens: g.prompt,
+        completionTokens: g.completion,
+        totalTokens: g.total,
+        cacheReadTokens: g.cacheRead,
+        cacheCreationTokens: g.cacheCreation
+      });
+    }
+    if (pricing) {
+      addSaving(acc, "context_trim", Math.round(g.savedPrompt * pricing.prompt * 1e5), g.savedPrompt, g.trimCalls, true);
+      addSaving(acc, "recall_overhead", -Math.round(g.recallPrompt * pricing.prompt * 1e5), -g.recallPrompt, g.recallCalls, true);
+      const net = (g.cacheRead * (1 - CACHE_READ_MULTIPLIER) - g.cacheCreation * (CACHE_CREATION_MULTIPLIER - 1)) * pricing.prompt;
+      addSaving(acc, "prompt_cache", Math.round(net * 1e5), g.cacheRead, g.cacheCalls, false);
+    } else {
+      addSaving(acc, "context_trim", 0, g.savedPrompt, g.trimCalls, true);
+      addSaving(acc, "recall_overhead", 0, -g.recallPrompt, g.recallCalls, true);
+    }
+  }
+  spend.platformUsd = millicentsToUsd(platformMc);
+  spend.yourKeyUsd = millicentsToUsd(yourKeyMc);
+  spend.totalUsd = millicentsToUsd(platformMc + yourKeyMc);
+  return { spend, ...savedFrom(acc, spend.totalUsd) };
+}
+function combineSpendSavings(a, b) {
+  const sum = (k) => a.spend[k] + b.spend[k];
+  const spend = {
+    platformUsd: sum("platformUsd"),
+    yourKeyUsd: sum("yourKeyUsd"),
+    totalUsd: sum("totalUsd"),
+    promptTokens: sum("promptTokens"),
+    completionTokens: sum("completionTokens"),
+    cacheReadTokens: sum("cacheReadTokens"),
+    totalTokens: sum("totalTokens"),
+    unpricedTokens: sum("unpricedTokens"),
+    requests: sum("requests"),
+    ...a.spend.estimated || b.spend.estimated ? { estimated: true } : {}
+  };
+  const acc = /* @__PURE__ */ new Map();
+  for (const row of [...a.saved.bySource, ...b.saved.bySource]) {
+    addSaving(acc, row.source, Math.round(row.usd * 1e5), row.tokens, row.events, row.estimated);
+  }
+  return { spend, ...savedFrom(acc, spend.totalUsd) };
+}
+
+// ../packages/spend-contract/src/index.ts
+var USAGE_SURFACES = ["web", "vsix", "on_prem", "cloud", "sdk", "rovr"];
+function isUsageSurface(raw) {
+  return typeof raw === "string" && USAGE_SURFACES.includes(raw);
+}
+var USAGE_SURFACE_HEADER = "x-builderforce-surface";
+
+// src/localChat/journal.ts
+var BOUND_ONLY_VERSION = 0;
+var importKey = (type, id) => `${type}:${id}:import`;
+function isImported(mapping) {
+  return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
+}
+async function dropPending(tx, record2) {
+  const stale = (await tx.pending()).filter((event) => event.clientEntityId === record2.id && event.entityType === record2.entityType);
+  if (stale.length > 0) await tx.acknowledge(stale.map((event) => event.eventId));
+}
+function importPayload(record2, mapping) {
+  if (record2.entityType !== "chat" || mapping?.serverVersion !== BOUND_ONLY_VERSION) return record2.payload;
+  const serverId = Number(mapping.serverId);
+  return Number.isSafeInteger(serverId) && serverId > 0 ? { ...record2.payload, serverId } : record2.payload;
+}
+async function queueImport(tx, record2, chatClientId) {
+  await dropPending(tx, record2);
+  if (record2.deletedAt) return;
+  const mapping = await tx.mapping(record2.entityType, record2.id, record2.destination);
+  await tx.append({
+    idempotencyKey: importKey(record2.entityType, record2.id),
+    clientEntityId: record2.id,
+    entityType: record2.entityType,
+    operation: "import",
+    schemaVersion: record2.schemaVersion,
+    occurredAt: record2.occurredAt,
+    dependsOn: chatClientId && record2.entityType !== "chat" ? [importKey("chat", chatClientId)] : [],
+    destination: record2.destination,
+    payload: importPayload(record2, mapping)
+  });
+}
+async function journalWrite(tx, record2, operation, options) {
+  if (record2.destination.kind === "unbound") {
+    await tx.append({
+      idempotencyKey: options.key,
+      clientEntityId: record2.id,
+      entityType: record2.entityType,
+      operation,
+      schemaVersion: record2.schemaVersion,
+      occurredAt: record2.occurredAt,
+      ...record2.baseVersion !== void 0 ? { baseVersion: record2.baseVersion } : {},
+      dependsOn: options.dependsOn ?? [],
+      destination: record2.destination,
+      payload: record2.payload
+    });
+    return;
+  }
+  const mapping = await tx.mapping(record2.entityType, record2.id, record2.destination);
+  if (!isImported(mapping)) {
+    await queueImport(tx, record2, options.chatClientId);
+    return;
+  }
+  await dropPending(tx, record2);
+  await tx.append({
+    idempotencyKey: `${options.key}:server`,
+    clientEntityId: record2.id,
+    entityType: record2.entityType,
+    operation,
+    schemaVersion: record2.schemaVersion,
+    occurredAt: record2.occurredAt,
+    baseVersion: mapping.serverVersion,
+    dependsOn: [],
+    destination: record2.destination,
+    payload: operation === "delete" ? null : record2.payload
+  });
+}
+
+// src/localChat/records.ts
+function isOwnRecord(row, deviceId) {
+  return row.provenance?.source !== "imported" || row.provenance.deviceId === deviceId;
+}
+async function liveRecords(tx, type, deviceId) {
+  const rows = await tx.list(type);
+  return rows.filter((row) => !row.deletedAt && isOwnRecord(row, deviceId));
+}
+async function chatRecordById(tx, deviceId, id) {
+  return (await liveRecords(tx, "chat", deviceId)).find((row) => row.payload.chat.id === id);
+}
+
+// src/localChat/chatIdentity.ts
+async function boundServerId(tx, clientId, destination) {
+  if (!destination || destination.kind !== "bound") return void 0;
+  const mapping = await tx.mapping("chat", clientId, destination);
+  const id = mapping ? Number(mapping.serverId) : NaN;
+  return Number.isSafeInteger(id) && id > 0 ? id : void 0;
+}
+function createLocalChatIdentity(options) {
+  const { store, deviceId, port } = options;
+  const inFlight = /* @__PURE__ */ new Map();
+  const read = (localId) => store.read(async (tx) => {
+    const chat = await chatRecordById(tx, deviceId, localId);
+    return chat ? { chat, serverId: await boundServerId(tx, chat.id, port.destination()) } : void 0;
+  });
+  const map = async (clientId, destination, serverId) => {
+    await store.transact(async (tx) => {
+      if (await tx.mapping("chat", clientId, destination)) return;
+      await tx.putMapping({ destination, entityType: "chat", clientEntityId: clientId, serverId: String(serverId), serverVersion: BOUND_ONLY_VERSION });
+      const queued = (await tx.pending()).some((event) => event.entityType === "chat" && event.clientEntityId === clientId && event.operation === "import");
+      const record2 = queued ? (await liveRecords(tx, "chat", deviceId)).find((row) => row.id === clientId) : void 0;
+      if (record2) await queueImport(tx, record2);
+    });
+  };
+  const bindOnce = async (localId) => {
+    const found = await read(localId);
+    if (!found) return void 0;
+    if (found.serverId !== void 0) return found.serverId;
+    const destination = port.destination();
+    if (!destination || destination.kind !== "bound" || !port.allowed()) return void 0;
+    const { chat } = found.chat.payload;
+    const serverId = await port.createServerChat({ title: chat.title, projectId: chat.projectId ?? null });
+    if (serverId == null) return void 0;
+    await map(found.chat.id, destination, serverId);
+    return (await read(localId))?.serverId;
+  };
+  return {
+    serverIdFor: async (localId) => (await read(localId))?.serverId,
+    clientIdFor: async (localId) => (await read(localId))?.chat.id,
+    localIdFor: (serverId) => store.read(async (tx) => {
+      const destination = port.destination();
+      for (const chat of await liveRecords(tx, "chat", deviceId)) {
+        if (await boundServerId(tx, chat.id, destination) === serverId) return chat.payload.chat.id;
+      }
+      return void 0;
+    }),
+    bind(localId) {
+      const running = inFlight.get(localId);
+      if (running) return running;
+      const next = bindOnce(localId).finally(() => inFlight.delete(localId));
+      inFlight.set(localId, next);
+      return next;
+    },
+    async adopt(localId, serverId) {
+      const destination = port.destination();
+      const found = await read(localId);
+      if (!found || !destination || destination.kind !== "bound") return false;
+      await map(found.chat.id, destination, serverId);
+      return true;
+    }
+  };
+}
+
+// src/localChat/usageLedger.ts
+var DEFAULT_PAID_ROUTE = `anthropic/claude-sonnet-${ANTHROPIC_RELEASES.sonnet[0]}`;
+function usageRouteOf(result, requested) {
+  if (result.localFirst?.some((attempt) => attempt.outcome === "served" && isLocalModelRef(attempt.target))) return "local";
+  const model = result.resolvedModel ?? requested ?? "";
+  if (isLocalModelRef(model)) return "local";
+  return directCatalogId(model) !== void 0 ? "byo-direct" : "gateway";
+}
+var count = (n) => typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+function paidRouteOf(rows, book2) {
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const row = rows[i];
+    if (row.route === "local") continue;
+    const price = listPriceOf(book2, row.model);
+    if (price) return { prompt: price.input, completion: price.output };
+  }
+  const fallback = listPriceOf(book2, DEFAULT_PAID_ROUTE);
+  return fallback ? { prompt: fallback.input, completion: fallback.output } : void 0;
+}
+async function usageRowsOf(tx, deviceId, clientChatId) {
+  return (await liveRecords(tx, "usage", deviceId)).map((row) => row.payload).filter((row) => row.clientChatId === clientChatId).sort((a, b) => a.at.localeCompare(b.at));
+}
+function createRunUsageLedger(options) {
+  const book2 = options.book ?? snapshotPriceBook;
+  const now = options.now ?? (() => /* @__PURE__ */ new Date());
+  const newId = options.newId ?? (() => crypto.randomUUID());
+  return {
+    async record(input) {
+      const promptTokens = count(input.usage?.prompt);
+      const completionTokens = count(input.usage?.completion);
+      if (promptTokens + completionTokens === 0) return;
+      await options.store.transact(async (tx) => {
+        const chat = await chatRecordById(tx, options.deviceId, input.chatId);
+        if (!chat) return;
+        const id = newId();
+        const at = now().toISOString();
+        let value = {
+          clientEventId: id,
+          clientChatId: chat.id,
+          runKey: input.runKey,
+          model: input.model,
+          route: input.route,
+          ...input.mode ? { mode: input.mode } : {},
+          promptTokens,
+          completionTokens,
+          cacheReadTokens: Math.min(count(input.usage?.cacheRead), promptTokens),
+          cacheCreationTokens: Math.min(count(input.usage?.cacheCreation), promptTokens),
+          at
+        };
+        if (input.route === "local") {
+          const pricing = paidRouteOf(await usageRowsOf(tx, options.deviceId, chat.id), book2());
+          value = {
+            ...value,
+            savingsSource: "local_model",
+            savedPrompt: promptTokens,
+            savedCompletion: completionTokens,
+            savedCostMc: computeCostMillicents(pricing, { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens })
+          };
+        }
+        const record2 = newLocalRecord({
+          id,
+          entityType: "usage",
+          payload: value,
+          deviceId: options.deviceId,
+          destination: chat.destination,
+          occurredAt: at
+        });
+        await tx.put(record2);
+        if (input.route !== "gateway") {
+          await journalWrite(tx, record2, "create", { key: `usage:${id}`, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
+        }
+      });
+    }
+  };
+}
+function withRunUsage(stream, ledger, context, onError = () => void 0) {
+  return async (opts, handlers) => {
+    const result = await stream(opts, handlers);
+    void ledger.record({
+      chatId: context.chatId,
+      runKey: context.runKey,
+      model: result.resolvedModel ?? opts.model ?? "auto",
+      route: usageRouteOf(result, opts.model),
+      usage: result.usage,
+      ...context.mode ? { mode: context.mode } : {}
+    }).catch(onError);
+    return result;
+  };
+}
+function sliceOf(row, book2) {
+  const total = row.promptTokens + row.completionTokens;
+  const local = row.savingsSource === "local_model";
+  const price = local ? void 0 : book2.priceOf(row.model);
+  return {
+    model: row.model,
+    byo: row.route === "byo-direct",
+    savingsSource: local ? "local_model" : null,
+    savingsEstimated: local,
+    prompt: row.promptTokens,
+    completion: row.completionTokens,
+    cacheRead: row.cacheReadTokens,
+    cacheCreation: row.cacheCreationTokens,
+    total,
+    costMc: row.route === "gateway" && price ? computeCostMillicents({ prompt: price.input, completion: price.output }, {
+      promptTokens: row.promptTokens,
+      completionTokens: row.completionTokens,
+      totalTokens: total,
+      cacheReadTokens: row.cacheReadTokens,
+      cacheCreationTokens: row.cacheCreationTokens
+    }) : 0,
+    calls: 1,
+    cacheCalls: row.cacheReadTokens > 0 ? 1 : 0,
+    savedPrompt: row.savedPrompt ?? 0,
+    savedCompletion: row.savedCompletion ?? 0,
+    recallPrompt: row.recallPrompt ?? 0,
+    savedCostMc: row.savedCostMc ?? 0,
+    trimCalls: 0,
+    recallCalls: 0,
+    rows: 1
+  };
+}
+function ledgerSpend(rows, opts) {
+  const book2 = opts.book ?? snapshotPriceBook();
+  const kept = opts.excludeGateway ? rows.filter((row) => row.route !== "gateway" && !opts.imported?.has(row.clientEventId)) : rows;
+  if (kept.length === 0) return null;
+  const summary = foldSpendSavings(kept.map((row) => sliceOf(row, book2)), book2);
+  return kept.some((row) => row.route === "gateway") ? { ...summary, spend: { ...summary.spend, estimated: true } } : summary;
+}
+async function importedUsageIds(tx, rows, destination) {
+  const ids2 = /* @__PURE__ */ new Set();
+  for (const row of rows) {
+    if (row.route !== "gateway" && isImported(await tx.mapping("usage", row.clientEventId, destination))) ids2.add(row.clientEventId);
+  }
+  return ids2;
+}
+async function usageRowsByChat(tx, deviceId) {
+  const byChat2 = /* @__PURE__ */ new Map();
+  for (const row of await liveRecords(tx, "usage", deviceId)) {
+    const list2 = byChat2.get(row.payload.clientChatId) ?? [];
+    list2.push(row.payload);
+    byChat2.set(row.payload.clientChatId, list2);
+  }
+  return byChat2;
+}
+
 // src/localFirstPersistence.ts
 var chatValue = (record2) => record2.payload.chat;
 function createLocalBrainPersistence(options) {
@@ -1797,27 +2824,12 @@ function createLocalBrainPersistence(options) {
   const now = options.now ?? (() => /* @__PURE__ */ new Date());
   const newId = options.newId ?? (() => crypto.randomUUID());
   const blobs = /* @__PURE__ */ new Map();
-  const records = (tx, type) => tx.list(type).then((rows) => rows.filter((row) => !row.deletedAt));
-  const chats = (tx) => records(tx, "chat");
-  const messages = (tx) => records(tx, "message");
+  const chats = (tx) => liveRecords(tx, "chat", options.deviceId);
+  const messages = (tx) => liveRecords(tx, "message", options.deviceId);
   const chatFor = async (tx, id) => {
     const chat = (await chats(tx)).find((row) => row.payload.chat.id === id);
     if (!chat) throw new Error(`No such local chat: ${id}`);
     return chat;
-  };
-  const append = async (tx, record2, operation, eventId, dependsOn = []) => {
-    await tx.append({
-      eventId,
-      clientEntityId: record2.id,
-      entityType: record2.entityType,
-      operation,
-      schemaVersion: record2.schemaVersion,
-      occurredAt: record2.occurredAt,
-      ...record2.baseVersion !== void 0 ? { baseVersion: record2.baseVersion } : {},
-      dependsOn,
-      destination: record2.destination,
-      payload: record2.payload
-    });
   };
   const nextId = async (tx) => {
     const [chatRows, messageRows] = await Promise.all([chats(tx), messages(tx)]);
@@ -1827,15 +2839,60 @@ function createLocalBrainPersistence(options) {
       ...messageRows.map((row) => row.payload.message.id)
     ) + 1;
   };
+  const projectionInputs = async (tx, rows) => {
+    const account = options.accountDestination?.();
+    const usage = await usageRowsByChat(tx, options.deviceId);
+    return Promise.all(rows.map(async (record2) => {
+      const serverId = await boundServerId(tx, record2.id, account);
+      const chatUsage = usage.get(record2.id) ?? [];
+      return {
+        record: record2,
+        serverId,
+        usage: chatUsage,
+        imported: serverId !== void 0 && account ? await importedUsageIds(tx, chatUsage, account) : /* @__PURE__ */ new Set()
+      };
+    }));
+  };
+  const project = async (inputs) => {
+    const bound = inputs.flatMap((input) => input.serverId !== void 0 ? [input.serverId] : []);
+    let server = null;
+    if (bound.length > 0 && options.serverSpend) {
+      try {
+        server = await options.serverSpend(bound);
+      } catch {
+        server = null;
+      }
+    }
+    return inputs.map(({ record: record2, serverId, usage, imported }) => {
+      const chat = chatValue(record2);
+      const fromServer = serverId !== void 0 ? server?.get(serverId) ?? null : null;
+      const local = ledgerSpend(usage, {
+        excludeGateway: fromServer !== null,
+        imported,
+        ...options.priceBook ? { book: options.priceBook() } : {}
+      });
+      const spend = fromServer && local ? combineSpendSavings(fromServer, local) : fromServer ?? local;
+      return {
+        ...chat,
+        ...serverId !== void 0 ? { serverId } : {},
+        ...spend ? { spend } : {}
+      };
+    });
+  };
   return {
     async listChats(params) {
-      return options.store.read(async (tx) => {
-        const all = (await chats(tx)).map(chatValue).filter((chat) => !chat.isArchived).filter((chat) => params?.projectId == null || String(chat.projectId) === params.projectId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id - a.id);
+      const inputs = await options.store.read(async (tx) => {
+        const all = (await chats(tx)).filter((row) => !row.payload.chat.isArchived).filter((row) => params?.projectId == null || String(row.payload.chat.projectId) === params.projectId).sort((a, b) => b.payload.chat.updatedAt.localeCompare(a.payload.chat.updatedAt) || b.payload.chat.id - a.payload.chat.id);
         const offset = params?.offset ?? 0;
-        return params?.limit != null ? all.slice(offset, offset + params.limit) : all.slice(offset);
+        const page = params?.limit != null ? all.slice(offset, offset + params.limit) : all.slice(offset);
+        return projectionInputs(tx, page);
       });
+      return project(inputs);
     },
-    getChat: (id) => options.store.read((tx) => chatFor(tx, id).then(chatValue)),
+    async getChat(id) {
+      const inputs = await options.store.read(async (tx) => projectionInputs(tx, [await chatFor(tx, id)]));
+      return (await project(inputs))[0];
+    },
     async createChat(body) {
       return options.store.transact(async (tx) => {
         const [id, clientId] = [await nextId(tx), newId()];
@@ -1860,7 +2917,7 @@ function createLocalBrainPersistence(options) {
           occurredAt: stamp
         });
         await tx.put(record2);
-        await append(tx, record2, "create", `chat:${clientId}`);
+        await journalWrite(tx, record2, "create", { key: `chat:${clientId}` });
         return chat;
       });
     },
@@ -1876,7 +2933,7 @@ function createLocalBrainPersistence(options) {
           payload: { ...current.payload, chat }
         };
         await tx.put(next, current.version);
-        await append(tx, next, "update", `chat:${current.id}:v${next.version}`);
+        await journalWrite(tx, next, "update", { key: `chat:${current.id}:v${next.version}` });
         return chat;
       });
     },
@@ -1885,13 +2942,18 @@ function createLocalBrainPersistence(options) {
         const chat = await chatFor(tx, id);
         const stamp = now().toISOString();
         const deleted = { ...chat, version: chat.version + 1, baseVersion: chat.version, deletedAt: stamp, updatedAt: stamp };
+        const chatDeleteKey = `chat:${chat.id}:delete:v${deleted.version}`;
         await tx.put(deleted, chat.version);
-        await append(tx, deleted, "delete", `chat:${chat.id}:delete:v${deleted.version}`);
+        await journalWrite(tx, deleted, "delete", { key: chatDeleteKey });
         const rows = (await messages(tx)).filter((row) => row.payload.chatId === id);
         for (const row of rows) {
           const tombstone = { ...row, version: row.version + 1, baseVersion: row.version, deletedAt: stamp, updatedAt: stamp };
           await tx.put(tombstone, row.version);
-          await append(tx, tombstone, "delete", `message:${row.id}:delete:v${tombstone.version}`, [`chat:${chat.id}:delete:v${deleted.version}`]);
+          await journalWrite(tx, tombstone, "delete", {
+            key: `message:${row.id}:delete:v${tombstone.version}`,
+            dependsOn: [chatDeleteKey],
+            chatClientId: chat.id
+          });
         }
         return {};
       });
@@ -1915,11 +2977,12 @@ function createLocalBrainPersistence(options) {
           payload: { ...current.payload, chat }
         };
         await tx.put(next, current.version);
-        await append(tx, next, "update", `chat:${current.id}:archive:v${next.version}`);
+        await journalWrite(tx, next, "update", { key: `chat:${current.id}:archive:v${next.version}` });
         return { archived: true };
       });
     },
     summarizeChat: async () => ({ error: options.summarizeUnavailable }),
+    ...options.bindChat ? { bindChat: options.bindChat } : {},
     async getMessages(chatId, limit) {
       return options.store.read(async (tx) => {
         const all = (await messages(tx)).filter((row) => row.payload.chatId === chatId).sort((a, b) => a.payload.message.seq - b.payload.message.seq).map((row) => row.payload.message);
@@ -1954,7 +3017,7 @@ function createLocalBrainPersistence(options) {
             occurredAt: stamp
           });
           await tx.put(record2);
-          await append(tx, record2, "create", eventKey, [`chat:${chat.id}`]);
+          await journalWrite(tx, record2, "create", { key: eventKey, dependsOn: [`chat:${chat.id}`], chatClientId: chat.id });
         }
         if (added.length > 0) {
           const nextChat = { ...chat, version: chat.version + 1, updatedAt: stamp, payload: { ...chat.payload, chat: { ...chat.payload.chat, updatedAt: stamp } } };
@@ -1978,7 +3041,7 @@ function createLocalBrainPersistence(options) {
           payload: { ...row.payload, message: { ...row.payload.message, metadata: JSON.stringify(metadata) } }
         };
         await tx.put(next, row.version);
-        await append(tx, next, "update", `message:${row.id}:feedback:v${next.version}`);
+        await journalWrite(tx, next, "update", { key: `message:${row.id}:feedback:v${next.version}`, chatClientId: row.payload.chatClientId });
         return {};
       });
     },
@@ -1995,12 +3058,40 @@ function createLocalBrainPersistence(options) {
           destination
         });
         await tx.put(record2);
-        await append(tx, record2, "create", `attachment:${key}`);
+        await journalWrite(tx, record2, "create", { key: `attachment:${key}` });
       });
       return { key, name: file.name, type: file.type };
     },
     uploadUrl: (key) => blobs.get(key) ?? ""
   };
+}
+
+// src/localChat/chatSync.ts
+async function bindChatHistoryForSync(store, deviceId, destination) {
+  if (destination.kind !== "bound") return 0;
+  const unbound = (rows) => rows.filter((row) => row.destination.kind === "unbound" && isOwnRecord(row, deviceId));
+  const anything = await store.read(async (tx) => {
+    for (const type of ["chat", "message", "usage"]) if (unbound(await tx.list(type)).length > 0) return true;
+    return false;
+  });
+  if (!anything) return 0;
+  return store.transact(async (tx) => {
+    const rebind = async (row) => {
+      const moved = { ...row, destination };
+      await tx.put(moved);
+      return moved;
+    };
+    const chats = unbound(await tx.list("chat"));
+    for (const chat of chats) await queueImport(tx, await rebind(chat));
+    for (const message of unbound(await tx.list("message"))) {
+      await queueImport(tx, await rebind(message), message.payload.chatClientId);
+    }
+    for (const usage of unbound(await tx.list("usage"))) {
+      const moved = await rebind(usage);
+      if (usage.payload.route !== "gateway") await queueImport(tx, moved, usage.payload.clientChatId);
+    }
+    return chats.filter((chat) => !chat.deletedAt).length;
+  });
 }
 
 // ../packages/agent-stall/src/requestIntent.ts
@@ -3216,12 +4307,17 @@ async function notARepoWithCandidates(action, ctx) {
   return notARepoResult(action, parseCheckoutList(listed.stdout));
 }
 var RESOLVE_BASE = `BASE="$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; [ -n "$BASE" ] || BASE=main`;
+var IDENTITY_EMAIL = 'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"';
+var IDENTITY_NAME = 'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"';
 function buildGitCommand(action, opts) {
   const path2 = safeGitArg(opts?.path);
   const pathArg = path2 ? ` -- "${path2}"` : "";
   const repo = safeRepoArg(opts?.repo);
   const scoped = (cmd) => repo ? `cd "${repo}" && ${cmd}` : cmd;
   const scopedScript = (lines) => repoScopedScript(lines.join("\n"), opts?.repo);
+  const tracked = safeGitArg(opts?.trackedBranch);
+  const absorb = tracked ? ["set -e", IDENTITY_EMAIL, IDENTITY_NAME, `git fetch origin "${tracked}" 2>/dev/null && git merge --ff-only "origin/${tracked}" 2>/dev/null || true`] : [];
+  const publish = (force) => tracked ? [force ? "git push --force-with-lease origin HEAD" : "git push origin HEAD"] : [];
   switch (action) {
     case "status":
       return scoped("git status --short --branch");
@@ -3235,25 +4331,29 @@ function buildGitCommand(action, opts) {
       const base = safeGitArg(opts?.baseBranch);
       const resolveBase = base ? `BASE="${base}"` : RESOLVE_BASE;
       return scopedScript([
-        "set -e",
+        ...tracked ? absorb : ["set -e"],
         resolveBase,
-        'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
-        'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
+        ...tracked ? [] : [IDENTITY_EMAIL, IDENTITY_NAME],
         'git fetch origin "$BASE"',
         'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
+        ...publish(false),
         'echo "Synced with origin/$BASE"'
       ]);
     }
     case "undo":
       return scopedScript([
+        ...absorb,
         '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
         "git reset --hard HEAD~1",
+        ...publish(true),
         'echo "Undid the last commit (use git_redo to reapply)"'
       ]);
     case "redo":
       return scopedScript([
+        ...absorb,
         '[ -z "$(git status --porcelain)" ] || { echo DIRTY; exit 4; }',
         'git reset --hard "HEAD@{1}"',
+        ...publish(true),
         'echo "Reapplied the last undone change"'
       ]);
   }
@@ -3276,13 +4376,15 @@ async function runGitTool(action, opts, ctx) {
   const explicitRepo = opts.repo;
   let repo = explicitRepo;
   let path2 = opts.path;
-  let r = await ctx.caps.shell.run(buildGitCommand(action, { ...opts, repo, path: path2 }));
+  const trackedBranch = ctx.caps.shell?.trackedBranch;
+  const build = (o) => buildGitCommand(action, trackedBranch ? { ...o, trackedBranch } : o);
+  let r = await ctx.caps.shell.run(build({ ...opts, repo, path: path2 }));
   if (isNotARepo(r) && !explicitRepo) {
     const inferred = inferRepoFromPath(opts.path);
     if (inferred) {
       const inner = commitPathCandidates(opts.path ?? "", inferred);
       path2 = inner.length > 0 ? inner[inner.length - 1] : void 0;
-      r = await ctx.caps.shell.run(buildGitCommand(action, { ...opts, repo: inferred, path: path2 }));
+      r = await ctx.caps.shell.run(build({ ...opts, repo: inferred, path: path2 }));
       if (!isNotARepo(r)) repo = inferred;
     }
     if (isNotARepo(r)) return notARepoWithCandidates(action, ctx);
@@ -4853,9 +5955,29 @@ var OBSERVATION = {
   delete: "deleted",
   read: "read"
 };
-var RunKnowledgeRecorder = class {
+var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
   memory = new WorkingMemory();
   tools = [];
+  /**
+   * The recorder a resumed step continues with. A host that runs one step per process
+   * (the cloud's Durable Object ticks) MUST carry this, or every step starts with an
+   * empty memory: the brief is never worth giving and the run-end map covers one step.
+   */
+  static restore(state) {
+    const r = new _RunKnowledgeRecorder();
+    if (!state) return r;
+    if (state.memory.task) r.memory.setTask(state.memory.task);
+    for (const kind of ["created", "edited", "deleted", "read"]) {
+      for (const path2 of state.memory[kind] ?? []) r.memory.observe({ kind, path: path2 });
+    }
+    for (const query of state.memory.searched ?? []) r.memory.observe({ kind: "searched", query });
+    r.tools.push(...state.tools ?? []);
+    return r;
+  }
+  /** The state {@link restore} rebuilds this recorder from. */
+  snapshot() {
+    return { memory: this.memory.snapshot, tools: [...this.tools] };
+  }
   setPrompt(prompt) {
     this.memory.setTask(prompt);
   }
@@ -5582,84 +6704,6 @@ function isCostLeverOn(env, id, tenantId) {
   return costLeverBucket(id, tenantId) < rollout;
 }
 
-// ../packages/model-catalog/src/price.ts
-var TOKENS_PER_MILLION = 1e6;
-function perMillionToPerToken(usdPerMillion) {
-  return usdPerMillion / TOKENS_PER_MILLION;
-}
-var ZERO_PRICE = Object.freeze({ input: 0, output: 0 });
-
-// ../packages/model-catalog/src/priceTiers.ts
-var tier = (aboveInputTokens, inputPerMillion, outputPerMillion) => ({
-  aboveInputTokens,
-  input: perMillionToPerToken(inputPerMillion),
-  output: perMillionToPerToken(outputPerMillion)
-});
-var PRICE_TIERS = Object.freeze({
-  // Google AI Studio / Vertex list price: $1.25 / $10 per M up to 200K prompt tokens,
-  // $2.50 / $15 above (ai.google.dev/gemini-api/docs/pricing). Verify against vendor pricing page.
-  "gemini-2-5-pro": [tier(2e5, 2.5, 15)],
-  // Anthropic long-context pricing for the 1M-window Sonnet 4 / 4.5: $3 / $15 per M up
-  // to 200K input, $6 / $22.50 above (docs.claude.com pricing, "long context").
-  // Verify against vendor pricing page.
-  "claude-sonnet-4": [tier(2e5, 6, 22.5)],
-  "claude-sonnet-4-5": [tier(2e5, 6, 22.5)],
-  // Claude Haiku 5.5: $0.10 / $0.50 per M for prompts up to 100K, $0.50 / $2.50 beyond
-  // (Anthropic model pricing table, 2026-10). Verify against vendor pricing page.
-  "claude-haiku-5-5": [tier(1e5, 0.5, 2.5)]
-});
-function priceTierFamily(modelId) {
-  let id = (modelId ?? "").trim().toLowerCase();
-  id = id.slice(id.lastIndexOf("/") + 1);
-  id = id.replace(/^(?:[a-z]{2,3}\.)?anthropic\./, "");
-  id = id.replace(/:.*$/, "");
-  id = id.replace(/\./g, "-");
-  id = id.replace(/-\d{8}(?:-v\d+)?$/, "");
-  return id;
-}
-function priceTiersFor(modelId) {
-  return PRICE_TIERS[priceTierFamily(modelId)];
-}
-function priceTierBoundary(modelId) {
-  const tiers = priceTiersFor(modelId);
-  return tiers && tiers.length > 0 ? Math.min(...tiers.map((t) => t.aboveInputTokens)) : void 0;
-}
-
-// ../packages/model-catalog/src/providers.ts
-var LLM_PROVIDER_INFO = [
-  { id: "anthropic", label: "Anthropic (Claude)", credential: "api_key", keyPlaceholder: "sk-ant-\u2026", subscription: "paste" },
-  { id: "openai", label: "OpenAI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "paste" },
-  { id: "google", label: "Google (Gemini)", credential: "api_key", keyPlaceholder: "AIza\u2026", subscription: null },
-  { id: "meta", label: "Meta AI (MUSE)", credential: "api_key", keyPlaceholder: "meta-\u2026", subscription: null },
-  // A Kimi Code subscription issues no API key at all — its own config leaves `api_key`
-  // empty beside an OAuth record — so it connects by device-code redirect, never paste.
-  { id: "kimi", label: "Kimi", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: "device" },
-  { id: "moonshot", label: "Moonshot AI", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
-  { id: "qwen", label: "Qwen", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
-  { id: "minimax", label: "MiniMax", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
-  { id: "xai", label: "xAI (Grok)", credential: "api_key", keyPlaceholder: "xai-\u2026", subscription: "paste" },
-  { id: "ollama", label: "Ollama Cloud", credential: "api_key", keyPlaceholder: "sk-\u2026", subscription: null },
-  {
-    id: "ollama-local",
-    label: "Ollama",
-    credential: "local_runtime",
-    keyPlaceholder: "",
-    subscription: null,
-    localRuntime: { defaultBaseUrl: "http://127.0.0.1:11434", exampleModel: "llama3.1:8b" }
-  },
-  // FreeToken's engine default; it serves whatever model the tenant loaded, so no example.
-  {
-    id: "freetoken",
-    label: "FreeToken",
-    credential: "local_runtime",
-    keyPlaceholder: "",
-    subscription: null,
-    localRuntime: { defaultBaseUrl: "http://127.0.0.1:1919" }
-  }
-];
-var LLM_PROVIDERS = LLM_PROVIDER_INFO.map((p) => p.id);
-var INFO_BY_ID = new Map(LLM_PROVIDER_INFO.map((p) => [p.id, p]));
-
 // src/workingTranscript.ts
 import {
   defaultEstimateTokens,
@@ -5985,7 +7029,7 @@ function createDeferredLocalRecords(opts = {}) {
 }
 var deferredLocalRecords = createDeferredLocalRecords();
 function conversationKeyOf(call2) {
-  const chatId = call2.metadata?.chatId;
+  const chatId = call2.conversationKey ?? call2.metadata?.chatId;
   return typeof chatId === "number" && Number.isFinite(chatId) ? `chat:${chatId}` : null;
 }
 function submitLocalTurnVerdict(chatId, passed) {
@@ -8102,12 +9146,16 @@ function codeChangeFile(args) {
   return null;
 }
 function chatWorkLinkingDirective(chatId) {
-  return `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
-\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
+  const linked = chatId != null;
+  return (linked ? `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
+` : `This conversation lives only on this machine \u2014 it has no platform chat to link work to, so never pass a chatId and do not call builtin_chats_link_ticket or builtin_chats_list_tickets. Still make the work visible on the board:
+`) + `\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item)${linked ? ` AND link it with builtin_chats_link_ticket (chatId=${chatId}, linkType="created")` : ""}. The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
 \u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
-\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
-\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer \u2014 self-review, ship it, and move it to "done" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
-\u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
+` + (linked ? `\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
+` : `\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"; no chatId). If a ticket you already know of tracks this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate.
+`) + `\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing ${linked ? "linked " : ""}task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished: if this session can commit and push (it has git_commit and git_push), YOU are the reviewer \u2014 self-review, ship it, and move it to "done" (see the SHIP YOUR OWN CHANGE contract); otherwise advance it to "in_review" for someone who can (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.` + (linked ? `
+\u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.` : `
+\u2022 Never end a turn having identified actionable work or changed code without it being a ticket whose status reflects the work you did.`);
 }
 
 // src/chatMode.ts
@@ -8134,6 +9182,7 @@ function describeRoster(roster) {
   return roster.map((a) => `${a.name} (agentRef ${a.ref}${a.role ? `, ${a.role}` : ""})`).join("; ");
 }
 function chatWorkDirective(chatId, opts) {
+  const chatArg = chatId != null ? `chatId=${chatId}, ` : "";
   const throughThem = opts?.canDelegate ? " When you do a slice of the work here instead of dispatching it, do it THROUGH one of them: spawn_agent with as_agent=<that agent's name> so the slice is done in that agent's persona, and say which agent did what. Work that names no agent is work nobody owns." : "";
   const roster = opts?.roster ?? [];
   const staffed = roster.length > 0;
@@ -8143,18 +9192,18 @@ function chatWorkDirective(chatId, opts) {
   const whoIsHere = staffed ? `\u2022 THE AGENTS IN THIS CHAT are ${describeRoster(roster)}. A human put them here: that is this platform's way of saying these are the people this work belongs to.
 ` : "";
   const ordering = staffed ? delegatesLocally ? `\u2022 DELEGATE TO THEM, HERE. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work, and this session runs it on this machine: hand it to a local sub-agent with ${localSpawn}, ${pickByRole}. Then say which agent did what. A local sub-agent is NOT a cloud run \u2014 it needs no ticket assignment and no builtin_chats_dispatch_agent, and the workspace's execution kill-switch does not stop it. Do NOT make the change yourself merely because you could do it faster \u2014 the human staffed this conversation.
-` : `\u2022 DISPATCH TO THEM. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work: assign the ticket and start the run with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the ref above>, taskId=<the ticket>), then say who picked it up. Do NOT make the change yourself merely because you could do it faster \u2014 the human staffed this conversation, and a session that quietly does its agents' work leaves them idle and leaves the user unable to see who did what.${opts?.canEditHere ? " You DO hold the workspace file tools; keep them for what dispatch cannot cover \u2014 reading and locating the code so the directive you hand an agent is specific, checking what a run came back with, and an edit the user asks YOU for in this message." : ""}
+` : `\u2022 DISPATCH TO THEM. That is the DEFAULT in this chat, not a fallback. Work that falls inside one of their roles is THEIR work: assign the ticket and start the run with builtin_chats_dispatch_agent (${chatArg}agentRef=<the ref above>, taskId=<the ticket>), then say who picked it up. Do NOT make the change yourself merely because you could do it faster \u2014 the human staffed this conversation, and a session that quietly does its agents' work leaves them idle and leaves the user unable to see who did what.${opts?.canEditHere ? " You DO hold the workspace file tools; keep them for what dispatch cannot cover \u2014 reading and locating the code so the directive you hand an agent is specific, checking what a run came back with, and an edit the user asks YOU for in this message." : ""}
 ` : opts?.canEditHere ? `\u2022 DO IT HERE WHEN YOU CAN. No agent has been invited into this chat, so there is nobody to hand it to. This session has the workspace file tools, so anything you could change yourself in a handful of tool calls \u2014 a bug fix, a small refactor, a CSS or copy change, anything you have already located in the code \u2014 you MAKE, now. Dispatching a cloud agent for work you are already holding costs a whole run to do less than you can, and leaves the user waiting for it. Then record the change against this chat.${delegatesLocally ? ` Several independent slices go to local sub-agents with ${localSpawn}, ${pickByRole} \u2014 not to cloud agents.` : ""} Dispatch is for work this session genuinely cannot do: a long-horizon or repetitive batch, or work that must run somewhere you are not.
 ` : "";
   const finish = delegatesLocally ? `\u2022 FINISH WHAT YOU FILED. A ticket nobody is working has not started: every ticket you filed is either done in this session or handed to a local sub-agent (${pickByRole}). builtin_chats_dispatch_agent starts a CLOUD run \u2014 use it only when the user asks for the work to run in the cloud, or it must run where this session is not. A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
-` : `\u2022 FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (${staffed ? "one of the agents above, or " : ""}builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) \u2014 a Developer for code work, a QA agent for test work \u2014 and start the run yourself with builtin_chats_dispatch_agent (chatId=${chatId}, agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
+` : `\u2022 FINISH BY DISPATCHING what you did not do yourself. A ticket that no agent is running has not started. Every create/update tool returns an \`autoRun\` verdict \u2014 read it. When \`autoRun.dispatched\` is true, say which agent picked the work up. When it is false, do not stop there: pick a capable agent (${staffed ? "one of the agents above, or " : ""}builtin_cloud_agents_list_mine, or builtin_tasks_assignees for the accountable roster) \u2014 a Developer for code work, a QA agent for test work \u2014 and start the run yourself with builtin_chats_dispatch_agent (${chatArg}agentRef=<the agent>, taskId=<the ticket>). A dispatched agent joins this chat and can be steered mid-run with builtin_executions_post_message.
 `;
   const refused = delegatesLocally ? " An execution kill-switch or run cap stops CLOUD runs only \u2014 an `autoRun: execution_disabled` verdict on a ticket is about the cloud \u2014 so hand the slice to a local sub-agent instead. When the user asks for sub-agents, start them; do not ask how to proceed." : " If the work is something you could do here, do it instead.";
   return `MODE: WORK. This conversation exists to get something DONE, not to describe it. Take the work all the way to a finished change or a running agent.
 ${chatWorkLinkingDirective(chatId)}
 ` + whoIsHere + ordering + finish + `\u2022 STAFF WITH THE TEAM. The workspace's agents (builtin_chats_list_agents for those already in this chat, builtin_cloud_agents_list_mine for all of them) are the people this work belongs to. Match each ticket to the agent whose role fits it \u2014 Developer work to a developer, QA work to a QA agent \u2014 and never leave a ticket with no agent on it.${throughThem}
-\u2022 builtin_chats_runs (chatId=${chatId}) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.
-\u2022 If dispatch is genuinely refused \u2014 no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role \u2014 the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer.${refused} Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`;
+` + (chatId != null ? `\u2022 builtin_chats_runs (chatId=${chatId}) says what has ALREADY run on this chat's tickets and who started each run. Read it before claiming work is under way, and before starting a duplicate: an empty result means nothing was ever dispatched, whatever the transcript says about it.
+` : "") + `\u2022 If dispatch is genuinely refused \u2014 no capable agent, an execution kill-switch, an exhausted run cap, a human gate on the lane, a lifecycle-managed stage with no bound role \u2014 the refusal names the reason and what would clear it. Report THAT reason and do not retry the same dispatch hoping for a different answer.${refused} Never imply work has begun when nothing was dispatched, and never describe a dispatch you did not make.`;
 }
 function chatModeDirective(mode, chatId, opts) {
   return mode === "work" ? chatWorkDirective(chatId, opts) : chatConversationDirective();
@@ -9818,6 +10867,11 @@ function codeRunOutcome(args) {
 }
 
 // src/types.ts
+function serverChatIdOf(chat) {
+  if (!chat) return null;
+  if (chat.serverId != null) return chat.serverId;
+  return chat.origin === "local" ? null : chat.id;
+}
 var STEP_MESSAGE_ROLE = "tool";
 function isStepMessage(m) {
   return m.role === STEP_MESSAGE_ROLE;
@@ -10488,7 +11542,7 @@ function computeRunProgress(events, messages = []) {
       if (!ev.isError && !isFailedToolResult(ev.result)) mutationsSucceeded += 1;
     }
   }
-  const repeatedTargets = [...targetCounts.entries()].filter(([, count]) => count > 1).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+  const repeatedTargets = [...targetCounts.entries()].filter(([, count2]) => count2 > 1).map(([label, count2]) => ({ label, count: count2 })).sort((a, b) => b.count - a.count);
   const distinctTargets = targetCounts.size;
   const revisits = repeatedTargets.reduce((sum, t) => sum + (t.count - 1), 0);
   const revisitRatio = targetedCalls > 0 ? revisits / targetedCalls : 0;
@@ -11456,8 +12510,8 @@ function memoryUsageInTrace(events) {
       out.evermindRecalls += 1;
       const result = ev.result;
       if (result && typeof result === "object") {
-        const count = result.count;
-        if (typeof count === "number") out.evermindItems += count;
+        const count2 = result.count;
+        if (typeof count2 === "number") out.evermindItems += count2;
         const tokens2 = result.blockTokens;
         if (typeof tokens2 === "number") out.evermindPromptTokens += tokens2;
       }
@@ -11832,10 +12886,12 @@ function shippedToBaseBranch(events, opts) {
 // src/previewReview.ts
 var REVIEW_RECORD_TOOL = "builtin_reviews_record";
 function previewReviewDirective(chatId) {
+  const listed = chatId != null ? `builtin_chats_list_tickets with chatId=${chatId} lists it` : "the ticket you recorded the change against";
+  const linkFirst = chatId != null ? ` If the ticket you reviewed is not linked yet, link it with builtin_chats_link_ticket (chatId=${chatId}) first.` : "";
   return `REVIEW YOUR OWN CHANGE \u2014 in this Studio session YOU are its reviewer. The app runs in a live preview in this browser that no other agent can reach, so a ticket you leave "in_review" sits at 75% on the board forever, and dispatching a QA or design agent to review it is not a substitute \u2014 even when agents are invited into this chat, the review of a change THIS session made is yours. When your turn changes the app, finish it in this order:
 1. VERIFY \u2014 \`canvas_read_build_diagnostics\` must show no current failures. Then call \`canvas_inspect_preview\` with the CSS selectors your change targets and the widths the request is about (a phone bug: include the widths it names, or [360, 390, 414]; a desktop layout: the desktop viewport). Read the numbers against what was ASKED, not only the pass/fail: a pill that must hug its label is a few dozen px tall, not the card's height; a mobile menu must not make the page wider than the screen; an image must not cover the headline (\`occludedBy\`). If a width fails, or the measurements show the change did not do what was asked, FIX it and inspect again.
-2. RECORD \u2014 when every width passes and the measurements match the request, record the review with builtin_reviews_record (taskId = the ticket tracking the change \u2014 builtin_chats_list_tickets with chatId=${chatId} lists it; verdict "complete"; a summary that QUOTES the measurements that prove it, e.g. ".character-tag 74\xD723px at 390px; page 390px wide at 390px"). One call per ticket the change delivers. If something the ticket asked for is genuinely not done, record verdict "gaps" with each gap instead of "complete".
-3. CLOSE \u2014 a ticket linked to this chat that has a "complete" review recorded after a passing inspection moves to done (100%) automatically when your turn ends. If the ticket you reviewed is not linked yet, link it with builtin_chats_link_ticket (chatId=${chatId}) first. Report each ticket's verdict with the key measurements.
+2. RECORD \u2014 when every width passes and the measurements match the request, record the review with builtin_reviews_record (taskId = the ticket tracking the change \u2014 ${listed}; verdict "complete"; a summary that QUOTES the measurements that prove it, e.g. ".character-tag 74\xD723px at 390px; page 390px wide at 390px"). One call per ticket the change delivers. If something the ticket asked for is genuinely not done, record verdict "gaps" with each gap instead of "complete".
+3. CLOSE \u2014 a ticket linked to this chat that has a "complete" review recorded after a passing inspection moves to done (100%) automatically when your turn ends.${linkFirst} Report each ticket's verdict with the key measurements.
 Never say a change works or a ticket is done without a passing \`canvas_inspect_preview\` AFTER your last edit. If the preview cannot be inspected (it is not running, or the probe times out), say so plainly and leave the ticket in review \u2014 do not record a "complete" review you could not verify.`;
 }
 function toolEvents(events) {
@@ -12054,13 +13110,14 @@ function attachDeltaToRunTicket(toolName, args, deltaTicketId) {
   const bag = args;
   if (bag.taskId == null) bag.taskId = deltaTicketId;
 }
-async function recordCodeChangeTicket(chatId, c, req, phase) {
+async function recordCodeChangeTicket(serverChatId, c, req, phase) {
   if (!req.runTool || req.projectId == null) return;
   const known = new Set(c.deltaRecordedFiles);
   const files = c.touchedFiles.filter((f) => !known.has(f)).slice(0, 50);
   if (phase === "settle" && c.deltaTicketId != null && files.length === 0) return;
   const attachTo = c.deltaTicketId;
-  const summary = files.length ? `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from Brain chat #${chatId}` : `Code change from Brain chat #${chatId}`;
+  const source = serverChatId != null ? `Brain chat #${serverChatId}` : "a local editor chat";
+  const summary = files.length ? `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from ${source}` : `Code change from ${source}`;
   const toolStart = nowMs2();
   const args = {
     projectId: req.projectId,
@@ -12069,7 +13126,7 @@ async function recordCodeChangeTicket(chatId, c, req, phase) {
     files,
     kind: "improvement",
     modality: "ide",
-    chatId,
+    ...serverChatId != null ? { chatId: serverChatId } : {},
     ...attachTo != null ? { taskId: attachTo } : {}
   };
   let out;
@@ -12094,11 +13151,11 @@ async function recordCodeChangeTicket(chatId, c, req, phase) {
     isError: isFailedToolResult(out)
   });
 }
-async function updateLinkedTickets(chatId, c, req, select, status2, reason) {
-  if (!req.runTool) return;
+async function updateLinkedTickets(serverChatId, c, req, select, status2, reason) {
+  if (!req.runTool || serverChatId == null) return;
   let listed;
   try {
-    listed = await req.runTool("builtin_chats_list_tickets", { chatId });
+    listed = await req.runTool("builtin_chats_list_tickets", { chatId: serverChatId });
   } catch {
     return;
   }
@@ -12123,9 +13180,10 @@ async function updateLinkedTickets(chatId, c, req, select, status2, reason) {
     });
   }
 }
-async function autoLinkCreatedItem(chatId, c, runTool, toolName, out) {
+async function autoLinkCreatedItem(serverChatId, c, runTool, toolName, out) {
   const link = workItemLinkFromCreate(toolName, out);
-  if (!link) return;
+  if (!link || serverChatId == null) return;
+  const chatId = serverChatId;
   const toolStart = nowMs2();
   let result;
   try {
@@ -12148,6 +13206,11 @@ async function autoLinkCreatedItem(chatId, c, runTool, toolName, out) {
     result: result ?? null,
     isError: isFailedToolResult(result)
   });
+}
+
+// src/runStore/serverChat.ts
+function resolveServerChatId(chatId, req) {
+  return req.serverChatId === void 0 ? chatId : req.serverChatId;
 }
 
 // src/runStore/runMemory.ts
@@ -12606,7 +13669,8 @@ function turnOptimizationDirective() {
 
 // src/selfReviewShip.ts
 function selfReviewShipDirective(chatId) {
-  return 'SHIP YOUR OWN CHANGE \u2014 in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:\n1. VERIFY \u2014 run the type-check / tests / build that cover what you touched (`run_command`) and fix whatever fails.\n2. SELF-REVIEW \u2014 read your own diff with `git_diff` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 builtin_chats_list_tickets with chatId=' + chatId + ' lists it; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
+  const trackingTicket = chatId != null ? "builtin_chats_list_tickets with chatId=" + chatId + " lists it" : "the one builtin_tickets_from_delta returned for it";
+  return 'SHIP YOUR OWN CHANGE \u2014 in this session YOU are its reviewer. This is a local editor session: no other agent or reviewer can ever reach a change you leave in the working tree, so a ticket you leave "in_review" sits at 75% on the board forever. When your turn changes code, finish it in this order:\n1. VERIFY \u2014 run the type-check / tests / build that cover what you touched (`run_command`) and fix whatever fails.\n2. SELF-REVIEW \u2014 read your own diff with `git_diff` against what the ticket and the user asked for: bugs, leftover debug code, edits unrelated to the task, missing tests or localisation. If you find a problem, FIX it and review again. Then record the pass with builtin_reviews_record (taskId = the ticket tracking this change \u2014 ' + trackingTicket + '; verdict "complete"; a one-paragraph summary of what you checked).\n3. SHIP \u2014 `git_commit` with allowBaseBranch:true and exactly the `paths` you changed (never a catch-all: the tree may hold the human\'s own work), then `git_push` with allowBaseBranch:true. Both are shown to the human for approval \u2014 that approval is their review of your review, so do not ask for it in prose as well.\n4. CLOSE \u2014 the push reports the branch it landed on. Once it lands on the base branch with nothing left to push, the in_review ticket this chat opened for the change moves to done automatically. Move any OTHER linked ticket this change fully delivers to done yourself with builtin_tasks_update. Report the commit hash and the push result.\nExceptions, and only these: if the user asked for a pull request or a ticket branch, commit on a `branch` and `open_pull_request` instead (the ticket then closes when that PR merges); if the user said not to commit or push, leave the change uncommitted and say so. If a commit or push is refused or fails, report the exact error \u2014 never claim a change shipped when it did not.';
 }
 var PUBLISH_TOOLS = /* @__PURE__ */ new Set(["git_commit", "git_push", "open_pull_request"]);
 var RAW_PUBLISH = gitCommandPattern("commit|push");
@@ -12969,8 +14033,10 @@ async function prepareRunLoop(chatId, c, req, runKey) {
   const catalog = canAskUser ? [...toolSpecs ?? [], ASK_USER_TOOL_SPEC, HAND_OFF_TOOL_SPEC] : toolSpecs;
   const allTools = catalog && catalog.length > 0 ? catalog : void 0;
   const runMode = normalizeChatMode(req.chatMode ?? "work");
+  const serverChatId = resolveServerChatId(chatId, req);
   const metadata = {
-    chatId,
+    ...serverChatId != null ? { chatId: serverChatId } : {},
+    ...req.clientChatId ? { clientChatId: req.clientChatId } : {},
     guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     guestTurnInput: latestUserText(convo),
     mode: runMode,
@@ -13003,16 +14069,16 @@ ${extra}`;
   const canEditHere = canChangeCodeHere(catalogToolNames);
   systemPrompt = `${systemPrompt}
 
-${chatModeDirective(runMode, chatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), canFanOut: catalogToolNames.includes("spawn_agents"), roster: req.chatRoster })}
+${chatModeDirective(runMode, serverChatId, { canEditHere, canDelegate: catalogToolNames.includes("spawn_agent"), canFanOut: catalogToolNames.includes("spawn_agents"), roster: req.chatRoster })}
 
 ${turnOptimizationDirective()}`;
   const canShip = canShipHere(catalogToolNames);
   if (canShip) systemPrompt = `${systemPrompt}
 
-${selfReviewShipDirective(chatId)}`;
+${selfReviewShipDirective(serverChatId)}`;
   if (canReviewInPreview(catalogToolNames)) systemPrompt = `${systemPrompt}
 
-${previewReviewDirective(chatId)}`;
+${previewReviewDirective(serverChatId)}`;
   if (c.priorResearch) systemPrompt = `${systemPrompt}
 
 ${c.priorResearch}`;
@@ -13059,6 +14125,7 @@ ${turnContext}` : systemPrompt),
   });
   const run = {
     chatId,
+    serverChatId,
     runKey,
     c,
     req,
@@ -13605,7 +14672,10 @@ function completeTurnPort(run) {
           metadata: callMetadata,
           role: ask.role,
           ...ask.excludeModels.length > 0 ? { excludeModels: ask.excludeModels } : {},
-          prompt_cache_key: `brain:${run.chatId}`,
+          // Keyed on the conversation's identity OFF this machine (PRD 36): the server
+          // chat, else the local chat's client id — never its local view key.
+          prompt_cache_key: `brain:${run.serverChatId ?? run.req.clientChatId ?? "local"}`,
+          conversationKey: run.chatId,
           signal: c.abort?.signal
         },
         handlers
@@ -13779,12 +14849,12 @@ function dispatchToolPort(run) {
       c.codeChanged = true;
       for (const f of changed) if (!c.touchedFiles.includes(f)) c.touchedFiles.push(f);
       if (first && !c.ticketRecorded && req.projectId != null && req.runTool) {
-        await recordCodeChangeTicket(chatId, c, req, "open").catch(() => {
+        await recordCodeChangeTicket(run.serverChatId, c, req, "open").catch(() => {
         });
       }
     }
     if (isTicketRecordingTool(call2.name)) c.ticketRecorded = true;
-    await autoLinkCreatedItem(chatId, c, runTool, call2.name, out);
+    await autoLinkCreatedItem(run.serverChatId, c, runTool, call2.name, out);
     let advisory = null;
     if (!isReadTool) writeLedger.record(call2.name, args, { ok: !isFailedToolResult(out), unscoped: isUnscopedMutation(call2.name, args) });
     if (isFailedToolResult(out)) {
@@ -13911,7 +14981,7 @@ function beforeDispatchHook(run) {
         runTool: (name, args2) => runTool(name, args2),
         toolNames: new Set(catalogToolNames),
         ...req.projectId != null ? { projectId: req.projectId } : {},
-        afterCreate: (toolName, out) => autoLinkCreatedItem(chatId, c, runTool, toolName, out),
+        afterCreate: (toolName, out) => autoLinkCreatedItem(run.serverChatId, c, runTool, toolName, out),
         step: (label, args2, out, durationMs) => pushTrace(c, {
           ts: nowIso(),
           category: "tool",
@@ -14417,6 +15487,7 @@ async function startRun(runKey, request) {
   if (c.running) return;
   const lineage = request.lineage;
   const chatId = lineage?.rootChatId ?? runKey;
+  const serverChatId = resolveServerChatId(chatId, request);
   const steps = batchStepPersistence(request.persistence, stepDurabilityFor(chatId, runKey));
   const runPersistence = lineage ? lineagePersistence(steps.persistence, lineage, (msg) => appendRunMessage(chatId, msg)) : steps.persistence;
   const req = { ...request, persistence: runPersistence };
@@ -14449,22 +15520,22 @@ async function startRun(runKey, request) {
       emit(c);
     }
     if (!aborted && c.codeChanged && req.projectId != null && req.runTool && (!c.ticketRecorded || c.deltaTicketId != null)) {
-      await recordCodeChangeTicket(chatId, c, req, "settle").catch(() => {
+      await recordCodeChangeTicket(serverChatId, c, req, "settle").catch(() => {
       });
     }
     if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
-      await updateLinkedTickets(chatId, c, req, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog").catch(() => {
+      await updateLinkedTickets(serverChatId, c, req, linkedTicketsToAdvance, "in_progress", "worked-ticket-off-backlog").catch(() => {
       });
     }
     const shipped = !aborted && c.codeChanged && shippedToBaseBranch(runTrace(c), { touchedFiles: c.touchedFiles });
     if (shipped && req.projectId != null && req.runTool) {
-      await updateLinkedTickets(chatId, c, req, linkedTicketsToComplete, "done", "shipped-to-base-branch").catch(() => {
+      await updateLinkedTickets(serverChatId, c, req, linkedTicketsToComplete, "done", "shipped-to-base-branch").catch(() => {
       });
     }
     const reviewedInPreview = !aborted && c.codeChanged ? ticketsReviewedInPreview(runTrace(c)) : [];
     if (reviewedInPreview.length && req.projectId != null && req.runTool) {
       await updateLinkedTickets(
-        chatId,
+        serverChatId,
         c,
         req,
         (listed) => linkedTicketsReviewedComplete(listed, reviewedInPreview),
@@ -18405,13 +19476,6 @@ function PromptInput({
   ] });
 }
 
-// ../packages/spend-contract/src/index.ts
-var USAGE_SURFACES = ["web", "vsix", "on_prem", "cloud", "sdk", "rovr"];
-function isUsageSurface(raw) {
-  return typeof raw === "string" && USAGE_SURFACES.includes(raw);
-}
-var USAGE_SURFACE_HEADER = "x-builderforce-surface";
-
 // src/usageSurface.ts
 function withUsageSurface(fetchImpl, surface) {
   return (input, init) => fetchImpl(input, {
@@ -18660,6 +19724,7 @@ export {
   askUserBlock,
   attachEvermindLearn,
   attemptedPublish,
+  bindChatHistoryForSync,
   brainPersonaAgents,
   brainRequestError,
   buildBrainTriageReport,
@@ -18706,6 +19771,7 @@ export {
   createHandoffFit,
   createHostModelStream,
   createLocalBrainPersistence,
+  createLocalChatIdentity,
   createLocalFirstStream,
   createLocalStream,
   createLocalSuccessFederation,
@@ -18713,6 +19779,7 @@ export {
   createPageEngineClient,
   createPageEngineSet,
   createPayloadBudget,
+  createRunUsageLedger,
   declinesReview,
   declinesShipping,
   defaultInferenceMode,
@@ -18911,6 +19978,7 @@ export {
   serializeAskUser,
   serveEngineWorker,
   servePageEngines,
+  serverChatIdOf,
   setLastResolvedModel,
   setMcpToolStatus,
   shippedToBaseBranch,
@@ -18974,6 +20042,7 @@ export {
   withProvenanceMetadata,
   withRating,
   withReadyPageModels,
+  withRunUsage,
   withUsageSurface,
   workFiledNotStaffedVerdict,
   workItemLinkFromCreate

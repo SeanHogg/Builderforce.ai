@@ -1,28 +1,20 @@
 /**
  * Composition — the usage ledger port the sync usage importer writes through
- * (PRD 36.4). The write is the ONE canonical writer (`recordUsageRow`); the
- * existence read is the retry dedupe the sync transaction cannot provide, because
- * `llm_usage_log` lives in the usage database (`resolveUsageDatabase`), not in the
- * database the push's unit of work commits to.
+ * (PRD 36.4): the ONE canonical writer (`writeUsageRow`), which holds a synced row to
+ * one per idempotency key with a unique index. The dedupe has to live there, not in the
+ * sync transaction: `llm_usage_log` is in the usage database (`resolveUsageDatabase`),
+ * not in the database the push's unit of work commits to.
  */
 
-import { and, eq } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { llmUsageLog } from '../../infrastructure/database/schema';
-import { recordUsageRow, resolveUsageDatabase } from '../llm/usageLedger';
+import { writeUsageRow } from '../llm/usageLedger';
 import type { SyncUsageLedger } from './syncPorts';
 
 export function syncUsageLedger(db: Db, env: Env): SyncUsageLedger {
   return {
-    async hasRow(tenantId, idempotencyKey) {
-      const [row] = await resolveUsageDatabase(env, db)
-        .select({ id: llmUsageLog.id })
-        .from(llmUsageLog)
-        .where(and(eq(llmUsageLog.tenantId, tenantId), eq(llmUsageLog.idempotencyKey, idempotencyKey)))
-        .limit(1);
-      return !!row;
+    async record(row) {
+      await writeUsageRow(db, env, row, { syncImport: true });
     },
-    record: (row) => recordUsageRow(db, env, row),
   };
 }

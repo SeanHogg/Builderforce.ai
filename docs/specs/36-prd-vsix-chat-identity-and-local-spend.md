@@ -164,3 +164,46 @@ can be misattributed.
   (`saved_cost_usd_millicents`, `byo` so it never counts against the plan allowance).
 - Pulled records another device synced are hidden from this device's chat reads: their view
   keys were minted elsewhere and collide. Cross-device chat history is not in this PRD.
+
+**Hardening after review (same day).**
+- A sync import writes history only into the CALLER'S OWN chat. The mapping keyspace is
+  the tenant's, so `mappedChat` (`api/.../sync/importers/index.ts`) requires the mapping's
+  destination and the chat's owner (`SyncImportContext.resolveOwnChatId` →
+  `brainChatGuards.chatOwnedBy`). Another member's chat is `foreign`: a message is
+  rejected, a usage row lands unattributed. Chat adopt, update and archive use the same
+  ownership.
+- A synced usage row is written once. A partial unique index (migrations `1275`,
+  transactional `0022`) is on `(tenant_id, idempotency_key) WHERE idempotency_key LIKE
+  'sync-usage:%'`. `writeUsageRow(…, { syncImport: true })` inserts with `ON CONFLICT DO
+  NOTHING` and throws on failure, and the importer answers a failed write as pending, so it
+  is retried and never marked applied. `recordUsageRow` is the request path's never-throw
+  wrapper over it.
+  - The prefix is RESERVED: a gateway caller's client-chosen `Idempotency-Key` that claims
+    it, or one too long for the column, is dropped (`storedIdempotencyKey`). Without this,
+    a caller could send the prefix on every call and have each row after the first
+    swallowed by the index, so the call is served but never billed.
+  - The ledger key is the event's own entity id. A usage payload naming another event, or
+    an out-of-range token count, is rejected, so no write can fail forever.
+  - Steps after the insert (cached totals, BYO alert) are reported, never thrown. A synced
+  row does not clear the workspace's BYO alert.
+- After sync, a bound chat's pill leaves out ledger rows the platform imported
+  (`importedUsageIds`), so local-model spend is not counted on both sides.
+- The ledger records the gateway's prompt-cache split (`cache_read_input_tokens` /
+  `cache_creation_input_tokens`, or OpenAI's `prompt_tokens_details`). The run-end
+  memory commit's model call is recorded on the chat's ledger (`editorRunEnd.ts`).
+- The Sessions tree names SERVER chats and the panel keys LOCAL ones, so the tree's
+  open, delete, archive, rename and unarchive go through `clients/vscode/src/sessionChats.ts`.
+  - Only the caller's OWN chat is continued in the editor (one local copy per server
+    chat, even on a double-click). A colleague's shared or member chat opens on the web,
+    because binding to it would put this person's runs, spend and memory on that chat.
+  - The tree's Running overlay matches editor runs by their bound server id, while the
+    panel's tab reads them by local id (`attention.ts` `editorChatState`).
+- Binding a chat whose import a sync pass already queued re-queues that import with the
+  server id, so the server adopts the chat rather than creating a second one.
+- A synced message delete is resolved from the message's own row, scoped to the
+  caller's chat; a tombstone carries no payload.
+- The run-end memory commit names its server chat on the wire.
+- Test changes that are behaviour decisions, not retargets:
+  - `syncImporterFor('chat')` is now `importSyncedChat` (36.4 gives chat its own importer);
+  - `POST /api/brain/chats` is now `connected-feature` (Q1);
+  - the `unlinkedRunId` test went with the function, which no longer has a caller.

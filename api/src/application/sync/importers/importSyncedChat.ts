@@ -97,15 +97,9 @@ async function writeFailure(error: unknown, operation: string): Promise<BoundedI
   return rejected('chat_write_failed');
 }
 
-/** The hinted chat, when it is this caller's own chat in this tenant. */
-async function adoptable(tx: Tx, ctx: SyncImportContext, chatId: number): Promise<boolean> {
-  const [row] = await tx
-    .select({ id: brainChats.id })
-    .from(brainChats)
-    .where(and(eq(brainChats.id, chatId), eq(brainChats.tenantId, ctx.auth.tenantId), eq(brainChats.userId, ctx.auth.userId)))
-    .limit(1);
-  return !!row;
-}
+/** The caller's own chat row — every update and archive is scoped to it. */
+const ownChat = (ctx: SyncImportContext, chatId: number) =>
+  and(eq(brainChats.id, chatId), eq(brainChats.tenantId, ctx.auth.tenantId), eq(brainChats.userId, ctx.auth.userId));
 
 /** A project the chat names, when this tenant owns it — else none (never a rejection). */
 async function projectOf(ctx: SyncImportContext, projectId: number | null): Promise<number | null> {
@@ -126,7 +120,7 @@ async function createChat(
     if (sameCanonical(mapping, stored)) return appliedExisting(mapping, stored);
     return conflict(mapping, 'entity_already_imported');
   }
-  if (serverIdHint !== null && (await adoptable(tx, ctx, serverIdHint))) {
+  if (serverIdHint !== null && (await ctx.resolveOwnChatId(serverIdHint)) !== null) {
     return appliedNew(String(serverIdHint), 1, ctx.destinationKey, stored);
   }
   const projectId = await projectOf(ctx, fields.projectId);
@@ -174,7 +168,7 @@ async function updateChat(
       isArchived: fields.isArchived,
       ...(fields.mode ? { mode: fields.mode } : {}),
       updatedAt: ctx.now,
-    }).where(and(eq(brainChats.id, id), eq(brainChats.tenantId, ctx.auth.tenantId))).returning({ id: brainChats.id }));
+    }).where(ownChat(ctx, id)).returning({ id: brainChats.id }));
     if (insertedId(rows) === null) return rejected('chat_not_found');
     return appliedNew(current.serverId, current.serverVersion + 1, ctx.destinationKey, stored);
   } catch (error) {
@@ -198,7 +192,7 @@ async function deleteChat(
     // A deleted local chat is ARCHIVED here, never destroyed: its usage and ticket
     // links keep pointing at a row that still exists.
     const rows = await tx.transaction((savepoint) => savepoint.update(brainChats).set({ isArchived: true, updatedAt: ctx.now })
-      .where(and(eq(brainChats.id, id), eq(brainChats.tenantId, ctx.auth.tenantId))).returning({ id: brainChats.id }));
+      .where(ownChat(ctx, id)).returning({ id: brainChats.id }));
     if (insertedId(rows) === null) return rejected('chat_not_found');
     return appliedNew(current.serverId, current.serverVersion + 1, ctx.destinationKey, tombstone);
   } catch (error) {

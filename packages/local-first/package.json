@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/local-first",
-  "version": "2026.10.24",
+  "version": "2026.10.25",
   "private": true,
   "type": "module",
   "exports": {

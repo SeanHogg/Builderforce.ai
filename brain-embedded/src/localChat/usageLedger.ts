@@ -14,7 +14,7 @@
  * chat's other rows (`journal.ts`).
  */
 
-import { newLocalRecord, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
+import { newLocalRecord, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction } from '@builderforce/local-first';
 import { isLocalModelRef } from '@builderforce/local-inference';
 import { ANTHROPIC_RELEASES, directCatalogId, listPriceOf, snapshotPriceBook, type PriceBook } from '@builderforce/model-catalog';
 import {
@@ -25,7 +25,7 @@ import {
 } from '@builderforce/spend-contract';
 import type { CompletionUsage, StreamChatResult } from '../streamChatCompletion';
 import type { BrainStreamFn } from '../runStore/runTypes';
-import { journalWrite } from './journal';
+import { isImported, journalWrite } from './journal';
 import { chatRecordById, liveRecords } from './records';
 
 /** Where a call ran: through the gateway, on this machine, or straight to a provider. */
@@ -134,8 +134,8 @@ export function createRunUsageLedger(options: RunUsageLedgerOptions): RunUsageLe
           ...(input.mode ? { mode: input.mode } : {}),
           promptTokens,
           completionTokens,
-          cacheReadTokens: 0,
-          cacheCreationTokens: 0,
+          cacheReadTokens: Math.min(count(input.usage?.cacheRead), promptTokens),
+          cacheCreationTokens: Math.min(count(input.usage?.cacheCreation), promptTokens),
           at,
         };
         if (input.route === 'local') {
@@ -226,17 +226,36 @@ function sliceOf(row: RunUsageValue, book: PriceBook): UsageSlice {
 }
 
 /**
- * A local chat's spend from its ledger rows (§3.2). `serverSeen` = the rows the
- * platform already accounts for (a bound chat's gateway calls), left out so the
- * server's figure for them is added once, not twice. A figure that priced any gateway
- * call on the device is an estimate.
+ * A local chat's spend from its ledger rows (§3.2). `excludeGateway` = the platform's
+ * figure for this chat is being added, so the rows it already accounts for are left
+ * out and counted once, not twice: its gateway calls, and the calls a sync import
+ * put on the platform (`imported`, by `clientEventId`). A figure that priced any
+ * gateway call on the device is an estimate.
  */
-export function ledgerSpend(rows: readonly RunUsageValue[], opts: { excludeGateway: boolean; book?: PriceBook }): SpendSavingsSummary | null {
+export function ledgerSpend(
+  rows: readonly RunUsageValue[],
+  opts: { excludeGateway: boolean; imported?: ReadonlySet<string>; book?: PriceBook },
+): SpendSavingsSummary | null {
   const book = opts.book ?? snapshotPriceBook();
-  const kept = opts.excludeGateway ? rows.filter((row) => row.route !== 'gateway') : rows;
+  const kept = opts.excludeGateway
+    ? rows.filter((row) => row.route !== 'gateway' && !opts.imported?.has(row.clientEventId))
+    : rows;
   if (kept.length === 0) return null;
   const summary = foldSpendSavings(kept.map((row) => sliceOf(row, book)), book);
   return kept.some((row) => row.route === 'gateway') ? { ...summary, spend: { ...summary.spend, estimated: true } } : summary;
+}
+
+/** Of a chat's ledger rows, the ones a sync receipt says the platform imported. */
+export async function importedUsageIds(
+  tx: LocalFirstTransaction,
+  rows: readonly RunUsageValue[],
+  destination: EntityDestination,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (row.route !== 'gateway' && isImported(await tx.mapping('usage', row.clientEventId, destination))) ids.add(row.clientEventId);
+  }
+  return ids;
 }
 
 /** Every chat's ledger rows, by chat client id — one read for a whole chat list. */

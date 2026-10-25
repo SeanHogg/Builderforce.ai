@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { getSessionTabMode, type SessionTabMode } from "./gateway";
-import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
+import { editorChatState, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { WebviewPanelBase } from "./webviewShared";
 import { workspaceCanvasSession, type WorkspaceCanvasSession } from "./workspaceSession";
 import { WorkspaceSurface, type BrainInbound, type BrainIntent } from "./workspaceSurface";
@@ -141,12 +141,13 @@ export class BuilderForcePanel extends WebviewPanelBase<BrainInbound> {
   /**
    * Paint this tab with its chat's title + live status, so a user juggling sessions
    * sees which one is working and which one needs an answer WITHOUT opening it —
-   * the same signal the Sessions row shows, off the same {@link attentionFor} map.
+   * the same run state the Sessions row shows ({@link editorChatState}, by local id).
    * Reuse mode keeps the product title (its one tab is not a single session).
    */
   private applyTabStatus(): void {
     if (this.mode !== "perSession") return;
-    const state = this.ownChatId != null ? attentionFor("chat", this.ownChatId) : undefined;
+    // The panel's chat is a LOCAL id: its own runs, not the server map (PRD 36).
+    const state = this.ownChatId != null ? editorChatState(this.ownChatId) : undefined;
     const name = this.chatTitle.trim() || "BuilderForce";
     this.panel.title = `${sessionTabPrefix(state)}${name}`;
     this.panel.iconPath = sessionTabIcon(this.ctx.extensionUri, state);

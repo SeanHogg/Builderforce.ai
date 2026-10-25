@@ -266,6 +266,10 @@ export interface CompletionUsage {
   prompt?: number;
   completion?: number;
   total?: number;
+  /** Prompt tokens served from the vendor's prompt cache — INCLUDED in `prompt`. */
+  cacheRead?: number;
+  /** Prompt tokens written to the vendor's prompt cache — INCLUDED in `prompt`. */
+  cacheCreation?: number;
 }
 
 /**
@@ -627,9 +631,25 @@ async function runStreamChatCompletion(
   let usage: CompletionUsage | undefined;
   const readUsage = (u: unknown): void => {
     if (!u || typeof u !== 'object') return;
-    const o = u as { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown };
+    const o = u as {
+      prompt_tokens?: unknown;
+      completion_tokens?: unknown;
+      total_tokens?: unknown;
+      // The gateway's cache split (Anthropic names), or OpenAI's `prompt_tokens_details`.
+      cache_read_input_tokens?: unknown;
+      cache_creation_input_tokens?: unknown;
+      prompt_tokens_details?: { cached_tokens?: unknown; cache_write_tokens?: unknown } | null;
+    };
     const num = (x: unknown): number | undefined => (typeof x === 'number' && Number.isFinite(x) ? x : undefined);
-    const next: CompletionUsage = { prompt: num(o.prompt_tokens), completion: num(o.completion_tokens), total: num(o.total_tokens) };
+    const cacheRead = num(o.cache_read_input_tokens) ?? num(o.prompt_tokens_details?.cached_tokens);
+    const cacheCreation = num(o.cache_creation_input_tokens) ?? num(o.prompt_tokens_details?.cache_write_tokens);
+    const next: CompletionUsage = {
+      prompt: num(o.prompt_tokens),
+      completion: num(o.completion_tokens),
+      total: num(o.total_tokens),
+      ...(cacheRead != null ? { cacheRead } : {}),
+      ...(cacheCreation != null ? { cacheCreation } : {}),
+    };
     if (next.prompt != null || next.completion != null || next.total != null) usage = next;
   };
   // The vendor's raw-response count, from whichever chunk carried it (the finishing one).

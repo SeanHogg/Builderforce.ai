@@ -97,6 +97,16 @@ describe('run usage ledger — spend on the device', () => {
     expect(local?.estimated).toBe(true);
   });
 
+  it('prices a call’s cached prompt at the cache tier, as the platform does', async () => {
+    const { ledger, persistence, store } = setup({ destination: () => undefined });
+    const chat = await persistence.createChat({ title: 'x' });
+    await ledger.record({ chatId: chat.id, runKey: 1, model: 'openai/gpt-x', route: 'gateway', usage: { prompt: 1_000_000, completion: 0, cacheRead: 1_000_000 } });
+    const [row] = await store.read((tx) => tx.list<RunUsageValue>('usage'));
+    expect(row?.payload.cacheReadTokens).toBe(1_000_000);
+    // $1/M input, every token read from cache at 0.1×.
+    expect((await persistence.getChat(chat.id)).spend?.spend.totalUsd).toBeCloseTo(0.1);
+  });
+
   it('a gateway call is never journaled for sync; a local call is', async () => {
     const { ledger, persistence, store } = setup({ destination: () => undefined });
     const chat = await persistence.createChat({ title: 'x' });
@@ -150,6 +160,18 @@ describe('sync on enable — the chat history goes to the account once', () => {
     await bindChatHistoryForSync(store, DEVICE, ACCOUNT);
     const chatImport = (await store.read((tx) => tx.pending())).find((e) => e.entityType === 'chat')!;
     expect((chatImport.payload as { serverId?: number }).serverId).toBe(4242);
+  });
+
+  it('a chat bound after the sync pass queued it still imports naming its server chat', async () => {
+    let account: EntityDestination | undefined;
+    const { persistence, identity, store } = setup({ destination: () => account });
+    const chat = await persistence.createChat({ title: 'x' });
+    await bindChatHistoryForSync(store, DEVICE, ACCOUNT);
+    account = ACCOUNT;
+    await identity.bind(chat.id);
+    const chatImports = (await store.read((tx) => tx.pending())).filter((e) => e.entityType === 'chat');
+    expect(chatImports).toHaveLength(1);
+    expect((chatImports[0]!.payload as { serverId?: number }).serverId).toBe(4242);
   });
 
   it('a second pass finds nothing and writes nothing', async () => {

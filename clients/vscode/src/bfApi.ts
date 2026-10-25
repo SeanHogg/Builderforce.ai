@@ -906,6 +906,8 @@ export interface BfBrainChat {
   title: string;
   projectId: number | null;
   origin?: string;
+  /** The chat's owner (`chatColumns.ownerId`) — a shared chat's is a colleague. */
+  ownerId?: string | null;
   createdAt?: string;
   updatedAt?: string;
   /** Agents/humans invited into the chat (multi-party chat). Refs resolve to
