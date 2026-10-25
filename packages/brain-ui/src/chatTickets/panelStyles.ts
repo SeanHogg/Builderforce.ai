@@ -33,6 +33,8 @@ export const S = {
   // The header row: ticket health on the left, the sort control on the right. Wraps
   // on a narrow panel rather than pushing the select off the edge.
   headerRow: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, minWidth: 0 } as React.CSSProperties,
+  // The drawer toggles, wrapping on a narrow panel; the cost pill closes the row on the right.
+  actionRow: { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 } as React.CSSProperties,
   ticketsHeader: { display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px', flex: '1 1 auto', minWidth: 0, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', color: V.text } as React.CSSProperties,
   caret: { display: 'inline-block', fontSize: 11, color: V.muted, transition: 'transform 120ms ease' } as React.CSSProperties,
   ticketsCount: { fontSize: 12, fontWeight: 600, color: V.text } as React.CSSProperties,

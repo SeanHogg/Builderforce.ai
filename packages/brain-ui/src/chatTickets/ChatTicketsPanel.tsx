@@ -22,7 +22,7 @@ import { useChatProgressSync } from './useChatProgressSync';
 import { V } from './tokens';
 import { TicketParentLine } from './TicketParentLine';
 import { AgentsSection } from './AgentsSection';
-import { SpendPill, hasSpendToShow } from '../spend/SpendPill';
+import { SpendPill } from '../spend/SpendPill';
 import type { SpendLabels } from '../spend/labels';
 import type { SpendSavingsSummary } from '@seanhogg/builderforce-brain-embedded';
 import { LinkForm } from './LinkForm';
@@ -72,7 +72,7 @@ export interface ChatTicketsPanelProps {
    *  editor's run registry); omit where there are none. */
   subagents?: readonly ChatSubagentVM[];
   /** What this conversation cost and what memory saved it — the `spend` the api attaches
-   *  to every chat payload. Shown as a pill in the header row; absent/empty ⇒ no pill. */
+   *  to every chat payload. Shown as a pill at the right end of the action row; absent/empty ⇒ no pill. */
   spend?: SpendSavingsSummary | null;
   spendLabels?: Partial<SpendLabels>;
   /** BCP-47 locale for the pill's money and token formatting. */
@@ -214,9 +214,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       )}
       {/* Collapsible header — one row summarising the linked tickets so a chat with
           hundreds of them stays compact. Click to expand/collapse the ring grid. */}
-      {(tickets.length > 0 || hasSpendToShow(spend)) && (
+      {tickets.length > 0 && (
         <div style={S.headerRow}>
-          {tickets.length > 0 && (
           <button
             type="button"
             onClick={toggleCollapsed}
@@ -229,7 +228,6 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
             <span style={S.ticketsCount}>{labels.ticketCount(tickets.length)}</span>
             <span style={S.ticketsAgg}>{agg.pct}%{agg.total > 0 ? ` · ${agg.done}/${agg.total}` : ''}</span>
           </button>
-          )}
           {tickets.length > 1 && (
             <select
               aria-label={labels.sortLabel}
@@ -243,7 +241,6 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
               <option value="linked" style={S.option}>{labels.sortLinked}</option>
             </select>
           )}
-          <SpendPill summary={spend} labels={spendLabels} locale={locale} />
         </div>
       )}
 
@@ -327,8 +324,9 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         </div>
       )}
 
-      {/* Action toggles */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {/* Action toggles — the conversation's cost pill closes the row at the bottom-right
+          (its wrap carries `margin-left: auto`; the popover anchors right). */}
+      <div style={S.actionRow}>
         <button type="button" onClick={() => togglePanel('link')} style={S.pill(panel === 'link')}>＋ {labels.link}</button>
         <button type="button" onClick={() => togglePanel('agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length + subagents.length ? ` (${agents.length + subagents.length})` : ''}</button>
         <button type="button" onClick={() => togglePanel('people')} style={S.pill(panel === 'people')}>👤 {labels.people}{members.length ? ` (${members.length})` : ''}</button>
@@ -349,6 +347,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           </button>
         ))}
         {msg && <span style={{ fontSize: 12, color: V.accent, alignSelf: 'center' }}>{msg}</span>}
+        <SpendPill summary={spend} labels={spendLabels} locale={locale} />
       </div>
 
       {openExtension && <div style={S.drawer}>{openExtension.render()}</div>}
