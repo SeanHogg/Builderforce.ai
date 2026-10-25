@@ -5,7 +5,7 @@
  * list, as of {@link PRICE_SNAPSHOT_AT}. Read through `snapshotPriceBook()`.
  */
 
-export const PRICE_SNAPSHOT_AT = "2026-10-24T23:31:18.263Z";
+export const PRICE_SNAPSHOT_AT = "2026-10-25T01:59:31.462Z";
 
 export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>> = {
   "~anthropic/claude-fable-latest": [0.00001, 0.00005],
@@ -14,10 +14,10 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~anthropic/claude-sonnet-latest": [0.000002, 0.00001],
   "~deepseek/deepseek-flash-latest": [2e-8, 0.000001],
   "~deepseek/deepseek-pro-latest": [1.188e-7, 0.000008],
-  "~deepseek/deepseek-v4-flash-latest": [4.22e-8, 1.763e-7],
+  "~deepseek/deepseek-v4-flash-latest": [4.22e-8, 1.694e-7],
   "~google/gemini-flash-latest": [7.5e-7, 0.00000375],
   "~google/gemini-pro-latest": [0.000002, 0.00001],
-  "~moonshotai/kimi-latest": [1.9e-7, 0.0000085258],
+  "~moonshotai/kimi-latest": [1.9e-7, 0.00000894],
   "~openai/gpt-astra-latest": [0.00001, 0.00005],
   "~openai/gpt-luna-latest": [1e-7, 5e-7],
   "~openai/gpt-mini-latest": [7.5e-7, 0.0000045],
@@ -25,8 +25,8 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "~openai/gpt-terra-latest": [0.000002, 0.000012],
   "~unbiased/pareto-latest": [8e-7, 0.0000032],
   "~x-ai/grok-latest": [0.000002, 0.000006],
-  "~z-ai/glm-flash-latest": [5.02e-8, 8.19e-8],
-  "~z-ai/glm-latest": [7.5e-8, 0.000004295],
+  "~z-ai/glm-flash-latest": [1.91e-8, 1.352e-7],
+  "~z-ai/glm-latest": [7.03e-8, 0.0000043843],
   "aion-labs/aion-2.0": [8e-7, 0.0000016],
   "aion-labs/aion-3.0": [0.000003, 0.000006],
   "aion-labs/aion-3.0-mini": [7e-7, 0.0000014],
@@ -92,7 +92,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "deepseek/deepseek-v3.2": [2.8e-7, 4.2e-7],
   "deepseek/deepseek-v3.2-exp": [2.7e-7, 4.1e-7],
   "deepseek/deepseek-v4-flash": [9.1e-8, 1.82e-7],
-  "deepseek/deepseek-v4-flash-0731": [4.444e-8, 1.3332e-7],
+  "deepseek/deepseek-v4-flash-0731": [4.22e-8, 1.694e-7],
   "deepseek/deepseek-v4-flash-vision-exp": [2.156e-7, 6.468e-7],
   "deepseek/deepseek-v4-pro": [2.088e-7, 4.176e-7],
   "deepseek/deepseek-v4-pro-0813": [6.6e-7, 0.00000198],
@@ -162,7 +162,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "meta-llama/llama-3.1-70b-instruct": [4e-7, 4e-7],
   "meta-llama/llama-3.1-8b-instruct": [5e-8, 8e-8],
   "meta-llama/llama-3.2-1b-instruct": [2.7e-8, 2.01e-7],
-  "meta-llama/llama-3.2-3b-instruct": [5.09e-8, 3.35e-7],
+  "meta-llama/llama-3.2-3b-instruct": [5e-8, 3.3e-7],
   "meta-llama/llama-3.3-70b-instruct": [1e-7, 3.2e-7],
   "meta-llama/llama-4-maverick": [1.875e-7, 6.525e-7],
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
@@ -425,9 +425,9 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "tencent/hy-mt2-1.8b": [4.4e-8, 1.77e-7],
   "tencent/hy-mt2-30b-a3b": [7.4e-8, 2.95e-7],
   "tencent/hy-mt2-7b": [7.4e-8, 2.95e-7],
-  "tencent/hy3": [8.25e-8, 3.3e-7],
+  "tencent/hy3": [1.32e-7, 5.28e-7],
   "tencent/hy3-preview": [1.8e-7, 6e-7],
-  "tencent/hy4-preview": [7.506e-7, 0.0000022509],
+  "tencent/hy4-preview": [8.34e-7, 0.000002501],
   "thedrummer/cydonia-24b-v4.1": [3e-7, 5e-7],
   "thedrummer/skyfall-36b-v2": [5.5e-7, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
@@ -468,7 +468,7 @@ export const PRICE_SNAPSHOT: Readonly<Record<string, readonly [number, number]>>
   "z-ai/glm-5-turbo": [0.0000012, 0.000004],
   "z-ai/glm-5.1": [0.0000014, 0.0000044],
   "z-ai/glm-5.2": [3.41e-8, 0.000007],
-  "z-ai/glm-5.3": [9.08e-8, 0.00000161],
+  "z-ai/glm-5.3": [7.9e-8, 0.0000014],
   "z-ai/glm-5.3-flash": [1.5e-7, 5e-7],
   "z-ai/glm-5.3-flash:batch": [5e-8, 1.8e-7],
   "z-ai/glm-5.3-flashx": [3.7e-7, 0.00000125],
