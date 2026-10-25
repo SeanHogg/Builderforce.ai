@@ -6,6 +6,7 @@ import {
   type LocalFirstTransaction,
   type LocalRecord,
 } from '@builderforce/local-first';
+import type { PriceBook } from '@builderforce/model-catalog';
 import { combineSpendSavings, type SpendSavingsSummary } from '@builderforce/spend-contract';
 import type { BrainPersistenceAdapter } from './config';
 import type { BrainChat, BrainMessage } from './types';
@@ -31,6 +32,8 @@ export interface LocalBrainPersistenceOptions {
   serverSpend?: (serverIds: readonly number[]) => Promise<ReadonlyMap<number, SpendSavingsSummary>>;
   /** Bind a chat now (the host's chat identity). Omitted: the adapter offers no `bindChat`. */
   bindChat?: (chatId: number) => Promise<number | undefined>;
+  /** The book a chat's own calls are priced with. Defaults to the bundled snapshot. */
+  priceBook?: () => PriceBook;
   createObjectURL?: (file: File) => string;
   now?: () => Date;
   newId?: () => string;
@@ -98,7 +101,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
       // The platform's figure covers the gateway's calls only when it HAS this chat; a
       // chat it could not report keeps the device's estimate of every call.
       const fromServer = serverId !== undefined ? server?.get(serverId) ?? null : null;
-      const local = ledgerSpend(usage, { excludeGateway: fromServer !== null });
+      const local = ledgerSpend(usage, { excludeGateway: fromServer !== null, ...(options.priceBook ? { book: options.priceBook() } : {}) });
       const spend = fromServer && local ? combineSpendSavings(fromServer, local) : fromServer ?? local;
       return {
         ...chat,

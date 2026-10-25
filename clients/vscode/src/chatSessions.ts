@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { createBuilderForceHandler } from "./chatParticipant";
-import { getBrainChatMessages } from "./bfApi";
+import { localBrainApplication } from "./localFirstStore";
 import type { BrainRunHost } from "./brainRunHost";
 
 const SESSION_TYPE = "builderforce";
@@ -216,8 +216,9 @@ function titleFromResource(resource: vscode.Uri): string {
 
 /**
  * Restore a reopened session's turns, read through the SAME persistence the chat handler
- * writes to ({@link getBrainChatMessages} reads back what `appendBrainMessages` wrote), so
- * this is a reader of the existing store rather than a second one. Rows become real
+ * writes to — the host's local store, where the session's id is a LOCAL view key (PRD 36).
+ * Reading the server by that id returned whichever server chat shared the number. Rows
+ * become real
  * `ChatRequestTurn` / `ChatResponseTurn` instances so the workbench renders them natively
  * — and each assistant turn carries `result.metadata.brainChatId`, which is how the shared
  * handler resumes the conversation on the next message instead of forking a new one.
@@ -230,7 +231,7 @@ async function sessionHistory(ctx: vscode.ExtensionContext, resource: vscode.Uri
 
   let rows;
   try {
-    rows = await getBrainChatMessages(ctx.secrets, chatId);
+    rows = await localBrainApplication(ctx).persistence.getMessages(chatId);
   } catch (e) {
     console.error("[BuilderForce] chat-session history read failed:", e);
     return [] as unknown[];

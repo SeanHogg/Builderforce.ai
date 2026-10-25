@@ -13,7 +13,6 @@ import { getApiKey, getBaseUrl } from "./gateway";
 import { ttlCache } from "./ttlCache";
 import { registerDeadLetterQueue } from "./deadLetterCommand";
 import { createDurableOutbox, outboxSecrets, scopeTenantId, setOutboxScope, trackReachability } from "./outboxStorage";
-import { isPermanentHttpFailure } from "@builderforce/write-outbox";
 import { isClosedTask } from "@builderforce/agent-loop";
 
 export interface BfProject {
@@ -965,49 +964,10 @@ export async function listBrainChats(
   }
 }
 
-/** One persisted transcript row (GET /api/brain/chats/:id/messages). The SAME rows the
- *  webview/web app render, so a session restored from them reads identically in the
- *  editor. `createdAt` arrives ISO-encoded over the wire. */
-export interface BfBrainChatMessage {
-  id: number;
-  role: string;
-  content: string;
-  /** JSON string, or null. The chat handler reads `brainChatId` out of it. */
-  metadata: string | null;
-  seq: number;
-  createdAt: string;
-}
-
 /**
- * Read a Brain conversation's transcript (GET /api/brain/chats/:id/messages) — the SAME
- * persistence the chat handler writes through ({@link appendBrainMessages}), read back so
- * a REOPENED session shows its turns instead of an empty editor. The server returns the
- * TAIL (most recent `limit`, oldest-first), which is what makes a reopened chat still
- * show its last reply. Degrades to [] when signed out / unreachable, so the tab opens
- * rather than errors.
- */
-export async function getBrainChatMessages(
-  secrets: vscode.SecretStorage,
-  chatId: number,
-  limit = 100,
-): Promise<BfBrainChatMessage[]> {
-  try {
-    const r = await authed<{ messages?: BfBrainChatMessage[] }>(
-      secrets,
-      `/api/brain/chats/${chatId}/messages?limit=${limit}`,
-    );
-    return r?.messages ?? [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Create a Brain conversation (POST /api/brain/chats) and return its id — the SAME
- * unified store the webview + web app use. The native `@builderforce` chat handler
- * creates one lazily for a session so the work it does (created tickets, from_delta
- * code-change captures) links back to a real conversation, exactly like the webview
- * Brain. Returns null when signed out / unreachable (the handler then runs unlinked).
+ * Create a Brain conversation (POST /api/brain/chats) and return its id — the BIND of a
+ * local chat (PRD 36, `chatAccount.ts`): a title and a project, never the transcript.
+ * Returns null when signed out / unreachable (the chat then stays local).
  */
 export async function createBrainChat(
   secrets: vscode.SecretStorage,
@@ -1024,37 +984,6 @@ export async function createBrainChat(
   }
 }
 
-/**
- * Append turns to a Brain conversation (POST /api/brain/chats/:id/messages) so the
- * native chat's transcript is persisted into the SAME store the webview + web app
- * read — the linked chat then carries the actual conversation, not just ticket
- * lineage. Returns the server's TRUTHFUL learn-gate outcome for the persisted turn
- * (the same `evermindLearn` the webview/web adapters attach) so the caller can surface
- * a learn/skip line + self-heal a project-less chat. Never breaks the chat turn: on a
- * failure it returns null and the turn goes to the durable {@link pendingTurns} queue,
- * which replays it — under the SAME event keys — once the platform answers again.
- */
-export async function appendBrainMessages(
-  secrets: vscode.SecretStorage,
-  chatId: number,
-  messages: Array<{ role: string; content: string }>,
-): Promise<EvermindLearnOutcome | null> {
-  if (messages.length === 0) return null;
-  const keyed = messages.map((m) => ({ ...m, eventKey: `vsix:${crypto.randomUUID()}` }));
-  // Older turns of this chat are still waiting: this one queues behind them, so the
-  // transcript keeps the order the turns happened in.
-  if (pendingTurns.size(chatId) > 0) {
-    for (const m of keyed) pendingTurns.enqueue(chatId, m);
-    void pendingTurns.flush(chatId);
-    return null;
-  }
-  const r = await postBrainMessages(secrets, chatId, keyed);
-  if (r.ok) return r.evermindLearn ?? null;
-  // A refusal (deleted chat, no access) would be refused again; anything else replays.
-  if (!isPermanentHttpFailure(r)) for (const m of keyed) pendingTurns.enqueue(chatId, m);
-  return null;
-}
-
 /** One turn row as the messages endpoint takes it. `eventKey` is its idempotency key. */
 export interface BrainMessageInput {
   role: string;
@@ -1068,6 +997,8 @@ export interface BrainMessageInput {
  * order. Each row keeps the `eventKey` it was first sent with, so a replay of a write the
  * server did take (only the answer was lost) returns the original rows instead of a
  * duplicate. A chat the server refuses (deleted, no access) is dropped, not retried.
+ * Nothing enqueues here any more — the editor's turns are local and reach the account
+ * through sync (PRD 36) — but the lanes older builds queued on disk still drain.
  */
 const pendingTurns = createDurableOutbox<BrainMessageInput, number>("brain-turns", {
   maxItems: 25,
@@ -1118,7 +1049,7 @@ export type BrainMessageWrite = BrainMessageWriteSuccess | BrainMessageWriteFail
 /**
  * POST turns to a Brain chat and get back the rows the server created, plus the
  * learn-gate outcome — the ONE write behind both the participant's after-the-fact
- * persist ({@link appendBrainMessages}) and the host-owned webview run's in-loop
+ * persist (the queued turns above) and the host-owned webview run's in-loop
  * persistence, which needs the created rows to append them to the live transcript.
  *
  * Never throws; it REPORTS instead. It used to answer `undefined` for every failure

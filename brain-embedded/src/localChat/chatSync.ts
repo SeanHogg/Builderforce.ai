@@ -21,8 +21,15 @@ import type { RunUsageValue } from './usageLedger';
 /** Move this device's unbound chat rows into `destination`. Returns how many chats moved. */
 export async function bindChatHistoryForSync(store: LocalFirstStore, deviceId: string, destination: EntityDestination): Promise<number> {
   if (destination.kind !== 'bound') return 0;
+  const unbound = <T>(rows: LocalRecord<T>[]) => rows.filter((row) => row.destination.kind === 'unbound' && isOwnRecord(row, deviceId));
+  // Read first: a commit notifies every store subscriber — the sync trigger among them —
+  // so a pass with nothing to move must not write.
+  const anything = await store.read(async (tx) => {
+    for (const type of ['chat', 'message', 'usage'] as const) if (unbound(await tx.list(type)).length > 0) return true;
+    return false;
+  });
+  if (!anything) return 0;
   return store.transact(async (tx) => {
-    const unbound = <T>(rows: LocalRecord<T>[]) => rows.filter((row) => row.destination.kind === 'unbound' && isOwnRecord(row, deviceId));
     const rebind = async <T>(row: LocalRecord<T>): Promise<LocalRecord<T>> => {
       const moved = { ...row, destination };
       await tx.put(moved);

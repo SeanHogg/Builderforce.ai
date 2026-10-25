@@ -77,7 +77,9 @@ describe("chatSessions stays a thin registration adapter", () => {
 
   it("restores real history, and builds turns with the VERIFIED constructor arity", () => {
     // (c): an always-empty history meant a reopened tab showed nothing.
-    expect(SOURCE).toContain("getBrainChatMessages");
+    // Read from the LOCAL store the handler writes (PRD 36) — the session id is a local
+    // view key, so a server read by it returned another chat's transcript.
+    expect(SOURCE).toContain("persistence.getMessages(chatId)");
     expect(SOURCE).not.toContain("history: []");
     // The ext host dispatches on `instanceof`, and ChatRequestTurn takes 7 args — an 8th
     // silently lands in `modelId`.

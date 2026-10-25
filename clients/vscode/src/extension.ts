@@ -69,6 +69,7 @@ import { renderWebviewHtml } from "./webviewShared";
 import { VisualizationPanel } from "./visualizationPanel";
 import { bindPlatformPolicy, platformPolicy, platformPolicyResolved, withPlatformAuthentication, outboxSendPermission as platformOutboxSendPermission } from "./platformPolicy";
 import { localBrainApplication } from "./localFirstStore";
+import { installChatSync } from "./chatSyncHost";
 import { configurePolicyGatesPersistence } from "./policyGates";
 import { createPolicyGatesPersistence } from "./policySnapshots";
 import { installHostBfiRuntime } from "./hostBfi/runtime";
@@ -186,6 +187,9 @@ export function activate(context: vscode.ExtensionContext): void {
     deviceId: context.globalState.get<string>("builderforce.localDeviceId") ?? "",
   }));
   context.subscriptions.push({ dispose: platformPolicy().subscribe(() => refreshWorkspaceSurfaces()) });
+  // PRD 36: once sync is turned on, this device's chats, transcripts and local-model
+  // usage go to the account once. Inert until the `synchronize` capability is granted.
+  context.subscriptions.push(installChatSync(context));
   initProjectState(context.workspaceState);
   // Gate the sidebar on auth before anything else registers: until this resolves the
   // key is falsy, so the login (Welcome) panel shows and the feature views stay hidden.

@@ -1,9 +1,9 @@
 /**
  * Host installer for the local-first sync coordinator (#5899).
  *
- * Not referenced by `extension.ts`. Activation must not call this until a slice
- * that owns `extension.ts` wires it. This module does not open IndexedDB, touch
- * the editor, or open a socket.
+ * Constructed by the chat slice of sync (`chatSyncHost.ts`, PRD 36) on each pass,
+ * and only while `synchronize` is granted. This module does not open IndexedDB,
+ * touch the editor, or open a socket.
  *
  * `installSyncCoordinator` only constructs the coordinator, and only when
  * `synchronize` is granted. It does not drain. `drainQueuedCreates` is the

@@ -23,7 +23,7 @@ vi.mock('./systemAuditApi', () => ({
   startSystemAudit: vi.fn(async () => ({ runId: 'run', briefing: 'Inspect source' })),
   getSystemAuditRun: vi.fn(async () => ({ status: 'completed', ticketIds: [] })),
 }));
-vi.mock('./bfApi', () => ({ appendBrainMessages: vi.fn(async () => null), listSystemAudits: vi.fn(async () => []) }));
+vi.mock('./bfApi', () => ({ listSystemAudits: vi.fn(async () => []) }));
 vi.mock('./auditResultsPanel', () => ({ AuditResultsPanel: { open: vi.fn() } }));
 vi.mock('./openWorkspace', () => ({ openWorkspace: vi.fn() }));
 vi.mock('./projectState', () => ({ getSelectedProject: () => ({ id: 7 }), onProjectChange: () => ({ dispose() {} }) }));
