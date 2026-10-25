@@ -57,6 +57,16 @@ describe("post-login auth surface sync", () => {
     expect(resolve.indexOf("onDidReceiveMessage")).toBeLessThan(resolve.indexOf("webview.html"));
     // The view answers the host-owned cases (token.refresh / signin) like every surface.
     expect(resolve).toContain("handleSharedHostMessage");
+    // Opening the chat view must NOT open the Visualization panel with it: the panel is
+    // for the run's board/changes and opens only on the header's Visualize lever or the
+    // `builderforce.openVisualization` command — never on its own.
+    expect(resolve).not.toContain("openVisualizationOnce");
+  });
+
+  it("does not auto-open the Visualization on sign-in or view resolve", () => {
+    const chatView = src("chatView.ts");
+    expect(chatView).not.toContain("openVisualizationOnce");
+    expect(chatView).not.toContain("secrets.onDidChange");
   });
 
   it("contributes the chat view to the secondary sidebar with an activity-bar fallback", () => {

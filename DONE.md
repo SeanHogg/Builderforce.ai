@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-10-25 — Opening the BuilderForce tab no longer opens the Visualization (VSIX 2026.10.88)
+
+`chatView.ts` opened the Visualization panel whenever the chat view loaded or you signed in (`openVisualizationOnce`). Both triggers are gone. The panel now opens only from the header's Visualize button or the `builderforce.openVisualization` command, which is what the agent runs. Guarded in `authPanelSync.test.ts`.
+
 ## ✅ RESOLVED 2026-10-25 — A Kimi turn no longer dies after its first step (VSIX 2026.10.87 · api 2026.10.84 · brain-embedded 2026.10.57 · Rovr 2026.10.29)
 
 The first Kimi call in a turn worked; the next failed "The API Key appears to be invalid or may have expired". Two causes:
