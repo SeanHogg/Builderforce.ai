@@ -27,6 +27,8 @@ import type { JsonRequest } from '../workStatus/consumptionSnapshot';
 import type { UpgradeTarget } from '../workStatus/AccountStatus';
 import type { WorkStatusLabels } from '../workStatus/labels';
 import type { SpendLabels } from '../spend/labels';
+import { ConnectionsPanel } from '../connections/ConnectionsPanel';
+import type { ComposerConnections, ConnectionsLabels } from '../connections/types';
 import { ComposerAddMenu, type ComposerAddMenuItem } from './ComposerAddMenu';
 import { ComposerTrailingButton } from './ComposerTrailingButton';
 import { AttachmentChips, type ComposerAttachment } from './AttachmentChips';
@@ -41,6 +43,7 @@ export interface BrainComposerLabels {
   spend?: Partial<SpendLabels>;
   mention?: UseMentionAutocompleteOptions['labels'];
   ticket?: UseTicketAutocompleteOptions['labels'];
+  connections?: Partial<ConnectionsLabels>;
 }
 
 export interface BrainComposerProps {
@@ -74,6 +77,9 @@ export interface BrainComposerProps {
     onUpgrade?: (target: UpgradeTarget) => void;
   };
   onAccountSettings?: () => void;
+    /** The workspace's connected provider accounts — shown under the Status tab with Test
+     *  and Reconnect. Omit on a surface that cannot open a sign-in page. */
+    connections?: ComposerConnections;
   attachments?: {
     items: readonly ComposerAttachment[];
     onAdd: (files: File[]) => void;
@@ -200,6 +206,9 @@ export function BrainComposer(props: BrainComposerProps) {
     ? {
       label: spendLabels(labelBundle?.spend).spendHeading,
       content: (
+  const connectionsNode = account?.connections
+    ? <ConnectionsPanel connections={account.connections} labels={labelBundle?.connections} />
+    : null;
         <WorkSpendPanel
           request={account.request}
           labels={labelBundle?.spend}
@@ -272,7 +281,7 @@ export function BrainComposer(props: BrainComposerProps) {
               labels={labelBundle?.options}
               disabled={disabled}
               {...groups}
-              status={statusNode}
+              status={statusNode && <>{statusNode}{connectionsNode}</>}
               spend={spendTab}
               onAccountSettings={onAccountSettings}
             />

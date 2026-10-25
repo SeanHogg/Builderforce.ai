@@ -35658,5 +35658,33 @@
     "inviteAdvisor": "Invitar al asesor al contexto de IA",
     "inviteAdvisorHint": "Permite que la IA lea este hilo restringido y añade a tu asesor.",
     "advisorInvited": "Asesor invitado al contexto de IA"
+  },
+  "providerConnections": {
+    "heading": "Cuentas conectadas",
+    "empty": "No hay cuentas de proveedor conectadas.",
+    "loadFailed": "No se pudieron cargar las cuentas conectadas.",
+    "unavailable": "Las cuentas conectadas no están disponibles desde aquí.",
+    "authOauth": "Suscripción",
+    "authApiKey": "Clave de API",
+    "healthOk": "Funciona",
+    "healthCapacity": "Límite de uso alcanzado: añade créditos o espera al reinicio",
+    "healthNotEntitled": "Sesión iniciada, pero el plan no incluye este modelo",
+    "healthRejected": "La sesión caducó: vuelve a conectar",
+    "healthUnresolved": "No se pudo leer la credencial: vuelve a conectar",
+    "test": "Probar",
+    "testing": "Probando…",
+    "testOk": "La conexión funciona",
+    "reconnect": "Volver a conectar",
+    "pasteHint": "Inicia sesión en la página que se abrió y pega el código que muestra.",
+    "pastePlaceholder": "Pega el código",
+    "finish": "Finalizar",
+    "finishing": "Finalizando…",
+    "cancel": "Cancelar",
+    "deviceHint": "Aprueba en el navegador: la página muestra el código {code}.",
+    "reconnected": "Conectada de nuevo",
+    "errDenied": "Se rechazó la conexión.",
+    "errExpired": "Ese código caducó: vuelve a conectar.",
+    "errStart": "No se pudo iniciar la reconexión.",
+    "errFailed": "No se pudo volver a conectar."
   }
 }

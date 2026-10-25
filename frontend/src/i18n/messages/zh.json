@@ -35658,5 +35658,33 @@
     "inviteAdvisor": "邀请顾问加入 AI 上下文",
     "inviteAdvisorHint": "允许 AI 读取此受限会话，并将您的顾问加入其中。",
     "advisorInvited": "已邀请顾问加入 AI 上下文"
+  },
+  "providerConnections": {
+    "heading": "已连接的账户",
+    "empty": "尚未连接任何提供商账户。",
+    "loadFailed": "无法加载已连接的账户。",
+    "unavailable": "无法在此处查看已连接的账户。",
+    "authOauth": "订阅",
+    "authApiKey": "API 密钥",
+    "healthOk": "正常",
+    "healthCapacity": "已达到用量上限 — 请充值或等待额度重置",
+    "healthNotEntitled": "已登录，但当前套餐不包含此模型",
+    "healthRejected": "登录已过期 — 请重新连接",
+    "healthUnresolved": "无法读取凭据 — 请重新连接",
+    "test": "测试",
+    "testing": "测试中…",
+    "testOk": "连接正常",
+    "reconnect": "重新连接",
+    "pasteHint": "在打开的页面中登录，然后粘贴页面显示的代码。",
+    "pastePlaceholder": "粘贴代码",
+    "finish": "完成",
+    "finishing": "正在完成…",
+    "cancel": "取消",
+    "deviceHint": "请在浏览器中批准 — 页面会显示代码 {code}。",
+    "reconnected": "已重新连接",
+    "errDenied": "连接请求被拒绝。",
+    "errExpired": "该代码已过期 — 请重新连接。",
+    "errStart": "无法开始重新连接。",
+    "errFailed": "无法重新连接。"
   }
 }

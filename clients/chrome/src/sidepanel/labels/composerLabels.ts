@@ -116,6 +116,36 @@ const OPTIONS_KEY: Readonly<Record<string, MessageKey>> = {
 
 const PICKER_KEY: Readonly<Record<string, MessageKey>> = {
   'mention.title': 'mnTitle',
+/** The Status tab's Connected accounts — `conn<Field>` in Rovr's catalogs. */
+const CONNECTIONS_KEY: Readonly<Record<string, MessageKey>> = {
+  heading: 'connHeading',
+  empty: 'connEmpty',
+  loadFailed: 'connLoadFailed',
+  unavailable: 'connUnavailable',
+  authOauth: 'connAuthOauth',
+  authApiKey: 'connAuthApiKey',
+  healthOk: 'connHealthOk',
+  healthCapacity: 'connHealthCapacity',
+  healthNotEntitled: 'connHealthNotEntitled',
+  healthRejected: 'connHealthRejected',
+  healthUnresolved: 'connHealthUnresolved',
+  test: 'connTest',
+  testing: 'connTesting',
+  testOk: 'connTestOk',
+  reconnect: 'connReconnect',
+  pasteHint: 'connPasteHint',
+  pastePlaceholder: 'connPastePlaceholder',
+  finish: 'connFinish',
+  finishing: 'connFinishing',
+  cancel: 'connCancel',
+  deviceHint: 'connDeviceHint',
+  reconnected: 'connReconnected',
+  errDenied: 'connErrDenied',
+  errExpired: 'connErrExpired',
+  errStart: 'connErrStart',
+  errFailed: 'connErrFailed',
+};
+
   'mention.agent': 'mnAgent',
   'mention.human': 'mnHuman',
   'ticket.title': 'mnTicketTitle',
@@ -142,6 +172,7 @@ export function composerMessageKey(scoped: string, memoryGap: MemoryGap): Messag
     case 'spend': return SPEND_KEY[key];
     default: return PICKER_KEY[scoped];
   }
+    case 'connections': return CONNECTIONS_KEY[key];
 }
 
 /** Everything `BrainComposer` renders, in the panel's language. */

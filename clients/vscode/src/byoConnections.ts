@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { LLM_PROVIDER_INFO } from "@builderforce/model-catalog";
 import * as bfApi from "./bfApi";
 import { connectProviderInteractively } from "./providerConnect";
 import { LOCAL_CREDENTIAL_PROVIDERS, localCredentialStore, type LocalCredentialProvider } from "./localProviderCredentials";
@@ -18,19 +19,16 @@ import { LOCAL_CREDENTIAL_PROVIDERS, localCredentialStore, type LocalCredentialP
 /** Sentinel id for the "add a new provider" row in the picker. */
 const ADD_PROVIDER = "__add__";
 
-/** Provider display information */
-const PROVIDER_INFO: Record<string, { label: string; supportsOAuth: boolean }> = {
-  anthropic: { label: "Anthropic (Claude)", supportsOAuth: true },
-  openai: { label: "OpenAI", supportsOAuth: true },
-  google: { label: "Google (Gemini)", supportsOAuth: false },
-  meta: { label: "Meta AI (MUSE)", supportsOAuth: false },
-  kimi: { label: "Kimi", supportsOAuth: true },
-  moonshot: { label: "Moonshot AI", supportsOAuth: false },
-  qwen: { label: "Qwen", supportsOAuth: false },
-  minimax: { label: "MiniMax", supportsOAuth: false },
-  xai: { label: "xAI (Grok)", supportsOAuth: true },
-  ollama: { label: "Ollama Cloud", supportsOAuth: false },
-};
+/**
+ * Provider display information — derived from the shared BYO provider table so this
+ * picker, the web settings page and the composer's Connected accounts can never name or
+ * offer providers differently. Self-hosted runtimes connect from their own settings form.
+ */
+const PROVIDER_INFO: Record<string, { label: string; supportsOAuth: boolean }> = Object.fromEntries(
+  LLM_PROVIDER_INFO
+    .filter((p) => p.credential === "api_key")
+    .map((p) => [p.id, { label: p.label, supportsOAuth: p.subscription !== null }]),
+);
 
 /** Describe a provider's connection status */
 function describeProvider(provider: bfApi.ByoProvider): string {

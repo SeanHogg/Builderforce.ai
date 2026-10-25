@@ -9,7 +9,7 @@ import { useMemo, type ReactNode } from 'react';
 import { BrainComposer, useComposerMenuRequest } from '@seanhogg/builderforce-brain-ui';
 import { PRICING_URL } from '../config';
 import { t } from '../i18n/t';
-import { useInferenceModeOption } from './hooks';
+import { useInferenceModeOption, useServices } from './hooks';
 import { rovrComposerLabels } from './labels/composerLabels';
 import { ROVR_STARTERS } from './rovrStarters';
 import { SiteChip } from './SiteChip';
@@ -49,6 +49,8 @@ export function RovrComposer({ composerId, value, onChange, onSubmit, running, o
   const account = useMemo(
     () =>
       request
+  // The Status tab's Connected accounts (Test / Reconnect) — the panel's one client.
+  const { connections } = useServices();
         ? {
             request,
             projectId,
@@ -56,7 +58,8 @@ export function RovrComposer({ composerId, value, onChange, onSubmit, running, o
             onUpgrade: () => void chrome.tabs.create({ url: PRICING_URL }),
           }
         : undefined,
-    [request, projectId, locale],
+    [request, projectId, locale, connections],
+            connections,
   );
 
   return (

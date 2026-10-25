@@ -363,6 +363,21 @@ export type { QueuedTurns, QueuedItem, QueuedTurnsOptions } from './composer/use
 // The `/` menu's Status tab — plan, meters, 30-day spend & savings, Evermind.
 export { WorkStatusPanel } from './workStatus/WorkStatusPanel';
 export type { WorkStatusPanelProps } from './workStatus/WorkStatusPanel';
+// Connected provider accounts — the Status tab's section, and the reconnect state machine
+// the web settings card runs too.
+export { ConnectionsPanel } from './connections/ConnectionsPanel';
+export type { ConnectionsPanelProps } from './connections/ConnectionsPanel';
+export { useProviderReconnect } from './connections/useProviderReconnect';
+export type { ProviderReconnect, ReconnectFailure, ReconnectFailureReason, ReconnectPhase } from './connections/useProviderReconnect';
+export { DEFAULT_CONNECTIONS_LABELS } from './connections/types';
+export type {
+  ComposerConnections,
+  ConnectionHealth,
+  ConnectionsLabels,
+  ProviderConnection,
+  ProviderConnectionsPort,
+  ProviderConnectStart,
+} from './connections/types';
 export { WorkSpendPanel } from './workStatus/WorkSpendPanel';
 export type { WorkSpendPanelProps } from './workStatus/WorkSpendPanel';
 export type { UpgradeTarget } from './workStatus/AccountStatus';
@@ -392,6 +407,7 @@ export { composerLabelsFrom } from './composer/labels';
 export { promptOptionsLabelsFrom } from './promptOptions/types';
 export { workStatusLabelsFrom } from './workStatus/labels';
 export { spendLabelsFrom } from './spend/labels';
+export { connectionsLabelsFrom } from './connections/types';
 export { chatTicketsLabelsFrom } from './chatTickets/labelBundle';
 export { chatHistoryLabelsFrom } from './surface/ChatHistory';
 export { toolConfirmLabelsFrom } from './ToolConfirmBar';

@@ -35658,5 +35658,33 @@
     "inviteAdvisor": "Berater in den KI-Kontext einladen",
     "inviteAdvisorHint": "Erlaubt der KI, diesen eingeschränkten Thread zu lesen, und fügt deinen Berater hinzu.",
     "advisorInvited": "Berater in den KI-Kontext eingeladen"
+  },
+  "providerConnections": {
+    "heading": "Verbundene Konten",
+    "empty": "Keine Anbieterkonten verbunden.",
+    "loadFailed": "Verbundene Konten konnten nicht geladen werden.",
+    "unavailable": "Verbundene Konten sind hier nicht verfügbar.",
+    "authOauth": "Abonnement",
+    "authApiKey": "API-Schlüssel",
+    "healthOk": "Funktioniert",
+    "healthCapacity": "Nutzungslimit erreicht – Guthaben aufladen oder auf das Zurücksetzen warten",
+    "healthNotEntitled": "Angemeldet, aber der Tarif umfasst dieses Modell nicht",
+    "healthRejected": "Anmeldung abgelaufen – neu verbinden",
+    "healthUnresolved": "Zugangsdaten nicht lesbar – neu verbinden",
+    "test": "Testen",
+    "testing": "Wird getestet…",
+    "testOk": "Verbindung funktioniert",
+    "reconnect": "Neu verbinden",
+    "pasteHint": "Melde dich auf der geöffneten Seite an und füge den angezeigten Code ein.",
+    "pastePlaceholder": "Code einfügen",
+    "finish": "Abschließen",
+    "finishing": "Wird abgeschlossen…",
+    "cancel": "Abbrechen",
+    "deviceHint": "Im Browser bestätigen – die Seite zeigt den Code {code}.",
+    "reconnected": "Neu verbunden",
+    "errDenied": "Die Verbindung wurde abgelehnt.",
+    "errExpired": "Der Code ist abgelaufen – erneut verbinden.",
+    "errStart": "Neu verbinden konnte nicht gestartet werden.",
+    "errFailed": "Neu verbinden fehlgeschlagen."
   }
 }

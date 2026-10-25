@@ -1695,14 +1695,6 @@ export interface ByoProviderTestResult {
   error?: string;
 }
 
-/** OAuth complete response */
-export interface ByoOAuthCompleteResult {
-  ok: boolean;
-  provider: string;
-  authType?: "api_key" | "oauth";
-  status?: "pending" | "slow_down";
-}
-
 /**
  * List the tenant's configured BYO model providers.
  * Returns the providers that have credentials configured (API key or OAuth).
@@ -1770,24 +1762,5 @@ export async function testByoProvider(
   if (!ws) return undefined;
   return authed<ByoProviderTestResult>(secrets, `/llm/provider-keys/${provider}/test`, {
     method: "POST",
-  });
-}
-
-/**
- * Complete OAuth flow for a BYO provider.
- * The paste grant's redeem step; the start and the device poll are
- * `@builderforce/provider-connect` (`providerConnect.ts`).
- */
-export async function completeByoOAuth(
-  secrets: vscode.SecretStorage,
-  provider: string,
-  code: string,
-  state?: string,
-): Promise<ByoOAuthCompleteResult | undefined> {
-  const ws = await getCurrentWorkspace(secrets);
-  if (!ws) return undefined;
-  return authed<ByoOAuthCompleteResult>(secrets, `/llm/provider-keys/${provider}/oauth/complete`, {
-    method: "POST",
-    body: JSON.stringify({ code, ...(state ? { state } : {}) }),
   });
 }

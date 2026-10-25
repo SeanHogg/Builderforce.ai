@@ -1533,5 +1533,109 @@
   "spHintLocalModel": {
     "message": "Un modelo en este equipo atendió la llamada: lo que tu ruta de pago habría cobrado por los mismos tokens",
     "description": "Saving source explanation"
+  },
+  "connHeading": {
+    "message": "Cuentas conectadas",
+    "description": "Composer Status tab, Connected accounts: heading"
+  },
+  "connEmpty": {
+    "message": "No hay cuentas de proveedor conectadas.",
+    "description": "Composer Status tab, Connected accounts: empty"
+  },
+  "connLoadFailed": {
+    "message": "No se pudieron cargar las cuentas conectadas.",
+    "description": "Composer Status tab, Connected accounts: loadFailed"
+  },
+  "connUnavailable": {
+    "message": "Las cuentas conectadas no están disponibles desde aquí.",
+    "description": "Composer Status tab, Connected accounts: unavailable"
+  },
+  "connAuthOauth": {
+    "message": "Suscripción",
+    "description": "Composer Status tab, Connected accounts: authOauth"
+  },
+  "connAuthApiKey": {
+    "message": "Clave de API",
+    "description": "Composer Status tab, Connected accounts: authApiKey"
+  },
+  "connHealthOk": {
+    "message": "Funciona",
+    "description": "Composer Status tab, Connected accounts: healthOk"
+  },
+  "connHealthCapacity": {
+    "message": "Límite de uso alcanzado: añade créditos o espera al reinicio",
+    "description": "Composer Status tab, Connected accounts: healthCapacity"
+  },
+  "connHealthNotEntitled": {
+    "message": "Sesión iniciada, pero el plan no incluye este modelo",
+    "description": "Composer Status tab, Connected accounts: healthNotEntitled"
+  },
+  "connHealthRejected": {
+    "message": "La sesión caducó: vuelve a conectar",
+    "description": "Composer Status tab, Connected accounts: healthRejected"
+  },
+  "connHealthUnresolved": {
+    "message": "No se pudo leer la credencial: vuelve a conectar",
+    "description": "Composer Status tab, Connected accounts: healthUnresolved"
+  },
+  "connTest": {
+    "message": "Probar",
+    "description": "Composer Status tab, Connected accounts: test"
+  },
+  "connTesting": {
+    "message": "Probando…",
+    "description": "Composer Status tab, Connected accounts: testing"
+  },
+  "connTestOk": {
+    "message": "La conexión funciona",
+    "description": "Composer Status tab, Connected accounts: testOk"
+  },
+  "connReconnect": {
+    "message": "Volver a conectar",
+    "description": "Composer Status tab, Connected accounts: reconnect"
+  },
+  "connPasteHint": {
+    "message": "Inicia sesión en la página que se abrió y pega el código que muestra.",
+    "description": "Composer Status tab, Connected accounts: pasteHint"
+  },
+  "connPastePlaceholder": {
+    "message": "Pega el código",
+    "description": "Composer Status tab, Connected accounts: pastePlaceholder"
+  },
+  "connFinish": {
+    "message": "Finalizar",
+    "description": "Composer Status tab, Connected accounts: finish"
+  },
+  "connFinishing": {
+    "message": "Finalizando…",
+    "description": "Composer Status tab, Connected accounts: finishing"
+  },
+  "connCancel": {
+    "message": "Cancelar",
+    "description": "Composer Status tab, Connected accounts: cancel"
+  },
+  "connDeviceHint": {
+    "message": "Aprueba en el navegador: la página muestra el código {code}.",
+    "description": "Composer Status tab, Connected accounts: deviceHint"
+  },
+  "connReconnected": {
+    "message": "Conectada de nuevo",
+    "description": "Composer Status tab, Connected accounts: reconnected"
+  },
+  "connErrDenied": {
+    "message": "Se rechazó la conexión.",
+    "description": "Composer Status tab, Connected accounts: errDenied"
+  },
+  "connErrExpired": {
+    "message": "Ese código caducó: vuelve a conectar.",
+    "description": "Composer Status tab, Connected accounts: errExpired"
+  },
+  "connErrStart": {
+    "message": "No se pudo iniciar la reconexión.",
+    "description": "Composer Status tab, Connected accounts: errStart"
+  },
+  "connErrFailed": {
+    "message": "No se pudo volver a conectar.",
+    "description": "Composer Status tab, Connected accounts: errFailed"
   }
 }

@@ -35658,5 +35658,33 @@
     "inviteAdvisor": "Inviter le conseiller dans le contexte IA",
     "inviteAdvisorHint": "Permet à l'IA de lire ce fil restreint et y ajoute votre conseiller.",
     "advisorInvited": "Conseiller invité dans le contexte IA"
+  },
+  "providerConnections": {
+    "heading": "Comptes connectés",
+    "empty": "Aucun compte de fournisseur connecté.",
+    "loadFailed": "Impossible de charger les comptes connectés.",
+    "unavailable": "Les comptes connectés ne sont pas disponibles ici.",
+    "authOauth": "Abonnement",
+    "authApiKey": "Clé API",
+    "healthOk": "Fonctionne",
+    "healthCapacity": "Limite d’utilisation atteinte — ajoutez des crédits ou attendez la réinitialisation",
+    "healthNotEntitled": "Connecté, mais l’offre n’inclut pas ce modèle",
+    "healthRejected": "Connexion expirée — reconnectez-vous",
+    "healthUnresolved": "Identifiant illisible — reconnectez-vous",
+    "test": "Tester",
+    "testing": "Test en cours…",
+    "testOk": "La connexion fonctionne",
+    "reconnect": "Reconnecter",
+    "pasteHint": "Connectez-vous sur la page ouverte, puis collez le code qu’elle affiche.",
+    "pastePlaceholder": "Coller le code",
+    "finish": "Terminer",
+    "finishing": "Finalisation…",
+    "cancel": "Annuler",
+    "deviceHint": "Approuvez dans votre navigateur — la page affiche le code {code}.",
+    "reconnected": "Reconnecté",
+    "errDenied": "La connexion a été refusée.",
+    "errExpired": "Ce code a expiré — reconnectez-vous.",
+    "errStart": "Impossible de lancer la reconnexion.",
+    "errFailed": "Impossible de reconnecter."
   }
 }

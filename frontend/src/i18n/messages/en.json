@@ -35658,5 +35658,33 @@
     "inviteAdvisor": "Invite advisor to AI context",
     "inviteAdvisorHint": "Lets the AI read this restricted thread and adds your advisor to it.",
     "advisorInvited": "Advisor invited to AI context"
+  },
+  "providerConnections": {
+    "heading": "Connected accounts",
+    "empty": "No provider accounts connected.",
+    "loadFailed": "Could not load connected accounts.",
+    "unavailable": "Connected accounts are not available from here.",
+    "authOauth": "Subscription",
+    "authApiKey": "API key",
+    "healthOk": "Working",
+    "healthCapacity": "Usage limit reached — add credits or wait for the reset",
+    "healthNotEntitled": "Signed in, but the plan does not cover this model",
+    "healthRejected": "Sign-in expired — reconnect",
+    "healthUnresolved": "Credential could not be read — reconnect",
+    "test": "Test",
+    "testing": "Testing…",
+    "testOk": "Connection works",
+    "reconnect": "Reconnect",
+    "pasteHint": "Sign in on the page that opened, then paste the code it shows.",
+    "pastePlaceholder": "Paste code",
+    "finish": "Finish",
+    "finishing": "Finishing…",
+    "cancel": "Cancel",
+    "deviceHint": "Approve in your browser — the page shows code {code}.",
+    "reconnected": "Reconnected",
+    "errDenied": "The connection was declined.",
+    "errExpired": "That code expired — reconnect again.",
+    "errStart": "Could not start reconnecting.",
+    "errFailed": "Could not reconnect."
   }
 }

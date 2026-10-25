@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -11,7 +11,6 @@ import { ProviderModelPicker } from '@/components/llm/ProviderModelPicker';
 import { buttonDanger, buttonPrimary, inputStyle, sectionTitle } from '@/components/llm/providerKeysStyles';
 import { ProbeResultLine, ProviderHealthHeader, useProbeRunner, type ProbeVerdict } from '@/components/llm/ProviderProbeVerdict';
 import {
-  isDeadConnectCode,
   openRouterConnectionsApi,
   providerKeysApi,
   type ByoPrecedenceEntry,
@@ -27,8 +26,8 @@ import { faultMessage } from '@/lib/apiClient';
 import { useErrorMessage } from '@/i18n/useErrorMessage';
 import { REPLAY_BLOCK } from '@/lib/replaySensitive';
 import { LLM_PROVIDER_INFO, isLlmProvider, llmProviderInfo, type LlmProvider, type LlmProviderInfo } from '@builderforce/model-catalog';
-import { ProviderConnectError, awaitDeviceApproval } from '@builderforce/provider-connect';
-import { gatewayRequest } from '@/lib/gatewayRequest';
+import { useProviderReconnect, type ReconnectFailure } from '@seanhogg/builderforce-brain-ui';
+import { webConnections } from '@/lib/providerConnections';
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
  * frontier-model accounts — Anthropic, OpenAI, and/or Google — and the platform
@@ -348,18 +347,17 @@ function ProviderConnectionCard({
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
-  const [pastedCode, setPastedCode] = useState('');
-  const [oauthState, setOauthState] = useState('');
-  /** Set when the provider uses a DEVICE grant (Kimi): there is nothing to paste, so the
-   *  card shows the code the provider's page will display and waits for the approval. */
-  const [deviceCode, setDeviceCode] = useState<{ userCode: string; intervalSeconds: number } | null>(null);
-  /** Cancels the device poll. A ref, not state, because the loop reads it BETWEEN awaits —
-   *  a state value captured in the closure would still be live after a cancel. */
-  const pollAbortRef = useRef<AbortController | null>(null);
-  // Stop polling if the card unmounts mid-connect, so an abandoned tab does not leave a
-  // loop running against the API until the page is closed.
-  useEffect(() => () => { pollAbortRef.current?.abort(); }, []);
+  /** The subscription connect — THE shared state machine (start → paste | device approval)
+   *  the composer's Connected accounts section runs too. A device wait ends with the card. */
+  const reconnect = useProviderReconnect(webConnections.client, config.id, {
+    openUrl: webConnections.openUrl,
+    onConnected: () => onChange('oauth'),
+  });
+  const connecting = reconnect.phase !== 'idle' && reconnect.phase !== 'starting';
+  const connectBusy = reconnect.phase === 'starting' || reconnect.phase === 'finishing';
+  /** A connect in flight owns the card: removing or replacing the credential under it would
+   *  let the late approval store the account straight back. */
+  const connectInFlight = reconnect.phase !== 'idle';
   const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ProbeVerdict | null>(null);
@@ -406,86 +404,17 @@ function ProviderConnectionCard({
     }
   };
 
-  const startConnect = async () => {
-    setBusy(true); setError(null);
-    try {
-      const started = await providerKeysApi.oauthStart(config.id);
-      setOauthState(started.state);
-      window.open(started.authorizeUrl, '_blank', 'noopener,noreferrer');
-      setConnecting(true);
-      if (started.grant === 'device' && started.userCode) {
-        // Nothing to paste — the code is already in the URL we just opened. Show it so
-        // the operator can verify the page they landed on, and wait for the approval.
-        const device = { userCode: started.userCode, intervalSeconds: started.pollIntervalSeconds ?? 5 };
-        setDeviceCode(device);
-        pollAbortRef.current = new AbortController();
-        void pollForApproval(started.state, device.intervalSeconds, pollAbortRef.current.signal);
-      }
-    } catch (e) {
-      setError(faultMessage(e, t('errStartConnect')));
-    } finally {
-      setBusy(false);
+  /** Why a connect ended without a connection, in the operator's language. A dead code
+   *  sends the card back to Connect (the hook already reset it), so it says to start over. */
+  const connectFailureText = (failure: ReconnectFailure): string => {
+    switch (failure.reason) {
+      case 'expired': return config.subscription === 'device' ? t('errDeviceExpired') : t('errCodeExpired');
+      case 'denied': return t('errConnectDeclined');
+      case 'unavailable': return t('errStartConnect');
+      default: return failure.detail ?? t('errConnectSubscription');
     }
   };
-
-  /**
-   * Wait for the approval in the provider's tab — the shared loop
-   * (`@builderforce/provider-connect`) the editor and Rovr run too. It is bounded by the
-   * window the server holds the pending record for, widens on `slow_down`, and stops at
-   * once on a decline or an expiry instead of polling a code that can never approve.
-   */
-  const pollForApproval = async (state: string, intervalSeconds: number, signal: AbortSignal) => {
-    try {
-      await awaitDeviceApproval(gatewayRequest, config.id, { state, intervalMs: intervalSeconds * 1000 }, {
-        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-        now: () => Date.now(),
-        signal,
-      });
-      onChange('oauth');
-    } catch (e) {
-      const reason = e instanceof ProviderConnectError ? e.reason : 'failed';
-      if (reason === 'cancelled') return;
-      setError(reason === 'expired' ? t('errDeviceExpired') : reason === 'denied' ? t('errConnectDeclined') : t('errConnectSubscription'));
-    }
-    stopDeviceConnect();
-  };
-
-  /** Tear down a device connect — the ONE place that clears it, so a cancel, a success,
-   *  a failure and a timeout can never leave different halves of the state behind. */
-  const stopDeviceConnect = () => {
-    pollAbortRef.current?.abort();
-    pollAbortRef.current = null;
-    setConnecting(false);
-    setDeviceCode(null);
-    setOauthState('');
-  };
-
-  const finishConnect = async () => {
-    const code = pastedCode.trim();
-    if (!code) return;
-    setBusy(true); setError(null);
-    try {
-      await providerKeysApi.oauthComplete(config.id, code, oauthState || undefined);
-      onChange('oauth');
-      setConnecting(false);
-      setPastedCode('');
-      setOauthState('');
-    } catch (e) {
-      // A code that can never be redeemed (single-use, and short-lived on every
-      // provider) leaves nothing to retry — keeping the box open invited the
-      // operator to press Finish on the same dead code until they gave up. Drop
-      // back to Connect so the next click actually starts a new consent, and say
-      // so in the user's own language rather than relaying the API's English.
-      if (isDeadConnectCode(e)) {
-        setError(t('errCodeExpired'));
-        setConnecting(false); setPastedCode(''); setOauthState('');
-      } else {
-        setError(faultMessage(e, t('errConnectSubscription')));
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
+  const shownError = error ?? (reconnect.failure ? connectFailureText(reconnect.failure) : null);
 
   const remove = async () => {
     setBusy(true); setError(null);
@@ -520,7 +449,7 @@ function ProviderConnectionCard({
         {diagnostic?.authAlert && <AuthAlertNotice alert={diagnostic.authAlert} t={t} />}
       </div>
 
-      {error && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
+      {shownError && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: shownError })}</div>}
 
       <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <ProviderStatusChip
@@ -531,7 +460,7 @@ function ProviderConnectionCard({
           t={t}
         />
         {configured && (
-          <button type="button" onClick={remove} disabled={busy} style={{ ...buttonDanger, padding: '2px 10px' }}>
+          <button type="button" onClick={remove} disabled={busy || connectInFlight} style={{ ...buttonDanger, padding: '2px 10px' }}>
             {authType === 'oauth' ? t('disconnect') : t('remove')}
           </button>
         )}
@@ -541,10 +470,15 @@ function ProviderConnectionCard({
       {config.subscription !== null && (
         <>
           {!connecting ? (
-            <button type="button" onClick={startConnect} disabled={busy} style={{ ...buttonPrimary, opacity: busy ? 0.5 : 1 }}>
-              {busy ? t('working') : authType === 'oauth' ? t('reconnect', { subscription }) : t('connect', { subscription })}
+            <button
+              type="button"
+              onClick={() => { setError(null); void reconnect.start(); }}
+              disabled={busy || connectBusy}
+              style={{ ...buttonPrimary, opacity: busy || connectBusy ? 0.5 : 1 }}
+            >
+              {busy || connectBusy ? t('working') : authType === 'oauth' ? t('reconnect', { subscription }) : t('connect', { subscription })}
             </button>
-          ) : config.subscription === 'device' ? (
+          ) : reconnect.phase === 'device' ? (
             /* Device grant: the code already travelled in the URL, so there is nothing to
                paste. Show it so the operator can check the page they landed on shows the
                same one, and wait — the poll finishes the connect on its own. */
@@ -560,12 +494,12 @@ function ProviderConnectionCard({
                     borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
                   }}
                 >
-                  {deviceCode?.userCode ?? '…'}
+                  {reconnect.userCode ?? '…'}
                 </code>
                 <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }} role="status">
                   {t('deviceWaiting')}
                 </span>
-                <button type="button" onClick={stopDeviceConnect} disabled={busy} style={{ ...buttonDanger, flexShrink: 0 }}>
+                <button type="button" onClick={reconnect.cancel} disabled={busy} style={{ ...buttonDanger, flexShrink: 0 }}>
                   {t('cancel')}
                 </button>
               </div>
@@ -578,16 +512,16 @@ function ProviderConnectionCard({
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <input
                   type="text"
-                  value={pastedCode}
-                  onChange={(e) => setPastedCode(e.target.value)}
+                  value={reconnect.code}
+                  onChange={(e) => reconnect.setCode(e.target.value)}
                   placeholder={t(`provider.${config.id}.pastePlaceholder`)}
-                  disabled={busy}
+                  disabled={busy || connectBusy}
                   style={{ ...inputStyle, flex: '1 1 180px' }}
                 />
-                <button type="button" onClick={finishConnect} disabled={busy || !pastedCode.trim()} style={{ ...buttonPrimary, opacity: busy || !pastedCode.trim() ? 0.5 : 1, flexShrink: 0 }}>
-                  {busy ? t('connecting') : t('finish')}
+                <button type="button" onClick={() => { setError(null); void reconnect.finish(); }} disabled={busy || connectBusy || !reconnect.code.trim()} style={{ ...buttonPrimary, opacity: busy || connectBusy || !reconnect.code.trim() ? 0.5 : 1, flexShrink: 0 }}>
+                  {connectBusy ? t('connecting') : t('finish')}
                 </button>
-                <button type="button" onClick={() => { setConnecting(false); setPastedCode(''); setOauthState(''); }} disabled={busy} style={{ ...buttonDanger, flexShrink: 0 }}>
+                <button type="button" onClick={reconnect.cancel} disabled={busy || connectBusy} style={{ ...buttonDanger, flexShrink: 0 }}>
                   {t('cancel')}
                 </button>
               </div>
@@ -610,7 +544,7 @@ function ProviderConnectionCard({
           disabled={busy}
           style={{ ...inputStyle, flex: '1 1 180px' }}
         />
-        <button type="button" onClick={saveKey} disabled={busy || !draft.trim()} style={{ ...buttonPrimary, opacity: busy || !draft.trim() ? 0.5 : 1, flexShrink: 0 }}>
+        <button type="button" onClick={saveKey} disabled={busy || connectInFlight || !draft.trim()} style={{ ...buttonPrimary, opacity: busy || connectInFlight || !draft.trim() ? 0.5 : 1, flexShrink: 0 }}>
           {busy ? t('saving') : authType === 'api_key' ? t('replace') : t('save')}
         </button>
       </div>

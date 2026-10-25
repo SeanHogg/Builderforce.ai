@@ -9,15 +9,20 @@
  * (204 ⇒ `undefined`) — the SAME `/api/*` contract the web app's clients use.
  */
 import { BrainRequestError, brainRequestError } from '@seanhogg/builderforce-brain-embedded';
+import type { GatewayRequest } from '@builderforce/provider-connect';
 
 export type AuthedFetch = <T>(path: string, init?: RequestInit) => Promise<T>;
 
-export function authedFetch(
+/**
+ * One bearer call with the 401 contract above — the part `authedFetch` and
+ * {@link authedGateway} share, so a token refresh behaves the same for both.
+ */
+function authedSend(
   baseUrl: string,
   getToken: () => string | null,
   onUnauthorized: () => void | Promise<void>,
-): AuthedFetch {
-  return async <T>(path: string, init?: RequestInit): Promise<T> => {
+): (path: string, init?: RequestInit) => Promise<Response> {
+  return async (path, init) => {
     const send = () => {
       const token = getToken();
       const headers: Record<string, string> = {
@@ -38,6 +43,18 @@ export function authedFetch(
         res = await send();
       }
     }
+    return res;
+  };
+}
+
+export function authedFetch(
+  baseUrl: string,
+  getToken: () => string | null,
+  onUnauthorized: () => void | Promise<void>,
+): AuthedFetch {
+  const call = authedSend(baseUrl, getToken, onUnauthorized);
+  return async <T>(path: string, init?: RequestInit): Promise<T> => {
+    const res = await call(path, init);
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       // Prefer a structured `{ error }` / `{ message }` payload so a server diagnostic
@@ -55,5 +72,28 @@ export function authedFetch(
     }
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
+  };
+}
+
+/**
+ * The same bearer call in the shape `@builderforce/provider-connect` takes: the status
+ * rides with the body instead of a non-2xx throwing, because the connect flow decides on
+ * WHICH refusal it got. Throws only when there was no answer at all (offline).
+ */
+export function authedGateway(
+  baseUrl: string,
+  getToken: () => string | null,
+  onUnauthorized: () => void | Promise<void>,
+): GatewayRequest {
+  const call = authedSend(baseUrl, getToken, onUnauthorized);
+  return async (path, init) => {
+    const res = await call(path, {
+      method: init?.method ?? 'GET',
+      ...(init?.json !== undefined ? { body: JSON.stringify(init.json) } : {}),
+    });
+    const text = await res.text().catch(() => '');
+    let body: unknown = null;
+    try { body = text ? JSON.parse(text) : null; } catch { body = { error: text }; }
+    return { status: res.status, body };
   };
 }

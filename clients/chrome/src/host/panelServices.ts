@@ -8,6 +8,8 @@
 import { createLocalRuntimeProber, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import { createOnlineSignal } from '@builderforce/write-outbox';
 import { createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, type BrainConfig, type ModelFallbackChannel, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
+import { createProviderConnectionsClient, type GatewayRequest } from '@builderforce/provider-connect';
+import type { ComposerConnections } from '@seanhogg/builderforce-brain-ui';
 import { createApiClient, type ApiClient } from '../api/apiClient';
 import { portRequest } from '../api/requestPorts';
 import { createSession, type Session } from '../auth/session';
@@ -73,6 +75,9 @@ export interface PanelServices {
   pageEngines: PageEngineSet;
   /** The workspace's Kimi account, called from this browser (Settings → Model, the Connect card). */
   kimi: ConnectedAccount;
+  /** The workspace's connected provider accounts — the composer's Status tab and the Kimi
+   *  connect both list, test and reconnect through this ONE client (so they share one flow). */
+  connections: ComposerConnections;
   /** Hybrid's pick failed and the turn was answered with Auto — the chat's one-line notice
    *  (brain-ui `ModelFallbackNotice`) reads this. */
   modelFallback: ModelFallbackChannel;
@@ -177,8 +182,18 @@ export async function createPanelServices(): Promise<PanelServices> {
     },
   });
   const endpoints = async () => loopbackEndpoints(await settings.synapseUrl());
+  // The panel's ONE status-preserving gateway call — provider-connect decides on WHICH
+  // refusal it got, so a non-2xx comes back as its status instead of throwing.
+  const gateway: GatewayRequest = (path, init) => api.raw(path, {
+    method: init?.method ?? 'GET',
+    ...(init?.json !== undefined ? { json: init.json } : {}),
+  });
+  const connections: ComposerConnections = {
+    client: createProviderConnectionsClient(gateway),
+    openUrl: (url) => void chrome.tabs.create({ url }),
+  };
   const kimi = createConnectedAccount({
-    api,
+    request: gateway,
     storage: local,
     originGranted: () => chrome.permissions.contains({ origins: KIMI_API_ORIGINS }),
     now: Date.now,
@@ -308,6 +323,7 @@ export async function createPanelServices(): Promise<PanelServices> {
     },
     pageEngines,
     kimi,
+    connections,
     modelFallback,
     sendRuntime,
     reportError,

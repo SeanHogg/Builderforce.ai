@@ -14,7 +14,6 @@
 import type { HostLocalPin } from '@seanhogg/builderforce-brain-embedded';
 import { parseLocalModelRef } from '@builderforce/local-inference';
 import { createLocalCredentialStore, type GatewayRequest, type LocalCredentialStore } from '@builderforce/provider-connect';
-import type { ApiClient } from '../api/apiClient';
 import type { KeyValueStore } from '../platform/keyValue';
 
 export const KIMI_PROVIDER = 'kimi';
@@ -42,26 +41,21 @@ export function connectRequiredProvider(error: string | null | undefined): strin
 }
 
 export interface ConnectedAccount {
-  /** The gateway call the connect flow runs over (status-preserving). */
-  request: GatewayRequest;
   store: LocalCredentialStore;
   /** Where a `local/kimi-code/<model>` pin runs, or null for any other ref. */
   pinFor(ref: string): Promise<HostLocalPin | null>;
 }
 
 export function createConnectedAccount(deps: {
-  api: ApiClient;
+  /** The panel's ONE status-preserving gateway call (`PanelServices.gateway`). */
+  request: GatewayRequest;
   storage: KeyValueStore;
   /** Whether Rovr may call Kimi's origin (`chrome.permissions.contains`). */
   originGranted(): Promise<boolean>;
   now: () => number;
 }): ConnectedAccount {
-  const request: GatewayRequest = (path, init) => deps.api.raw(path, {
-    method: init?.method ?? 'GET',
-    ...(init?.json !== undefined ? { json: init.json } : {}),
-  });
   const store = createLocalCredentialStore({
-    request,
+    request: deps.request,
     provider: KIMI_PROVIDER,
     store: {
       get: (key) => deps.storage.get<string>(key),
@@ -72,7 +66,6 @@ export function createConnectedAccount(deps: {
   });
 
   return {
-    request,
     store,
     async pinFor(ref) {
       const pin = parseLocalModelRef(ref);

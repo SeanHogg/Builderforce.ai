@@ -1533,5 +1533,109 @@
   "spHintLocalModel": {
     "message": "本机上的模型处理了此次调用——这是付费路由对相同令牌本应收取的费用",
     "description": "Saving source explanation"
+  },
+  "connHeading": {
+    "message": "已连接的账户",
+    "description": "Composer Status tab, Connected accounts: heading"
+  },
+  "connEmpty": {
+    "message": "尚未连接任何提供商账户。",
+    "description": "Composer Status tab, Connected accounts: empty"
+  },
+  "connLoadFailed": {
+    "message": "无法加载已连接的账户。",
+    "description": "Composer Status tab, Connected accounts: loadFailed"
+  },
+  "connUnavailable": {
+    "message": "无法在此处查看已连接的账户。",
+    "description": "Composer Status tab, Connected accounts: unavailable"
+  },
+  "connAuthOauth": {
+    "message": "订阅",
+    "description": "Composer Status tab, Connected accounts: authOauth"
+  },
+  "connAuthApiKey": {
+    "message": "API 密钥",
+    "description": "Composer Status tab, Connected accounts: authApiKey"
+  },
+  "connHealthOk": {
+    "message": "正常",
+    "description": "Composer Status tab, Connected accounts: healthOk"
+  },
+  "connHealthCapacity": {
+    "message": "已达到用量上限 — 请充值或等待额度重置",
+    "description": "Composer Status tab, Connected accounts: healthCapacity"
+  },
+  "connHealthNotEntitled": {
+    "message": "已登录，但当前套餐不包含此模型",
+    "description": "Composer Status tab, Connected accounts: healthNotEntitled"
+  },
+  "connHealthRejected": {
+    "message": "登录已过期 — 请重新连接",
+    "description": "Composer Status tab, Connected accounts: healthRejected"
+  },
+  "connHealthUnresolved": {
+    "message": "无法读取凭据 — 请重新连接",
+    "description": "Composer Status tab, Connected accounts: healthUnresolved"
+  },
+  "connTest": {
+    "message": "测试",
+    "description": "Composer Status tab, Connected accounts: test"
+  },
+  "connTesting": {
+    "message": "测试中…",
+    "description": "Composer Status tab, Connected accounts: testing"
+  },
+  "connTestOk": {
+    "message": "连接正常",
+    "description": "Composer Status tab, Connected accounts: testOk"
+  },
+  "connReconnect": {
+    "message": "重新连接",
+    "description": "Composer Status tab, Connected accounts: reconnect"
+  },
+  "connPasteHint": {
+    "message": "在打开的页面中登录，然后粘贴页面显示的代码。",
+    "description": "Composer Status tab, Connected accounts: pasteHint"
+  },
+  "connPastePlaceholder": {
+    "message": "粘贴代码",
+    "description": "Composer Status tab, Connected accounts: pastePlaceholder"
+  },
+  "connFinish": {
+    "message": "完成",
+    "description": "Composer Status tab, Connected accounts: finish"
+  },
+  "connFinishing": {
+    "message": "正在完成…",
+    "description": "Composer Status tab, Connected accounts: finishing"
+  },
+  "connCancel": {
+    "message": "取消",
+    "description": "Composer Status tab, Connected accounts: cancel"
+  },
+  "connDeviceHint": {
+    "message": "请在浏览器中批准 — 页面会显示代码 {code}。",
+    "description": "Composer Status tab, Connected accounts: deviceHint"
+  },
+  "connReconnected": {
+    "message": "已重新连接",
+    "description": "Composer Status tab, Connected accounts: reconnected"
+  },
+  "connErrDenied": {
+    "message": "连接请求被拒绝。",
+    "description": "Composer Status tab, Connected accounts: errDenied"
+  },
+  "connErrExpired": {
+    "message": "该代码已过期 — 请重新连接。",
+    "description": "Composer Status tab, Connected accounts: errExpired"
+  },
+  "connErrStart": {
+    "message": "无法开始重新连接。",
+    "description": "Composer Status tab, Connected accounts: errStart"
+  },
+  "connErrFailed": {
+    "message": "无法重新连接。",
+    "description": "Composer Status tab, Connected accounts: errFailed"
   }
 }

@@ -5,6 +5,7 @@ import {
   isLlmProvider,
   llmProviderInfo,
   supportsSubscription,
+  isSubscriptionSignInUrl,
 } from './index.js';
 
 describe('LLM provider vocabulary', () => {
@@ -43,5 +44,29 @@ describe('LLM provider vocabulary', () => {
     expect(isLlmProvider('freetoken')).toBe(true);
     expect(isLlmProvider('openrouter')).toBe(false);
     expect(isLlmProvider(undefined)).toBe(false);
+  });
+});
+
+describe('isSubscriptionSignInUrl', () => {
+  it('accepts each subscription provider sign-in page, on its own domain or a subdomain', () => {
+    for (const url of [
+      'https://claude.ai/oauth/authorize?code=true',
+      'https://console.anthropic.com/oauth/authorize',
+      'https://auth.openai.com/oauth/authorize?client_id=x',
+      'https://auth.x.ai/oauth/authorize?state=s',
+      'https://auth.kimi.com/device?user_code=AB-CD',
+    ]) expect(isSubscriptionSignInUrl(url), url).toBe(true);
+  });
+
+  it('refuses anything else — another host, a lookalike, a non-https scheme, garbage', () => {
+    for (const url of [
+      'https://evil.example/oauth/authorize',
+      'https://x.ai.evil.example/',
+      'https://notclaude.ai/',
+      'http://auth.x.ai/oauth/authorize',
+      'command:workbench.action.terminal.new',
+      'not a url',
+      '',
+    ]) expect(isSubscriptionSignInUrl(url), url).toBe(false);
   });
 });

@@ -67,6 +67,8 @@ function composerCatalogPath(scoped: string): string | undefined {
       return STATUS_PATH[key] ?? `workStatus.${key}`;
     case 'spend':
       return spendCatalogPath(key);
+    case 'connections':
+      return `providerConnections.${key}`;
     default:
       return PICKER_PATH[scoped];
   }

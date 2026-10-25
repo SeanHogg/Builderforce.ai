@@ -6,6 +6,7 @@ import { useLocale } from 'next-intl';
 import type { BrainComposerProps, JsonRequest, UpgradeTarget } from '@seanhogg/builderforce-brain-ui';
 import { apiRequest } from '@/lib/apiClient';
 import { useOptionalAuth } from '@/lib/AuthContext';
+import { webConnections } from '@/lib/providerConnections';
 
 const request: JsonRequest = (path) => apiRequest(path);
 
@@ -33,6 +34,8 @@ export function useComposerAccount({ enabled, projectId }: {
         // A free tier is sent to pick a paid plan; a paid tier to the same page, where
         // its own plan is the one it manages.
         onUpgrade: (target: UpgradeTarget) => router.push(target === 'pricing' ? '/pricing?upgrade=pro' : '/pricing'),
+        // The Status tab's Connected accounts (Test / Reconnect).
+        connections: webConnections,
       }
     : undefined), [enabled, signedIn, projectId, locale, router]);
 }

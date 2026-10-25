@@ -1533,5 +1533,109 @@
   "spHintLocalModel": {
     "message": "Un modèle sur cet appareil a traité l’appel — ce que votre route payante aurait facturé pour les mêmes jetons",
     "description": "Saving source explanation"
+  },
+  "connHeading": {
+    "message": "Comptes connectés",
+    "description": "Composer Status tab, Connected accounts: heading"
+  },
+  "connEmpty": {
+    "message": "Aucun compte de fournisseur connecté.",
+    "description": "Composer Status tab, Connected accounts: empty"
+  },
+  "connLoadFailed": {
+    "message": "Impossible de charger les comptes connectés.",
+    "description": "Composer Status tab, Connected accounts: loadFailed"
+  },
+  "connUnavailable": {
+    "message": "Les comptes connectés ne sont pas disponibles ici.",
+    "description": "Composer Status tab, Connected accounts: unavailable"
+  },
+  "connAuthOauth": {
+    "message": "Abonnement",
+    "description": "Composer Status tab, Connected accounts: authOauth"
+  },
+  "connAuthApiKey": {
+    "message": "Clé API",
+    "description": "Composer Status tab, Connected accounts: authApiKey"
+  },
+  "connHealthOk": {
+    "message": "Fonctionne",
+    "description": "Composer Status tab, Connected accounts: healthOk"
+  },
+  "connHealthCapacity": {
+    "message": "Limite d’utilisation atteinte — ajoutez des crédits ou attendez la réinitialisation",
+    "description": "Composer Status tab, Connected accounts: healthCapacity"
+  },
+  "connHealthNotEntitled": {
+    "message": "Connecté, mais l’offre n’inclut pas ce modèle",
+    "description": "Composer Status tab, Connected accounts: healthNotEntitled"
+  },
+  "connHealthRejected": {
+    "message": "Connexion expirée — reconnectez-vous",
+    "description": "Composer Status tab, Connected accounts: healthRejected"
+  },
+  "connHealthUnresolved": {
+    "message": "Identifiant illisible — reconnectez-vous",
+    "description": "Composer Status tab, Connected accounts: healthUnresolved"
+  },
+  "connTest": {
+    "message": "Tester",
+    "description": "Composer Status tab, Connected accounts: test"
+  },
+  "connTesting": {
+    "message": "Test en cours…",
+    "description": "Composer Status tab, Connected accounts: testing"
+  },
+  "connTestOk": {
+    "message": "La connexion fonctionne",
+    "description": "Composer Status tab, Connected accounts: testOk"
+  },
+  "connReconnect": {
+    "message": "Reconnecter",
+    "description": "Composer Status tab, Connected accounts: reconnect"
+  },
+  "connPasteHint": {
+    "message": "Connectez-vous sur la page ouverte, puis collez le code qu’elle affiche.",
+    "description": "Composer Status tab, Connected accounts: pasteHint"
+  },
+  "connPastePlaceholder": {
+    "message": "Coller le code",
+    "description": "Composer Status tab, Connected accounts: pastePlaceholder"
+  },
+  "connFinish": {
+    "message": "Terminer",
+    "description": "Composer Status tab, Connected accounts: finish"
+  },
+  "connFinishing": {
+    "message": "Finalisation…",
+    "description": "Composer Status tab, Connected accounts: finishing"
+  },
+  "connCancel": {
+    "message": "Annuler",
+    "description": "Composer Status tab, Connected accounts: cancel"
+  },
+  "connDeviceHint": {
+    "message": "Approuvez dans votre navigateur — la page affiche le code {code}.",
+    "description": "Composer Status tab, Connected accounts: deviceHint"
+  },
+  "connReconnected": {
+    "message": "Reconnecté",
+    "description": "Composer Status tab, Connected accounts: reconnected"
+  },
+  "connErrDenied": {
+    "message": "La connexion a été refusée.",
+    "description": "Composer Status tab, Connected accounts: errDenied"
+  },
+  "connErrExpired": {
+    "message": "Ce code a expiré — reconnectez-vous.",
+    "description": "Composer Status tab, Connected accounts: errExpired"
+  },
+  "connErrStart": {
+    "message": "Impossible de lancer la reconnexion.",
+    "description": "Composer Status tab, Connected accounts: errStart"
+  },
+  "connErrFailed": {
+    "message": "Impossible de reconnecter.",
+    "description": "Composer Status tab, Connected accounts: errFailed"
   }
 }

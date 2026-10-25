@@ -52,6 +52,7 @@ export {
   isLlmProvider,
   llmProviderInfo,
   supportsSubscription,
+  isSubscriptionSignInUrl,
   type LlmLocalRuntimeHints,
   type LlmProvider,
   type LlmProviderCredential,

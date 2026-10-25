@@ -53,23 +53,30 @@ export interface LlmProviderInfo {
   readonly keyPlaceholder: string;
   /** The subscription connect this provider offers, or `null` for key-only. */
   readonly subscription: LlmProviderSubscriptionGrant | null;
+  /**
+   * The registrable domains that provider's subscription sign-in page lives under (the
+   * gateway mints the exact URL). A host that opens that page on a webview's behalf
+   * opens only these ({@link isSubscriptionSignInUrl}). Present exactly when
+   * `subscription` is set.
+   */
+  readonly signInDomains?: readonly string[];
   /** Present exactly when `credential` is `local_runtime`. */
   readonly localRuntime?: LlmLocalRuntimeHints;
 }
 
 /** Every BYO provider, in the order hosts list them. */
 export const LLM_PROVIDER_INFO: readonly LlmProviderInfo[] = [
-  { id: 'anthropic', label: 'Anthropic (Claude)', credential: 'api_key', keyPlaceholder: 'sk-ant-…', subscription: 'paste' },
-  { id: 'openai',    label: 'OpenAI',             credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: 'paste' },
+  { id: 'anthropic', label: 'Anthropic (Claude)', credential: 'api_key', keyPlaceholder: 'sk-ant-…', subscription: 'paste', signInDomains: ['claude.ai', 'anthropic.com'] },
+  { id: 'openai',    label: 'OpenAI',             credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: 'paste', signInDomains: ['openai.com'] },
   { id: 'google',    label: 'Google (Gemini)',    credential: 'api_key', keyPlaceholder: 'AIza…',    subscription: null },
   { id: 'meta',      label: 'Meta AI (MUSE)',     credential: 'api_key', keyPlaceholder: 'meta-…',   subscription: null },
   // A Kimi Code subscription issues no API key at all — its own config leaves `api_key`
   // empty beside an OAuth record — so it connects by device-code redirect, never paste.
-  { id: 'kimi',      label: 'Kimi',               credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: 'device' },
+  { id: 'kimi',      label: 'Kimi',               credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: 'device', signInDomains: ['kimi.com'] },
   { id: 'moonshot',  label: 'Moonshot AI',        credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: null },
   { id: 'qwen',      label: 'Qwen',               credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: null },
   { id: 'minimax',   label: 'MiniMax',            credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: null },
-  { id: 'xai',       label: 'xAI (Grok)',         credential: 'api_key', keyPlaceholder: 'xai-…',    subscription: 'paste' },
+  { id: 'xai',       label: 'xAI (Grok)',         credential: 'api_key', keyPlaceholder: 'xai-…',    subscription: 'paste', signInDomains: ['x.ai'] },
   { id: 'ollama',    label: 'Ollama Cloud',       credential: 'api_key', keyPlaceholder: 'sk-…',     subscription: null },
   {
     id: 'ollama-local', label: 'Ollama', credential: 'local_runtime', keyPlaceholder: '', subscription: null,
@@ -99,4 +106,18 @@ export function llmProviderInfo(id: LlmProvider): LlmProviderInfo {
 /** Whether the provider offers a consumer-subscription (OAuth) connect. */
 export function supportsSubscription(id: LlmProvider): boolean {
   return llmProviderInfo(id).subscription !== null;
+}
+
+/**
+ * Whether `url` is a provider's subscription sign-in page: https, on one of the
+ * `signInDomains` of a provider that offers a subscription connect. The gate a host
+ * applies before opening a page a webview asked for.
+ */
+export function isSubscriptionSignInUrl(url: string): boolean {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return false; }
+  if (parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase();
+  return LLM_PROVIDER_INFO.some((p) =>
+    (p.signInDomains ?? []).some((domain) => host === domain || host.endsWith(`.${domain}`)));
 }

@@ -18,10 +18,10 @@ import * as vscode from "vscode";
 import {
   ProviderConnectError,
   awaitDeviceApproval,
+  completePasteConnect,
   startProviderConnect,
   type LocalCredentialOutcome,
 } from "@builderforce/provider-connect";
-import { completeByoOAuth } from "./bfApi";
 import { gatewayRequest } from "./gatewayRequest";
 import { localCredentialStore, type LocalCredentialProvider } from "./localProviderCredentials";
 
@@ -62,8 +62,7 @@ export async function connectProviderInteractively(
         validateInput: (v) => (v.trim() ? undefined : vscode.l10n.t("Authorization code is required")),
       });
       if (!code?.trim()) return false;
-      const result = await completeByoOAuth(secrets, provider, code.trim(), start.state);
-      if (!result?.ok) throw new ProviderConnectError("failed", "the authorization code was not accepted");
+      await completePasteConnect(request, provider, code.trim(), start.state);
     } else {
       // Device grant: the code already travelled in the URL. Show it so the person can
       // confirm the page they landed on, and wait — cancellable — for the approval.

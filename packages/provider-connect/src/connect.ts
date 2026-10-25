@@ -36,7 +36,7 @@ export interface ProviderConnectStart {
 export type ProviderConnectFailure = 'unavailable' | 'denied' | 'expired' | 'cancelled' | 'failed';
 
 export class ProviderConnectError extends Error {
-  constructor(readonly reason: ProviderConnectFailure, detail?: string) {
+  constructor(readonly reason: ProviderConnectFailure, readonly detail?: string) {
     super(detail ? `${reason}: ${detail}` : reason);
     this.name = 'ProviderConnectError';
   }

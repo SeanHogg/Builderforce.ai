@@ -3760,57 +3760,7 @@ export const providerKeysApi = {
       method: 'PUT',
       body: JSON.stringify({ order }),
     }),
-
-  /**
-   * Begin connecting a subscription — returns the provider's authorize URL to open.
-   *
-   * `grant` says how it FINISHES, because the two styles need different UI: `paste` ends
-   * with the operator copying a code back (Anthropic / OpenAI / xAI), while `device`
-   * (Kimi) has nothing to copy — the code rides in the URL, and the client polls
-   * {@link oauthComplete} until the approval lands. `userCode` is shown so the operator
-   * can confirm the page they reached is the one this request opened.
-   */
-  oauthStart: (provider: LlmProvider): Promise<{
-    authorizeUrl: string;
-    state: string;
-    grant?: 'paste' | 'device';
-    userCode?: string;
-    pollIntervalSeconds?: number;
-  }> =>
-    request(`/llm/provider-keys/${provider}/oauth/start`, { method: 'POST' }),
-
-  /**
-   * Finish connecting a subscription.
-   *
-   * For a `paste` grant, `code` is what the provider's consent page showed (a
-   * `code#state` pair, or the whole callback URL). For a `device` grant there is no code
-   * and this POLLS: `status` comes back `pending` while the operator has not approved yet
-   * and `slow_down` when the provider wants a wider interval — neither is an error, so
-   * they resolve rather than throw, and the caller simply calls again.
-   */
-  oauthComplete: (provider: LlmProvider, code: string, state?: string): Promise<{
-    ok: boolean;
-    provider: LlmProvider;
-    authType?: ProviderAuthType;
-    status?: 'pending' | 'slow_down';
-  }> =>
-    request(
-      `/llm/provider-keys/${provider}/oauth/complete`,
-      { method: 'POST', body: JSON.stringify({ code, ...(state ? { state } : {}) }) },
-    ),
 };
-
-/**
- * True when a failed connect can never succeed by pressing Finish again: the
- * authorization code is spent or expired, or the pending consent session is
- * gone. Both are recovered the same way — start the connect over — and the
- * distinction from a transient upstream failure is the API's to make, so the
- * wire codes are read here rather than spelled out in each connect surface.
- */
-export function isDeadConnectCode(error: unknown): boolean {
-  const code = (error as { code?: string } | null)?.code;
-  return code === 'oauth_code_spent' || code === 'oauth_state_expired';
-}
 
 // ---------------------------------------------------------------------------
 // Human-in-the-loop requests — approvals, questions, and feedback an agent

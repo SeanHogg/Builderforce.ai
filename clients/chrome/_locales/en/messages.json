@@ -1653,5 +1653,109 @@
   "spHintLocalModel": {
     "message": "A model on this machine served the call — what your paid route would have charged for the same tokens",
     "description": "Saving source explanation"
+  },
+  "connHeading": {
+    "message": "Connected accounts",
+    "description": "Composer Status tab, Connected accounts: heading"
+  },
+  "connEmpty": {
+    "message": "No provider accounts connected.",
+    "description": "Composer Status tab, Connected accounts: empty"
+  },
+  "connLoadFailed": {
+    "message": "Could not load connected accounts.",
+    "description": "Composer Status tab, Connected accounts: loadFailed"
+  },
+  "connUnavailable": {
+    "message": "Connected accounts are not available from here.",
+    "description": "Composer Status tab, Connected accounts: unavailable"
+  },
+  "connAuthOauth": {
+    "message": "Subscription",
+    "description": "Composer Status tab, Connected accounts: authOauth"
+  },
+  "connAuthApiKey": {
+    "message": "API key",
+    "description": "Composer Status tab, Connected accounts: authApiKey"
+  },
+  "connHealthOk": {
+    "message": "Working",
+    "description": "Composer Status tab, Connected accounts: healthOk"
+  },
+  "connHealthCapacity": {
+    "message": "Usage limit reached — add credits or wait for the reset",
+    "description": "Composer Status tab, Connected accounts: healthCapacity"
+  },
+  "connHealthNotEntitled": {
+    "message": "Signed in, but the plan does not cover this model",
+    "description": "Composer Status tab, Connected accounts: healthNotEntitled"
+  },
+  "connHealthRejected": {
+    "message": "Sign-in expired — reconnect",
+    "description": "Composer Status tab, Connected accounts: healthRejected"
+  },
+  "connHealthUnresolved": {
+    "message": "Credential could not be read — reconnect",
+    "description": "Composer Status tab, Connected accounts: healthUnresolved"
+  },
+  "connTest": {
+    "message": "Test",
+    "description": "Composer Status tab, Connected accounts: test"
+  },
+  "connTesting": {
+    "message": "Testing…",
+    "description": "Composer Status tab, Connected accounts: testing"
+  },
+  "connTestOk": {
+    "message": "Connection works",
+    "description": "Composer Status tab, Connected accounts: testOk"
+  },
+  "connReconnect": {
+    "message": "Reconnect",
+    "description": "Composer Status tab, Connected accounts: reconnect"
+  },
+  "connPasteHint": {
+    "message": "Sign in on the page that opened, then paste the code it shows.",
+    "description": "Composer Status tab, Connected accounts: pasteHint"
+  },
+  "connPastePlaceholder": {
+    "message": "Paste code",
+    "description": "Composer Status tab, Connected accounts: pastePlaceholder"
+  },
+  "connFinish": {
+    "message": "Finish",
+    "description": "Composer Status tab, Connected accounts: finish"
+  },
+  "connFinishing": {
+    "message": "Finishing…",
+    "description": "Composer Status tab, Connected accounts: finishing"
+  },
+  "connCancel": {
+    "message": "Cancel",
+    "description": "Composer Status tab, Connected accounts: cancel"
+  },
+  "connDeviceHint": {
+    "message": "Approve in your browser — the page shows code {code}.",
+    "description": "Composer Status tab, Connected accounts: deviceHint"
+  },
+  "connReconnected": {
+    "message": "Reconnected",
+    "description": "Composer Status tab, Connected accounts: reconnected"
+  },
+  "connErrDenied": {
+    "message": "The connection was declined.",
+    "description": "Composer Status tab, Connected accounts: errDenied"
+  },
+  "connErrExpired": {
+    "message": "That code expired — reconnect again.",
+    "description": "Composer Status tab, Connected accounts: errExpired"
+  },
+  "connErrStart": {
+    "message": "Could not start reconnecting.",
+    "description": "Composer Status tab, Connected accounts: errStart"
+  },
+  "connErrFailed": {
+    "message": "Could not reconnect.",
+    "description": "Composer Status tab, Connected accounts: errFailed"
   }
 }

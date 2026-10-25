@@ -83,6 +83,7 @@ function bundleKeyOf(scoped: string): string | undefined {
     case 'options': return optionBundleKey(key);
     case 'status': return statusKey(key);
     case 'spend': return spendKey(key);
+    case 'connections': return `conn.${key}`;
     default: return MENTION_KEY[scoped];
   }
 }

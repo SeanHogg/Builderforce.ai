@@ -14,6 +14,17 @@ export {
   type ProviderConnectStart,
 } from './connect.js';
 export {
+  completePasteConnect,
+  connectionHealth,
+  createProviderConnectionsClient,
+  listProviderConnections,
+  testProviderConnection,
+  type ConnectionHealth,
+  type ProviderConnection,
+  type ProviderConnectionsClient,
+  type ProviderTestResult,
+} from './connections.js';
+export {
   LOCAL_CREDENTIAL_REFRESH_MARGIN_MS,
   createLocalCredentialStore,
   fetchLocalCredential,

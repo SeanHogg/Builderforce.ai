@@ -2,7 +2,7 @@
  * Everything `BrainComposer` renders — the box, the `/` menu, its Status tab, the spend
  * readouts and the @/# pickers — from ONE host lookup, through each part's own key
  * table. Canonical keys are scoped by part: `composer.<key>`, `options.<key>`,
- * `status.<key>`, `spend.<key>`, `mention.<key>` and `ticket.<key>`, each `<key>` being
+ * `status.<key>`, `spend.<key>`, `connections.<key>`, `mention.<key>` and `ticket.<key>`, each `<key>` being
  * that part's own canonical key (see `composerLabelsFrom`, `promptOptionsLabelsFrom`,
  * `workStatusLabelsFrom`, `spendLabelsFrom`). Every host — the web (next-intl), the
  * editor webview (`vscode.l10n` bundle) and Rovr (`chrome.i18n`) — builds its composer
@@ -15,6 +15,7 @@ import { promptOptionsLabelsFrom, type PromptOptionsLabels } from '../promptOpti
 import { spendLabelsFrom, type SpendLabels } from '../spend/labels';
 import { workStatusLabelsFrom, type WorkStatusLabels } from '../workStatus/labels';
 import { composerLabelsFrom, type ComposerLabels } from './labels';
+import { connectionsLabelsFrom, type ConnectionsLabels } from '../connections/types';
 
 export { DEFAULT_MENTION_LABELS, DEFAULT_TICKET_TAG_LABELS };
 
@@ -28,6 +29,7 @@ export interface FullBrainComposerLabels {
   options: PromptOptionsLabels;
   status: WorkStatusLabels;
   spend: SpendLabels;
+  connections: ConnectionsLabels;
   mention: Required<MentionLabels>;
   ticket: Required<TicketAutocompleteLabels>;
 }
@@ -43,6 +45,7 @@ export function brainComposerLabelsFrom(
     options: { ...promptOptionsLabelsFrom(scopedLookup(lookup, 'options')), ...overrides?.options },
     status: workStatusLabelsFrom(scopedLookup(lookup, 'status')),
     spend: spendLabelsFrom(scopedLookup(lookup, 'spend')),
+    connections: connectionsLabelsFrom(scopedLookup(lookup, 'connections')),
     mention: stringsFrom(DEFAULT_MENTION_LABELS, scopedLookup(lookup, 'mention')),
     ticket: stringsFrom(DEFAULT_TICKET_TAG_LABELS, scopedLookup(lookup, 'ticket')),
   };

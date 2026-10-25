@@ -34,6 +34,7 @@ import {
 } from '@seanhogg/builderforce-brain-ui';
 import type { AuthedFetch } from '../authedFetch';
 import { openUpgrade } from '../accountPlan';
+import { editorConnections } from '../providerConnections';
 import type { createChatTicketsAdapter } from '../chatTicketsAdapter';
 import { webviewLocalModelStore } from '../pageEngines';
 import { post, request, type InitData } from '../vscodeBridge';
@@ -112,6 +113,8 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
     () => brainComposerLabels(init.labels, init.modelLabels, init.locale),
     [init.labels, init.modelLabels, init.locale],
   );
+  // The Status tab's Connected accounts — Test / Reconnect without leaving the chat.
+  const connections = useMemo(() => editorConnections(init.baseUrl), [init.baseUrl]);
   const personaLabels = useMemo(() => personaPickerLabels(init.labels), [init.labels]);
   const personaModalities = useMemo(() => personaModalityOptions(init.labels), [init.labels]);
   const recipientLabels = useMemo(() => recipientPickerLabels(init.labels), [init.labels]);
@@ -199,7 +202,7 @@ export function VsCodeComposer(props: VsCodeComposerProps) {
         ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name)
         : undefined}
       options={options}
-      account={{ request: apiReq, projectId, locale: init.locale, onUpgrade: openUpgrade }}
+      account={{ request: apiReq, projectId, locale: init.locale, onUpgrade: openUpgrade, connections }}
       onAccountSettings={() => post('settings')}
       attachments={{
         items: conv.pendingAttachments,
