@@ -13,9 +13,9 @@
  * started with a `signal` also dies with it. Output is a bounded tail.
  */
 
-import { spawn, type ChildProcess } from "child_process";
+import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus } from "@builderforce/agent-tools";
-import { killProcessTree, processGroupOption } from "./processTree";
+import { killProcessTree, spawnCommand } from "./processTree";
 
 /** The run a job belongs to; `undefined` = a caller with no run (a hook, a test). */
 export type JobOwner = number | undefined;
@@ -81,15 +81,12 @@ const unknownJob = (id: string): ShellJobStatus => ({
 export function startJob(command: string, opts: StartJobOptions): ShellJobStart {
   if (opts.signal?.aborted) return { ok: false, error: "the run was stopped" };
   evictFinished();
-  const common = {
-    cwd: opts.cwd,
-    windowsHide: true,
-    ...processGroupOption(),
-    ...(opts.env ? { env: { ...process.env, ...opts.env } } : {}),
-  };
   let child: ChildProcess;
   try {
-    child = opts.bash ? spawn(opts.bash, ["-c", command], common) : spawn(command, { ...common, shell: true });
+    child = spawnCommand(command, opts.bash, {
+      cwd: opts.cwd,
+      ...(opts.env ? { env: { ...process.env, ...opts.env } } : {}),
+    });
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -99,8 +96,8 @@ export function startJob(command: string, opts: StartJobOptions): ShellJobStart 
   const id = `job-${n}`;
   let settle!: () => void;
   const job: Job = { id, owner, child, status: "running", output: "", truncated: false, done: new Promise<void>((r) => { settle = r; }) };
-  const append = (chunk: Buffer | string): void => {
-    job.output += chunk.toString();
+  const append = (chunk: string): void => {
+    job.output += chunk;
     if (job.output.length > opts.maxOutput) {
       job.output = job.output.slice(job.output.length - opts.maxOutput);
       job.truncated = true;

@@ -30,6 +30,11 @@ vi.mock("./gitApi", () => ({
 vi.mock("vscode", () => ({
   workspace: { workspaceFolders: [{ uri: { fsPath: "/ws" } }] },
   l10n: { t: (message: string) => message },
+  EventEmitter: class {
+    event = () => ({ dispose() {} });
+    fire() {}
+    dispose() {}
+  },
 }));
 
 vi.mock("@seanhogg/builderforce-brain-embedded", () => ({

@@ -7,15 +7,11 @@
  */
 
 import * as path from "path";
-import { exec, execFile, type ChildProcess } from "child_process";
-import { promisify } from "util";
+import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus, ShellResult } from "@builderforce/agent-tools";
 import { needsPosixShell, findBash, posixShellOption, cmdCannotRun } from "./posixShell";
-import { killProcessTree, processGroupOption } from "./processTree";
+import { spawnCommand, stopCommand } from "./processTree";
 import { killJob, pollJob, startJob, type JobOwner } from "./localShellJobs";
-
-const execAsync = promisify(exec);
-const execFileAsync = promisify(execFile);
 
 // Bound a command's wall-clock + the output handed back to the model. Matches the cloud
 // Container's COMMAND_TIMEOUT_MS (api/container/server.mjs) — a build/type-check/test
@@ -28,6 +24,36 @@ const RUN_MAX_OUTPUT = 60_000;
 
 function clamp(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n…(${text.length - max} more chars truncated)`;
+}
+
+interface Exited { stdout: string; stderr: string; code: number | null; signal: NodeJS.Signals | null; error?: Error }
+
+/**
+ * Wait for `child` to exit. Never rejects. A stream past {@link RUN_MAX_BUFFER} calls
+ * `onOverflow` once and keeps no more: an unbounded producer (`yes`, `tail -f`, a
+ * watcher run in the foreground) is stopped there, not left to the 10-minute bound.
+ */
+function collect(child: ChildProcess, onOverflow: () => void): Promise<Exited> {
+  return new Promise((resolve) => {
+    const out = { stdout: "", stderr: "" };
+    let overflowed = false;
+    for (const key of ["stdout", "stderr"] as const) {
+      child[key]?.on("data", (chunk: string) => {
+        if (out[key].length < RUN_MAX_BUFFER) out[key] += chunk;
+        else if (!overflowed) {
+          overflowed = true;
+          onOverflow();
+        }
+      });
+    }
+    let error: Error | undefined;
+    child.on("error", (e) => {
+      error = e;
+      // A child that never started emits no `close`.
+      if (child.pid === undefined) resolve({ ...out, code: null, signal: null, error: e });
+    });
+    child.on("close", (code, signal) => resolve({ ...out, code, signal, ...(error ? { error } : {}) }));
+  });
 }
 
 export interface LocalShellOptions {
@@ -76,46 +102,43 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
     const timeout = options.timeoutMs ?? RUN_TIMEOUT_MS;
     const signal = options.signal;
     if (signal?.aborted) return aborted("");
-    // No `timeout` option: `exec`'s own kills only the shell (see the timer below).
-    const common = {
-      cwd,
-      maxBuffer: RUN_MAX_BUFFER,
-      windowsHide: true,
-      // Its own process group on POSIX, so Stop can kill the group, not just the shell.
-      ...processGroupOption(),
-      ...(options.env ? { env: { ...process.env, ...options.env } } : {}),
-    };
     // A POSIX script goes to bash EXPLICITLY (`bash -c <script>`), not through the
     // platform shell with an override: the one thing that must not vary between
     // machines is which interpreter parses `set -e`. A one-liner keeps the default.
-    const pending = bash ? execFileAsync(bash, ["-c", command], common) : execAsync(command, common);
-    // Stop kills the TREE. `exec`'s own `signal` option is deliberately not used: it kills
-    // the shell first, which on Windows orphans the real process before `taskkill /T` can
-    // walk to it (see `processTree.ts`).
-    const child = (pending as { child?: ChildProcess }).child;
-    const onAbort = (): void => { void killProcessTree(child?.pid); };
-    // The wall-clock bound kills the TREE too: `exec`'s own `timeout` signals only the
-    // shell, which leaves a POSIX process group, or a Windows shell's children, running on.
+    // `spawnCommand` puts it in its own process group, so Stop can kill the group.
+    let child: ChildProcess;
+    try {
+      child = spawnCommand(command, bash, { cwd, ...(options.env ? { env: { ...process.env, ...options.env } } : {}) });
+    } catch (e) {
+      return { ok: false, exitCode: 1, stdout: e instanceof Error ? e.message : String(e) };
+    }
+    let overflowed = false;
+    const exited = collect(child, () => {
+      overflowed = true;
+      stopCommand(child);
+    });
+    // Stop kills the TREE, never just the shell: that orphans the real process — on
+    // Windows before `taskkill /T` can walk to it (see `processTree.ts`).
+    const onAbort = (): void => stopCommand(child);
+    // The wall-clock bound kills the TREE too, for the same reason.
     let timedOut = false;
     const onTimeout = setTimeout(() => {
       timedOut = true;
-      void killProcessTree(child?.pid);
+      stopCommand(child);
     }, timeout);
     signal?.addEventListener("abort", onAbort, { once: true });
     try {
-      const { stdout, stderr } = await pending;
-      const out = [stdout, stderr].filter((s) => s && s.trim()).join("\n").trim();
+      const r = await exited;
+      const out = [r.stdout, r.stderr].filter((s) => s.trim()).join("\n").trim();
       if (signal?.aborted) return aborted(out);
-      return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", RUN_MAX_OUTPUT) };
-    } catch (e) {
-      const err = e as { code?: number | string; killed?: boolean; signal?: string; stdout?: string; stderr?: string; message?: string };
-      const out = [err.stdout, err.stderr].filter((s) => s && String(s).trim()).join("\n").trim();
-      if (signal?.aborted) return aborted(out);
-      if (timedOut || err.killed || err.signal === "SIGTERM") {
+      if (overflowed) {
+        return { ok: false, error: `stopped — it printed more than ${RUN_MAX_BUFFER / (1024 * 1024)}MB of output`, stdout: clamp(out, RUN_MAX_OUTPUT) };
+      }
+      if (r.code === 0 && !r.error) return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", RUN_MAX_OUTPUT) };
+      if (timedOut || r.signal === "SIGTERM") {
         return { ok: false, error: `timed out after ${timeout / 1000}s`, stdout: clamp(out, RUN_MAX_OUTPUT) };
       }
-      const code = typeof err.code === "number" ? err.code : 1;
-      return { ok: false, exitCode: code, stdout: clamp(out || err.message || "(no output)", RUN_MAX_OUTPUT) };
+      return { ok: false, exitCode: r.code ?? 1, stdout: clamp(out || r.error?.message || "(no output)", RUN_MAX_OUTPUT) };
     } finally {
       clearTimeout(onTimeout);
       signal?.removeEventListener("abort", onAbort);

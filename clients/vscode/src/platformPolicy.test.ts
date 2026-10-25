@@ -162,7 +162,9 @@ describe("platform request classification (the shared route table)", () => {
     [`${api}/llm/v1/models`, "GET", "connected-feature"],
     [`${api}/llm/v1/chat/completions`, "POST", "gateway-inference"],
     [`${api}/api/auth/tenant-api-key-token`, "POST", "authenticate"],
-    [`${api}/api/brain/chats`, "POST", "synchronize"],
+    // Binding a chat sends its title and project only — not content (`platformRoutes.ts`).
+    [`${api}/api/brain/chats`, "POST", "connected-feature"],
+    [`${api}/api/brain/chats/3/messages`, "POST", "synchronize"],
   ] as const)("%s %s → %s", (url, method, capability) => {
     expect(platformCapabilityFor(url, { method })).toBe(capability);
   });
