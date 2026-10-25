@@ -256,6 +256,13 @@ describe("the inference mode is decided by the seam", () => {
     expect(routing).not.toContain("parseLocalModelRef(");
   });
 
+  // The store was defined but never created at activation, so every Kimi turn without a
+  // CLI login failed "Kimi credentials are not initialized" and the connect was never offered.
+  it("creates the workspace Kimi credential store at activation, so a turn can offer the sign-in", () => {
+    const extension = stripComments(fs.readFileSync(path.join(SRC, "extension.ts"), "utf8"));
+    expect(extension).toContain("initLocalProviderCredentials(context.secrets, gatewayRequest(context.secrets)");
+  });
+
   it("never sends an unauthorized Specific Kimi pick to the gateway silently — the turn fails with why", () => {
     expect(routing).toContain('choice.inferenceMode === "specific" && localRuntime(pin.provider).gatewayVendor !== undefined');
     expect(routing).toContain("if (route.unauthorized) throw unauthorizedError(route.unauthorized);");

@@ -58,6 +58,8 @@ import { posixShellReport } from "./posixShell";
 import { editWorkspaceHooks } from "./hooks/editorDirectives";
 import { buildIdentityReport } from "./buildIdentityReport";
 import { initErrorReporter, reportExtensionError, surfaceError } from "./errorReporter";
+import { initLocalProviderCredentials } from "./localProviderCredentials";
+import { gatewayRequest } from "./gatewayRequest";
 import { bindOutboxStorage, durableStepHost } from "./outboxStorage";
 import { bindLocalSuccessStorage } from "./localSuccessStorage";
 import { EXPORT_DEAD_LETTERS_COMMAND, runExportDeadLetters } from "./deadLetterCommand";
@@ -355,6 +357,12 @@ export function activate(context: vscode.ExtensionContext): void {
   // The ONE log surface, owned by errorReporter so any module can write to it and
   // so "log it" and "file it in Quality" can never drift apart.
   const output = initErrorReporter(context);
+  // The workspace's connected-subscription credentials (Kimi), held locally so a Kimi turn
+  // is called from this machine — and so a turn with no usable Kimi source can OFFER the
+  // connect. The stores exist synchronously; only hydrating SecretStorage is awaited, off
+  // the activation path. A credential arriving or dropped re-pushes the model lists.
+  void initLocalProviderCredentials(context.secrets, gatewayRequest(context.secrets), () => refreshWorkspaceSurfaces())
+    .catch((error: unknown) => void reportExtensionError(error, { operation: "localCredentials.init" }));
 
   // Native Chat participant (@builderforce) + dedicated session tab (proposed API,
   // feature-detected — no-ops unless launched with --enable-proposed-api).
